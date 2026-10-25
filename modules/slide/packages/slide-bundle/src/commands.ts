@@ -63,6 +63,7 @@ export const CMD = {
   previousSlide: `${COMMAND_PREFIX}.previousSlide`,
   nextSlide: `${COMMAND_PREFIX}.nextSlide`,
   addComment: `${COMMAND_PREFIX}.addComment`,
+  insertShapes: `${COMMAND_PREFIX}.insertShapes`,
 } as const;
 
 /** The edit context a deck holds as its document context (editor ADR 307):
@@ -149,6 +150,8 @@ export interface SlideCommandDeps {
   store: SlidesStore | null;
   /** The typed commands are live (`host.objects` routes to them). */
   objectModel: boolean;
+  /** The Shapes panel's id, where it is contributed (Insert ▸ Shapes…). */
+  shapesPanel?: string;
   /** The importer's path. */
   openDeck(name: string, bytes: Uint8Array): Promise<ImportReport | null>;
   /** The exporter's path; null when there is no deck to write. */
@@ -424,6 +427,20 @@ export function contributeSlideCommands(
         handler: move("moveSlideDown", 1),
       }),
     );
+    // Insert ▸ Shapes…: the Shapes panel, where a click inserts a preset
+    // on the active slide (ADR 717).
+    if (deps.shapesPanel && host.supports("shell.openPanel@1")) {
+      const panel = deps.shapesPanel;
+      handles.push(
+        command({
+          id: CMD.insertShapes,
+          title: t(COMMANDS.insertShapes),
+          category: CATEGORY,
+          when: () => active() !== null,
+          handler: guarded("insertShapes", () => host.shell.openPanel(panel)),
+        }),
+      );
+    }
   }
 
   // The keys of the slide verbs this host got, offered where the command

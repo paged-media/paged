@@ -946,6 +946,40 @@ pub struct LayerStack {
     /// LAYER COMPS, in the panel's order. Document state: in every
     /// snapshot (an edit to a comp is an undo step) and persisted.
     comps: Vec<LayerComp>,
+    /// The HISTORY BRUSH's sources per layer (session state, like the
+    /// edit target): see [`Self::history_source`].
+    history_states: HistoryStates,
+}
+
+/// Which earlier state of a layer the History / Art History brushes
+/// paint from. Until history snapshots exist these are the two states
+/// the session can name without them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryKind {
+    /// The layer as it was when the image was opened — precisely, before
+    /// its first pixel edit in this session (a layer added later starts
+    /// from its state at creation).
+    Open,
+    /// The layer before its NEWEST pixel edit — "the step before this
+    /// one". Recorded at that edit; an undo does not move it.
+    Previous,
+}
+
+impl HistoryKind {
+    pub fn from_wire(s: &str) -> Option<HistoryKind> {
+        match s {
+            "open" => Some(HistoryKind::Open),
+            "previous" => Some(HistoryKind::Previous),
+            _ => None,
+        }
+    }
+}
+
+/// Per layer id, straight RGBA8 at the canvas extent.
+#[derive(Debug, Default)]
+pub(crate) struct HistoryStates {
+    open: std::collections::HashMap<u32, Arc<[u8]>>,
+    previous: std::collections::HashMap<u32, Arc<[u8]>>,
 }
 
 /// Most structure steps kept (the journal bounds the pixel ones).
@@ -1052,6 +1086,7 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps: Vec::new(),
+            history_states: HistoryStates::default(),
         })
     }
 
@@ -1310,6 +1345,7 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps: Vec::new(),
+            history_states: HistoryStates::default(),
         };
         if let Some(deep) = stack
             .groups
@@ -2601,6 +2637,24 @@ impl LayerStack {
             // happens to be selected when the user reaches for it.
             self.journal.record(label, active.id as u64, &view, clipped)
         };
+        // The history brush's sources: the state before this edit.
+        {
+            // An 8-bit layer's buffer is shared, not copied (the edit
+            // REPLACES the `Arc`, it never writes through it); a 16-bit
+            // one is reduced once, since the history brush paints 8-bit.
+            let rgba = &self.layers[self.active].rgba;
+            let before: Arc<[u8]> = if rgba.depth() == image_core::SampleDepth::U8 {
+                rgba.raw_arc()
+            } else {
+                Arc::from(rgba.canvas().to_rgba8().into_owned().into_boxed_slice())
+            };
+            let id = self.layers[self.active].id;
+            self.history_states
+                .open
+                .entry(id)
+                .or_insert_with(|| Arc::clone(&before));
+            self.history_states.previous.insert(id, before);
+        }
         self.layers[self.active].rgba = pixels.into();
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
             self.steps.push(Step::Pixels);
@@ -2608,6 +2662,35 @@ impl LayerStack {
         }
         self.sync_with_journal();
         Ok(outcome)
+    }
+
+    /// The ACTIVE layer's history state `kind` as canvas-extent straight
+    /// RGBA8 — the History brush's source. A layer never edited since it
+    /// was opened IS its open state (and its previous one). A state
+    /// recorded before the canvas changed size no longer fits and is
+    /// refused (`None`), never stretched.
+    pub fn history_source(&self, kind: HistoryKind) -> Option<Arc<[u8]>> {
+        let layer = self.active();
+        if !layer.is_pixels() {
+            return None;
+        }
+        let want = (self.width as usize) * (self.height as usize) * 4;
+        let stored = match kind {
+            HistoryKind::Open => self.history_states.open.get(&layer.id),
+            HistoryKind::Previous => self
+                .history_states
+                .previous
+                .get(&layer.id)
+                .or_else(|| self.history_states.open.get(&layer.id)),
+        };
+        match stored {
+            Some(px) if px.len() == want => Some(Arc::clone(px)),
+            Some(_) => None,
+            None => {
+                let now = layer.rgba.canvas().to_rgba8().into_owned();
+                Some(Arc::from(now.into_boxed_slice()))
+            }
+        }
     }
 
     /// Is the active layer editable (present, unlocked)? The doors check

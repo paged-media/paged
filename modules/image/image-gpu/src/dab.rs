@@ -374,6 +374,45 @@ impl SampledTip {
         self.diameter
     }
 
+    /// The bitmap's coverage at TIP-SPACE coordinates `(tx, ty)` in
+    /// image px relative to the dab centre, for a dab of `diameter`
+    /// squashed by `roundness`, after the shape-level mirrors — the
+    /// lookup [`crate::brush::OrientedTip`] rotates into. `0..=1`.
+    pub(crate) fn coverage_in_tip_space(
+        &self,
+        tx: f32,
+        ty: f32,
+        diameter: f32,
+        roundness: f32,
+        flip_x: bool,
+        flip_y: bool,
+    ) -> f32 {
+        let major = self.width.max(self.height) as f32;
+        let s = diameter / major;
+        let sy = s * roundness;
+        if !(s.is_finite() && sy.is_finite()) || s <= 0.0 || sy <= 0.0 {
+            return 0.0;
+        }
+        let mut bx = tx / s + self.width as f32 * 0.5;
+        let mut by = ty / sy + self.height as f32 * 0.5;
+        if flip_x != self.flip_x {
+            bx = self.width as f32 - bx;
+        }
+        if flip_y != self.flip_y {
+            by = self.height as f32 - by;
+        }
+        self.sample(bx, by).clamp(0.0, 1.0)
+    }
+
+    /// Half the diagonal of the stamped footprint at `diameter` — the
+    /// reach of a rotated bitmap dab.
+    pub(crate) fn reach_at(&self, diameter: f32) -> f32 {
+        let major = self.width.max(self.height) as f32;
+        let s = diameter / major;
+        let (hx, hy) = (self.width as f32 * s * 0.5, self.height as f32 * s * 0.5);
+        (hx * hx + hy * hy).sqrt()
+    }
+
     /// Scale factor from bitmap texels to image px on the major axis.
     fn scale(&self) -> f32 {
         self.diameter / self.width.max(self.height) as f32
@@ -593,6 +632,16 @@ pub struct StrokeAccumulator {
     /// Union of every dab box in the stroke so far.
     stroke: Option<Region>,
     dabs: u64,
+    /// The per-pixel paint COLOUR, allocated by the first coloured stamp
+    /// (colour dynamics, the art history brush): each dab's colour lands
+    /// weighted by the coverage it added, so the field is the colour the
+    /// accumulated coverage is made of. `None` = the stroke paints one
+    /// colour and the composite uses `gen.solid`.
+    colors: Option<Vec<[f32; 3]>>,
+    /// What shapes the accumulated coverage on its way to the mask: the
+    /// dual tip, a whole-stroke texture, wet edges, noise
+    /// ([`crate::brush::Lowering`]). `None` = the raw coverage.
+    lowering: Option<Box<crate::brush::Lowering>>,
 }
 
 impl StrokeAccumulator {
@@ -604,6 +653,142 @@ impl StrokeAccumulator {
             dirty: None,
             stroke: None,
             dabs: 0,
+            colors: None,
+            lowering: None,
+        }
+    }
+
+    /// Install the coverage shaping (dual tip, stroke texture, wet
+    /// edges, noise). Set once, before the first dab.
+    pub fn set_lowering(&mut self, lowering: crate::brush::Lowering) {
+        self.lowering = Some(Box::new(lowering));
+    }
+
+    pub fn lowering(&self) -> Option<&crate::brush::Lowering> {
+        self.lowering.as_deref()
+    }
+
+    pub fn lowering_mut(&mut self) -> Option<&mut crate::brush::Lowering> {
+        self.lowering.as_deref_mut()
+    }
+
+    /// Does the stroke carry a per-pixel colour field?
+    pub fn has_colors(&self) -> bool {
+        self.colors.is_some()
+    }
+
+    /// The colour field over `region` as a STRAIGHT rgba16float window
+    /// (alpha 1) — the paint layer of a multi-coloured stroke. Pixels no
+    /// coloured dab reached carry `fallback`.
+    pub fn color_window_f16(&self, region: Region, fallback: [f32; 3]) -> Vec<u8> {
+        let mut out = Vec::with_capacity((region.w as usize) * (region.h as usize) * 8);
+        for y in 0..region.h as i64 {
+            for x in 0..region.w as i64 {
+                let (ix, iy) = (region.x as i64 + x, region.y as i64 + y);
+                let rgb = if ix < 0 || iy < 0 || ix >= self.width as i64 || iy >= self.height as i64
+                {
+                    fallback
+                } else {
+                    let i = (iy as usize) * (self.width as usize) + ix as usize;
+                    match &self.colors {
+                        Some(c) if self.acc[i] > 0.0 => c[i],
+                        _ => fallback,
+                    }
+                };
+                for v in [rgb[0], rgb[1], rgb[2], 1.0] {
+                    out.extend_from_slice(&half::f16::from_f32(v).to_bits().to_le_bytes());
+                }
+            }
+        }
+        out
+    }
+
+    /// The general stamp every dynamics feature rides: `flow` deposits
+    /// toward a per-dab CEILING (`acc ← acc + flow·c·(ceiling − acc)`,
+    /// never lowering a pixel), optionally in a COLOUR, with the tip's
+    /// coverage optionally MODULATED per pixel first (texture each tip,
+    /// the background eraser's colour gate). `ceiling == 1`, no colour
+    /// and no modulation is exactly [`Self::stamp`].
+    pub fn stamp_spec(&mut self, spec: &crate::brush::StampSpec<'_>) -> bool {
+        let flow = spec.flow.clamp(0.0, 1.0);
+        let ceiling = spec.ceiling.clamp(0.0, 1.0);
+        if flow <= 0.0 || ceiling <= 0.0 {
+            return false;
+        }
+        let Some(bounds) = spec
+            .tip
+            .dab_bounds(spec.cx, spec.cy, self.width, self.height)
+        else {
+            return false;
+        };
+        if spec.color.is_some() && self.colors.is_none() {
+            self.colors = Some(vec![[0.0; 3]; self.acc.len()]);
+        }
+        let mut touched = false;
+        for y in bounds.y as u32..bounds.bottom() as u32 {
+            for x in bounds.x as u32..bounds.right() as u32 {
+                let mut c = spec.tip.coverage_at_pixel(spec.cx, spec.cy, x, y);
+                if let Some(m) = spec.modulate {
+                    c = m(x, y, c);
+                }
+                if c <= 0.0 {
+                    continue;
+                }
+                let i = (y * self.width + x) as usize;
+                let prev = self.acc[i];
+                if ceiling <= prev {
+                    continue;
+                }
+                let next = (prev + flow * c * (ceiling - prev)).min(1.0);
+                if next > prev {
+                    self.acc[i] = next;
+                    if let (Some(rgb), Some(field)) = (spec.color, self.colors.as_mut()) {
+                        // The new colour's share of the pixel's coverage.
+                        let w = (next - prev) / next;
+                        let old = field[i];
+                        field[i] = [
+                            old[0] + (rgb[0] - old[0]) * w,
+                            old[1] + (rgb[1] - old[1]) * w,
+                            old[2] + (rgb[2] - old[2]) * w,
+                        ];
+                    }
+                    touched = true;
+                }
+            }
+        }
+        if touched {
+            self.dirty = Some(match self.dirty {
+                Some(d) => d.union(bounds),
+                None => bounds,
+            });
+            self.stroke = Some(match self.stroke {
+                Some(s) => s.union(bounds),
+                None => bounds,
+            });
+        }
+        self.dabs += 1;
+        touched
+    }
+
+    /// Mark `region` dirty without stamping — the lowering changed under
+    /// it (a dual-tip dab that landed where the primary already was).
+    pub fn mark_dirty(&mut self, region: Region) {
+        let Some(region) = region.intersect(Region::new(0, 0, self.width, self.height)) else {
+            return;
+        };
+        self.dirty = Some(match self.dirty {
+            Some(d) => d.union(region),
+            None => region,
+        });
+    }
+
+    /// The coverage after the lowering (dual tip, texture, wet edges,
+    /// noise) — what the mask is made of, before opacity and selection.
+    pub fn shaped_at(&self, x: u32, y: u32) -> f32 {
+        let a = self.value_at(x, y);
+        match &self.lowering {
+            Some(l) if a > 0.0 => l.shape(x, y, a),
+            _ => a,
         }
     }
 
@@ -712,7 +897,7 @@ impl StrokeAccumulator {
         opacity: f32,
         selection: Option<&SelectionCoverage>,
     ) -> f32 {
-        let base = self.value_at(x, y) * opacity.clamp(0.0, 1.0);
+        let base = self.shaped_at(x, y) * opacity.clamp(0.0, 1.0);
         match selection {
             Some(sel) => base * (sel.coverage_at(x, y) as f32 / 255.0),
             None => base,

@@ -108,7 +108,7 @@ mod wasm {
     use crate::saveback::{encode_rgba8, psd_write_adjusted, RasterFormat};
     use crate::selection::SessionSelection;
     use crate::stroke::{blend_kernel, blend_names, StrokeParams, StrokeSession, StrokeTool};
-    use image_gpu::dab::{PressureTarget, StrokeSample};
+    use image_gpu::dab::PressureTarget;
 
     thread_local! {
         /// The bundle-realm GPU device (I-07: created HERE, where
@@ -4873,6 +4873,264 @@ mod wasm {
         // Whether the in-flight stroke paints the active layer's MASK
         // (fixed at begin, like every other stroke parameter).
         static STROKE_ON_MASK: Cell<bool> = const { Cell::new(false) };
+        // An undo label that overrides the tool's (the magic eraser
+        // commits through the eraser's stroke).
+        static STROKE_LABEL: Cell<Option<&'static str>> = const { Cell::new(None) };
+    }
+
+    /// The undo step's name for a committed stroke of `tool`.
+    fn stroke_label(tool: StrokeTool) -> &'static str {
+        match tool {
+            StrokeTool::Smudge => "Smudge",
+            StrokeTool::Mixer => "Mixer Brush",
+            StrokeTool::History => "History Brush",
+            StrokeTool::ArtHistory => "Art History Brush",
+            StrokeTool::BackgroundEraser => "Background Eraser",
+            StrokeTool::ColorReplace => "Color Replacement",
+            _ => "Paint",
+        }
+    }
+
+    /// Run `f` on the in-flight stroke (errors when there is none).
+    fn with_stroke<T>(
+        f: impl FnOnce(&mut StrokeSession) -> Result<T, JsValue>,
+    ) -> Result<T, JsValue> {
+        STROKE.with(|s| {
+            let mut slot = s.borrow_mut();
+            let session = slot
+                .as_mut()
+                .ok_or_else(|| JsValue::from_str("no stroke in progress"))?;
+            f(session)
+        })
+    }
+
+    /// The BRUSH ENGINE's settings keys, newline-separated, in the order
+    /// `brush_stroke_set_dynamics` reads its values. The bundle packs by
+    /// NAME against this list, so a key added here never shifts another.
+    #[wasm_bindgen]
+    pub fn brush_dynamics_keys() -> String {
+        image_gpu::dynamics::DYNAMICS_KEYS.join("\n")
+    }
+
+    /// The texture / dual-brush combine modes, newline-separated, in
+    /// ordinal order.
+    #[wasm_bindgen]
+    pub fn brush_combine_modes() -> String {
+        image_gpu::brush::CombineKind::ALL
+            .iter()
+            .map(|m| m.as_wire())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Freeze BRUSH SETTINGS (every pane, the paint tools' options, the
+    /// stroke's seed) into the in-flight stroke: `values[i]` is
+    /// `brush_dynamics_keys()[i]`. Call between begin and the first
+    /// extend. A smudge / mixer stroke that samples all layers reads the
+    /// composite as it is now.
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_dynamics(values: Vec<f32>) -> Result<(), JsValue> {
+        let d = image_gpu::dynamics::BrushDynamics::from_values(&values);
+        let composite = STROKE.with(|s| {
+            s.borrow().as_ref().and_then(|session| {
+                let t = session.params().tool;
+                let all = (t == StrokeTool::Smudge && d.tools.smudge_sample_all)
+                    || (t == StrokeTool::Mixer && d.tools.mixer_sample_all);
+                all.then(|| session.handle())
+            })
+        });
+        let composite = composite.and_then(|h| IMAGES.with(|m| m.borrow().get(&h).cloned()));
+        with_stroke(|session| {
+            session.set_dynamics(d);
+            if let Some(img) = composite {
+                let rgba: Arc<[u8]> =
+                    Arc::from(img.rgba.to_rgba8().into_owned().into_boxed_slice());
+                session.set_alt_source(rgba).map_err(ingest_err)?;
+            }
+            Ok(())
+        })
+    }
+
+    fn tip_from(w: u32, h: u32, alpha: Vec<u8>) -> Result<Option<image_gpu::SampledTip>, JsValue> {
+        if w == 0 || h == 0 {
+            return Ok(None);
+        }
+        image_gpu::SampledTip::new(w, h, alpha)
+            .map(Some)
+            .ok_or_else(|| JsValue::from_str("tip bitmap: w × h does not match its bytes"))
+    }
+
+    /// The SAMPLED TIP for the in-flight stroke: a `w × h` coverage
+    /// bitmap (255 = paint). `w = 0` returns to the computed tip.
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_tip_bitmap(w: u32, h: u32, alpha: Vec<u8>) -> Result<(), JsValue> {
+        let tip = tip_from(w, h, alpha)?;
+        with_stroke(|session| {
+            session.set_tip_bitmap(tip);
+            Ok(())
+        })
+    }
+
+    /// The DUAL BRUSH's sampled tip (`w = 0`: its computed tip).
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_dual_bitmap(w: u32, h: u32, alpha: Vec<u8>) -> Result<(), JsValue> {
+        let tip = tip_from(w, h, alpha)?;
+        with_stroke(|session| {
+            session.set_dual_bitmap(tip);
+            Ok(())
+        })
+    }
+
+    /// The TEXTURE: an engine-held image (the defined pattern) as the
+    /// brush texture of the in-flight stroke.
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_texture_image(handle: u32) -> Result<(), JsValue> {
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let rgba: Arc<[u8]> = Arc::from(img.rgba.to_rgba8().into_owned().into_boxed_slice());
+        with_stroke(|session| {
+            session
+                .set_texture_source(img.width, img.height, rgba)
+                .map_err(ingest_err)
+        })
+    }
+
+    /// The HISTORY STATE the in-flight History / Art History stroke paints
+    /// from: `open` (the active layer as opened — before its first edit
+    /// this session) or `previous` (before its newest edit). Snapshots
+    /// are a later package; these are the two states nameable without
+    /// them. Errors for any other tool, without a layer stack, or when
+    /// the canvas changed size since the state was recorded.
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_history_source(kind: &str) -> Result<(), JsValue> {
+        let kind = crate::layers::HistoryKind::from_wire(kind).ok_or_else(|| {
+            JsValue::from_str(&format!(
+                "unknown history state \"{kind}\" (open | previous)"
+            ))
+        })?;
+        let handle = with_stroke(|session| {
+            if !session.params().tool.reads_history() {
+                return Err(JsValue::from_str(
+                    "only the history and art history brushes read a history state",
+                ));
+            }
+            Ok(session.handle())
+        })?;
+        let src = LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .filter(|d| d.handle == handle)
+                .map(|d| d.stack.history_source(kind))
+        });
+        let src = match src {
+            None => {
+                return Err(JsValue::from_str(
+                    "the history brush paints a layer's earlier state, and this image has no layer stack",
+                ))
+            }
+            Some(None) => {
+                return Err(JsValue::from_str(
+                    "that history state no longer fits the canvas (it changed size), or the active layer has no pixels",
+                ))
+            }
+            Some(Some(px)) => px,
+        };
+        with_stroke(|session| session.set_alt_source(src).map_err(ingest_err))
+    }
+
+    /// MAGIC ERASER: erase the colour region at `(x, y)` to transparency
+    /// on the ACTIVE layer, in one undo step. The region is the magic
+    /// wand's (`tolerance` 0–255 per channel, `contiguous`), read from
+    /// the active layer or with `sample_all` from the composite;
+    /// `antialias` softens its edge by a 0.6 px feather; `opacity` 0–1
+    /// scales the erase. The current selection clips it.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn magic_erase(
+        handle: u32,
+        x: u32,
+        y: u32,
+        tolerance: u8,
+        antialias: bool,
+        contiguous: bool,
+        sample_all: bool,
+        opacity: f32,
+    ) -> Result<DecodedHandle, JsValue> {
+        let ctx = GPU.with(|g| g.borrow().clone()).ok_or_else(|| {
+            JsValue::from_str("the magic eraser is GPU-only — call init_gpu first")
+        })?;
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        if x >= img.width || y >= img.height {
+            return Err(JsValue::from_str(&format!(
+                "magic eraser click ({x},{y}) outside {}×{}",
+                img.width, img.height
+            )));
+        }
+        let layer = LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .filter(|d| d.handle == handle)
+                .map(|d| d.stack.active().rgba.canvas().to_rgba8().into_owned())
+        });
+        let source = match (sample_all, layer) {
+            (false, Some(px)) => px,
+            _ => img.rgba.to_rgba8().into_owned(),
+        };
+        let mut field = SelectionCoverage::magic_wand(
+            img.width, img.height, &source, x, y, tolerance, contiguous,
+        );
+        if antialias {
+            field.feather(0.6);
+        }
+        brush_stroke_begin(
+            handle,
+            "eraser",
+            1.0,
+            1.0,
+            opacity,
+            1.0,
+            0.25,
+            "normal",
+            vec![0.0, 0.0, 0.0, 1.0],
+            "none",
+        )?;
+        let mut session = STROKE
+            .with(|s| s.borrow_mut().take())
+            .ok_or_else(|| JsValue::from_str("internal: the magic eraser's stroke did not open"))?;
+        let painted = session.paint_field(&ctx, &field).await;
+        STROKE.with(|s| *s.borrow_mut() = Some(session));
+        if let Err(e) = painted {
+            brush_stroke_cancel();
+            return Err(JsValue::from_str(&e.to_string()));
+        }
+        STROKE_LABEL.with(|l| l.set(Some("Magic Eraser")));
+        brush_stroke_commit().await
+    }
+
+    /// DEFINE BRUSH PRESET: the selection's pixels (the whole image when
+    /// nothing is selected) as a brush-tip bitmap — `[w, h]` as two
+    /// little-endian u32, then `w·h` coverage bytes. Coverage is
+    /// Photoshop's rule: dark paints, white does not, transparent does
+    /// not (`(255 − luma) · alpha`), times the selection's own coverage.
+    /// Read from the composite; at most 2500 px a side.
+    #[wasm_bindgen]
+    pub fn brush_tip_from_selection(handle: u32) -> Result<Vec<u8>, JsValue> {
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let sel = SELECTION.with(|s| s.borrow().mask_for(handle));
+        let rgba = img.rgba.to_rgba8();
+        let out = crate::stroke::tip_from_pixels(img.width, img.height, &rgba, sel.as_deref())
+            .ok_or_else(|| {
+                JsValue::from_str(
+                    "nothing to define a brush from — the selection is empty, or the area is \
+                     blank (white or transparent everywhere)",
+                )
+            })?;
+        Ok(out)
     }
 
     /// BEGIN a stroke on the engine-held image `handle`.
@@ -4910,7 +5168,8 @@ mod wasm {
         let tool = StrokeTool::from_wire(tool).ok_or_else(|| {
             JsValue::from_str(&format!(
                 "unknown paint tool \"{tool}\" \
-                 (brush | pencil | eraser | clone | heal | dodge | burn | sponge | blur | sharpen | spot-heal)"
+                 (brush | pencil | eraser | clone | heal | dodge | burn | sponge | blur | sharpen | spot-heal \
+                 | smudge | mixer | history | art-history | background-eraser | color-replace)"
             ))
         })?;
         let blend_kernel = blend_kernel(blend).ok_or_else(|| {
@@ -5007,6 +5266,39 @@ mod wasm {
     /// composite of the same samples.
     #[wasm_bindgen]
     pub async fn brush_stroke_extend(x: f32, y: f32, pressure: f32) -> Result<Vec<u8>, JsValue> {
+        extend_with(image_gpu::dynamics::PenSample::at(x, y, pressure)).await
+    }
+
+    /// EXTEND with everything a PEN reports — the brush engine's door
+    /// (`brush_stroke_extend` is this with no tilt, no rotation and the
+    /// wheel at full). `tilt_x` / `tilt_y` in degrees −90..90 (Pointer
+    /// Events), `rotation` the barrel twist in degrees 0..360, `wheel`
+    /// the airbrush wheel 0..1. Taken verbatim, so a recorded stroke
+    /// replays identically.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn brush_stroke_extend_pen(
+        x: f32,
+        y: f32,
+        pressure: f32,
+        tilt_x: f32,
+        tilt_y: f32,
+        rotation: f32,
+        wheel: f32,
+    ) -> Result<Vec<u8>, JsValue> {
+        extend_with(image_gpu::dynamics::PenSample {
+            x,
+            y,
+            pressure,
+            tilt_x,
+            tilt_y,
+            rotation,
+            wheel,
+        })
+        .await
+    }
+
+    async fn extend_with(pen: image_gpu::dynamics::PenSample) -> Result<Vec<u8>, JsValue> {
         let ctx = GPU
             .with(|g| g.borrow().clone())
             .ok_or_else(|| JsValue::from_str("painting is GPU-only — call init_gpu first"))?;
@@ -5015,9 +5307,7 @@ mod wasm {
         let mut session = STROKE
             .with(|s| s.borrow_mut().take())
             .ok_or_else(|| JsValue::from_str("no stroke in progress (brush_stroke_begin first)"))?;
-        let result = session
-            .extend(&ctx, StrokeSample::new(x, y, pressure))
-            .await;
+        let result = session.extend_pen(&ctx, pen).await;
         let handle = session.handle();
         // Shared, not copied: the stroke copies on its next write only if
         // the fold still holds this handle.
@@ -5173,6 +5463,16 @@ mod wasm {
         let mut session = STROKE
             .with(|s| s.borrow_mut().take())
             .ok_or_else(|| JsValue::from_str("no stroke in progress"))?;
+        // CATCH-UP AT END: a smoothed stroke lands on the pointer first.
+        if let Some(ctx) = GPU.with(|g| g.borrow().clone()) {
+            session
+                .finish(&ctx)
+                .await
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        }
+        let label = STROKE_LABEL
+            .with(|l| l.take())
+            .unwrap_or_else(|| stroke_label(session.params().tool));
         // The SPOT HEALING BRUSH deposits nothing while it is dragged; its
         // source is found and its heal composited here, on release.
         if session.params().tool == StrokeTool::SpotHeal {
@@ -5221,7 +5521,7 @@ mod wasm {
             let result = if on_mask {
                 commit_mask_stroke(&mut doc, ctx.as_deref(), damage, &pixels).await
             } else {
-                commit_stroke_into_active(&mut doc, ctx.as_deref(), damage, pixels).await
+                commit_stroke_into_active(&mut doc, ctx.as_deref(), damage, pixels, label).await
             };
             (doc, result)
         })
@@ -5233,10 +5533,11 @@ mod wasm {
         ctx: Option<&GpuContext>,
         damage: image_core::Region,
         pixels: Arc<[u8]>,
+        label: &'static str,
     ) -> Result<DecodedHandle, JsValue> {
         let (w, h) = (doc.stack.width(), doc.stack.height());
         doc.stack
-            .edit_active("Paint", damage, pixels.into())
+            .edit_active(label, damage, pixels.into())
             .map_err(ingest_err)?;
         let rgba = doc.stack.composite(ctx, None).await.map_err(ingest_err)?;
         set_image_pixels(doc.handle, rgba)?;
@@ -5282,6 +5583,7 @@ mod wasm {
     pub fn brush_stroke_cancel() {
         STROKE.with(|s| *s.borrow_mut() = None);
         STROKE_ON_MASK.with(|m| m.set(false));
+        STROKE_LABEL.with(|l| l.set(None));
     }
 
     /// Is a stroke in progress?
@@ -5590,6 +5892,68 @@ mod wasm {
             l.fill()
                 .map_or_else(|| "null".to_string(), |f| format!("\"{}\"", f.source.kind_name())),
         )
+    }
+
+    /// The SAMPLED TIP `sample_index` of an `.abr` (a preset's
+    /// `sampleIndex`) as `[w u32 LE, h u32 LE, alpha…]` — 8-bit
+    /// coverage, 255 = paint; a 16-bit tip is reduced by the explicit
+    /// lossy call. Stateless: the glue keeps the file's bytes.
+    #[wasm_bindgen]
+    pub fn abr_tip(bytes: &[u8], sample_index: u32) -> Result<Vec<u8>, JsValue> {
+        crate::brushes::tip_bitmap(bytes, sample_index as usize)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    thread_local! {
+        // The `.abr` export in progress (begin → add* → finish).
+        static ABR_EXPORT: RefCell<Option<crate::brushes::AbrExport>> =
+            const { RefCell::new(None) };
+    }
+
+    /// The per-preset values `abr_export_add` takes, newline-separated,
+    /// in order — the glue packs by NAME from this list.
+    #[wasm_bindgen]
+    pub fn abr_export_keys() -> String {
+        crate::brushes::EXPORT_KEYS.join("\n")
+    }
+
+    /// Start an `.abr` export (drops one left unfinished).
+    #[wasm_bindgen]
+    pub fn abr_export_begin() {
+        ABR_EXPORT.with(|e| *e.borrow_mut() = Some(Default::default()));
+    }
+
+    /// Add one preset: `values` in `abr_export_keys` order; `w`/`h`/
+    /// `alpha` its sampled tip, or `w = h = 0` for the round tip.
+    #[wasm_bindgen]
+    pub fn abr_export_add(
+        name: &str,
+        values: Vec<f32>,
+        w: u32,
+        h: u32,
+        alpha: Vec<u8>,
+    ) -> Result<(), JsValue> {
+        ABR_EXPORT.with(|e| {
+            let mut slot = e.borrow_mut();
+            let export = slot
+                .as_mut()
+                .ok_or_else(|| JsValue::from_str("no export in progress (abr_export_begin)"))?;
+            let bitmap = (w > 0 && h > 0).then_some((w, h, &alpha[..]));
+            export
+                .add(name, &values, bitmap)
+                .map_err(|m| JsValue::from_str(&m))
+        })
+    }
+
+    /// Finish the export: the `.abr` bytes (version 6.2).
+    #[wasm_bindgen]
+    pub fn abr_export_finish() -> Result<Vec<u8>, JsValue> {
+        ABR_EXPORT.with(|e| {
+            e.borrow_mut()
+                .take()
+                .map(|x| x.finish())
+                .ok_or_else(|| JsValue::from_str("no export in progress (abr_export_begin)"))
+        })
     }
 
     /// Minimal JSON string escape (quotes, backslash, control chars) —

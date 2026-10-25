@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! `cargo run -p slide-geom --example geom-svg -- deck.pptx <slide> > out.svg`
+//! `cargo run -p slide-resolve --example geom-svg -- deck.pptx <slide> > out.svg`
 //! draws one slide's preset shapes from evaluated outlines (outline check
 //! against PowerPoint's own render; no text, no paint).
 

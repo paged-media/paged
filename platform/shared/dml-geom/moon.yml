@@ -1,0 +1,33 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# dml-geom: DrawingML preset and custom geometry, adjust handles, connection
+# sites and the live-preset arithmetic, shared by paged.slide and (for its
+# shapes) paged.doc (PM-0014: the lowest layer every consumer reaches). A path
+# dependency of modules/slide, which lists its sources in its own
+# rust-sources file group.
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "shared"]
+
+project:
+  title: "platform/shared/dml-geom"
+  description: "Shared DrawingML geometry: presets, handles, connection sites, live presets."
+
+dependsOn:
+  - id: "ooxml"
+    scope: "production"
+
+tasks:
+  # The standalone build takes every feature (paged-ooxml needs a zip
+  # backend, which `standalone` supplies here and the modules supply there).
+  rust-check:
+    command: "cargo check --workspace --all-targets --all-features"
+  rust-build:
+    command: "cargo build --workspace --all-features"
+  rust-lint:
+    command: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+  rust-test:
+    script: >-
+      cargo nextest run --workspace --all-features
+      && cargo test --doc --workspace --all-features

@@ -46,6 +46,13 @@ export const SHOWN_PATHS = [
   "characterFillColor",
   "paragraphJustification",
   "paragraphListType",
+  // Doc ADR 608 amendment 1 (engine ADR 1018).
+  "characterHighlightColor",
+  "characterHidden",
+  "characterUnderlineType",
+  "paragraphShadingOn",
+  "paragraphBorderOn",
+  "paragraphRuleBelow",
 ] as const satisfies readonly PropertyPath[];
 
 export type ShownPath = (typeof SHOWN_PATHS)[number];
@@ -54,6 +61,13 @@ export interface WordSnapshot {
   /** The selection's effective values (absent: no selection). */
   format: Partial<Record<ShownPath, Read<unknown>>>;
   hasSelection: boolean;
+  /** Tab is a list level here (Word): a range, or a caret at the start of
+   *  its paragraph. */
+  tabIsListLevel: boolean;
+  /** The document shows hidden text (`documentShowHiddenText`). */
+  showHidden: boolean;
+  /** Bumped to put the focus in the style box (Apply Styles). */
+  focusStyleBox: number;
   styles: StyleRow[];
   fonts: string[];
   swatches: Array<{ selfId: string; name: string }>;
@@ -68,11 +82,18 @@ export interface WordStore {
   refreshDocument(): Promise<void>;
   refreshPage(): Promise<void>;
   refreshWords(): Promise<void>;
+  /** Read whether the document shows hidden text. */
+  refreshShowHidden(): Promise<void>;
+  /** Ask the style box for the focus. */
+  requestStyleBoxFocus(): void;
 }
 
 const EMPTY: WordSnapshot = {
   format: {},
   hasSelection: false,
+  tabIsListLevel: false,
+  showHidden: false,
+  focusStyleBox: 0,
   styles: [],
   fonts: [],
   swatches: [],
@@ -118,17 +139,26 @@ export function createWordStore(
       const ask = ++latest.format;
       const sel = host.text.selection();
       if (!sel) {
-        set({ format: {}, hasSelection: false });
+        set({ format: {}, hasSelection: false, tabIsListLevel: false });
         return;
       }
-      const props = await host.text.properties([...SHOWN_PATHS]);
+      const [props, content] = await Promise.all([
+        host.text.properties([...SHOWN_PATHS]),
+        sel.start === sel.end ? story(sel.storyId) : Promise.resolve(null),
+      ]);
       if (ask !== latest.format) return;
       const format: Partial<Record<ShownPath, Read<unknown>>> = {};
       for (const p of SHOWN_PATHS) {
         const r = props?.[p];
         format[p] = r === "mixed" ? "mixed" : r ? r.value : null;
       }
-      set({ format, hasSelection: true });
+      set({
+        format,
+        hasSelection: true,
+        tabIsListLevel:
+          sel.start !== sel.end ||
+          (content !== null && atParagraphStart(content, sel.start)),
+      });
     },
     async refreshDocument() {
       const [styles, fonts, swatches] = await Promise.all([
@@ -164,6 +194,16 @@ export function createWordStore(
             : { index: index < 0 ? 0 : index, count: pages.length },
       });
     },
+    async refreshShowHidden() {
+      try {
+        set({ showHidden: await readShowHidden(host) });
+      } catch {
+        // No object model here: the toggle shows off.
+      }
+    },
+    requestStyleBoxFocus() {
+      set({ focusStyleBox: snap.focusStyleBox + 1 });
+    },
     async refreshWords() {
       if (!host.supports("document.readStory@1")) return;
       const ask = ++latest.words;
@@ -182,4 +222,27 @@ export function createWordStore(
       set({ words: { total: storyWords(stories), selected } });
     },
   };
+}
+
+const utf8 = new TextEncoder();
+
+/** Whether content offset `offset` is the start of a paragraph of
+ *  `content` (offsets count UTF-8 bytes and one per paragraph break). */
+export function atParagraphStart(content: StoryText, offset: number): boolean {
+  let at = 0;
+  for (const p of content.paragraphs) {
+    if (offset === at) return true;
+    at += utf8.encode(p.runs.map((r) => r.text).join("")).length + 1;
+    if (at > offset) return false;
+  }
+  return false;
+}
+
+/** Whether the document shows hidden text (`documentShowHiddenText` on the
+ *  `doc` address); false when the object model cannot say. */
+export async function readShowHidden(host: BundleHost): Promise<boolean> {
+  const v = await host.objects.get("doc", "documentShowHiddenText");
+  if (v.kind !== "value") return false;
+  const raw = v.value as boolean | { value?: unknown } | null;
+  return raw === true || (typeof raw === "object" && raw?.value === true);
 }

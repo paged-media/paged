@@ -12,6 +12,7 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/layer-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/cmyk-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-masks.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/brush-strokes.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -33,6 +34,14 @@ Photoshop's own sRGB conversions under three intent/BPC settings).
 `image-conformance/tests/it/psd_vector_masks_photoshop.rs` (vector masks: the
 merged composite, and the render Photoshop caches in each masked layer's
 channel −2).
+`image-js/tests/it/brush_photoshop.rs` (brush strokes: Stroke Path with the
+Brush tool -- dab placement, spacing, the round tip's profile, elliptical and
+sampled tips under angle and flips -> `fixtures/photoshop/brush-strokes.ledger.json`;
+regenerate with `PAGED_PHOTOSHOP_LEDGER=write cargo nextest run -p image-js brush_photoshop`).
+The brush probe reads and RESTORES the user's paintbrush options, foreground
+colour and current tool, and deletes the one temporary brush preset it
+defines, by name. A partial tool-options descriptor resets the unnamed
+gates, so the probe names every gate on every call.
 
 ## Traps, and what each step does about them
 

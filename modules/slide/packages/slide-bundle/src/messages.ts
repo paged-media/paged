@@ -98,6 +98,23 @@ export const MODEL = defineMessages("slide.model", {
   deleteComment: "Delete a comment",
   previousSlide: "Previous slide",
   nextSlide: "Next slide",
+  insertShape: "Insert a shape",
+});
+
+/** The Shapes panel (Insert ▸ Shapes) and its categories, PowerPoint's. */
+export const SHAPES = defineMessages("slide.shapes", {
+  title: "Shapes",
+  empty: "Go to a slide to insert shapes.",
+  insert: "Insert {name}",
+  lines: "Lines",
+  rectangles: "Rectangles",
+  basicShapes: "Basic Shapes",
+  blockArrows: "Block Arrows",
+  equation: "Equation Shapes",
+  flowchart: "Flowchart",
+  starsAndBanners: "Stars and Banners",
+  callouts: "Callouts",
+  actionButtons: "Action Buttons",
 });
 
 /** The palette commands (commands.ts). */
@@ -109,6 +126,7 @@ export const COMMANDS = defineMessages("slide.commands", {
   moveSlideDown: "Move slide down",
   importPptx: "Open PowerPoint deck…",
   exportPptx: "Export PowerPoint deck…",
+  insertShapes: "Insert shape…",
   previousSlide: "Previous slide",
   nextSlide: "Next slide",
   addComment: "New comment",
@@ -178,6 +196,7 @@ defineMessages("menu", {
   "Presenter View": "Presenter View",
   "Rehearse Timings": "Rehearse Timings",
   "Slide Sorter": "Slide Sorter",
+  "Shapes…": "Shapes…",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled

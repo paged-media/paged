@@ -1,0 +1,997 @@
+{
+  "fixture": "brush-strokes",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/brush-strokes.jsx",
+    "script_sha256": "4a72cb1c55e2409e6caee9cd6b4f55f5cac375713b0c3a2ec85fbdb809bbd71b",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-24T14:02:08.921Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "round-d40-h0-single",
+      "params": {
+        "tip": "computed",
+        "diameter": 40,
+        "hardness": 0,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 40,
+          "hardness": 0,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d40-h0-single.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d40-h50-single",
+      "params": {
+        "tip": "computed",
+        "diameter": 40,
+        "hardness": 50,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 40,
+          "hardness": 50,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d40-h50-single.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d40-h100-single",
+      "params": {
+        "tip": "computed",
+        "diameter": 40,
+        "hardness": 100,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 40,
+          "hardness": 100,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d40-h100-single.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d40-h50-single-half",
+      "params": {
+        "tip": "computed",
+        "diameter": 40,
+        "hardness": 50,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 1000,
+        "from": [
+          64.5,
+          64.5
+        ],
+        "to": [
+          74.5,
+          64.5
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 40,
+          "hardness": 50,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d40-h50-single-half.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d11-h100-single",
+      "params": {
+        "tip": "computed",
+        "diameter": 11,
+        "hardness": 100,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 11,
+          "hardness": 100,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d11-h100-single.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d20-h100-sp10",
+      "params": {
+        "tip": "computed",
+        "diameter": 20,
+        "hardness": 100,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 10,
+        "from": [
+          14,
+          64
+        ],
+        "to": [
+          114,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 20,
+          "hardness": 100,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 10,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d20-h100-sp10.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d20-h100-sp25",
+      "params": {
+        "tip": "computed",
+        "diameter": 20,
+        "hardness": 100,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 25,
+        "from": [
+          14,
+          64
+        ],
+        "to": [
+          114,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 20,
+          "hardness": 100,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 25,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d20-h100-sp25.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d20-h50-sp25",
+      "params": {
+        "tip": "computed",
+        "diameter": 20,
+        "hardness": 50,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 25,
+        "from": [
+          14,
+          64
+        ],
+        "to": [
+          114,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 20,
+          "hardness": 50,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 25,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d20-h50-sp25.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d10-h100-sp100",
+      "params": {
+        "tip": "computed",
+        "diameter": 10,
+        "hardness": 100,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 100,
+        "from": [
+          14,
+          64
+        ],
+        "to": [
+          114,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 10,
+          "hardness": 100,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 100,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d10-h100-sp100.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d10-h100-sp200",
+      "params": {
+        "tip": "computed",
+        "diameter": 10,
+        "hardness": 100,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 200,
+        "from": [
+          14,
+          64
+        ],
+        "to": [
+          114,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 10,
+          "hardness": 100,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 200,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d10-h100-sp200.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d10-h100-sp150",
+      "params": {
+        "tip": "computed",
+        "diameter": 10,
+        "hardness": 100,
+        "angle": 0,
+        "roundness": 100,
+        "spacing": 150,
+        "from": [
+          14,
+          64
+        ],
+        "to": [
+          114,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 10,
+          "hardness": 100,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 150,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d10-h100-sp150.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d40-h100-a30-r40",
+      "params": {
+        "tip": "computed",
+        "diameter": 40,
+        "hardness": 100,
+        "angle": 30,
+        "roundness": 40,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 40,
+          "hardness": 100,
+          "angle": 30,
+          "roundness": 40,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d40-h100-a30-r40.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d40-h100-am60-r25",
+      "params": {
+        "tip": "computed",
+        "diameter": 40,
+        "hardness": 100,
+        "angle": -60,
+        "roundness": 25,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 40,
+          "hardness": 100,
+          "angle": -60,
+          "roundness": 25,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d40-h100-am60-r25.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "round-d40-h50-a90-r50",
+      "params": {
+        "tip": "computed",
+        "diameter": 40,
+        "hardness": 50,
+        "angle": 90,
+        "roundness": 50,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "computedBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 40,
+          "hardness": 50,
+          "angle": 90,
+          "roundness": 50,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/round-d40-h50-a90-r50.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "tip-source",
+      "params": {
+        "tip": "source",
+        "triangle": [
+          [
+            8,
+            8
+          ],
+          [
+            56,
+            8
+          ],
+          [
+            8,
+            32
+          ]
+        ],
+        "square": [
+          [
+            8,
+            40
+          ],
+          [
+            16,
+            40
+          ],
+          [
+            16,
+            48
+          ],
+          [
+            8,
+            48
+          ]
+        ],
+        "defined": {
+          "diameter": 48,
+          "spacing": 10
+        }
+      },
+      "output": "brush-strokes/tip-source.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "sampled-a0",
+      "params": {
+        "tip": "sampled",
+        "diameter": 48,
+        "angle": 0,
+        "flipX": false,
+        "flipY": false,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "sampledBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 48,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/sampled-a0.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "sampled-a30",
+      "params": {
+        "tip": "sampled",
+        "diameter": 48,
+        "angle": 30,
+        "flipX": false,
+        "flipY": false,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "sampledBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 48,
+          "angle": 30,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/sampled-a30.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "sampled-am30",
+      "params": {
+        "tip": "sampled",
+        "diameter": 48,
+        "angle": -30,
+        "flipX": false,
+        "flipY": false,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "sampledBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 48,
+          "angle": -30,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/sampled-am30.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "sampled-flipx",
+      "params": {
+        "tip": "sampled",
+        "diameter": 48,
+        "angle": 0,
+        "flipX": true,
+        "flipY": false,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "sampledBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 48,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": true,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/sampled-flipx.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "sampled-flipy",
+      "params": {
+        "tip": "sampled",
+        "diameter": 48,
+        "angle": 0,
+        "flipX": false,
+        "flipY": true,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "sampledBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 48,
+          "angle": 0,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": false,
+          "flipY": true
+        }
+      },
+      "output": "brush-strokes/sampled-flipy.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    },
+    {
+      "id": "sampled-flipx-a30",
+      "params": {
+        "tip": "sampled",
+        "diameter": 48,
+        "angle": 30,
+        "flipX": true,
+        "flipY": false,
+        "spacing": 1000,
+        "from": [
+          64,
+          64
+        ],
+        "to": [
+          74,
+          64
+        ],
+        "readback": {
+          "tip_class": "sampledBrush",
+          "opacity": 100,
+          "flow": 100,
+          "mode": "normal",
+          "smoothing": false,
+          "gates": {
+            "useTipDynamics": false,
+            "useScatter": false,
+            "useTexture": false,
+            "useColorDynamics": false,
+            "usePaintDynamics": false,
+            "useBrushPose": false,
+            "wetEdges": false,
+            "noise": false,
+            "repeat": false
+          },
+          "diameter": 48,
+          "angle": 30,
+          "roundness": 100,
+          "spacing": 1000,
+          "flipX": true,
+          "flipY": false
+        }
+      },
+      "output": "brush-strokes/sampled-flipx-a30.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16
+    }
+  ]
+}

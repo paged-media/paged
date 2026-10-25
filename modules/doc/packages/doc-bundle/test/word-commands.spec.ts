@@ -132,10 +132,21 @@ describe("word count (word-count.ts)", () => {
 function textHost(values: Record<string, TextPropertyRead> = {}) {
   const writes: TextPropertyWrite[][] = [];
   const styles: Array<[string, string]> = [];
+  const mutations: Array<{ op: string; args: Record<string, unknown> }> = [];
+  const opened: unknown[][] = [];
+  const focus: string[] = [];
   const host = {
     log: { warn() {}, info() {}, debug() {}, error() {} },
+    supports: () => true,
+    shell: { openPanel: (...a: unknown[]) => void opened.push(a) },
+    objects: {
+      async get() {
+        return { kind: "value", value: false };
+      },
+    },
     text: {
       selection: () => ({ storyId: "s", start: 0, end: 4 }),
+      characterRange: async () => ({ storyId: "s", start: 0, end: 4 }),
       async properties(paths: string[]) {
         const out: Record<string, TextPropertyRead> = {};
         for (const p of paths) if (values[p]) out[p] = values[p]!;
@@ -151,16 +162,25 @@ function textHost(values: Record<string, TextPropertyRead> = {}) {
       },
     },
     document: {
-      async collection() {
+      async collection(name: string) {
+        if (name === "swatches")
+          return [{ selfId: "Color/u9", name: "Yellow" }];
+        if (name === "numberingLists") return [];
         return [
           { selfId: "ParagraphStyle/docx-Heading1", name: "heading 1" },
           { selfId: "ParagraphStyle/docx-Normal", name: "Normal" },
         ];
       },
+      async mutate(m: { op: string; args: Record<string, unknown> }) {
+        mutations.push(m);
+        return { applied: true, createdId: null };
+      },
     },
   } as unknown as BundleHost;
-  return { host, writes, styles };
+  return { host, writes, styles, mutations, opened, focus };
 }
+
+type Rec = ReturnType<typeof textHost>;
 
 const v = (value: unknown): TextPropertyRead => ({ value: value as never });
 
@@ -168,7 +188,7 @@ const v = (value: unknown): TextPropertyRead => ({ value: value as never });
  *  text, 10 pt, no list, no indent). */
 const EXPECTED: Record<
   WordCommandName,
-  (w: TextPropertyWrite[][], s: Array<[string, string]>) => void
+  (w: TextPropertyWrite[][], s: Array<[string, string]>, r: Rec) => void
 > = {
   bold: (w) =>
     expect(w[0]).toEqual([
@@ -219,10 +239,16 @@ const EXPECTED: Record<
     expect(w[0]![0]!.value).toEqual({ type: "text", value: "BulletList" }),
   numbering: (w) =>
     expect(w[0]![0]!.value).toEqual({ type: "text", value: "NumberedList" }),
-  listLevelDown: (w) =>
-    expect(w[0]![0]!.value).toEqual({ type: "length", value: 2 }),
-  listLevelUp: (w) =>
-    expect(w[0]![0]!.value).toEqual({ type: "length", value: 1 }),
+  listLevelDown: (w, _s, r) => {
+    expect(w).toEqual([]);
+    expect(r.mutations).toEqual([
+      {
+        op: "setListLevel",
+        args: { storyId: "s", start: 0, end: 4, delta: 1 },
+      },
+    ]);
+  },
+  listLevelUp: (_w, _s, r) => expect(r.mutations[0]!.args.delta).toBe(-1),
   copyFormat: (w) => expect(w).toEqual([]),
   pasteFormat: (w) => expect(w).toEqual([]),
   lineSpacing1: (w) =>
@@ -237,6 +263,99 @@ const EXPECTED: Record<
     expect(w[0]![0]!.value).toEqual({ type: "length", value: 18 }),
   lineSpacing2: (w) =>
     expect(w[0]![0]!.value).toEqual({ type: "length", value: 24 }),
+  doubleUnderline: (w) =>
+    expect(w[0]).toEqual([
+      {
+        path: "characterUnderlineType",
+        value: { type: "text", value: "double" },
+      },
+    ]),
+  hidden: (w) =>
+    expect(w[0]).toEqual([
+      { path: "characterHidden", value: { type: "bool", value: true } },
+    ]),
+  highlight: (w) =>
+    expect(w[0]).toEqual([
+      {
+        path: "characterHighlightColor",
+        value: { type: "colorRef", value: "Color/u9" },
+      },
+    ]),
+  shading: (w) =>
+    expect(w[0]!.map((x) => x.path)).toEqual([
+      "paragraphShadingOn",
+      "paragraphShadingColor",
+      "paragraphShadingTint",
+    ]),
+  borderBottom: (w) =>
+    expect(w[0]![1]).toEqual({
+      path: "paragraphRuleBelow",
+      value: {
+        type: "paragraphRule",
+        value: { on: true, weight: 0.5, color: "Color/Black", offset: 4 },
+      },
+    }),
+  borderBox: (w) =>
+    expect(w[0]![1]).toEqual({
+      path: "paragraphBorderOn",
+      value: { type: "bool", value: true },
+    }),
+  borderNone: (w) =>
+    expect(w[0]!.map((x) => x.path)).toEqual([
+      "paragraphBorderOn",
+      "paragraphRuleBelow",
+    ]),
+  showHidden: (_w, _s, r) =>
+    expect(r.mutations).toEqual([
+      {
+        op: "set",
+        args: {
+          address: "doc",
+          path: "documentShowHiddenText",
+          value: { type: "bool", value: true },
+        },
+      },
+    ]),
+  clearParagraph: (w) =>
+    expect(w[0]![0]).toEqual({
+      path: "paragraphJustification",
+      value: { type: "text", value: "" },
+    }),
+  restartNumbering: (_w, _s, r) =>
+    expect(r.mutations[0]).toEqual({
+      op: "restartNumbering",
+      args: { storyId: "s", start: 0, end: 4, startAt: 1 },
+    }),
+  continueNumbering: (_w, _s, r) =>
+    expect(r.mutations[0]!.args.continueNumbering).toBe(true),
+  listOutline: (w, _s, r) => {
+    expect(r.mutations[0]!.op).toBe("createNumberingList");
+    expect(w[0]![0]).toEqual({
+      path: "paragraphAppliedNumberingList",
+      value: { type: "text", value: "NumberingList/word-preset-outline" },
+    });
+  },
+  listLegal: (w) =>
+    expect(w[0]![0]!.value).toEqual({
+      type: "text",
+      value: "NumberingList/word-preset-legal",
+    }),
+  listBullets: (w) =>
+    expect(w[0]![1]!.value).toEqual({ type: "text", value: "BulletList" }),
+  styleUpdate: (_w, _s, r) => expect(r.mutations[0]!.op).toBe("batch"),
+  styleModify: (_w, _s, r) =>
+    expect(r.opened).toEqual([
+      [
+        "paged.style-options",
+        { target: "style:paragraph/ParagraphStyle/docx-Normal" },
+      ],
+    ]),
+  styleNew: (_w, _s, r) =>
+    expect(r.mutations[0]).toEqual({
+      op: "createParagraphStyle",
+      args: { name: "Style 1", basedOn: "ParagraphStyle/docx-Normal" },
+    }),
+  applyStyles: (_w, _s, r) => expect(r.focus).toEqual(["style box"]),
 };
 
 describe("every Word command's write (commands.ts)", () => {
@@ -272,8 +391,26 @@ describe("every Word command's write (commands.ts)", () => {
     covers("command:media.paged.doc.command.word.lineSpacing1");
     covers("command:media.paged.doc.command.word.lineSpacing15");
     covers("command:media.paged.doc.command.word.lineSpacing2");
+    covers("command:media.paged.doc.command.word.doubleUnderline");
+    covers("command:media.paged.doc.command.word.hidden");
+    covers("command:media.paged.doc.command.word.highlight");
+    covers("command:media.paged.doc.command.word.shading");
+    covers("command:media.paged.doc.command.word.borderBottom");
+    covers("command:media.paged.doc.command.word.borderBox");
+    covers("command:media.paged.doc.command.word.borderNone");
+    covers("command:media.paged.doc.command.word.showHidden");
+    covers("command:media.paged.doc.command.word.clearParagraph");
+    covers("command:media.paged.doc.command.word.restartNumbering");
+    covers("command:media.paged.doc.command.word.continueNumbering");
+    covers("command:media.paged.doc.command.word.listOutline");
+    covers("command:media.paged.doc.command.word.listLegal");
+    covers("command:media.paged.doc.command.word.listBullets");
+    covers("command:media.paged.doc.command.word.styleUpdate");
+    covers("command:media.paged.doc.command.word.styleModify");
+    covers("command:media.paged.doc.command.word.styleNew");
+    covers("command:media.paged.doc.command.word.applyStyles");
     for (const name of Object.keys(WORD_COMMAND) as WordCommandName[]) {
-      const { host, writes, styles } = textHost({
+      const { host, writes, styles, ...rest } = textHost({
         characterFontStyle: v("Regular"),
         characterFontSize: v(10),
         characterUnderline: v(false),
@@ -281,9 +418,17 @@ describe("every Word command's write (commands.ts)", () => {
         paragraphSpaceBefore: v(0),
         paragraphListType: v("NoList"),
         paragraphNumberingLevel: v(1),
+        appliedParagraphStyle: v("ParagraphStyle/docx-Normal"),
+        characterHighlightColor: v("Swatch/None"),
+        paragraphShadingOn: v(false),
+        characterHidden: v(false),
       });
-      await runWordCommand(host, name, { copied: null });
-      EXPECTED[name](writes, styles);
+      const rec = { host, writes, styles, ...rest };
+      await runWordCommand(host, name, {
+        copied: null,
+        focusStyleBox: () => void rec.focus.push("style box"),
+      });
+      EXPECTED[name](writes, styles, rec);
     }
   });
 
