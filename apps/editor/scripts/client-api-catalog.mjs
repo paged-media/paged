@@ -91,6 +91,13 @@ const GROUPS = [
       "Pointer deltas for a live drag, written into shared memory at input rate rather than posted per move.",
   },
   {
+    key: "data-bridge",
+    file: "src/sab/data-bridge.ts",
+    title: "Script data (shared memory)",
+    summary:
+      "Engine ADR 1014, amendment 2 — a script's paged.data calls, answered on the main thread while the worker blocks on a SharedArrayBuffer.",
+  },
+  {
     key: "journal",
     file: "src/journal/",
     title: "Journal (flight recorder)",
