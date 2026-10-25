@@ -73,6 +73,13 @@ import { makeCommentsPanel } from "./panels/comments-panel.js";
 import { makeNotesPanel } from "./panels/notes-panel.js";
 import { makeSlidesPanel } from "./panels/slides-panel.js";
 import { SlidesStore } from "./slides-model.js";
+import {
+  contributeShow,
+  showTypedCommands,
+  SORTER_VIEW,
+} from "./show/contribute.js";
+import { SHOW } from "./messages.js";
+import { makeSlideSorter } from "./views/slide-sorter.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
 export const SLIDES_PANEL_ID = "media.paged.slide.panel.slides";
@@ -263,9 +270,15 @@ export function activate(host: BundleHost): BundleHandle {
     if (!target || !host.supports("viewport.pages@1")) return null;
     return (await host.viewport.goToPage(target.pageId)) ? target.pageId : null;
   };
+  // The slide show's typed commands are registered with the model, which
+  // comes first; they run the show once it is contributed below.
+  let runShow: ((id: string) => Promise<boolean>) | null = null;
   const model = contributeSlideObjectModel(host, {
     openDeck,
     exportDeck,
+    extraCommands: showTypedCommands((id) =>
+      runShow ? runShow(id) : Promise.resolve(false),
+    ),
     comments: () => comments,
     step,
     activePage: () => store?.activePage() ?? null,
@@ -441,6 +454,42 @@ export function activate(host: BundleHost): BundleHandle {
       () => commands.dispose(),
       () => menu.dispose(),
     );
+  }
+
+  // Slide ADR 716 — Slide Show, Presenter View, Rehearse Timings (one
+  // presentation, extensions ADR 345) and View ▸ Slide Sorter (a module
+  // view in place of the canvas).
+  if (store && host.supports("contribute.command@1")) {
+    const show = contributeShow(
+      host,
+      {
+        store,
+        readReport: async () => {
+          if (!host.supports("storage.parts@1")) return null;
+          try {
+            const bytes = await host.parts.read(REPORT_PART);
+            return bytes
+              ? (JSON.parse(new TextDecoder().decode(bytes)) as ImportReport)
+              : null;
+          } catch {
+            return null;
+          }
+        },
+      },
+      host.supports("contribute.view@1") && host.supports("render.snapshot@1")
+        ? () =>
+            host.contribute.view({
+              id: SORTER_VIEW,
+              title: t(SHOW.slideSorter),
+              render: makeSlideSorter(host, store),
+            })
+        : null,
+    );
+    runShow = show.run;
+    disposers.push(() => {
+      runShow = null;
+      show.dispose();
+    });
   }
 
   if (store && richPanels) {

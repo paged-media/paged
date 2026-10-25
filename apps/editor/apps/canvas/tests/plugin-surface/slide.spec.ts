@@ -134,6 +134,31 @@ const PALETTE = {
   "media.paged.slide.command.addComment": "Slide/New comment",
 } as const;
 
+/** The slide show's commands (slide ADR 716, `src/show/contribute.ts`):
+ *  their titles and their menu entries. Offered only in a deck. */
+const SHOW = {
+  "media.paged.slide.command.slideShowFromBeginning": [
+    "Slide show from the beginning",
+    "Slide Show/From Beginning",
+  ],
+  "media.paged.slide.command.slideShowFromCurrent": [
+    "Slide show from the current slide",
+    "Slide Show/From Current Slide",
+  ],
+  "media.paged.slide.command.presenterView": [
+    "Presenter view",
+    "Slide Show/Presenter View",
+  ],
+  "media.paged.slide.command.rehearseTimings": [
+    "Rehearse timings",
+    "Slide Show/Rehearse Timings",
+  ],
+  "media.paged.slide.command.slideSorter": [
+    "Slide sorter",
+    "View/Slide Sorter",
+  ],
+} as const;
+
 const KIND = (k: string) => `plugin:media.paged.slide/${k}`;
 
 /** THE IDS, SPELLED OUT. Comparing the manifest to the registries proves
@@ -166,10 +191,12 @@ const DECLARED = {
     DELETE_COMMENT,
     PREVIOUS_SLIDE,
     NEXT_SLIDE,
+    // The slide show's typed twins carry their palette ids.
+    ...Object.keys(SHOW),
   ],
   /** The deck's document context (editor ADR 307): no frame is entered. */
   editContexts: [{ type: "slideDeck", entry: "doubleClick" }],
-  commands: Object.keys(PALETTE),
+  commands: [...Object.keys(PALETTE), ...Object.keys(SHOW)],
 } as const;
 
 /** Each panel's title, and what it is: the sorter, the notes and the
@@ -1135,13 +1162,21 @@ test.describe("plugin surface · paged.slide", () => {
       "media.paged.slide.command.moveSlideDown": "Move slide down",
       "media.paged.slide.command.importPptx": "Open PowerPoint deck…",
       "media.paged.slide.command.exportPptx": "Export PowerPoint deck…",
+      ...Object.fromEntries(
+        Object.entries(SHOW).map(([id, [title]]) => [id, title]),
+      ),
     });
     for (const x of blank.commands)
       expect(x.category, `${x.id} category`).toBe("Slide");
     // A menu entry onto each.
     expect(
       Object.fromEntries(blank.verbItems.map((m) => [m.command, m.path])),
-    ).toEqual(PALETTE);
+    ).toEqual({
+      ...PALETTE,
+      ...Object.fromEntries(
+        Object.entries(SHOW).map(([id, [, path]]) => [id, path]),
+      ),
+    });
     // Outside a deck only Open is offered.
     expect(
       blank.commands.filter((x) => x.applies).map((x) => x.id),
@@ -1171,6 +1206,10 @@ test.describe("plugin surface · paged.slide", () => {
           "ctrl+arrowup",
           "cmd+arrowdown",
           "ctrl+arrowdown",
+          // PowerPoint's slide show keys (slide ADR 716).
+          "f5",
+          "shift+f5",
+          "alt+f5",
         ].sort(),
       );
     expect(
@@ -1231,7 +1270,7 @@ test.describe("plugin surface · paged.slide", () => {
         { timeout: 15_000 },
       )
       .toEqual(
-        Object.keys(PALETTE)
+        [...Object.keys(PALETTE), ...Object.keys(SHOW)]
           .filter(
             (id) =>
               id !== "media.paged.slide.command.moveSlideUp" &&

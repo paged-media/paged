@@ -549,6 +549,9 @@ export interface SlideObjectModelOptions {
   step?: (by: -1 | 1) => Promise<string | null>;
   /** The active slide's page id, or null. */
   activePage?: () => string | null;
+  /** More typed commands to register with the model: the slide show's
+   *  twins of its palette commands (show/contribute.ts). */
+  extraCommands?: readonly TypedCommandContribution[];
 }
 
 /** Register the slide object model on `host`. Headless: no DOM, no edit
@@ -1325,6 +1328,7 @@ export function contributeSlideObjectModel(
       deleteComment,
       stepCommand(PREVIOUS_SLIDE_COMMAND, t(MODEL.previousSlide), -1),
       stepCommand(NEXT_SLIDE_COMMAND, t(MODEL.nextSlide), 1),
+      ...(options.extraCommands ?? []),
     ] as readonly TypedCommandContribution[],
     // Editor plan G3a: a placeholder's text, whether a slide is shown.
     templateFields: slideTemplateFields(host),

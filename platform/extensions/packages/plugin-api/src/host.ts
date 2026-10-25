@@ -60,8 +60,13 @@ import type {
   OverlayContribution,
   PagedEditor,
   PanelContribution,
+  PresentationContribution,
+  PresentationState,
+  PresentRequest,
+  PresentResult,
   ToolContribution,
   ToolPreviewShape,
+  ViewContribution,
 } from "./editor.js";
 import type { SceneLayer } from "./wire.js";
 
@@ -489,6 +494,23 @@ export interface ContributionSurface {
    * warns and registers nothing).
    */
   frameSurface(contribution: FrameSurfaceContribution): Disposable;
+  /**
+   * Register a PRESENTATION (extensions ADR 345, C1): a full-screen
+   * surface the host shows on `host.shell.present({ id })`, on the
+   * editor's screen, in a window of its own, or as a console with an
+   * audience window. See {@link PresentationContribution}. The id must be
+   * listed in `contributes.presentations[]`. Probe
+   * `supports("shell.present@1")` for a host that can show it (the door
+   * warns and registers nothing on one that cannot).
+   */
+  presentation(contribution: PresentationContribution): Disposable;
+  /**
+   * Register a module VIEW (extensions ADR 345, C5): a work surface that
+   * replaces the canvas while `host.shell.showView(id)` shows it (a slide
+   * sorter). See {@link ViewContribution}. The id must be listed in
+   * `contributes.views[]`. Probe `supports("shell.views@1")`.
+   */
+  view(contribution: ViewContribution): Disposable;
   /**
    * Register a CONTROL-BAR GROUP (extensions ADR 348, C1): a segment of
    * the host's control bar shown while the edit context `scope` names is
@@ -1718,6 +1740,64 @@ export interface RenderSurface {
     id: ElementId,
     options?: RenderElementOptions,
   ): Promise<RenderedElement | null>;
+  /** Extensions ADR 346 (C2) — a page as LAYERS: the background (the page
+   *  without `items` and `hideItems`) and each of `items` alone on a
+   *  transparent ground, cropped to what it draws, all at one scale — the
+   *  frames a slide show composites and animates. `null` for an unknown
+   *  page. `supports("render.layers@1")`. */
+  layers(
+    pageId: PageId,
+    options?: RenderLayersOptions,
+  ): Promise<RenderedLayers | null>;
+}
+
+/** Extensions ADR 346 — what `host.render.layers` renders. */
+export interface RenderLayersOptions {
+  /** Items drawn as layers of their own (and left out of the
+   *  background). A group is one layer with its members. */
+  items?: ElementId[];
+  /** Items left out of every layer (a hidden build step). */
+  hideItems?: ElementId[];
+  /** Pixels per pt, 1/72 to 2400/72 (default 1: 72 dpi). */
+  scale?: number;
+  /** `"bitmap"` (the default where `createImageBitmap` exists, else
+   *  `"png"`): decoded `ImageBitmap`s ready to upload as textures;
+   *  `"png"` PNG bytes; `"rgba"` straight-alpha pixels. */
+  format?: "bitmap" | "png" | "rgba";
+  /** How far past an item's geometric bounds, in pt, its layer may reach
+   *  for stroke and effects (default 72). */
+  marginPt?: number;
+}
+
+/** One layer of {@link RenderedLayers}. */
+export interface RenderedLayer {
+  /** The item, or null for the background. */
+  id: ElementId | null;
+  widthPx: number;
+  heightPx: number;
+  /** The page region the image covers, in page pt (the whole page for
+   *  the background). */
+  region: RenderRect;
+  /** `format: "bitmap"`. The caller owns it (`close()` when done). */
+  bitmap?: ImageBitmap;
+  /** `format: "png"`. */
+  png?: Uint8Array;
+  /** `format: "rgba"`: straight alpha, rows top to bottom. */
+  rgba?: Uint8Array;
+}
+
+/** What `host.render.layers` answers. */
+export interface RenderedLayers {
+  pageId: PageId;
+  /** Pixels per pt the layers were drawn at. */
+  scale: number;
+  /** The engine's layout generation the background shows. */
+  layoutGeneration: number;
+  background: RenderedLayer;
+  /** One per requested item that draws something, in request order. An
+   *  item on another page, one that draws nothing, or every item on an
+   *  engine without `render.snapshot@2` is left out. */
+  items: RenderedLayer[];
 }
 
 // ----------------------------------------------------------------- text
@@ -2038,6 +2118,36 @@ export interface ShellSurface {
    * whether the host took it: probe `supports("shell.documentContext@1")`.
    */
   setDocumentContext(type: string | null): boolean;
+  /**
+   * Extensions ADR 345 (C1) — show one of THIS bundle's presentations
+   * (throws for an id it did not register). The host hides its chrome
+   * and calls the presentation's `render` per surface. Answers whether it
+   * is shown and where: a `"secondary"` request whose audience window
+   * cannot open falls back to `"screen"` with the console alone. Call it
+   * from a user gesture (a key, a click): a browser opens a window and
+   * enters full screen only then. `{ presented: false }` on a host
+   * without presentations (`supports("shell.present@1")`).
+   */
+  present(request: PresentRequest): Promise<PresentResult>;
+  /** End the presentation shown, if it is one of this bundle's. */
+  exitPresent(): Promise<void>;
+  /** The presentation shown (any bundle's), or null. */
+  presentation(): PresentationState | null;
+  /** Fires when a presentation starts or ends (null: ended). */
+  onDidChangePresentation(
+    handler: (state: PresentationState | null) => void,
+  ): Disposable;
+  /**
+   * Extensions ADR 345 (C5) — show one of THIS bundle's module views in
+   * place of the canvas, or give the canvas back (`null`, which also
+   * closes another bundle's view). Answers whether it changed; false
+   * without views (`supports("shell.views@1")`) or for an unknown id.
+   */
+  showView(id: string | null): boolean;
+  /** The module view shown, or null while the canvas is. */
+  activeView(): string | null;
+  /** Fires when a view is shown or closed (null: the canvas is back). */
+  onDidChangeView(handler: (id: string | null) => void): Disposable;
 }
 
 /** What `ShellSurface.saveFile` delivers (K-10) — the inverse of

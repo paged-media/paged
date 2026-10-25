@@ -34,6 +34,8 @@ import {
   createEditContextRegistry,
   createExporterRegistry,
   createFrameSurfaceRegistry,
+  createPresentationRegistry,
+  createViewRegistry,
   createControlBarGroupRegistry,
   createDocumentContextStore,
   createStatusItemRegistry,
@@ -50,6 +52,8 @@ import {
   type EditContextRegistry,
   type ExporterRegistry,
   type FrameSurfaceRegistry,
+  type PresentationRegistry,
+  type ViewRegistry,
   type ControlBarGroupRegistry,
   type DocumentContextStore,
   type StatusItemRegistry,
@@ -105,6 +109,12 @@ export interface ShellRegistries {
   /** The document context (extensions ADR 348): the plugin content type
    *  the open document is. Dropped when a document loads. */
   documentContext: DocumentContextStore;
+  /** Presentations (extensions ADR 345, editor ADRs 304/305): a bundle's
+   *  full-screen surfaces and the host's presenter. */
+  presentations: PresentationRegistry;
+  /** Module views (extensions ADR 345, editor ADR 306): a bundle's work
+   *  surface shown in place of the canvas. */
+  views: ViewRegistry;
 }
 
 const Context = createContext<ShellRegistries | null>(null);
@@ -154,6 +164,8 @@ export function createShellRegistries(
     importers: createImporterRegistry(),
     exporters: createExporterRegistry(),
     frameSurfaces: createFrameSurfaceRegistry(),
+    presentations: createPresentationRegistry(),
+    views: createViewRegistry(),
     controlBarGroups: createControlBarGroupRegistry(),
     statusItems: createStatusItemRegistry(),
     documentContext: createDocumentContextStore(),
