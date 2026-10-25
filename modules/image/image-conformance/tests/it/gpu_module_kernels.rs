@@ -169,6 +169,32 @@ fn hue_sat_stress() -> Vec<u8> {
     bytemuck::bytes_of(&p).to_vec()
 }
 
+/// `geom.warp_mesh` (WP5.10): the identity patch is the tile itself.
+fn warp_mesh_identity() -> Vec<u8> {
+    image_kernels::families::warp::WarpMeshParams::identity(OUT, OUT)
+        .as_bytes()
+        .to_vec()
+}
+
+/// An Arc at 50 % over the tile (paged-warp's style mesh).
+fn warp_mesh_arc() -> Vec<u8> {
+    use paged_warp::envelope::{mesh, Rect, Warp, WarpStyle};
+    let rect = Rect {
+        x: 0.0,
+        y: 0.0,
+        w: f64::from(OUT),
+        h: f64::from(OUT),
+    };
+    let warp = Warp {
+        style: WarpStyle::Arc,
+        bend: 0.5,
+        ..Warp::NONE
+    };
+    image_kernels::families::warp::WarpMeshParams::new(&mesh(&warp, rect), OUT, OUT)
+        .as_bytes()
+        .to_vec()
+}
+
 fn lut3d_identity() -> Vec<u8> {
     bytemuck::bytes_of(&AdjustLut3dParams::identity()).to_vec()
 }
@@ -632,6 +658,11 @@ const TABLE: &[Row] = &[
               ("cx", V::F(HALF_OUT)), ("cy", V::F(HALF_OUT)),
               ("radius", V::F(HALF_OUT)), ("frequency", V::F(4.0))]),
           note: "amount 0 is the documented identity for every warp kind" },
+    Row { id: "geom.warp_mesh",
+          identity: Identity::Params(P::Raw(warp_mesh_identity)),
+          stress: P::Raw(warp_mesh_arc),
+          note: "the identity patch is the source rectangle: Newton lands on \
+                 each texel's own centre, both mix factors 0" },
     Row { id: "geom.mosaic",
           identity: Identity::Params(P::Fields(&[("cell_px", V::F(1.0))])),
           stress: P::Fields(&[("cell_px", V::F(8.0))]),

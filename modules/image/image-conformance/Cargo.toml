@@ -42,6 +42,9 @@ proptest = { workspace = true }
 image-js = { path = "../image-js", features = ["reference-fold"] }
 # Colour-conversion properties (prop_colour.rs) round-trip both CMS backends.
 image-cms = { path = "../image-cms" }
+# `geom.warp_mesh`'s parity and behavioural rows build their meshes with
+# the envelope module the bundle uses (WP5.10).
+paged-warp = { workspace = true }
 criterion = { workspace = true }
 # D-4 bench (png_d4): zune-png is the chosen adapter; image/png is the
 # loser kept here ONLY as the bench comparison baseline (dev-dep, never

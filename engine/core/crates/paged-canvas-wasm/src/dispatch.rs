@@ -592,6 +592,7 @@ impl WorkerCore {
                 format,
                 background,
                 trim,
+                story,
             } => {
                 let Some(model) = self.model.as_ref() else {
                     reply!(WorkerToMainKind::SnapshotFailed {
@@ -614,6 +615,7 @@ impl WorkerCore {
                         background,
                         markers,
                         trim,
+                        story: story.as_ref(),
                     },
                 );
                 match res {

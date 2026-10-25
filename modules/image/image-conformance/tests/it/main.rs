@@ -28,6 +28,7 @@ mod family_compose;
 mod family_conv;
 mod family_gen;
 mod family_geom;
+mod family_warp;
 mod family_linear;
 mod family_minmax;
 mod family_morph;

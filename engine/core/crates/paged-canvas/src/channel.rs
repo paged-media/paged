@@ -731,6 +731,11 @@ export type WorkerToMain = WorkerToMainKind & {
 //   `TooLarge` / `NothingDrawn`.
 //   An older worker ignores the new fields and answers a whole-page PNG,
 //   which a caller detects by the reply's missing `format` / `region`.
+// Additive on 76, no bump (governance rule 1) — engine ADR 10XX,
+//   `RequestSnapshot.story`: a story the document does not hold, laid out
+//   and drawn alone (paged.image's type layers). Optional; an older worker
+//   ignores it and draws the page, which a caller detects by the reply's
+//   region (it covers the story's box only when the story was drawn).
 // Rides v76 (unreleased; added before first consumer sync, governance rule
 //   4) — engine ADRs 1018 and 1021: the mutations setStyleBasedOn,
 //   setListLevel, restartNumbering and findReplace (Operations
@@ -1231,6 +1236,12 @@ pub enum MainToWorkerKind {
         /// Nothing drawn answers `SnapshotError::NothingDrawn`.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         trim: bool,
+        /// Engine ADR 10XX — draw this story alone, laid out by the
+        /// engine in a frame at its bounds on `page_id`, in a copy of the
+        /// document (which is not changed). `only` is then ignored; an
+        /// absent `clip` draws the frame's box.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        story: Option<crate::snapshot::SnapshotStory>,
     },
     /// Replace the worker's current selection. Phase 3 Item 1 — the
     /// worker mirrors the main thread's `ContentSelection` so the
@@ -4626,10 +4637,12 @@ mod tests {
                 format: Default::default(),
                 background: Default::default(),
                 trim: false,
+                story: None,
             },
         };
         let json = serde_json::to_string(&msg).unwrap();
         // A v1 request serializes as it did before ADR 338.
+        assert!(!json.contains("\"story\""), "{json}");
         assert!(!json.contains("\"only\""), "{json}");
         assert!(!json.contains("\"format\""), "{json}");
         assert!(!json.contains("\"background\""), "{json}");

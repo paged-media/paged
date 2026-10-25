@@ -100,6 +100,11 @@ pub struct SnapshotPng {
     /// exactly. Absent for a whole page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<SnapshotClip>,
+    /// Engine ADR 10XX — the request's `story` was drawn (alone). Absent
+    /// when there was none, and from an engine that does not know the
+    /// field (it drew the page instead).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub story: bool,
 }
 
 /// Extensions ADR 338 — the encoding of a snapshot's pixels.
@@ -157,6 +162,110 @@ impl SnapshotClip {
 /// past it): 16 384 px is 54 in at 300 ppi.
 pub const MAX_SNAPSHOT_SIDE_PX: u32 = 16_384;
 
+/// Engine ADR 10XX — a story the document does not hold, drawn by the
+/// snapshot alone: laid out by the engine's text stack (the composer,
+/// justification, hyphenation and the document's fonts) in a frame at
+/// `bounds` on the snapshot's page, in a copy of the document. The
+/// document is not changed; no undo step, no id is minted in it.
+///
+/// What paged.image's type layers are made of: their text lives in the
+/// image, and the engine draws it at the image's resolution.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotStory {
+    /// The text frame, page pt: `[top, left, bottom, right]`.
+    pub bounds: [f32; 4],
+    /// The paragraphs, in order. An empty list draws nothing.
+    #[serde(default)]
+    pub paragraphs: Vec<SnapshotParagraph>,
+    /// `"top"` (the default), `"center"`, `"bottom"` or `"justify"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vertical_justification: Option<String>,
+}
+
+/// One paragraph of a [`SnapshotStory`]. Every absent value is the
+/// document's default paragraph style's.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotParagraph {
+    pub runs: Vec<SnapshotRun>,
+    /// IDML's names: `LeftAlign`, `CenterAlign`, `RightAlign`,
+    /// `LeftJustified`, `CenterJustified`, `RightJustified`,
+    /// `FullyJustified`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub justification: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_line_indent: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left_indent: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right_indent: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_before: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_after: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hyphenation: Option<bool>,
+    /// `"paragraph"` (Adobe Paragraph Composer) or `"single"` (Single-line).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composer: Option<String>,
+}
+
+/// One run of a [`SnapshotParagraph`]: text in one set of character
+/// attributes. Absent values inherit (the paragraph style's).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotRun {
+    /// The text; a `\n` or `\r` inside it is a forced line break.
+    pub text: String,
+    /// Family name, as the document's fonts name it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point_size: Option<f32>,
+    /// Leading in pt; absent is auto.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leading: Option<f32>,
+    /// The fill, sRGB 0–255. Absent is the style's (black).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_rgb: Option<[u8; 3]>,
+    /// 1/1000 em.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tracking: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline_shift: Option<f32>,
+    /// Percent (100 = none).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub horizontal_scale: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vertical_scale: Option<f32>,
+    /// Degrees.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skew: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub underline: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strikethru: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ligatures: Option<bool>,
+    /// IDML's `Normal`, `AllCaps`, `SmallCaps`, `CapToSmallCap`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capitalization: Option<String>,
+    /// IDML's `Normal`, `Superscript`, `Subscript`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<String>,
+}
+
+impl SnapshotStory {
+    /// Finite bounds with an area.
+    pub fn is_valid(&self) -> bool {
+        let [t, l, b, r] = self.bounds;
+        [t, l, b, r].iter().all(|v| v.is_finite()) && b > t && r > l
+    }
+}
+
 /// One `RequestSnapshot`, every option in one place.
 #[derive(Debug, Clone, Copy)]
 pub struct SnapshotRequest<'a> {
@@ -172,6 +281,9 @@ pub struct SnapshotRequest<'a> {
     /// Crop the image to the pixels something was drawn on (on a
     /// transparent ground; a paper ground is never trimmed).
     pub trim: bool,
+    /// Engine ADR 10XX — draw this story alone instead of the page's items
+    /// (`only` is then ignored).
+    pub story: Option<&'a SnapshotStory>,
 }
 
 impl<'a> SnapshotRequest<'a> {
@@ -188,6 +300,7 @@ impl<'a> SnapshotRequest<'a> {
             background: SnapshotBackground::Paper,
             markers: false,
             trim: false,
+            story: None,
         }
     }
 
@@ -195,6 +308,7 @@ impl<'a> SnapshotRequest<'a> {
     /// the GPU snapshot path draws exactly these.
     pub fn is_v1(&self) -> bool {
         self.only.is_empty()
+            && self.story.is_none()
             && self.clip.is_none()
             && !self.trim
             && self.format == SnapshotFormat::Png
@@ -302,10 +416,44 @@ pub fn snapshot_page<'a>(
     only: &[crate::element_selection::ElementId],
     markers: bool,
 ) -> Result<(SnapshotPage<'a>, f32), SnapshotError> {
+    snapshot_page_with_story(
+        model,
+        page_id,
+        target_width_px,
+        dpi,
+        hide,
+        only,
+        markers,
+        None,
+    )
+}
+
+/// [`snapshot_page`], or — with `story` (engine ADR 10XX) — the page with
+/// nothing on it but that story, laid out in a copy of the document.
+#[allow(clippy::too_many_arguments)]
+pub fn snapshot_page_with_story<'a>(
+    model: &'a CanvasModel,
+    page_id: &PageId,
+    target_width_px: u32,
+    dpi: Option<f32>,
+    hide: &[crate::element_selection::ElementId],
+    only: &[crate::element_selection::ElementId],
+    markers: bool,
+    story: Option<&SnapshotStory>,
+) -> Result<(SnapshotPage<'a>, f32), SnapshotError> {
     let unknown = || SnapshotError::UnknownPage {
         page_id: page_id.clone(),
     };
-    let page = if !hide.is_empty() || !only.is_empty() {
+    let page = if let Some(story) = story {
+        if !story.is_valid() {
+            return Err(SnapshotError::InvalidClip);
+        }
+        SnapshotPage::Hiding(Box::new(
+            model
+                .build_page_with_story(page_id, story)
+                .map_err(|_| unknown())?,
+        ))
+    } else if !hide.is_empty() || !only.is_empty() {
         SnapshotPage::Hiding(Box::new(
             model
                 .build_page_filtered(page_id, hide, only)
@@ -373,14 +521,26 @@ pub fn render_snapshot_request(
     req: &SnapshotRequest<'_>,
 ) -> Result<SnapshotPng, SnapshotError> {
     let explicit_dpi = req.dpi.filter(|d| *d > 0.0 && d.is_finite());
-    let dpi = match (explicit_dpi, req.clip) {
+    // A story without a clip draws its frame's box (engine ADR 10XX).
+    let clip = req.clip.or_else(|| {
+        req.story.map(|s| {
+            let [t, l, b, r] = s.bounds;
+            SnapshotClip {
+                x: l,
+                y: t,
+                width: r - l,
+                height: b - t,
+            }
+        })
+    });
+    let dpi = match (explicit_dpi, clip) {
         (_, Some(c)) if !c.is_valid() => return Err(SnapshotError::InvalidClip),
         (Some(d), _) => Some(d),
         (None, Some(_)) if req.target_width_px == 0 => return Err(SnapshotError::InvalidWidth(0)),
         (None, Some(c)) => Some(req.target_width_px as f32 / c.width * 72.0),
         (None, None) => None,
     };
-    let (page, dpi) = snapshot_page(
+    let (page, dpi) = snapshot_page_with_story(
         model,
         req.page_id,
         req.target_width_px,
@@ -388,6 +548,7 @@ pub fn render_snapshot_request(
         req.hide,
         req.only,
         req.markers,
+        req.story,
     )?;
     let transparent = req.background == SnapshotBackground::Transparent;
     let background = if transparent {
@@ -411,7 +572,7 @@ pub fn render_snapshot_request(
             Ok(())
         }
     };
-    let (img, region) = match req.clip {
+    let (img, region) = match clip {
         None => {
             let px = |pt: f32| ((pt * scale).ceil().max(1.0)) as u32;
             fits(px(page.width_pt), px(page.height_pt))?;
@@ -480,9 +641,11 @@ pub fn render_snapshot_request(
             format: SnapshotFormat::Rgba,
             rgba: snap.rgba,
             region: None,
+            story: false,
         },
     };
     reply.region = region;
+    reply.story = req.story.is_some();
     Ok(reply)
 }
 
@@ -608,6 +771,7 @@ pub fn encode_snapshot_png(snap: Snapshot) -> Result<SnapshotPng, SnapshotError>
         format: SnapshotFormat::Png,
         rgba: Vec::new(),
         region: None,
+        story: false,
     })
 }
 

@@ -669,6 +669,7 @@ dependencies = [
  "paged-psd",
  "paged-resample",
  "paged-test-resources",
+ "paged-warp",
  "png",
  "pollster",
  "proptest",
@@ -723,7 +724,10 @@ dependencies = [
  "paged-psd",
  "paged-resample",
  "paged-test-resources",
+ "paged-warp",
  "pollster",
+ "serde",
+ "serde_json",
  "skrifa",
  "thiserror",
  "wasm-bindgen",
@@ -1151,6 +1155,10 @@ version = "0.0.0"
 
 [[package]]
 name = "paged-test-resources"
+version = "0.0.0"
+
+[[package]]
+name = "paged-warp"
 version = "0.0.0"
 
 [[package]]
