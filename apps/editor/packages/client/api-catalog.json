@@ -351,19 +351,19 @@
           "name": "CanvasClient.svgImportPlan",
           "kind": "method",
           "signature": "async svgImportPlan(pageId: PageId, bytes: Uint8Array, options: SvgImportOptions",
-          "summary": "v77 (engine ADR 1016) — plan the import of an SVG (or SVGZ) file onto `pageId`: the engine reads it with usvg and lowers it to ONE batch of native page items (paths, swatches, gradients, groups, clips, masks, pictures, text frames)."
+          "summary": "v77 (engine ADR 1018) — plan the import of an SVG (or SVGZ) file onto `pageId`: the engine reads it with usvg and lowers it to ONE batch of native page items (paths, swatches, gradients, groups, clips, masks, pictures, text frames)."
         },
         {
           "name": "CanvasClient.importSvg",
           "kind": "method",
           "signature": "async importSvg(pageId: PageId, bytes: Uint8Array, options: SvgImportOptions",
-          "summary": "v77 (engine ADR 1016) — plan and apply an SVG import as one undo step."
+          "summary": "v77 (engine ADR 1018) — plan and apply an SVG import as one undo step."
         },
         {
           "name": "CanvasClient.exportSvg",
           "kind": "method",
           "signature": "async exportSvg(pageId: PageId, elementIds: readonly ElementId[]",
-          "summary": "v77 (engine ADR 1016) — the page `pageId` as an SVG document; with `elementIds`, nothing but those items, the view box fitted to what they draw."
+          "summary": "v77 (engine ADR 1018) — the page `pageId` as an SVG document; with `elementIds`, nothing but those items, the view box fitted to what they draw."
         },
         {
           "name": "CanvasClient.exportPaged",

@@ -2860,7 +2860,7 @@ export function createBundleHost(
           return { applied: false, error };
         }
       }
-      // Engine ADR 1016 — the step's name, set once the write landed.
+      // Engine ADR 1017 — the step's name, set once the write landed.
       const label =
         typeof options?.label === "string" && options.label.trim() !== ""
           ? options.label
@@ -3295,7 +3295,7 @@ export function createBundleHost(
       bytes: Uint8Array,
       options: SvgImportRequest = {},
     ): Promise<SvgImportResult> {
-      // Engine ADR 1016 (protocol v77). The engine PLANS (a read) and the
+      // Engine ADR 1018 (protocol v77). The engine PLANS (a read) and the
       // plan's one batch goes through `mutate`, so the write gate, the
       // namespace check and the undo step are the ordinary ones.
       const empty = { items: 0, notes: [] };
@@ -3342,7 +3342,7 @@ export function createBundleHost(
       }
     },
     async exportSvg(request: SvgExportRequest = {}): Promise<SvgExportResult> {
-      // Engine ADR 1016 (protocol v77): a pure read.
+      // Engine ADR 1018 (protocol v77): a pure read.
       requireDocRead("document.exportSvg");
       const empty = { items: 0, notes: [] };
       const { pageId: wanted, elementIds, ...options } = request;

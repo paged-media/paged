@@ -1599,7 +1599,7 @@ pub enum PropertyPath {
     /// rest as lost. Paint-only (`frame_style`).
     FrameFillRule,
 
-    // ---- engine ADR 1016 — the gradient's start ---------------------
+    // ---- engine ADR 1018 — the gradient's start ---------------------
     /// `GradientFillStart`: where a frame's gradient fill starts, in the
     /// item's own (inner) coordinates — a linear axis begins there, a
     /// radial gradient is centred there with `FrameGradientFillLength` as

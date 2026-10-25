@@ -1313,7 +1313,7 @@ export interface SwatchDisplay {
   outOfGamut: boolean;
 }
 
-/** `document.importSvg` options (engine ADR 1016). */
+/** `document.importSvg` options (engine ADR 1018). */
 export interface SvgImportRequest extends SvgImportOptions {
   /** The page to import onto; the active page when absent. */
   pageId?: PageId;
@@ -1333,7 +1333,7 @@ export interface SvgImportResult {
   error?: string;
 }
 
-/** `document.exportSvg`'s request (engine ADR 1016). */
+/** `document.exportSvg`'s request (engine ADR 1018). */
 export interface SvgExportRequest extends SvgExportOptions {
   /** The page; the active page when absent. */
   pageId?: PageId;
@@ -1555,7 +1555,7 @@ export interface DocumentSurface {
    *  throws `PluginApiNotImplemented` (a visible seam, never a fake value). */
   storyContent(storyId: string): Promise<StoryContent | null>;
   /**
-   * Engine ADR 1016 (protocol v77) — import an SVG (or SVGZ) file as
+   * Engine ADR 1018 (protocol v77) — import an SVG (or SVGZ) file as
    * native page items, as ONE undo step. The engine reads it with usvg
    * (`<use>`, `<defs>`, `<symbol>`, CSS, units and transforms resolved)
    * and lowers it to paths and compound paths, swatches, gradients,
@@ -1575,7 +1575,7 @@ export interface DocumentSurface {
     options?: SvgImportRequest,
   ): Promise<SvgImportResult>;
   /**
-   * Engine ADR 1016 (protocol v77) — a page, or some of its items, as an
+   * Engine ADR 1018 (protocol v77) — a page, or some of its items, as an
    * SVG document: paths with their fills and strokes, linear and radial
    * gradients, opacity and blend modes, clips and masks, pictures as data
    * URIs, and text as outlines or (`options.text: "text"`) as `<text>`

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG (engine ADR 1016): an SVG
+// File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG (engine ADR 1018): an SVG
 // with a gradient and a clip path is chosen in the real file picker,
 // lands as native items (a gradient swatch, the clipped shape pasted into
 // its clip frame) in ONE undo step, and is selected; the page and the

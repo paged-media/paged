@@ -765,7 +765,7 @@ property_paths! {
         FramePdfPage => "framePdfPage" : count().min(1.0).default_num(1.0).idml(idml![attr(PDFAttribute, PageNumber)]),
         // Engine ADR 1006 — the outline's fill rule; IDML has no attribute.
         FrameFillRule => "frameFillRule" : enum_(FILL_RULES).default_text("NonZero"),
-        // Engine ADR 1016 — the gradient fill's start, `[x, y]` in inner coordinates.
+        // Engine ADR 1018 — the gradient fill's start, `[x, y]` in inner coordinates.
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),

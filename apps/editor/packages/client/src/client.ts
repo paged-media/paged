@@ -1303,7 +1303,7 @@ export class CanvasClient {
   }
 
   /**
-   * v77 (engine ADR 1016) — plan the import of an SVG (or SVGZ) file onto
+   * v77 (engine ADR 1018) — plan the import of an SVG (or SVGZ) file onto
    * `pageId`: the engine reads it with usvg and lowers it to ONE batch of
    * native page items (paths, swatches, gradients, groups, clips, masks,
    * pictures, text frames). A pure read: apply `plan.mutation` with
@@ -1327,7 +1327,7 @@ export class CanvasClient {
   }
 
   /**
-   * v77 (engine ADR 1016) — plan and apply an SVG import as one undo step.
+   * v77 (engine ADR 1018) — plan and apply an SVG import as one undo step.
    * Resolves to the plan and the mutation's reply (`null` when the file
    * draws nothing or could not be read).
    */
@@ -1342,7 +1342,7 @@ export class CanvasClient {
   }
 
   /**
-   * v77 (engine ADR 1016) — the page `pageId` as an SVG document; with
+   * v77 (engine ADR 1018) — the page `pageId` as an SVG document; with
    * `elementIds`, nothing but those items, the view box fitted to what
    * they draw. Text is outlines unless `options.text` is `"text"`.
    */

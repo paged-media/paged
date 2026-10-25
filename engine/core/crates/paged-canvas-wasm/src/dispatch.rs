@@ -822,7 +822,7 @@ impl WorkerCore {
                     },
                 }
             }
-            // Engine ADR 1016 — SVG in and out; both read only.
+            // Engine ADR 1018 — SVG in and out; both read only.
             MainToWorkerKind::RequestSvgImport {
                 page_id,
                 bytes,

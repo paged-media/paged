@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG (engine ADR 1016), the
+// File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG (engine ADR 1018), the
 // commands over a scripted client: the import plans and applies through
 // the client (one write), reports the engine's losses and selects what it
 // made; the exports hand the engine's SVG to the download door; the rows

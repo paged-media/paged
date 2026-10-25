@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1016 — SVG import and export through the canvas model.
+//! Engine ADR 1018 — SVG import and export through the canvas model.
 //!
 //! Every SVG here is written in the test. Each import is planned by the
 //! model (`svg_import_plan`), applied as the one batch it is, and then

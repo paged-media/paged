@@ -12913,7 +12913,7 @@ impl CanvasModel {
             .ok_or_else(|| crate::channel::LoadError::Build(format!("no page {page_id}")))
     }
 
-    /// The faces registered for the document's text (engine ADR 1016's
+    /// The faces registered for the document's text (engine ADR 1018's
     /// SVG import lays text out with them).
     pub(crate) fn document_fonts(&self) -> &[FontEntry] {
         &self.font_registry

@@ -1583,7 +1583,7 @@ pub enum MainToWorkerKind {
     ExportElements {
         element_ids: Vec<crate::element_selection::ElementId>,
     },
-    /// v77 (engine ADR 1016) — plan the import of an SVG (or SVGZ) file
+    /// v77 (engine ADR 1018) — plan the import of an SVG (or SVGZ) file
     /// onto `page_id`: `paged-svg` reads it with usvg (`<use>`, `<defs>`,
     /// CSS, units and transforms resolved) and lowers it to ONE batch of
     /// native page items. Pure READ: the reply `SvgImportPlanned` carries
@@ -1597,7 +1597,7 @@ pub enum MainToWorkerKind {
         #[serde(default)]
         options: paged_svg::SvgImportOptions,
     },
-    /// v77 (engine ADR 1016) — write the page `page_id` as an SVG
+    /// v77 (engine ADR 1018) — write the page `page_id` as an SVG
     /// document; with `element_ids`, nothing but those items, the view
     /// box fitted to what they draw. Pure READ. Reply: `SvgExported`, or
     /// `ExportSvgFailed`.
