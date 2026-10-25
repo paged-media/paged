@@ -262,8 +262,20 @@ fn a_record_flow_names_the_row_each_instance_shows__feat__data_bind_record_statu
 /// The session as a document reopens it: the payload through JSON, the
 /// source imported again (the store is the data, not the recipe).
 fn reopen(s: &DataSession) -> DataSession {
-    let json = serde_json::to_string(&s.payload()).unwrap();
-    let mut r = DataSession::from_payload(serde_json::from_str(&json).unwrap(), 0);
+    reopen_json(serde_json::to_value(s.payload()).unwrap())
+}
+
+/// The same for a document saved before the applied values were (its
+/// payload has the `applied` hashes only).
+fn reopen_hashes_only(s: &DataSession) -> DataSession {
+    let mut json = serde_json::to_value(s.payload()).unwrap();
+    json.as_object_mut().unwrap().remove("applied_values");
+    reopen_json(json)
+}
+
+fn reopen_json(json: serde_json::Value) -> DataSession {
+    let text = serde_json::to_string(&json).unwrap();
+    let mut r = DataSession::from_payload(serde_json::from_str(&text).unwrap(), 0);
     r.store_import("p", Format::Csv, CSV, None).unwrap();
     refresh(&mut r);
     r
@@ -283,14 +295,17 @@ fn the_payload_keeps_the_applied_snapshot_compact__feat__data_bind_record_status
         .rows
         .iter()
         .all(|r| r.len() == 32 && r.chars().all(|c| c.is_ascii_hexdigit())));
-    let json = serde_json::to_string(&payload).unwrap();
+    let json = serde_json::to_string(snap).unwrap();
     assert!(!json.contains("Hammer"), "{json}");
+    // The values ride beside the hashes, in their own field.
+    assert_eq!(payload.applied_values["q"].columns.len(), 3);
     // The round trip is exact, and a reopened session saves it again.
     let r = reopen(&s);
     assert_eq!(r.payload(), payload);
     // A payload written before the snapshot existed loads without one.
     let mut old: serde_json::Value = serde_json::to_value(&payload).unwrap();
     old.as_object_mut().unwrap().remove("applied");
+    old.as_object_mut().unwrap().remove("applied_values");
     let mut o = DataSession::from_payload(serde_json::from_value(old).unwrap(), 0);
     o.store_import("p", Format::Csv, CSV, None).unwrap();
     refresh(&mut o);
@@ -298,7 +313,7 @@ fn the_payload_keeps_the_applied_snapshot_compact__feat__data_bind_record_status
 }
 
 #[test]
-fn after_a_reopen_a_changed_row_reads_as_changed__feat__data_bind_record_status() {
+fn after_a_reopen_of_hashes_only_a_changed_row_reads_as_changed__feat__data_bind_record_status() {
     let mut s = session("SELECT * FROM p");
     bind(
         &mut s,
@@ -306,7 +321,7 @@ fn after_a_reopen_a_changed_row_reads_as_changed__feat__data_bind_record_status(
             "query": "q", "expr": "name"}),
     );
     s.mark_rows_applied();
-    let mut r = reopen(&s);
+    let mut r = reopen_hashes_only(&s);
     let opts = RecordStatusOptions {
         instances: vec![1, 2],
         ..Default::default()
@@ -361,7 +376,7 @@ fn a_saved_whole_row_snapshot_matches_rows_by_content__feat__data_bind_record_st
         snap.rows.iter().all(|r| r.len() == 16),
         "one hash per record"
     );
-    let mut r = reopen(&s);
+    let mut r = reopen_hashes_only(&s);
     let opts = RecordStatusOptions {
         instances: vec![2],
         ..Default::default()
@@ -381,4 +396,80 @@ fn a_saved_whole_row_snapshot_matches_rows_by_content__feat__data_bind_record_st
     assert!(st.changed.is_empty());
     assert_eq!(st.removed, 1);
     assert_eq!(st.instances, [None]);
+}
+
+#[test]
+fn the_applied_values_survive_a_reopen_for_the_row_diff__feat__data_bind_record_status() {
+    let mut s = session("SELECT * FROM p");
+    s.mark_rows_applied();
+    let mut r = reopen(&s);
+    let diff = r.row_diff(&Default::default());
+    assert!(!diff[0].baseline, "the values before came back");
+    assert_eq!(diff[0].updated_count, 0);
+    edit(
+        &mut r,
+        serde_json::json!([{"op": "set", "row": 1, "field": "price", "value": 13}]),
+    );
+    let diff = r.row_diff(&Default::default());
+    let d = &diff[0];
+    assert_eq!(d.key, ["sku"]);
+    assert_eq!(d.updated_count, 1);
+    let change = &d.updated[0].changes[0];
+    assert_eq!(
+        (
+            change.column.as_str(),
+            change.before.as_str(),
+            change.after.as_str()
+        ),
+        ("price", "12", "13")
+    );
+    // Held again in memory, the result is keyed as asked (a change by name
+    // is a change, not one record new and one removed).
+    let by_name = RecordStatusOptions {
+        key: Some(vec!["name".into()]),
+        ..Default::default()
+    };
+    let st = r.record_status(&q(), &by_name).unwrap();
+    assert_eq!(st.key, ["name"]);
+    assert_eq!(st.changed, [1]);
+    assert!(st.added.is_empty());
+    // Without the values (a document saved before them) there is no "before".
+    let o = reopen_hashes_only(&s);
+    assert!(o.row_diff(&Default::default())[0].baseline);
+}
+
+#[test]
+fn every_value_reads_back_as_written__feat__data_bind_record_status() {
+    use data_core::{FieldType, RecordSet, Schema, Value, ValueError};
+    use data_session::record_status::AppliedValues;
+    let schema = Schema::from_fields([("v".to_string(), FieldType::Text)]);
+    let cells = vec![
+        Value::Null,
+        Value::Bool(true),
+        Value::Number(9.5),
+        Value::Number(12.0),
+        Value::Number(-0.0),
+        Value::Number(f64::NAN),
+        Value::Number(f64::NEG_INFINITY),
+        Value::text("12"),
+        Value::Date(20_000),
+        Value::DateTime(1_760_000_000_123),
+        Value::Bytes(vec![0, 15, 255]),
+        Value::Error(ValueError::DivByZero),
+    ];
+    let rs = RecordSet::new(schema, vec![cells]).unwrap();
+    let json = serde_json::to_string(&AppliedValues::of(&rs)).unwrap();
+    let back: AppliedValues = serde_json::from_str(&json).unwrap();
+    let back = back.to_record_set().unwrap();
+    // NaN is not equal to itself: compare the bits of each number.
+    for (a, b) in rs.columns[0].iter().zip(&back.columns[0]) {
+        match (a, b) {
+            (Value::Number(x), Value::Number(y)) => assert_eq!(x.to_bits(), y.to_bits()),
+            _ => assert_eq!(a, b),
+        }
+    }
+    // A malformed entry reads as none (the hashes stay).
+    let bad: AppliedValues =
+        serde_json::from_str(r#"{"schema":{"fields":[]},"columns":[[{"q":1}]]}"#).unwrap();
+    assert!(bad.to_record_set().is_none());
 }

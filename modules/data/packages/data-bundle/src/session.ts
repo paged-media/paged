@@ -85,14 +85,18 @@ import {
   emptyTargets,
   encodeSession,
   dataPartOf,
+  loadAppliedValues,
   loadData,
   loadFile,
+  storeAppliedValues,
   storeData,
   storeFile,
+  valuesPartOf,
   type BinaryFormat,
   type PersistedData,
   type PersistedSession,
   type PersistedTargets,
+  type ValuesCache,
 } from "./persist";
 import type { LowerStamp, LoweredTableAt } from "./lower";
 import { commitRecordFlow } from "./flow-writer";
@@ -1129,6 +1133,14 @@ export function createSession(
   // dropped record shows (every refresh resolves it at that record).
   const tableInto = new Map<string, { frame: ElementId; storyId: string }>();
   const recordOf = new Map<string, number>();
+  // Editor ADR 291: the record the record preview stepped a binding to, where
+  // it is not the record the binding shows otherwise (the first, or its
+  // dropped record). A field refresh keeps it; Lower writes the document from
+  // the data again and drops it.
+  const steppedAt = new Map<string, number>();
+  /** The record a binding shows in the document, when it is not the first. */
+  const shownRecord = (id: string): number | undefined =>
+    steppedAt.get(id) ?? recordOf.get(id);
   const barcodeMinted = new Map<string, ElementId[]>();
   // Data ADR 564 — what the last placements left to check for issues: each
   // image binding's outcome, each record flow's frames and unplaced records,
@@ -1155,6 +1167,8 @@ export function createSession(
   let bootPayload: unknown = null;
   // Data parts this session wrote or read (a large CSV is written once).
   const knownDataParts = new Set<string>();
+  /** Each query's applied values as last stored (editor ADR 291). */
+  const valuesCache: ValuesCache = new Map();
   const persistence: PersistenceState = { status: "empty", hash: null };
   let lastWritten: string | null = null;
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1362,10 +1376,46 @@ export function createSession(
     return { kind, id: rest.join(":") } as ElementId;
   }
 
-  /** Resolve a binding at the record it shows: the record a dropped record
-   *  fixed (editor ADR 291), else the first. */
-  function resolveFor(e: DataEngineLike, id: string): unknown {
-    const at = recordOf.get(id);
+  /** The record preview is about to write `record` into the document for
+   *  `id`: from then on it shows that record (editor ADR 291), so the
+   *  per-record status counts it placed, its placements name it, and a field
+   *  refresh keeps it there (Lower goes back to the binding's own record).
+   *  Recorded BEFORE the write, with the session version written, so the
+   *  label the write carries names the version that holds the record (as
+   *  the applied snapshot, `markAppliedBeforeWrite`). Returns what takes it
+   *  back when nothing was written. */
+  async function steppedTo(
+    id: string,
+    record: number,
+    atRecord: boolean,
+  ): Promise<() => void> {
+    // An engine without the record lane writes the first record.
+    const at = atRecord ? record : 0;
+    const before = steppedAt.get(id);
+    const set = (n: number | undefined) => {
+      if (n === undefined || n === (recordOf.get(id) ?? 0))
+        steppedAt.delete(id);
+      else steppedAt.set(id, n);
+    };
+    set(at);
+    if (steppedAt.get(id) === before) return () => {};
+    markDirty();
+    await settleLabel();
+    return () => {
+      set(before);
+      markDirty();
+    };
+  }
+
+  /** Resolve a binding at the record it shows: the record the preview
+   *  stepped it to, else the record a dropped record fixed (editor ADR 291),
+   *  else the first. A lower (`lowering`) writes the binding's own record. */
+  function resolveFor(
+    e: DataEngineLike,
+    id: string,
+    lowering = false,
+  ): unknown {
+    const at = lowering ? recordOf.get(id) : shownRecord(id);
     return at !== undefined && typeof e.resolve_lowered_at === "function"
       ? e.resolve_lowered_at(id, at)
       : e.resolve_lowered(id);
@@ -1420,6 +1470,7 @@ export function createSession(
       }
     }
     if (recordOf.size > 0) targets.record = Object.fromEntries(recordOf);
+    if (steppedAt.size > 0) targets.stepped = Object.fromEntries(steppedAt);
     const data: PersistedData[] = [];
     for (const [source, text] of importedCsv) {
       const stored = await storeData(
@@ -1448,9 +1499,17 @@ export function createSession(
         ),
       );
     }
+    // Editor ADR 291: the applied values leave the recipe and are stored
+    // like imported data (inline when small, else a part of their own).
+    const applied = await storeAppliedValues(
+      payload,
+      (path, bytes) => host.parts.write(path, bytes),
+      knownDataParts,
+      valuesCache,
+    );
     return {
       v: 1,
-      engine: payload,
+      engine: applied.engine,
       locale,
       sync,
       targets,
@@ -1465,6 +1524,9 @@ export function createSession(
       refresh: Object.fromEntries(refreshPolicies),
       ...(previewAt.size > 0 ? { preview: Object.fromEntries(previewAt) } : {}),
       ...(appliedSet !== null ? { dataSet: appliedSet } : {}),
+      ...(Object.keys(applied.values).length > 0
+        ? { appliedValues: applied.values }
+        : {}),
       ...(assetColumns.size > 0
         ? { assets: Object.fromEntries(assetColumns) }
         : {}),
@@ -1541,12 +1603,16 @@ export function createSession(
     try {
       const built = await buildPersisted();
       if (!built) return;
-      const named = new Set(
-        built.data.flatMap((d) => {
+      const named = new Set([
+        ...built.data.flatMap((d) => {
           const part = dataPartOf(d);
           return part ? [part] : [];
         }),
-      );
+        ...Object.values(built.appliedValues ?? {}).flatMap((v) => {
+          const part = valuesPartOf(v);
+          return part ? [part] : [];
+        }),
+      ]);
       for (const rel of await host.parts.list(DATA_PART_DIR)) {
         const path = rel.startsWith(DATA_PART_DIR)
           ? rel
@@ -2309,12 +2375,14 @@ export function createSession(
     loweredInto.clear();
     tableInto.clear();
     recordOf.clear();
+    steppedAt.clear();
     hostOids.clear();
     hostElements.clear();
     relinkSources.length = 0;
     labelRecipe = null;
     pendingDefs.length = 0;
     knownDataParts.clear();
+    valuesCache.clear();
     bootPayload = null;
     lastWritten = null;
     persistence.status = "empty";
@@ -2413,9 +2481,22 @@ export function createSession(
       return;
     }
 
-    // The engine: boot it with the saved recipe, then the user's decisions.
+    // The engine: boot it with the saved recipe (the applied values back in
+    // it, editor ADR 291), then the user's decisions.
     locale = saved.locale;
-    bootPayload = saved.engine;
+    const withValues = await loadAppliedValues(
+      saved.engine,
+      saved.appliedValues,
+      (path) => host.parts.read(path),
+    );
+    for (const part of withValues.parts) knownDataParts.add(part);
+    if (withValues.missing.length > 0)
+      report({
+        level: "warn",
+        source: "restore",
+        message: `the values the document was last written from are missing for ${withValues.missing.join(", ")} — the row diff has no "before" until the next update`,
+      });
+    bootPayload = withValues.engine;
     let e: DataEngineLike;
     try {
       e = await ensureEngine();
@@ -2468,6 +2549,8 @@ export function createSession(
     }
     for (const [id, n] of Object.entries(saved.targets.record ?? {}))
       if (Number.isInteger(n) && n >= 0) recordOf.set(id, n);
+    for (const [id, n] of Object.entries(saved.targets.stepped ?? {}))
+      if (Number.isInteger(n) && n >= 0) steppedAt.set(id, n);
 
     // Imported data: back into the store when it is first used.
     for (const d of saved.data) {
@@ -3091,12 +3174,10 @@ export function createSession(
     placeRecord: (target, query, record) =>
       self.placeRecord(query, record, elementOfAddress(target)),
     loadSample: () => self.loadSample(),
-    recordOf: (id) => recordOf.get(id),
-    placements: () => props.placements((id) => recordOf.get(id)),
+    recordOf: (id) => shownRecord(id),
+    placements: () => props.placements(shownRecord),
     recordStatus: (query) =>
-      props.recordStatus(query, self.diffKeyOf(query), (id) =>
-        recordOf.get(id),
-      ),
+      props.recordStatus(query, self.diffKeyOf(query), shownRecord),
     issues: () => publishIssues(),
     assetColumns: () => self.assetColumns(),
     setAssetColumn: (query, field, def) =>
@@ -3325,6 +3406,7 @@ export function createSession(
     async removeBinding(id, mode) {
       tableInto.delete(id);
       recordOf.delete(id);
+      steppedAt.delete(id);
       variableStories.delete(id);
       return props.removeBinding(id, mode);
     },
@@ -4226,6 +4308,9 @@ export function createSession(
     async lowerBinding(id) {
       try {
         const e = await ensureEngine();
+        // Lower writes the binding from the data at its own record: a record
+        // the preview stepped to is left (editor ADR 291).
+        if (steppedAt.delete(id)) markDirty();
         // ADR 558: property bindings (and visibility, re-expressed as its
         // elementVisible triple, where the host has the object model) write
         // through host.objects — in lowerAll, all of them in ONE batch.
@@ -4321,7 +4406,24 @@ export function createSession(
               boxH = Math.max(1, bottom - top);
             }
           }
-          const bc = e.lower_barcode(id, boxW, boxH) as LoweredBarcode | null;
+          // At the record it shows (a record stepped to or dropped), else
+          // the first.
+          const at = recordOf.get(id);
+          const lowerAt = (
+            e as {
+              lower_barcode_at?: (
+                b: string,
+                r: number,
+                w: number,
+                h: number,
+              ) => unknown;
+            }
+          ).lower_barcode_at;
+          const bc = (
+            at !== undefined && typeof lowerAt === "function"
+              ? lowerAt.call(e, id, at, boxW, boxH)
+              : e.lower_barcode(id, boxW, boxH)
+          ) as LoweredBarcode | null;
           if (bc) {
             const plan = await relowerPlan(
               { kind: "barcode", binding: id },
@@ -4342,7 +4444,7 @@ export function createSession(
           state.message = tr(STATUS.loweredBarcode, { id });
           return;
         }
-        const lowered = resolveFor(e, id) as { kind?: string } | null;
+        const lowered = resolveFor(e, id, true) as { kind?: string } | null;
         if (lowered?.kind === "table") {
           const plan = await relowerPlan({ kind: "table", binding: id });
           const known = tableAt.get(id);
@@ -4452,6 +4554,12 @@ export function createSession(
 
     async lowerAll() {
       await this.refreshData();
+      // Every binding is written at its own record: the records the preview
+      // stepped to go, in the session version the first write names.
+      if (steppedAt.size > 0) {
+        steppedAt.clear();
+        markDirty();
+      }
       // The document is written from these results: the row diff's
       // "before", marked ahead of the writes so the first carries its label.
       await markAppliedBeforeWrite(() => this.markApplied());
@@ -4597,6 +4705,7 @@ export function createSession(
               : e.lower_barcode(bindingId, boxW, boxH)
           ) as LoweredBarcode | null;
           if (bc) {
+            await steppedTo(bindingId, record, typeof lowerAt === "function");
             // Update in place: the previous step's symbol goes in the same batch.
             const plan = await relowerPlan(
               { kind: "barcode", binding: bindingId },
@@ -4652,8 +4761,10 @@ export function createSession(
             : await readOwnFields("preview", bindingId);
           previewFields = null;
           if (fields === null) return;
+          const atRecord = typeof e.resolve_lowered_at === "function";
           if (fields.length > 0) {
             const stale = fields.filter((f) => f.value !== value);
+            const undoStep = await steppedTo(bindingId, record, atRecord);
             const before = docChanges;
             const written = await writeFields(
               "preview",
@@ -4678,14 +4789,17 @@ export function createSession(
                 fields: fields.map((f) => ({ ...f, value })),
               };
             }
+            if (written === 0 && stale.length > 0) undoStep();
           } else if (!placedVariables.has(bindingId)) {
             // Not in the document yet: place it once (the normal lower lane).
+            const undoStep = await steppedTo(bindingId, record, atRecord);
             const placed = await commitLoweredVariable(
               host,
               lowered as never,
               bindingId,
             );
             if (placed) variablePlaced(bindingId, placed.storyId);
+            else undoStep();
           } else {
             // Placed earlier and since removed from the document. Placing it
             // again on every step would mint a frame per step; say so instead.
@@ -4700,6 +4814,11 @@ export function createSession(
         } else if (lowered?.kind === "image") {
           const tgt = imageTargets.get(bindingId);
           if (tgt) {
+            await steppedTo(
+              bindingId,
+              record,
+              typeof e.resolve_lowered_at === "function",
+            );
             await commitLoweredImage(
               host,
               lowered as never,
@@ -4764,8 +4883,9 @@ export function createSession(
         { value: string | null } | "kept" | "failed" | "same"
       >();
       const ours = fields.filter((f) => bindingKinds.get(f.key) === "variable");
-      // A field placed by a dropped record resolves at its record (below).
-      const atZero = ours.filter((f) => !recordOf.has(f.key));
+      // A field placed by a dropped record, or stepped to a record by the
+      // preview, resolves at its record (below).
+      const atZero = ours.filter((f) => shownRecord(f.key) === undefined);
       if (typeof e.refresh_field_values === "function" && atZero.length > 0) {
         let decided: FieldRefreshOut[] = [];
         try {
