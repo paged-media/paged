@@ -127,6 +127,12 @@ pub struct WorkerCore {
     /// v77 (engine ADR 1030) — the history depth a host set
     /// (`SetHistoryDepth`); like the snap settings it survives loads.
     pub history_depth: Option<usize>,
+    /// The embedder's data door (core ADR 1014, amendment 2): when set,
+    /// every message is dispatched inside `paged_script::with_data`, so a
+    /// script's `paged.data.*` — in its first run and in every resumption
+    /// after a host-objects round — reads through it. `None` leaves the
+    /// interpreter's own refusal ("no data is attached").
+    pub script_data: Option<Box<dyn paged_script::ScriptData>>,
 }
 
 impl Default for WorkerCore {
@@ -285,7 +291,13 @@ impl WorkerCore {
             script_sessions: std::collections::BTreeMap::new(),
             next_script_session: 1,
             history_depth: None,
+            script_data: None,
         }
+    }
+
+    /// Install (or, with `None`, remove) the data door script runs read.
+    pub fn set_script_data(&mut self, data: Option<Box<dyn paged_script::ScriptData>>) {
+        self.script_data = data;
     }
 
     /// Parse one main-thread message and dispatch it. Returns the JSON
@@ -324,7 +336,16 @@ impl WorkerCore {
                 );
             }
         };
-        let (reply, effect) = self.dispatch(msg, clock);
+        let (reply, effect) = match self.script_data.take() {
+            // Taken out for the call so the door and the core are borrowed
+            // apart, and put back after it.
+            Some(mut data) => {
+                let out = paged_script::with_data(data.as_mut(), || self.dispatch(msg, clock));
+                self.script_data = Some(data);
+                out
+            }
+            None => self.dispatch(msg, clock),
+        };
         (serde_json::to_string(&reply).unwrap_or_default(), effect)
     }
 

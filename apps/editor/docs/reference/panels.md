@@ -646,6 +646,12 @@ through the real Operation channel — undoable.
 
 Multi-line JS (Cmd-Enter) in the worker's embedded **Boa** engine with the
 `paged.*` global; console output + errors; every write undoable.
+`paged.data.tables / records / query / evaluate` read the document's data
+from the data service the Data panel shows: the worker blocks on a
+SharedArrayBuffer while the main thread answers (engine ADR 1014,
+amendment 2; `packages/client/src/sab/data-bridge.ts`). With no data
+service, or without cross-origin isolation, they throw "no data is
+attached".
 **End state** — the automation backbone (plugins + the AI assistant execute
 through it); gains API autocomplete/docs.
 

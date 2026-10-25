@@ -8,3 +8,4 @@ mod committed_change_reports;
 mod dispatch;
 mod no_async_exports;
 mod scene_cache;
+mod script_data;

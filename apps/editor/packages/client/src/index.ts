@@ -72,6 +72,19 @@ export {
   supportsGestureSab,
   type GestureUpdateRecord,
 } from "./sab/gesture";
+export {
+  DataBridgeHost,
+  DATA_BRIDGE_CAPACITY,
+  DATA_BRIDGE_HEADER_BYTES,
+  DATA_CALL_TIMEOUT_MS,
+  allocateDataBridge,
+  createDataBridgeCaller,
+  isDataBridgeMessage,
+  type DataBridgeMessage,
+  type DataCallAnswerer,
+  type DataCallMessage,
+  type DataMoreMessage,
+} from "./sab/data-bridge";
 
 // The journal (ADR 025) — the local flight recorder. Lives here because
 // `packages/client` is the only package BOTH the render worker and the React

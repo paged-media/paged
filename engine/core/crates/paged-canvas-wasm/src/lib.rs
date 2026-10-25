@@ -36,6 +36,7 @@
 
 pub mod dispatch;
 pub mod scene_cache;
+pub mod script_data;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
@@ -857,6 +858,34 @@ mod wasm {
             let (reply, effect) = self.core.handle_message(input, &now_ms);
             self.apply_cache_effect(effect);
             reply
+        }
+
+        /// Install the data door of script runs (core ADR 1014, amendment 2):
+        /// `bridge(method, argsJson)` answers `paged.data.*` synchronously
+        /// with an `{ ok }` / `{ error }` JSON envelope (see
+        /// [`crate::script_data`]); the editor's worker blocks on shared
+        /// memory until the main thread's data service has answered. A
+        /// throw, or a non-string return, is the call's error. `undefined`
+        /// removes the door, and `paged.data.*` throws "no data is
+        /// attached" again.
+        #[wasm_bindgen(js_name = setScriptDataBridge)]
+        pub fn set_script_data_bridge(&mut self, bridge: Option<js_sys::Function>) {
+            let data = bridge.map(|f| {
+                Box::new(crate::script_data::BridgeData::new(move |method, args| {
+                    let answer = f
+                        .call2(&JsValue::NULL, &method.into(), &args.into())
+                        .map_err(|e| {
+                            format!(
+                                "the data bridge failed: {}",
+                                e.as_string().unwrap_or_else(|| format!("{e:?}"))
+                            )
+                        })?;
+                    answer
+                        .as_string()
+                        .ok_or_else(|| "the data bridge answered no string".to_string())
+                })) as Box<dyn paged_script::ScriptData>
+            });
+            self.core.set_script_data(data);
         }
 
         /// A `RequestSnapshot`, drawn by Vello on this worker's WebGPU

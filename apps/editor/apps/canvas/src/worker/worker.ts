@@ -63,6 +63,7 @@ import {
   GESTURE_MODIFIER_DISABLE_SNAP,
   GESTURE_SAB_OFFSETS,
 } from "@paged-media/client";
+import { createDataBridgeCaller } from "@paged-media/client";
 import { WorkerRenderer, type RendererWasm } from "./render";
 // Decision-B package boundary: the engine wasm now ships in the
 // published `@paged-media/canvas-wasm` package. The wasm-bindgen
@@ -200,6 +201,13 @@ interface CanvasWorkerInstance {
     mutationJson: string,
     bytes: Uint8Array,
   ): string;
+  /** Engine ADR 1014, amendment 2 — the data door of script runs:
+   *  `bridge(method, argsJson)` answers an `{ ok }` / `{ error }` JSON
+   *  envelope synchronously; `undefined` removes it. Optional so an older
+   *  wasm still satisfies the interface (`paged.data.*` then refuses). */
+  setScriptDataBridge?(
+    bridge?: (method: string, argsJson: string) => string,
+  ): void;
 }
 
 interface CanvasWasmModule {
@@ -417,6 +425,10 @@ type IncomingMessage =
   | { kind: "channel"; msg: MainToWorker }
   | { kind: "cameraSab"; buffer: SharedArrayBuffer | ArrayBuffer }
   | { kind: "gestureSab"; buffer: SharedArrayBuffer | ArrayBuffer }
+  // Engine ADR 1014, amendment 2 — the shared buffer a script's
+  // `paged.data.*` blocks on while the main thread's data service answers
+  // (`@paged-media/client`'s `sab/data-bridge`); none removes the door.
+  | { kind: "dataBridge"; buffer?: SharedArrayBuffer }
   | {
       kind: "attachCanvas";
       canvas: OffscreenCanvas;
@@ -817,6 +829,20 @@ async function dispatch(data: IncomingMessage): Promise<void> {
   if (data.kind === "gestureSab") {
     gestureBuffer = new GestureBuffer(data.buffer);
     startGestureDrain();
+    return;
+  }
+  if (data.kind === "dataBridge") {
+    await initPromise;
+    const buffer = data.buffer;
+    worker?.setScriptDataBridge?.(
+      buffer
+        ? createDataBridgeCaller(buffer, (message) =>
+            (self as unknown as DedicatedWorkerGlobalScope).postMessage(
+              message,
+            ),
+          )
+        : undefined,
+    );
     return;
   }
   if (data.kind === "setSnapshotBackend") {

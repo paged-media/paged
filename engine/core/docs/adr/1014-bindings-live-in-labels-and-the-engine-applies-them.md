@@ -107,8 +107,8 @@ next run. A script calls:
 
 Record sets have the provider shape `{ schema: { fields: [{ name, ty }] }, columns, rowCount }`
 (`record_set_json`). An error the door reports becomes an `Error` the script can catch. With no
-door attached, every call throws a TypeError that says no data is attached to this run. That is
-the editor's worker today. A script never gets an empty answer that looks like data.
+door attached, every call throws a TypeError that says no data is attached to this run. That was
+the editor's worker until amendment 2. A script never gets an empty answer that looks like data.
 
 `paged script DOC SCRIPT --source ID=FILE …` attaches one. `script_data` (`paged-cli/src/data.rs`)
 builds a `DataSession` from the document's binding labels as `paged data apply` does: it imports
@@ -124,3 +124,29 @@ document that binds nothing yet. The door answers as follows:
 - `evaluate` calls `evaluate_at`.
 
 With no label and no `--source`, nothing is attached.
+
+## Amendment 2 (2026-10-25): the editor attaches a door
+
+The editor runs scripts in its canvas worker; the data lives on the main thread, behind the async
+data service paged.data serves (the one the Data panel reads). `ScriptData` is synchronous, so the
+worker bridges the two over shared memory:
+
+- `paged-canvas-wasm` exports `CanvasWorker.setScriptDataBridge(bridge?)`. `bridge(method,
+  argsJson)` returns an envelope, `{ "ok": value }` or `{ "error": message }` (a bare value would
+  be ambiguous: `evaluate`'s answer has an `error` field of its own). `BridgeData`
+  (`src/script_data.rs`) is the `ScriptData` over it. The arguments are positional: `tables []`,
+  `records [table, { offset, limit? }]`, `query [sql]`, `evaluate [query, expr, record]`.
+  `WorkerCore` dispatches every message inside `with_data` while a door is set, so a script that
+  resumes after a host-objects round still reads it. The door is a plain export, not a message
+  of the channel: the protocol does not change. `undefined` removes it.
+- The worker's `bridge` posts `{ kind: "dataCall", id, method, args }` and blocks on
+  `Atomics.wait` over a SharedArrayBuffer until the main thread writes the answer and notifies
+  (`@paged-media/client`'s `sab/data-bridge.ts`). An answer larger than the buffer comes in
+  chunks, each asked for with `dataMore`. No answer within 30 s is the call's error; the late
+  answer is dropped. The main thread answers from the data service serving the document now;
+  with none, the call fails with "no data is attached".
+- `CanvasClient.setScriptData(answer)` installs it; the editor does so when its data backend is
+  there. Without cross-origin isolation there is no SharedArrayBuffer, nothing is installed, and
+  the interpreter's own refusal stands.
+
+The CLI's door is unchanged, and so is the refusal of a run with none.
