@@ -154,6 +154,14 @@ defineMessages("menu", {
   Unlink: "Unlink",
   "Layer comps": "Layer comps",
   "New layer comp": "New layer comp",
+  Brush: "Brush",
+  "Brush settings": "Brush settings",
+  "Brush presets": "Brush presets",
+  "Define brush preset…": "Define brush preset…",
+  "Import brush presets…": "Import brush presets…",
+  "Export brush presets (.abr)…": "Export brush presets (.abr)…",
+  "Export brush presets (.json)…": "Export brush presets (.json)…",
+  "Lock transparent pixels": "Lock transparent pixels",
 });
 
 const C = "media.paged.image.command";
@@ -410,6 +418,25 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Image/Apply crop", "commitCrop", "crop"],
   ["Image/Set type", "setType", "type"],
   ["Image/Load brush library (.abr)…", "loadBrushLibrary", "brush"],
+  ["Image/Brush/Brush settings", "openBrushSettings", "brush-panels"],
+  ["Image/Brush/Brush presets", "openBrushPresets", "brush-panels"],
+  ["Image/Brush/Define brush preset…", "defineBrushPreset", "brush-presets"],
+  ["Image/Brush/Import brush presets…", "importBrushPresets", "brush-presets"],
+  [
+    "Image/Brush/Export brush presets (.abr)…",
+    "exportBrushPresetsAbr",
+    "brush-presets",
+  ],
+  [
+    "Image/Brush/Export brush presets (.json)…",
+    "exportBrushPresetsJson",
+    "brush-presets",
+  ],
+  [
+    "Image/Brush/Lock transparent pixels",
+    "toggleLockTransparent",
+    "brush-lock",
+  ],
 
   ["Image/Commit edits to the document", "commitImage", "commit"],
 

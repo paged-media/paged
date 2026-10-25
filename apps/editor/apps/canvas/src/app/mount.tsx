@@ -153,6 +153,16 @@ import { ConsentDialog } from "../ConsentDialog";
 import { SecretPromptDialog } from "../SecretPromptDialog";
 import { CoreCommandDialog } from "../core-command-dialog";
 import {
+  FIND_COMMANDS,
+  FIND_KEYBINDINGS,
+  FIND_MENU_ITEMS,
+} from "../find/find-commands";
+import { FindReplaceDialog, GoToDialog } from "../find/find-ui";
+import {
+  STYLE_OPTIONS_PANEL,
+  targetStyleOptions,
+} from "../panels/style-options-panel";
+import {
   GLOBAL_LIGHT_COMMANDS,
   GLOBAL_LIGHT_MENU_ITEMS,
   GlobalLightDialog,
@@ -534,6 +544,9 @@ function PluginBundles() {
     const hostOptions = createEditorHostOptions({
       getEditor: () => pagedRef.current,
       panels: cockpitActionsOf(scope),
+      panelTarget: (panelId, target) => {
+        if (panelId === STYLE_OPTIONS_PANEL) targetStyleOptions(scope, target);
+      },
       enterEditContext: (type, elementId) =>
         enterContextRef.current(type, elementId),
       exitEditContext: async (type, opts) => {
@@ -1481,12 +1494,15 @@ function CanvasAppIntegration() {
       ...buildBatchCommands(),
       ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
+      // ADR 303 — Find & Replace, Go to page.
+      ...FIND_COMMANDS,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
       ...buildCoreCommandEntries(),
     ].map((c) => registries.commands.register(c));
     const menuDisposables = [
       ...APP_MENU_ITEMS,
       SELECT_ALL_MENU_ITEM,
+      ...FIND_MENU_ITEMS,
       ...CLIPBOARD_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
@@ -1507,6 +1523,7 @@ function CanvasAppIntegration() {
     const keyDisposables = [
       ...APP_KEYBINDINGS,
       ...SELECT_ALL_KEYBINDINGS,
+      ...FIND_KEYBINDINGS,
       ...CLIPBOARD_KEYBINDINGS,
       ...CANVAS_CONTEXT_MENU_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
@@ -1713,6 +1730,8 @@ function CanvasAppRoot() {
       <TransformEachDialog />
       <BatchDialog />
       <OpenAsTemplateDialog />
+      <FindReplaceDialog />
+      <GoToDialog />
       {/* The live-demo playground UI and the docs' iframe scripting bridge:
           the page entry's tools (they drive the page's `__canvas`), only in
           the dev and `demo` builds, only when the URL asks (they render

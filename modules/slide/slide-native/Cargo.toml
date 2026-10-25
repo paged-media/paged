@@ -17,6 +17,7 @@ slide-geom.workspace = true
 paged-model.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

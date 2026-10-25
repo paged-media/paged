@@ -7,7 +7,7 @@
   ▼
 pptx-core IR
   │  slide-resolve    theme / master / layout / placeholder inheritance, colours, fonts
-  │  slide-geom       preset geometry → Bézier paths
+  │  slide-geom       = platform/shared/dml-geom: presets, handles, sites, live presets
   ▼
 resolved deck
   │  slide-native     → native document (engine model crates) as .paged (ADR 708)
@@ -30,7 +30,7 @@ original .pptx + native document (.paged, host.documents.exportPaged)
 | `pptx-import`           | `.pptx` → IR; charts through the shared `dml-chart` reader (ADR 709)                                                                                             | in place: reads every corpus deck                         |
 | `pptx-fonts`            | embedded faces: Embedded OpenType, MicroType Express, embedding permissions (ADR 707)                                                                            | in place                                                  |
 | `slide-resolve`         | inheritance resolution                                                                                                                                           | in place                                                  |
-| `slide-geom`            | preset geometry evaluator                                                                                                                                        | in place                                                  |
+| `slide-geom`            | `platform/shared/dml-geom` (alias): preset and custom geometry, adjust handles, connection sites, refit and connector routing (ADR 717)                          | in place                                                  |
 | `slide-chart`           | chart lowering from cached values                                                                                                                                | in place                                                  |
 | `slide-native`          | resolved deck → native document, packaged as `.paged` (ADR 708); item labels with shape keys (ADR 711)                                                           | in place                                                  |
 | `pptx-export`           | native read model (`native`), probe of inherited text defaults (`probe`), slide/shape/text writers (`slide`, `text`, `geom`, `xml`) → `.pptx` (ADR 704, ADR 711) | shapes, text, pictures, tables, groups, new slides, links |

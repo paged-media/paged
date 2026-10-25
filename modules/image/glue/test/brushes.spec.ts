@@ -43,7 +43,12 @@ const ONE_PRESET_WIRE =
   '"warnings":[],"presets":[{"index":0,"name":"Soft Round 30",' +
   '"kind":"computed","diameter":30,"diameterUnit":"#Pxl",' +
   '"hardness":0.5,"spacing":0.25,"spacingEnabled":true,' +
-  '"roundness":1,"angle":0}]}';
+  '"roundness":1,"angle":0,"sampleIndex":null,' +
+  '"dynamics":{"tip":{"flipX":false,"flipY":false},"shape":null,' +
+  '"scatter":null,"texture":null,"dual":null,"color":null,' +
+  '"transfer":null,"pose":null,"wetEdges":null,"noise":null,' +
+  '"buildUp":null,"protectTexture":null,"pressureOverridesSize":null,' +
+  '"pressureOverridesOpacity":null,"smoothing":null,"toolOptions":null}}]}';
 
 /** A library whose presets exercise every "cannot apply that" branch. */
 const AWKWARD_WIRE = JSON.stringify({
@@ -127,7 +132,7 @@ describe("the engine facade's .abr door", () => {
     const engine = wrapEngine(fakeWasm(ONE_PRESET_WIRE));
     const lib = engine.abrPresets(new Uint8Array([1]));
     expect(lib.presetCount).toBe(1);
-    expect(lib.presets[0]).toEqual({
+    expect(lib.presets[0]).toMatchObject({
       index: 0,
       name: "Soft Round 30",
       kind: "computed",
@@ -138,6 +143,9 @@ describe("the engine facade's .abr door", () => {
       spacingEnabled: true,
       roundness: 1,
       angle: 0,
+      // The brush engine's additions (src/abr-preset.ts maps them).
+      sampleIndex: null,
+      dynamics: { tip: { flipX: false, flipY: false }, shape: null },
     });
   });
 

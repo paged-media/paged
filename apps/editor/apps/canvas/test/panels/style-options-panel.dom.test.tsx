@@ -69,8 +69,42 @@ describe("Style Options panel: states", () => {
       "Heading",
     ]);
     expect(h.field("name").querySelector("input")!.value).toBe("Heading");
-    expect(h.root.querySelector("[data-style-based-on]")?.textContent).toBe(
-      "[No style]",
+    const basedOn = h.root.querySelector<HTMLSelectElement>(
+      "[data-style-based-on]",
+    )!;
+    expect(basedOn.value).toBe("");
+    expect(basedOn.selectedOptions[0]!.textContent).toBe("[No style]");
+  });
+
+  test("Based on is editable: one setStyleBasedOn, read back from the engine (engine ADR 1018)", async () => {
+    covers("panel:paged.style-options");
+    const h = await mount();
+    const basedOn = h.root.querySelector<HTMLSelectElement>(
+      "[data-style-based-on]",
+    )!;
+    const root = "ParagraphStyle/$ID/[No paragraph style]";
+    const from = h.mark();
+    await h.choose(basedOn, root);
+    expect(h.mutations(from)).toEqual([
+      {
+        op: "setStyleBasedOn",
+        args: {
+          collection: "paragraph",
+          styleId: h.scene.paragraphStyle,
+          basedOn: root,
+        },
+      },
+    ] as never);
+    const styles = (await h.client.collection("paragraphStyles")) as Array<{
+      selfId: string;
+      basedOn?: string | null;
+    }>;
+    expect(
+      styles.find((s) => s.selfId === h.scene.paragraphStyle)?.basedOn,
+    ).toBe(root);
+    // The style itself is not offered as its own parent.
+    expect([...basedOn.options].map((o) => o.value)).not.toContain(
+      h.scene.paragraphStyle,
     );
   });
 

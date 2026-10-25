@@ -15,27 +15,129 @@
  *  @copyright  Copyright (c) And The Next GmbH
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
-
-//! # slide-geom — DrawingML geometry → Bézier outlines
+//! # dml-geom — DrawingML geometry → Bézier outlines, handles and sites
 //!
 //! A shape's outline is a small program: adjust values, guide formulas over
 //! the shape's width and height, and paths of move / line / arc / Bézier
 //! commands that reference the guides. Presets (`a:prstGeom`) are the 187
 //! programs of ECMA-376 Annex D, embedded from `data/presetShapeDefinitions.xml`
-//! and read with the same reader as an authored `a:custGeom`, so one
-//! evaluator serves both.
+//! and read with the same reader as an authored `a:custGeom` ([`read`]), so
+//! one evaluator serves both.
 //!
 //! The result is in the shape's own box, `(0, 0)`–`(w, h)`, as subpaths of
 //! anchors with incoming and outgoing control points — the form the engine's
-//! path items take.
+//! path items take. The same evaluation places the geometry's adjust handles
+//! (`a:ahLst`) and connection sites (`a:cxnLst`); [`live`] builds on it for
+//! presets that stay presets while they are edited (a resize keeps a rounded
+//! corner's radius, an adjust handle changes an adjust value, a connector is
+//! routed between two sites).
+//!
+//! Shared by paged.slide and paged.doc (DrawingML shapes in both formats;
+//! PM-0014: a capability lives at the lowest layer its consumers reach).
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use pptx_core::{CustomGeometry, PathCmd};
 use serde::{Deserialize, Serialize};
 
+pub mod live;
+pub mod read;
+
 const DEFINITIONS: &str = include_str!("../data/presetShapeDefinitions.xml");
+
+// ─── the geometry program ───────────────────────────────────────────
+
+/// `a:custGeom`, or a preset's definition: adjust values, guides, paths,
+/// adjust handles and connection sites, as authored (formulas and guide
+/// names, unevaluated).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CustomGeometry {
+    pub adjust: Vec<(String, String)>,
+    pub guides: Vec<(String, String)>,
+    pub paths: Vec<GeomPath>,
+    /// `a:ahLst`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub handles: Vec<AdjustHandle>,
+    /// `a:cxnLst`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub connections: Vec<ConnectionSite>,
+}
+
+/// One `a:path` of a custom geometry, in its own coordinate space.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct GeomPath {
+    pub w: Option<i64>,
+    pub h: Option<i64>,
+    /// `fill` (norm / none / lighten / …), `None` = norm.
+    pub fill: Option<String>,
+    pub stroke: bool,
+    pub commands: Vec<PathCmd>,
+}
+
+/// One path command; points are guide names or literal numbers, as authored.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PathCmd {
+    MoveTo(String, String),
+    LineTo(String, String),
+    /// `arcTo wR hR stAng swAng`.
+    ArcTo(String, String, String, String),
+    QuadTo([(String, String); 2]),
+    CubicTo([(String, String); 3]),
+    Close,
+}
+
+/// The adjust value one coordinate of a handle moves, and its range (guide
+/// names or numbers).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HandleRef {
+    pub guide: String,
+    pub min: String,
+    pub max: String,
+}
+
+/// `a:ahXY` / `a:ahPolar`: where the handle is drawn (`pos`, guide names)
+/// and the adjust values dragging it moves.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AdjustHandle {
+    /// `gdRefX` / `gdRefY` with their ranges.
+    Xy {
+        x: Option<HandleRef>,
+        y: Option<HandleRef>,
+        pos: (String, String),
+    },
+    /// `gdRefR` / `gdRefAng` with their ranges.
+    Polar {
+        r: Option<HandleRef>,
+        ang: Option<HandleRef>,
+        pos: (String, String),
+    },
+}
+
+impl AdjustHandle {
+    /// The adjust values the handle moves, in order (x then y, or radius
+    /// then angle).
+    pub fn refs(&self) -> Vec<&HandleRef> {
+        match self {
+            AdjustHandle::Xy { x, y, .. } => x.iter().chain(y.iter()).collect(),
+            AdjustHandle::Polar { r, ang, .. } => r.iter().chain(ang.iter()).collect(),
+        }
+    }
+    pub fn pos(&self) -> &(String, String) {
+        match self {
+            AdjustHandle::Xy { pos, .. } | AdjustHandle::Polar { pos, .. } => pos,
+        }
+    }
+}
+
+/// `a:cxn`: a connection site and the direction a connector leaves it in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConnectionSite {
+    /// 60 000ths of a degree, or a guide name.
+    pub ang: String,
+    pub pos: (String, String),
+}
+
+// ─── evaluated forms ────────────────────────────────────────────────
 
 /// One anchor with its incoming (`left`) and outgoing (`right`) control
 /// points; a corner has both equal to the anchor.
@@ -70,6 +172,33 @@ pub struct Outline {
     pub text_rect: (f64, f64, f64, f64),
 }
 
+/// An adjust handle, placed in the shape's box.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Handle {
+    pub pos: (f64, f64),
+    pub polar: bool,
+    /// The adjust values it moves.
+    pub refs: Vec<String>,
+}
+
+/// A connection site, placed in the shape's box (or on the page, through
+/// [`live::sites_on_page`]).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Site {
+    pub pos: (f64, f64),
+    /// The direction a connector leaves the site in, degrees clockwise
+    /// from the +x axis (0 right, 90 down, 180 left, 270 up).
+    pub angle: f64,
+}
+
+/// An outline with its handles and connection sites.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Evaluated {
+    pub outline: Outline,
+    pub handles: Vec<Handle>,
+    pub sites: Vec<Site>,
+}
+
 /// A preset's geometry and its text rectangle (`l t r b` guide names).
 type Definition = (CustomGeometry, Option<[String; 4]>);
 
@@ -77,11 +206,11 @@ fn definitions() -> &'static HashMap<String, Definition> {
     static DEFS: OnceLock<HashMap<String, Definition>> = OnceLock::new();
     DEFS.get_or_init(|| {
         let root =
-            pptx_import::xml::parse(DEFINITIONS.as_bytes()).expect("embedded definitions parse");
+            paged_ooxml::tree::parse(DEFINITIONS.as_bytes()).expect("embedded definitions parse");
         root.children
             .iter()
             .map(|shape| {
-                let geom = pptx_import::shapes::custom_geometry(shape);
+                let geom = read::custom_geometry(shape);
                 let rect =
                     shape.children.iter().find(|c| c.local == "rect").map(|r| {
                         ["l", "t", "r", "b"].map(|k| r.attr(k).unwrap_or("0").to_string())
@@ -99,31 +228,52 @@ pub fn preset_names() -> Vec<&'static str> {
     v
 }
 
+/// A preset's definition (its adjust defaults, guides, paths, handles and
+/// connection sites).
+pub fn preset_geometry(name: &str) -> Option<&'static CustomGeometry> {
+    definitions().get(name).map(|(g, _)| g)
+}
+
 /// Evaluate preset `name` for a `w` × `h` box with the shape's own adjust
 /// values (`a:avLst` of the `a:prstGeom`, overriding the preset's defaults).
 pub fn preset(name: &str, adjust: &[(String, String)], w: f64, h: f64) -> Option<Outline> {
+    preset_evaluated(name, adjust, w, h).map(|e| e.outline)
+}
+
+/// [`preset`] with the handles and connection sites.
+pub fn preset_evaluated(
+    name: &str,
+    adjust: &[(String, String)],
+    w: f64,
+    h: f64,
+) -> Option<Evaluated> {
     let (geom, rect) = definitions().get(name)?;
     Some(evaluate(geom, rect.as_ref(), adjust, w, h))
 }
 
 /// Evaluate an authored `a:custGeom` for a `w` × `h` box.
 pub fn custom(geom: &CustomGeometry, w: f64, h: f64) -> Outline {
+    evaluate(geom, None, &[], w, h).outline
+}
+
+/// [`custom`] with the handles and connection sites.
+pub fn custom_evaluated(geom: &CustomGeometry, w: f64, h: f64) -> Evaluated {
     evaluate(geom, None, &[], w, h)
 }
 
 // ─── guides ─────────────────────────────────────────────────────────
 
 /// 60 000ths of a degree → radians.
-fn rad(angle: f64) -> f64 {
+pub(crate) fn rad(angle: f64) -> f64 {
     (angle / 60_000.0).to_radians()
 }
 
-struct Guides {
+pub(crate) struct Guides {
     values: HashMap<String, f64>,
 }
 
 impl Guides {
-    fn new(w: f64, h: f64) -> Self {
+    pub(crate) fn new(w: f64, h: f64) -> Self {
         let ss = w.min(h);
         let ls = w.max(h);
         let mut v = HashMap::new();
@@ -173,7 +323,7 @@ impl Guides {
         Guides { values: v }
     }
 
-    fn arg(&self, s: &str) -> f64 {
+    pub(crate) fn arg(&self, s: &str) -> f64 {
         self.values
             .get(s)
             .copied()
@@ -235,7 +385,7 @@ impl Guides {
         }
     }
 
-    fn define(&mut self, name: &str, fmla: &str) {
+    pub(crate) fn define(&mut self, name: &str, fmla: &str) {
         let v = self.formula(fmla);
         self.values.insert(name.to_string(), v);
     }
@@ -353,13 +503,14 @@ impl Builder {
     }
 }
 
-fn evaluate(
+/// The guides of `geom` for a `w` × `h` box with `adjust` overriding its
+/// adjust values: every adjust value, then every guide, in order.
+pub(crate) fn guides_of(
     geom: &CustomGeometry,
-    rect: Option<&[String; 4]>,
     adjust: &[(String, String)],
     w: f64,
     h: f64,
-) -> Outline {
+) -> Guides {
     let mut g = Guides::new(w, h);
     for (name, fmla) in &geom.adjust {
         let own = adjust
@@ -378,6 +529,32 @@ fn evaluate(
     for (name, fmla) in &geom.guides {
         g.define(name, fmla);
     }
+    g
+}
+
+/// Where each handle of `geom` sits with these guides.
+pub(crate) fn handles_of(geom: &CustomGeometry, g: &Guides) -> Vec<Handle> {
+    geom.handles
+        .iter()
+        .map(|h| {
+            let (x, y) = h.pos();
+            Handle {
+                pos: (g.arg(x), g.arg(y)),
+                polar: matches!(h, AdjustHandle::Polar { .. }),
+                refs: h.refs().into_iter().map(|r| r.guide.clone()).collect(),
+            }
+        })
+        .collect()
+}
+
+fn evaluate(
+    geom: &CustomGeometry,
+    rect: Option<&[String; 4]>,
+    adjust: &[(String, String)],
+    w: f64,
+    h: f64,
+) -> Evaluated {
+    let g = guides_of(geom, adjust, w, h);
 
     let mut b = Builder {
         fill_mode: None,
@@ -438,9 +615,25 @@ fn evaluate(
     let text_rect = rect
         .map(|r| (g.arg(&r[0]), g.arg(&r[1]), g.arg(&r[2]), g.arg(&r[3])))
         .unwrap_or((0.0, 0.0, w, h));
-    Outline {
-        subpaths: b.subpaths,
-        text_rect,
+    let sites = geom
+        .connections
+        .iter()
+        .map(|c| {
+            let mut angle = g.arg(&c.ang) / 60_000.0;
+            angle = angle.rem_euclid(360.0);
+            Site {
+                pos: (g.arg(&c.pos.0), g.arg(&c.pos.1)),
+                angle,
+            }
+        })
+        .collect();
+    Evaluated {
+        outline: Outline {
+            subpaths: b.subpaths,
+            text_rect,
+        },
+        handles: handles_of(geom, &g),
+        sites,
     }
 }
 

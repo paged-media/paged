@@ -19,10 +19,10 @@
 
 // PLUGIN MENUS — paged.slide (modules/slide/packages/slide-bundle/src/menu.ts).
 //
-// Ten entries: File ▸ Open PowerPoint deck… and File ▸ Export PowerPoint
-// deck…, and eight slide verbs under the Slide menu (New, Duplicate,
-// Delete, Move up / down, Previous / Next slide, New comment), which the
-// bar folds into Plugins ▸ Slide beside the panels.
+// Eleven entries: File ▸ Open PowerPoint deck… and File ▸ Export PowerPoint
+// deck…, Insert ▸ Shapes…, and eight slide verbs under the Slide menu (New,
+// Duplicate, Delete, Move up / down, Previous / Next slide, New comment),
+// which the bar folds into Plugins ▸ Slide beside the panels.
 //
 // ORDER MATTERS here (serial): the document starts as a blank one, where
 // only Open applies; the deck is then opened (through the importer, as
@@ -71,6 +71,7 @@ const DOWN = "Slide/Move slide down";
 const PREVIOUS = "Slide/Previous slide";
 const NEXT = "Slide/Next slide";
 const COMMENT = "Slide/New comment";
+const SHAPES = "Insert/Shapes…";
 const SLIDE_VERBS = [NEW, DUPLICATE, DELETE, UP, DOWN, PREVIOUS, NEXT, COMMENT];
 
 interface CanvasProbe {
@@ -212,6 +213,18 @@ test.describe.serial("plugin menus — paged.slide", () => {
       timeout: 10_000,
     });
     await expect(live.locator("[data-comment-new]")).toBeVisible();
+  });
+
+  test("Insert/Shapes… — opens the Shapes panel on the active slide", async () => {
+    covers("menu:Insert/Shapes…");
+    covers("command:media.paged.slide.command.insertShapes");
+    await expectGreyedAndInert(bare, SHAPES);
+    await toFirstSlide(live);
+    const out = await clickEntry(live, SHAPES, `${C}.insertShapes`);
+    expect(out.after, "opening the panel edits nothing").toBe(out.before);
+    await expect(live.locator("[data-shapes-panel]")).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test("Slide/New slide — adds a slide after the active one; one Undo removes it", async () => {

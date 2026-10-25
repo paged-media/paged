@@ -762,6 +762,7 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps,
+            history_states: Default::default(),
         })
     }
 }

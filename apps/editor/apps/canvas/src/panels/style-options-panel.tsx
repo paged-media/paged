@@ -53,9 +53,10 @@ import {
   useEditorScope,
   type EditorScope,
   displayName,
+  useCanvasClient,
   useCollection,
 } from "@paged-media/shell";
-import { formatAddress } from "@paged-media/plugin-sdk";
+import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
 import { FieldSelect, Tab } from "@paged-media/panel-kit";
 import type { CollectionName } from "@paged-media/client";
 
@@ -555,6 +556,20 @@ export function openStyleOptions(
   cockpitActionsOf(scope).openPanel?.(STYLE_OPTIONS_PANEL);
 }
 
+/** Extensions ADR 348 amendment 1 — a bundle's `openPanel` target: a
+ *  style address points the panel at that style. False for any other. */
+export function targetStyleOptions(
+  scope: EditorScope,
+  target: string,
+): boolean {
+  const parsed = parseAddress(target);
+  if (parsed?.kind !== "style") return false;
+  const family = parsed.family as StyleFamily;
+  if (!FAMILIES.some((f) => f.family === family)) return false;
+  setStyleOptionsTarget(scope, family, parsed.name);
+  return true;
+}
+
 /** The ADR 131 address of a style. */
 export function styleAddress(family: StyleFamily, selfId: string): string {
   return formatAddress({ kind: "style", family, name: selfId } as never);
@@ -571,6 +586,7 @@ interface StyleRow {
 export function StyleOptionsPanel() {
   const strings = useStrings();
   const scope = useEditorScope();
+  const client = useCanvasClient();
   const target = scope.get(TARGET);
   const current = useSyncExternalStore(target.subscribe, target.get);
   const family = current.family;
@@ -641,12 +657,34 @@ export function StyleOptionsPanel() {
               schemaKind={address}
             />
             <CockpitRow label={strings.t(M.basedOn)}>
-              <span
-                className="text-xs"
+              {/* Engine ADR 1018 — Based on is editable: one
+                  `setStyleBasedOn`, one undo step; the engine refuses a
+                  parent that would make the style inherit from itself. */}
+              <FieldSelect
                 data-style-based-on={row?.basedOn ?? ""}
+                className="h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[12px]"
+                value={basedOn ? basedOn.selfId : ""}
+                onChange={(e) => {
+                  if (!selfId) return;
+                  void client.mutate({
+                    op: "setStyleBasedOn",
+                    args: {
+                      collection: family,
+                      styleId: selfId,
+                      basedOn: e.target.value || null,
+                    },
+                  });
+                }}
               >
-                {basedOn ? displayName(basedOn.name) : strings.t(M.noStyle)}
-              </span>
+                <option value="">{strings.t(M.noStyle)}</option>
+                {(styles ?? [])
+                  .filter((s) => s.selfId !== selfId)
+                  .map((s) => (
+                    <option key={s.selfId} value={s.selfId}>
+                      {displayName(s.name)}
+                    </option>
+                  ))}
+              </FieldSelect>
             </CockpitRow>
           </>
         ) : (
