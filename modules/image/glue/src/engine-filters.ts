@@ -498,7 +498,10 @@ export interface FilterEngine {
   ): Promise<DecodedInfo>;
   applyDesaturate(handle: number): Promise<DecodedInfo>;
   /** Develop at the 61 settings of `develop.ts`. */
-  applyDevelop(handle: number, settings: readonly number[]): Promise<DecodedInfo>;
+  applyDevelop(
+    handle: number,
+    settings: readonly number[],
+  ): Promise<DecodedInfo>;
 }
 
 const f32 = (v: readonly number[]): Float32Array => Float32Array.from(v);
@@ -655,7 +658,13 @@ export function filterEngineOf(
       run(wasm.apply_gallery_chrome(h, detail, smoothness, amount)),
     galleryPlasticWrap: (h, strength, detail, smoothness, amount) =>
       run(
-        wasm.apply_gallery_plastic_wrap(h, strength, detail, smoothness, amount),
+        wasm.apply_gallery_plastic_wrap(
+          h,
+          strength,
+          detail,
+          smoothness,
+          amount,
+        ),
       ),
     applyShadowsHighlights: (h, s) =>
       run(

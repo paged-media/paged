@@ -35,9 +35,24 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   box blur, surface blur, motion and radial blur, lens blur, add noise (uniform or
   gaussian, monochromatic), despeckle, dust and scratches, median (radius ≤ 10), reduce
   noise, high pass, maximum and minimum (radius ≤ 32, square or round), offset, smart
-  sharpen, emboss, find edges, glowing edges, mosaic, colour halftone, ten more gallery
-  effects, gradient map and selective colour; average (no dialog) fills the selection with
-  its average colour. Warp and glass have their own Distort section; colour lookup from a
+  sharpen, emboss, find edges, glowing edges, mosaic, ten gallery effects, gradient map
+  and selective colour; average (no dialog) fills the selection with its average colour.
+  WP5.2 adds ([ADR 468](adr/468-filter-families-and-galleries.md)): **Distort** (displace
+  with a map from the composite or a file, polar coordinates both ways, ripple, shear on a
+  five-point curve, zigzag), **Render** (clouds, difference clouds, fibers in the
+  foreground/background colours, lens flare in four lens types, lighting effects with one
+  spot, point or infinite light and a texture channel), **Stylize** (wind, extrude, tiles,
+  trace contour, solarize), **Pixelate** (crystallize, pointillize, mezzotint, facet, colour
+  halftone with a screen per channel), **Adjust** (shadows/highlights, HDR toning, match
+  colour, replace colour, equalize, desaturate, and Develop — white balance, tone, presence,
+  HSL in eight ranges, colour grading, a parametric tone curve, sharpening and noise
+  reduction, also as a Develop adjustment layer with its own panel in the layer's
+  Properties). The **Filter Gallery** workspace stacks effect layers (eye, reorder, add,
+  delete) over all 47 of Photoshop's gallery effects, applied as one undo step; the
+  **Blur Gallery** workspace runs field (pins), iris, tilt-shift, path and spin blur,
+  together if wanted, with its pins and handles on the canvas (any image tool's drag moves
+  them). **Curves' targeted adjustment**: armed, a drag on the image moves the curve at the
+  tone under the pointer. Warp and glass have their own Distort section; colour lookup from a
   `.cube` file, shape blur; gradient (foreground
   to background), noise, solid, pattern and content-aware fills; Define pattern; the paint
   bucket; a gradient tool (drag the line) in five geometries, linear, radial, angular,
@@ -237,6 +252,14 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   16 px, high pass σ 10 px); Photoshop's go further. There is no Reveal All: layers are
   stored within the canvas (ADR 464 clips their bounds to it), so nothing lies beyond it to
   reveal. Trim trims all four sides (no per-side choice).
+- **WP5.2 filter limits.** The Filter Gallery effects and the Sketch filters are recipes over
+  a dozen gallery operations, not Photoshop's algorithms; the Photoshop ledger records the
+  distance (mostly `convention`). Lighting Effects takes one light, not several; Match Colour
+  matches whole-image statistics (no source layer list inside a document); Replace Colour
+  samples one colour (no colour-range preview or eyedropper sampling); the Blur Gallery has no
+  per-pin focus ellipses beyond iris and spin, and Path Blur takes one polyline of up to eight
+  points. HDR Toning, Lighting Effects and both galleries have no Photoshop recording (not
+  scriptable).
 - **The preview on the page** is one scene-layer image, cleared when the frame leaves the
   selection and on Reset. It goes through the scene layer's image doors (`submitImage`,
   `submitImageTiles`), so a brush sample sends only the rectangle it changed. Edits reach

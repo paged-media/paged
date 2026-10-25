@@ -235,7 +235,8 @@ export function blurGalleryHit(
           const s = Math.max(pw, ph);
           const [cs, sn] = [Math.cos(rad(rot)), Math.sin(rad(rot))];
           const d: Pt = [p[0] - c[0], p[1] - c[1]];
-          const local = axis === 0 ? d[0] * cs + d[1] * sn : -d[0] * sn + d[1] * cs;
+          const local =
+            axis === 0 ? d[0] * cs + d[1] * sn : -d[0] * sn + d[1] * cs;
           return { [key]: Math.min(1, Math.max(0.02, Math.abs(local) / s)) };
         },
       };

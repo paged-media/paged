@@ -467,7 +467,10 @@ export interface ImageSessionState {
   /** Curves' TARGETED ADJUSTMENT (I-55): armed on one curve, the image
    *  click-drag moves the point for the tone under the pointer. A new
    *  object after each move, so the curve editor follows `points`. */
-  curvesTarget: { channel: CurveChannel; points: Array<[number, number]> } | null;
+  curvesTarget: {
+    channel: CurveChannel;
+    points: Array<[number, number]>;
+  } | null;
 }
 
 export interface ImageSession {
@@ -3293,7 +3296,10 @@ export function createImageSession(host: BundleHost): ImageSession {
   } = { armed: false, drag: null };
   /** The tone (0..1) of the image under `at` on `channel`'s curve: the
    *  channel's value, or Rec. 709 luminance for the composite. */
-  const toneAt = (at: [number, number], channel: CurveChannel): number | null => {
+  const toneAt = (
+    at: [number, number],
+    channel: CurveChannel,
+  ): number | null => {
     const src = state.source;
     if (!src || !engine) return null;
     const [x, y] = [Math.floor(at[0]), Math.floor(at[1])];
@@ -3938,7 +3944,15 @@ export function createImageSession(host: BundleHost): ImageSession {
       curvesTarget.armed = channel !== null;
       curvesTarget.drag = null;
       state.curvesTarget = channel
-        ? { channel, points: points ? [...points] : [[0, 0], [1, 1]] }
+        ? {
+            channel,
+            points: points
+              ? [...points]
+              : [
+                  [0, 0],
+                  [1, 1],
+                ],
+          }
         : null;
       if (channel) setStatus(t(S.curvesTargetArmed));
       else emit();

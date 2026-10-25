@@ -16,7 +16,6 @@
 // scales it by the proxy's factor, so the preview looks like the result
 // rather than like the filter at a magnified size.
 
-
 import {
   amount,
   angle,

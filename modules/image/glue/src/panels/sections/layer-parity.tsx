@@ -821,7 +821,8 @@ function DevelopFields({
   const groups = [
     ...new Set(inSection.map(({ x }) => x.group).filter((g) => g)),
   ] as string[];
-  const group = groups.length > 1 ? groups[Math.min(sub, groups.length - 1)] : null;
+  const group =
+    groups.length > 1 ? groups[Math.min(sub, groups.length - 1)] : null;
   const full =
     values.length === DEVELOP_SETTINGS.length ? values : developDefaults();
   return (
@@ -850,7 +851,11 @@ function DevelopFields({
         .map(({ x, at }) => (
           <Field
             key={at}
-            label={x.group && group === null ? `${t(x.group)} ${t(x.label)}` : t(x.label)}
+            label={
+              x.group && group === null
+                ? `${t(x.group)} ${t(x.label)}`
+                : t(x.label)
+            }
             values={full}
             at={at}
             min={x.min}
@@ -1520,9 +1525,7 @@ export function LayerPropertiesSection({
           </div>
         );
       case "develop":
-        return (
-          <DevelopFields values={v} disabled={disabled} onValues={set} />
-        );
+        return <DevelopFields values={v} disabled={disabled} onValues={set} />;
     }
   };
   return (

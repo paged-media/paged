@@ -192,8 +192,10 @@ const sd = (v: FilterValues) => Math.round(num(v, "seed")) || 1;
 const texture = () =>
   select("texture", FG.textureKind, [F.canvas, F.burlap, F.brick], 0);
 const lightAngle = () => angle("light", FG.lightPosition, 135);
-const ink = (e: ImageEngine, ctx: FilterContext): Step => (h) =>
-  e.applyGradientMap(h, ctx.fg, ctx.bg);
+const ink =
+  (e: ImageEngine, ctx: FilterContext): Step =>
+  (h) =>
+    e.applyGradientMap(h, ctx.fg, ctx.bg);
 const DIR_ANGLE = [45, 0, 135, 90] as const;
 const direction = () =>
   select(
@@ -236,7 +238,15 @@ const EFFECTS: readonly Effect[] = [
           1 - num(v, "paper") / 100,
         ),
       (h) =>
-        e.galleryStrokes(h, sd(v), 45, clamp(num(v, "width"), 0, 24), 0, 0, 0.6),
+        e.galleryStrokes(
+          h,
+          sd(v),
+          45,
+          clamp(num(v, "width"), 0, 24),
+          0,
+          0,
+          0.6,
+        ),
     ],
   },
   {
@@ -290,8 +300,7 @@ const EFFECTS: readonly Effect[] = [
     ],
     recipe: (e, v) => [
       (h) => e.galleryKuwahara(h, clamp(2 + num(v, "size") * 0.6, 1, 8), 1),
-      (h) =>
-        e.galleryPosterizeEdges(h, 6 + num(v, "detail"), 0.9, 0.05, 1),
+      (h) => e.galleryPosterizeEdges(h, 6 + num(v, "detail"), 0.9, 0.05, 1),
       (h) =>
         e.galleryTexturizer(h, sd(v), 0, 12, num(v, "texture") * 0.25, 135, 1),
     ],
@@ -439,8 +448,7 @@ const EFFECTS: readonly Effect[] = [
           135,
           1,
         ),
-      (h) =>
-        e.galleryKuwahara(h, clamp(num(v, "smoothness") / 2, 1, 8), 0.5),
+      (h) => e.galleryKuwahara(h, clamp(num(v, "smoothness") / 2, 1, 8), 0.5),
     ],
   },
   {
@@ -482,8 +490,7 @@ const EFFECTS: readonly Effect[] = [
     ],
     recipe: (e, v) => [
       (h) => e.galleryKuwahara(h, clamp(9 - num(v, "detail") / 2, 1, 8), 1),
-      (h) =>
-        e.galleryPosterizeEdges(h, 24, num(v, "shadow") / 10, 0.04, 1),
+      (h) => e.galleryPosterizeEdges(h, 24, num(v, "shadow") / 10, 0.04, 1),
       (h) => e.galleryGrain(h, sd(v), 1, true, num(v, "texture") * 0.05),
     ],
   },
@@ -498,8 +505,7 @@ const EFFECTS: readonly Effect[] = [
       r("smoothness", FG.smoothnessLabel, 1, 15, 1, 5),
     ],
     recipe: (e, v) => [
-      (h) =>
-        e.galleryKuwahara(h, clamp(num(v, "smoothness") / 2, 1, 8), 0.6),
+      (h) => e.galleryKuwahara(h, clamp(num(v, "smoothness") / 2, 1, 8), 0.6),
       (h) =>
         e.galleryPosterizeEdges(
           h,
@@ -606,7 +612,14 @@ const EFFECTS: readonly Effect[] = [
       const a = DIR_ANGLE[num(v, "dir")] ?? 45;
       return [
         (h) =>
-          e.galleryDiffuse(h, sd(v), clamp(num(v, "radius") / 3, 0, 8), a, 1, 1),
+          e.galleryDiffuse(
+            h,
+            sd(v),
+            clamp(num(v, "radius") / 3, 0, 8),
+            a,
+            1,
+            1,
+          ),
         (h) => e.galleryStrokes(h, sd(v), a, num(v, "length"), 0, 0, 0.7),
       ];
     },
@@ -817,8 +830,7 @@ const EFFECTS: readonly Effect[] = [
       lightAngle(),
     ],
     recipe: (e, v, ctx) => [
-      (h) =>
-        e.galleryKuwahara(h, clamp(num(v, "smoothness") / 2 + 1, 1, 8), 1),
+      (h) => e.galleryKuwahara(h, clamp(num(v, "smoothness") / 2 + 1, 1, 8), 1),
       (h) => e.galleryThresholdInk(h, num(v, "balance") / 50, 0.1, 1),
       (h) => e.galleryBasRelief(h, num(v, "light"), 30, 3, 1),
       ink(e, ctx),
@@ -855,8 +867,7 @@ const EFFECTS: readonly Effect[] = [
       r("smoothness", FG.smoothnessLabel, 1, 50, 1, 5),
     ],
     recipe: (e, v, ctx) => [
-      (h) =>
-        e.galleryKuwahara(h, clamp(num(v, "smoothness") / 6 + 1, 1, 8), 1),
+      (h) => e.galleryKuwahara(h, clamp(num(v, "smoothness") / 6 + 1, 1, 8), 1),
       (h) => e.galleryThresholdInk(h, num(v, "balance") / 50, 0.02, 1),
       ink(e, ctx),
     ],

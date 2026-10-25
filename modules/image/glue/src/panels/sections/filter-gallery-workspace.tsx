@@ -54,7 +54,8 @@ export function GalleryWorkspace({
   const def = layer ? effects.find((d) => d.id === layer.effect) : undefined;
   // The stack's keys are positional, so a change rewrites them all (keys
   // past a shorter stack stay behind unread: `stack` says how many count).
-  const commit = (next: GalleryLayer[]) => onValues(galleryValues(next, effects));
+  const commit = (next: GalleryLayer[]) =>
+    onValues(galleryValues(next, effects));
   const setLayer = (i: number, l: GalleryLayer) =>
     commit(layers.map((x, j) => (j === i ? l : x)));
 
@@ -165,7 +166,10 @@ export function GalleryWorkspace({
           onClick={() => {
             if (!layer) return;
             const next = [...layers];
-            next.splice(active + 1, 0, { ...layer, values: { ...layer.values } });
+            next.splice(active + 1, 0, {
+              ...layer,
+              values: { ...layer.values },
+            });
             commit(next);
             setActive(active + 1);
           }}
@@ -189,7 +193,10 @@ export function GalleryWorkspace({
           disabled={active >= layers.length - 1}
           onClick={() => {
             const next = [...layers];
-            [next[active], next[active + 1]] = [next[active + 1]!, next[active]!];
+            [next[active], next[active + 1]] = [
+              next[active + 1]!,
+              next[active]!,
+            ];
             commit(next);
             setActive(active + 1);
           }}
@@ -202,7 +209,10 @@ export function GalleryWorkspace({
           disabled={active <= 0}
           onClick={() => {
             const next = [...layers];
-            [next[active - 1], next[active]] = [next[active]!, next[active - 1]!];
+            [next[active - 1], next[active]] = [
+              next[active]!,
+              next[active - 1]!,
+            ];
             commit(next);
             setActive(active - 1);
           }}

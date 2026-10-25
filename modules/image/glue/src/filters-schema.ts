@@ -333,7 +333,10 @@ export const num = (v: FilterValues, k: string): number => {
   return typeof x === "number" ? x : 0;
 };
 export const bool = (v: FilterValues, k: string): boolean => v[k] === true;
-export const rgb = (v: FilterValues, k: string): readonly [number, number, number] => {
+export const rgb = (
+  v: FilterValues,
+  k: string,
+): readonly [number, number, number] => {
   const x = v[k];
   return Array.isArray(x) ? (x as [number, number, number]) : [0, 0, 0];
 };
@@ -374,7 +377,6 @@ export const shape: ParamSpec = {
   ],
   default: 0,
 };
-
 
 export const select = (
   key: string,

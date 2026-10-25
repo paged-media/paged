@@ -14,7 +14,12 @@ import { useState } from "react";
 import { FILTERS, filterDef, filterDefaults } from "../src/filters";
 import type { FilterValue } from "../src/filters";
 import type { CurvesPick, FilterDialogState } from "../src/session";
-import { dialAngle, FilterDialog } from "../src/panels/sections/filter-dialog";
+import {
+  dialAngle,
+  FilterDialog,
+  paramShown,
+} from "../src/panels/sections/filter-dialog";
+import { GALLERY_EFFECTS } from "../src/filters";
 import {
   ImageSizeDialog,
   lengthToPx,
@@ -23,6 +28,8 @@ import {
   TrimDialog,
 } from "../src/panels/sections/image-dialogs";
 import { CurvesTools } from "../src/panels/sections/curves-tools";
+import { MoreFilters } from "../src/panels/sections/more-filters";
+import { galleryLayers } from "../src/filters-gallery";
 
 afterEach(() => cleanup());
 
@@ -33,6 +40,7 @@ function filterHarness(id: Parameters<typeof filterDef>[0], gpu = true) {
   const onBefore = mock((_b: boolean) => {});
   const onOk = mock(() => {});
   const onCancel = mock(() => {});
+  const onChooseImage = mock((_k: string, _c: 0 | 1) => {});
   function Harness() {
     const [dialog, setDialog] = useState<FilterDialogState>({
       id,
@@ -62,23 +70,43 @@ function filterHarness(id: Parameters<typeof filterDef>[0], gpu = true) {
         }}
         onOk={onOk}
         onCancel={onCancel}
+        onChooseImage={onChooseImage}
+        effects={GALLERY_EFFECTS}
       />
     );
   }
   const view = render(<Harness />);
   const q = (sel: string) =>
     view.container.querySelector(sel) as HTMLInputElement | null;
-  return { view, q, onChange, onPreview, onBefore, onOk, onCancel };
+  return {
+    view,
+    q,
+    onChange,
+    onPreview,
+    onBefore,
+    onOk,
+    onCancel,
+    onChooseImage,
+  };
 }
 
 describe("the Filter dialog component", () => {
   it("draws every parameter of every filter's schema", () => {
     for (const def of FILTERS) {
+      // The workspace draws its stack, not parameters (its own tests).
+      if (def.id === "filterGallery") continue;
       const { view } = filterHarness(def.id);
       const shown = [
         ...view.container.querySelectorAll("[data-filter-param]"),
       ].map((e) => e.getAttribute("data-filter-param"));
-      expect(shown).toEqual(def.params.map((p) => p.key));
+      const defaults = filterDefaults(def);
+      // At the defaults: every parameter whose condition holds; on-canvas
+      // points show as a count instead of a control.
+      expect(shown).toEqual(
+        def.params
+          .filter((p) => paramShown(p, defaults) && p.kind !== "points")
+          .map((p) => p.key),
+      );
       expect(
         view.container.querySelector(`[data-filter-dialog="${def.id}"]`),
       ).not.toBeNull();
@@ -277,5 +305,110 @@ describe("the Curves tools", () => {
     // A second click disarms.
     fireEvent.click(q('[data-image-curves-pick="black"]'));
     expect(onArm).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe("the WP5.2 dialog parts", () => {
+  it("sections head their parameters; a switch shows its blur's settings", () => {
+    const { view, q } = filterHarness("blurGallery");
+    expect(
+      view.container.querySelector(
+        '[data-filter-section="image.blurGallery.field"]',
+      ),
+    ).not.toBeNull();
+    // Iris is off at the defaults: its sliders are not drawn.
+    expect(q('[data-filter-param="irisBlur"]')).toBeNull();
+    fireEvent.click(q('[data-filter-param="iris"]')!);
+    expect(q('[data-filter-param="irisBlur"]')).not.toBeNull();
+    // The field pin: a count and a blur slider per pin.
+    expect(
+      view.container.querySelector('[data-filter-points="fieldPins"]')!
+        .textContent,
+    ).toMatch(/1 point/);
+    expect(q('[data-filter-point="fieldPins:0"]')).not.toBeNull();
+  });
+
+  it("a pin's slider sends the whole list with its blur changed", () => {
+    const { q, onChange } = filterHarness("blurGallery");
+    fireEvent.change(q('[data-filter-point="fieldPins:0"]')!, {
+      target: { value: "40" },
+    });
+    expect(onChange).toHaveBeenLastCalledWith({ fieldPins: [0.5, 0.5, 40] });
+  });
+
+  it("an image parameter asks for a file through onChooseImage", () => {
+    const { q, onChooseImage } = filterHarness("displace");
+    const sel = q('[data-filter-param="map"]')!;
+    expect(sel.value).toBe("0");
+    fireEvent.change(sel, { target: { value: "1" } });
+    expect(onChooseImage).toHaveBeenLastCalledWith("map", 1);
+  });
+
+  it("the Filter Gallery: choose an effect, add, hide and delete layers", () => {
+    const { view, onChange } = filterHarness("filterGallery");
+    const c = view.container;
+    expect(c.querySelectorAll("[data-filter-gallery-layer]")).toHaveLength(1);
+    fireEvent.click(c.querySelector('[data-filter-gallery-effect="chrome"]')!);
+    let v = onChange.mock.calls.at(-1)![0];
+    expect(galleryLayers(v, GALLERY_EFFECTS).map((l) => l.effect)).toEqual([
+      "chrome",
+    ]);
+    fireEvent.click(c.querySelector("[data-filter-gallery-new]")!);
+    expect(c.querySelectorAll("[data-filter-gallery-layer]")).toHaveLength(2);
+    fireEvent.click(c.querySelector('[data-filter-gallery-eye="0"]')!);
+    v = onChange.mock.calls.at(-1)![0];
+    expect(galleryLayers(v, GALLERY_EFFECTS).map((l) => l.visible)).toEqual([
+      false,
+      true,
+    ]);
+    fireEvent.click(c.querySelector("[data-filter-gallery-delete]")!);
+    expect(c.querySelectorAll("[data-filter-gallery-layer]")).toHaveLength(1);
+    // The active layer's own settings are drawn under the browser.
+    expect(c.querySelector('[data-filter-param="detail"]')).not.toBeNull();
+  });
+
+  it("More filters opens a group's choice, a blur and a no-dialog filter", () => {
+    const onOpen = mock((_id: string) => {});
+    const onOneShot = mock((_k: string) => {});
+    const onBlur = mock((_k: string) => {});
+    const view = render(
+      <MoreFilters
+        filters={FILTERS}
+        disabled={false}
+        onOpen={onOpen}
+        onOneShot={onOneShot}
+        onBlurGallery={onBlur}
+      />,
+    );
+    const c = view.container;
+    fireEvent.change(
+      c.querySelector('[data-image-more-filters-group="Distort"]')!,
+      { target: { value: "ripple" } },
+    );
+    expect(onOpen).toHaveBeenLastCalledWith("ripple");
+    fireEvent.click(c.querySelector('[data-image-blur-gallery="iris"]')!);
+    expect(onBlur).toHaveBeenLastCalledWith("iris");
+    fireEvent.click(c.querySelector('[data-image-one-shot="solarize"]')!);
+    expect(onOneShot).toHaveBeenLastCalledWith("solarize");
+    fireEvent.click(c.querySelector("[data-image-filter-gallery]")!);
+    expect(onOpen).toHaveBeenLastCalledWith("filterGallery");
+  });
+
+  it("Curves' targeted adjustment toggles through onTarget", () => {
+    const onTarget = mock((_on: boolean) => {});
+    const view = render(
+      <CurvesTools
+        armed={null}
+        disabled={false}
+        onAuto={() => {}}
+        onArm={() => {}}
+        targeting={false}
+        onTarget={onTarget}
+      />,
+    );
+    const b = view.container.querySelector("[data-image-curves-target]")!;
+    expect(b.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(b);
+    expect(onTarget).toHaveBeenLastCalledWith(true);
   });
 });

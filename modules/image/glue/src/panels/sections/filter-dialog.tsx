@@ -276,46 +276,47 @@ function PointsParam({
   onChange: (v: FilterValue) => void;
 }) {
   const count = Math.floor(value.length / p.stride);
-  const rows = [];
-  if (p.stride === 3)
-    for (let i = 0; i < count; i++) {
-      const at = i * 3 + 2;
-      rows.push(
-        <div key={i} style={row}>
-          <label htmlFor={`${id}-${i}`}>{t(M.pinBlur, { n: i + 1 })}</label>
-          <input
-            id={`${id}-${i}`}
-            type="range"
-            data-filter-point={`${p.key}:${i}`}
-            min={p.min}
-            max={p.max}
-            step={1}
-            value={value[at] ?? 0}
-            onChange={(e) => {
-              const next = [...value];
-              next[at] = Number(e.target.value);
-              onChange(next);
-            }}
-          />
-          <span style={{ ...mono, minWidth: "4.5em", textAlign: "right" }}>
-            {Math.round(value[at] ?? 0)} px
-          </span>
-          <button
-            type="button"
-            aria-label={t(M.removePin, { n: i + 1 })}
-            data-filter-point-remove={`${p.key}:${i}`}
-            disabled={count <= 1}
-            onClick={() => {
-              const next = [...value];
-              next.splice(i * 3, 3);
-              onChange(next);
-            }}
-          >
-            ×
-          </button>
-        </div>,
-      );
-    }
+  const rows =
+    p.stride === 3
+      ? Array.from({ length: count }, (_, i) => {
+          const at = i * 3 + 2;
+          return (
+            <div key={i} style={row}>
+              <label htmlFor={`${id}-${i}`}>{t(M.pinBlur, { n: i + 1 })}</label>
+              <input
+                id={`${id}-${i}`}
+                type="range"
+                data-filter-point={`${p.key}:${i}`}
+                min={p.min}
+                max={p.max}
+                step={1}
+                value={value[at] ?? 0}
+                onChange={(e) => {
+                  const next = [...value];
+                  next[at] = Number(e.target.value);
+                  onChange(next);
+                }}
+              />
+              <span style={{ ...mono, minWidth: "4.5em", textAlign: "right" }}>
+                {Math.round(value[at] ?? 0)} px
+              </span>
+              <button
+                type="button"
+                aria-label={t(M.removePin, { n: i + 1 })}
+                data-filter-point-remove={`${p.key}:${i}`}
+                disabled={count <= 1}
+                onClick={() => {
+                  const next = [...value];
+                  next.splice(i * 3, 3);
+                  onChange(next);
+                }}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })
+      : [];
   return (
     <>
       <div style={row}>
