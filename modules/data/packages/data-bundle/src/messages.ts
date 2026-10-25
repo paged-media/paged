@@ -640,4 +640,18 @@ export const STATUS = defineMessages("data.status", {
   ruleUndo: `Rule "{scope}"`,
 });
 
+/** What may be wrong with the placed content (data ADR 564): the data door's
+ *  `issues`, the Problems panel's rows. */
+export const ISSUES = defineMessages("data.issues", {
+  overset: `The text of "{binding}" does not fit its frame: enlarge the frame, shorten the text, or turn on Auto-Size in Text Frame Options.`,
+  oversetRecord: `The text of "{binding}" for record {record} does not fit its frame: enlarge the frame, shorten the text, or turn on Auto-Size in Text Frame Options.`,
+  missingAsset: `The picture of "{binding}" is missing: {reason}.`,
+  noReference: "no reference in the data",
+  lowResolution: `The picture of "{binding}" is {ppi} ppi at its size in the frame, under {min} ppi: use a larger picture or make the frame smaller.`,
+  emptyValue: `"{binding}" shows an empty value: check the field in the data.`,
+  failed: `"{binding}" failed: {reason}`,
+  failedUnknown: `"{binding}" could not be resolved: check its expression and the data.`,
+  unplaced: `{count} of {total} record(s) of "{binding}" were not placed: make the flow's frames larger or the records shorter.`,
+});
+
 defineTranslations("de", de);

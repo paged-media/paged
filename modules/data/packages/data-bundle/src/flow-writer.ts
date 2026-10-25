@@ -81,6 +81,9 @@ export interface FlowWriteResult {
   pages: PageId[];
   mutateCalls: number;
   overflow: boolean;
+  /** Records the paginator placed, of how many (0 of 0 before it ran). */
+  placed: number;
+  total: number;
   diagnostics: string[];
 }
 
@@ -155,6 +158,8 @@ export async function commitRecordFlow(
       pages: [],
       mutateCalls: 0,
       overflow: false,
+      placed: 0,
+      total: 0,
       diagnostics: ["flow: no start page"],
     };
   const box = marginBox(page);
@@ -169,6 +174,8 @@ export async function commitRecordFlow(
       pages: [],
       mutateCalls: 0,
       overflow: flow.overflow,
+      placed: flow.placed,
+      total: flow.total,
       diagnostics,
     };
 
@@ -191,6 +198,8 @@ export async function commitRecordFlow(
         pages: [],
         mutateCalls,
         overflow: flow.overflow,
+        placed: flow.placed,
+        total: flow.total,
         diagnostics: [...diagnostics, `flow: adding pages was refused`],
       };
     }
@@ -209,6 +218,8 @@ export async function commitRecordFlow(
       pages: out,
       mutateCalls,
       overflow: flow.overflow,
+      placed: flow.placed,
+      total: flow.total,
       diagnostics: [
         ...diagnostics,
         "flow: the added pages are not where expected",
@@ -250,6 +261,8 @@ export async function commitRecordFlow(
       pages: out,
       mutateCalls,
       overflow: flow.overflow,
+      placed: flow.placed,
+      total: flow.total,
       diagnostics: [...diagnostics, "flow: the frame batch was refused"],
     };
   }
@@ -262,6 +275,8 @@ export async function commitRecordFlow(
     pages: out,
     mutateCalls,
     overflow: flow.overflow,
+    placed: flow.placed,
+    total: flow.total,
     diagnostics,
   };
 }

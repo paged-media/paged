@@ -491,6 +491,28 @@ mod wasm {
             to_js(&data_lower::merge::merge_overset(&plan, &metrics))
         }
 
+        /// The distinct words of one text (`string[]`, the space included),
+        /// for the host to measure before [`text_overset`] (data ADR 564).
+        pub fn text_words(&self, text: &str) -> Result<JsValue, JsValue> {
+            to_js(&data_lower::merge::text_words(text))
+        }
+
+        /// Is `text` overset in a frame `width` × `height` (pt)? `metrics` is
+        /// one `FrameMetrics` (`{ leadingPt, advances }`) — DM-7's measured
+        /// rule, for any text the data placed (data ADR 564).
+        pub fn text_overset(
+            &self,
+            text: &str,
+            width: f64,
+            height: f64,
+            metrics: JsValue,
+        ) -> Result<bool, JsValue> {
+            let metrics: data_lower::merge::FrameMetrics = from_js(metrics)?;
+            Ok(data_lower::merge::text_overset(
+                text, width, height, &metrics,
+            ))
+        }
+
         /// Plan a §10 batch run over a query's result (`mode` is `BatchMode`):
         /// `{ mode, units: [{ label, recordIndices }], totalRecords }` — which
         /// records feed which output document (per-record / per-group / one

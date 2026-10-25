@@ -18,6 +18,7 @@ import type {
   DataBindingSpec,
   DataChange,
   DataEvaluation,
+  DataIssue,
   DataPipelineStep,
   DataPlacement,
   DataRowEdit,
@@ -69,6 +70,9 @@ export interface DataDoorDeps {
   syncStatusOf(id: string): string | null;
   /** The page items each binding is placed in, by ADR 131 address. */
   placements(): Promise<readonly { binding: string; address: string }[]>;
+  /** What may be wrong with the placed content (data ADR 564), read now and
+   *  published to the Problems panel. */
+  issues(): Promise<readonly DataIssue[]>;
   /** Place a field on a page item (`kind:id`), the panel's drag to place. */
   place(
     target: string,
@@ -449,6 +453,9 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
         });
       }
       return out;
+    },
+    async issues() {
+      return deps.issues();
     },
     async assetColumns() {
       const out: DataAssetColumn[] = [];

@@ -57,6 +57,7 @@ import {
 import type { ElementId } from "@paged-media/client";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
+import { DataIssuesLine } from "./data-issues";
 import {
   gridSql,
   groupRows,
@@ -1063,6 +1064,7 @@ export function DataPanel() {
             : null
         }
       />
+      {service && <DataIssuesLine service={service} />}
       {service && (
         <Grid
           key={table.name}

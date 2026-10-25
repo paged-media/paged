@@ -80,6 +80,15 @@ Query), place (drag a field header onto a frame, or right-click any property).
   polygon (an image binding, lowered at once); on anything else, or with no item under the
   point, the refusal and its reason reach Problems. A source table's headers do not drag (a
   binding reads a query).
+- Amended 2026-10-24: `data@1` gained `issues()` (read role; plugin-sdk 0.74.3-canary.24):
+  what may be wrong with the placed content, each named where it is (data ADR 564). Below the
+  status line, an **issues line** sums them up by kind, worst first ("1 picture missing · 2
+  texts do not fit"), in the worst severity's tone, each message (which says what to do) in its
+  tooltip; a click selects the page items concerned. It is read again when the data changes and
+  on the pushes that change the document, so a frame grown to fit clears its issue; a service
+  without `issues` shows no line. The UI is `apps/canvas/src/panels/data-issues.tsx`. The field
+  markers draw a frame named by a warning or an error in the error red. paged.data also
+  publishes the issues to Problems.
 - Not part of this record, and not built yet:
   - per-record status (a record new or deleted in the source) and markers per record, which
     need the service to report which record each instance shows;

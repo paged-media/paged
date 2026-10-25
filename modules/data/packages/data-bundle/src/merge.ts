@@ -640,6 +640,17 @@ async function copiedFrameProperties(
   return out;
 }
 
+/** A story's font, size and leading as the overset measure reads them
+ *  (the whole story's formatting, as a template frame's is read; data ADR
+ *  564 measures any placed text with it). */
+export async function storyFont(
+  host: BundleHost,
+  storyId: string,
+  text: string,
+): Promise<TemplateFrameInfo["font"]> {
+  return fontOf(await copiedProperties(host, storyId, text));
+}
+
 function fontOf(format: CopiedProperty[]): TemplateFrameInfo["font"] {
   const get = (p: string) =>
     (format.find((f) => f.path === p)?.value as { value?: unknown } | undefined)
