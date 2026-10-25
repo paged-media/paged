@@ -67,9 +67,9 @@ Read from the code on 2026-10-25.
   slide x of y, grid, black screen) and opens the audience in a window of its own, synced over a
   BroadcastChannel; without a second window it runs alone. Rehearse Timings writes each slide's
   time into its transition in one undo step. Frames are the engine's page layers (extensions
-  ADR 346), prefetched, drawn without the editor's substituted-font highlight. Transitions go
-  through the WebGPU transition seam; until the shader library registers, fade-like kinds
-  cross-fade and the rest cut.
+  ADR 346), prefetched, drawn without the editor's substituted-font highlight. Transitions play
+  through the WGSL shader library (ADR 721) on WebGPU, with the deck's effect options; without
+  WebGPU the show cuts and says so once.
 - **Slide Sorter** (View ▸ Slide Sorter, ADR 716): a module view in place of the canvas;
   select, Shift/Cmd+click, drag to move the selection, hide, set the transition, double-click to
   open a slide.
@@ -117,6 +117,18 @@ Read from the code on 2026-10-25.
 - **Links on import.** A run's `a:hlinkClick` becomes the engine's text hyperlink: a URL, the
   page of the slide it jumps to, or the show action as a `ppaction://` URL. A shape's click
   action is kept in its item metadata, along with its shape key, placeholder and preset.
+- **Transition shaders** (ADR 721; `src/show/shaders`). Every PowerPoint transition is a WGSL
+  shader over the two slide images: the 20 ECMA-376 effects, the 19 of PowerPoint 2010, the 12
+  `p15:prstTrans` presets, with random choosing from a pool and morph playing as a cross-fade.
+  One prelude declares the bindings and the `Uniforms` block, and `manifest.json` maps each
+  PowerPoint id and its attributes to a shader and its parameters. `createTransitionRenderer`
+  draws on the caller's WebGPU device, with lazy pipelines and ping-pong passes. Nine effects are
+  marked as 2.5D approximations in the manifest: vortex, honeycomb, ferris, prestige, fracture,
+  crush, airplane, origami and drape. Checked by naga (`slide-shaders`) and by the bun tests, and
+  in Chrome by `tests/gpu`: every shader compiles with Tint, progress 0 and 1 reproduce the
+  slides, golden frames hold at 0.25, 0.5 and 0.75, and every transition takes under 1 ms of
+  GPU time per 1080p frame on an M3 Max (most take under 0.2 ms). The show runtime that plays
+  them is the next part of M5.
 - **The PowerPoint oracle** (ADR 705). Scripts drive PowerPoint 16.113.3 to export PDF, per-shape
   geometry, first baselines and chart bars (`scripts/ppt-*`). Fixtures authored through PowerPoint:
   geometry, text, placeholders, motion, baselines.
@@ -190,5 +202,4 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   reported in the export's diagnostics, and the shape is written as the deck had it. A notes
   master for a deck that has none. Transitions, timing, masters and layouts are still copied, not
   regenerated (later waves of ADR 711).
-- Animations in the show (per-item layers, wave 5), the WGSL transition library (ADR 721) wired
-  in, custom shows, ink saved as annotations.
+- Animations in the show (per-item layers, wave 5), custom shows, ink saved as annotations.

@@ -12,6 +12,9 @@
 # scripts/sync-wire.mjs --check, scripts/gen-core-commands.mjs --check
 platform/extensions/packages/plugin-api/src/wire.d.ts
 platform/extensions/packages/plugin-sdk/src/core-commands.generated.ts
+# bun run gen:shaders (modules/slide/packages/slide-bundle; its
+# test/transitions.spec.ts compares it with the .wgsl files)
+modules/slide/packages/slide-bundle/src/show/shaders/sources.generated.ts
 # scripts/sync-catalog.mjs --check (the vendored engine catalog + provenance)
 platform/extensions/packages/plugin-api/src/catalog.json
 **/catalog.provenance.json
