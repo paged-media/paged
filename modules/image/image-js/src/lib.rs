@@ -1400,6 +1400,107 @@ mod wasm {
         })
     }
 
+    /// Register `rgba` (`width`×`height`) as a NEW engine-held image
+    /// derived from `src`: it inherits the source's colour treatment and
+    /// its depth provenance, as a crop and a resize do.
+    fn register_derived(
+        src: &DecodedImage,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> DecodedHandle {
+        let handle = NEXT_HANDLE.with(|n| {
+            let h = n.get();
+            n.set(h + 1);
+            h
+        });
+        let (display, depth_reduced) = (display_code(src.display), src.depth_reduced);
+        IMAGES.with(|m| {
+            m.borrow_mut().insert(
+                handle,
+                DecodedImage {
+                    width,
+                    height,
+                    rgba: rgba.into(),
+                    display: src.display,
+                    depth_reduced,
+                },
+            )
+        });
+        DecodedHandle {
+            handle,
+            width,
+            height,
+            display,
+            depth_reduced,
+        }
+    }
+
+    /// RESAMPLE on the CPU (image ADR 467): `paged_resample`'s separable,
+    /// premultiplied resize of an engine-held image to `out_w`×`out_h`,
+    /// registered as a NEW engine-held image (the source stays). `filter`
+    /// ∈ lanczos3 | bilinear. Needs no device and gives the same bytes
+    /// whether or not `init_gpu` succeeded: the supported backend of the
+    /// headless and batch actions. The editor's interactive resize stays
+    /// on the GPU kernels ([`resize_image`]).
+    #[wasm_bindgen]
+    pub fn resize_image_cpu(
+        handle: u32,
+        out_w: u32,
+        out_h: u32,
+        filter: &str,
+    ) -> Result<DecodedHandle, JsValue> {
+        let f = paged_resample::Filter::parse(filter).ok_or_else(|| {
+            JsValue::from_str(&format!(
+                "unknown CPU resample filter \"{filter}\" (lanczos3 | bilinear)"
+            ))
+        })?;
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let out = paged_resample::resize_rgba8(
+            &img.rgba.to_rgba8(),
+            img.width,
+            img.height,
+            out_w,
+            out_h,
+            f,
+        )
+        .map_err(|e| JsValue::from_str(&format!("resize: {e}")))?;
+        Ok(register_derived(&img, out_w, out_h, out))
+    }
+
+    /// STRAIGHTEN + CROP on the CPU (image ADR 467): turn the image by
+    /// `−degrees` about the centre of the rectangle `(x, y, w, h)` and cut
+    /// it out (`paged_resample::rotate_crop_rgba8`: bilinear,
+    /// premultiplied, clamp-to-edge — the model of `geom.rotate_bilinear`),
+    /// registered as a NEW engine-held image. The rectangle must lie
+    /// inside the image. At 0° it is [`crop_image`]'s cut, byte for byte.
+    /// Needs no device; the editor's crop tool stays on
+    /// [`straighten_crop_image`].
+    #[wasm_bindgen]
+    pub fn straighten_crop_image_cpu(
+        handle: u32,
+        x: u32,
+        y: u32,
+        w: u32,
+        h: u32,
+        degrees: f64,
+    ) -> Result<DecodedHandle, JsValue> {
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let out = paged_resample::rotate_crop_rgba8(
+            &img.rgba.to_rgba8(),
+            img.width,
+            img.height,
+            paged_resample::Rect { x, y, w, h },
+            degrees,
+        )
+        .map_err(|e| JsValue::from_str(&format!("straighten: {e}")))?;
+        Ok(register_derived(&img, w, h, out))
+    }
+
     // ─────────────────────── GENERATE / FILL doors ───────────────────
     //
     // The generator family's editor reach (`crate::fill`). Both doors

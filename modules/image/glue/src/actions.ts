@@ -26,7 +26,11 @@
 //
 //   · decode — PNG / JPEG / PSD composite (sniffed), CMYK and embedded ICC
 //     profiles converted to sRGB at decode (the CMS rung 1 of the ingest);
-//   · crop — the axis-aligned cut (`crop_image`, pure windowing);
+//   · crop — the axis-aligned cut (`crop_image`, pure windowing), or with
+//     an `angle` the straightened crop (`straighten_crop_image_cpu`);
+//   · resize and fit — a resample on the CPU (`resize_image_cpu`): the
+//     engine's `paged-resample`, separable Lanczos-3 or bilinear,
+//     premultiplied, its filter widened when shrinking (ADR 467);
 //   · the adjustment chain — `filter_region_rgba8` over the whole picture,
 //     on the GPU where this realm's engine has a device, otherwise on the
 //     shipped CPU twins of the same kernels (ADR 465): greyscale is the
@@ -35,14 +39,32 @@
 //   · encode — PNG (lossless, with the channel reduction for a grey buffer)
 //     or JPEG at a quality.
 //
-// WHAT DOES NOT, said plainly: a RESIZE or fit-to-a-box is a resample, and
-// the resample kernels are GPU-only (`resize_image` refuses without
-// `init_gpu`), as is a straightened (non-zero angle) crop. An action may not
-// depend on whether the realm happens to have a device, so neither is
-// registered until the engine's `paged-raster` / `paged-kernels` give the
-// module a CPU resample (PM-0014). `crop` with an `aspect` is the honest
-// subset of "fit": the largest centred rectangle of that shape, cut, not
-// scaled. WebP is neither decoded nor encoded by the codec set.
+// The resample is the CPU one even where a device exists: an action may
+// not depend on whether the realm happens to have one, so a resize gives
+// the same bytes in the editor, a worker and the headless host. The GPU
+// resample kernels stay the editor's interactive path (its resize dialog
+// and crop tool); the two agree within one 8-bit level on opaque pixels
+// (ADR 467). WebP is neither decoded nor encoded by the codec set.
+//
+// THE ACTIONS AND THEIR PARAMETERS (each asset action also takes `format`,
+// "keep" | "png" | "jpeg", and `quality`, 1–100, for its output):
+//
+//   info       — { width, height, format, colour, depthReduced, ppi }
+//   convert    — re-encode (`format` defaults to "png")
+//   crop       — x, y, width, height (0 = to the edge), aspect (w ÷ h, the
+//                largest centred rectangle of that shape), angle (degrees,
+//                clockwise: the content inside the rectangle turned by
+//                `angle` about its centre lands upright; where the turn
+//                swings past the picture its edge pixels repeat)
+//   resize     — width and/or height (one alone keeps the aspect), or
+//                scale (a factor); filter "lanczos3" | "bilinear"
+//   fit        — width, height (the box), mode "contain" (the whole
+//                picture inside the box) | "cover" (the box filled, the
+//                overflow cut centred), enlarge (false: never scale up),
+//                filter
+//   adjust     — adjust: { <adjustment-layer path>: value }
+//   greyscale  — (none)
+//   sharpen    — amount
 
 import type {
   ActionAsset,
@@ -53,6 +75,8 @@ import type {
 
 import {
   bootEngine,
+  type CpuResampleFilter,
+  type DecodedInfo,
   type DisplayTreatment,
   type ImageEngine,
   type RasterFormat,
@@ -65,6 +89,8 @@ export const IMAGE_ACTION_IDS = {
   info: `${PREFIX}info`,
   convert: `${PREFIX}convert`,
   crop: `${PREFIX}crop`,
+  resize: `${PREFIX}resize`,
+  fit: `${PREFIX}fit`,
   adjust: `${PREFIX}adjust`,
   greyscale: `${PREFIX}greyscale`,
   sharpen: `${PREFIX}sharpen`,
@@ -116,23 +142,26 @@ interface Raster {
   depthReduced: boolean;
 }
 
-function decode(
+/** One engine step over a held picture: a new held picture made from the
+ *  one behind `handle`, which is `w × h`. */
+type Step = (
   e: ImageEngine,
-  asset: ActionAsset,
-  crop?: (
-    w: number,
-    h: number,
-  ) => { x: number; y: number; w: number; h: number },
-): Raster {
+  handle: number,
+  w: number,
+  h: number,
+) => Pick<DecodedInfo, "handle" | "width" | "height">;
+
+/** Decode, run the steps in order (each frees the picture before it), and
+ *  read the pixels back. */
+function decode(e: ImageEngine, asset: ActionAsset, ...steps: Step[]): Raster {
   const d = e.decode(asset.bytes);
   let handle = d.handle;
   let { width, height } = d;
   try {
-    if (crop) {
-      const c = e.crop(d.handle, crop(width, height));
-      handle = c.handle;
-      ({ width, height } = c);
-      e.freeImage(d.handle);
+    for (const step of steps) {
+      const next = step(e, handle, width, height);
+      e.freeImage(handle);
+      ({ handle, width, height } = next);
     }
     return {
       width,
@@ -235,6 +264,119 @@ export function cropRectFor(
   };
 }
 
+/** The crop step the parameters name: the axis-aligned cut, or with a
+ *  non-zero `angle` the straightened one. */
+function cropStep(p: Readonly<Record<string, unknown>>, id: string): Step {
+  const angle = Number(p.angle ?? 0);
+  if (!Number.isFinite(angle) || Math.abs(angle) > 360)
+    throw new Error(`${id}: angle is degrees, from -360 to 360`);
+  return (e, handle, w, h) => {
+    const r = cropRectFor(p, w, h, id);
+    return angle === 0
+      ? e.crop(handle, r)
+      : e.straightenCropCpu(handle, r, angle);
+  };
+}
+
+const FILTERS: readonly string[] = ["lanczos3", "bilinear"];
+
+function filterOf(
+  p: Readonly<Record<string, unknown>>,
+  id: string,
+): CpuResampleFilter {
+  const f = p.filter ?? "lanczos3";
+  if (typeof f !== "string" || !FILTERS.includes(f))
+    throw new Error(`${id}: filter is "lanczos3" or "bilinear"`);
+  return f as CpuResampleFilter;
+}
+
+/** The longest edge a resize or fit writes (the engine also refuses more
+ *  than 2²⁸ pixels in all). */
+export const MAX_EDGE = 16384;
+
+function edge(n: number, name: string, id: string): number {
+  const v = Math.max(1, Math.round(n));
+  if (v > MAX_EDGE)
+    throw new Error(`${id}: a ${name} of ${v} exceeds ${MAX_EDGE} pixels`);
+  return v;
+}
+
+/** The size `resize`'s parameters name for a `w × h` picture. */
+export function resizeSizeFor(
+  p: Readonly<Record<string, unknown>>,
+  w: number,
+  h: number,
+  id: string = IMAGE_ACTION_IDS.resize,
+): { w: number; h: number } {
+  const tw = whole(p.width, "width", id);
+  const th = whole(p.height, "height", id);
+  const scale = Number(p.scale ?? 0);
+  if (!Number.isFinite(scale) || scale < 0)
+    throw new Error(`${id}: scale is a factor above 0, or 0 for none`);
+  if (scale > 0) {
+    if (tw || th)
+      throw new Error(`${id}: give a scale or a width and height, not both`);
+    return {
+      w: edge(w * scale, "width", id),
+      h: edge(h * scale, "height", id),
+    };
+  }
+  if (!tw && !th) throw new Error(`${id}: give a width, a height or a scale`);
+  return {
+    w: edge(tw || (w * th) / h, "width", id),
+    h: edge(th || (h * tw) / w, "height", id),
+  };
+}
+
+/** What `fit` does to a `w × h` picture: the centred rectangle it keeps
+ *  (the whole picture for `contain`) and the size it resamples that to. */
+export function fitPlanFor(
+  p: Readonly<Record<string, unknown>>,
+  w: number,
+  h: number,
+  id: string = IMAGE_ACTION_IDS.fit,
+): {
+  keep: { x: number; y: number; w: number; h: number };
+  w: number;
+  h: number;
+} {
+  const bw = whole(p.width, "width", id);
+  const bh = whole(p.height, "height", id);
+  if (!bw || !bh) throw new Error(`${id}: the box needs a width and a height`);
+  const mode = p.mode ?? "contain";
+  if (mode !== "contain" && mode !== "cover")
+    throw new Error(`${id}: mode is "contain" or "cover"`);
+  const enlarge = p.enlarge ?? true;
+  if (typeof enlarge !== "boolean")
+    throw new Error(`${id}: enlarge is true or false`);
+  const s0 =
+    mode === "contain" ? Math.min(bw / w, bh / h) : Math.max(bw / w, bh / h);
+  const s = enlarge ? s0 : Math.min(s0, 1);
+  if (mode === "contain")
+    return {
+      keep: { x: 0, y: 0, w, h },
+      w: Math.min(bw, edge(w * s, "width", id)),
+      h: Math.min(bh, edge(h * s, "height", id)),
+    };
+  // Cover: the box, mapped back into the picture at that scale, is the
+  // part kept, centred; the rest is cut. Not enlarging, a picture smaller
+  // than the box on a side keeps that side.
+  const ow = Math.min(bw, edge(w * s, "width", id));
+  const oh = Math.min(bh, edge(h * s, "height", id));
+  const kw = Math.max(1, Math.min(w, Math.round(ow / s)));
+  const kh = Math.max(1, Math.min(h, Math.round(oh / s)));
+  return {
+    keep: {
+      x: Math.floor((w - kw) / 2),
+      y: Math.floor((h - kh) / 2),
+      w: kw,
+      h: kh,
+    },
+    w: ow,
+    h: oh,
+  };
+}
+
 /** The action definitions over an engine boot (injected by tests). */
 export function imageActions(
   engine: () => Promise<ImageEngine>,
@@ -289,10 +431,44 @@ export function imageActions(
     ),
     asset(
       IMAGE_ACTION_IDS.crop,
-      "Crop (a rectangle, or the largest centred one of an aspect ratio)",
-      { x: 0, y: 0, width: 0, height: 0, aspect: 0 },
-      (e, a, p) =>
-        decode(e, a, (w, h) => cropRectFor(p, w, h, IMAGE_ACTION_IDS.crop)),
+      "Crop (a rectangle, or the largest centred one of an aspect ratio; straightened by an angle)",
+      { x: 0, y: 0, width: 0, height: 0, aspect: 0, angle: 0 },
+      (e, a, p) => decode(e, a, cropStep(p, IMAGE_ACTION_IDS.crop)),
+    ),
+    asset(
+      IMAGE_ACTION_IDS.resize,
+      "Resize (to a width and/or height, or by a scale)",
+      { width: 0, height: 0, scale: 0, filter: "lanczos3" },
+      (e, a, p) => {
+        const filter = filterOf(p, IMAGE_ACTION_IDS.resize);
+        return decode(e, a, (_, handle, w, h) => {
+          const size = resizeSizeFor(p, w, h);
+          return e.resizeCpu(handle, size.w, size.h, filter);
+        });
+      },
+    ),
+    asset(
+      IMAGE_ACTION_IDS.fit,
+      "Fit into a box (contain, or cover with the overflow cut)",
+      {
+        width: 0,
+        height: 0,
+        mode: "contain",
+        enlarge: true,
+        filter: "lanczos3",
+      },
+      (e, a, p) => {
+        const filter = filterOf(p, IMAGE_ACTION_IDS.fit);
+        return decode(e, a, (_, handle, w, h) => {
+          const plan = fitPlanFor(p, w, h);
+          const kept = e.crop(handle, plan.keep);
+          try {
+            return e.resizeCpu(kept.handle, plan.w, plan.h, filter);
+          } finally {
+            e.freeImage(kept.handle);
+          }
+        });
+      },
     ),
     asset(
       IMAGE_ACTION_IDS.adjust,
