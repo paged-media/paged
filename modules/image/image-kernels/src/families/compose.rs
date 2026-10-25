@@ -404,6 +404,142 @@ pub static COMPOSE_DARKER_COLOR: KernelDef =
 pub static COMPOSE_LIGHTER_COLOR: KernelDef =
     compose_def("compose.lighter_color", LIGHTER_COLOR_WGSL, 4);
 
+// ── dissolve (Photoshop) ────────────────────────────────────────────
+//
+// Not a `B(Cb, Cs)`: each pixel shows the source, OPAQUE, where a hash of
+// its canvas position falls under the source's effective alpha
+// (`b.a · opacity`), and the backdrop elsewhere — antialiased edges and
+// partial opacity dither instead of fading. The hash is the engine's
+// (`paged_blend::dissolve_threshold`, engine ADR 1016: `lowbias32` folded
+// over seed, y and x; the top 24 bits as a fraction), so the scalar twin
+// is `paged_blend::composite_dissolve` and the two agree bit for bit on
+// the threshold. `origin` is the dispatch window's canvas offset: a
+// window of the accumulator dissolves exactly as the whole canvas does.
+
+/// `opacity` as the other compose kernels; `seed` picks the pattern;
+/// `origin_*` is the dispatch window's top-left on the canvas.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct DissolveParams {
+    pub opacity: f32,
+    pub seed: u32,
+    pub origin_x: u32,
+    pub origin_y: u32,
+}
+
+impl DissolveParams {
+    pub fn new(opacity: f32, seed: u32, origin: (u32, u32)) -> Self {
+        Self {
+            opacity,
+            seed,
+            origin_x: origin.0,
+            origin_y: origin.1,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const DISSOLVE_WGSL: &str = "// paged.image compose kernel — handwritten under ABI v1.1.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    opacity: f32,
+    seed: u32,
+    origin_x: u32,
+    origin_y: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(0) @binding(1) var in1 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+fn unpremul_rgb(c: vec4<f32>) -> vec3<f32> {
+    if (c.a == 0.0) { return vec3<f32>(0.0); }
+    return c.rgb / c.a;
+}
+
+fn lowbias32(x0: u32) -> u32 {
+    var x = x0;
+    x = x ^ (x >> 16u);
+    x = x * 0x7feb352du;
+    x = x ^ (x >> 15u);
+    x = x * 0x846ca68bu;
+    x = x ^ (x >> 16u);
+    return x;
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let a = textureLoad(in0, xy, 0);
+    let b = textureLoad(in1, xy, 0);
+    let alpha = b.a * params.opacity;
+    let cx = gid.x + params.origin_x;
+    let cy = gid.y + params.origin_y;
+    let h = lowbias32(cx ^ lowbias32(cy ^ lowbias32(params.seed)));
+    let r = f32(h >> 8u) * (1.0 / 16777216.0);
+    var result = a;
+    if (alpha > 0.0 && r < alpha) {
+        result = vec4<f32>(unpremul_rgb(b), 1.0);
+    }
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
+}
+";
+
+const DISSOLVE_PARAMS: ParamsLayout = ParamsLayout {
+    size: ::core::mem::size_of::<DissolveParams>(),
+    fields: &[
+        ParamField {
+            name: "opacity",
+            wgsl_ty: "f32",
+        },
+        ParamField {
+            name: "seed",
+            wgsl_ty: "u32",
+        },
+        ParamField {
+            name: "origin_x",
+            wgsl_ty: "u32",
+        },
+        ParamField {
+            name: "origin_y",
+            wgsl_ty: "u32",
+        },
+    ],
+};
+
+/// Photoshop's Dissolve (see the section note).
+pub static COMPOSE_DISSOLVE: KernelDef = KernelDef {
+    id: "compose.dissolve",
+    class: KernelClass::Point,
+    inputs: 2,
+    params: DISSOLVE_PARAMS,
+    wgsl: DISSOLVE_WGSL,
+    module: true,
+    mip_exact: true,
+    gpu_tolerance: Tolerance::ChannelEpsF16(2),
+};
+
+/// The parameter block a layer blend `def` takes for a dispatch whose
+/// window starts at `origin` on the canvas: [`DissolveParams`] (seed 0,
+/// the canvas's one pattern) for Dissolve, [`ComposeParams`] for every
+/// other mode.
+pub fn layer_params(def: &KernelDef, opacity: f32, origin: (u32, u32)) -> Vec<u8> {
+    if ::core::ptr::eq(def, &COMPOSE_DISSOLVE) || def.id == COMPOSE_DISSOLVE.id {
+        DissolveParams::new(opacity, 0, origin).as_bytes().to_vec()
+    } else {
+        ComposeParams::new(opacity).as_bytes().to_vec()
+    }
+}
+
 pub static FAMILY: &[&KernelDef] = &[
     &COMPOSE_NORMAL,
     &COMPOSE_MULTIPLY,
@@ -431,6 +567,7 @@ pub static FAMILY: &[&KernelDef] = &[
     &COMPOSE_DIVIDE,
     &COMPOSE_DARKER_COLOR,
     &COMPOSE_LIGHTER_COLOR,
+    &COMPOSE_DISSOLVE,
 ];
 
 // ─────────────────────────── normal_gamma ──────────────────────────

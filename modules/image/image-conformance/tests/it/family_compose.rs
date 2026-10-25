@@ -400,7 +400,7 @@ fn compose_psd_key_roundtrip() {
             "psd_key round-trip for {blend:?}"
         );
     }
-    assert_eq!(Blend::from_psd_key("zzzz"), None, "unknown key → None");
+    assert_eq!(Blend::from_psd_key(b"zzzz"), None, "unknown key → None");
 }
 
 #[test]
@@ -426,4 +426,63 @@ fn compose_normal_gamma_parity() {
     if let Some(r) = parity(&COMPOSE_NORMAL_GAMMA, normal, &[&a, &b], &p) {
         assert_within(r, &COMPOSE_NORMAL_GAMMA);
     }
+}
+
+/// Dissolve (engine ADR 1016): the GPU kernel and the scalar twin
+/// (`paged_blend::composite_dissolve`) agree pixel for pixel over the
+/// full backdrop×source grid, at a window offset into the canvas and a
+/// non-zero seed — the threshold hash is the same bits on both lanes, so
+/// every keep/drop decision matches and only f16 storage differs.
+#[test]
+fn compose_dissolve_parity() {
+    use image_conformance::compose_ref::composite_dissolve;
+    use image_kernels::families::compose::{DissolveParams, COMPOSE_DISSOLVE};
+    let a = backdrop_tile(W, H);
+    let b = source_tile(W, H);
+    for (opacity, origin, seed) in [(1.0f32, (0, 0), 0u32), (0.5, (37, 11), 7)] {
+        let p = DissolveParams::new(opacity, seed, origin);
+        let at = std::cell::Cell::new(0u32);
+        let reference = |a: Px, b: Px, p: &DissolveParams| {
+            let i = at.get();
+            at.set(i + 1);
+            let (x, y) = (i % W + p.origin_x, i / W + p.origin_y);
+            composite_dissolve(a, b, p.opacity, x, y, p.seed)
+        };
+        match parity(&COMPOSE_DISSOLVE, reference, &[&a, &b], &p) {
+            Some(r) => assert_within(r, &COMPOSE_DISSOLVE),
+            None => {
+                eprintln!("SKIP: no GPU adapter");
+                return;
+            }
+        }
+    }
+}
+
+/// Dissolve's semantics without a GPU: a pixel is the source made opaque
+/// or the backdrop untouched — never a mix — and the share of source
+/// pixels follows the source's alpha × opacity.
+#[test]
+fn compose_dissolve_semantics() {
+    use image_conformance::compose_ref::composite_dissolve;
+    let backdrop = Px([0.1, 0.2, 0.3, 1.0]);
+    let source = premul([0.9, 0.5, 0.1], 0.5);
+    let mut kept = 0usize;
+    let n = 256 * 256;
+    for y in 0..256 {
+        for x in 0..256 {
+            let out = composite_dissolve(backdrop, source, 0.8, x, y, 3);
+            if out.0 == backdrop.0 {
+                continue;
+            }
+            assert_eq!(out.0, [0.9, 0.5, 0.1, 1.0], "source, opaque");
+            kept += 1;
+        }
+    }
+    let share = kept as f32 / n as f32;
+    assert!((share - 0.4).abs() < 0.01, "kept {share}, want 0.5 × 0.8");
+    // A transparent source keeps the backdrop everywhere.
+    assert_eq!(
+        composite_dissolve(backdrop, Px([0.0; 4]), 1.0, 5, 5, 3).0,
+        backdrop.0
+    );
 }

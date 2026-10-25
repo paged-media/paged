@@ -35,6 +35,9 @@ too_many_arguments = "allow"
 # compile unchanged until a mechanical rename.
 image-core = { path = "../../engine/core/crates/paged-pixel", package = "paged-pixel" }
 image-psd = { path = "../../engine/core/crates/paged-psd", package = "paged-psd" }
+# The 27 blend modes: names, PSD keys and the scalar formulas the compose
+# reference twins call (engine ADR 1016).
+paged-blend = { path = "../../engine/core/crates/paged-blend" }
 thiserror = "2"
 anyhow = "1"
 bytes = "1"

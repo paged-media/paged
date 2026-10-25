@@ -979,6 +979,20 @@
   tests:
     rust: ["image-conformance/tests/it/family_compose.rs"]
 
+- id: compose.dissolve
+  rust_path: families::compose::COMPOSE_DISSOLVE
+  state_row: image.kernel.family-t1
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: gegl
+  status: implemented
+  provenance:
+    - "Photoshop blend mode — dissolve: the source, opaque, where a seeded per-pixel hash falls under its alpha·opacity, else the backdrop; the hash is the engine's (paged-blend, engine ADR 1016); public behaviour, no reference reading"
+    - "PSD blend key 'diss'"
+  tests:
+    rust: ["image-conformance/tests/it/family_compose.rs (compose_dissolve_parity)"]
+
 # ── adjust family (T2; tone/color point ops) ─────────────────
 
 - id: adjust.exposure

@@ -64,7 +64,7 @@ use image_kernels::families::cast::{
     CastPremultiplyParams, CastUnpremultiplyParams, CAST_PREMULTIPLY, CAST_UNPREMULTIPLY,
 };
 use image_kernels::families::compose::{
-    ComposeGammaParams, ComposeParams, COMPOSE_NORMAL, COMPOSE_NORMAL_GAMMA,
+    layer_params, ComposeGammaParams, ComposeParams, COMPOSE_NORMAL, COMPOSE_NORMAL_GAMMA,
 };
 use image_kernels::KernelDef;
 
@@ -641,7 +641,7 @@ impl LayerStack {
                                 .dispatch(
                                     def,
                                     &[&a, &b],
-                                    ComposeParams::new(*opacity).as_bytes(),
+                                    &layer_params(def, *opacity, (0, 0)),
                                     mask.as_ref(),
                                     &out,
                                 )
@@ -681,7 +681,7 @@ impl LayerStack {
                         .dispatch(
                             pixel_kernel(blend, *gamma),
                             &[&win, &plate],
-                            &pixel_params(*opacity, *gamma),
+                            &pixel_params(blend, *opacity, *gamma, (rx, ry)),
                             mask.as_ref(),
                             &blended,
                         )
@@ -708,7 +708,7 @@ impl LayerStack {
                         .dispatch(
                             pixel_kernel(blend, *gamma),
                             &[&acc, &plate],
-                            &pixel_params(*opacity, *gamma),
+                            &pixel_params(blend, *opacity, *gamma, (0, 0)),
                             mask.as_ref(),
                             &out,
                         )
@@ -907,7 +907,7 @@ pub(super) fn clip_close(
         .dispatch(
             blend,
             &[outer, &group],
-            ComposeParams::new(opacity).as_bytes(),
+            &layer_params(blend, opacity, (0, 0)),
             None,
             &out,
         )
@@ -972,11 +972,18 @@ fn pixel_kernel(blend: &'static KernelDef, gamma: Option<f32>) -> &'static Kerne
     }
 }
 
-/// The parameter block for [`pixel_kernel`].
-fn pixel_params(opacity: f32, gamma: Option<f32>) -> Vec<u8> {
+/// The parameter block for [`pixel_kernel`], for a dispatch whose
+/// window starts at `origin` on the canvas (Dissolve's pattern is a
+/// function of the canvas pixel).
+fn pixel_params(
+    blend: &'static KernelDef,
+    opacity: f32,
+    gamma: Option<f32>,
+    origin: (u32, u32),
+) -> Vec<u8> {
     match gamma {
         Some(g) => ComposeGammaParams::new(opacity, g).as_bytes().to_vec(),
-        None => ComposeParams::new(opacity).as_bytes().to_vec(),
+        None => layer_params(blend, opacity, origin),
     }
 }
 
@@ -1185,7 +1192,7 @@ impl LayerStack {
                                 .dispatch(
                                     def,
                                     &[&a, &b],
-                                    ComposeParams::new(*opacity).as_bytes(),
+                                    &layer_params(def, *opacity, (rx, ry)),
                                     mask.as_ref(),
                                     &out,
                                 )
@@ -1248,7 +1255,7 @@ impl LayerStack {
                         .dispatch(
                             pixel_kernel(blend, *gamma),
                             &[&a, &plate],
-                            &pixel_params(*opacity, *gamma),
+                            &pixel_params(blend, *opacity, *gamma, (rx, ry)),
                             mask.as_ref(),
                             &out,
                         )

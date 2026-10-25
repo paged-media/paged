@@ -581,36 +581,11 @@ pub fn psd_write_adjusted(
 }
 
 /// The PSD blend-mode key for a `compose.*` name — the inverse of
-/// `layers::psd_blend_kernel` (same 26 modes, Adobe's keys).
+/// `layers::psd_blend_kernel`, through the engine's one table (engine
+/// ADR 1016).
 fn psd_blend_key(name: &str) -> [u8; 4] {
-    match name.strip_prefix("compose.").unwrap_or(name) {
-        "multiply" => *b"mul ",
-        "screen" => *b"scrn",
-        "overlay" => *b"over",
-        "darken" => *b"dark",
-        "lighten" => *b"lite",
-        "color_dodge" => *b"div ",
-        "color_burn" => *b"idiv",
-        "hard_light" => *b"hLit",
-        "soft_light" => *b"sLit",
-        "difference" => *b"diff",
-        "exclusion" => *b"smud",
-        "hue" => *b"hue ",
-        "saturation" => *b"sat ",
-        "color" => *b"colr",
-        "luminosity" => *b"lum ",
-        "linear_burn" => *b"lbrn",
-        "linear_dodge" => *b"lddg",
-        "darker_color" => *b"dkCl",
-        "lighter_color" => *b"lgCl",
-        "vivid_light" => *b"vLit",
-        "linear_light" => *b"lLit",
-        "pin_light" => *b"pLit",
-        "hard_mix" => *b"hMix",
-        "subtract" => *b"fsub",
-        "divide" => *b"fdiv",
-        _ => *b"norm",
-    }
+    paged_blend::BlendMode::from_id(name.strip_prefix("compose.").unwrap_or(name))
+        .map_or(*b"norm", |m| *m.psd_key())
 }
 
 fn opacity_u8(o: f32) -> u8 {

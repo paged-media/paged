@@ -665,6 +665,7 @@ dependencies = [
  "image-js",
  "image-kernels",
  "image-pipeline",
+ "paged-blend",
  "paged-pixel",
  "paged-psd",
  "paged-test-resources",
@@ -718,6 +719,7 @@ dependencies = [
  "image-pipeline",
  "jpeg-encoder",
  "js-sys",
+ "paged-blend",
  "paged-pixel",
  "paged-psd",
  "paged-test-resources",
@@ -1131,6 +1133,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-blend"
+version = "0.0.0"
+
+[[package]]
 name = "paged-pixel"
 version = "0.0.0"
 
@@ -1139,6 +1145,7 @@ name = "paged-psd"
 version = "0.0.0"
 dependencies = [
  "miniz_oxide 0.9.1",
+ "paged-blend",
  "paged-pixel",
  "thiserror",
 ]

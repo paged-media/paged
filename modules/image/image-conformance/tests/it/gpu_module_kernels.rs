@@ -346,6 +346,12 @@ const TABLE: &[Row] = &[
     Row { id: "compose.divide",        identity: Identity::Params(COMPOSE_IDENTITY), stress: COMPOSE_STRESS, note: COMPOSE_NOTE },
     Row { id: "compose.darker_color",  identity: Identity::Params(COMPOSE_IDENTITY), stress: COMPOSE_STRESS, note: COMPOSE_NOTE },
     Row { id: "compose.lighter_color", identity: Identity::Params(COMPOSE_IDENTITY), stress: COMPOSE_STRESS, note: COMPOSE_NOTE },
+    Row { id: "compose.dissolve",
+          identity: Identity::Params(P::Fields(&[("opacity", V::F(0.0)), ("seed", V::U(0)),
+              ("origin_x", V::U(0)), ("origin_y", V::U(0))])),
+          stress: P::Fields(&[("opacity", V::F(0.75)), ("seed", V::U(7)),
+              ("origin_x", V::U(13)), ("origin_y", V::U(5))]),
+          note: "opacity 0 keeps the backdrop everywhere (ADR 1016's seeded dither)" },
 
     // ── conv (windowed convolutions + one binary point op) ─────────────
     Row { id: "conv.box",

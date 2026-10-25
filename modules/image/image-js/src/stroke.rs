@@ -213,15 +213,16 @@ pub fn blend_kernel(name: &str) -> Option<&'static KernelDef> {
 }
 
 /// The wire names of every blend mode a stroke can use (the `compose.`
-/// prefix dropped) — the panel's blend picker reads this list, so it can
-/// never drift from the registry.
+/// prefix dropped), in Photoshop's menu order: the engine's one list
+/// (`paged_blend::BlendMode::MENU`, engine ADR 1016), kept to the modes
+/// the registry has a kernel for — the panel's blend picker reads this
+/// list, so it can never drift from either.
 pub fn blend_names() -> Vec<&'static str> {
-    let mut names: Vec<&'static str> = compose::FAMILY
-        .iter()
-        .map(|k| k.id.strip_prefix("compose.").unwrap_or(k.id))
-        .collect();
-    names.sort_unstable();
-    names
+    paged_blend::BlendMode::MENU
+        .into_iter()
+        .map(paged_blend::BlendMode::id)
+        .filter(|id| blend_kernel(id).is_some())
+        .collect()
 }
 
 /// Everything about a stroke that is fixed for its whole duration.
@@ -1149,7 +1150,11 @@ mod tests {
     #[test]
     fn image_editor_paint_every_registered_blend_mode_is_reachable() {
         let names = blend_names();
-        assert_eq!(names.len(), 26, "the compose family is 26 kernels");
+        assert_eq!(
+            names.len(),
+            27,
+            "the compose family is 27 kernels, Dissolve included"
+        );
         for n in &names {
             let k = blend_kernel(n).unwrap_or_else(|| panic!("`{n}` should resolve"));
             assert_eq!(k.id, format!("compose.{n}"));
@@ -1159,7 +1164,11 @@ mod tests {
             blend_kernel("compose.multiply").map(|k| k.id),
             Some("compose.multiply")
         );
-        assert!(blend_kernel("dissolve").is_none());
+        assert!(
+            blend_kernel("dissolve").is_some(),
+            "Dissolve is registered (ADR 1016)"
+        );
+        assert!(blend_kernel("pass_through").is_none());
         assert!(blend_kernel("").is_none());
     }
 
