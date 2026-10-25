@@ -36,7 +36,6 @@ import {
   importSvg,
   leafIdsOf,
   SVG_EXPORTER_ID,
-  SVG_IMPORTER_ID,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";

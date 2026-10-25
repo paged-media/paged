@@ -2735,6 +2735,8 @@ export function createBundleHost(
         payload: { appliedSeq: outcome.appliedSeq, label },
       })
       .catch(() => undefined);
+  };
+
   /** The page a page-scoped door acts on when the caller names none: the
    *  document's active page, else its first. */
   const activePageId = async (): Promise<PageId | null> => {
