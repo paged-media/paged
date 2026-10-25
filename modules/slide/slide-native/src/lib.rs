@@ -48,6 +48,8 @@ use paged_model::{
 };
 use paged_scene::{Document, ParsedMasterSpread, ParsedSpread, ParsedStory};
 use slide_geom::SubPath;
+pub mod live;
+
 use slide_resolve::model::*;
 
 /// What a deck became: the `.paged` package, and what the bundle needs
@@ -276,7 +278,7 @@ pub fn deck_label(name: &str, width: f64, height: f64, fonts: &[String]) -> Stri
 }
 
 /// JSON text with every non-ASCII character as a `\uXXXX` escape.
-fn ascii(text: &str) -> String {
+pub(crate) fn ascii(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         if c.is_ascii() {
@@ -336,10 +338,39 @@ pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
         }
     }
     if let Some((prst, adj)) = &it.meta.preset {
+        let mut p = serde_json::json!({ "prst": prst, "adj": adj });
+        // A live preset (slide ADR 717): its flips, as the deck wrote them.
+        if it.meta.flip != (false, false) {
+            p["flip"] = serde_json::json!([it.meta.flip.0, it.meta.flip.1]);
+        }
+        data.insert("preset".into(), p);
+    }
+    // The box the shape's outline was drawn for (slide ADR 717): the
+    // element's own coordinates, `(0, 0)`–`(w, h)`. A live preset is drawn
+    // again from it when the element is resized, and a connector glued to
+    // the shape finds its sites on it.
+    if key.is_some() && !matches!(it.kind, ItemKind::Group { .. }) {
         data.insert(
-            "preset".into(),
-            serde_json::json!({ "prst": prst, "adj": adj }),
+            "box".into(),
+            serde_json::json!([round3(it.w), round3(it.h)]),
         );
+    }
+    if let Some(c) = &it.meta.connector {
+        let end = |e: &slide_resolve::model::CxnEnd| {
+            let mut v = serde_json::json!({ "id": e.id, "idx": e.idx });
+            if let Some((x, y)) = e.at {
+                v["at"] = serde_json::json!([round3(x), round3(y)]);
+            }
+            v
+        };
+        let mut v = serde_json::Map::new();
+        if let Some(e) = &c.st {
+            v.insert("st".into(), end(e));
+        }
+        if let Some(e) = &c.end {
+            v.insert("end".into(), end(e));
+        }
+        data.insert("connector".into(), serde_json::Value::Object(v));
     }
     if let Some(h) = &it.meta.link {
         data.insert("link".into(), link_json(h));
@@ -353,6 +384,11 @@ pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
     Some(ascii(
         &serde_json::json!({ "v": 1, "data": data }).to_string(),
     ))
+}
+
+/// A length to the thousandth of a point, as labels keep it.
+fn round3(v: f64) -> f64 {
+    (v * 1000.0).round() / 1000.0
 }
 
 /// A name as the model keeps it: no control characters, and the white

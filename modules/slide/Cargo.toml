@@ -10,7 +10,6 @@ members = [
     "pptx-core",
     "pptx-import",
     "pptx-fonts",
-    "slide-geom",
     "slide-chart",
     "slide-resolve",
     "slide-native",
@@ -59,7 +58,10 @@ pptx-export = { path = "pptx-export" }
 pptx-core = { path = "pptx-core" }
 pptx-import = { path = "pptx-import" }
 pptx-fonts = { path = "pptx-fonts" }
-slide-geom = { path = "slide-geom" }
+# The DrawingML geometry: presets, handles, connection sites, live presets.
+# Shared with doc's shapes (platform/shared/dml-geom, PM-0014); its old name
+# here until a mechanical rename.
+slide-geom = { path = "../../platform/shared/dml-geom", package = "dml-geom" }
 slide-chart = { path = "slide-chart" }
 slide-resolve = { path = "slide-resolve" }
 slide-native = { path = "slide-native" }

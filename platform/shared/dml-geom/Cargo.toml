@@ -1,0 +1,29 @@
+[package]
+name = "dml-geom"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.99"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+description = "DrawingML geometry shared by paged.slide and paged.doc: the 187 ECMA-376 preset shapes and authored custom geometry evaluated to Bézier outlines, their adjust handles and connection sites, and the live-preset arithmetic (refit after a resize, an adjust handle dragged, a connector routed between two sites)."
+
+# A workspace of its own, as platform/shared/ooxml and dml-chart are: the
+# modules take it as a path dependency (docs/adr/PM-0005, PM-0014).
+[workspace]
+
+[features]
+default = []
+# A zip backend for paged-ooxml, which requires one, in this crate's own
+# build and tests only. The modules choose theirs through their own
+# paged-ooxml dependency and never enable this.
+standalone = ["paged-ooxml/deflate"]
+
+[dependencies]
+paged-ooxml = { path = "../ooxml" }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+paged-ooxml = { path = "../ooxml", features = ["deflate"] }
+
+[lints.clippy]
+all = "warn"

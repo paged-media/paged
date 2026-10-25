@@ -16,6 +16,7 @@ pptx-core.workspace = true
 pptx-import.workspace = true
 slide-resolve.workspace = true
 slide-native.workspace = true
+slide-geom.workspace = true
 paged-model.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true

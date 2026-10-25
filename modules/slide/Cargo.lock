@@ -143,6 +143,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dml-geom"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -319,6 +327,7 @@ name = "pptx-core"
 version = "0.0.0"
 dependencies = [
  "dml-chart",
+ "dml-geom",
  "serde",
 ]
 
@@ -327,6 +336,7 @@ name = "pptx-export"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "dml-geom",
  "paged-model",
  "paged-ooxml",
  "paged-scene",
@@ -356,6 +366,7 @@ name = "pptx-import"
 version = "0.0.0"
 dependencies = [
  "dml-chart",
+ "dml-geom",
  "flate2",
  "paged-ooxml",
  "paged-test-resources",
@@ -537,15 +548,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "slide-geom"
-version = "0.0.0"
-dependencies = [
- "pptx-core",
- "pptx-import",
- "serde",
-]
-
-[[package]]
 name = "slide-js"
 version = "0.0.0"
 dependencies = [
@@ -564,6 +566,7 @@ dependencies = [
 name = "slide-native"
 version = "0.0.0"
 dependencies = [
+ "dml-geom",
  "flate2",
  "paged-model",
  "paged-ooxml",
@@ -571,8 +574,8 @@ dependencies = [
  "paged-store",
  "pptx-core",
  "pptx-import",
+ "serde",
  "serde_json",
- "slide-geom",
  "slide-resolve",
  "zip",
 ]
@@ -581,6 +584,7 @@ dependencies = [
 name = "slide-resolve"
 version = "0.0.0"
 dependencies = [
+ "dml-geom",
  "paged-ooxml",
  "paged-test-resources",
  "pptx-core",
@@ -588,7 +592,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slide-chart",
- "slide-geom",
 ]
 
 [[package]]

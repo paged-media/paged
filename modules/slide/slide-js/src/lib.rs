@@ -361,3 +361,73 @@ pub fn export_pptx(
         not_exported: out.not_exported,
     })
 }
+
+/// Live presets and connectors (slide ADR 717): one JSON request, one JSON
+/// answer. `op` is
+/// - `follow` (`elements`): what an edit to those page elements asks of
+///   the live presets and connectors on them (`slide_native::live::follow`),
+/// - `handles` (`element`): a preset's adjust handles on the page,
+/// - `adjust` (`elements`, `target`, `index`, `point`): the writes a drag of
+///   that handle to that page point makes,
+/// - `newShape` (`prst`, `w`, `h`, `key`): a preset drawn as new elements,
+/// - `gallery`: every preset by Insert ▸ Shapes category with a thumbnail.
+#[wasm_bindgen(js_name = live)]
+pub fn live(request: &str) -> Result<String, JsError> {
+    live_json(request).map_err(|e| JsError::new(&e))
+}
+
+/// [`live`] without the wasm boundary.
+pub fn live_json(request: &str) -> Result<String, String> {
+    use slide_native::live as l;
+    let v: serde_json::Value = serde_json::from_str(request).map_err(|e| e.to_string())?;
+    let op = v.get("op").and_then(|o| o.as_str()).unwrap_or("");
+    let field = |k: &str| v.get(k).cloned().unwrap_or(serde_json::Value::Null);
+    let elements = || -> Result<Vec<l::Element>, String> {
+        serde_json::from_value(field("elements")).map_err(|e| format!("elements: {e}"))
+    };
+    let out = match op {
+        "follow" => serde_json::to_value(l::follow(&elements()?)),
+        "handles" => {
+            let e: l::Element =
+                serde_json::from_value(field("element")).map_err(|e| format!("element: {e}"))?;
+            serde_json::to_value(l::handles(&e))
+        }
+        "adjust" => {
+            let target = v.get("target").and_then(|t| t.as_str()).unwrap_or("");
+            let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+            let point: [f64; 2] =
+                serde_json::from_value(field("point")).map_err(|e| format!("point: {e}"))?;
+            serde_json::to_value(l::adjust(&elements()?, target, index, point))
+        }
+        "newShape" => {
+            let prst = v.get("prst").and_then(|p| p.as_str()).unwrap_or("");
+            let num = |k: &str| v.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let key = v.get("key").and_then(|k| k.as_str()).unwrap_or("new:1");
+            serde_json::to_value(l::new_shape(prst, num("w"), num("h"), key))
+        }
+        "gallery" => serde_json::to_value(l::gallery()),
+        other => return Err(format!("unknown live op {other:?}")),
+    }
+    .map_err(|e| e.to_string())?;
+    Ok(out.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::live_json;
+
+    #[test]
+    fn the_live_door_answers_json_and_names_an_unknown_op() {
+        let g: serde_json::Value =
+            serde_json::from_str(&live_json(r#"{"op":"gallery"}"#).unwrap()).unwrap();
+        assert_eq!(g.as_array().unwrap().len(), 187);
+        let s: serde_json::Value = serde_json::from_str(
+            &live_json(r#"{"op":"newShape","prst":"roundRect","w":100,"h":50,"key":"new:1"}"#)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(s["elements"], 1);
+        assert_eq!(live_json(r#"{"op":"follow","elements":[]}"#).unwrap(), "[]");
+        assert!(live_json(r#"{"op":"nope"}"#).unwrap_err().contains("nope"));
+    }
+}

@@ -251,6 +251,20 @@ pub struct Sp {
     /// `dsp:txXfrm`: a SmartArt shape's text box, which need not be the
     /// shape's own box (same coordinate space as the shape's `xfrm`).
     pub text_xfrm: Option<Xfrm>,
+    /// A connector's `a:stCxn`: the shape and site its start is glued to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub st_cxn: Option<CxnRef>,
+    /// A connector's `a:endCxn`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_cxn: Option<CxnRef>,
+}
+
+/// `a:stCxn` / `a:endCxn`: a shape on the same slide (its `cNvPr` id) and
+/// the index of one of its connection sites.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CxnRef {
+    pub id: u32,
+    pub idx: u32,
 }
 
 /// `p:spPr` / `p:grpSpPr`.
@@ -274,36 +288,10 @@ pub enum Geometry {
     Custom(CustomGeometry),
 }
 
-/// `a:custGeom`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct CustomGeometry {
-    pub adjust: Vec<(String, String)>,
-    pub guides: Vec<(String, String)>,
-    pub paths: Vec<GeomPath>,
-}
-
-/// One `a:path` of a custom geometry, in its own coordinate space.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct GeomPath {
-    pub w: Option<Emu>,
-    pub h: Option<Emu>,
-    /// `fill` (norm / none / lighten / …), `None` = norm.
-    pub fill: Option<String>,
-    pub stroke: bool,
-    pub commands: Vec<PathCmd>,
-}
-
-/// One path command; points are guide names or literal numbers, as authored.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum PathCmd {
-    MoveTo(String, String),
-    LineTo(String, String),
-    /// `arcTo wR hR stAng swAng`.
-    ArcTo(String, String, String, String),
-    QuadTo([(String, String); 2]),
-    CubicTo([(String, String); 3]),
-    Close,
-}
+// `a:custGeom` and its parts: the geometry program is the shared
+// DrawingML geometry model (`platform/shared/dml-geom`, PM-0014), which also
+// evaluates it.
+pub use slide_geom::{AdjustHandle, ConnectionSite, CustomGeometry, GeomPath, HandleRef, PathCmd};
 
 /// `p:style`: references into the theme's format scheme.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
