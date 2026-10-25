@@ -286,6 +286,7 @@ async function newStyleOps(
     "paragraphStyles",
     "characterStyles",
     "swatches",
+    "colorGroups",
   ] as const) {
     try {
       for (const row of await host.document.collection<{ selfId: string }>(
@@ -302,7 +303,7 @@ async function newStyleOps(
       spec?: { selfId?: string | null };
     };
     const id =
-      op.op === "createSwatch"
+      op.op === "createSwatch" || op.op === "createColorGroup"
         ? args.spec?.selfId
         : op.op === "createParagraphStyle" || op.op === "createCharacterStyle"
           ? args.selfId

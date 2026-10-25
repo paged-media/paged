@@ -226,8 +226,14 @@ fn fold_segments(
 /// table's paragraph, so a native table has no read-back paragraph. The
 /// bundle's pour now gives each native table its own paragraph
 /// ([`overlay_story_content_in`] with [`TableParagraphs::Own`]).
+///
+/// A paragraph takes the paragraph style read back when the lowering knows
+/// it (a Word style, a style the lowering synthesized): the paragraph
+/// style applied on the canvas is saved (ADR 610). A style the lowering does
+/// not know (the engine's own default) leaves the paragraph's as it was;
+/// [`overlay_story_content_with`] names the styles made in paged too.
 pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) -> LoweredDoc {
-    overlay_story_content_in(baseline, content, TableParagraphs::Joined)
+    overlay_story_content_with(baseline, content, TableParagraphs::Joined, &|_| false)
 }
 
 /// Where the native tables of a read-back story stand among its paragraphs.
@@ -250,6 +256,27 @@ pub fn overlay_story_content_in(
     baseline: &LoweredDoc,
     content: &StoryContentIn,
     tables: TableParagraphs,
+) -> LoweredDoc {
+    overlay_story_content_with(baseline, content, tables, &|_| false)
+}
+
+/// [`overlay_story_content`], with `created` answering for the paragraph
+/// styles made in paged that save-back writes into `styles.xml`.
+pub fn overlay_story_content_known(
+    baseline: &LoweredDoc,
+    content: &StoryContentIn,
+    created: &dyn Fn(&str) -> bool,
+) -> LoweredDoc {
+    overlay_story_content_with(baseline, content, TableParagraphs::Joined, created)
+}
+
+/// The overlay with both choices: where native tables stand (`tables`) and
+/// which paragraph styles were made in paged (`created`).
+pub fn overlay_story_content_with(
+    baseline: &LoweredDoc,
+    content: &StoryContentIn,
+    tables: TableParagraphs,
+    created: &dyn Fn(&str) -> bool,
 ) -> LoweredDoc {
     let mut edited = baseline.clone();
     // The edit styles are gathered here while the blocks are borrowed.
@@ -277,6 +304,15 @@ pub fn overlay_story_content_in(
         let end = (ci + parts).min(content.paragraphs.len());
         let folded = fold_segments(p, &content.paragraphs[ci..end]);
         ci = end;
+        if let Some(style) = folded
+            .paragraph_style
+            .as_deref()
+            .filter(|t| known_para_style(&styles, t) || created(t))
+        {
+            if p.para_style_id.as_deref() != Some(style) {
+                p.para_style_id = Some(style.to_string());
+            }
+        }
         // The run list as read back: the differ maps it onto the Word runs
         // character by character (text edits, runs the engine joined, a
         // run split by a new look, direct formatting).
@@ -286,19 +322,30 @@ pub fn overlay_story_content_in(
     edited
 }
 
+/// Whether `token` is a paragraph style of the lowering (a Word style or
+/// one it synthesized).
+fn known_para_style(styles: &[LoweredStyle], token: &str) -> bool {
+    styles
+        .iter()
+        .any(|s| s.collection == StyleCollection::Paragraph && s.id == token)
+}
+
 /// Give `edited` the swatches the canvas made that the import did not
 /// (`colors`: swatch id → the RGB the host displays it in, `RRGGBB`, a
 /// leading `#` allowed), so the differ resolves a run filled with one to
-/// its `w:color`. A value that is not six hex digits is left out (the run's
-/// colour is then not written).
+/// its `w:color` — any document swatch, CMYK, spot or Lab included, is
+/// written as the hex it shows. A value that is not six hex digits is left
+/// out (the run's colour is then not written).
+///
+/// A theme colour's swatch (doc ADR 609) the user edited shows another
+/// colour now: it takes that colour, so its runs are written with the new
+/// hex instead of the theme reference. A display within 2 of the import's
+/// colour per channel is the same colour (colour management may round).
 pub fn add_canvas_colors(
     edited: &mut LoweredDoc,
     colors: &std::collections::BTreeMap<String, String>,
 ) {
     for (id, hex) in colors {
-        if edited.swatches.iter().any(|s| &s.id == id) {
-            continue;
-        }
         let hex = hex.trim_start_matches('#');
         if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
             continue;
@@ -307,11 +354,24 @@ pub fn add_canvas_colors(
         let (Ok(r), Ok(g), Ok(b)) = (channel(0), channel(2), channel(4)) else {
             continue;
         };
+        if let Some(sw) = edited.swatches.iter_mut().find(|s| &s.id == id) {
+            let moved = sw.theme.is_some()
+                && sw.value.len() >= 3
+                && [r, g, b]
+                    .iter()
+                    .zip(&sw.value)
+                    .any(|(new, old)| (new - old).abs() > 2.0);
+            if moved {
+                sw.value = vec![r, g, b];
+            }
+            continue;
+        }
         edited.swatches.push(docx_lower::ir::LoweredSwatch {
             id: id.clone(),
             name: id.clone(),
             space: "RGB".into(),
             value: vec![r, g, b],
+            theme: None,
         });
     }
 }
@@ -357,8 +417,20 @@ pub struct CellContentIn {
 /// runs read back (its words' own looks over its neighbour's). A table poured as text, or a cell that is not in the
 /// lowering, is left as it was and reported in the returned ledger.
 pub fn overlay_cells(edited: &mut LoweredDoc, cells: &[CellContentIn]) -> Vec<String> {
+    overlay_cells_known(edited, cells, &|_| false)
+}
+
+/// [`overlay_cells`], with `created` answering for the paragraph styles made
+/// in paged: a paragraph added in a cell takes the paragraph style read back
+/// when it is a style the lowering knows or one of these (ADR 610), not its
+/// neighbour's.
+pub fn overlay_cells_known(
+    edited: &mut LoweredDoc,
+    cells: &[CellContentIn],
+    created: &dyn Fn(&str) -> bool,
+) -> Vec<String> {
     let mut styles = std::mem::take(&mut edited.styles);
-    let skips = overlay_cells_into(edited, &mut styles, cells);
+    let skips = overlay_cells_into(edited, &mut styles, cells, created);
     edited.styles = styles;
     skips
 }
@@ -367,6 +439,7 @@ fn overlay_cells_into(
     edited: &mut LoweredDoc,
     styles: &mut Vec<LoweredStyle>,
     cells: &[CellContentIn],
+    created: &dyn Fn(&str) -> bool,
 ) -> Vec<String> {
     let mut skips = Vec::new();
     for c in cells {
@@ -402,7 +475,7 @@ fn overlay_cells_into(
         });
         let texts: Vec<String> = c.text.split('\n').map(str::to_string).collect();
         if texts.len() != cell.paragraphs.len() {
-            cell.paragraphs = restructure_cell(&cell.paragraphs, &texts, styled, styles);
+            cell.paragraphs = restructure_cell(&cell.paragraphs, &texts, styled, styles, created);
             continue;
         }
         if let Some(read) = styled {
@@ -531,7 +604,9 @@ pub fn overlay_tables(edited: &mut LoweredDoc, tables: &[TableContentIn]) -> Vec
                         }
                     } else {
                         cell.paragraphs =
-                            restructure_cell(&cell.paragraphs, &texts, None, &mut styles);
+                            restructure_cell(&cell.paragraphs, &texts, None, &mut styles, &|_| {
+                                false
+                            });
                     }
                 } else {
                     // A new row's cell: one paragraph per line, in the look
@@ -594,6 +669,7 @@ fn restructure_cell(
     texts: &[String],
     styled: Option<&Vec<ParagraphContentIn>>,
     styles: &mut Vec<LoweredStyle>,
+    created: &dyn Fn(&str) -> bool,
 ) -> Vec<LoweredParagraph> {
     let old: Vec<String> = paras
         .iter()
@@ -640,12 +716,21 @@ fn restructure_cell(
                     ..Default::default()
                 }];
                 // Its runs as read, formatting included: the differ writes
-                // them as the copy's runs.
+                // them as the copy's runs; and its own paragraph style, when
+                // the canvas gave it one save-back can write.
+                let mut para_style_id = from.para_style_id.clone();
                 if let Some(rp) = styled.and_then(|ps| ps.get(e)) {
                     overlay_runs(styles, &mut runs, &rp.runs);
+                    if let Some(t) = rp
+                        .paragraph_style
+                        .as_deref()
+                        .filter(|t| known_para_style(styles, t) || created(t))
+                    {
+                        para_style_id = Some(t.to_string());
+                    }
                 }
                 out.push(LoweredParagraph {
-                    para_style_id: from.para_style_id.clone(),
+                    para_style_id,
                     list: from.list,
                     source_index: from.source_index,
                     runs,

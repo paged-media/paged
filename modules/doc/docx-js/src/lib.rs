@@ -186,12 +186,15 @@ mod wasm {
                 /// pour's layout); absent on documents poured before.
                 #[serde(default, rename = "tableParagraphs")]
                 table_paragraphs: bool,
+                #[serde(default)]
+                styles: Vec<docx_export::StyleIn>,
             }
             let Cells {
                 cells,
                 tables,
                 colors,
                 table_paragraphs,
+                styles,
             } = serde_json::from_str(content_json)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             let layout = if table_paragraphs {
@@ -200,10 +203,21 @@ mod wasm {
                 docx_export::TableParagraphs::Joined
             };
             let (bytes, skips) = session
-                .save_edited_from_read(&content, &cells, &tables, &colors, layout)
+                .save_edited_full(&content, &cells, &tables, &colors, &styles, layout)
                 .map_err(|e| JsValue::from_str(&e))?;
             *self.last_skips.borrow_mut() = skips;
             Ok(bytes)
+        }
+
+        /// The tokens of the document's Word styles in paged (a JSON string
+        /// array): the styles the bundle reads back for save-back.
+        pub fn style_tokens(&self) -> String {
+            let tokens = self
+                .session
+                .as_ref()
+                .map(|s| s.style_tokens())
+                .unwrap_or_default();
+            serde_json::to_string(&tokens).unwrap_or_else(|_| "[]".into())
         }
 
         /// The refusal ledger of the LAST `save_edited*` call, as a JSON string

@@ -331,7 +331,7 @@ fn effective_para_props(
 
 /// Invert a synthesized paragraph style's `StyleProp`s back to `ParaProps` — the
 /// reverse of `docx-lower`'s `para_props` (points → twips, 20 twips per point).
-fn invert_para_props(props: &[StyleProp]) -> docx_core::ParaProps {
+pub(crate) fn invert_para_props(props: &[StyleProp]) -> docx_core::ParaProps {
     use docx_core::Justification as J;
     let tw = |pt: f32| (pt * 20.0).round() as i32;
     let mut p = docx_core::ParaProps::default();
@@ -489,6 +489,17 @@ fn align_cell(
                     }
                     None => (None, Vec::new()),
                 };
+                // A paragraph style of its own (Enter in a heading gives
+                // the next style): the copy's `<w:pPr>` takes it.
+                let (n_props, n_style) =
+                    effective_para_props(neighbour.para_style_id.as_deref(), base, bindings);
+                let (a_props, a_style) = effective_para_props(
+                    ec.paragraphs[e].para_style_id.as_deref(),
+                    edited,
+                    bindings,
+                );
+                let new_ppr =
+                    (n_props != a_props || n_style != a_style).then_some((a_props, a_style));
                 structural.push(StructuralEdit::CloneCellParagraph {
                     block,
                     cell,
@@ -497,6 +508,7 @@ fn align_cell(
                     text: new[e].clone(),
                     base: look,
                     pieces,
+                    new_ppr,
                 });
             }
         }
@@ -836,7 +848,10 @@ fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], size_pt: f32, doc:
     }
     for p in overrides {
         match (p.path.as_str(), &p.value) {
-            ("characterFontFamily", PropValue::Text(f)) => r.font = Some(f.clone()),
+            ("characterFontFamily", PropValue::Text(f)) => {
+                r.font = Some(f.clone());
+                r.font_theme = theme_font_slot(f, doc);
+            }
             ("characterFontStyle", PropValue::Text(s)) => {
                 set(&mut r.bold, s.contains("Bold"));
                 set(&mut r.italic, s.contains("Italic") || s.contains("Oblique"));
@@ -845,8 +860,9 @@ fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], size_pt: f32, doc:
                 r.size_half_pts = Some((pt * 2.0).round() as u32);
             }
             ("characterFillColor", PropValue::ColorRef(id)) => {
-                if let Some(hex) = swatch_hex(id, doc) {
+                if let Some((hex, theme)) = swatch_color(id, doc) {
                     r.color = Some(hex);
+                    r.theme_color = theme;
                 }
             }
             ("characterUnderline", PropValue::Bool(u)) => set(&mut r.underline, *u),
@@ -881,6 +897,9 @@ fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], size_pt: f32, doc:
 
 /// What becomes of one baseline run ([`plan_runs`]).
 #[derive(Debug, Clone, PartialEq)]
+// Short-lived (one per run of an edited paragraph): boxing the look would
+// cost an allocation per edit to save stack space nobody keeps.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum RunPlan {
     /// Untouched: not addressed, its bytes stay.
     Keep,
@@ -1104,11 +1123,14 @@ fn align_chars(a: &[char], b: &[char]) -> Vec<Align> {
 
 /// Invert a synthesized character style's `StyleProp`s back to `RunProps` — the
 /// exact reverse of `docx-lower`'s `run_props`.
-fn invert_props(props: &[StyleProp], size_pt: f32, doc: &LoweredDoc) -> RunProps {
+pub(crate) fn invert_props(props: &[StyleProp], size_pt: f32, doc: &LoweredDoc) -> RunProps {
     let mut r = RunProps::default();
     for p in props {
         match (p.path.as_str(), &p.value) {
-            ("characterFontFamily", PropValue::Text(f)) => r.font = Some(f.clone()),
+            ("characterFontFamily", PropValue::Text(f)) => {
+                r.font = Some(f.clone());
+                r.font_theme = theme_font_slot(f, doc);
+            }
             ("characterFontStyle", PropValue::Text(s)) => {
                 let (b, i) = match s.as_str() {
                     "Bold Italic" => (true, true),
@@ -1122,7 +1144,11 @@ fn invert_props(props: &[StyleProp], size_pt: f32, doc: &LoweredDoc) -> RunProps
             ("characterFontSize", PropValue::Length(pt)) => {
                 r.size_half_pts = Some((pt * 2.0).round() as u32);
             }
-            ("characterFillColor", PropValue::ColorRef(id)) => r.color = swatch_hex(id, doc),
+            ("characterFillColor", PropValue::ColorRef(id)) => {
+                let (hex, theme) = swatch_color(id, doc).unzip();
+                r.color = hex;
+                r.theme_color = theme.flatten();
+            }
             ("characterUnderline", PropValue::Bool(u)) => r.underline = Some(*u),
             ("characterStrikethru", PropValue::Bool(s)) => r.strike = Some(*s),
             ("characterPosition", PropValue::Text(pos)) => {
@@ -1149,16 +1175,43 @@ fn invert_props(props: &[StyleProp], size_pt: f32, doc: &LoweredDoc) -> RunProps
     r
 }
 
-/// Resolve a swatch id to its `RRGGBB` hex (the inverse of `swatch_for`).
-fn swatch_hex(id: &str, doc: &LoweredDoc) -> Option<String> {
+/// Resolve a swatch id to its `RRGGBB` hex (the inverse of `swatch_for`)
+/// and, for a theme colour's swatch that still shows the colour it had at
+/// import (doc ADR 609), the theme reference Word wrote: an edited theme
+/// swatch, or any other swatch, writes plain hex.
+pub(crate) fn swatch_color(
+    id: &str,
+    doc: &LoweredDoc,
+) -> Option<(String, Option<docx_core::ThemeColorRef>)> {
     let sw = doc.swatches.iter().find(|s| s.id == id)?;
     if sw.value.len() < 3 {
         return None;
     }
-    Some(format!(
+    let hex = format!(
         "{:02X}{:02X}{:02X}",
-        sw.value[0] as u8, sw.value[1] as u8, sw.value[2] as u8
-    ))
+        sw.value[0].round() as u8,
+        sw.value[1].round() as u8,
+        sw.value[2].round() as u8
+    );
+    let theme = sw
+        .theme
+        .as_ref()
+        .filter(|t| t.rgb.eq_ignore_ascii_case(&hex))
+        .map(|t| t.color.clone());
+    Some((hex, theme))
+}
+
+/// The theme font a family is (doc ADR 609): `minorHAnsi` for the theme's
+/// body face, `majorHAnsi` for its heading face, else none.
+pub(crate) fn theme_font_slot(family: &str, doc: &LoweredDoc) -> Option<String> {
+    let fonts = doc.theme_fonts.as_ref()?;
+    if fonts.minor.as_deref() == Some(family) {
+        Some("minorHAnsi".into())
+    } else if fonts.major.as_deref() == Some(family) {
+        Some("majorHAnsi".into())
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

@@ -44,6 +44,15 @@ export function buildStyleMutations(ir: LoweredDoc): Mutation[] {
       },
     } as Mutation);
   }
+  // Doc ADR 609 — the "Word theme" group, once its swatches exist.
+  for (const group of ir.colorGroups ?? []) {
+    ops.push({
+      op: "createColorGroup",
+      args: {
+        spec: { selfId: group.id, name: group.name, members: group.members },
+      },
+    } as Mutation);
+  }
   for (const style of ir.styles) {
     ops.push(createStyleOp(style));
     for (const prop of style.props) {

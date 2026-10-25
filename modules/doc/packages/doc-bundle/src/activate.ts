@@ -39,7 +39,8 @@ import {
 } from "./panels/outline-panel.js";
 import { placeEmbedded } from "./place.js";
 import { openStandalone } from "./open.js";
-import { canvasColors, readTableCells } from "./save-cells.js";
+import { canvasColors, readTableCells, themeSwatches } from "./save-cells.js";
+import { readStyles, styleColors } from "./save-styles.js";
 import {
   discoverDocs,
   readDocBytes,
@@ -207,13 +208,18 @@ export function activate(host: BundleHost): BundleHandle {
     try {
       engine.loadDocx(source);
       engine.setMidPageColumns(state.data.midPageColumns ?? true);
-      const colors = await canvasColors(host, content.paragraphs, cells);
+      const styles = await readStyles(host, engine.styleTokens());
+      const colors = await canvasColors(host, content.paragraphs, cells, [
+        ...themeSwatches(ir),
+        ...styleColors(styles),
+      ]);
       const bytes = engine.saveEditedFromContent({
         ...content,
         cells,
         tables,
         colors,
         tableParagraphs: layout === "own",
+        styles,
       });
       host.diagnostics.set(
         "media.paged.doc/save-back",
@@ -290,12 +296,15 @@ export function activate(host: BundleHost): BundleHandle {
       try {
         engine.loadDocx(last.source);
         engine.setMidPageColumns(last.midPageColumns);
-        const read = await readTableCells(
+        const lowered = engine.lowered();
+        const read = await readTableCells(host, lowered, last.storyIds);
+        const styles = await readStyles(host, engine.styleTokens());
+        const colors = await canvasColors(
           host,
-          engine.lowered(),
-          last.storyIds,
+          content.paragraphs,
+          read.cells,
+          [...themeSwatches(lowered), ...styleColors(styles)],
         );
-        const colors = await canvasColors(host, content.paragraphs, read.cells);
         // This session poured it: each native table has its own paragraph.
         const bytes = engine.saveEditedFromContent({
           ...content,
@@ -303,6 +312,7 @@ export function activate(host: BundleHost): BundleHandle {
           tables: read.tables,
           colors,
           tableParagraphs: true,
+          styles,
         });
         // Save-back refusal feedback (ADR-007 posture): the patcher's skip
         // ledger — edits refused rather than risking corruption (gridSpan

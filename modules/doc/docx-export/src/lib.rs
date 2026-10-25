@@ -32,14 +32,20 @@ mod edit;
 mod overlay;
 mod rpr;
 mod splice;
+mod styles;
 
 pub use bindings::{build_bindings, BlockBinding, DocxBindings, ParaUse, RunBinding, RunLock};
 pub use diff::diff;
 pub use edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit};
 pub use overlay::{
-    add_canvas_colors, overlay_cells, overlay_story_content, overlay_story_content_in,
+    add_canvas_colors, overlay_cells, overlay_cells_known, overlay_story_content,
+    overlay_story_content_in, overlay_story_content_known, overlay_story_content_with,
     overlay_tables, CellContentIn, ParagraphContentIn, RunContentIn, StoryContentIn,
     TableContentIn, TableParagraphs,
+};
+pub use styles::{
+    plan_styles, splice_styles, CreatedStyle, ModifiedStyle, StyleEntryIn, StyleIn, StylePlan,
+    WireValue,
 };
 
 use std::collections::BTreeMap;
@@ -97,6 +103,7 @@ pub fn apply_edits(
             label: format!("run edit skipped: block {} run {}", e.block, e.run),
             rpr_merge,
             split: Vec::new(),
+            inside_at: None,
         });
     }
 
@@ -141,6 +148,7 @@ pub fn apply_edits(
                 text,
                 base,
                 pieces,
+                new_ppr,
             } => {
                 if let Some(why) =
                     bindings.cell_paragraph_refusal(*block, *cell, *para, ParaUse::Address)
@@ -157,9 +165,18 @@ pub fn apply_edits(
                     continue;
                 };
                 let src = pkg.require(main_part)?;
-                let Some(frag) =
-                    splice::clone_cell_paragraph(src, path, text, !*before, base.as_ref(), pieces)
-                else {
+                let ppr = new_ppr
+                    .as_ref()
+                    .map(|(props, style)| rpr::render_ppr(props, style.as_deref()));
+                let Some(frag) = splice::clone_cell_paragraph(
+                    src,
+                    path,
+                    text,
+                    !*before,
+                    base.as_ref(),
+                    pieces,
+                    ppr.as_deref(),
+                ) else {
                     skips.push(format!(
                         "clone-cell-paragraph skipped: block {block} cell {cell} paragraph {para} is not in the document part"
                     ));
@@ -576,6 +593,30 @@ pub fn apply_edits(
     // Every edit refused: the part is untouched, so keep it lazy-verbatim.
     if patched.as_slice() != pkg.require(main_part)? {
         pkg.set_part(main_part, patched);
+    }
+    Ok(skips)
+}
+
+/// Write `plan` into the styles part `styles_part` of `pkg` (doc ADR 610):
+/// modified Word styles spliced in place, created ones appended. Answers
+/// what could not be written. Without a styles part, or with nothing to
+/// write, the package is untouched.
+pub fn apply_style_plan(
+    pkg: &mut OpcPackage,
+    styles_part: Option<&str>,
+    plan: &StylePlan,
+) -> Result<Vec<String>, OoxmlError> {
+    if plan.is_empty() {
+        return Ok(Vec::new());
+    }
+    let Some(part) = styles_part else {
+        return Ok(vec![
+            "the document has no styles part: style changes are not saved".into(),
+        ]);
+    };
+    let (patched, skips) = splice_styles(pkg.require(part)?, plan);
+    if patched.as_slice() != pkg.require(part)? {
+        pkg.set_part(part, patched);
     }
     Ok(skips)
 }
