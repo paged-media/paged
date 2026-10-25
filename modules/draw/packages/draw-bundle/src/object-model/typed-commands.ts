@@ -72,7 +72,7 @@ import {
 import type { TraceOptions } from "../trace-engine";
 import { TRACE_PRESET_IDS } from "../commands/trace-presets";
 import { RECOLOR_MODES } from "../commands/recolor";
-import { HARMONY_RULES } from "@paged-media/draw-geometry";
+import { HARMONY_RULES, LIQUIFY_KINDS } from "@paged-media/draw-geometry";
 import {
   BOOL,
   COLOR,
@@ -568,6 +568,60 @@ export const TWINS: readonly TwinSpec[] = [
   }),
   twin("recolorArtworkOptions", {}),
   twin("applyGuideColor", { ...T, hex: TEXT, stroke: BOOL }),
+  // WP6.7 — the distortion tools' gestures as data (page pt). A liquify
+  // stroke names its kernel and EVERY option of Illustrator's dialog; a
+  // puppet warp names the pins that hold, the pin dragged and where to,
+  // and how many automatic pins come first.
+  twin("liquifyStroke", {
+    ...T,
+    page: TEXT,
+    kind: enumOf(LIQUIFY_KINDS),
+    path: { kind: "list", of: POINT },
+    width: LEN,
+    height: LEN,
+    angle: DEG,
+    intensity: NUM,
+    detail: INT,
+    simplify: NUM,
+    twirlRate: DEG,
+    complexity: INT,
+    horizontal: NUM,
+    vertical: NUM,
+    affectAnchors: BOOL,
+    affectIn: BOOL,
+    affectOut: BOOL,
+    seed: INT,
+  }),
+  twin("puppetWarp", {
+    ...T,
+    holds: { kind: "list", of: POINT },
+    from: POINT,
+    to: POINT,
+    autoPins: INT,
+  }),
+  twin("puppetWarpTool", {}),
+  // The perspective grid (per page; "" = the selection's page, else the
+  // page in view) and artwork on its planes.
+  twin("perspectiveShowGrid", { page: TEXT }),
+  twin("perspectiveHideGrid", { page: TEXT }),
+  twin("perspectiveLockGrid", { page: TEXT }),
+  twin("perspectiveUnlockGrid", { page: TEXT }),
+  twin("perspectiveOnePoint", { page: TEXT }),
+  twin("perspectiveTwoPoint", { page: TEXT }),
+  twin("perspectiveThreePoint", { page: TEXT }),
+  twin("perspectiveSetPlane", {
+    page: TEXT,
+    plane: enumOf(["left", "right", "floor", "none"]),
+  }),
+  twin("attachToPerspective", { ...T }),
+  twin("releaseFromPerspective", { ...T }),
+  twin("moveOnPerspective", { ...T, from: POINT, to: POINT }),
+  twin("drawOnPerspective", {
+    page: TEXT,
+    shape: enumOf(["rectangle", "ellipse"]),
+    from: POINT,
+    to: POINT,
+  }),
 ];
 
 /** The args schema of a twin. */
