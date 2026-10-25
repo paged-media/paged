@@ -76,6 +76,7 @@ fn plan_of(doc: &Document) -> ExportPlan {
                     content_edited: false,
                     page_id: Some(id),
                     layout: st["layout"].as_str().map(str::to_string),
+                    comments: None,
                 })
             })
             .collect(),
@@ -645,6 +646,46 @@ fn a_slide_made_in_the_editor_is_exported_on_its_layout() {
     }
     let ct = part_text(&out.bytes, "[Content_Types].xml");
     assert!(ct.contains(&format!("PartName=\"/{}\"", last.part)));
+
+    // A comment on the new slide (slide ADR 711) is written with it: a
+    // modern comment part on the new slide part, naming its new slide id.
+    let mut plan = plan_of(&doc);
+    plan.slides.last_mut().unwrap().comments = Some(vec![pptx_core::Comment {
+        id: "{C0C0C0C0-0000-4000-8000-0000000000AA}".into(),
+        author: "Editor".into(),
+        initials: "E".into(),
+        created: Some("2026-10-25T13:00:00.000".into()),
+        text: "On a new slide".into(),
+        x: Some(12.0),
+        y: Some(24.0),
+        ..Default::default()
+    }]);
+    let paged = paged_store::package::wrap_document(&doc, "deck", 960.0, 540.0).unwrap();
+    let out = export_with(&bytes, &plan, Some(&paged)).unwrap();
+    keep(&out.bytes, "new-slide-comment");
+    assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
+    let ir = pptx_import::import_pptx(&out.bytes).unwrap();
+    let last = ir.slides.last().unwrap();
+    assert_eq!(last.comments.len(), 1);
+    let c = &last.comments[0];
+    assert_eq!(c.text, "On a new slide");
+    assert_eq!(c.author, "Editor");
+    assert_eq!((c.x, c.y), (Some(12.0), Some(24.0)));
+    let xml = part_text(&out.bytes, &last.part);
+    assert!(xml.contains("p188:commentRel"), "{xml}");
+    let cm = paged_ooxml::opc::OpcPackage::read(&out.bytes)
+        .unwrap()
+        .file_names()
+        .find(|n| n.contains("modernComment"))
+        .map(str::to_string)
+        .unwrap();
+    assert!(
+        part_text(&out.bytes, &cm).contains(&format!(r#"sldId="{}""#, last.slide_id)),
+        "names its slide"
+    );
+    assert!(ir.slides[..ir.slides.len() - 1]
+        .iter()
+        .all(|s| s.comments.is_empty()));
 }
 
 fn geom_close(a: &[f64; 6], b: &[f64; 6]) -> bool {

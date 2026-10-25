@@ -40,8 +40,14 @@ import type { ObjectValue, ValueType } from "@paged-media/plugin-api";
 import slideBundle from "../../src/index";
 import { slideEngine, type ImportReport } from "../../src/engine";
 import {
+  ADD_COMMENT_COMMAND,
   DECK_ADDRESS,
+  DELETE_COMMENT_COMMAND,
   DUPLICATE_SLIDE_COMMAND,
+  NEXT_SLIDE_COMMAND,
+  PREVIOUS_SLIDE_COMMAND,
+  REPLY_COMMENT_COMMAND,
+  RESOLVE_COMMENT_COMMAND,
   EXPORT_PPTX_COMMAND,
   IMPORT_PPTX_COMMAND,
   NEW_SLIDE_COMMAND,
@@ -93,7 +99,7 @@ beforeEach(async () => {
 afterEach(() => h.dispose());
 
 describe("[plugin-slide.object-model] slides, layouts, placeholders through host.objects", () => {
-  it("declares four kinds and four typed commands", async () => {
+  it("declares four kinds and ten typed commands", async () => {
     const kinds = (await h.objects.kinds())
       .filter((k) => k.owner === "media.paged.slide")
       .map((k) => k.kind);
@@ -108,12 +114,20 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
       .filter((c) => c.owner === "media.paged.slide")
       .map((c) => c.id)
       .sort();
-    expect(commands).toEqual([
-      DUPLICATE_SLIDE_COMMAND,
-      EXPORT_PPTX_COMMAND,
-      IMPORT_PPTX_COMMAND,
-      NEW_SLIDE_COMMAND,
-    ]);
+    expect(commands).toEqual(
+      [
+        ADD_COMMENT_COMMAND,
+        DELETE_COMMENT_COMMAND,
+        NEXT_SLIDE_COMMAND,
+        PREVIOUS_SLIDE_COMMAND,
+        REPLY_COMMENT_COMMAND,
+        RESOLVE_COMMENT_COMMAND,
+        DUPLICATE_SLIDE_COMMAND,
+        EXPORT_PPTX_COMMAND,
+        IMPORT_PPTX_COMMAND,
+        NEW_SLIDE_COMMAND,
+      ].sort(),
+    );
   });
 
   it("the import command opens a slide per page; the deck answers from its label", async () => {

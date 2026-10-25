@@ -54,6 +54,7 @@ const M = defineMessages("app.soloProfiles", {
   docBlurb: "Text, styles, outline",
   webBlurb: "HTML source, flow, bake",
   dataBlurb: "Sources, bindings, generated pages",
+  slideBlurb: "Slides, notes, comments",
 });
 
 /** A plugin hosted as its own application. */
@@ -495,6 +496,94 @@ const DATA_PROFILE: SoloProfile = {
   ],
 };
 
+/**
+ * paged.slide — a presentation program (editor ADR 307).
+ *
+ * PowerPoint's Normal view: the slide in the middle at the deck's size,
+ * the Slides rail on the left (thumbnails, sections, drag to reorder,
+ * Delete on a thumbnail), and the slide's own panels in the right dock:
+ * Slide, Transition, Placeholder, Deck, Comments and Notes. A new document
+ * is a 16:9 slide at PowerPoint's default size (13.333 × 7.5 in, 960 ×
+ * 540 pt); an opened deck brings its own size.
+ *
+ * NOTES ARE A DOCK TAB, not a pane under the slide: the cockpit has no
+ * bottom dock (`ModeCockpitSlots` is left / right / canvas), and the
+ * panel's `defaultDock: "bottom"` is a wish the host does not honour yet.
+ * ADR 307 records the gap.
+ *
+ * MENUS. PowerPoint's bar is File, Home, Insert, Design, Transitions,
+ * Animations, Slide Show, Review, View; a menu-bar app has File, Edit,
+ * View, Insert, Format, Arrange, Slide, Window, Help. The host has no
+ * Insert or Format menu: its inserts live under Object (Insert text
+ * frame, rectangle, …) and its text formatting under Type, so those two
+ * stand in for Insert and Format. The `Slide` menu is the bundle's own and
+ * arrives with it.
+ *
+ * Text is the most common thing on a slide, so the text panels stay (as
+ * in doc); the page-layout surfaces (pages, masters, spreads, preflight,
+ * separations, stories) do not: a deck's pages ARE the slides, which the
+ * Slides rail shows.
+ */
+const SLIDE_PROFILE: SoloProfile = {
+  bundleId: "media.paged.slide",
+  title: "paged.slide",
+  documentSizePt: [960, 540],
+  panelIds: [
+    "paged.properties",
+    "paged.object-transform",
+    "paged.align",
+    "paged.character",
+    "paged.paragraph",
+    "paged.bullets-numbering",
+    "paged.fonts",
+    "paged.swatches",
+    "paged.color",
+    "paged.stroke",
+    "paged.effects",
+    "paged.layers",
+    "paged.info",
+    "paged.problems",
+    "paged.actions",
+    "paged.keyboard-shortcuts",
+  ],
+  // PowerPoint's Insert ▸ Text Box and Shapes: the host's type tool and its
+  // shape primitives. The slide bundle contributes no tools of its own.
+  toolIds: [
+    "paged.tool.type",
+    "paged.tool.rectangle",
+    "paged.tool.ellipse",
+    "paged.tool.line",
+    "paged.tool.polygon",
+  ],
+  menuTopLevels: ["File", "Edit", "View", "Type", "Object", "Window", "Help"],
+  slots: {
+    left: "media.paged.slide.panel.slides",
+    tabs: [
+      "media.paged.slide.panel.slide",
+      "media.paged.slide.panel.transition",
+      "media.paged.slide.panel.placeholder",
+      "media.paged.slide.panel.deck",
+      "media.paged.slide.panel.comments",
+      "media.paged.slide.panel.notes",
+    ],
+  },
+  panelRailIds: [
+    "media.paged.slide.panel.slides",
+    "media.paged.slide.panel.notes",
+    "media.paged.slide.panel.comments",
+    "paged.properties",
+    "paged.problems",
+  ],
+  get blurb() {
+    return t(M.slideBlurb);
+  },
+  paletteSuggestions: [
+    "media.paged.slide.command.newSlide",
+    "media.paged.slide.command.addComment",
+    "media.paged.slide.command.exportPptx",
+  ],
+};
+
 /** Every profile, keyed by the `?solo=` value a user types. The key is
  *  the SHORT name (`paged.draw`), not the manifest id — a URL is typed
  *  by a person. */
@@ -505,6 +594,7 @@ export const SOLO_PROFILES: Readonly<Record<string, SoloProfile>> = {
   "paged.doc": DOC_PROFILE,
   "paged.web": WEB_PROFILE,
   "paged.data": DATA_PROFILE,
+  "paged.slide": SLIDE_PROFILE,
 };
 
 // NO PROFILE FOR paged.pdf OR paged.publish, and the reason is measured

@@ -72,7 +72,8 @@ import { encodeEnvelope, labelKey } from "@paged-media/helpers";
 import { t } from "@paged-media/strings";
 
 import type { ImportReport, SlideReport, Transition } from "./engine.js";
-import { MODEL } from "./messages.js";
+import type { CommentsStore } from "./comments-model.js";
+import { COMMENTS, MODEL } from "./messages.js";
 import { slideTemplateFields } from "./template-fields.js";
 import {
   layouts,
@@ -94,6 +95,13 @@ import duplicateSlideArgs from "../schema/duplicate-slide.args.json" with { type
 import duplicateSlideResult from "../schema/duplicate-slide.result.json" with { type: "json" };
 import exportPptxArgs from "../schema/export-pptx.args.json" with { type: "json" };
 import exportPptxResult from "../schema/export-pptx.result.json" with { type: "json" };
+import addCommentArgs from "../schema/add-comment.args.json" with { type: "json" };
+import addCommentResult from "../schema/add-comment.result.json" with { type: "json" };
+import replyCommentArgs from "../schema/reply-comment.args.json" with { type: "json" };
+import replyCommentResult from "../schema/reply-comment.result.json" with { type: "json" };
+import resolveCommentArgs from "../schema/resolve-comment.args.json" with { type: "json" };
+import deleteCommentArgs from "../schema/delete-comment.args.json" with { type: "json" };
+import emptyStruct from "../schema/empty.json" with { type: "json" };
 
 export const PLUGIN_ID = "media.paged.slide";
 /** The label key every slide label is written under (the host derives the
@@ -109,6 +117,15 @@ export const NEW_SLIDE_COMMAND = "media.paged.slide.newSlide";
 export const IMPORT_PPTX_COMMAND = "media.paged.slide.importPptx";
 export const DUPLICATE_SLIDE_COMMAND = "media.paged.slide.duplicateSlide";
 export const EXPORT_PPTX_COMMAND = "media.paged.slide.exportPptx";
+/** The typed twins of the palette's New comment, Previous slide and Next
+ *  slide (same ids, ADR 323), and the comment verbs the panel uses. */
+export const ADD_COMMENT_COMMAND = "media.paged.slide.command.addComment";
+export const REPLY_COMMENT_COMMAND = "media.paged.slide.command.replyComment";
+export const RESOLVE_COMMENT_COMMAND =
+  "media.paged.slide.command.resolveComment";
+export const DELETE_COMMENT_COMMAND = "media.paged.slide.command.deleteComment";
+export const PREVIOUS_SLIDE_COMMAND = "media.paged.slide.command.previousSlide";
+export const NEXT_SLIDE_COMMAND = "media.paged.slide.command.nextSlide";
 
 export const SLIDE_SCHEMA = slideRows as unknown as readonly PropertySchema[];
 export const LAYOUT_SCHEMA = layoutRows as unknown as readonly PropertySchema[];
@@ -524,6 +541,14 @@ export interface SlideObjectModelOptions {
     diagnostics: string[];
     notExported: string[];
   } | null>;
+  /** The deck's comments (ADR 711, amendment 2026-10-25); null when the
+   *  host keeps no container parts. */
+  comments?: () => CommentsStore | null;
+  /** Go one slide back or on from the active one; answers the page gone
+   *  to, or null when there is none (or no viewport). */
+  step?: (by: -1 | 1) => Promise<string | null>;
+  /** The active slide's page id, or null. */
+  activePage?: () => string | null;
 }
 
 /** Register the slide object model on `host`. Headless: no DOM, no edit
@@ -1169,6 +1194,124 @@ export function contributeSlideObjectModel(
     },
   };
 
+  /** The comments store, or an error a script can read. */
+  const commentsOf = (): CommentsStore => {
+    const c = options.comments?.() ?? null;
+    if (!c) throw new Error("unavailable: this host keeps no comments");
+    return c;
+  };
+  /** The page a `slide` argument names, else the active slide's. */
+  const slideOf = async (ref: string | undefined): Promise<string> => {
+    const deck = await loadDeck();
+    if (!deck) throw new Error("failed: this document is not a slide deck");
+    const id = ref ? slidePageId(ref) : (options.activePage?.() ?? null);
+    if (!id) throw new Error("unknownAddress: no slide is active; name one");
+    if (!deck.pages.some((p) => p.id === id))
+      throw new Error(`unknownAddress: no slide ${ref ?? id}`);
+    return id;
+  };
+
+  const addComment: TypedCommandContribution<
+    { text: string; slide?: string; author?: string; x?: number; y?: number },
+    { comment: string }
+  > = {
+    id: ADD_COMMENT_COMMAND,
+    title: t(MODEL.addComment),
+    args: addCommentArgs as ValueType,
+    result: addCommentResult as ValueType,
+    async handler(_ctx, args) {
+      if (args.text.trim() === "")
+        throw new Error("invalid: a comment needs text");
+      const store = commentsOf();
+      const page = await slideOf(args.slide);
+      const at =
+        typeof args.x === "number" && typeof args.y === "number"
+          ? { x: args.x, y: args.y }
+          : null;
+      const name =
+        args.author?.trim() || store.authorName() || t(COMMENTS.defaultAuthor);
+      const made = await store.add(page, args.text, name, at);
+      return { comment: made.id };
+    },
+  };
+
+  const replyComment: TypedCommandContribution<
+    { slide: string; comment: string; text: string; author?: string },
+    { reply: string }
+  > = {
+    id: REPLY_COMMENT_COMMAND,
+    title: t(MODEL.replyComment),
+    args: replyCommentArgs as ValueType,
+    result: replyCommentResult as ValueType,
+    async handler(_ctx, args) {
+      if (args.text.trim() === "")
+        throw new Error("invalid: a reply needs text");
+      const store = commentsOf();
+      const page = await slideOf(args.slide);
+      const name =
+        args.author?.trim() || store.authorName() || t(COMMENTS.defaultAuthor);
+      const reply = await store.reply(page, args.comment, args.text, name);
+      if (!reply) throw new Error(`unknownAddress: no comment ${args.comment}`);
+      return { reply: reply.id };
+    },
+  };
+
+  const resolveComment: TypedCommandContribution<
+    { slide: string; comment: string; resolved: boolean },
+    Record<string, never>
+  > = {
+    id: RESOLVE_COMMENT_COMMAND,
+    title: t(MODEL.resolveComment),
+    args: resolveCommentArgs as ValueType,
+    result: emptyStruct as ValueType,
+    async handler(_ctx, args) {
+      const store = commentsOf();
+      const page = await slideOf(args.slide);
+      const known = store.forPage(page).some((c) => c.id === args.comment);
+      if (!known) throw new Error(`unknownAddress: no comment ${args.comment}`);
+      await store.setResolved(page, args.comment, args.resolved !== false);
+      return {};
+    },
+  };
+
+  const deleteComment: TypedCommandContribution<
+    { slide: string; comment: string; reply?: string },
+    Record<string, never>
+  > = {
+    id: DELETE_COMMENT_COMMAND,
+    title: t(MODEL.deleteComment),
+    args: deleteCommentArgs as ValueType,
+    result: emptyStruct as ValueType,
+    async handler(_ctx, args) {
+      const store = commentsOf();
+      const page = await slideOf(args.slide);
+      if (!(await store.remove(page, args.comment, args.reply || undefined)))
+        throw new Error(`unknownAddress: no comment ${args.comment}`);
+      return {};
+    },
+  };
+
+  const stepCommand = (
+    id: string,
+    title: string,
+    by: -1 | 1,
+  ): TypedCommandContribution<
+    Record<string, never>,
+    Record<string, never>
+  > => ({
+    id,
+    title,
+    args: emptyStruct as ValueType,
+    result: emptyStruct as ValueType,
+    async handler() {
+      if (!options.step)
+        throw new Error("unavailable: this host has no viewport");
+      if ((await options.step(by)) === null)
+        throw new Error("failed: there is no slide to go to");
+      return {};
+    },
+  });
+
   return host.contribute.objectModel({
     kinds: [deckKind, slideKind, layoutKind, placeholderKind],
     commands: [
@@ -1176,6 +1319,12 @@ export function contributeSlideObjectModel(
       importPptx,
       duplicateSlide,
       exportPptx,
+      addComment,
+      replyComment,
+      resolveComment,
+      deleteComment,
+      stepCommand(PREVIOUS_SLIDE_COMMAND, t(MODEL.previousSlide), -1),
+      stepCommand(NEXT_SLIDE_COMMAND, t(MODEL.nextSlide), 1),
     ] as readonly TypedCommandContribution[],
     // Editor plan G3a: a placeholder's text, whether a slide is shown.
     templateFields: slideTemplateFields(host),

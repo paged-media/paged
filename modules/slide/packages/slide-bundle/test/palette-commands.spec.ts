@@ -41,8 +41,10 @@ import { activate } from "../src/activate";
 import {
   CMD,
   COMMAND_PREFIX,
+  DECK_CONTEXT,
   PPTX_ACCEPT,
   SLIDE_KEYBINDINGS,
+  SLIDE_NORMAL_VIEW_KEYS,
   contributeSlideCommands,
 } from "../src/commands";
 import { contributeMenu, MENU_ENTRIES } from "../src/menu";
@@ -81,6 +83,7 @@ function recordingHost(
   const menus: MenuContribution[] = [];
   const keys: KeybindingContribution[] = [];
   let caret: unknown = null;
+  let selected: string[] = [];
   const logs: string[] = [];
   const mutations: MutationInput[] = [];
   const invoked: Array<{ command: string; args: unknown }> = [];
@@ -111,6 +114,7 @@ function recordingHost(
       },
     },
     text: { caret: () => caret },
+    selection: { get: () => selected },
     document: {
       collection: async () => pageIds().map((selfId) => ({ selfId })),
       async mutate(m: MutationInput) {
@@ -149,6 +153,9 @@ function recordingHost(
     setCaret(c: unknown) {
       caret = c;
     },
+    select(ids: string[]) {
+      selected = ids;
+    },
     logs,
     mutations,
     invoked,
@@ -179,6 +186,8 @@ function setup(
     active?: number;
     features?: readonly string[];
     withStore?: boolean;
+    scopedKeys?: boolean;
+    openComments?: () => void;
     exportDeck?: () => Promise<{
       bytes: Uint8Array;
       fileName: string;
@@ -198,6 +207,8 @@ function setup(
   const handle = contributeSlideCommands(r.host, {
     store: opts.withStore === false ? null : store,
     objectModel: true,
+    ...(opts.scopedKeys ? { scopedKeys: true } : {}),
+    ...(opts.openComments ? { openComments: opts.openComments } : {}),
     async openDeck(name) {
       opened.push(name);
       return null;
@@ -293,6 +304,97 @@ describe("paged.slide palette commands", () => {
     ]);
     s.handle.dispose();
     expect(s.keys).toEqual([]);
+  });
+
+  it("binds PowerPoint's Normal-view keys scoped to the deck: Cmd/Ctrl+M, Cmd/Ctrl+D with nothing selected, PageUp/PageDown", async () => {
+    covers(
+      "keybinding:cmd+m→media.paged.slide.command.newSlide",
+      "keybinding:ctrl+m→media.paged.slide.command.newSlide",
+      "keybinding:cmd+d→media.paged.slide.command.duplicateSlide",
+      "keybinding:ctrl+d→media.paged.slide.command.duplicateSlide",
+      "keybinding:pageup→media.paged.slide.command.previousSlide",
+      "keybinding:pagedown→media.paged.slide.command.nextSlide",
+    );
+    // Without the scope door (or without the deck context) none is bound.
+    const plain = setup({ scopedKeys: true });
+    expect(plain.keys.some((k) => k.scope)).toBe(false);
+    const noContext = setup({
+      features: [...ALL, "contribute.keybinding.scope@1"],
+    });
+    expect(noContext.keys.some((k) => k.scope)).toBe(false);
+
+    const s = setup({
+      slides: 3,
+      active: 2,
+      scopedKeys: true,
+      features: [...ALL, "contribute.keybinding.scope@1"],
+    });
+    const scoped = s.keys.filter((k) => k.scope);
+    expect(scoped.map((k) => `${k.key}→${k.command}`)).toEqual(
+      SLIDE_NORMAL_VIEW_KEYS.map((k) => `${k.key}→${k.command}`),
+    );
+    for (const k of scoped) {
+      expect(k.scope).toEqual({ editContext: DECK_CONTEXT });
+      expect(s.commands.has(k.command)).toBe(true);
+    }
+    const on = (key: string) => {
+      const k = scoped.find((x) => x.key === key)!;
+      return typeof k.when === "function" ? k.when(null) : true;
+    };
+    for (const k of scoped) expect(on(k.key), k.key).toBe(true);
+    // A selection keeps Cmd+D the host's (duplicate the object).
+    s.select(["u12"]);
+    expect(on("cmd+d")).toBe(false);
+    expect(on("ctrl+d")).toBe(false);
+    expect(on("cmd+m")).toBe(true);
+    s.select([]);
+    // A caret keeps PageUp/PageDown and Cmd+D the text's; Ctrl+M is still
+    // New slide, as in PowerPoint.
+    s.setCaret({ story: "u1", offset: 0 });
+    expect(on("pageup")).toBe(false);
+    expect(on("pagedown")).toBe(false);
+    expect(on("cmd+d")).toBe(false);
+    expect(on("ctrl+m")).toBe(true);
+    s.setCaret(null);
+    // They follow their commands: no previous slide on the first.
+    s.state.active = 1;
+    expect(on("pageup")).toBe(false);
+    expect(on("pagedown")).toBe(true);
+    // PageDown runs Next slide: the viewport goes to slide 2.
+    await s.commands
+      .get(scoped.find((k) => k.key === "pagedown")!.command)!
+      .handler(null);
+    expect(s.visited).toEqual(["p2"]);
+    s.handle.dispose();
+    expect(s.keys).toEqual([]);
+  });
+
+  it("Previous / Next slide go to the neighbouring slide; New comment raises the Comments panel", async () => {
+    covers(
+      "command:media.paged.slide.command.previousSlide",
+      "command:media.paged.slide.command.nextSlide",
+      "command:media.paged.slide.command.addComment",
+    );
+    let raised = 0;
+    const s = setup({ slides: 3, active: 2, openComments: () => raised++ });
+    expect(s.when(CMD.previousSlide)).toBe(true);
+    expect(s.when(CMD.nextSlide)).toBe(true);
+    await s.run(CMD.previousSlide);
+    await s.run(CMD.nextSlide);
+    expect(s.visited).toEqual(["p1", "p3"]);
+    s.state.active = 3;
+    expect(s.when(CMD.nextSlide)).toBe(false);
+    // At the end a bare invoke logs and stays.
+    await s.run(CMD.nextSlide);
+    expect(s.visited).toEqual(["p1", "p3"]);
+    expect(s.logs.some((l) => l.includes("nextSlide"))).toBe(true);
+    expect(s.when(CMD.addComment)).toBe(true);
+    await s.run(CMD.addComment);
+    expect(raised).toBe(1);
+    // Without a panel door New comment logs why.
+    const bare = setup({ slides: 2, active: 1 });
+    await bare.run(CMD.addComment);
+    expect(bare.logs.some((l) => l.includes("addComment"))).toBe(true);
   });
 
   it("binds no keys on a host without the slide store", () => {
