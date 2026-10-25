@@ -134,8 +134,9 @@ describe("the Find & Replace commands", () => {
     covers("command:paged.edit.replace");
     covers("command:paged.edit.goTo");
     for (const c of FIND_COMMANDS) {
-      expect(c.when?.({ document: { handle: null } })).toBe(false);
-      expect(c.when?.(withDoc)).toBe(true);
+      const when = c.when as (state: unknown) => boolean;
+      expect(when({ document: { handle: null } })).toBe(false);
+      expect(when(withDoc)).toBe(true);
     }
     const scope = createEditorScope();
     const paged = { scope } as never;
