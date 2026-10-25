@@ -25,22 +25,28 @@
 //
 // What is NOT bound, and why (the plan's map minus these):
 //   · keys the browser keeps for itself and never hands a page: Cmd+1/2/5
-//     (tab switching), Cmd+T / Cmd+Shift+T, Cmd+M, Cmd+Q, Cmd+H, Cmd+N /
+//     (tab switching), Cmd+T / Cmd+Shift+T, Cmd+M, Cmd+Q, Cmd+N /
 //     Cmd+Shift+N, Cmd+W; the control bar carries line spacing, the
-//     indents and the Normal style instead, and Word for Mac's own
-//     alternatives are bound where it has one (Ctrl+Shift+M indent,
-//     Cmd+Alt+C/V for copy/paste formatting — Cmd+Shift+C opens the
-//     browser's inspector);
+//     indents, Clear paragraph formatting and the Normal style instead, and
+//     Word for Mac's own alternatives are bound where it has one
+//     (Ctrl+Shift+M indent, Cmd+Alt+C/V for copy/paste formatting —
+//     Cmd+Shift+C opens the browser's inspector). Cmd+H (Replace) is bound,
+//     for the browsers that hand it over; Cmd+Alt+F, the host's own
+//     Find/Change key, opens the same dialog everywhere;
 //   · Cmd+Shift+= (superscript): with Shift the key reports "+", which a
 //     combo cannot name; the control bar's button does it;
-//   · keys whose target the engine does not have yet: double underline and
-//     hidden text (no underline kinds or hidden attribute), clear paragraph
-//     formatting (no way to drop an override), Cmd+D (no Font dialog),
-//     Cmd+Shift+S (the host's Save As stays), the structure keys (page and
-//     column breaks, nbsp and Alt+Shift+arrows need an insertion and a
-//     paragraph move host.text does not offer), find and replace (the
-//     engine's FindReplace op is not on main), fields, notes, links,
-//     comments and track changes (waves 2 and 3).
+//   · Cmd+Shift+S (the style box, Word's "Apply Styles"): the host keeps it
+//     for Save As (a reserved key); the `applyStyles` command and the Styles
+//     menu put the focus in the control bar's style box instead;
+//   · keys whose target the engine does not have yet: Cmd+D (no Font
+//     dialog), the structure keys (page and column breaks, nbsp and
+//     Alt+Shift+arrows need an insertion and a paragraph move host.text
+//     does not offer), fields, notes, links, comments and track changes
+//     (waves 2 and 3).
+//
+// Find, Replace and Go To are the HOST's commands (editor ADR 303: one
+// Find & Replace for every text document); the Word keys below only name
+// them (`WORD_HOST_KEYS`).
 
 import type {
   BundleHost,
@@ -49,6 +55,8 @@ import type {
   Value,
 } from "@paged-media/plugin-api";
 
+import { LIST_PRESETS, type ListPresetId } from "./lists.js";
+import { readShowHidden } from "./word-state.js";
 import {
   ALIGNMENTS,
   leadingFor,
@@ -99,6 +107,25 @@ export const WORD_COMMAND = {
   lineSpacing1: `${ID}.lineSpacing1`,
   lineSpacing15: `${ID}.lineSpacing15`,
   lineSpacing2: `${ID}.lineSpacing2`,
+  // Doc ADR 608 amendment 1 — what engine ADR 1018 made possible.
+  doubleUnderline: `${ID}.doubleUnderline`,
+  hidden: `${ID}.hidden`,
+  highlight: `${ID}.highlight`,
+  shading: `${ID}.shading`,
+  borderBottom: `${ID}.borderBottom`,
+  borderBox: `${ID}.borderBox`,
+  borderNone: `${ID}.borderNone`,
+  showHidden: `${ID}.showHidden`,
+  clearParagraph: `${ID}.clearParagraph`,
+  restartNumbering: `${ID}.restartNumbering`,
+  continueNumbering: `${ID}.continueNumbering`,
+  listOutline: `${ID}.listOutline`,
+  listLegal: `${ID}.listLegal`,
+  listBullets: `${ID}.listBullets`,
+  styleUpdate: `${ID}.styleUpdate`,
+  styleModify: `${ID}.styleModify`,
+  styleNew: `${ID}.styleNew`,
+  applyStyles: `${ID}.applyStyles`,
 } as const;
 export type WordCommandName = keyof typeof WORD_COMMAND;
 
@@ -137,6 +164,27 @@ export const WORD_KEYS: ReadonlyArray<{
   { key: "shift+tab", command: WORD_COMMAND.listLevelUp, list: true },
   { key: "cmd+alt+c", command: WORD_COMMAND.copyFormat },
   { key: "cmd+alt+v", command: WORD_COMMAND.pasteFormat },
+  { key: "cmd+shift+d", command: WORD_COMMAND.doubleUnderline },
+  { key: "cmd+shift+h", command: WORD_COMMAND.hidden },
+];
+
+/** The host's Find & Replace commands (editor ADR 303). */
+export const HOST_FIND = {
+  find: "paged.edit.find",
+  replace: "paged.edit.replace",
+  goTo: "paged.edit.goTo",
+} as const;
+
+/**
+ * Word's find keys, scoped to a Word document like the rest, naming the
+ * host's commands: Cmd+F the Navigation pane's search (the Find results
+ * panel), Cmd+H Replace, Cmd+G Go To (which inside a Word document takes
+ * the key from the host's Group).
+ */
+export const WORD_HOST_KEYS: ReadonlyArray<{ key: string; command: string }> = [
+  { key: "cmd+f", command: HOST_FIND.find },
+  { key: "cmd+h", command: HOST_FIND.replace },
+  { key: "cmd+g", command: HOST_FIND.goTo },
 ];
 
 /** The character paths Copy formatting carries. */
@@ -169,9 +217,18 @@ function plain<T>(r: TextPropertyRead | null | undefined): Read<T> {
   return r.value as T;
 }
 
-/** Where the commands keep Copy formatting's format between keys. */
+/** Where the commands keep Copy formatting's format between keys, and
+ *  what the chrome lends them. */
 export interface WordCommandState {
   copied: TextPropertyWrite[] | null;
+  /** The highlight colour the Highlight button applies (Word's last
+   *  used); absent: the document's yellow, made when it has none. */
+  highlight?: string | null;
+  /** The shading colour the Shading button applies; absent: black at
+   *  15 % (Word's light grey). */
+  shading?: string | null;
+  /** Put the focus in the control bar's style box (Apply Styles). */
+  focusStyleBox?: () => void;
 }
 
 const text = (value: string): Value => ({ type: "text", value });
@@ -247,14 +304,175 @@ async function lineSpacing(host: BundleHost, multiple: number) {
   ]);
 }
 
+/** Tab / Shift+Tab in a list: the engine's `setListLevel` by a delta on
+ *  every paragraph the selection touches (engine ADR 1018), one undo step;
+ *  the level clamps to 1–9 there. */
 async function listLevel(host: BundleHost, delta: 1 | -1) {
-  const level = await readOne<number>(host, "paragraphNumberingLevel");
-  const at = typeof level === "number" ? level : 1;
-  return host.text.format([
-    {
-      path: "paragraphNumberingLevel",
-      value: length(Math.min(9, Math.max(1, at + delta))),
+  const r = await host.text.characterRange();
+  if (!r) return { applied: false };
+  return mutateOutcome(host, {
+    op: "setListLevel",
+    args: { storyId: r.storyId, start: r.start, end: r.end, delta },
+  });
+}
+
+async function mutateOutcome(
+  host: BundleHost,
+  m: unknown,
+): Promise<{ applied: boolean; error?: string }> {
+  const out = await host.document.mutate(m as never);
+  return out.applied
+    ? { applied: true }
+    : { applied: false, error: String(out.error ?? "refused") };
+}
+
+/** The paragraph paths Clear paragraph formatting drops (an empty text or
+ *  a `null` length clears a paragraph override, so the style shows
+ *  through), and the per-character leading line spacing writes. */
+const CLEAR_PARAGRAPH: TextPropertyWrite[] = [
+  { path: "paragraphJustification", value: text("") },
+  { path: "paragraphLeftIndent", value: length(null) },
+  { path: "paragraphRightIndent", value: length(null) },
+  { path: "paragraphFirstLineIndent", value: length(null) },
+  { path: "paragraphSpaceBefore", value: length(null) },
+  { path: "paragraphSpaceAfter", value: length(null) },
+  { path: "characterLeading", value: length(null), extent: "paragraphs" },
+];
+
+/** The paths Update to Match / New Style carry from the selection into
+ *  the paragraph style, with their wire types. */
+const STYLE_PATHS: Record<string, Value["type"]> = {
+  characterFontFamily: "text",
+  characterFontStyle: "text",
+  characterFontSize: "length",
+  characterLeading: "length",
+  characterCase: "text",
+  characterPosition: "text",
+  characterUnderline: "bool",
+  characterStrikethru: "bool",
+  characterFillColor: "colorRef",
+  paragraphJustification: "text",
+  paragraphLeftIndent: "length",
+  paragraphRightIndent: "length",
+  paragraphFirstLineIndent: "length",
+  paragraphSpaceBefore: "length",
+  paragraphSpaceAfter: "length",
+};
+
+/** The selection's effective values as `setStyleProperty` writes onto
+ *  paragraph style `styleId` (mixed and unreadable paths left out). */
+async function styleWrites(host: BundleHost, styleId: string) {
+  const paths = Object.keys(STYLE_PATHS);
+  const props = await host.text.properties(paths as never);
+  if (!props) return [];
+  return paths.flatMap((path) => {
+    const r = props[path as never] as TextPropertyRead | null | undefined;
+    if (!r || r === "mixed" || r.value === null || r.value === undefined)
+      return [];
+    return [
+      {
+        op: "setStyleProperty",
+        args: {
+          collection: "paragraph",
+          styleId,
+          path,
+          value: { type: STYLE_PATHS[path], value: r.value } as Value,
+        },
+      },
+    ];
+  });
+}
+
+/** The caret's paragraph style (`null` for none or mixed). */
+async function currentStyle(host: BundleHost): Promise<string | null> {
+  const s = await readOne<string>(host, "appliedParagraphStyle");
+  return typeof s === "string" && s !== "mixed" ? s : null;
+}
+
+/** The host's Style Options panel on paragraph style `styleId`. */
+function openStyleOptions(host: BundleHost, styleId: string): boolean {
+  if (!host.supports("shell.openPanel@1")) return false;
+  host.shell.openPanel("paged.style-options", {
+    target: `style:paragraph/${styleId}`,
+  });
+  return true;
+}
+
+/** A style name the document does not have yet ("Style 1", "Style 2"…). */
+async function freshStyleName(host: BundleHost): Promise<string> {
+  const styles = (await host.document.collection(
+    "paragraphStyles",
+  )) as unknown as StyleRow[];
+  const names = new Set(styles.map((s) => s.name));
+  for (let n = 1; ; n++) if (!names.has(`Style ${n}`)) return `Style ${n}`;
+}
+
+/** The swatch Highlight applies when none was chosen: the document's
+ *  yellow, made (one undo step of its own) when it has none. */
+async function yellowSwatch(host: BundleHost): Promise<string | null> {
+  const swatches = (await host.document.collection(
+    "swatches",
+  )) as unknown as Array<{ selfId: string; name: string }>;
+  const found = swatches.find((s) =>
+    /^yellow$/i.test(s.name.replace(/^\$ID\//, "")),
+  );
+  if (found) return found.selfId;
+  const out = await host.document.mutate({
+    op: "createSwatch",
+    args: {
+      spec: {
+        selfId: "Color/word-highlight-yellow",
+        name: "Yellow",
+        space: "RGB",
+        value: [255, 255, 0],
+      },
     },
+  } as never);
+  return out.applied ? "Color/word-highlight-yellow" : null;
+}
+
+const NO_HIGHLIGHT = "Swatch/None";
+
+/** A half-point black rule a little below the last line: Word's bottom
+ *  border. */
+const RULE_BELOW: Value = {
+  type: "paragraphRule",
+  value: { on: true, weight: 0.5, color: "Color/Black", offset: 4 },
+};
+const NO_RULE: Value = { type: "paragraphRule", value: { on: false } };
+
+async function showHiddenNow(host: BundleHost): Promise<boolean> {
+  try {
+    return await readShowHidden(host);
+  } catch {
+    return false;
+  }
+}
+
+/** Apply a multilevel list preset to the touched paragraphs: the list is
+ *  made once per document, then the paragraphs take it (and a numbered or
+ *  bullet list type) in one batch. */
+async function applyListPreset(host: BundleHost, id: ListPresetId) {
+  const preset = LIST_PRESETS[id];
+  const lists = (await host.document
+    .collection("numberingLists")
+    .catch(() => [])) as unknown as Array<{ selfId: string }>;
+  if (!lists.some((l) => l.selfId === preset.selfId)) {
+    const made = await host.document.mutate({
+      op: "createNumberingList",
+      args: {
+        spec: {
+          selfId: preset.selfId,
+          name: preset.name,
+          levels: preset.levels,
+        },
+      },
+    } as never);
+    if (!made.applied) return { applied: false };
+  }
+  return host.text.format([
+    { path: "paragraphAppliedNumberingList", value: text(preset.selfId) },
+    { path: "paragraphListType", value: text(preset.listType) },
   ]);
 }
 
@@ -369,5 +587,145 @@ export async function runWordCommand(
       return lineSpacing(host, 1.5);
     case "lineSpacing2":
       return lineSpacing(host, 2);
+    case "doubleUnderline": {
+      const now = await readOne<string>(host, "characterUnderlineType");
+      return host.text.format([
+        {
+          path: "characterUnderlineType",
+          value: text(now === "double" ? "none" : "double"),
+        },
+      ]);
+    }
+    case "hidden":
+      return toggleBool(host, "characterHidden");
+    case "highlight": {
+      const now = await readOne<string>(host, "characterHighlightColor");
+      const on = typeof now === "string" && now !== "" && now !== NO_HIGHLIGHT;
+      const swatch = on
+        ? NO_HIGHLIGHT
+        : (state.highlight ?? (await yellowSwatch(host)));
+      if (!swatch) return { applied: false };
+      return host.text.format([
+        {
+          path: "characterHighlightColor",
+          value: { type: "colorRef", value: swatch },
+        },
+      ]);
+    }
+    case "shading": {
+      const now = await readOne<boolean>(host, "paragraphShadingOn");
+      if (now === true) {
+        return host.text.format([
+          { path: "paragraphShadingOn", value: bool(false) },
+        ]);
+      }
+      return host.text.format([
+        { path: "paragraphShadingOn", value: bool(true) },
+        {
+          path: "paragraphShadingColor",
+          value: { type: "colorRef", value: state.shading ?? "Color/Black" },
+        },
+        {
+          path: "paragraphShadingTint",
+          value: length(state.shading ? 100 : 15),
+        },
+      ]);
+    }
+    case "borderBottom":
+      // Word's bottom border is InDesign's rule below the paragraph.
+      return host.text.format([
+        { path: "paragraphBorderOn", value: bool(false) },
+        { path: "paragraphRuleBelow", value: RULE_BELOW },
+      ]);
+    case "borderBox":
+      return host.text.format([
+        { path: "paragraphRuleBelow", value: NO_RULE },
+        { path: "paragraphBorderOn", value: bool(true) },
+        { path: "paragraphBorderWeight", value: length(0.5) },
+        {
+          path: "paragraphBorderColor",
+          value: { type: "colorRef", value: "Color/Black" },
+        },
+      ]);
+    case "borderNone":
+      return host.text.format([
+        { path: "paragraphBorderOn", value: bool(false) },
+        { path: "paragraphRuleBelow", value: NO_RULE },
+      ]);
+    case "showHidden": {
+      const now = await showHiddenNow(host);
+      return mutateOutcome(host, {
+        op: "set",
+        args: {
+          address: "doc",
+          path: "documentShowHiddenText",
+          value: bool(!now),
+        },
+      });
+    }
+    case "clearParagraph":
+      return host.text.format(CLEAR_PARAGRAPH);
+    case "restartNumbering":
+    case "continueNumbering": {
+      const r = await host.text.characterRange();
+      if (!r) return { applied: false };
+      return mutateOutcome(host, {
+        op: "restartNumbering",
+        args: {
+          storyId: r.storyId,
+          start: r.start,
+          end: r.end,
+          ...(name === "restartNumbering"
+            ? { startAt: 1 }
+            : { continueNumbering: true }),
+        },
+      });
+    }
+    case "listOutline":
+      return applyListPreset(host, "outline");
+    case "listLegal":
+      return applyListPreset(host, "legal");
+    case "listBullets":
+      return applyListPreset(host, "bullets");
+    case "styleUpdate": {
+      // Update to Match Selection: the caret's paragraph style takes the
+      // selection's format, one batch = one undo step.
+      const style = await currentStyle(host);
+      if (!style) return { applied: false };
+      const ops = await styleWrites(host, style);
+      if (ops.length === 0) return { applied: false };
+      return mutateOutcome(host, { op: "batch", args: { ops } });
+    }
+    case "styleModify": {
+      const style = await currentStyle(host);
+      return { applied: style !== null && openStyleOptions(host, style) };
+    }
+    case "styleNew": {
+      // New Style from Selection: a style based on the paragraph's, with
+      // the selection's format, applied to the paragraph; then its options
+      // open so it can be named.
+      const based = await currentStyle(host);
+      const name = await freshStyleName(host);
+      const made = await host.document.mutate({
+        op: "createParagraphStyle",
+        args: { name, ...(based ? { basedOn: based } : {}) },
+      } as never);
+      if (!made.applied) return { applied: false };
+      const styles = (await host.document.collection(
+        "paragraphStyles",
+      )) as unknown as StyleRow[];
+      const created = styles.find((s) => s.name === name);
+      if (!created) return { applied: false };
+      const ops = await styleWrites(host, created.selfId);
+      if (ops.length > 0) {
+        await mutateOutcome(host, { op: "batch", args: { ops } });
+      }
+      const applied = await host.text.applyStyle("paragraph", created.selfId);
+      openStyleOptions(host, created.selfId);
+      return applied;
+    }
+    case "applyStyles":
+      state.focusStyleBox?.();
+      return { applied: state.focusStyleBox !== undefined };
   }
 }

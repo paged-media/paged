@@ -28,6 +28,9 @@ dependsOn:
   # dml-chart, the shared DrawingML chart reader (slide ADR 709).
   - id: "dml-chart"
     scope: "production"
+  # dml-geom, the shared DrawingML geometry (slide ADR 717, PM-0014).
+  - id: "dml-geom"
+    scope: "production"
   # slide-chart labels through sheet-format (and sheet-core, whose build
   # reads sheet's function registry), which read platform/shared/fmt (ADR 710).
   - id: "sheet"
@@ -37,7 +40,8 @@ dependsOn:
 
 # Path dependencies into the engine (docx-skeleton / slide-native build on
 # paged-model, paged-scene, paged-store; ADR 606 / ADR 708) and into
-# platform/shared/ooxml (paged-ooxml, doc ADR 607), and into modules/sheet's
+# platform/shared/ooxml (paged-ooxml, doc ADR 607) and platform/shared/dml-geom
+# (slide ADR 717), and into modules/sheet's
 # sheet-format and sheet-core and platform/shared/fmt (slide-chart, ADR 710):
 # their crates are inputs here too, so `moon ci` re-runs this project when
 # one it builds changes.
@@ -57,6 +61,9 @@ fileGroups:
     - "/platform/shared/ooxml/Cargo.toml"
     - "/platform/shared/dml-chart/src/**/*.rs"
     - "/platform/shared/dml-chart/Cargo.toml"
+    - "/platform/shared/dml-geom/src/**/*.rs"
+    - "/platform/shared/dml-geom/data/*.xml"
+    - "/platform/shared/dml-geom/Cargo.toml"
     - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"
@@ -75,6 +82,9 @@ fileGroups:
     - "/platform/shared/ooxml/Cargo.toml"
     - "/platform/shared/dml-chart/src/**/*.rs"
     - "/platform/shared/dml-chart/Cargo.toml"
+    - "/platform/shared/dml-geom/src/**/*.rs"
+    - "/platform/shared/dml-geom/data/*.xml"
+    - "/platform/shared/dml-geom/Cargo.toml"
     - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"

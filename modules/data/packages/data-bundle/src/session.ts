@@ -1681,6 +1681,21 @@ export function createSession(
     if (persistTimer && labelActive) await flushPersistInternal();
   }
 
+  /** The document is about to be written from the current results: record
+   *  them as the applied snapshot (the per-record status's "before", saved
+   *  as the payload's `applied`, editor ADR 291) BEFORE the write, so the
+   *  label the write carries names the version that holds it. Marked after
+   *  the write, the session moved past its label as soon as the write
+   *  landed, and the next document write (or the first one after a
+   *  reopen) labelled a version no write of the user's made. Without
+   *  labels the snapshot is saved with the next session write, as before. */
+  async function markAppliedBeforeWrite(
+    mark: () => Promise<void> | void,
+  ): Promise<void> {
+    await mark();
+    if (labelActive) await flushPersistInternal();
+  }
+
   /** After an undo or redo: if the document's label now names another
    *  session version, reload that version (the session follows undo). */
   async function followLabel(): Promise<void> {
@@ -4356,6 +4371,9 @@ export function createSession(
 
     async lowerAll() {
       await this.refreshData();
+      // The document is written from these results: the row diff's
+      // "before", marked ahead of the writes so the first carries its label.
+      await markAppliedBeforeWrite(() => this.markApplied());
       // One command: its lowerings share one read of the active page.
       // Variables are planned first and placed together: one batch, one undo
       // step for the whole command (budget W5).
@@ -4382,8 +4400,6 @@ export function createSession(
         lowerCtx = undefined;
       }
       if (ctx.refreshFields) await this.refreshFields();
-      // The document is now written from these results: the row diff's "before".
-      await this.markApplied();
       issuesSoon();
     },
 
@@ -4739,8 +4755,12 @@ export function createSession(
         });
       }
 
+      // The document is now written from these results: the row diff's
+      // "before", marked ahead of the write that carries its label.
+      if (writes.length > 0)
+        await markAppliedBeforeWrite(() => this.markApplied());
+      else await this.markApplied();
       const written = await writeFields("refresh", writes);
-      await this.markApplied();
       issuesSoon();
       const kept = [...resolved.values()].filter((r) => r === "kept").length;
       state.status = "ready";
@@ -5278,6 +5298,16 @@ export function createSession(
         undefined,
         snapshot,
       );
+      // The document is written from this query's records: the "before" of
+      // its per-record status (editor ADR 291), marked ahead of the write so
+      // the label the merge carries names the version holding it.
+      await markAppliedBeforeWrite(() => {
+        try {
+          e.mark_query_applied?.(options.query);
+        } catch {
+          // an engine without the lane: no status, nothing else changes
+        }
+      });
       await settleLabel();
       const engineForMerge = e as Required<
         Pick<DataEngineLike, "plan_merge" | "merge_words" | "merge_overset">
@@ -5294,16 +5324,7 @@ export function createSession(
         templatePresent,
         pageHandles: labelActive,
       });
-      if (result.ok) {
-        mergeTemplates.set(mergeId, template);
-        // The document is now written from this query's records: the
-        // "before" of its per-record status (editor ADR 291).
-        try {
-          e.mark_query_applied?.(options.query);
-        } catch {
-          // an engine without the lane: no status, nothing else changes
-        }
-      }
+      if (result.ok) mergeTemplates.set(mergeId, template);
       mergeFrames = result.records.flatMap((r) =>
         r.frames.map((f) => ({
           binding: mergeId,

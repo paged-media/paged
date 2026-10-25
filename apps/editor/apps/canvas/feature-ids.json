@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 539,
-    "keybinding": 131,
-    "menu": 383,
-    "panel": 130,
-    "tool": 81
+    "command": 579,
+    "keybinding": 140,
+    "menu": 399,
+    "panel": 132,
+    "tool": 91
   },
   "features": [
     {
@@ -226,7 +226,27 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.applyStyles",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.bold",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.borderBottom",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.borderBox",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.borderNone",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -241,12 +261,27 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.clearParagraph",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.continueNumbering",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.copyFormat",
       "kind": "command",
       "owner": "media.paged.doc"
     },
     {
       "id": "command:media.paged.doc.command.word.decreaseIndent",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.doubleUnderline",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -267,6 +302,16 @@
     },
     {
       "id": "command:media.paged.doc.command.word.heading3",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.hidden",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.highlight",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -301,12 +346,27 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.listBullets",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.listLegal",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.listLevelDown",
       "kind": "command",
       "owner": "media.paged.doc"
     },
     {
       "id": "command:media.paged.doc.command.word.listLevelUp",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.listOutline",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -322,6 +382,21 @@
     },
     {
       "id": "command:media.paged.doc.command.word.pasteFormat",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.restartNumbering",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.shading",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.showHidden",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -342,6 +417,21 @@
     },
     {
       "id": "command:media.paged.doc.command.word.strikethrough",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.styleModify",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.styleNew",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.styleUpdate",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -397,6 +487,11 @@
     },
     {
       "id": "command:media.paged.draw.command.attachTextToPath",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.attachToPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -487,6 +582,11 @@
     },
     {
       "id": "command:media.paged.draw.command.detachTextFromPath",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.drawOnPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -616,6 +716,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.liquifyStroke",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.makeCompoundPath",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -652,6 +757,11 @@
     },
     {
       "id": "command:media.paged.draw.command.makeRadialRepeat",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.moveOnPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -731,7 +841,57 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.perspectiveHideGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveLockGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveOnePoint",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveSetPlane",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveShowGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveThreePoint",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveTwoPoint",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveUnlockGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.placeSymbolInstance",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.puppetWarp",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.puppetWarpTool",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -797,6 +957,11 @@
     },
     {
       "id": "command:media.paged.draw.command.releaseCompoundPath",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.releaseFromPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -1926,6 +2091,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.insertShapes",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.moveSlideDown",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -1997,6 +2167,11 @@
     },
     {
       "id": "command:media.paged.slide.importPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.insertShape",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2291,12 +2466,37 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.edit.find",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.findNext",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.findPrevious",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.goTo",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.edit.paste",
       "kind": "command",
       "owner": "editor"
     },
     {
       "id": "command:paged.edit.pasteInPlace",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.replace",
       "kind": "command",
       "owner": "editor"
     },
@@ -2886,6 +3086,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+alt+f→paged.edit.replace",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:cmd+alt+shift+d→paged.edit.duplicate",
       "kind": "keybinding",
       "owner": "editor"
@@ -2956,9 +3161,24 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "keybinding:cmd+f→paged.edit.find",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+g→paged.edit.goTo",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+g→paged.object.group",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+h→paged.edit.replace",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+i→media.paged.doc.command.word.italic",
@@ -2969,6 +3189,11 @@
       "id": "keybinding:cmd+j→media.paged.doc.command.word.justify",
       "kind": "keybinding",
       "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+j→paged.edit.goTo",
+      "kind": "keybinding",
+      "owner": "editor"
     },
     {
       "id": "keybinding:cmd+k→paged.palette.toggle",
@@ -3026,9 +3251,19 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+shift+d→media.paged.doc.command.word.doubleUnderline",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+shift+g→paged.object.ungroup",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+shift+h→media.paged.doc.command.word.hidden",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+shift+h→paged.sample.hello",
@@ -3191,7 +3426,17 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "keybinding:ctrl+f→paged.edit.find",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:ctrl+g→paged.object.group",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+h→paged.edit.replace",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3919,6 +4164,31 @@
       "id": "menu:Edit/Edit colors/Recolor artwork…",
       "kind": "menu",
       "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Edit/Find and replace…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Find next",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Find previous",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Find…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Go to page…",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:Edit/Paste",
@@ -4656,6 +4926,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Insert/Shapes…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Layout/Add page",
       "kind": "menu",
       "owner": "editor"
@@ -4929,6 +5204,21 @@
       "id": "menu:Object/Pathfinder/Keep or remove faces…",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Perspective/Attach to active plane",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Perspective/Release with perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Puppet warp",
+      "kind": "menu",
+      "owner": "media.paged.draw"
     },
     {
       "id": "menu:Object/Rasterize…",
@@ -5221,6 +5511,41 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Perspective grid/Hide grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Lock grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/One-point perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Show grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Three-point perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Two-point perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Unlock grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:View/Show data markers",
       "kind": "menu",
       "owner": "editor"
@@ -5456,6 +5781,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "panel:media.paged.slide.panel.shapes",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "panel:media.paged.slide.panel.slide",
       "kind": "panel",
       "owner": "media.paged.slide"
@@ -5637,6 +5967,11 @@
     },
     {
       "id": "panel:paged.export-tagging",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.find-results",
       "kind": "panel",
       "owner": "editor"
     },
@@ -5951,6 +6286,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.bloat",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.blobBrush",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -5962,6 +6302,11 @@
     },
     {
       "id": "tool:media.paged.draw.tool.cornerRadius",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.crystallize",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
@@ -6036,6 +6381,26 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.perspectiveGrid",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.perspectiveSelect",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.pucker",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.puppetWarp",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.reflect",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -6047,6 +6412,11 @@
     },
     {
       "id": "tool:media.paged.draw.tool.reshape",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.scallop",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
@@ -6071,12 +6441,27 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.twirl",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.typeOnPath",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.warp",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.width",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.wrinkle",
       "kind": "tool",
       "owner": "media.paged.draw"
     },

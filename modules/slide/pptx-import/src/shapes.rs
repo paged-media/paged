@@ -19,9 +19,9 @@
 //! Shape trees: `p:spTree` and everything in it.
 
 use pptx_core::{
-    Blip, CustomGeometry, FrameContent, GeomPath, Geometry, GraphicFrame, Group, Hyperlink,
-    NvProps, PathCmd, Pic, Placeholder, Shape, ShapeProps, ShapeStyle, Sp, StyleRef, Table,
-    TableCell, TableRow, Xfrm,
+    Blip, CustomGeometry, CxnRef, FrameContent, Geometry, GraphicFrame, Group, Hyperlink, NvProps,
+    Pic, Placeholder, Shape, ShapeProps, ShapeStyle, Sp, StyleRef, Table, TableCell, TableRow,
+    Xfrm,
 };
 
 use crate::paint::{color_in, effects, fill_in, line};
@@ -92,7 +92,20 @@ fn sp(el: &El, nv_name: &str, ctx: &Ctx) -> Sp {
         text: el.child(Ns::P, "txBody").map(|t| text_body(t, ctx)),
         use_bg_fill: el.attr_bool("useBgFill").unwrap_or(false),
         text_xfrm: el.child(Ns::P, "txXfrm").map(xfrm),
+        st_cxn: cxn(el, "stCxn"),
+        end_cxn: cxn(el, "endCxn"),
     }
+}
+
+/// A connector's `p:nvCxnSpPr/p:cNvCxnSpPr/a:stCxn` (or `a:endCxn`).
+fn cxn(el: &El, name: &str) -> Option<CxnRef> {
+    let c = el
+        .path(&[(Ns::P, "nvCxnSpPr"), (Ns::P, "cNvCxnSpPr")])?
+        .child(Ns::A, name)?;
+    Some(CxnRef {
+        id: c.attr_u32("id")?,
+        idx: c.attr_u32("idx").unwrap_or(0),
+    })
 }
 
 /// `p:nvSpPr` / `p:nvPicPr` / … : `p:cNvPr` + `p:nvPr/p:ph`.
@@ -185,65 +198,9 @@ fn guides(el: Option<&El>) -> Vec<(String, String)> {
     .unwrap_or_default()
 }
 
-/// `a:custGeom` (and, with the same elements, a preset definition from
-/// `presetShapeDefinitions.xml`).
+/// `a:custGeom`: the shared DrawingML geometry reader (`dml-geom`).
 pub fn custom_geometry(el: &El) -> CustomGeometry {
-    let pt = |p: &El| {
-        (
-            p.attr("x").unwrap_or("0").to_string(),
-            p.attr("y").unwrap_or("0").to_string(),
-        )
-    };
-    let pts = |c: &El| -> Vec<(String, String)> { c.children_named(Ns::A, "pt").map(pt).collect() };
-    let paths = el
-        .child(Ns::A, "pathLst")
-        .map(|l| {
-            l.children_named(Ns::A, "path")
-                .map(|p| GeomPath {
-                    w: p.attr_i64("w"),
-                    h: p.attr_i64("h"),
-                    fill: p.attr("fill").map(str::to_string),
-                    stroke: p.attr_bool("stroke").unwrap_or(true),
-                    commands: p
-                        .children
-                        .iter()
-                        .filter_map(|c| {
-                            let ps = pts(c);
-                            Some(match c.local.as_str() {
-                                "moveTo" => {
-                                    let (x, y) = ps.first()?.clone();
-                                    PathCmd::MoveTo(x, y)
-                                }
-                                "lnTo" => {
-                                    let (x, y) = ps.first()?.clone();
-                                    PathCmd::LineTo(x, y)
-                                }
-                                "arcTo" => PathCmd::ArcTo(
-                                    c.attr("wR").unwrap_or("0").to_string(),
-                                    c.attr("hR").unwrap_or("0").to_string(),
-                                    c.attr("stAng").unwrap_or("0").to_string(),
-                                    c.attr("swAng").unwrap_or("0").to_string(),
-                                ),
-                                "quadBezTo" if ps.len() >= 2 => {
-                                    PathCmd::QuadTo([ps[0].clone(), ps[1].clone()])
-                                }
-                                "cubicBezTo" if ps.len() >= 3 => {
-                                    PathCmd::CubicTo([ps[0].clone(), ps[1].clone(), ps[2].clone()])
-                                }
-                                "close" => PathCmd::Close,
-                                _ => return None,
-                            })
-                        })
-                        .collect(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    CustomGeometry {
-        adjust: guides(el.child(Ns::A, "avLst")),
-        guides: guides(el.child(Ns::A, "gdLst")),
-        paths,
-    }
+    slide_geom::read::custom_geometry(el)
 }
 
 fn shape_style(el: &El) -> ShapeStyle {

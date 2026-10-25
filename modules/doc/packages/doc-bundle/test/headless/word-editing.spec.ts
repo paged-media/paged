@@ -143,7 +143,7 @@ describe.skipIf(!docxPresent)(
       covers("keybinding:shift+tab→media.paged.doc.command.word.listLevelUp");
       covers("keybinding:cmd+alt+c→media.paged.doc.command.word.copyFormat");
       covers("keybinding:cmd+alt+v→media.paged.doc.command.word.pasteFormat");
-      expect(WORD_KEYS).toHaveLength(24);
+      expect(WORD_KEYS).toHaveLength(26);
       for (const k of WORD_KEYS) {
         expect(bound).toContainEqual(
           expect.objectContaining({

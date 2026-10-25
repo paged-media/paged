@@ -37,6 +37,9 @@ function store(snap: Partial<WordSnapshot>): WordStore {
   const full: WordSnapshot = {
     format: {},
     hasSelection: true,
+    tabIsListLevel: false,
+    showHidden: false,
+    focusStyleBox: 0,
     styles: [],
     fonts: [],
     swatches: [],
@@ -51,6 +54,8 @@ function store(snap: Partial<WordSnapshot>): WordStore {
     refreshDocument: async () => {},
     refreshPage: async () => {},
     refreshWords: async () => {},
+    refreshShowHidden: async () => {},
+    requestStyleBoxFocus: () => {},
   };
 }
 
@@ -72,6 +77,8 @@ describe("the Word Home group (doc ADR 608)", () => {
         setFontFamily() {},
         setFontSize() {},
         setTextColor() {},
+        setHighlight() {},
+        setShading() {},
       },
     );
     const { container } = render(<Home editContext="wordDocument" />);
@@ -108,6 +115,8 @@ describe("the Word Home group (doc ADR 608)", () => {
         setFontFamily() {},
         setFontSize() {},
         setTextColor() {},
+        setHighlight() {},
+        setShading() {},
       },
     );
     const { container } = render(<Home editContext="wordDocument" />);
@@ -132,12 +141,108 @@ describe("the Word Home group (doc ADR 608)", () => {
       setFontFamily() {},
       setFontSize() {},
       setTextColor() {},
+      setHighlight() {},
+      setShading() {},
     });
     const { container } = render(<Home editContext="wordDocument" />);
     expect(
       container.querySelector<HTMLButtonElement>('[data-word-button="bold"]')!
         .disabled,
     ).toBe(true);
+  });
+});
+
+describe("the Home group's wave-1 additions (doc ADR 608 amendment 1)", () => {
+  it("lights highlight, double underline, hidden, shading, borders and Show ¶", () => {
+    const ran: WordCommandName[] = [];
+    const picked: Array<[string, string]> = [];
+    const Home = makeHomeGroup(
+      store({
+        format: {
+          characterHighlightColor: "Color/u9",
+          characterUnderlineType: "double",
+          characterHidden: true,
+          paragraphShadingOn: true,
+          paragraphRuleBelow: { on: true },
+          paragraphBorderOn: false,
+        },
+        showHidden: true,
+        swatches: [
+          { selfId: "Swatch/None", name: "$ID/None" },
+          { selfId: "Color/u9", name: "Yellow" },
+        ],
+      }),
+      {
+        run: (n) => ran.push(n),
+        applyParagraphStyle() {},
+        setFontFamily() {},
+        setFontSize() {},
+        setTextColor() {},
+        setHighlight: (id) => picked.push(["highlight", id]),
+        setShading: (id) => picked.push(["shading", id]),
+      },
+    );
+    const { container } = render(<Home editContext="wordDocument" />);
+    const button = (id: string) =>
+      container.querySelector<HTMLButtonElement>(`[data-word-button="${id}"]`)!;
+    for (const id of [
+      "highlight",
+      "doubleUnderline",
+      "hidden",
+      "shading",
+      "showHidden",
+    ]) {
+      expect(button(id).getAttribute("aria-pressed")).toBe("true");
+    }
+    const sel = (attr: string) =>
+      container.querySelector<HTMLSelectElement>(`[${attr}]`)!;
+    expect(sel("data-word-borders").value).toBe("bottom");
+    fireEvent.change(sel("data-word-borders"), { target: { value: "box" } });
+    fireEvent.change(sel("data-word-highlight"), {
+      target: { value: "Color/u9" },
+    });
+    fireEvent.change(sel("data-word-shading"), {
+      target: { value: "Color/u9" },
+    });
+    fireEvent.change(sel("data-word-multilevel"), {
+      target: { value: "listLegal" },
+    });
+    fireEvent.change(sel("data-word-styles-menu"), {
+      target: { value: "styleUpdate" },
+    });
+    fireEvent.click(button("clearParagraph"));
+    fireEvent.click(button("highlight"));
+    expect(ran).toEqual([
+      "borderBox",
+      "listLegal",
+      "styleUpdate",
+      "clearParagraph",
+      "highlight",
+    ]);
+    expect(picked).toEqual([
+      ["highlight", "Color/u9"],
+      ["shading", "Color/u9"],
+    ]);
+    // The Styles menu offers Word's four style actions.
+    expect(
+      [...sel("data-word-styles-menu").options].map((o) => o.value),
+    ).toEqual(["", "styleUpdate", "styleModify", "styleNew", "applyStyles"]);
+  });
+
+  it("Apply Styles puts the focus in the style box", () => {
+    const Home = makeHomeGroup(store({ focusStyleBox: 1 }), {
+      run() {},
+      applyParagraphStyle() {},
+      setFontFamily() {},
+      setFontSize() {},
+      setTextColor() {},
+      setHighlight() {},
+      setShading() {},
+    });
+    const { container } = render(<Home editContext="wordDocument" />);
+    expect(document.activeElement).toBe(
+      container.querySelector("[data-word-style]"),
+    );
   });
 });
 

@@ -55,6 +55,7 @@ import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { OPEN_AS_TEMPLATE_COMMANDS } from "../../../src/panels/template/open-as-template-dialog";
 import { buildBatchCommands } from "../../../src/panels/batch-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
+import { FIND_COMMANDS } from "../../../src/find/find-commands";
 import { hostCommands } from "../../../src/app/instance";
 import { AI_ASK_COMMAND } from "@paged-media/shell";
 
@@ -167,6 +168,7 @@ function tableIds(): string[] {
     ...buildBatchCommands(),
     ...OPEN_AS_TEMPLATE_COMMANDS,
     SELECT_ALL_COMMAND,
+    ...FIND_COMMANDS,
     // Registered only when an embedding host supplies the action.
     ...hostCommands({ submit: noop, close: noop, back: noop }),
   ].map((c) => c.id);
@@ -247,6 +249,7 @@ describe("the host command inventory", () => {
       "buildBatchCommands()",
       "OPEN_AS_TEMPLATE_COMMANDS",
       "SELECT_ALL_COMMAND",
+      "FIND_COMMANDS",
       "buildCoreCommandEntries()",
     ]);
   });

@@ -153,7 +153,9 @@ Query), place (drag a field header onto a frame, or right-click any property).
     and keyed as asked. A payload without `applied` loads with no snapshot (the additive
     rule); the document label's recipe never carries it (it is state, and grows with the
     data), so the labels path (`restore_from_labels`) is unchanged. Undo that reloads a session
-    version brings that version's snapshot. The Sync panel's row diff keeps its in-memory
+    version brings that version's snapshot. The snapshot is taken before the write that applies
+    the data (Lower, a field refresh, a merge), so the label that write carries names the
+    version holding it: a reopened document names the version it was saved with. The Sync panel's row diff keeps its in-memory
     snapshot only: it shows the values before, which the saved form does not keep.
   - The field markers label a frame's top-left bracket with the record its placements name
     (`DataPlacement.record`, counted from 1 as the grid and Data Merge count: `#3`, `#2 #5`

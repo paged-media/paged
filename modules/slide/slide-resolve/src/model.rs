@@ -235,6 +235,30 @@ pub struct ItemMeta {
     /// The shape's click action (`a:hlinkClick` on `p:cNvPr`).
     #[serde(default)]
     pub link: Option<pptx_core::Hyperlink>,
+    /// The `a:xfrm` flips (`flipH`, `flipV`) a live preset keeps.
+    #[serde(default)]
+    pub flip: (bool, bool),
+    /// A connector's glued ends (slide ADR 717).
+    #[serde(default)]
+    pub connector: Option<Connector>,
+}
+
+/// A connector's glued ends.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Connector {
+    pub st: Option<CxnEnd>,
+    pub end: Option<CxnEnd>,
+}
+
+/// One glued end: the shape (`cNvPr` id on the same slide), the index of
+/// its connection site, and where that site is on the page at import
+/// (`None` when the shape is not one whose sites the editor follows: a
+/// group, or a shape not drawn).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CxnEnd {
+    pub id: u32,
+    pub idx: u32,
+    pub at: Option<(f64, f64)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

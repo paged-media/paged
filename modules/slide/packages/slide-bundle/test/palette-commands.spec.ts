@@ -49,6 +49,7 @@ import {
 } from "../src/commands";
 import { contributeMenu, MENU_ENTRIES } from "../src/menu";
 import { SHOW_CMD, SHOW_MENU } from "../src/show/contribute";
+import { SHAPES_PANEL_ID } from "../src/shapes";
 import {
   DUPLICATE_SLIDE_COMMAND,
   NEW_SLIDE_COMMAND,
@@ -91,6 +92,7 @@ function recordingHost(
   const visited: string[] = [];
   const picks: unknown[] = [];
   const saves: Array<{ suggestedName: string; length: number }> = [];
+  const panels: string[] = [];
   let picked: Array<{ name: string; bytes: Uint8Array; mimeType: string }> = [];
   const host = {
     supports: (f: string) => features.includes(f),
@@ -144,6 +146,9 @@ function recordingHost(
         saves.push({ suggestedName: o.suggestedName, length: o.bytes.length });
         return true;
       },
+      openPanel(id: string) {
+        panels.push(id);
+      },
     },
   } as unknown as BundleHost;
   return {
@@ -163,6 +168,7 @@ function recordingHost(
     visited,
     picks,
     saves,
+    panels,
     pick(files: typeof picked) {
       picked = files;
     },
@@ -178,6 +184,7 @@ const ALL = [
   "objects@1",
   "shell.pickFile@1",
   "shell.saveFile@1",
+  "shell.openPanel@1",
 ];
 
 function setup(
@@ -210,6 +217,7 @@ function setup(
     objectModel: true,
     ...(opts.scopedKeys ? { scopedKeys: true } : {}),
     ...(opts.openComments ? { openComments: opts.openComments } : {}),
+    shapesPanel: SHAPES_PANEL_ID,
     async openDeck(name) {
       opened.push(name);
       return null;
@@ -243,7 +251,7 @@ describe("paged.slide palette commands", () => {
     // The file verbs in the host's File menu, the slide verbs in Slide.
     expect(s.menus.map((m) => m.path)).toEqual(MENU_ENTRIES.map(([p]) => p));
     for (const [path] of MENU_ENTRIES)
-      expect(["File", "Slide"]).toContain(path.split("/")[0]);
+      expect(["File", "Slide", "Insert"]).toContain(path.split("/")[0]);
     s.menu.dispose();
     s.handle.dispose();
     expect(s.menus).toEqual([]);
@@ -398,6 +406,23 @@ describe("paged.slide palette commands", () => {
     expect(bare.logs.some((l) => l.includes("addComment"))).toBe(true);
   });
 
+  it("Insert ▸ Shapes… opens the Shapes panel, offered where a slide is active", async () => {
+    covers("command:media.paged.slide.command.insertShapes");
+    const s = setup({ slides: 3, active: 2 });
+    expect(s.when(CMD.insertShapes)).toBe(true);
+    await s.run(CMD.insertShapes);
+    expect(s.panels).toEqual([SHAPES_PANEL_ID]);
+    // Opening the panel edits nothing.
+    expect(s.mutations).toEqual([]);
+    s.state.active = 0;
+    expect(s.when(CMD.insertShapes)).toBe(false);
+    // Without the panel door the command is not registered at all.
+    const bare = setup({
+      features: ALL.filter((f) => f !== "shell.openPanel@1"),
+    });
+    expect(bare.commands.has(CMD.insertShapes)).toBe(false);
+  });
+
   it("binds no keys on a host without the slide store", () => {
     const s = setup({ withStore: false });
     expect(s.keys).toEqual([]);
@@ -413,6 +438,7 @@ describe("paged.slide palette commands", () => {
       CMD.moveSlideDown,
       CMD.exportPptx,
       CMD.importPptx,
+      CMD.insertShapes,
     ])
       expect(s.when(id), id).toBe(true);
 
@@ -432,6 +458,7 @@ describe("paged.slide palette commands", () => {
       CMD.deleteSlide,
       CMD.moveSlideUp,
       CMD.moveSlideDown,
+      CMD.insertShapes,
     ])
       expect(s.when(id), id).toBe(false);
 
@@ -579,9 +606,10 @@ describe("paged.slide palette commands", () => {
       parts: { read: async () => null },
     } as unknown as BundleHost);
     // Every declared command but the Slide Sorter, which needs the view
-    // door this host does not have.
-    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 1);
-    expect(r.menus.length).toBe(MENU_ENTRIES.length + SHOW_MENU.length - 1);
+    // door this host does not have, and Insert ▸ Shapes…, which opens the
+    // Shapes panel and needs the panel and snapshot doors this host lacks.
+    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 2);
+    expect(r.menus.length).toBe(MENU_ENTRIES.length + SHOW_MENU.length - 2);
     h.dispose();
     expect(r.commands.size).toBe(0);
     expect(r.menus.length).toBe(0);
