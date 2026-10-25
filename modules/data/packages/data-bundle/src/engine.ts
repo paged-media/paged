@@ -251,6 +251,13 @@ export interface DataEngineLike {
   mark_rows_applied?(): void;
   /** §8: the row diff per query since `mark_rows_applied` (`QueryRowDiff[]`). */
   row_diff?(opts: unknown): unknown;
+  /** Snapshot ONE query's result as the one the document was written from
+   *  (a Data Merge). */
+  mark_query_applied?(query: string): void;
+  /** Editor ADR 291: one query's per-record status since it was written
+   *  from (`EngineRecordStatus`, or null without a result). `opts` is
+   *  `{ key?, instances? }`. */
+  record_status?(query: string, opts: unknown): unknown;
   /** Check an expression: `{ ok, error?, fields, unknownFields }`. */
   check_expression?(src: string, query?: string | null): unknown;
   /** §9.5: which records a condition fires on, `{ fires, total, error? }`. */

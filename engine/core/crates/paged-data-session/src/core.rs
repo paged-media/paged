@@ -1439,6 +1439,37 @@ impl DataSession {
         }
     }
 
+    /// Record one query's current result as the one the document was written
+    /// from — the per-query twin of [`mark_rows_applied`](Self::mark_rows_applied),
+    /// for a write that read only that query (a Data Merge, a record stepped
+    /// to). A query without a result keeps its snapshot.
+    pub fn mark_query_applied(&mut self, query: &QueryId) {
+        if let Some(r) = self.engine.result(query) {
+            self.applied_rows.insert(query.clone(), r.clone());
+        }
+    }
+
+    /// The per-record status of one query (editor ADR 291): the records new,
+    /// changed and placed, and how many placed ones are gone, since the
+    /// document was last written from it ([`crate::record_status`] says how
+    /// records are matched and what counts as placed). `None` while the query
+    /// has no result. Read-only.
+    pub fn record_status(
+        &self,
+        query: &QueryId,
+        opts: &crate::record_status::RecordStatusOptions,
+    ) -> Option<crate::record_status::RecordStatus> {
+        let current = self.engine.result(query)?;
+        Some(crate::record_status::record_status(
+            query,
+            self.engine.order_is_defined(query),
+            self.applied_rows.get(query),
+            current,
+            &self.bindings,
+            opts,
+        ))
+    }
+
     /// The §8 row diff: for every query with a result, the rows added, removed
     /// and changed since [`mark_rows_applied`](Self::mark_rows_applied), and
     /// which bindings read what changed. Read-only: it neither moves the applied
@@ -2244,11 +2275,13 @@ fn to_flow_groups(rf: &ResolvedRecordFlow) -> Vec<FlowGroup> {
                 .map(|r| FlowRecord {
                     cells: r.cells.clone(),
                     height_pt: r.height_pt,
+                    record: r.record,
                 })
                 .collect(),
             footer: g.footer.as_ref().map(|f| FlowRecord {
                 cells: f.cells.clone(),
                 height_pt: f.height_pt,
+                record: None,
             }),
         })
         .collect()
