@@ -1473,6 +1473,27 @@ export interface SvgNote {
 }
 
 /**
+ * One member of an alternates field, as the field lists it.
+ */
+export interface AlternateMember {
+    /**
+     * The item\'s name, the member\'s name in the field.
+     */
+    name: string;
+    /**
+     * The item, when a document page carries one of that name.
+     */
+    elementId: ElementId | null;
+    visible: boolean;
+}
+
+/**
+ * One part of a styled value: text, in a character style or the frame\'s
+ * own, or a break.
+ */
+export type StyledRun = { break: RunBreak } | { text: string; style?: string };
+
+/**
  * One point query. `point` is page-local pt on `page_id`.
  */
 export interface SnapPointQuery {

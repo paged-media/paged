@@ -645,37 +645,37 @@
           "name": "CanvasClient.undoLog",
           "kind": "method",
           "signature": "async undoLog(limit?: number): Promise<UndoLog>",
-          "summary": "Engine ADR 1017 — the named undo timeline: the newest `limit` undo steps oldest first and the redo steps next-redo first (all of them without a limit), with the logs' lengths and the history depth."
+          "summary": "Engine ADR 1030 — the named undo timeline: the newest `limit` undo steps oldest first and the redo steps next-redo first (all of them without a limit), with the logs' lengths and the history depth."
         },
         {
           "name": "CanvasClient.labelStep",
           "kind": "method",
           "signature": "async labelStep(appliedSeq: number, label: string): Promise<boolean>",
-          "summary": "Engine ADR 1017 — name the undo step `appliedSeq` (the step a write just made) `label`."
+          "summary": "Engine ADR 1030 — name the undo step `appliedSeq` (the step a write just made) `label`."
         },
         {
           "name": "CanvasClient.undoTo",
           "kind": "method",
           "signature": "async undoTo(appliedSeq: number): Promise<WorkerToMain>",
-          "summary": "Engine ADR 1017 — undo down to and including the step `appliedSeq`, in one round trip."
+          "summary": "Engine ADR 1030 — undo down to and including the step `appliedSeq`, in one round trip."
         },
         {
           "name": "CanvasClient.redoTo",
           "kind": "method",
           "signature": "async redoTo(appliedSeq: number): Promise<WorkerToMain>",
-          "summary": "Engine ADR 1017 — redo up to and including the step `appliedSeq`."
+          "summary": "Engine ADR 1030 — redo up to and including the step `appliedSeq`."
         },
         {
           "name": "CanvasClient.restoreTo",
           "kind": "method",
           "signature": "async restoreTo(appliedSeq: number, label?: string): Promise<WorkerToMain>",
-          "summary": "Engine ADR 1017 — make the document what it was right after the step `appliedSeq` (`0`: before the oldest step) as ONE new undo step named `label` (a snapshot restore)."
+          "summary": "Engine ADR 1030 — make the document what it was right after the step `appliedSeq` (`0`: before the oldest step) as ONE new undo step named `label` (a snapshot restore)."
         },
         {
           "name": "CanvasClient.setHistoryDepth",
           "kind": "method",
           "signature": "async setHistoryDepth(depth: number): Promise<number>",
-          "summary": "Engine ADR 1017 — keep at most `depth` undo steps (1..=10,000); the worker keeps the depth across loads."
+          "summary": "Engine ADR 1030 — keep at most `depth` undo steps (1..=10,000); the worker keeps the depth across loads."
         },
         {
           "name": "CanvasClient.setCamera",
