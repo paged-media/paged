@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// A text field written in styles (engine ADR 1016; docs/composable-editor.md
+// A text field written in styles (engine ADR 1017; docs/composable-editor.md
 // §12, decision 6): the author lists the character styles the field allows
 // and whether it takes line and paragraph breaks, and this control offers
 // exactly those. A button per allowed style puts the selected text in it (or

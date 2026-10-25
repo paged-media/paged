@@ -13743,7 +13743,7 @@ impl CanvasModel {
         };
         check_requirements(&self.scene, &requirements, &self.session_policy)
             .map_err(frame_mutation_error)?;
-        // Engine ADR 1016: a text field takes only the breaks its author
+        // Engine ADR 1017: a text field takes only the breaks its author
         // allows, typed or filled.
         if let Mutation::InsertText {
             story_id,

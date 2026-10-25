@@ -63,6 +63,11 @@ use paragraph_breaker::{Breakpoint, Item, INFINITE_PENALTY};
 
 use crate::layout::FINISHING_STRETCH;
 
+/// The penalty of a break inside a word wider than the measure, which
+/// Word's first-fit takes only when nothing else fits a line
+/// ([`SingleLineOptions::word`]). Only the Word mode's item list has it.
+pub(crate) const OVERFLOW_PENALTY: i32 = INFINITE_PENALTY - 1;
+
 /// A paragraph's Single-line Composer settings, as the caller knows them
 /// from the paragraph's attributes. [`ComposeOptions::single_line`]
 /// carries them; `None` there is the Paragraph Composer.
@@ -82,6 +87,14 @@ pub struct SingleLineOptions {
     /// floor below it, the stretch per space past which a justified line
     /// is too loose to keep when its next word could be hyphenated.
     pub max_stretch_ratio: f32,
+    /// Microsoft Word's first-fit instead of InDesign's Single-line
+    /// Composer (`Composer::WordFirstFit`, engine ADR 1016): no space or
+    /// letter is ever compressed, justified or not; a word is hyphenated
+    /// only when the line would otherwise end `zone` or more short of the
+    /// margin, at its last point that fits; and a word wider than the
+    /// measure is split where it overflows. The other fields keep their
+    /// meaning (`letter_shrink_ratio` and `max_stretch_ratio` are unused).
+    pub word: bool,
 }
 
 impl Default for SingleLineOptions {
@@ -93,6 +106,22 @@ impl Default for SingleLineOptions {
             ladder_limit: 3,
             letter_shrink_ratio: 0.0,
             max_stretch_ratio: 0.33,
+            word: false,
+        }
+    }
+}
+
+impl SingleLineOptions {
+    /// Word's defaults where the document is silent: the 0.25 in
+    /// hyphenation zone `w:hyphenationZone` falls back to, and no limit on
+    /// consecutive hyphens (`w:consecutiveHyphenLimit` absent or 0).
+    pub fn word() -> Self {
+        Self {
+            zone: (18.0 * crate::shape::ADVANCE_PRECISION) as i32,
+            ladder_limit: 0,
+            letter_shrink_ratio: 0.0,
+            max_stretch_ratio: 0.0,
+            word: true,
         }
     }
 }
@@ -111,6 +140,8 @@ pub(crate) struct SingleLineParams {
     pub hyphen_slack: i32,
     /// Stretch per space past which a justified line is too loose.
     pub loose_per_space: i32,
+    /// Word's first-fit ([`SingleLineOptions::word`]).
+    pub word: bool,
 }
 
 impl SingleLineParams {
@@ -127,10 +158,15 @@ impl SingleLineParams {
             justified,
             zone: o.zone.max(0),
             ladder_limit: o.ladder_limit,
-            letter_shrink: (space * o.letter_shrink_ratio.max(0.0)).round() as i32,
+            letter_shrink: if o.word {
+                0
+            } else {
+                (space * o.letter_shrink_ratio.max(0.0)).round() as i32
+            },
             // One em plus 7.3 pt.
             hyphen_slack: ((point_size + 7.3) * crate::shape::ADVANCE_PRECISION).round() as i32,
             loose_per_space: (space * o.max_stretch_ratio.max(0.6)).round() as i32,
+            word: o.word,
         }
     }
 }
@@ -162,6 +198,9 @@ pub(crate) fn single_line_breaks<T>(
     opts: &SingleLineParams,
 ) -> Vec<Breakpoint> {
     let mut breaks = Vec::new();
+    // Word never compresses a line to keep a word on it, justified or not
+    // (`fixtures/first-fit.word.json`, J01: 0.5 pt over 15 spaces wraps).
+    let compress = opts.justified && !opts.word;
     if items.is_empty() {
         return breaks;
     }
@@ -219,6 +258,9 @@ pub(crate) fn single_line_breaks<T>(
         let mut b: Option<Candidate> = None;
         // Hyphenation points inside the word after A.
         let mut points: Vec<Candidate> = Vec::new();
+        // Word's first-fit: the last place a word wider than the measure
+        // can be split on a line it starts.
+        let mut overflow: Option<Candidate> = None;
         let mut i = start;
         while i < items.len() {
             match &items[i] {
@@ -235,7 +277,7 @@ pub(crate) fn single_line_breaks<T>(
                     let c = Candidate {
                         index: i,
                         width,
-                        shrink: if opts.justified {
+                        shrink: if compress {
                             shrink + letters(start, i.saturating_sub(1))
                         } else {
                             0
@@ -249,7 +291,7 @@ pub(crate) fn single_line_breaks<T>(
                         a = Some(c);
                         points.clear();
                     } else {
-                        if opts.justified && fits(&c) {
+                        if compress && fits(&c) {
                             b = Some(c);
                         }
                         break;
@@ -263,12 +305,30 @@ pub(crate) fn single_line_breaks<T>(
                     penalty,
                     flagged,
                 } => {
-                    if *penalty <= -INFINITE_PENALTY || (*penalty < INFINITE_PENALTY && !*flagged) {
+                    if *penalty == OVERFLOW_PENALTY {
+                        if a.is_none() {
+                            let c = Candidate {
+                                index: i,
+                                width,
+                                shrink: 0,
+                                spaces,
+                                hyphen: false,
+                                forced: false,
+                            };
+                            if fits_natural(&c) || overflow.is_none() {
+                                overflow = Some(c);
+                            } else {
+                                break;
+                            }
+                        }
+                    } else if *penalty <= -INFINITE_PENALTY
+                        || (*penalty < INFINITE_PENALTY && !*flagged)
+                    {
                         let forced = *penalty <= -INFINITE_PENALTY;
                         let c = Candidate {
                             index: i,
                             width,
-                            shrink: if opts.justified {
+                            shrink: if compress {
                                 shrink + letters(start, i)
                             } else {
                                 0
@@ -285,7 +345,7 @@ pub(crate) fn single_line_breaks<T>(
                                 break;
                             }
                         } else {
-                            if opts.justified && fits(&c) {
+                            if compress && fits(&c) {
                                 b = Some(c);
                             }
                             break;
@@ -294,7 +354,7 @@ pub(crate) fn single_line_breaks<T>(
                         points.push(Candidate {
                             index: i,
                             width: width + pw,
-                            shrink: if opts.justified {
+                            shrink: if compress {
                                 shrink + letters(start, i)
                             } else {
                                 0
@@ -310,6 +370,7 @@ pub(crate) fn single_line_breaks<T>(
         }
 
         let chosen = choose(a, b, &points, m, opts, hyphens_in_a_row)
+            .or(overflow)
             .or(first_gap)
             .unwrap_or(Candidate {
                 index: items.len() - 1,
@@ -374,7 +435,7 @@ fn choose(
             None => true,
             Some(a) => {
                 let slack = m - a.width;
-                if opts.justified {
+                if opts.justified && !opts.word {
                     slack >= opts.hyphen_slack
                         || a.spaces == 0
                         || slack > opts.loose_per_space * a.spaces
@@ -385,7 +446,7 @@ fn choose(
             }
         };
         if trigger {
-            let pick = if opts.justified {
+            let pick = if opts.justified && !opts.word {
                 fitting
                     .iter()
                     .min_by_key(|p| (m - p.width).abs())
@@ -456,6 +517,7 @@ mod tests {
             letter_shrink: 0,
             hyphen_slack: 60,
             loose_per_space: 1000,
+            word: false,
         }
     }
 
@@ -557,6 +619,83 @@ mod tests {
         let b = single_line_breaks(&items, &[40], &[], &o);
         assert_eq!(b.len(), 4);
         assert!(b[..3].iter().all(|p| items_is_hyphen(&items, p.index)));
+    }
+
+    fn word(justified: bool, zone: i32) -> SingleLineParams {
+        SingleLineParams {
+            zone,
+            ladder_limit: 0,
+            word: true,
+            ..opts(justified)
+        }
+    }
+
+    #[test]
+    fn word_first_fit_never_compresses_a_justified_line() {
+        // The compressed line that InDesign takes at 136 (above) is not
+        // Word's: the third word goes to the next line.
+        let items = para(&[&[40], &[40], &[40]], 50);
+        let b = single_line_breaks(&items, &[136], &[], &word(true, 100));
+        assert_eq!(b.len(), 2);
+        assert_eq!(b[0].index, 3);
+        assert_eq!(b[0].ratio, 0.0);
+    }
+
+    #[test]
+    fn word_first_fit_hyphenates_by_the_zone_justified_or_not() {
+        // A = 50, measure 118: slack 68. Word 3 = 60|30, its point at
+        // 50 + 10 + 60 + 4 = 124 does not fit; 30|60 does (94).
+        let items = para(&[&[20], &[20], &[30, 60]], 3);
+        for justified in [false, true] {
+            let b = single_line_breaks(&items, &[118], &[], &word(justified, 60));
+            assert!(items_is_hyphen(&items, b[0].index), "slack 68 ≥ zone 60");
+            let b = single_line_breaks(&items, &[118], &[], &word(justified, 70));
+            assert!(!items_is_hyphen(&items, b[0].index), "slack 68 < zone 70");
+        }
+    }
+
+    #[test]
+    fn word_first_fit_splits_a_word_wider_than_the_measure_on_its_own_line() {
+        // "aa" then a word of five 30-wide pieces split by overflow
+        // penalties, measure 100: "aa" stands alone (the long word starts
+        // the next line), then 90 | 60.
+        let mut items: Vec<Item<()>> = vec![
+            Item::Box {
+                width: 20,
+                data: (),
+            },
+            Item::Glue {
+                width: SP,
+                stretch: 3,
+                shrink: 0,
+            },
+        ];
+        for k in 0..5 {
+            if k > 0 {
+                items.push(Item::Penalty {
+                    width: 0,
+                    penalty: OVERFLOW_PENALTY,
+                    flagged: false,
+                });
+            }
+            items.push(Item::Box {
+                width: 30,
+                data: (),
+            });
+        }
+        items.push(Item::Glue {
+            width: 0,
+            stretch: FINISHING_STRETCH,
+            shrink: 0,
+        });
+        items.push(Item::Penalty {
+            width: 0,
+            penalty: -INFINITE_PENALTY,
+            flagged: true,
+        });
+        let b = single_line_breaks(&items, &[100], &[], &word(false, 100));
+        let widths: Vec<i32> = b.iter().map(|b| b.width).collect();
+        assert_eq!(widths, vec![20, 90, 60]);
     }
 
     fn items_is_hyphen(items: &[Item<()>], i: usize) -> bool {

@@ -52,7 +52,7 @@ What the editor ships and what it does not, read from the code at commit `6d098e
   `tests/live-scripts.spec.ts`.
 - **Templates.** The Template panel makes fields, sets what a filler may do and previews the
   template as a filler; the form fills every kind of field, text in the styles and with the
-  breaks the author allows and alternates by a picker (ADR 276; engine ADRs 1000–1002, 1016).
+  breaks the author allows and alternates by a picker (ADR 276; engine ADRs 1000–1002, 1017).
 - **Films.** The paged.media films are recorded by a Playwright project (`films`, local only,
   [ADR 224](adr/224-films-are-recorded-by-the-editor.md)); the paged.draw film is the first.
 

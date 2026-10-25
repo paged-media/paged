@@ -61,7 +61,7 @@ pub enum TemplateFieldKind {
     Module,
     /// One of several items (alternates): the filler picks one member, the
     /// others are hidden. The field's `members` name the items (engine ADR
-    /// 1016); the field lives in the document's policy, not on an item.
+    /// 1017); the field lives in the document's policy, not on an item.
     Alternates,
 }
 
@@ -101,7 +101,7 @@ pub enum OverflowRule {
     AllowAndFlag,
 }
 
-/// Which breaks a text field's value may hold (engine ADR 1016). Each
+/// Which breaks a text field's value may hold (engine ADR 1017). Each
 /// takes the ones before it: a field that takes paragraph breaks takes
 /// line breaks too.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Tsify)]
@@ -155,7 +155,7 @@ pub struct Constraints {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fit: Option<String>,
     /// The character styles a text field's value may be written in, by
-    /// style id (`CharacterStyle/Bold`) or name (`Bold`) (engine ADR 1016).
+    /// style id (`CharacterStyle/Bold`) or name (`Bold`) (engine ADR 1017).
     /// Empty: none, the value takes the frame's own style only.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub allowed_styles: Vec<String>,
@@ -273,7 +273,7 @@ pub struct DocumentPolicy {
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub runs: BTreeMap<String, FieldDef>,
     /// Fields that choose one of several items (`alternates`), by field
-    /// name (engine ADR 1016). Their members stay ordinary items, hidden
+    /// name (engine ADR 1017). Their members stay ordinary items, hidden
     /// but the one shown, so an IDML reader sees hidden page items.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub alternates: BTreeMap<String, FieldDef>,

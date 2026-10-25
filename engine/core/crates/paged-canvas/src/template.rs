@@ -30,7 +30,7 @@
 //! before the old and the old deleted, so it takes the first run's
 //! character and paragraph style; a picture takes the field's fit.
 //!
-//! Engine ADR 1016: a text field's value may also be styled runs, in the
+//! Engine ADR 1017: a text field's value may also be styled runs, in the
 //! character styles its author allows and with the breaks the author
 //! allows, and an alternates field's value is the member shown.
 
@@ -57,7 +57,7 @@ pub enum FieldValue {
     Image { uri: String },
     /// A `visibility` field.
     Visible { visible: bool },
-    /// A `text` field's value as styled runs (engine ADR 1016): each run's
+    /// A `text` field's value as styled runs (engine ADR 1017): each run's
     /// text in one of the field's allowed character styles, or in the
     /// frame's own; break markers between them.
     Runs { runs: Vec<StyledRun> },
@@ -223,7 +223,7 @@ pub struct TemplateFieldSummary {
     pub value: Option<FieldValue>,
     /// The story overflows its frames.
     pub overset: bool,
-    /// An alternates field's members, in its order (engine ADR 1016).
+    /// An alternates field's members, in its order (engine ADR 1017).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub members: Vec<AlternateMember>,
 }
@@ -256,7 +256,7 @@ impl CanvasModel {
         Some(text)
     }
 
-    /// A text field's story as styled runs (engine ADR 1016): a run in one
+    /// A text field's story as styled runs (engine ADR 1017): a run in one
     /// of `allowed`'s styles is named by the field's own spelling of it,
     /// any other run is in the frame's style.
     fn story_runs(&self, story_id: &str, allowed: &[String]) -> Vec<StyledRun> {
@@ -580,7 +580,7 @@ impl CanvasModel {
                         problem("longer than the field allows");
                         continue;
                     }
-                    // Engine ADR 1016: only the breaks and the character
+                    // Engine ADR 1017: only the breaks and the character
                     // styles the author allows.
                     let found = TextBreaks::of_text(&flat.text);
                     if c.breaks.is_some_and(|takes| found > takes) {

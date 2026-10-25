@@ -126,7 +126,7 @@ export function tagOps(
     attribute("label", field.label),
     attribute("maxLength", field.constraints?.maxLength?.toString()),
     attribute("required", field.required ? "true" : undefined),
-    // Engine ADR 1016: what a styled text field takes.
+    // Engine ADR 1017: what a styled text field takes.
     attribute(
       "allowedStyles",
       field.constraints?.allowedStyles?.length
@@ -629,7 +629,7 @@ interface DocumentPolicy {
   [key: string]: unknown;
 }
 
-/** Engine ADR 1016: the selected items become the alternates of one field.
+/** Engine ADR 1017: the selected items become the alternates of one field.
  *  Each keeps its name (an unnamed one is named after the field), the first
  *  stays shown and the rest are hidden; one batch, one undo step. */
 function AlternatesMaker({

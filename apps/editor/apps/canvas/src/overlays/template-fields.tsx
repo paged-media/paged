@@ -137,7 +137,7 @@ function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
     const points = corners.map(([x, y]) => `${pr.x + x},${pr.y + y}`).join(" ");
     const [lx, ly] = corners[0]!;
     const label = row.field.label ?? row.field.name;
-    // Engine ADR 1016: an alternates field is outlined on the member it
+    // Engine ADR 1017: an alternates field is outlined on the member it
     // shows, and says which one.
     const active =
       row.field.kind === "alternates"

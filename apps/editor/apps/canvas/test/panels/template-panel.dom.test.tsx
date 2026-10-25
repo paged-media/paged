@@ -221,7 +221,7 @@ describe("Template panel", () => {
     expect(opened.kind).toBe("mutationApplied");
   });
 
-  // Engine ADR 1016: what a styled text field allows, and alternates made
+  // Engine ADR 1017: what a styled text field allows, and alternates made
   // from a selection.
   test("an author allows styles and breaks, and makes alternates", async () => {
     covers("panel:paged.template");

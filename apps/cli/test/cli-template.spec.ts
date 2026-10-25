@@ -370,7 +370,7 @@ describe("paged template ingest", () => {
   });
 });
 
-/** Engine ADR 1016: `headline`, a text field allowing Bold and no breaks,
+/** Engine ADR 1017: `headline`, a text field allowing Bold and no breaks,
  *  and `layout`, an alternates field over the frames `left` and `right`. */
 async function writeStyled(dir: string): Promise<string> {
   const h = await createHeadlessHost({
@@ -451,7 +451,7 @@ async function writeStyled(dir: string): Promise<string> {
   }
 }
 
-describe("paged template: styled values and alternates (engine ADR 1016)", () => {
+describe("paged template: styled values and alternates (engine ADR 1017)", () => {
   it("describes, fills and checks them", async () => {
     const styled = await writeStyled(tmp.dir);
     const listed = await cli(["template", "fields", styled, NP]);

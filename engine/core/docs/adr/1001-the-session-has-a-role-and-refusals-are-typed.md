@@ -99,4 +99,4 @@ style; the template survives IDML and `.paged` round trips) and the dispatch tes
 
 `setTemplateFields` takes `runs` (styled text) and `alternate` values, and a `templateFields`
 row of an alternates field lists its `members`; typed text holding a break its field does not
-take is refused at the text door: [ADR 1016](1016-styled-field-values-and-alternates.md).
+take is refused at the text door: [ADR 1017](1017-styled-field-values-and-alternates.md).

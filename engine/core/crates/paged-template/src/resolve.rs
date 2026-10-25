@@ -46,7 +46,7 @@ pub struct PolicyIndex {
     /// its story's text.
     run_grants: HashMap<String, PermSet>,
     /// The items that are members of an alternates field, by `Self`, and
-    /// the field's name (engine ADR 1016): showing or hiding them is
+    /// the field's name (engine ADR 1017): showing or hiding them is
     /// filling the field.
     members: HashMap<String, String>,
 }
@@ -273,7 +273,7 @@ pub fn alternate_members(doc: &Document, field: &FieldDef) -> Vec<(String, Optio
 
 /// The character style `wanted` names (by id or name), as its
 /// `CharacterStyle/…` id, when `allowed` lists it (by id or name) and the
-/// document defines it (engine ADR 1016).
+/// document defines it (engine ADR 1017).
 pub fn allowed_character_style(doc: &Document, allowed: &[String], wanted: &str) -> Option<String> {
     let matches = |key: &str, def: &paged_model::CharacterStyleDef| {
         def.self_id == key

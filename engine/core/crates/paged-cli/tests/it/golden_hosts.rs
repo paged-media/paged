@@ -664,7 +664,7 @@ fn template_fixture(tag: &str) -> Fx {
     fx
 }
 
-/// Engine ADR 1016: a text field written in the styles and breaks its
+/// Engine ADR 1017: a text field written in the styles and breaks its
 /// author allows, and an alternates field choosing one of two frames.
 const STYLED_AUTHOR: &str = r#"
 const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);

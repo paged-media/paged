@@ -444,7 +444,7 @@ the author grants deliberately. That keeps the design intent intact for most tem
 where the end user should not pick colours or point sizes.
 
 **Lightly styled text** (decided on 2026-10-24, engine
-[ADR 1016](../../../engine/core/docs/adr/1016-styled-field-values-and-alternates.md)): the author
+[ADR 1017](../../../engine/core/docs/adr/1017-styled-field-values-and-alternates.md)): the author
 lists the character styles a `text` field allows (`constraints.allowedStyles`, for example Bold
 and Italic) and the breaks it takes (`constraints.breaks`: `none`, `line` or `paragraph`). The
 value is then a list of runs, `[{ text, style? } | { break }]`; a run without a style keeps the
@@ -452,7 +452,7 @@ frame's own. The form offers a button per allowed style and Enter only where bre
 and the engine refuses any other style or break, whoever sends it. Such a field grants applying
 its allowed character styles and nothing else of `text.style`.
 
-**Alternates** (decided on 2026-10-24, ADR 1016): an `alternates` field groups variant frames
+**Alternates** (decided on 2026-10-24, ADR 1017): an `alternates` field groups variant frames
 under one choice. It lives in the document's policy and names its members by item name; the
 filler picks one, the engine shows it and hides the others in one undo step, and each member is
 granted being shown or hidden and nothing more. In IDML the members stay ordinary page items,
@@ -963,13 +963,13 @@ Taken on 2026-10-21, with the implementation plan
    template notice ([ADR 293](adr/293-a-template-opened-as-a-document-says-so.md)).
 5. **Permission granularity in text.** A placeholder run is the range mechanism: a field limited
    to part of a story is a placeholder run (from XML tags or Make field on a selection). No
-   second mechanism. No code was needed; engine ADR 1016 records it.
+   second mechanism. No code was needed; engine ADR 1017 records it.
 6. **Field values with style.** The author lists the character styles a text field allows (for
    example Bold and Italic) and whether it takes line and paragraph breaks. The form offers
    exactly those; the value is written as runs in the allowed styles, and nothing else is
-   accepted. Built: engine ADR 1016, §7.3.
+   accepted. Built: engine ADR 1017, §7.3.
 7. **Choice fields over frames.** Authors can group variant frames (alternates) under one
    choice field; the filler picks one and the others are hidden. Alternates round-trip as
-   hidden items in IDML. Built: engine ADR 1016, §7.3.
+   hidden items in IDML. Built: engine ADR 1017, §7.3.
 8. **Licensing for embedders.** It follows the repository's licence terms and is outside the
    scope of this paper.

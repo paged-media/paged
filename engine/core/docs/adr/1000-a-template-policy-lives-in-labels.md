@@ -121,4 +121,4 @@ Evidence: `crates/paged-mutate/tests/it/template_policy.rs`
 A text field may list the character styles and the breaks its value takes, and a character-scope
 `ApplyStyle` in an allowed style needs only `text.edit` on it; an `alternates` field in the
 document's policy grants each member `item.visibility`, and a member's name is the author's:
-[ADR 1016](1016-styled-field-values-and-alternates.md).
+[ADR 1017](1017-styled-field-values-and-alternates.md).

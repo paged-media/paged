@@ -224,7 +224,7 @@ export interface TemplateFieldSummary {
      */
     overset: boolean;
     /**
-     * An alternates field\'s members, in its order (engine ADR 1016).
+     * An alternates field\'s members, in its order (engine ADR 1017).
      */
     members?: AlternateMember[];
 }
@@ -2586,7 +2586,7 @@ export interface DocumentPolicy {
     runs?: Map<string, FieldDef>;
     /**
      * Fields that choose one of several items (`alternates`), by field
-     * name (engine ADR 1016). Their members stay ordinary items, hidden
+     * name (engine ADR 1017). Their members stay ordinary items, hidden
      * but the one shown, so an IDML reader sees hidden page items.
      */
     alternates?: Map<string, FieldDef>;
@@ -3059,7 +3059,7 @@ export interface Constraints {
     fit?: string;
     /**
      * The character styles a text field\'s value may be written in, by
-     * style id (`CharacterStyle/Bold`) or name (`Bold`) (engine ADR 1016).
+     * style id (`CharacterStyle/Bold`) or name (`Bold`) (engine ADR 1017).
      * Empty: none, the value takes the frame\'s own style only.
      */
     allowedStyles?: string[];
@@ -3169,7 +3169,7 @@ export interface OversetAt {
 }
 
 /**
- * Which breaks a text field\'s value may hold (engine ADR 1016). Each
+ * Which breaks a text field\'s value may hold (engine ADR 1017). Each
  * takes the ones before it: a field that takes paragraph breaks takes
  * line breaks too.
  */

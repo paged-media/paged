@@ -168,7 +168,7 @@ async function fill(
       return ref ? [[r.field.name, ref] as const] : [];
     }),
   );
-  // Engine ADR 1016: a text given to an alternates field names the member
+  // Engine ADR 1017: a text given to an alternates field names the member
   // to show.
   const alternates = new Set(
     rows.filter((r) => r.field.kind === "alternates").map((r) => r.field.name),
@@ -224,7 +224,7 @@ async function fill(
     });
 }
 
-/** What a field takes beyond its kind (engine ADR 1016): a text field's
+/** What a field takes beyond its kind (engine ADR 1017): a text field's
  *  allowed styles and breaks, an alternates field's members. */
 function describe(r: FieldRow): string {
   const c = r.field.constraints ?? {};
@@ -262,7 +262,7 @@ function readValues(cwd: string, arg: string): FieldValue[] {
     );
   }
   // `{ "name": "text" | boolean | runs | value }` is accepted beside the
-  // wire's list; a list is a styled value's runs (engine ADR 1016).
+  // wire's list; a list is a styled value's runs (engine ADR 1017).
   if (Array.isArray(parsed)) return parsed as FieldValue[];
   if (parsed && typeof parsed === "object") {
     return Object.entries(parsed as Record<string, unknown>).map(

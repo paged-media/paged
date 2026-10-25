@@ -80,7 +80,7 @@ pub fn fields(doc: &Path, opts: &DocumentOptions, json_out: bool) -> Result<()> 
     Ok(())
 }
 
-/// What a field takes beyond its kind (engine ADR 1016): a text field's
+/// What a field takes beyond its kind (engine ADR 1017): a text field's
 /// allowed styles and breaks, an alternates field's members.
 fn describe(field: &paged_template::FieldDef) -> String {
     let c = &field.constraints;
@@ -132,7 +132,7 @@ pub fn read_values(arg: &str) -> Result<Vec<TemplateFieldValue>> {
 }
 
 /// `values` as their fields take them: a text given to an alternates field
-/// names the member to show (engine ADR 1016).
+/// names the member to show (engine ADR 1017).
 fn as_fields_take(
     session: &Session,
     values: Vec<TemplateFieldValue>,

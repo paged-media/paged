@@ -433,7 +433,7 @@ fn normalize_paragraph_breaks(text: &str) -> std::borrow::Cow<'_, str> {
 }
 
 /// The content length `text` takes once inserted: its UTF-8 bytes, each
-/// paragraph return one `\n` (template fields, engine ADR 1016).
+/// paragraph return one `\n` (template fields, engine ADR 1017).
 pub(crate) fn normalized_len(text: &str) -> u32 {
     normalize_paragraph_breaks(text).len() as u32
 }

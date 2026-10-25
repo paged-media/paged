@@ -159,7 +159,7 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
   const label = field.label ?? field.name;
   const max = field.constraints?.maxLength ?? null;
   const text = draft ?? current;
-  // Engine ADR 1016: a text field with allowed styles or breaks is written
+  // Engine ADR 1017: a text field with allowed styles or breaks is written
   // as styled runs, through the control that offers exactly those.
   const allowedStyles = field.constraints?.allowedStyles ?? [];
   const breaks = (field.constraints?.breaks ?? null) as Breaks | null;

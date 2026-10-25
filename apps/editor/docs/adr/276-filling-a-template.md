@@ -75,7 +75,7 @@ restate both. The Consequences above are updated accordingly.
 ## Amendment — 2026-10-24: styled text and alternates
 
 A text field whose author listed character styles or breaks (engine
-[ADR 1016](../../../../engine/core/docs/adr/1016-styled-field-values-and-alternates.md)) is
+[ADR 1017](../../../../engine/core/docs/adr/1017-styled-field-values-and-alternates.md)) is
 filled through a styled-text control (`apps/canvas/src/panels/template/styled-text.tsx`): a
 button per allowed style, Enter for a paragraph break and Shift+Enter for a line break only when
 the field takes them, and the value written as runs when the control loses focus. An

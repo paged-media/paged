@@ -207,7 +207,7 @@ describe("Template form", () => {
     }
   });
 
-  // Engine ADR 1016: a text field written in the styles its author allows.
+  // Engine ADR 1017: a text field written in the styles its author allows.
   test("a styled field offers exactly its styles and writes runs", async () => {
     covers("panel:paged.template.form");
     const h = await mount();
@@ -288,7 +288,7 @@ describe("Template form", () => {
     expect(h.root.querySelector("[data-field-problem]")).toBeNull();
   });
 
-  // Engine ADR 1016: an alternates field shows the member the filler picks.
+  // Engine ADR 1017: an alternates field shows the member the filler picks.
   test("an alternates field picks one member in one step", async () => {
     covers("panel:paged.template.form");
     const h = await mount();

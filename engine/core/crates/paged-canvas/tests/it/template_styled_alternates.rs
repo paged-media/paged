@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1016: a text field's value in the character styles and with
+//! Engine ADR 1017: a text field's value in the character styles and with
 //! the breaks its author allows, and nothing else; an alternates field whose
 //! filler shows one member and hides the rest, in one undo step, granted
 //! nothing but that; both through IDML export and import.

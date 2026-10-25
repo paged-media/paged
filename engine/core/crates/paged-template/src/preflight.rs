@@ -253,7 +253,7 @@ pub fn preflight(doc: &Document) -> Vec<TemplateFinding> {
             }
         }
     }
-    // Engine ADR 1016: a text field's allowed styles, and alternates.
+    // Engine ADR 1017: a text field's allowed styles, and alternates.
     for (target, field) in index.fields() {
         let name = field.name.trim();
         let styles = &field.constraints.allowed_styles;

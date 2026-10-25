@@ -168,6 +168,9 @@ export interface TableReplace {
   clear?: Mutation[];
   /** Told where the table now is, for the next update in place. */
   onTable?: (at: LoweredTableAt) => void;
+  /** Put the table in this frame's story (a table dropped on a text frame,
+   *  editor ADR 291) instead of a fresh frame. */
+  into?: { frame: ElementId; storyId: string };
 }
 
 /** Commit a lowered dynamic table to a fresh page frame as ONE batch — one
@@ -219,6 +222,29 @@ export async function commitLoweredTable(
     host.log.warn(
       `lower: replacing the table in place was refused (${String(errorText(outcome.error))}) — placing it afresh`,
     );
+  }
+  if (replace?.into) {
+    const { frame, storyId } = replace.into;
+    const ops: Mutation[] = [
+      ...(replace.clear ?? []),
+      tableInsertMutation(storyId, tableInsertSpec(table)),
+      { op: "bindCreated", args: { handle: "table" } } as Mutation,
+      ...tableCellInserts(table, storyId, "$h:table"),
+      bindingMetadata(frame, envelopeEarly),
+    ];
+    const outcome = await host.document.mutate({ op: "batch", args: { ops } });
+    if (!outcome.applied) {
+      host.log.warn(
+        `lower: the table was not placed in its frame (${String(errorText(outcome.error))})`,
+      );
+      return null;
+    }
+    const t = (outcome.minted ?? []).find(
+      (m) => m.element.kind === "table",
+    )?.element;
+    const id = t ? tableIdOf(t) : "";
+    if (id) replace.onTable?.({ frame, storyId, tableId: id });
+    return frame.id as string;
   }
   const pageId = await pageFor(host, ctx);
   if (!pageId) {
@@ -585,6 +611,45 @@ export async function commitLoweredVariable(
     `variable "${variable.target}" placed as field "${bindingKey}" in story ${storyId}`,
   );
   return { storyId, offset };
+}
+
+/** Editor ADR 291, a record dropped on a design: each `<<field>>` span of
+ *  the stories becomes a variable carrying its value, as ONE batch (one
+ *  undo step). Spans go back to front per story, so a replacement moves no
+ *  offset a later one uses. False when the host refused the batch. */
+export async function commitSpanVariables(
+  host: BundleHost,
+  spans: readonly {
+    storyId: string;
+    start: number;
+    end: number;
+    key: string;
+    value: string | null;
+  }[],
+): Promise<boolean> {
+  if (!host.supports("document.placeholders@1") || spans.length === 0)
+    return false;
+  const carrier = await variableCarrier(host);
+  const ordered = [...spans].sort((a, b) =>
+    a.storyId === b.storyId
+      ? b.start - a.start
+      : a.storyId.localeCompare(b.storyId),
+  );
+  const ops: Mutation[] = [];
+  for (const s of ordered)
+    ops.push(
+      {
+        op: "deleteRange",
+        args: { storyId: s.storyId, start: s.start, end: s.end },
+      },
+      ...placeVariableOps(carrier, s.storyId, s.start, s.key, s.value),
+    );
+  const outcome = await host.document.mutate({ op: "batch", args: { ops } });
+  if (!outcome.applied)
+    host.log.warn(
+      `record: the fields were not placed (${String(errorText(outcome.error))})`,
+    );
+  return outcome.applied;
 }
 
 /** Place every collected variable of one command as ONE batch — one rebuild

@@ -120,6 +120,15 @@ export interface PersistedTargets {
   rule: Record<string, { query: string; target: RuleTarget }>;
   /** The element each table / record-flow binding was last lowered into. */
   lowered: Record<string, ElementId>;
+  /** Editor ADR 291: the text frame (and story) a dropped table was placed
+   *  in, with its table when known. Absent when there is none. */
+  tableIn?: Record<
+    string,
+    { frame: ElementId; storyId: string; tableId?: string }
+  >;
+  /** Editor ADR 291: the record a binding placed by a dropped record shows
+   *  (0-based). Absent when there is none. */
+  record?: Record<string, number>;
 }
 
 export interface PersistedSession {

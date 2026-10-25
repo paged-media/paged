@@ -1,4 +1,4 @@
-# ADR 1016 — A text field takes the styles and breaks its author allows; alternates choose a frame
+# ADR 1017 — A text field takes the styles and breaks its author allows; alternates choose a frame
 
 - **Status:** Accepted 2026-10-24.
 - **Scope:** `crates/paged-template` (`Constraints::allowed_styles`, `Constraints::breaks`,

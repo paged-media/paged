@@ -61,7 +61,7 @@ pub struct Requirement {
     /// Needs `template.author` as well when the target item is a field
     /// (renaming a field's item renames the field).
     pub also_author_if_field: bool,
-    /// A character style applied to a story range (engine ADR 1016): `text.edit`
+    /// A character style applied to a story range (engine ADR 1017): `text.edit`
     /// suffices when the story's text field allows this style, since
     /// writing a value in its allowed styles is filling the field.
     pub or_allowed_style: Option<String>,
@@ -440,7 +440,7 @@ fn refused(r: &Requirement, permission: Permission) -> OperationError {
 }
 
 /// Refuses text typed into a text field that holds a break its field does
-/// not take (engine ADR 1016), for a session the policy binds. The
+/// not take (engine ADR 1017), for a session the policy binds. The
 /// refusal is `NotPermitted` of `text.edit`, its target naming the break.
 pub fn check_breaks(
     doc: &Document,

@@ -43,9 +43,9 @@ use crate::policy::{Constraints, FieldDef, TemplateFieldKind};
 pub const LABEL_ATTRIBUTE: &str = "label";
 pub const MAX_LENGTH_ATTRIBUTE: &str = "maxLength";
 pub const REQUIRED_ATTRIBUTE: &str = "required";
-/// A text field's allowed character styles, comma-separated (engine ADR 1016).
+/// A text field's allowed character styles, comma-separated (engine ADR 1017).
 pub const ALLOWED_STYLES_ATTRIBUTE: &str = "allowedStyles";
-/// A text field's breaks: `none`, `line` or `paragraph` (engine ADR 1016).
+/// A text field's breaks: `none`, `line` or `paragraph` (engine ADR 1017).
 pub const BREAKS_ATTRIBUTE: &str = "breaks";
 
 /// What else besides XML tags becomes a field.
