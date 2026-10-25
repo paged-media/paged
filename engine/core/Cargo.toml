@@ -11,6 +11,7 @@ members = [
     "crates/paged-pixel",
     "crates/paged-psd",
     "crates/paged-raster",
+    "crates/paged-sniff",
     "crates/paged-compose",
     "crates/paged-gpu",
     "crates/paged-renderer",
@@ -111,6 +112,15 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # jpeg, lzw), so the graph keeps one build of the crate.
 tiff = { version = "0.11", default-features = false, features = ["deflate", "fax", "jpeg", "lzw"] }
 base64 = "0.23"
+# paged-raster's JPEG decode keeps a CMYK/YCCK JPEG's inks (zune-jpeg, the
+# decoder `image` itself uses, so the graph keeps one build of it), its WebP
+# encode writes ICC, EXIF and XMP (image-webp, `image`'s WebP crate), and its
+# sRGB profile is moxcms's (`image`'s CMS crate). None is a new crate in the
+# tree (ADR 1005, amendment of 2026-10-25).
+zune-jpeg = "0.5"
+zune-core = "0.5"
+image-webp = "0.2"
+moxcms = "0.8"
 # paged-raster's optional decoders (ADR 1005, amendment of 2026-10-24).
 # AV1 for AVIF: rav1d (BSD-2-Clause), the Rust port of dav1d, in the build
 # published as `sqzer-rav1d`, upstream main with the safe Rust API and a

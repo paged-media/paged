@@ -224,6 +224,7 @@ impl<'b> Page<'b> {
             icc: self.blob(ICC),
             xmp: self.blob(XMP),
             iptc: self.blob(IPTC),
+            exif: None,
             photoshop_irb: self.blob(PHOTOSHOP),
             has_layers: self
                 .header

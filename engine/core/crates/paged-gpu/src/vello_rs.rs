@@ -222,25 +222,13 @@ impl PathRasterizer for VelloRasterizer {
 /// Materialise an RGBA8 buffer from encoded image bytes at the
 /// dimensions the build phase recorded. Used by the wasm32 lazy
 /// path (`DecodedImage.rgba` empty, `encoded` populated) so peak
-/// heap stays at one decoded image at a time. Mirror of `vcpu.rs`'s
-/// helper of the same name; duplicated so this lane builds without the
-/// `cpu` feature.
+/// heap stays at one decoded image at a time. `vcpu.rs` has a helper of
+/// the same name so each lane builds without the other's feature; both
+/// are `paged_raster::decode_rgba8_at`.
 fn decode_image_for_render(bytes: &[u8], expected_w: u32, expected_h: u32) -> Option<Vec<u8>> {
-    // paged-raster: a TIFF decodes (capped at the recorded size) as the
-    // renderer's build-time decode does; every other format is `image`'s
-    // decode and RGBA8 conversion, unchanged.
-    let decoded = paged_raster::decode_rgba8(bytes, Some(expected_w.max(expected_h))).ok()?;
-    if decoded.width == expected_w && decoded.height == expected_h {
-        return Some(decoded.data);
-    }
-    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, decoded.data)?;
-    let raw = image::imageops::resize(
-        &img,
-        expected_w,
-        expected_h,
-        image::imageops::FilterType::Triangle,
-    );
-    Some(raw.into_raw())
+    // One function for both lanes: paged-raster decodes (a TIFF or PSD
+    // capped at the recorded size) and resamples to it.
+    paged_raster::decode_rgba8_at(bytes, expected_w, expected_h)
 }
 
 /// Decoded image pixels kept across scene builds, keyed by the identity
