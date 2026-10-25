@@ -365,7 +365,7 @@ fn huge_coordinates_do_not_break_the_kernels__feat__frames_paths_geometry_kernel
 
 #[test]
 fn compound_offsets_are_monotone__feat__frames_paths_geometry_kernels_v2() {
-    let mut r = Lcg(0x0ff5_e7);
+    let mut r = Lcg(0x000f_f5e7);
     for case in 0..cases(120) {
         // A ring (a box with a hole) plus, sometimes, a second box.
         let (x0, y0) = (r.coord(0.0, 200.0), r.coord(0.0, 200.0));

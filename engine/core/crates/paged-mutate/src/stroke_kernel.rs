@@ -367,7 +367,7 @@ fn offset_compound(
     let max_depth = depth.iter().copied().max().unwrap_or(0);
     let mut by_depth: Vec<Vec<(Vec<PathAnchor>, Vec<usize>)>> = vec![Vec::new(); max_depth + 1];
     for (i, c) in contours.iter().enumerate() {
-        let d = if depth[i] % 2 == 0 { delta } else { -delta };
+        let d = if depth[i].is_multiple_of(2) { delta } else { -delta };
         if let Some((a, s, _)) = offset_closed_path(c, &[0], &[false], d, join, miter_limit) {
             by_depth[depth[i]].push((a, s));
         }
