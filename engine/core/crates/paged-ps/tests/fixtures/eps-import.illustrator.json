@@ -1,0 +1,214 @@
+{
+  "fixture": "eps-import",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/eps-import.jsx",
+    "script_sha256": "f1b514178f0cb99a1082f4ae5e9623c4378e2257665d344b0cd610e003aaea49",
+    "runner": "scripts/illustrator/run-probe.sh",
+    "recorded_at": "2026-10-24T18:48:17.928Z",
+    "host_os": "macOS 26.4",
+    "ruler_units": "RulerUnits.Points",
+    "artboard_rect_app": [
+      0,
+      792,
+      612,
+      0
+    ]
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down (mapped in and out of Illustrator's Y-up document coordinates through the scratch artboard's top-left corner)",
+  "operation": "the EPS written to Folder.temp, doc.placedItems.add() with .file set, positioned at the artboard's top-left, then placed.embed() (Illustrator interprets the PostScript)",
+  "cases": [
+    {
+      "id": "rgb-rect",
+      "parameters": {"eps":"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n%%EndComments\n1 0 0 setrgbcolor 10 10 80 30 rectfill\nshowpage\n%%EOF\n"},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 2400.000458,
+            "bounds": [9.999969,60,89.999985,90],
+            "winding": "cw",
+            "areaSignedApp": 2400.000458,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[9.999969,90],"left":[9.999969,90],"right":[9.999969,90]},
+              {"anchor":[9.999969,60],"left":[9.999969,60],"right":[9.999969,60]},
+              {"anchor":[89.999985,60],"left":[89.999985,60],"right":[89.999985,60]},
+              {"anchor":[89.999985,90],"left":[89.999985,90],"right":[89.999985,90]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "cmyk-triangle",
+      "parameters": {"eps":"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n%%EndComments\n0 1 1 0 setcmykcolor newpath 20 20 moveto 120 20 lineto 70 90 lineto closepath fill\nshowpage\n%%EOF\n"},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 3500,
+            "bounds": [20,9.999969,120,79.999969],
+            "winding": "ccw",
+            "areaSignedApp": -3500,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [227,6,19],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[20,79.999969],"left":[20,79.999969],"right":[20,79.999969]},
+              {"anchor":[120,79.999969],"left":[120,79.999969],"right":[120,79.999969]},
+              {"anchor":[69.999985,9.999969],"left":[69.999985,9.999969],"right":[69.999985,9.999969]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "circle-arc",
+      "parameters": {"eps":"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n%%EndComments\n0 0 1 setrgbcolor newpath 100 50 40 0 360 arc closepath fill\nshowpage\n%%EOF\n"},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 5027.163475,
+            "bounds": [60.080002,10.079987,140.079987,90.079987],
+            "winding": "ccw",
+            "areaSignedApp": -5027.163475,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,255],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[140.079987,50.079987],"left":[140.079987,50.079987],"right":[140.079987,27.999969]},
+              {"anchor":[100.079987,10.079987],"left":[122.159988,10.079987],"right":[77.999985,10.079987]},
+              {"anchor":[60.080002,50.079987],"left":[60.080002,27.999969],"right":[60.080002,72.159973]},
+              {"anchor":[100.079987,90.079987],"left":[77.999985,90.079987],"right":[122.159988,90.079987]},
+              {"anchor":[140.079987,50.079987],"left":[140.079987,72.159973],"right":[140.079987,50.079987]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "evenodd-ring",
+      "parameters": {"eps":"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n%%EndComments\n0 setgray newpath 20 10 160 80 rectfill 1 setgray newpath 30 20 moveto 170 20 lineto 170 80 lineto 30 80 lineto closepath 60 35 moveto 140 35 lineto 140 65 lineto 60 65 lineto closepath eofill\nshowpage\n%%EOF\n"},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 2399.997559,
+            "bounds": [59.999985,35,139.999985,64.999969],
+            "winding": "ccw",
+            "areaSignedApp": -2399.997559,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "evenodd": true,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[59.999985,64.999969],"left":[59.999985,64.999969],"right":[59.999985,64.999969]},
+              {"anchor":[139.999985,64.999969],"left":[139.999985,64.999969],"right":[139.999985,64.999969]},
+              {"anchor":[139.999985,35],"left":[139.999985,35],"right":[139.999985,35]},
+              {"anchor":[59.999985,35],"left":[59.999985,35],"right":[59.999985,35]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 8399.994812,
+            "bounds": [30,20,169.999985,79.999969],
+            "winding": "ccw",
+            "areaSignedApp": -8399.994812,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "evenodd": true,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[30,79.999969],"left":[30,79.999969],"right":[30,79.999969]},
+              {"anchor":[169.999985,79.999969],"left":[169.999985,79.999969],"right":[169.999985,79.999969]},
+              {"anchor":[169.999985,20],"left":[169.999985,20],"right":[169.999985,20]},
+              {"anchor":[30,20],"left":[30,20],"right":[30,20]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 12800.004883,
+            "bounds": [20,9.999969,180,90],
+            "winding": "cw",
+            "areaSignedApp": 12800.004883,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[20,90],"left":[20,90],"right":[20,90]},
+              {"anchor":[20,9.999969],"left":[20,9.999969],"right":[20,9.999969]},
+              {"anchor":[180,9.999969],"left":[180,9.999969],"right":[180,9.999969]},
+              {"anchor":[180,90],"left":[180,90],"right":[180,90]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "transformed-curve",
+      "parameters": {"eps":"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n%%EndComments\n0 0.5 0 setrgbcolor gsave 100 50 translate 30 rotate 2 1 scale newpath -20 -10 moveto 0 30 20 -30 40 10 curveto closepath fill grestore\nshowpage\n%%EOF\n"},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 0.000793,
+            "bounds": [70.358963,1.339722,164.282013,78.660217],
+            "winding": "cw",
+            "areaSignedApp": 0.000793,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,128,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[70.358963,78.660217],"left":[70.358963,78.660217],"right":[84.999985,24.019196]},
+              {"anchor":[164.282013,1.339722],"left":[149.640991,55.980713],"right":[164.282013,1.339722]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "stroked-line",
+      "parameters": {"eps":"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n%%EndComments\n0 0 0 setrgbcolor 4 setlinewidth newpath 20 20 moveto 180 80 lineto stroke\nshowpage\n%%EOF\n"},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": false,
+            "area": 0,
+            "bounds": [20,20,180,79.999969],
+            "winding": "none",
+            "areaSignedApp": 0,
+            "polarity": "positive",
+            "filled": false,
+            "stroked": true,
+            "strokeWidth": 4,
+            "stroke": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[20,79.999969],"left":[20,79.999969],"right":[20,79.999969]},
+              {"anchor":[180,20],"left":[180,20],"right":[180,20]}
+            ]
+          }
+      ] }
+    }
+  ]
+}

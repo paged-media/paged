@@ -61,6 +61,7 @@ mod image_convert;
 mod image_decode;
 mod images;
 mod keeps;
+mod placed_eps;
 mod placed_pdf;
 mod placed_svg;
 mod resume;

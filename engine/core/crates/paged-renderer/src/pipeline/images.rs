@@ -309,6 +309,11 @@ pub(super) fn emit_rectangle_image(
                     .compose(&Transform::scale(1.0 / img_w, 1.0 / img_h));
                 super::placed_svg::draw(art, t, &mut page.list);
             }
+            Placed::Eps(art) => {
+                let t = Transform::for_rect_in(r, outer)
+                    .compose(&Transform::scale(1.0 / img_w, 1.0 / img_h));
+                super::placed_eps::draw(art, t, &mut page.list);
+            }
         }
     }
 }
@@ -780,6 +785,8 @@ fn emit_image_under_clip(
         }
         // So do an SVG's user units, as its raster's pixels would.
         Placed::Svg(art) => super::placed_svg::draw(art, image_transform, list),
+        // And an EPS's points (engine ADR 1016).
+        Placed::Eps(art) => super::placed_eps::draw(art, image_transform, list),
     }
     if extra_clip.is_some() {
         list.push(DisplayCommand::PopClip(Transform::IDENTITY));
@@ -816,6 +823,8 @@ enum Placed {
     Raster(paged_compose::ImageId),
     Pdf(std::sync::Arc<[u8]>, super::placed_pdf::PdfView),
     Svg(std::sync::Arc<super::placed_svg::SvgArt>),
+    /// An EPS drawn from its PostScript (engine ADR 1016).
+    Eps(std::sync::Arc<super::placed_eps::EpsArt>),
 }
 
 /// A placed PDF (an Illustrator `.ai` is one) resolved to its page box,
@@ -887,10 +896,45 @@ fn placed_svg(
     ))
 }
 
-/// The vector SVG a `decoded_cache` entry stands for: an encoded-only SVG
-/// entry, as [`placed_svg`] leaves one.
+/// A placed EPS interpreted to vectors, resolved to its bounding box, or
+/// `None` for bytes that are not PostScript or a program the interpreter
+/// does not run to its end (the raster path, and with it the EPS's
+/// preview, then takes it). Remembered encoded-only, as an SVG is.
+fn placed_eps(
+    bytes: &[u8],
+    key: &str,
+    options: &PipelineOptions,
+    decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+) -> Option<ImageResolution> {
+    if !super::placed_eps::is_eps(bytes) {
+        return None;
+    }
+    let art = super::placed_eps::prepare(bytes, options)?;
+    let (w, h) = (art.width, art.height);
+    if !(w > 0.0 && h > 0.0) {
+        return None;
+    }
+    decoded_cache
+        .entry(key.to_string())
+        .or_insert_with(|| paged_compose::DecodedImage {
+            width: w.ceil() as u32,
+            height: h.ceil() as u32,
+            encoded: bytes::Bytes::copy_from_slice(bytes),
+            rgba: bytes::Bytes::new(),
+            icc: None,
+        });
+    Some(ImageResolution::Resolved(
+        Placed::Eps(std::sync::Arc::new(art)),
+        w,
+        h,
+    ))
+}
+
+/// The vector SVG (or EPS) a `decoded_cache` entry stands for: an
+/// encoded-only entry, as [`placed_svg`] and [`placed_eps`] leave one.
 fn cached_svg(
     key: &str,
+    options: Option<&PipelineOptions>,
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
 ) -> Option<ImageResolution> {
     let d = decoded_cache.get(key)?;
@@ -901,6 +945,9 @@ fn cached_svg(
     // A linked PDF is remembered the same way (see [`resolve_image_id`]).
     if let Some(pdf) = placed_pdf(&encoded) {
         return Some(pdf);
+    }
+    if let Some(eps) = options.and_then(|o| placed_eps(&encoded, key, o, decoded_cache)) {
+        return Some(eps);
     }
     placed_svg(&encoded, key, decoded_cache)
 }
@@ -915,7 +962,7 @@ fn resolve_image_id(
     let id = match page_image_cache.get(uri).copied() {
         Some(id) => id,
         None => {
-            if let Some(svg) = cached_svg(uri, decoded_cache) {
+            if let Some(svg) = cached_svg(uri, Some(options), decoded_cache) {
                 return svg;
             }
             let decoded = if let Some(d) = decoded_cache.get(uri) {
@@ -955,6 +1002,11 @@ fn resolve_image_id(
                 }
                 if let Some(svg) = placed_svg(bytes.as_ref(), uri, decoded_cache) {
                     return svg;
+                }
+                // An EPS draws from its PostScript when the interpreter
+                // runs it; its preview (the raster decode) otherwise.
+                if let Some(eps) = placed_eps(bytes.as_ref(), uri, options, decoded_cache) {
+                    return eps;
                 }
                 let Some(d) = decode_image_bytes(bytes.as_ref()) else {
                     tracing::warn!(uri, "image decode failed; skipping");
@@ -1032,7 +1084,7 @@ fn resolve_inline_image_bytes(
     let id = match page_image_cache.get(&key).copied() {
         Some(id) => id,
         None => {
-            if let Some(svg) = cached_svg(&key, decoded_cache) {
+            if let Some(svg) = cached_svg(&key, None, decoded_cache) {
                 return svg;
             }
             let decoded = if let Some(d) = decoded_cache.get(&key) {

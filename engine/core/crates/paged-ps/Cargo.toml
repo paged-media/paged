@@ -1,0 +1,31 @@
+[package]
+name = "paged-ps"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "A clean-room PostScript Level 2 interpreter for EPS: DSC, the core operators, graphics state, paths, images with their filters, shadings and Type 1/3 fonts, drawn to a neutral list of vector elements (engine ADR 1016)."
+
+[lints]
+workspace = true
+
+[dependencies]
+# The engine's shared capabilities (PM-0014): kurbo for paths, matrices
+# and arcs (the renderer's version), paged-raster's decode filters,
+# paged-color's colour maths.
+kurbo = "0.11.3"
+paged-raster = { path = "../paged-raster" }
+paged-color = { path = "../paged-color" }
+# The outlines of a substitute face (a font the EPS names but does not
+# embed) and of a Type 42 font's sfnts.
+ttf-parser = "0.25"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Test inputs: a JPEG for the DCT filter, zlib and LZW streams.
+image = { workspace = true }
+flate2 = { workspace = true }
+weezl = "0.1"
+# The Illustrator oracle fixture.
+serde_json = "1"

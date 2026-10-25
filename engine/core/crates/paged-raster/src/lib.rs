@@ -89,6 +89,7 @@
 #![forbid(unsafe_code)]
 
 mod convert;
+pub mod filters;
 mod icc;
 mod other;
 mod psd;

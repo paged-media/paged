@@ -3086,6 +3086,7 @@ name = "paged-compose"
 version = "0.0.0"
 dependencies = [
  "bytes",
+ "kurbo 0.11.3",
  "paged-color",
  "paged-scene",
  "paged-text",
@@ -3446,6 +3447,21 @@ name = "paged-pixel"
 version = "0.0.0"
 
 [[package]]
+name = "paged-ps"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "image",
+ "kurbo 0.11.3",
+ "paged-color",
+ "paged-raster",
+ "serde_json",
+ "thiserror",
+ "ttf-parser",
+ "weezl 0.1.12",
+]
+
+[[package]]
 name = "paged-psd"
 version = "0.0.0"
 dependencies = [
@@ -3460,12 +3476,14 @@ version = "0.0.0"
 dependencies = [
  "flate2",
  "image",
+ "jpeg-decoder",
  "paged-color",
  "paged-psd",
  "paged-test-resources",
  "thiserror",
  "tiff",
  "tracing",
+ "weezl 0.1.12",
 ]
 
 [[package]]
@@ -3492,6 +3510,7 @@ dependencies = [
  "paged-gpu",
  "paged-model",
  "paged-mutate",
+ "paged-ps",
  "paged-psd",
  "paged-raster",
  "paged-scene",

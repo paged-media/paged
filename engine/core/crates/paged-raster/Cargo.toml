@@ -22,6 +22,11 @@ flate2 = { workspace = true }
 paged-color = { path = "../paged-color" }
 # PSD/PSB composites and the layer records of PSDs and layered TIFFs.
 paged-psd = { path = "../paged-psd" }
+# The LZW and DCT decode filters (`filters`): weezl is the LZW of tiff and
+# gif, jpeg-decoder the renderer's JPEG decoder (it hands CMYK samples over
+# as stored, which a PostScript image's Decode array expects).
+weezl = "0.1"
+jpeg-decoder = "0.3"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
