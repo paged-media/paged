@@ -136,9 +136,11 @@ version = "0.0.0"
 dependencies = [
  "docx-core",
  "docx-lower",
+ "flate2",
  "paged-ooxml",
  "quick-xml",
  "serde",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -158,6 +160,8 @@ dependencies = [
  "docx-export",
  "docx-import",
  "docx-lower",
+ "docx-odt",
+ "docx-rtf",
  "docx-skeleton",
  "paged-ooxml",
  "serde",
@@ -173,6 +177,24 @@ dependencies = [
  "base64",
  "docx-core",
  "serde",
+]
+
+[[package]]
+name = "docx-odt"
+version = "0.0.0"
+dependencies = [
+ "docx-core",
+ "flate2",
+ "paged-ooxml",
+ "quick-xml",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "docx-rtf"
+version = "0.0.0"
+dependencies = [
+ "docx-core",
 ]
 
 [[package]]
