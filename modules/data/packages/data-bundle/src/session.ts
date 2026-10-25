@@ -2664,8 +2664,11 @@ export function createSession(
       self.placeRecord(query, record, elementOfAddress(target)),
     loadSample: () => self.loadSample(),
     recordOf: (id) => recordOf.get(id),
-    placements: () => props.placements(),
-    recordStatus: (query) => props.recordStatus(query, self.diffKeyOf(query)),
+    placements: () => props.placements((id) => recordOf.get(id)),
+    recordStatus: (query) =>
+      props.recordStatus(query, self.diffKeyOf(query), (id) =>
+        recordOf.get(id),
+      ),
     assetColumns: () => self.assetColumns(),
     setAssetColumn: (query, field, def) =>
       self.setAssetColumn(query, field, def),

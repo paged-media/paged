@@ -109,6 +109,31 @@ describe("record markers [data.bind.record-status]", () => {
     ]);
   });
 
+  it("a binding filled at a record of its own shows that record", () => {
+    const asked: unknown[] = [];
+    const out = withRecords(
+      [{ binding: "v", address: "textFrame:a" }],
+      PAYLOAD,
+      [],
+      (q, i, own) => (
+        asked.push([q, i, own]),
+        {
+          query: q,
+          key: [],
+          baseline: false,
+          added: [],
+          changed: [],
+          removed: 0,
+          placed: [4],
+          instances: [4],
+        }
+      ),
+      (id) => (id === "v" ? 5 : undefined),
+    );
+    expect(asked).toEqual([["q", [5], ["v"]]]);
+    expect(out).toEqual([{ binding: "v", address: "textFrame:a", record: 4 }]);
+  });
+
   it("asks the engine with the key, and says nothing without the lane", () => {
     const calls: unknown[] = [];
     const engine = {

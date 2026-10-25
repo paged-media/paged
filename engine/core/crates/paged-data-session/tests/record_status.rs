@@ -75,8 +75,8 @@ fn a_query_never_written_from_is_a_baseline__feat__data_bind_record_status() {
         .record_status(
             &q(),
             &RecordStatusOptions {
-                key: None,
                 instances: vec![2, 9],
+                ..Default::default()
             },
         )
         .unwrap();
@@ -108,9 +108,9 @@ fn added_changed_and_removed_records_are_matched_by_a_unique_column__feat__data_
     );
     s.mark_rows_applied();
     let opts = RecordStatusOptions {
-        key: None,
         // Merged records B-2 and C-3 (rows 1 and 2 when written).
         instances: vec![1, 2],
+        ..Default::default()
     };
     let st = s.record_status(&q(), &opts).unwrap();
     assert!(!st.baseline);
@@ -138,6 +138,17 @@ fn added_changed_and_removed_records_are_matched_by_a_unique_column__feat__data_
     assert_eq!(st.placed, [0, 1]);
     assert_eq!(st.first, None, "the record the variable showed is gone");
 
+    // The variable filled at record 2 (C-3, row 1 now) instead of the first.
+    let own = RecordStatusOptions {
+        instances: vec![2],
+        own_record: vec!["v".into()],
+        ..Default::default()
+    };
+    let st = s.record_status(&q(), &own).unwrap();
+    assert_eq!(st.removed, 0, "A-1 was never placed then");
+    assert_eq!(st.first, None);
+    assert_eq!(st.placed, [1]);
+
     // Writing the document again makes the current result the baseline.
     s.mark_query_applied(&q());
     let st = s.record_status(&q(), &opts).unwrap();
@@ -161,6 +172,7 @@ fn a_declared_key_wins_and_the_whole_row_never_reports_a_change__feat__data_bind
     let by_price = RecordStatusOptions {
         key: Some(vec!["price".into()]),
         instances: vec![0],
+        ..Default::default()
     };
     let st = s.record_status(&q(), &by_price).unwrap();
     assert_eq!(st.key, ["price"]);
@@ -191,8 +203,8 @@ fn without_a_unique_column_the_whole_row_is_the_key__feat__data_bind_record_stat
         .record_status(
             &q(),
             &RecordStatusOptions {
-                key: None,
                 instances: vec![2],
+                ..Default::default()
             },
         )
         .unwrap();

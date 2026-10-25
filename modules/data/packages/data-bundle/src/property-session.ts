@@ -39,6 +39,7 @@ import {
 } from "./property-lane";
 import {
   engineRecordStatus,
+  ownRecords,
   recordInstances,
   toDataRecordStatus,
   withRecords,
@@ -779,7 +780,9 @@ export function propertyMethods(ctx: PropertyContext) {
     /** The page items each binding is placed in, by address (the data
      *  door's `placements`): the session's facts and the labels first, then
      *  a property binding's selector resolved through `host.objects`. */
-    async placements(): Promise<PlacedRecord[]> {
+    async placements(
+      recordOf?: (binding: string) => number | undefined,
+    ): Promise<PlacedRecord[]> {
       const e = ctx.engineIfUp();
       if (!e) return [];
       const payload = (e.payload() ?? {}) as PayloadJson;
@@ -816,7 +819,9 @@ export function propertyMethods(ctx: PropertyContext) {
         out,
         payload,
         recordInstances(payload, elements),
-        (query, instances) => engineRecordStatus(e, query, instances, null),
+        (query, instances, own) =>
+          engineRecordStatus(e, query, instances, null, own),
+        recordOf,
       );
     },
 
@@ -826,6 +831,7 @@ export function propertyMethods(ctx: PropertyContext) {
     async recordStatus(
       query: string,
       key: readonly string[] | null = null,
+      recordOf?: (binding: string) => number | undefined,
     ): Promise<DataRecordStatus> {
       const e = ctx.engineIfUp();
       if (!e) return toDataRecordStatus(query, null);
@@ -834,13 +840,17 @@ export function propertyMethods(ctx: PropertyContext) {
         payload,
         labelledElements(await tree()),
       ).filter((i) => i.query === query);
+      const own = ownRecords(payload, recordOf).filter(
+        (o) => o.query === query,
+      );
       return toDataRecordStatus(
         query,
         engineRecordStatus(
           e,
           query,
-          instances.map((i) => i.record),
+          [...instances.map((i) => i.record), ...own.map((o) => o.record)],
           key,
+          own.map((o) => o.binding),
         ),
       );
     },

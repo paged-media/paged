@@ -131,7 +131,7 @@ editor ADR 291 left to this module are built as its own panels (see Shipped).
   (`DataSession::record_status`, paged-data-session `record_status.rs`): records match by the
   key chosen in the Sync panel, else the first column unique in both results, else the whole
   row (a changed record is then a removal and an addition). Placed are a table's records, the
-  first record of a single-record binding, and the records page items carry in their labels:
+  record a single-record binding shows (the first, or the record dropped on its design), and the records page items carry in their labels:
   merged records (the merge label names its query) and record-flow frames (the paginator
   names each instance's row). The snapshot is not saved: after opening a document nothing is
   new or changed until the document is written from the data again. A record stepped to in

@@ -95,13 +95,16 @@ export function recordInstances(
   return out;
 }
 
-/** The engine's status of one query, given the instances over it; null on
- *  an engine without the lane or a query without a result. */
+/** The engine's status of one query, given the instances over it and the
+ *  single-record bindings resolved at a record of their own (`own`; their
+ *  records are among the instances); null on an engine without the lane or
+ *  a query without a result. */
 export function engineRecordStatus(
   engine: DataEngineLike,
   query: string,
   instances: readonly number[],
   key: readonly string[] | null,
+  own: readonly string[] = [],
 ): EngineRecordStatus | null {
   if (typeof engine.record_status !== "function") return null;
   try {
@@ -109,11 +112,29 @@ export function engineRecordStatus(
       (engine.record_status(query, {
         instances: [...instances],
         ...(key && key.length > 0 ? { key: [...key] } : {}),
+        ...(own.length > 0 ? { ownRecord: [...own] } : {}),
       }) as EngineRecordStatus | null) ?? null
     );
   } catch {
     return null;
   }
+}
+
+/** The single-record bindings filled at a record of their own (a record
+ *  dropped on a design), with that record. */
+export function ownRecords(
+  payload: PayloadJson,
+  recordOf: ((binding: string) => number | undefined) | undefined,
+): { binding: string; query: string; record: number }[] {
+  if (!recordOf) return [];
+  const out: { binding: string; query: string; record: number }[] = [];
+  for (const b of payload.bindings ?? []) {
+    if (!SINGLE.has(b.kind) || typeof b.query !== "string") continue;
+    const record = recordOf(b.id);
+    if (record !== undefined)
+      out.push({ binding: b.id, query: b.query, record });
+  }
+  return out;
 }
 
 /** The contract's shape of the engine's answer (nothing for no answer). */
@@ -141,8 +162,9 @@ export interface PlacedRecord {
 }
 
 /** Placements with the record each shows: a single-record binding's at the
- *  record it resolves at, plus one placement per record instance (carried
- *  to its row now; an instance whose record is gone is left out). */
+ *  record it resolves at (the first, or its own), plus one placement per
+ *  record instance (carried to its row now; an instance whose record is gone
+ *  is left out). */
 export function withRecords(
   placements: readonly { binding: string; address: string }[],
   payload: PayloadJson,
@@ -150,11 +172,14 @@ export function withRecords(
   status: (
     query: string,
     instances: readonly number[],
+    own: readonly string[],
   ) => EngineRecordStatus | null,
+  recordOf?: (binding: string) => number | undefined,
 ): PlacedRecord[] {
   const bindingOf = new Map(
     (payload.bindings ?? []).map((b) => [b.id, b] as const),
   );
+  const own = ownRecords(payload, recordOf);
   const queries = new Set<string>(instances.map((i) => i.query));
   for (const p of placements) {
     const b = bindingOf.get(p.binding);
@@ -165,24 +190,31 @@ export function withRecords(
     string,
     { st: EngineRecordStatus | null; of: RecordInstance[] }
   >();
+  /** binding -> its own record now (null: gone). */
+  const ownNow = new Map<string, number | null>();
   for (const q of queries) {
     const of = instances.filter((i) => i.query === q);
-    statuses.set(q, {
-      st: status(
-        q,
-        of.map((i) => i.record),
-      ),
-      of,
+    const mine = own.filter((o) => o.query === q);
+    const st = status(
+      q,
+      [...of.map((i) => i.record), ...mine.map((o) => o.record)],
+      mine.map((o) => o.binding),
+    );
+    mine.forEach((o, k) => {
+      const now = st?.instances[of.length + k];
+      ownNow.set(o.binding, typeof now === "number" ? now : null);
     });
+    statuses.set(q, { st, of });
   }
   const out: PlacedRecord[] = [];
   for (const p of placements) {
     const b = bindingOf.get(p.binding);
-    const first =
-      b && SINGLE.has(b.kind) && typeof b.query === "string"
+    const record = ownNow.has(p.binding)
+      ? ownNow.get(p.binding)
+      : b && SINGLE.has(b.kind) && typeof b.query === "string"
         ? statuses.get(b.query)?.st?.first
         : undefined;
-    out.push(typeof first === "number" ? { ...p, record: first } : p);
+    out.push(typeof record === "number" ? { ...p, record } : p);
   }
   for (const { st, of } of statuses.values()) {
     if (!st) continue;

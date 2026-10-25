@@ -37,12 +37,13 @@
 //! single-record binding at (variable, image, barcode, visibility, property:
 //! the first record, which is the first row of a result whose order is
 //! defined and the first row in the stabilized order otherwise, as
-//! `ResolutionEngine::record_row` numbers it); and the per-record instances
-//! the host reports (a merged record's frames, a record-flow frame's
-//! records), which it reads from the labels of the page items that show
-//! them. Instances are rows of the snapshot; each is carried to its index in the current result by
-//! its key, so a placed record keeps its identity across a refresh that
-//! added, removed or reordered rows.
+//! `ResolutionEngine::record_row` numbers it, unless the host names it as
+//! filled at a record of its own); and the per-record instances the host
+//! reports (a merged record's frames, a record-flow frame's records, read
+//! from the labels of the page items that show them; a design a record was
+//! dropped on). Instances are rows of the snapshot; each is carried to its
+//! row in the current result by its key, so a placed record keeps its
+//! identity across a refresh that added, removed or reordered rows.
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
@@ -65,6 +66,11 @@ pub struct RecordStatusOptions {
     /// the document was written from (merged records, record-flow frames).
     #[serde(default)]
     pub instances: Vec<usize>,
+    /// Single-record bindings resolved at a record of their own (a record
+    /// dropped on a design), not at the first: the host reports that record
+    /// among the `instances`.
+    #[serde(default)]
+    pub own_record: Vec<String>,
 }
 
 /// One query's per-record status. Every index is into the CURRENT result.
@@ -114,6 +120,10 @@ pub fn record_status(
             Binding::Table { .. } => table = true,
             // A flow places what its frames hold: the host reports those.
             Binding::RecordFlow { .. } | Binding::Rule { .. } => {}
+            _ if opts
+                .own_record
+                .iter()
+                .any(|id| id.as_str() == b.id.as_str()) => {}
             _ => single = true,
         }
     }
