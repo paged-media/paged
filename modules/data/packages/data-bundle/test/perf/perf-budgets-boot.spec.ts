@@ -261,9 +261,11 @@ describe.skipIf(!RUN_BUDGETS)(
     // data.serve; the service answers only when another bundle asks.
     // Record templates and pagination (PM-0015 L4): +2 — contribute.panel
     // twice; both panels read the engine only once it runs.
+    // Data issues (data ADR 564): +1 — supports("diagnostics.publish@1"),
+    // asked once here so no command and no edit pays for it.
     const W7: Measured = onLabelled(
       {
-        hostCalls: 43,
+        hostCalls: 44,
         hostReads: 2,
         mutates: 0,
         mutationOps: 0,
@@ -277,7 +279,7 @@ describe.skipIf(!RUN_BUDGETS)(
         fingerprints: 0,
         storeQueries: 0,
       },
-      { hostCalls: 44, hostReads: 4 },
+      { hostCalls: 45, hostReads: 4 },
     );
     it("W7 activates without booting either engine [data.perf.gates]", async () => {
       h = await openRealHost();

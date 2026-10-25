@@ -565,6 +565,10 @@ export interface DataSourceSession
   getState(): SessionState;
   /** The data door this session serves (`data@1`, extensions ADR 343). */
   dataDoor(): DataDoor;
+  /** Publish the data issues to Problems after each placement and edit
+   *  (data ADR 564): the bundle turns it on where the host has a Problems
+   *  sink (`diagnostics.publish@1`, asked once at activation). */
+  publishIssuesToProblems(on: boolean): void;
   /** Editor ADR 291's drag to place: a field dropped on a page item. Into a
    *  text frame it is a variable at the start of the frame's story, onto a
    *  graphic frame its picture (an image binding). */
@@ -1090,6 +1094,7 @@ export function createSession(
   const storyOfFrame = new Map<string, string>();
   const variableFrames = new Map<string, string>();
   let issuesTimer: ReturnType<typeof setTimeout> | null = null;
+  let issuesToProblems = false;
   // The template each merge read last: a consumed template is gone from its
   // page, and a re-merge reuses it.
   const mergeTemplates = new Map<string, MergeTemplate>();
@@ -2813,7 +2818,7 @@ export function createSession(
    *  panel listens (`diagnostics.publish@1`) and something is placed: off
    *  the command's own path, one read for a burst of changes. */
   function issuesSoon(): void {
-    if (!host.supports("diagnostics.publish@1")) return;
+    if (!issuesToProblems) return;
     const anything =
       placedVariables.size > 0 ||
       loweredInto.size > 0 ||
@@ -2979,6 +2984,9 @@ export function createSession(
   const self: DataSourceSession = {
     ...props,
     dataDoor: () => door,
+    publishIssuesToProblems(on) {
+      issuesToProblems = on;
+    },
     async placeField(query, field, target) {
       const id = `${field.replace(/[^A-Za-z0-9_]/g, "_")}-${Date.now().toString(36)}`;
       if (target.kind === "textFrame") {

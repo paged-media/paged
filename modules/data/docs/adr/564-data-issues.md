@@ -59,8 +59,8 @@ address) and the record when known.
   A diagnostic has no document location, so the page item's address is its `source`; the Data
   panel's issues line selects the items.
 - **Off the command path.** No command reads the issues inline: a lower or a merge costs what
-  it cost (the perf budgets are unchanged), and a host without a Problems sink reads them only
-  when asked.
+  it cost, and a host without a Problems sink reads them only when asked. Whether the host has
+  one is asked once, at activation (the W7 boot budget moves by that one call).
 
 ## Consequences
 

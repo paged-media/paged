@@ -169,6 +169,10 @@ export function activate(host: BundleHost): BundleHandle {
     door.onChange((change) => handle.changed(change));
   }
 
+  // Data ADR 564: the issues reach Problems where the host has it.
+  if (host.supports("diagnostics.publish@1"))
+    session.publishIssuesToProblems(true);
+
   // File ▸ Import / drop: a JSON or Parquet file becomes a data source (the
   // contested spreadsheet types stay with paged.sheet — IMPORTER_EXTENSIONS).
   if (host.supports("contribute.importer@1")) {
