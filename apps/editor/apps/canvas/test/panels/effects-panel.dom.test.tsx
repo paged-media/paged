@@ -246,3 +246,66 @@ describe("Effects panel: every control writes the selection", () => {
     expect(await h.get(addr(h.scene.groupA), "frameBlendMode")).toEqual(before);
   });
 });
+
+describe("Effects panel: the 27 blend modes [effects-transparency.blend-modes-27]", () => {
+  test("the menu lists the engine's 27 in Photoshop's six groups", async () => {
+    covers("panel:paged.effects");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    const options = [...blend(h).querySelectorAll("option")];
+    expect(options.map((o) => o.value)).toEqual([
+      "Normal",
+      "Dissolve",
+      "Darken",
+      "Multiply",
+      "ColorBurn",
+      "LinearBurn",
+      "DarkerColor",
+      "Lighten",
+      "Screen",
+      "ColorDodge",
+      "LinearDodge",
+      "LighterColor",
+      "Overlay",
+      "SoftLight",
+      "HardLight",
+      "VividLight",
+      "LinearLight",
+      "PinLight",
+      "HardMix",
+      "Difference",
+      "Exclusion",
+      "Subtract",
+      "Divide",
+      "Hue",
+      "Saturation",
+      "Color",
+      "Luminosity",
+    ]);
+    expect(blend(h).querySelectorAll("hr").length).toBe(5);
+    // The eleven InDesign cannot store carry the marker; the sixteen not.
+    const marked = options.filter((o) => o.hasAttribute("data-not-in-idml"));
+    expect(marked.length).toBe(11);
+    expect(marked.every((o) => o.textContent?.endsWith("\u2020"))).toBe(true);
+    expect(
+      options.find((o) => o.value === "LinearBurn")?.getAttribute("title"),
+    ).toBe("InDesign can't store this mode: IDML gets Multiply");
+    expect(h.root.querySelector("[data-blend-not-in-idml]")).toBeNull();
+  });
+
+  test("Linear Burn writes frameBlendMode and notes what IDML gets", async () => {
+    covers("panel:paged.effects");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    const from = h.mark();
+    await h.choose(blend(h), "LinearBurn");
+    expect(h.mutations(from)).toEqual([
+      set(addr(h.scene.rect), "frameBlendMode", text("LinearBurn")),
+    ] as never);
+    expect(blend(h).value).toBe("LinearBurn");
+    expect(summary(h, "object")).toBe("Linear burn 100%");
+    expect(
+      h.root.querySelector("[data-blend-not-in-idml]")?.textContent,
+    ).toContain("IDML gets Multiply");
+  });
+});

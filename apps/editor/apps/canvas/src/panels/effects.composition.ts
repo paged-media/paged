@@ -53,6 +53,8 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import type { BlendModeInfo } from "@paged-media/plugin-api";
+import { BLEND_MODES } from "@paged-media/plugin-sdk";
 import { defineMessages, type Strings } from "@paged-media/strings";
 
 const M = defineMessages("app.effectsComposition", {
@@ -72,6 +74,18 @@ const M = defineMessages("app.effectsComposition", {
   saturation: "Saturation",
   color: "Color",
   luminosity: "Luminosity",
+  dissolve: "Dissolve",
+  linearBurn: "Linear burn",
+  darkerColor: "Darker color",
+  linearDodge: "Linear dodge (add)",
+  lighterColor: "Lighter color",
+  vividLight: "Vivid light",
+  linearLight: "Linear light",
+  pinLight: "Pin light",
+  hardMix: "Hard mix",
+  subtract: "Subtract",
+  divide: "Divide",
+  notInIdml: "InDesign can't store this mode: IDML gets {mode}",
   innerBevel: "Inner bevel",
   outerBevel: "Outer bevel",
   emboss: "Emboss",
@@ -129,27 +143,79 @@ const M = defineMessages("app.effectsComposition", {
   directionalFeather: "Directional feather",
 });
 
-// InDesign `BlendMode` enum strings (the parser stores the raw
-// attribute text). An out-of-list current value renders via
-// SelectLeaf's pass-through option.
-export const blendModes = (strings: Strings) => [
-  { value: "Normal", label: strings.t(M.normal) },
-  { value: "Multiply", label: strings.t(M.multiply) },
-  { value: "Screen", label: strings.t(M.screen) },
-  { value: "Overlay", label: strings.t(M.overlay) },
-  { value: "Darken", label: strings.t(M.darken) },
-  { value: "Lighten", label: strings.t(M.lighten) },
-  { value: "ColorDodge", label: strings.t(M.colorDodge) },
-  { value: "ColorBurn", label: strings.t(M.colorBurn) },
-  { value: "HardLight", label: strings.t(M.hardLight) },
-  { value: "SoftLight", label: strings.t(M.softLight) },
-  { value: "Difference", label: strings.t(M.difference) },
-  { value: "Exclusion", label: strings.t(M.exclusion) },
-  { value: "Hue", label: strings.t(M.hue) },
-  { value: "Saturation", label: strings.t(M.saturation) },
-  { value: "Color", label: strings.t(M.color) },
-  { value: "Luminosity", label: strings.t(M.luminosity) },
-];
+// The blend-mode menus list the engine's modes (engine ADR 1016,
+// plugin-sdk's `BLEND_MODES`, in Photoshop's order); only their
+// translations live here, keyed by the model spelling. An out-of-list
+// current value renders via SelectLeaf's pass-through option.
+const BLEND_LABELS: Record<string, (typeof M)[keyof typeof M]> = {
+  Normal: M.normal,
+  Dissolve: M.dissolve,
+  Darken: M.darken,
+  Multiply: M.multiply,
+  ColorBurn: M.colorBurn,
+  LinearBurn: M.linearBurn,
+  DarkerColor: M.darkerColor,
+  Lighten: M.lighten,
+  Screen: M.screen,
+  ColorDodge: M.colorDodge,
+  LinearDodge: M.linearDodge,
+  LighterColor: M.lighterColor,
+  Overlay: M.overlay,
+  SoftLight: M.softLight,
+  HardLight: M.hardLight,
+  VividLight: M.vividLight,
+  LinearLight: M.linearLight,
+  PinLight: M.pinLight,
+  HardMix: M.hardMix,
+  Difference: M.difference,
+  Exclusion: M.exclusion,
+  Subtract: M.subtract,
+  Divide: M.divide,
+  Hue: M.hue,
+  Saturation: M.saturation,
+  Color: M.color,
+  Luminosity: M.luminosity,
+};
+
+export interface BlendModeOption {
+  value: string;
+  label: string;
+  /** Photoshop's menu group (0–5). */
+  group: number;
+  /** One of InDesign's sixteen; otherwise IDML gets `idml`. */
+  native: boolean;
+  idml: string;
+}
+
+const blendOption = (strings: Strings, m: BlendModeInfo): BlendModeOption => {
+  const msg = BLEND_LABELS[m.name];
+  return {
+    value: m.name,
+    label: msg ? strings.t(msg) : m.label,
+    group: m.group,
+    native: m.native,
+    idml: m.idml,
+  };
+};
+
+/** Every blend mode an object, fill, stroke or content target takes
+ *  (all 27), grouped as Photoshop's menu groups them. */
+export const allBlendModes = (strings: Strings): BlendModeOption[] =>
+  BLEND_MODES.map((m) => blendOption(strings, m));
+
+/** The tooltip of a mode InDesign cannot store. */
+export const notInIdmlLabel = (strings: Strings, o: BlendModeOption): string =>
+  strings.t(M.notInIdml, {
+    mode:
+      allBlendModes(strings).find((m) => m.value === o.idml)?.label ?? o.idml,
+  });
+
+/** An effect's own blend (shadow, glow, satin): InDesign's sixteen. */
+export const blendModes = (strings: Strings) =>
+  BLEND_MODES.filter((m) => m.native).map((m) => {
+    const o = blendOption(strings, m);
+    return { value: o.value, label: o.label };
+  });
 
 const bevelStyles = (strings: Strings) => [
   { value: "InnerBevel", label: strings.t(M.innerBevel) },

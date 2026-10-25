@@ -60,7 +60,7 @@
 // group. The effect families stay on the object target (the engine has
 // no per-target effect paths).
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import {
   CatalogRegistryProvider,
@@ -78,7 +78,7 @@ import type { PropertyPath, Value } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
 import {
-  blendModes,
+  allBlendModes,
   bevelComposition,
   directionalFeatherComposition,
   dropShadowComposition,
@@ -86,6 +86,7 @@ import {
   innerGlowComposition,
   innerShadowComposition,
   outerGlowComposition,
+  notInIdmlLabel,
   satinComposition,
 } from "./effects.composition";
 import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
@@ -308,7 +309,7 @@ function targetSummary(
 ): string {
   if (blend.state.state !== "value" || opacity.state.state !== "value")
     return "—";
-  const modes = blendModes(strings);
+  const modes = allBlendModes(strings);
   const mode =
     modes.find((m) => m.value === unwrapText(blend.value))?.label ??
     modes[0]!.label;
@@ -380,6 +381,12 @@ export function EffectsPanel() {
   const blendId = unwrapText(blendField.value) || "Normal";
   const blendDisabled = blendField.onCommit == null;
   const blendMixed = blendField.value == null;
+  // A Photoshop mode (engine ADR 1016): say what an IDML save keeps.
+  const blendOpt = allBlendModes(strings).find((m) => m.value === blendId);
+  const blendNote =
+    !blendMixed && blendOpt && !blendOpt.native
+      ? notInIdmlLabel(strings, blendOpt)
+      : null;
 
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
@@ -443,13 +450,30 @@ export function EffectsPanel() {
                 —
               </option>
             )}
-            {blendModes(strings).map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
+            {allBlendModes(strings).map((opt, i, all) => (
+              <Fragment key={opt.value}>
+                {/* Photoshop's separators between its six groups. */}
+                {i > 0 && all[i - 1]!.group !== opt.group && <hr />}
+                <option
+                  value={opt.value}
+                  data-not-in-idml={opt.native ? undefined : ""}
+                  title={opt.native ? undefined : notInIdmlLabel(strings, opt)}
+                >
+                  {opt.native ? opt.label : `${opt.label} \u2020`}
+                </option>
+              </Fragment>
             ))}
           </KitSelect>
         </ObjectFieldFrame>
+        {blendNote && (
+          <div
+            className="text-[11px] pl-[92px]"
+            style={{ color: "var(--pg-muted-fg)" }}
+            data-blend-not-in-idml=""
+          >
+            {`\u2020 ${blendNote}`}
+          </div>
+        )}
         <div
           className="flex flex-col"
           role="radiogroup"

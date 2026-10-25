@@ -101,6 +101,7 @@ export type {
   ValueEdit,
 } from "./object-model.js";
 
+export type { BlendModeInfo } from "./blend-modes.js";
 export type { BundleHandle, PagedBundle } from "./bundle.js";
 
 export type {
