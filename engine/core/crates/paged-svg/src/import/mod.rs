@@ -747,6 +747,7 @@ impl<'a> Lower<'a> {
     fn make_group(&mut self, items: &[Item]) -> Item {
         self.ops.push(Mutation::CreateGroup {
             member_ids: items.iter().map(Item::id).collect(),
+            clip: false,
         });
         self.bind(Kind::Group)
     }
