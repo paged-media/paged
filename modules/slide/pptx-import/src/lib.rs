@@ -38,6 +38,7 @@ use pptx_core::{
 };
 
 pub mod chart;
+pub mod comments;
 pub mod fonts;
 pub mod paint;
 pub mod shapes;
@@ -190,6 +191,7 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
     }
 
     // Slides, in presentation order.
+    let authors = comments::authors(&pkg, &ctx);
     if let Some(list) = pres_el.child(Ns::P, "sldIdLst") {
         for s in list.children_named(Ns::P, "sldId") {
             let slide_id = s.attr_u32("id").unwrap_or(0);
@@ -197,7 +199,7 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
                 ctx.note(format!("slide {slide_id}: relationship does not resolve"));
                 continue;
             };
-            match slide(&pkg, &part, slide_id, &diagnostics) {
+            match slide(&pkg, &part, slide_id, &authors, &diagnostics) {
                 Ok(sl) => deck.slides.push(sl),
                 Err(e) => diagnostics.borrow_mut().push(e.to_string()),
             }
@@ -445,6 +447,7 @@ fn slide(
     pkg: &OpcPackage,
     part: &str,
     slide_id: u32,
+    authors: &comments::Authors,
     diagnostics: &RefCell<Vec<String>>,
 ) -> Result<Slide, ImportError> {
     let el = read_part(pkg, part)?;
@@ -482,6 +485,7 @@ fn slide(
             .and_then(|n| notes(pkg, &n, diagnostics)),
         transition,
         timing_xml,
+        comments: comments::of_slide(pkg, &ctx, authors),
     })
 }
 

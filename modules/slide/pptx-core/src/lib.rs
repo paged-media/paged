@@ -128,6 +128,91 @@ pub struct Slide {
     pub transition: Option<Transition>,
     /// `p:timing`, verbatim, for export and for the build-step parser.
     pub timing_xml: Option<String>,
+    /// The slide's review comments: modern threaded comments and legacy
+    /// ones, in the order the deck lists them (slide ADR 711).
+    pub comments: Vec<Comment>,
+}
+
+/// A review comment on a slide: a modern threaded comment
+/// (`p188:cm`, PowerPoint 365) or a legacy one (`p:cm`).
+///
+/// The JSON form (camelCase) is what the slide bundle keeps per page and
+/// hands back to export.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Comment {
+    /// `{GUID}` for a modern comment; `legacy-<authorId>-<idx>` for a
+    /// legacy one.
+    pub id: String,
+    /// The author's `{GUID}` (modern) or `legacy-<id>`.
+    pub author_id: String,
+    pub author: String,
+    pub initials: String,
+    /// The creation time as the deck wrote it.
+    pub created: Option<String>,
+    /// Plain text, one line per paragraph.
+    pub text: String,
+    /// The comment's position on the slide, pt (absent: on the slide as a
+    /// whole).
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    /// The `cNvPr id` of the shape the comment is anchored to.
+    pub shape_id: Option<u32>,
+    /// `active`, `resolved` or `closed` (absent: active).
+    pub status: Option<String>,
+    pub replies: Vec<CommentReply>,
+    /// Read from a legacy `p:cm` (export writes it as a modern comment).
+    pub legacy: bool,
+    /// The `p188:cm` element as the deck wrote it, re-emitted verbatim
+    /// while the comment is unchanged.
+    #[serde(skip)]
+    pub raw: Option<String>,
+    /// Its marker list (`pc:sldMkLst`, `ac:deMkLst`, `ac:txMkLst`) as
+    /// written.
+    #[serde(skip)]
+    pub marker_xml: Option<String>,
+}
+
+/// A reply in a comment's thread (`p188:reply`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CommentReply {
+    pub id: String,
+    pub author_id: String,
+    pub author: String,
+    pub initials: String,
+    pub created: Option<String>,
+    pub text: String,
+}
+
+impl Comment {
+    /// The same comment as far as the model goes (what the user can see and
+    /// change), ignoring the verbatim XML kept beside it.
+    pub fn same_as(&self, other: &Comment) -> bool {
+        let close = |a: Option<f64>, b: Option<f64>| match (a, b) {
+            (Some(a), Some(b)) => (a - b).abs() < 1e-6,
+            (None, None) => true,
+            _ => false,
+        };
+        let active = |s: &Option<String>| s.clone().filter(|s| s != "active");
+        self.id == other.id
+            && self.author_id == other.author_id
+            && self.author == other.author
+            && self.initials == other.initials
+            && self.created == other.created
+            && self.text == other.text
+            && close(self.x, other.x)
+            && close(self.y, other.y)
+            && self.shape_id == other.shape_id
+            && active(&self.status) == active(&other.status)
+            && self.replies == other.replies
+            && self.legacy == other.legacy
+    }
+}
+
+/// Two comment lists that are the same as far as the model goes.
+pub fn same_comments(a: &[Comment], b: &[Comment]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.same_as(y))
 }
 
 /// `p:bg`: either explicit properties or a reference into the theme's

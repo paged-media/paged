@@ -45,6 +45,7 @@ use paged_ooxml::rels::{part_dir, rels_part_name, resolve_target, Relationship, 
 use paged_ooxml::xml::{escape_attr as escape, unescape};
 use serde::Deserialize;
 
+pub mod comments;
 pub mod geom;
 pub mod native;
 pub mod probe;
@@ -87,6 +88,10 @@ pub struct SlidePlan {
     /// The master spread of the layout a slide made in the editor uses.
     #[serde(default)]
     pub layout: Option<String>,
+    /// The slide's review comments (`None`: as the deck had them, byte for
+    /// byte). A list the same as the source slide's keeps its bytes too.
+    #[serde(default)]
+    pub comments: Option<Vec<pptx_core::Comment>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -113,6 +118,7 @@ struct Original {
     slides: Vec<(String, u32, String)>,
     hidden: BTreeMap<String, bool>,
     notes: BTreeMap<String, Option<String>>,
+    comments: BTreeMap<String, Vec<pptx_core::Comment>>,
 }
 
 fn rels(pkg: &OpcPackage, part: &str) -> Relationships {
@@ -147,8 +153,10 @@ fn read_original(pkg: &OpcPackage, bytes: &[u8]) -> Result<Original, String> {
     let ir = pptx_import::import_pptx(bytes).map_err(|e| e.to_string())?;
     let mut hidden = BTreeMap::new();
     let mut notes = BTreeMap::new();
+    let mut comments = BTreeMap::new();
     for s in &ir.slides {
         hidden.insert(s.part.clone(), s.hidden);
+        comments.insert(s.part.clone(), s.comments.clone());
         notes.insert(
             s.part.clone(),
             s.notes
@@ -162,6 +170,7 @@ fn read_original(pkg: &OpcPackage, bytes: &[u8]) -> Result<Original, String> {
         slides,
         hidden,
         notes,
+        comments,
     })
 }
 
@@ -571,6 +580,12 @@ pub fn export_with(
                 && orig.hidden.get(part).copied().unwrap_or(false) == s.hidden
                 && orig.notes.get(part).cloned().flatten()
                     == s.notes.clone().filter(|n| !n.trim().is_empty())
+                && s.comments.as_ref().is_none_or(|c| {
+                    pptx_core::same_comments(
+                        c,
+                        orig.comments.get(part).map(Vec::as_slice).unwrap_or(&[]),
+                    )
+                })
         });
     if same_plan && model.is_none() && !slides.iter().any(|s| s.content_edited) {
         return Ok(Exported {
@@ -693,6 +708,8 @@ pub fn export_with(
 
     let mut out_parts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     let mut media_parts: Vec<String> = Vec::new();
+    // The authors the written comments name.
+    let mut comment_authors: Vec<comments::AuthorRef> = Vec::new();
     // The written slides: (part, sldId id, r:id, source part).
     let mut written: Vec<(String, u32, String, String)> = Vec::new();
 
@@ -915,6 +932,82 @@ pub fn export_with(
             },
             _ => {}
         }
+        // Comments: kept while the document has the slide's own, written
+        // as one modern part when they changed. A duplicate never shares
+        // its source's part.
+        let orig_comments: &[pptx_core::Comment] = if new {
+            &[]
+        } else {
+            orig.comments.get(src).map(Vec::as_slice).unwrap_or(&[])
+        };
+        let has_comment_rel = srels
+            .items
+            .iter()
+            .any(|r| comments::is_comment_rel(&r.rel_type));
+        let want_comments = match &s.comments {
+            Some(list) => Some(list.clone()),
+            None if !t.first && has_comment_rel => Some(orig_comments.to_vec()),
+            None => None,
+        };
+        if let Some(list) = want_comments {
+            if !(t.first && pptx_core::same_comments(&list, orig_comments)) {
+                let root_attrs = srels
+                    .items
+                    .iter()
+                    .filter(|r| r.rel_type == comments::REL_MODERN)
+                    .find_map(|r| {
+                        let p = resolve_target(&src_dir, &r.target);
+                        paged_ooxml::tree::parse(pkg.part(&p)?).ok()
+                    })
+                    .map(|el| el.raw_attrs)
+                    .unwrap_or_default();
+                srels
+                    .items
+                    .retain(|r| !comments::is_comment_rel(&r.rel_type));
+                slide_xml = comments::strip_comment_ext(&slide_xml);
+                if !list.is_empty() {
+                    let (xml, authors) = comments::write_part(
+                        &list,
+                        orig_comments,
+                        t.first,
+                        &root_attrs,
+                        &slide_xml,
+                        t.id,
+                    );
+                    let stem = format!(
+                        "{pres_dir}/comments/modernComment_{:X}_{}",
+                        t.id,
+                        comments::short_hash(&format!("{part}{xml}"))
+                    );
+                    let mut name = format!("{stem}.xml");
+                    let mut k = 1;
+                    while pkg.part(&name).is_some() || out_parts.contains_key(&name) {
+                        k += 1;
+                        name = format!("{stem}_{k}.xml");
+                    }
+                    let rid = (1..)
+                        .map(|n| format!("rId{n}"))
+                        .find(|id| srels.by_id(id).is_none())
+                        .expect("an unused id");
+                    srels.items.push(Relationship {
+                        id: rid.clone(),
+                        rel_type: comments::REL_MODERN.into(),
+                        target: relative(&dir, &name),
+                        target_mode: None,
+                    });
+                    slide_xml = comments::add_comment_ext(&slide_xml, &rid);
+                    added_types.push((name.clone(), comments::CT_COMMENTS));
+                    out_parts.insert(name, xml.into_bytes());
+                    for a in authors {
+                        if !comment_authors.contains(&a) {
+                            comment_authors.push(a);
+                        }
+                    }
+                }
+                srels_changed = true;
+            }
+        }
+
         // A duplicate's own relationships resolve from its own folder; its
         // folder is its source's, so targets stay as they are.
         let srels_bytes = match pkg.part(&rels_part_name(src)) {
@@ -953,6 +1046,65 @@ pub fn export_with(
             removed.insert(notes);
         }
         prels.items.retain(|r| &r.id != rid);
+    }
+
+    // Comment parts no written slide names any more go, with their
+    // content types.
+    let mut referenced: BTreeSet<String> = BTreeSet::new();
+    for (part, _, _, _) in &written {
+        if let Some(b) = out_parts.get(&rels_part_name(part)) {
+            for r in Relationships::parse(b).items {
+                if comments::is_comment_rel(&r.rel_type) {
+                    referenced.insert(resolve_target(part_dir(part), &r.target));
+                }
+            }
+        }
+    }
+    for (part, _, _) in &orig.slides {
+        for r in rels(&pkg, part).items {
+            if comments::is_comment_rel(&r.rel_type) {
+                let p = resolve_target(part_dir(part), &r.target);
+                if !referenced.contains(&p) {
+                    removed.insert(p);
+                }
+            }
+        }
+    }
+
+    // The authors the new comments name: added to the deck's authors list,
+    // or a new one.
+    let mut prels_changed = false;
+    if !comment_authors.is_empty() {
+        let existing = prels
+            .items
+            .iter()
+            .find(|r| r.rel_type == comments::REL_AUTHORS)
+            .map(|r| resolve_target(&pres_dir, &r.target));
+        let current = existing.as_deref().and_then(|p| text(&pkg, p).ok());
+        if let Some(xml) = comments::authors_xml(current.as_deref(), &comment_authors) {
+            match existing {
+                Some(p) if current.is_some() => {
+                    out_parts.insert(p, xml.into_bytes());
+                }
+                _ => {
+                    let p = format!("{pres_dir}/authors.xml");
+                    let rid = (next_rid + 1..)
+                        .map(|n| format!("rId{n}"))
+                        .find(|id| prels.by_id(id).is_none())
+                        .expect("an unused id");
+                    prels.items.retain(|r| r.rel_type != comments::REL_AUTHORS);
+                    prels.items.push(Relationship {
+                        id: rid,
+                        rel_type: comments::REL_AUTHORS.into(),
+                        target: relative(&pres_dir, &p),
+                        target_mode: None,
+                    });
+                    prels_changed = true;
+                    added_types.push((p.clone(), comments::CT_AUTHORS));
+                    out_parts.insert(p, xml.into_bytes());
+                }
+            }
+        }
     }
 
     // Links to a slide that is gone: the relationship and the links that
@@ -1048,7 +1200,7 @@ pub fn export_with(
         }
         let bytes = if name == orig.presentation {
             pres.clone().into_bytes()
-        } else if name == pres_rels && !same_list {
+        } else if name == pres_rels && (!same_list || prels_changed) {
             write_rels(&prels)
         } else if let Some(b) = out_parts.remove(name) {
             b
