@@ -60,16 +60,6 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   smartGuides: true,
 };
 
-const VIEW_SETTINGS = [
-  "setting:view.outline",
-  "setting:view.overprintPreview",
-  "setting:view.pixelPreview",
-  "setting:view.showGrid",
-  "setting:view.pixelGrid",
-  "setting:view.snapToGrid",
-  "setting:view.snapToPixel",
-  "setting:view.smartGuides",
-] as const;
 
 describe("view toggles", () => {
   test("defaults: threads off, snap to points on, heading anchors and data markers off", () => {
@@ -78,7 +68,14 @@ describe("view toggles", () => {
       "setting:view.snapToPoints",
       "setting:view.headingAnchors",
       "setting:view.dataMarkers",
-      ...VIEW_SETTINGS,
+      "setting:view.outline",
+      "setting:view.overprintPreview",
+      "setting:view.pixelPreview",
+      "setting:view.showGrid",
+      "setting:view.pixelGrid",
+      "setting:view.snapToGrid",
+      "setting:view.snapToPixel",
+      "setting:view.smartGuides",
     );
     for (const [k, v] of Object.entries(DEFAULTS))
       expect({ k, v: getViewToggle(scope, k as ViewToggle) }).toEqual({ k, v });
@@ -164,7 +161,16 @@ describe("view toggles", () => {
 
 describe("view modes (editor ADR 287)", () => {
   test("the toggles add up to one engine mode, Outline first", () => {
-    covers(...VIEW_SETTINGS);
+    covers(
+      "setting:view.outline",
+      "setting:view.overprintPreview",
+      "setting:view.pixelPreview",
+      "setting:view.showGrid",
+      "setting:view.pixelGrid",
+      "setting:view.snapToGrid",
+      "setting:view.snapToPixel",
+      "setting:view.smartGuides",
+    );
     expect(viewModeOf(scope)).toBe("preview");
     setViewToggle(scope, "overprintPreview", true);
     expect(viewModeOf(scope)).toBe("overprintPreview");

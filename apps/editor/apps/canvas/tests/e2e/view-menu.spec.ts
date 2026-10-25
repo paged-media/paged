@@ -268,7 +268,10 @@ test.describe("View menu — view modes, grids, snapping, Rotate View [editor-sh
   });
 
   test("Guides & grid preferences open from the View menu", async ({ page }) => {
-    covers("menu:View/Guides & grid preferences…");
+    covers(
+      "menu:View/Guides & grid preferences…",
+      "command:paged.view.guidesAndGridPreferences",
+    );
     await openShell(page, { doc: true });
     await clickMenuRow(page, "View/Guides & grid preferences…");
     const dialog = page.locator("[data-view-preferences-dialog]");
