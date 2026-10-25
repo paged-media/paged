@@ -268,6 +268,70 @@ describe.skipIf(!ready && !required)(
       ).toEqual([]);
     });
 
+    it("measures each run at its own size: a large run oversets a story one size would call fitting", async () => {
+      const { dataHost, consumer, frameAt } = await boot();
+      // 300 × 60 pt: "A-1" fits at any reading size.
+      const frame = await frameAt([100, 100, 160, 400]);
+      const placed = await consumer.data.place(
+        `textFrame:${frame}`,
+        "q",
+        "sku",
+      );
+      expect(
+        (await consumer.data.issues()).filter((i) => i.kind === "overset"),
+      ).toEqual([]);
+      // The user adds a word set at 72 pt after the value: its line is
+      // 86.4 pt tall (auto leading). The story's size now reads as mixed,
+      // so a measure at one size (the story's default) would still fit.
+      const story = (await dataHost.document.hitTest(
+        "usp" as never,
+        [250, 130],
+      ))!.storyId!;
+      const content = await dataHost.document.storyContent(story);
+      const length = content!.paragraphs
+        .flatMap((p) => p.runs.map((r) => r.text))
+        .join("").length;
+      const big = await dataHost.document.mutate({
+        op: "batch",
+        args: {
+          ops: [
+            {
+              op: "insertText",
+              args: { storyId: story, offset: length, text: " Big" },
+            },
+            {
+              op: "setElementProperty",
+              args: {
+                elementId: {
+                  kind: "storyRange",
+                  id: { story_id: story, start: length + 1, end: length + 4 },
+                },
+                path: "characterFontSize",
+                value: { type: "length", value: 72 },
+              },
+            },
+          ],
+        },
+      } as never);
+      expect(big.applied).toBe(true);
+      const sizes = (await dataHost.document.storyContent(story))!.paragraphs
+        .flatMap((p) => p.runs)
+        .map((r) => r.pointSize ?? null);
+      expect(sizes).toContain(72);
+      expect(
+        (await consumer.data.issues()).filter((i) => i.kind === "overset"),
+      ).toEqual([
+        {
+          kind: "overset",
+          severity: "warning",
+          // Measured, not the composer's word: the message says so.
+          message: expect.stringContaining("an estimate"),
+          binding: placed.binding,
+          address: `textFrame:${frame}`,
+        },
+      ]);
+    });
+
     it("asks the host the pixel size of a picture placed from a plain link", async () => {
       const { consumer, s } = await boot();
       // No asset column: the reference is placed as the link it is.

@@ -37,7 +37,10 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
 - data issues ([ADR 564](adr/564-data-issues.md)): overset text in every story the data
   wrote into, text variables placed by Lower included (the host's frame chain, or the engine's
   measured wrap where the host lays out without fonts, through every frame of a threaded
-  story), a missing or too coarse picture (asset columns, and plain links through the host's
+  story, each run at its own size, the message saying it is an estimate; a table's overflow
+  names its cells too; not checked: a text variable instance copied by hand into another
+  story, and which cell of a table it is, for want of a host read, ADR 564), a missing or too
+  coarse picture (asset columns, and plain links through the host's
   placed-image read), an empty or failed value, records a flow left out; served as `data@1`
   `issues()`, published to Problems, summed up in the Data panel.
 - the Data panel's drops (editor ADR 291) through `data@1`: a field onto a frame (`place`), a

@@ -1,14 +1,15 @@
 # ADR 564 — Data issues: what may be wrong with the placed content, named where it is
 
 - **Status:** Accepted 2026-10-24; amended 2026-10-25 (every placed text, threaded stories,
-  pictures from plain links).
+  pictures from plain links; whose word an overset is, runs at their own sizes, tables).
 - **Scope:** `packages/data-bundle/src/issues.ts` (the kinds, the resolution floor, the
   Problems rows), `session.ts` (what each placement leaves to check, `computeIssues`,
   `publishIssues`), `data-door.ts` (`issues`), `assets.ts` (a placed picture's pixel size),
   `flow-writer.ts` (a flow's placed and total records), `property-session.ts` (a text
-  variable's frame in the placements); `paged-data-lower`'s `text_words`, `text_overset` and
-  `text_overset_chain` (`engine/core/crates/paged-data-lower/src/merge.rs`) and their `data-js`
-  surface. Serves extensions [ADR 343](../../../../platform/extensions/docs/adr/343-the-data-door.md)'s
+  variable's frame in the placements); `paged-data-lower`'s `text_words`, `text_overset`,
+  `text_overset_chain`, `text_run_words` and `text_overset_runs`
+  (`engine/core/crates/paged-data-lower/src/merge.rs`) and their `data-js` surface;
+  `merge.ts`'s `storyFaces` (a story's runs and their faces). Serves extensions [ADR 343](../../../../platform/extensions/docs/adr/343-the-data-door.md)'s
   `DataService.issues`; shown by editor
   [ADR 291](../../../../apps/editor/docs/adr/291-the-data-panel.md) (amended 2026-10-24).
 
@@ -44,8 +45,27 @@ address) and the record when known.
   the engine wraps them and compares lines × leading with the frame (`text_overset`). A story
   threaded over several frames is wrapped through the chain's frames in order, each at its own
   width and holding the lines its height takes (`text_overset_chain`); what is left after the
-  last frame is the overset, named at that frame. The wrap is the engine's; the bundle reads
-  the host's geometry.
+  last frame is the overset, named at that frame. Each run is measured in its own face
+  (`text_overset_runs`): the font, style and size it sets directly (`StoryContent`'s runs),
+  the story's where it sets none; a line is as tall as the largest leading on it. The wrap is
+  the engine's; the bundle reads the host's geometry.
+- **Whose word it is.** Where the host lays the text out, its report is authoritative and
+  complete: it is the real composer, so text wrap around other items, tables in the story
+  (a cell whose text does not fit its row oversets its story, engine `OversetTextDropped`),
+  mixed sizes and every other setting are in it. The measurement is a fallback for a host
+  that cannot lay out (the headless host without fonts, which reports no overflow at all), and
+  is only asked when the host reported none. Reproducing the composer in the bundle (text wrap
+  depends on the geometry and wrap settings of every other page item, a table's rows on cell
+  insets, spans and grow rules) would be a second layout engine, with its own drift from the
+  first; it is not built. So a measured overset says so in its message ("as measured, an
+  estimate"): a user knows when a notice is a measurement rather than the composer's word. The
+  `DataIssue` contract is unchanged; the distinction is in the text.
+- **Tables.** A table paged.data lowered is checked at its frame like any placed text. When
+  the host reports its story overset, the message says that the table does not fit its frame
+  or a cell's text does not fit its row: the host reports a cell's overset as its story's, so
+  which it is is not known here. The cell is not named, and cells are not measured where the
+  host cannot lay out: a row's grow rule (`AutoGrow`, `MaximumHeight`) is not a read the host
+  serves, and a cell measured against a row that grows to fit it would be a false notice.
 - **Where a text variable is.** A text variable's instances (ADR 559) are not fields the
   document lists by story, and the object model has no selector from a variable to the stories
   its instances are in. So the session keeps the story of every instance it places (the
@@ -83,11 +103,18 @@ address) and the record when known.
   frames concerned, and the canvas field markers draw an issue's frame in the error red
   (editor ADR 291, amended 2026-10-24).
 - A text variable's instances are found where paged.data placed them; one the user copies into
-  another story by hand is not checked there. Rules are not checked separately: they style the
-  stories the variables are in.
-- The measured wrap is greedy and per word, at one font for the story (its first run's), as
-  Data Merge's is: a story of several sizes, a table in a story or text wrap around another
-  item are believed as the host reports them.
+  another story by hand is not checked there. No host read lists them: `StoryContent`'s
+  `RunContent` does not carry the engine run's `text_variable` (the model has it; the
+  story-content read drops it), core's selector index lists placeholder runs as `field:`
+  addresses but not text-variable runs, and `placeholders()` lists placeholder fields only.
+  A run whose text equals the variable's value is not an instance, so the stories are not
+  matched by text. Closing it needs one of those reads (a `textVariable` member on
+  `RunContent` is the smallest). Rules are not checked separately: they style the stories the
+  variables are in.
+- The measured wrap is greedy and per word, as Data Merge's is. A size or font set by a
+  character or paragraph style, not directly on the run, is measured at the story's; a story
+  whose size is mixed has no story size, so such runs read at 12 pt. Text wrap and tables are
+  the host's to report (Decision, "Whose word it is").
 
 ## Amendments
 
@@ -97,3 +124,11 @@ address) and the record when known.
   (`text_overset_chain`, the one-frame rule over a sequence of frames, equal to `text_overset`
   for one); a picture placed from a plain link is checked through the host's
   `assets.getPlacedImage`.
+- Amended 2026-10-25: whose word an overset is. The host's report is the composer's and
+  complete (text wrap, tables, every size); the measurement is a fallback for a host that
+  cannot lay out, and its message says it is an estimate. The measurement sets each run in
+  its own face (`text_run_words`, `text_overset_runs`, equal to `text_overset_chain` for one
+  face), so a large run in a small story is found where one size would call it fitting. A
+  table's overflow names its cells in the message; a cell is not named or measured (no host
+  read of a row's grow rule). A copied text variable instance stays unchecked: no host read
+  lists the instances (Consequences).

@@ -119,6 +119,7 @@ import {
   mergeRecords as writeMerge,
   readMergeTemplate,
   measureWords,
+  storyFaces,
   storyFont,
   type MergeResult,
   type MergeTemplate,
@@ -2741,9 +2742,18 @@ export function createSession(
             frame: address.slice("textFrame:".length),
           });
     }
+    const tables = new Set(
+      (payload.bindings ?? [])
+        .filter((b) => b.kind === "table")
+        .map((b) => b.id),
+    );
     for (const [id, el] of loweredInto)
       if (el.kind === "textFrame" && !flowNotes.has(id))
-        texts.push({ binding: id, frame: String(el.id) });
+        texts.push({
+          binding: id,
+          frame: String(el.id),
+          ...(tables.has(id) ? { table: true } : {}),
+        });
     for (const [id, note] of flowNotes) {
       if (note.storyId) texts.push({ binding: id, storyId: note.storyId });
       else for (const frame of note.frames) texts.push({ binding: id, frame });
@@ -2853,7 +2863,10 @@ export function createSession(
   /** Whether a story's text overflows its frames (`frameIds`, in chain
    *  order) as the engine wraps it at the host's advances through each
    *  frame in turn (the host's own layout reported none: a host without
-   *  fonts never does). False where it cannot be measured. */
+   *  fonts never does). Each run is measured in its own face (the font,
+   *  style and size it sets, the story's where it sets none); a wasm
+   *  without the run rule measures the story at one face. False where it
+   *  cannot be measured. */
   async function measuredOverset(
     storyId: string,
     frameIds: readonly string[],
@@ -2862,7 +2875,8 @@ export function createSession(
     if (!e?.text_words || !e.text_overset) return false;
     // A threaded story needs the chain rule; a wasm without it measures
     // one-frame stories only.
-    if (frameIds.length > 1 && !e.text_overset_chain) return false;
+    if (frameIds.length > 1 && !e.text_overset_chain && !e.text_overset_runs)
+      return false;
     if (!host.supports("document.readStory@1")) return false;
     const content = await host.document.storyContent(storyId);
     if (!content) return false;
@@ -2884,6 +2898,18 @@ export function createSession(
       if (!g?.bounds) return false;
       const [top, left, bottom, right] = g.bounds;
       boxes.push([right - left, bottom - top]);
+    }
+    if (e.text_run_words && e.text_overset_runs) {
+      // Each run in its own face: a story of several sizes is judged at
+      // each (the run rule is the chain rule for one face).
+      const faces = await storyFaces(host, storyId, text, content);
+      const words = e.text_run_words(faces.runs) as string[][];
+      const metrics = await measureWords(
+        host,
+        { frames: faces.fonts.map((font) => ({ font })) } as never,
+        faces.fonts.map((_, i) => words[i] ?? []),
+      );
+      return e.text_overset_runs(faces.runs, boxes, metrics);
     }
     const font = await storyFont(host, storyId, text);
     const words = e.text_words(text) as string[];
