@@ -551,7 +551,7 @@ impl Walker<'_, '_> {
         let n = (bake.w as usize) * (bake.h as usize);
         let mut rgb = Vec::with_capacity(n * 3);
         let mut alpha = Vec::with_capacity(n);
-        for px in bake.rgba.chunks_exact(4) {
+        for px in bake.rgba.as_chunks::<4>().0 {
             let a = px[3];
             for c in &px[..3] {
                 // Premultiplied → straight.

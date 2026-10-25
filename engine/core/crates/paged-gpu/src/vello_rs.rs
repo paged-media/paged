@@ -478,6 +478,7 @@ pub(crate) fn build_scene_for_surface(
     build_scene_with_transform(list, page_to_surface)
 }
 
+#[cfg(any(target_arch = "wasm32", test))]
 pub(crate) fn build_scene_with_transform(list: &DisplayList, page_to_px: kurbo::Affine) -> Scene {
     build_scene_with_transform_filtered(list, page_to_px, /*skip_overprints=*/ false, None)
 }
