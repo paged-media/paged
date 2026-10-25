@@ -185,6 +185,137 @@ fn gradient_map_teal_orange() -> Vec<u8> {
     .to_vec()
 }
 
+// The WP5.2 adjust_ext / develop blocks, via their real constructors.
+
+fn wp52c_none() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::DesaturateParams;
+    bytemuck::bytes_of(&DesaturateParams::new()).to_vec()
+}
+
+fn wp52c_sh_identity() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::ShadowsHighlightsParams;
+    bytemuck::bytes_of(&ShadowsHighlightsParams::from_values([
+        0.0, 0.5, 4.0, 0.0, 0.5, 4.0, 0.2, 0.0,
+    ]))
+    .to_vec()
+}
+
+fn wp52c_sh_stress() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::ShadowsHighlightsParams;
+    bytemuck::bytes_of(&ShadowsHighlightsParams::from_values([
+        0.6, 0.6, 4.0, 0.4, 0.5, 3.0, 0.3, 0.2,
+    ]))
+    .to_vec()
+}
+
+fn wp52c_hdr_identity() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::HdrToningParams;
+    bytemuck::bytes_of(&HdrToningParams::from_values([
+        6.0, 0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    ]))
+    .to_vec()
+}
+
+fn wp52c_hdr_stress() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::HdrToningParams;
+    bytemuck::bytes_of(&HdrToningParams::from_values([
+        6.0, 0.5, 0.8, 0.3, 0.5, 0.3, -0.2, 0.3, 0.1,
+    ]))
+    .to_vec()
+}
+
+const WP52C_STATS_A: [f32; 6] = [55.0, 8.0, 12.0, 18.0, 9.0, 11.0];
+const WP52C_STATS_B: [f32; 6] = [48.0, -4.0, 20.0, 22.0, 12.0, 8.0];
+
+fn wp52c_match_identity() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::MatchColorParams;
+    bytemuck::bytes_of(&MatchColorParams::new(
+        WP52C_STATS_A,
+        WP52C_STATS_B,
+        1.2,
+        0.8,
+        1.0,
+    ))
+    .to_vec()
+}
+
+fn wp52c_match_stress() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::MatchColorParams;
+    bytemuck::bytes_of(&MatchColorParams::new(
+        WP52C_STATS_A,
+        WP52C_STATS_B,
+        1.0,
+        1.0,
+        0.0,
+    ))
+    .to_vec()
+}
+
+fn wp52c_replace_identity() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::ReplaceColorParams;
+    bytemuck::bytes_of(&ReplaceColorParams::new(
+        [0.75, 0.375, 0.125],
+        80.0,
+        0.0,
+        0.0,
+        0.0,
+    ))
+    .to_vec()
+}
+
+fn wp52c_replace_stress() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::ReplaceColorParams;
+    bytemuck::bytes_of(&ReplaceColorParams::new(
+        [0.75, 0.375, 0.125],
+        200.0,
+        60.0,
+        0.3,
+        -0.1,
+    ))
+    .to_vec()
+}
+
+fn wp52c_develop(stress: bool) -> image_kernels::families::develop::DevelopSettings {
+    let mut s = image_kernels::families::develop::DevelopSettings::identity();
+    if stress {
+        for (i, v) in [
+            (0, 20.0),
+            (2, 0.4),
+            (3, 25.0),
+            (5, 30.0),
+            (12, 15.0),
+            (14, 30.0),
+            (38, 40.0),
+            (37, 200.0),
+            (8, 30.0),
+            (9, 40.0),
+            (10, 25.0),
+            (55, 60.0),
+            (59, 30.0),
+            (60, 40.0),
+        ] {
+            s.0[i] = v;
+        }
+    }
+    s
+}
+
+fn wp52c_develop_tone_identity() -> Vec<u8> {
+    bytemuck::bytes_of(&wp52c_develop(false).tone_params()).to_vec()
+}
+
+fn wp52c_develop_tone_stress() -> Vec<u8> {
+    bytemuck::bytes_of(&wp52c_develop(true).tone_params()).to_vec()
+}
+
+fn wp52c_develop_detail_identity() -> Vec<u8> {
+    bytemuck::bytes_of(&wp52c_develop(false).detail_params()).to_vec()
+}
+
+fn wp52c_develop_detail_stress() -> Vec<u8> {
+    bytemuck::bytes_of(&wp52c_develop(true).detail_params()).to_vec()
+}
+
 /// Every compose kernel folds `opacity` into the source FIRST, so a zero
 /// opacity makes the premultiplied source `vec4(0)` and source-over
 /// collapses to `term3 = (1−0)·αb·cb`, i.e. the backdrop.
@@ -637,6 +768,56 @@ const TABLE: &[Row] = &[
           stress: P::Fields(&[("cell_px", V::F(8.0))]),
           note: "cell 1 ⇒ the cell centre is the pixel itself (and cell 0 is \
                  clamped to 1 rather than dividing by zero)" },
+
+    // ── stylize + pixelate (WP5.2): amount 0 ⇒ mix(a, styled, 0) ────────
+    Row { id: "stylize.solarize",
+          identity: Identity::Params(P::Fields(&[("amount", V::F(0.0))])),
+          stress: P::Fields(&[("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "stylize.trace_contour",
+          identity: Identity::Params(P::Fields(&[("level", V::F(0.5)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[("level", V::F(0.5)), ("upper", V::U(1)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "stylize.wind",
+          identity: Identity::Params(P::Fields(&[("seed", V::U(7)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[("seed", V::U(7)), ("method", V::U(1)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "stylize.tiles",
+          identity: Identity::Params(P::Fields(&[
+              ("seed", V::U(7)), ("tiles", V::U(6)), ("max_offset", V::F(0.2)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("seed", V::U(7)), ("tiles", V::U(6)), ("max_offset", V::F(0.2)),
+              ("fill", V::U(2)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "stylize.extrude",
+          identity: Identity::Params(P::Fields(&[
+              ("seed", V::U(7)), ("size_px", V::F(8.0)), ("depth", V::F(30.0)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("seed", V::U(7)), ("size_px", V::F(8.0)), ("depth", V::F(30.0)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "pixelate.crystallize",
+          identity: Identity::Params(P::Fields(&[
+              ("seed", V::U(7)), ("cell_px", V::F(8.0)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[("seed", V::U(7)), ("cell_px", V::F(8.0)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "pixelate.pointillize",
+          identity: Identity::Params(P::Fields(&[
+              ("seed", V::U(7)), ("cell_px", V::F(8.0)), ("bg_r", V::F(1.0)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("seed", V::U(7)), ("cell_px", V::F(8.0)), ("bg_r", V::F(1.0)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "pixelate.mezzotint",
+          identity: Identity::Params(P::Fields(&[("seed", V::U(7)), ("kind", V::U(5)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[("seed", V::U(7)), ("kind", V::U(5)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "pixelate.color_halftone",
+          identity: Identity::Params(P::Fields(&[
+              ("max_radius", V::F(4.0)), ("angle1", V::F(108.0)), ("angle2", V::F(162.0)),
+              ("angle3", V::F(90.0)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("max_radius", V::F(4.0)), ("angle1", V::F(108.0)), ("angle2", V::F(162.0)),
+              ("angle3", V::F(90.0)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
     Row { id: "geom.offset",
           identity: Identity::Params(P::Fields(&[("dx", V::F(0.0)), ("dy", V::F(0.0)), ("edge", V::U(0))])),
           stress: P::Fields(&[("dx", V::F(5.5)), ("dy", V::F(-3.25)), ("edge", V::U(0))]),
@@ -702,6 +883,36 @@ const TABLE: &[Row] = &[
           stress: P::Fields(&[("inv_scale_x", V::F(2.0)), ("inv_scale_y", V::F(2.0))]),
           note: "sinc is INTERPOLATING — zero at every non-zero integer — so \
                  unit scale really is a pass-through, unlike mitchell" },
+
+    // ── adjust_ext / develop (WP5.2) ──────────────────────────────────
+    Row { id: "adjust.desaturate",
+          identity: Identity::NotDefined,
+          stress: P::Raw(wp52c_none),
+          note: "EXCLUDED from identity: no params — every pixel to its HSL lightness" },
+    Row { id: "adjust.shadows_highlights",
+          identity: Identity::Params(P::Raw(wp52c_sh_identity)),
+          stress: P::Raw(wp52c_sh_stress),
+          note: "both amounts and the midtone contrast 0 ⇒ the tone path is skipped" },
+    Row { id: "adjust.hdr_toning",
+          identity: Identity::Params(P::Raw(wp52c_hdr_identity)),
+          stress: P::Raw(wp52c_hdr_stress),
+          note: "gamma 1, every other control 0 ⇒ every stage is skipped" },
+    Row { id: "adjust.match_color",
+          identity: Identity::Params(P::Raw(wp52c_match_identity)),
+          stress: P::Raw(wp52c_match_stress),
+          note: "fade 1 ⇒ mix(moved, rgb, 1) = rgb" },
+    Row { id: "adjust.replace_color",
+          identity: Identity::Params(P::Raw(wp52c_replace_identity)),
+          stress: P::Raw(wp52c_replace_stress),
+          note: "hue, saturation and lightness 0 ⇒ the shift is skipped" },
+    Row { id: "develop.tone",
+          identity: Identity::Params(P::Raw(wp52c_develop_tone_identity)),
+          stress: P::Raw(wp52c_develop_tone_stress),
+          note: "every control at its default ⇒ every stage is skipped" },
+    Row { id: "develop.detail",
+          identity: Identity::Params(P::Raw(wp52c_develop_detail_identity)),
+          stress: P::Raw(wp52c_develop_detail_stress),
+          note: "texture, clarity, dehaze, sharpening and noise reduction 0 ⇒ early return" },
 ];
 
 /// Kernels exempt from the HALF-mask property, with the reason. The

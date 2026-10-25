@@ -9,8 +9,16 @@
       "read": "broad",
       "write": "scoped"
     },
-    "rendering": ["sceneLayer", "hitTest", "resourceProvider", "overlay"],
-    "assets": ["images", "fonts"],
+    "rendering": [
+      "sceneLayer",
+      "hitTest",
+      "resourceProvider",
+      "overlay"
+    ],
+    "assets": [
+      "images",
+      "fonts"
+    ],
     "network": false,
     "actions": {
       "register": true
@@ -108,6 +116,76 @@
       "media.paged.image.command.filterTexturizer",
       "media.paged.image.command.filterGradientMap",
       "media.paged.image.command.filterSelectiveColour",
+      "media.paged.image.command.filterGallery",
+      "media.paged.image.command.filterDisplace",
+      "media.paged.image.command.filterPolarCoordinates",
+      "media.paged.image.command.filterRipple",
+      "media.paged.image.command.filterShear",
+      "media.paged.image.command.filterZigzag",
+      "media.paged.image.command.filterClouds",
+      "media.paged.image.command.filterDifferenceClouds",
+      "media.paged.image.command.filterFibers",
+      "media.paged.image.command.filterLensFlare",
+      "media.paged.image.command.filterLightingEffects",
+      "media.paged.image.command.filterWind",
+      "media.paged.image.command.filterExtrude",
+      "media.paged.image.command.filterTiles",
+      "media.paged.image.command.filterTraceContour",
+      "media.paged.image.command.filterCrystallize",
+      "media.paged.image.command.filterPointillize",
+      "media.paged.image.command.filterMezzotint",
+      "media.paged.image.command.filterColorHalftone",
+      "media.paged.image.command.filterShadowsHighlights",
+      "media.paged.image.command.filterHdrToning",
+      "media.paged.image.command.filterMatchColor",
+      "media.paged.image.command.filterReplaceColor",
+      "media.paged.image.command.filterDevelop",
+      "media.paged.image.command.filterColoredPencil",
+      "media.paged.image.command.filterCutout",
+      "media.paged.image.command.filterDryBrush",
+      "media.paged.image.command.filterFresco",
+      "media.paged.image.command.filterNeonGlow",
+      "media.paged.image.command.filterPaletteKnife",
+      "media.paged.image.command.filterPlasticWrap",
+      "media.paged.image.command.filterRoughPastels",
+      "media.paged.image.command.filterSmudgeStick",
+      "media.paged.image.command.filterSponge",
+      "media.paged.image.command.filterUnderpainting",
+      "media.paged.image.command.filterWatercolor",
+      "media.paged.image.command.filterAccentedEdges",
+      "media.paged.image.command.filterAngledStrokes",
+      "media.paged.image.command.filterDarkStrokes",
+      "media.paged.image.command.filterInkOutlines",
+      "media.paged.image.command.filterSprayedStrokes",
+      "media.paged.image.command.filterSumiE",
+      "media.paged.image.command.filterDiffuseGlow",
+      "media.paged.image.command.filterOceanRipple",
+      "media.paged.image.command.filterChalkCharcoal",
+      "media.paged.image.command.filterCharcoal",
+      "media.paged.image.command.filterChrome",
+      "media.paged.image.command.filterConteCrayon",
+      "media.paged.image.command.filterGraphicPen",
+      "media.paged.image.command.filterNotePaper",
+      "media.paged.image.command.filterPlaster",
+      "media.paged.image.command.filterReticulation",
+      "media.paged.image.command.filterStamp",
+      "media.paged.image.command.filterTornEdges",
+      "media.paged.image.command.filterWaterPaper",
+      "media.paged.image.command.filterCraquelure",
+      "media.paged.image.command.filterGrain",
+      "media.paged.image.command.filterMosaicTiles",
+      "media.paged.image.command.filterPatchwork",
+      "media.paged.image.command.filterFieldBlur",
+      "media.paged.image.command.filterIrisBlur",
+      "media.paged.image.command.filterTiltShift",
+      "media.paged.image.command.filterPathBlur",
+      "media.paged.image.command.filterSpinBlur",
+      "media.paged.image.command.solarize",
+      "media.paged.image.command.facet",
+      "media.paged.image.command.desaturate",
+      "media.paged.image.command.equalize",
+      "media.paged.image.command.newAdjustmentDevelop",
+      "media.paged.image.command.curvesTarget",
       "media.paged.image.command.average",
       "media.paged.image.command.imageSize",
       "media.paged.image.command.trim",
@@ -180,7 +258,9 @@
       "media.paged.image.tool.patch",
       "media.paged.image.tool.type"
     ],
-    "importers": ["media.paged.image.importer.raster"],
+    "importers": [
+      "media.paged.image.importer.raster"
+    ],
     "exporters": [
       "media.paged.image.exporter.psd",
       "media.paged.image.exporter.png",
@@ -1311,13 +1391,20 @@
                     "kind": "list",
                     "of": {
                       "kind": "enum",
-                      "members": ["add", "subtract", "intersect"]
+                      "members": [
+                        "add",
+                        "subtract",
+                        "intersect"
+                      ]
                     },
                     "optional": true
                   },
                   "fillRule": {
                     "kind": "enum",
-                    "members": ["nonzero", "evenodd"],
+                    "members": [
+                      "nonzero",
+                      "evenodd"
+                    ],
                     "optional": true
                   },
                   "alpha": {

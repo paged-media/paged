@@ -38,6 +38,12 @@
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
 
+import {
+  filterEngineOf,
+  type FilterEngine,
+  type FilterWasm,
+} from "./engine-filters";
+
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
 export interface LevelsParams {
@@ -837,7 +843,8 @@ export const PLAIN_LAYER_PARITY = {
   | "fillKind"
 >;
 
-/** Photoshop's sixteen adjustment-layer kinds, in its menu order. */
+/** Photoshop's sixteen adjustment-layer kinds, in its menu order, and
+ *  Develop. */
 export const ADJUSTMENT_KINDS = [
   "brightnessContrast",
   "levels",
@@ -855,6 +862,9 @@ export const ADJUSTMENT_KINDS = [
   "threshold",
   "gradientMap",
   "selectiveColor",
+  // Not one of Photoshop's sixteen: the Camera Raw-class Develop
+  // adjustment (WP5.2), a layer kind of the engine's own.
+  "develop",
 ] as const;
 export type AdjustmentKind = (typeof ADJUSTMENT_KINDS)[number];
 
@@ -1114,7 +1124,7 @@ export interface FilterMask {
   feather?: number;
 }
 
-export interface ImageEngine {
+export interface ImageEngine extends FilterEngine {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2024,7 +2034,7 @@ interface DecodedHandleWasm {
 
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
-export interface ImageWasmModule {
+export interface ImageWasmModule extends FilterWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -2741,6 +2751,7 @@ export interface ImageWasmModule {
  *  mapping is unit-testable over a fake wasm object (no real wasm). */
 export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
   return {
+    ...filterEngineOf(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,

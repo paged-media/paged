@@ -25,20 +25,28 @@
 //! M0 fan-out (one agent per file).
 
 pub mod adjust;
+pub mod adjust_ext;
 pub mod arithmetic;
 pub mod band;
+pub mod blurgal;
 pub mod boolean;
 pub mod cast;
 pub mod compose;
 pub mod conv;
+pub mod develop;
+pub mod distort;
 pub mod gallery;
+pub mod gallery_ext;
 pub mod gen;
 pub mod geom;
 pub mod linear;
 pub mod minmax;
 pub mod morph;
+pub mod pixelate;
 pub mod relational;
+pub mod render;
 pub mod resample;
+pub mod stylize;
 
 use crate::KernelDef;
 
@@ -47,19 +55,27 @@ use crate::KernelDef;
 /// registry-generated dispatch table.
 pub static ALL_FAMILIES: &[&[&KernelDef]] = &[
     adjust::FAMILY,
+    adjust_ext::FAMILY,
     arithmetic::FAMILY,
     band::FAMILY,
+    blurgal::FAMILY,
     boolean::FAMILY,
     cast::FAMILY,
     compose::FAMILY,
     compose::GAMMA_FAMILY,
     conv::FAMILY,
+    develop::FAMILY,
+    distort::FAMILY,
     gallery::FAMILY,
+    gallery_ext::FAMILY,
     gen::FAMILY,
     geom::FAMILY,
     linear::FAMILY,
     minmax::FAMILY,
     morph::FAMILY,
+    pixelate::FAMILY,
     relational::FAMILY,
+    render::FAMILY,
     resample::FAMILY,
+    stylize::FAMILY,
 ];

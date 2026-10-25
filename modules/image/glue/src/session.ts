@@ -43,9 +43,16 @@ import {
   filterDef,
   filterDefaults,
   scaledForProxy,
+  type FilterContext,
   type FilterId,
   type FilterValue,
 } from "./filters";
+import { blurPreset, type BlurKind } from "./filters-blur-gallery";
+import {
+  blurGalleryHit,
+  blurGalleryShapes,
+  type BlurDrag,
+} from "./blur-gallery-pins";
 import { parseCube, toKernelCube } from "./cube";
 import {
   readSession,
@@ -239,7 +246,13 @@ export interface FilterDialogState {
    *  filter while the dialog stays open. */
   before: boolean;
   applied: boolean;
+  /** The file each `image` parameter resolved to (its name), when one
+   *  was chosen (`chooseFilterImage`). */
+  files: Record<string, string>;
 }
+
+/** The filters that apply at once (Photoshop gives them no dialog). */
+export type OneShotFilter = "solarize" | "facet" | "desaturate" | "equalize";
 
 /** Which dialog the panel shows on top (one at a time, as a modal). */
 export type ImageDialog =
@@ -451,6 +464,10 @@ export interface ImageSessionState {
    *  last set — a new object each time, so the panel's curve editor can
    *  follow it. Null until they are used on this image. */
   channelCurves: ChannelCurves | null;
+  /** Curves' TARGETED ADJUSTMENT (I-55): armed on one curve, the image
+   *  click-drag moves the point for the tone under the pointer. A new
+   *  object after each move, so the curve editor follows `points`. */
+  curvesTarget: { channel: CurveChannel; points: Array<[number, number]> } | null;
 }
 
 export interface ImageSession {
@@ -626,7 +643,29 @@ export interface ImageSession {
    *  defaults the first time) and, with preview on, show the result on
    *  the canvas. Refuses without an image. Replaces an open dialog
    *  (cancelling an open filter first). */
-  openFilterDialog(id: FilterId): Promise<boolean>;
+  openFilterDialog(
+    id: FilterId,
+    preset?: Record<string, FilterValue>,
+  ): Promise<boolean>;
+  /** FILTER ▸ BLUR GALLERY ▸ Field / Iris / Tilt-Shift / Path / Spin: the
+   *  Blur Gallery workspace with that blur switched on (its last settings
+   *  kept), the geometry on the canvas. */
+  openBlurGallery(kind: BlurKind): Promise<boolean>;
+  /** An `image` parameter's source: 0 this image's composite, 1 a file
+   *  the host's picker returns (decoded engine-side; refused when the
+   *  host has no picker or the user cancels). The preview follows. */
+  chooseFilterImage(key: string, choice: 0 | 1): Promise<boolean>;
+  /** The filters with no dialog (Solarize, Facet, Desaturate, Equalize):
+   *  one undo step in the active layer, inside the selection. */
+  applyOneShot(kind: OneShotFilter): Promise<boolean>;
+  /** A pointer on the canvas while the open dialog draws there (the Blur
+   *  Gallery's pins, Curves' targeted adjustment). True when it took the
+   *  event, so the active tool leaves it alone. `at` in image px. */
+  canvasPointer(
+    phase: "down" | "move" | "up",
+    at: [number, number],
+    modifiers?: { alt?: boolean; shift?: boolean },
+  ): boolean;
   /** Change the open filter dialog's values; the preview follows (on a
    *  resampled proxy at once where it can, at full resolution when the
    *  values rest). */
@@ -681,6 +720,15 @@ export interface ImageSession {
   /** Called by the image tools on pointer-down: when a Curves eyedropper
    *  is armed, it takes the click (and is disarmed). */
   takeCurvesPick(at: [number, number]): boolean;
+  /** Arm (or, with null, disarm) Curves' targeted adjustment on
+   *  `channel`'s curve, starting from the editor's `points`. While armed,
+   *  a drag on the image (any image tool) moves the curve point for the
+   *  tone under the pointer up or down — one curve change per drag, like
+   *  a drag of the point itself. */
+  armCurvesTarget(
+    channel: CurveChannel | null,
+    points?: Array<[number, number]>,
+  ): void;
   /** ADJUST ▸ Color Lookup from a .cube file's text. */
   applyColorLookup(cubeText: string, name?: string): Promise<boolean>;
   /** The GRADIENT TOOL: foreground → background along the dragged line
@@ -1512,6 +1560,19 @@ const S = defineMessages("image.status", {
   autoCurvesFlat: "Auto found no contrast to stretch.",
   curvesPickArmed: "Click the image to set the {kind} point.",
   curvesPicked: "Curves {kind} point set from {colour} at {x}, {y}.",
+  curvesTargetArmed:
+    "Drag up or down on the image to move the curve for the tone under the pointer.",
+  curvesTargeted: "Curve point {input} moved to {output}.",
+  noFilterImageChosen: "No image was chosen; the filter keeps its source.",
+});
+
+/** The filters with no dialog, as the status line and the undo step
+ *  name them. */
+const ONE_SHOT = defineMessages("image.effect", {
+  solarize: "Solarize",
+  facet: "Facet",
+  desaturate: "Desaturate",
+  equalize: "Equalize",
 });
 
 /** The Curves eyedroppers' names, as the status line says them. */
@@ -1741,6 +1802,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     ppi: null,
     curvesPicker: null,
     channelCurves: null,
+    curvesTarget: null,
   };
   /** The retained PSD parse handle (wasm-side), when state.psd is set. */
   let psdHandle: number | null = null;
@@ -2967,6 +3029,28 @@ export function createImageSession(host: BundleHost): ImageSession {
 
   /** The last values each filter's dialog was closed with. */
   const lastFilterValues = new Map<FilterId, Record<string, FilterValue>>();
+  /** The files the open dialog's `image` parameters decoded (owned:
+   *  freed with the dialog). */
+  const filterFiles = new Map<string, number>();
+  const freeFilterFiles = () => {
+    for (const h of filterFiles.values()) engine?.freeImage(h);
+    filterFiles.clear();
+  };
+  /** What a filter's run needs beyond its values (filters-schema.ts). */
+  const filterCtx = (
+    width: number,
+    height: number,
+    values: Readonly<Record<string, FilterValue>>,
+  ): FilterContext => ({
+    width,
+    height,
+    fg: [state.colors.fg[0], state.colors.fg[1], state.colors.fg[2]],
+    bg: [state.colors.bg[0], state.colors.bg[1], state.colors.bg[2]],
+    resource: (key) =>
+      values[key] === 1
+        ? (filterFiles.get(key) ?? null)
+        : (state.source?.handle ?? null),
+  });
   /** The image the dialog's proxy preview runs on (taken at open). */
   let filterProxy: {
     handle: number;
@@ -2993,7 +3077,29 @@ export function createImageSession(host: BundleHost): ImageSession {
     if (filterSettle) clearTimeout(filterSettle);
     filterSettle = null;
     freeFilterProxy();
+    freeFilterFiles();
+    blurDrag = null;
+    drawBlurGallery(null);
     appliedKey = null;
+  };
+
+  // ── the Blur Gallery's geometry on the canvas ───────────────────────
+  let blurDrag: BlurDrag | null = null;
+  let blurLayer: ReturnType<typeof host.overlay.layer> | null = null;
+  /** Draw (or clear) the open Blur Gallery's pins over the image. */
+  const drawBlurGallery = (d: FilterDialogState | null) => {
+    const src = state.source;
+    if (!d || d.id !== "blurGallery" || !src?.elementId) {
+      blurLayer?.clear();
+      return;
+    }
+    void resolveFrameFit(host, src, "blur gallery").then((fit) => {
+      if (openFilter() !== d) return;
+      blurLayer ??= host.overlay.layer("blur-gallery");
+      if (!fit) blurLayer.clear();
+      else
+        blurLayer.set(blurGalleryShapes(d.values, src.width, src.height, fit));
+    });
   };
 
   /** Take the preview step back off the image (it is the newest step:
@@ -3017,7 +3123,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     const def = filterDef(d.id);
     const values = { ...d.values };
     const eng = engine;
-    const ok = await api.applyEffect(def.label, (h) => def.run(eng, h, values));
+    const ctx = filterCtx(state.source.width, state.source.height, values);
+    const ok = await api.applyEffect(def.label, (h) =>
+      def.run(eng, h, values, ctx),
+    );
     // The dialog may have closed (or moved on) while the pass ran.
     if (openFilter() !== d) {
       if (ok) await historyStep(true);
@@ -3043,7 +3152,12 @@ export function createImageSession(host: BundleHost): ImageSession {
     const def = filterDef(d.id);
     const values = scaledForProxy(def, d.values, filterProxy.factor);
     try {
-      const out = await def.run(engine, filterProxy.handle, values);
+      const out = await def.run(
+        engine,
+        filterProxy.handle,
+        values,
+        filterCtx(filterProxy.width, filterProxy.height, d.values),
+      );
       let rgba: Uint8Array;
       try {
         rgba = await engine.adjust(out.handle, state.params);
@@ -3169,6 +3283,83 @@ export function createImageSession(host: BundleHost): ImageSession {
     for (const ch of ["r", "g", "b"] as const)
       api.setCurvePoints(curves[ch], ch);
     state.channelCurves = curves;
+  };
+
+  // ── CURVES ▸ TARGETED ADJUSTMENT (I-55) ─────────────────────────────
+  const curvesTarget: {
+    armed: boolean;
+    /** The drag: the point index it moves, where it started, its output. */
+    drag: { index: number; y0: number; out0: number } | null;
+  } = { armed: false, drag: null };
+  /** The tone (0..1) of the image under `at` on `channel`'s curve: the
+   *  channel's value, or Rec. 709 luminance for the composite. */
+  const toneAt = (at: [number, number], channel: CurveChannel): number | null => {
+    const src = state.source;
+    if (!src || !engine) return null;
+    const [x, y] = [Math.floor(at[0]), Math.floor(at[1])];
+    if (x < 0 || y < 0 || x >= src.width || y >= src.height) return null;
+    let c: Rgba01 | null;
+    try {
+      c = averageRgba8(engine.tile(src.handle, x, y, 1, 1));
+    } catch (err) {
+      host.log.debug("targeted adjustment sample failed", err);
+      return null;
+    }
+    if (!c) return null;
+    if (channel === "r") return c[0];
+    if (channel === "g") return c[1];
+    if (channel === "b") return c[2];
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  /** The curve through `pts` at `x`, as the engine's LUT draws it. */
+  const curveAt = (pts: Array<[number, number]>, x: number): number => {
+    if (!engine) return x;
+    const lut = engine.curveLut(pts);
+    return (lut[Math.round(Math.min(1, Math.max(0, x)) * 255)] ?? 0) / 255;
+  };
+  const curvesTargetPointer = (
+    phase: "down" | "move" | "up",
+    at: [number, number],
+  ): boolean => {
+    const target = state.curvesTarget;
+    if (!target) return false;
+    if (phase === "down") {
+      const tone = toneAt(at, target.channel);
+      if (tone === null) return false;
+      const pts = target.points.map((q) => [q[0], q[1]] as [number, number]);
+      // The point within 4 levels of the tone moves; otherwise a new one
+      // is placed ON the curve there, so the press alone changes nothing.
+      let index = pts.findIndex((q) => Math.abs(q[0] - tone) <= 4 / 255);
+      if (index < 0) {
+        pts.push([tone, curveAt(pts, tone)]);
+        pts.sort((a, b) => a[0] - b[0]);
+        index = pts.findIndex((q) => q[0] === tone);
+      }
+      curvesTarget.drag = { index, y0: at[1], out0: pts[index]![1] };
+      state.curvesTarget = { channel: target.channel, points: pts };
+      emit();
+      return true;
+    }
+    const drag = curvesTarget.drag;
+    if (!drag) return false;
+    // Up the image raises the output; a full image height is the range.
+    const span = Math.max(64, state.source?.height ?? 256);
+    const out = Math.min(1, Math.max(0, drag.out0 + (drag.y0 - at[1]) / span));
+    const pts = target.points.map((q, i) =>
+      i === drag.index ? ([q[0], out] as [number, number]) : q,
+    );
+    state.curvesTarget = { channel: target.channel, points: pts };
+    api.setCurvePoints(pts, target.channel);
+    if (phase === "up") {
+      curvesTarget.drag = null;
+      setStatus(
+        t(S.curvesTargeted, {
+          input: Math.round(pts[drag.index]![0] * 255),
+          output: Math.round(out * 255),
+        }),
+      );
+    }
+    return true;
   };
 
   const api: ImageSession = {
@@ -3383,7 +3574,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
 
-    async openFilterDialog(id) {
+    async openFilterDialog(id, preset) {
       const def = filterDef(id);
       if (openFilter()) await cancelFilter();
       if (!state.source || !engine) {
@@ -3393,13 +3584,19 @@ export function createImageSession(host: BundleHost): ImageSession {
       discardStroke();
       const filter: FilterDialogState = {
         id,
-        values: { ...filterDefaults(def), ...lastFilterValues.get(id) },
+        values: {
+          ...filterDefaults(def),
+          ...lastFilterValues.get(id),
+          ...preset,
+        },
         preview: true,
         before: false,
         applied: false,
+        files: {},
       };
       state.dialog = { kind: "filter", filter };
       emit();
+      drawBlurGallery(filter);
       await takeFilterProxy();
       if (openFilter() !== filter) {
         freeFilterProxy();
@@ -3417,7 +3614,107 @@ export function createImageSession(host: BundleHost): ImageSession {
       // A new dialog record, so a render memoised on it sees the change.
       state.dialog = { kind: "filter", filter: d };
       emit();
+      drawBlurGallery(d);
       scheduleFilterPreview();
+    },
+
+    openBlurGallery(kind) {
+      const last = lastFilterValues.get("blurGallery") ?? {};
+      return api.openFilterDialog(
+        "blurGallery",
+        blurPreset(last, kind) as Record<string, FilterValue>,
+      );
+    },
+
+    async chooseFilterImage(key, choice) {
+      const d = openFilter();
+      if (!d || !engine) return false;
+      if (choice === 0) {
+        const own = filterFiles.get(key);
+        if (own !== undefined) engine.freeImage(own);
+        filterFiles.delete(key);
+        const { [key]: _gone, ...files } = d.files;
+        d.files = files;
+        api.setFilterValues({ [key]: 0 });
+        return true;
+      }
+      if (!host.supports("shell.pickFile@1")) {
+        setStatus(t(S.thisHostWiresNoFilePicker));
+        return false;
+      }
+      const picked = await host.shell.pickFile({
+        accept: [".png", ".jpg", ".jpeg", ".webp", ".psd", ".tif", ".tiff"],
+      });
+      const file = picked[0];
+      if (!file || openFilter() !== d) {
+        setStatus(t(S.noFilterImageChosen));
+        return false;
+      }
+      let h: number;
+      try {
+        h = engine.decode(file.bytes).handle;
+      } catch (err) {
+        setStatus(t(S.whatFailed, { what: file.name, error: errText(err) }));
+        return false;
+      }
+      const own = filterFiles.get(key);
+      if (own !== undefined) engine.freeImage(own);
+      filterFiles.set(key, h);
+      d.files = { ...d.files, [key]: file.name };
+      api.setFilterValues({ [key]: 1 });
+      return true;
+    },
+
+    async applyOneShot(kind) {
+      const eng = engine;
+      if (!eng || !state.source) {
+        setStatus(t(S.filterNeedsAnImage, { label: t(ONE_SHOT[kind]) }));
+        return false;
+      }
+      return api.applyEffect(ONE_SHOT[kind], (h) => {
+        switch (kind) {
+          case "solarize":
+            return eng.applySolarize(h);
+          case "facet":
+            // Facet clumps similar neighbours into flat facets: the
+            // gallery's Kuwahara regions at their smallest radius.
+            return eng.galleryKuwahara(h, 2, 1);
+          case "desaturate":
+            return eng.applyDesaturate(h);
+          case "equalize":
+            return eng.applyEqualize(h, state.selection !== null);
+        }
+      });
+    },
+
+    canvasPointer(phase, at, modifiers = {}) {
+      // A drag cut off (the tool deactivated, the pointer left the frame)
+      // ends where it last was.
+      if (!Number.isFinite(at[0]) || !Number.isFinite(at[1])) {
+        const had = blurDrag !== null || curvesTarget.drag !== null;
+        blurDrag = null;
+        curvesTarget.drag = null;
+        return had;
+      }
+      const d = openFilter();
+      const src = state.source;
+      if (curvesTarget.armed && src) return curvesTargetPointer(phase, at);
+      if (!d || d.id !== "blurGallery" || !src) return false;
+      if (phase === "down") {
+        blurDrag = blurGalleryHit(
+          d.values,
+          src.width,
+          src.height,
+          at,
+          modifiers.alt === true,
+        );
+        if (!blurDrag) return false;
+      }
+      if (!blurDrag) return false;
+      const patch = blurDrag.move(at, src.width, src.height);
+      if (patch) api.setFilterValues(patch);
+      if (phase === "up") blurDrag = null;
+      return true;
     },
 
     async setFilterPreview(on) {
@@ -3473,7 +3770,9 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.filterNeedsAnImage, { label: t(def.label) }));
         return false;
       }
-      return api.applyEffect(def.label, (h) => def.run(eng, h, v));
+      const src = state.source;
+      const ctx = filterCtx(src?.width ?? 1, src?.height ?? 1, v);
+      return api.applyEffect(def.label, (h) => def.run(eng, h, v, ctx));
     },
 
     async applyAverage() {
@@ -3633,6 +3932,16 @@ export function createImageSession(host: BundleHost): ImageSession {
         }),
       );
       return curves;
+    },
+
+    armCurvesTarget(channel, points) {
+      curvesTarget.armed = channel !== null;
+      curvesTarget.drag = null;
+      state.curvesTarget = channel
+        ? { channel, points: points ? [...points] : [[0, 0], [1, 1]] }
+        : null;
+      if (channel) setStatus(t(S.curvesTargetArmed));
+      else emit();
     },
 
     takeCurvesPick(at) {
@@ -4585,6 +4894,10 @@ export function createImageSession(host: BundleHost): ImageSession {
         rgb[{ r: 0, g: 1, b: 2 }[channel]] = table;
         state.params = { ...state.params, curveLutRgb: rgb };
       }
+      // An armed targeted adjustment moves THIS curve next time.
+      const target = state.curvesTarget;
+      if (target && target.channel === channel && target.points !== points)
+        state.curvesTarget = { channel, points: [...points] };
       emit();
       schedulePreview();
     },

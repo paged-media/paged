@@ -16,237 +16,35 @@
 // scales it by the proxy's factor, so the preview looks like the result
 // rather than like the filter at a magnified size.
 
-import { defineMessages } from "@paged-media/strings";
 
-import type { DecodedInfo, ImageEngine } from "./engine";
+import {
+  amount,
+  angle,
+  bool,
+  BOX_MAX_RADIUS,
+  F,
+  HIGH_PASS_MAX_SIGMA,
+  MEDIAN_MAX_RADIUS,
+  MORPH_MAX_RADIUS,
+  num,
+  range,
+  rgb,
+  shape,
+  SURFACE_MAX_RADIUS,
+  type FilterDef,
+  type FilterId,
+  type FilterValue,
+  type FilterValues,
+} from "./filters-schema";
+import { BLUR_GALLERY } from "./filters-blur-gallery";
+import { FAMILY_FILTERS } from "./filters-families";
+import { FG, GALLERY_FILTERS, galleryWorkspace } from "./filters-gallery";
+import { DEVELOP_FILTERS } from "./develop";
 
-/** One value of a dialog: a number (sliders, angles, choices), a switch,
- *  or a colour (straight RGB in [0, 1]). */
-export type FilterValue = number | boolean | readonly [number, number, number];
-export type FilterValues = Readonly<Record<string, FilterValue>>;
+export * from "./filters-schema";
 
-export type ParamSpec =
-  | {
-      kind: "range";
-      key: string;
-      label: string;
-      min: number;
-      max: number;
-      step: number;
-      default: number;
-      /** A length in image px (scaled for the proxy preview). */
-      px?: boolean;
-      /** Shown as a percentage of [0, 1]. */
-      percent?: boolean;
-    }
-  | {
-      kind: "angle";
-      key: string;
-      label: string;
-      default: number;
-    }
-  | {
-      kind: "select";
-      key: string;
-      label: string;
-      options: ReadonlyArray<{ value: number; label: string }>;
-      default: number;
-    }
-  | { kind: "toggle"; key: string; label: string; default: boolean }
-  | {
-      kind: "color";
-      key: string;
-      label: string;
-      default: readonly [number, number, number];
-    };
-
-export interface FilterDef {
-  /** The id: the command is `filter<Id>` with the first letter raised. */
-  id: FilterId;
-  /** The dialog's title and the undo step's name (a message key). */
-  label: string;
-  /** Where the menu shows it, under Image ▸ Filter. */
-  group: FilterGroup;
-  params: readonly ParamSpec[];
-  run(
-    engine: ImageEngine,
-    handle: number,
-    v: FilterValues,
-  ): Promise<DecodedInfo>;
-}
-
-export type FilterGroup =
-  | "Blur"
-  | "Noise"
-  | "Other"
-  | "Sharpen"
-  | "Stylize"
-  | "Pixelate"
-  | "Filter Gallery"
-  | "Adjust";
-
-export const F = defineMessages("image.filter", {
-  boxBlur: "Box blur",
-  surfaceBlur: "Surface blur",
-  motionBlur: "Motion blur",
-  radialBlur: "Radial blur",
-  lensBlur: "Lens blur",
-  addNoise: "Add noise",
-  despeckle: "Despeckle",
-  dustScratches: "Dust & scratches",
-  median: "Median",
-  reduceNoise: "Reduce noise",
-  highPass: "High pass",
-  maximum: "Maximum",
-  minimum: "Minimum",
-  offset: "Offset",
-  smartSharpen: "Smart sharpen",
-  emboss: "Emboss",
-  findEdges: "Find edges",
-  glowingEdges: "Glowing edges",
-  mosaic: "Mosaic",
-  halftone: "Colour halftone",
-  paintDaubs: "Paint daubs",
-  posterEdges: "Poster edges",
-  filmGrain: "Film grain",
-  spatter: "Spatter",
-  crosshatch: "Crosshatch",
-  basRelief: "Bas relief",
-  photocopy: "Photocopy",
-  stainedGlass: "Stained glass",
-  glass: "Glass",
-  texturizer: "Texturizer",
-  gradientMap: "Gradient map",
-  selectiveColour: "Selective colour",
-
-  // Parameter labels.
-  radius: "Radius",
-  threshold: "Threshold",
-  angle: "Angle",
-  distance: "Distance",
-  amount: "Amount",
-  method: "Method",
-  spin: "Spin",
-  zoom: "Zoom",
-  centreX: "Centre X",
-  centreY: "Centre Y",
-  brightness: "Specular threshold",
-  boost: "Highlight boost",
-  distribution: "Distribution",
-  uniform: "Uniform",
-  gaussian: "Gaussian",
-  monochromatic: "Monochromatic",
-  edgeThreshold: "Edge threshold",
-  strength: "Strength",
-  preserve: "Preserve",
-  squareness: "Squareness",
-  roundness: "Roundness",
-  horizontal: "Horizontal",
-  vertical: "Vertical",
-  undefinedAreas: "Undefined areas",
-  setTransparent: "Set to transparent",
-  repeatEdge: "Repeat edge pixels",
-  wrapAround: "Wrap around",
-  clamp: "Halo limit",
-  height: "Height",
-  cellSize: "Cell size",
-  contrast: "Contrast",
-  levels: "Levels",
-  edgeAmount: "Edge intensity",
-  intensity: "Edge brightness",
-  smoothness: "Smoothness",
-  grain: "Grain size",
-  sprayRadius: "Spray radius",
-  anisotropy: "Direction",
-  spacing: "Spacing",
-  sets: "Line sets",
-  elevation: "Light elevation",
-  softness: "Softness",
-  border: "Border thickness",
-  scale: "Scale",
-  distortion: "Distortion",
-  texture: "Texture",
-  canvas: "Canvas",
-  burlap: "Burlap",
-  brick: "Brick",
-  relief: "Relief",
-  light: "Light direction",
-  shadow: "Shadows",
-  highlight: "Highlights",
-  colours: "Colours",
-  reds: "Reds",
-  yellows: "Yellows",
-  greens: "Greens",
-  cyans: "Cyans",
-  blues: "Blues",
-  magentas: "Magentas",
-  whites: "Whites",
-  neutrals: "Neutrals",
-  blacks: "Blacks",
-  cyan: "Cyan",
-  magenta: "Magenta",
-  yellow: "Yellow",
-  black: "Black",
-  absolute: "Absolute",
-  seed: "Seed",
-});
-
-// The kernels' window bounds (image-kernels): a radius past them is
-// refused engine-side, so the sliders stop there.
-const MEDIAN_MAX_RADIUS = 10;
-const MORPH_MAX_RADIUS = 32;
-const BOX_MAX_RADIUS = 32;
-const SURFACE_MAX_RADIUS = 16;
-const HIGH_PASS_MAX_SIGMA = 10;
-
-const num = (v: FilterValues, k: string): number => {
-  const x = v[k];
-  return typeof x === "number" ? x : 0;
-};
-const bool = (v: FilterValues, k: string): boolean => v[k] === true;
-const rgb = (v: FilterValues, k: string): readonly [number, number, number] => {
-  const x = v[k];
-  return Array.isArray(x) ? (x as [number, number, number]) : [0, 0, 0];
-};
-
-const range = (
-  key: string,
-  label: string,
-  min: number,
-  max: number,
-  step: number,
-  dflt: number,
-  extra: { px?: boolean; percent?: boolean } = {},
-): ParamSpec => ({
-  kind: "range",
-  key,
-  label,
-  min,
-  max,
-  step,
-  default: dflt,
-  ...extra,
-});
-const angle = (key: string, label: string, dflt: number): ParamSpec => ({
-  kind: "angle",
-  key,
-  label,
-  default: dflt,
-});
-const amount = (dflt = 1): ParamSpec =>
-  range("amount", F.amount, 0, 1, 0.01, dflt, { percent: true });
-const shape: ParamSpec = {
-  kind: "select",
-  key: "round",
-  label: F.preserve,
-  options: [
-    { value: 0, label: F.squareness },
-    { value: 1, label: F.roundness },
-  ],
-  default: 0,
-};
-
-export const FILTERS: readonly FilterDef[] = [
+/** The first families (the panel keeps a button for each). */
+export const FIRST_FAMILIES: readonly FilterDef[] = [
   // ── Blur ───────────────────────────────────────────────────────────
   {
     id: "boxBlur",
@@ -547,8 +345,10 @@ export const FILTERS: readonly FilterDef[] = [
   },
   {
     id: "halftone",
-    label: F.halftone,
-    group: "Pixelate",
+    // The gallery's Halftone Pattern (one rotated screen); Pixelate ▸
+    // Color Halftone is `colorHalftone` (a screen per channel).
+    label: FG.halftonePattern,
+    group: "Filter Gallery",
     params: [
       range("cell", F.cellSize, 2, 64, 1, 6, { px: true }),
       angle("angle", F.angle, 45),
@@ -822,39 +622,25 @@ export const FILTERS: readonly FilterDef[] = [
   },
 ];
 
-export type FilterId =
-  | "boxBlur"
-  | "surfaceBlur"
-  | "motionBlur"
-  | "radialBlur"
-  | "lensBlur"
-  | "addNoise"
-  | "despeckle"
-  | "dustScratches"
-  | "median"
-  | "reduceNoise"
-  | "highPass"
-  | "maximum"
-  | "minimum"
-  | "offset"
-  | "smartSharpen"
-  | "emboss"
-  | "findEdges"
-  | "glowingEdges"
-  | "mosaic"
-  | "halftone"
-  | "paintDaubs"
-  | "posterEdges"
-  | "filmGrain"
-  | "spatter"
-  | "crosshatch"
-  | "basRelief"
-  | "photocopy"
-  | "stainedGlass"
-  | "glass"
-  | "texturizer"
-  | "gradientMap"
-  | "selectiveColour";
+const ENTRIES: readonly FilterDef[] = [
+  ...FIRST_FAMILIES,
+  ...FAMILY_FILTERS,
+  ...GALLERY_FILTERS,
+  ...BLUR_GALLERY,
+  ...DEVELOP_FILTERS,
+];
+
+/** The effects the Filter Gallery workspace stacks: every entry of the
+ *  gallery group, and Glowing Edges (the gallery's one Stylize effect). */
+export const GALLERY_EFFECTS: readonly FilterDef[] = ENTRIES.filter(
+  (d) => d.group === "Filter Gallery" || d.id === "glowingEdges",
+);
+
+/** Every filter the dialog runs, in menu order, and the gallery workspace. */
+export const FILTERS: readonly FilterDef[] = [
+  ...ENTRIES,
+  galleryWorkspace(GALLERY_EFFECTS),
+];
 
 export function filterDef(id: FilterId): FilterDef {
   const def = FILTERS.find((f) => f.id === id);
@@ -879,13 +665,21 @@ export function scaledForProxy(
 ): Record<string, FilterValue> {
   const out: Record<string, FilterValue> = { ...values };
   for (const p of def.params) {
+    if (p.kind === "points" && p.pxValue && p.stride === 3) {
+      const a = values[p.key];
+      if (Array.isArray(a))
+        out[p.key] = a.map((x: number, i: number) =>
+          i % 3 === 2 ? Math.min(p.max, Math.max(p.min, x * factor)) : x,
+        );
+      continue;
+    }
     if (p.kind !== "range" || !p.px) continue;
     const v = num(values, p.key) * factor;
     // Integral parameters (step 1) stay integral.
     const stepped = p.step >= 1 ? Math.round(v) : v;
     out[p.key] = Math.min(p.max, Math.max(Math.min(p.min, 0), stepped));
   }
-  return out;
+  return def.scale ? def.scale(out, factor) : out;
 }
 
 /** `boxBlur` → `filterBoxBlur`, the command suffix. */

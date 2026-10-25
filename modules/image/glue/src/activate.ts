@@ -36,8 +36,9 @@ import type {
 import {
   contributePanel,
   contributeSchemaPanel,
-  contributeTool,
+  contributeTool as sdkContributeTool,
 } from "@paged-media/plugin-sdk";
+import { withCanvasCapture } from "./canvas-capture";
 import {
   imagePropertiesPanel,
   PROPERTIES_PANEL_ID,
@@ -53,6 +54,7 @@ import manifest from "../manifest.json";
 import { createImageSession } from "./session";
 import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
+import { BG, type BlurKind } from "./filters-blur-gallery";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { adjustmentKindLabel } from "./panels/sections/layer-parity";
@@ -120,6 +122,9 @@ const CMD = defineMessages("image.command", {
   invertSelectionImage: "Invert selection (image)",
   featherSelectionImage: "Feather selection (image)",
   filterDialog: "{label}… (filter)",
+  blurGalleryOf: "Blur gallery: {label}…",
+  oneShotFilter: "{label} (filter)",
+  curvesTarget: "Curves: targeted adjustment on the image",
   averageBlur: "Average (fill the selection with its average colour)",
   imageSize: "Image size…",
   trim: "Trim…",
@@ -148,6 +153,23 @@ const CMD = defineMessages("image.command", {
   linkLayers: "Link the active layer with the layer below",
   unlinkLayer: "Unlink the active layer",
   newLayerComp: "New layer comp",
+});
+
+const BLUR_LABELS: Record<BlurKind, string> = {
+  field: BG.field,
+  iris: BG.iris,
+  tilt: BG.tiltShift,
+  path: BG.path,
+  spin: BG.spin,
+};
+
+/** The no-dialog filters' names (the same keys the session's status
+ *  line uses). */
+const ONE_SHOT_LABELS = defineMessages("image.effect", {
+  solarize: "Solarize",
+  facet: "Facet",
+  desaturate: "Desaturate",
+  equalize: "Equalize",
 });
 
 const TOOL = defineMessages("image.tool", {
@@ -224,6 +246,18 @@ const TYPE_TOOL_ID = "media.paged.image.tool.type";
 
 export function activate(host: BundleHost): BundleHandle {
   const session = createImageSession(host);
+  // Every image tool offers a press to the dialog that draws on the
+  // canvas first (the Blur Gallery's pins, Curves' targeted adjustment).
+  const contributeTool: typeof sdkContributeTool = (h, spec) =>
+    sdkContributeTool(
+      h,
+      spec.gesture
+        ? {
+            ...spec,
+            gesture: () => withCanvasCapture(host, session, spec.gesture!()),
+          }
+        : spec,
+    );
   /** Whether the raster type tool is the one in hand. See the type
    *  tool's gesture wrapper below for why this is tracked here. */
   let typeToolActive = false;
@@ -827,6 +861,66 @@ export function activate(host: BundleHost): BundleHandle {
     ["filterTexturizer", "texturizer"],
     ["filterGradientMap", "gradientMap"],
     ["filterSelectiveColour", "selectiveColour"],
+    // WP5.2's families, the Filter Gallery's breadth and its workspace.
+    ["filterGallery", "filterGallery"],
+    ["filterDisplace", "displace"],
+    ["filterPolarCoordinates", "polarCoordinates"],
+    ["filterRipple", "ripple"],
+    ["filterShear", "shear"],
+    ["filterZigzag", "zigzag"],
+    ["filterClouds", "clouds"],
+    ["filterDifferenceClouds", "differenceClouds"],
+    ["filterFibers", "fibers"],
+    ["filterLensFlare", "lensFlare"],
+    ["filterLightingEffects", "lightingEffects"],
+    ["filterWind", "wind"],
+    ["filterExtrude", "extrude"],
+    ["filterTiles", "tiles"],
+    ["filterTraceContour", "traceContour"],
+    ["filterCrystallize", "crystallize"],
+    ["filterPointillize", "pointillize"],
+    ["filterMezzotint", "mezzotint"],
+    ["filterColorHalftone", "colorHalftone"],
+    ["filterShadowsHighlights", "shadowsHighlights"],
+    ["filterHdrToning", "hdrToning"],
+    ["filterMatchColor", "matchColor"],
+    ["filterReplaceColor", "replaceColor"],
+    ["filterDevelop", "develop"],
+    ["filterColoredPencil", "coloredPencil"],
+    ["filterCutout", "cutout"],
+    ["filterDryBrush", "dryBrush"],
+    ["filterFresco", "fresco"],
+    ["filterNeonGlow", "neonGlow"],
+    ["filterPaletteKnife", "paletteKnife"],
+    ["filterPlasticWrap", "plasticWrap"],
+    ["filterRoughPastels", "roughPastels"],
+    ["filterSmudgeStick", "smudgeStick"],
+    ["filterSponge", "sponge"],
+    ["filterUnderpainting", "underpainting"],
+    ["filterWatercolor", "watercolor"],
+    ["filterAccentedEdges", "accentedEdges"],
+    ["filterAngledStrokes", "angledStrokes"],
+    ["filterDarkStrokes", "darkStrokes"],
+    ["filterInkOutlines", "inkOutlines"],
+    ["filterSprayedStrokes", "sprayedStrokes"],
+    ["filterSumiE", "sumiE"],
+    ["filterDiffuseGlow", "diffuseGlow"],
+    ["filterOceanRipple", "oceanRipple"],
+    ["filterChalkCharcoal", "chalkCharcoal"],
+    ["filterCharcoal", "charcoal"],
+    ["filterChrome", "chrome"],
+    ["filterConteCrayon", "conteCrayon"],
+    ["filterGraphicPen", "graphicPen"],
+    ["filterNotePaper", "notePaper"],
+    ["filterPlaster", "plaster"],
+    ["filterReticulation", "reticulation"],
+    ["filterStamp", "stamp"],
+    ["filterTornEdges", "tornEdges"],
+    ["filterWaterPaper", "waterPaper"],
+    ["filterCraquelure", "craquelure"],
+    ["filterGrain", "grain"],
+    ["filterMosaicTiles", "mosaicTiles"],
+    ["filterPatchwork", "patchwork"],
   ] as const) {
     command({
       id: `media.paged.image.command.${suffix}`,
@@ -838,6 +932,58 @@ export function activate(host: BundleHost): BundleHandle {
       },
     });
   }
+  // FILTER ▸ BLUR GALLERY ▸ … — the workspace with that blur on.
+  for (const [suffix, kind] of [
+    ["filterFieldBlur", "field"],
+    ["filterIrisBlur", "iris"],
+    ["filterTiltShift", "tilt"],
+    ["filterPathBlur", "path"],
+    ["filterSpinBlur", "spin"],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(CMD.blurGalleryOf, { label: t(BLUR_LABELS[kind]) }),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        void session.openBlurGallery(kind);
+      },
+    });
+  }
+  // The filters Photoshop runs without a dialog.
+  for (const [suffix, label] of [
+    ["solarize", ONE_SHOT_LABELS.solarize],
+    ["facet", ONE_SHOT_LABELS.facet],
+    ["desaturate", ONE_SHOT_LABELS.desaturate],
+    ["equalize", ONE_SHOT_LABELS.equalize],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(CMD.oneShotFilter, { label: t(label) }),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        void session.applyOneShot(suffix);
+      },
+    });
+  }
+  // CURVES ▸ targeted adjustment (I-55): arm it on the composite curve;
+  // the panel's curve editor arms it on the curve it shows.
+  command({
+    id: "media.paged.image.command.curvesTarget",
+    title: t(CMD.curvesTarget),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      session.armCurvesTarget(
+        "rgb",
+        session.state().curvesTarget?.points ?? [
+          [0, 0],
+          [1, 1],
+        ],
+      );
+    },
+  });
   command({
     id: "media.paged.image.command.average",
     title: t(CMD.averageBlur),
@@ -955,6 +1101,7 @@ export function activate(host: BundleHost): BundleHandle {
     ["newAdjustmentThreshold", "threshold"],
     ["newAdjustmentGradientMap", "gradientMap"],
     ["newAdjustmentSelectiveColor", "selectiveColor"],
+    ["newAdjustmentDevelop", "develop"],
   ] as const) {
     command({
       id: `media.paged.image.command.${suffix}`,

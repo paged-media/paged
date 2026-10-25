@@ -40,6 +40,7 @@ function filterHarness(id: Parameters<typeof filterDef>[0], gpu = true) {
       preview: true,
       before: false,
       applied: true,
+      files: {},
     });
     return (
       <FilterDialog

@@ -12,6 +12,11 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/layer-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/cmyk-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-masks.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-distort.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-render.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-stylize.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-pixelate.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/adjustments-ext.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -23,6 +28,32 @@ PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_ph
 | `lib/stimuli.mjs`       | the deterministic 128×128 16-bit untagged PNG stimuli                                                         |
 | `lib/write-fixture.mjs` | judges the reply and the files, then copies them into `image-conformance/fixtures/photoshop/` with provenance |
 | `probes/*.jsx`          | one probe per family                                                                                          |
+
+The WP5.2 families (`filters-distort`, `filters-render`, `filters-stylize`,
+`filters-pixelate`, `adjustments-ext`) and the ActionManager events they
+send (the DOM has no method for most of them; ScriptListener-style keys):
+
+| probe             | cases (DOM method or AM event and keys)                                                                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filters-distort` | Polar Coordinates both ways, Ripple, ZigZag (3 styles), Shear, Displace (DOM `apply*`); the Displace map is the stimulus saved as an 8-bit PSD (a 16-bit map is refused as "cancelled") |
+| `filters-render`  | Clouds `Clds`, Difference Clouds `DfrC` (`RndS` seed), Fibers `Fbrs` (`Vrnc`, `Strg`, `RndS`), Lens Flare (DOM); colours black/white, restored after                                     |
+| `filters-stylize` | Solarize `Slrz`, Trace Contour `TrcC` (`Lvl `, `Edg ` `CntE`/`Lwr `·`Upr `), Wind `Wnd ` (`WndM`, `Drct`), Tiles `Tls ` (`TlNm`, `TlOf`, `FlCl`), Extrude `Extr` (`ExtT`, `ExtS`, `ExtD`, `ExtR`, `ExtF`, `ExtM`) |
+| `filters-pixelate`| Facet `Fct `, Crystallize `Crst` / Pointillize `Pntl` (`ClSz`), Mezzotint `Mztn` (`MztT`), Color Halftone `ClrH` (`Rds `, `Ang1`–`Ang4`)                                              |
+| `adjustments-ext` | Desaturate, Equalize (DOM), Shadows/Highlights `adaptCorrect` (`sdwM`/`hglM` `adaptCorrectTones` `Amnt`/`Wdth`/`Rds `, `BlcC`, `WhtC`, `Cntr`, `ClrC`), Replace Color `RplC` (`Fzns`, `Mnm `/`Mxm ` Lab, `H   `, `Strt`, `Lght`), Match Color `matchColor` (self, `neutralizeColor`) |
+
+- **8-bit-only filters.** Wind, Tiles and Extrude refuse a 16-bit document;
+  the case converts its duplicate to 8 bits, applies, converts back and
+  records `params.eight_bit` (the output is still a 16-bit PNG).
+- **Random filters** (Clouds, Difference Clouds, Fibers, Tiles, Crystallize,
+  Pointillize, Mezzotint) carry `params.compare = "stats"`: Photoshop's
+  generator is not ours, so the replay compares per-channel mean and
+  standard deviation, in 8-bit levels, never pixels.
+- **Not recorded:** HDR Toning (without its full descriptor it runs with the
+  dialog's last-used settings, which are user state; a recording would not
+  be reproducible); Lighting Effects (its descriptor is a large opaque
+  light list); the Blur Gallery (Field/Iris/Tilt-Shift/Path/Spin pins are
+  only scriptable through its workspace's undocumented descriptor) and the
+  Filter Gallery effects (8-bit only and keyed per effect; a later probe).
 
 Replays: `image-conformance/tests/it/oracle_photoshop.rs` (blend modes,
 adjustments, filters → `fixtures/photoshop/ledger.json`, every case
