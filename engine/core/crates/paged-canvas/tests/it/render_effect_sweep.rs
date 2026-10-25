@@ -3463,6 +3463,77 @@ fn style_cases(c: &mut Vec<Case>) {
             value: Value::Length(Some(31.0)),
         }
     }));
+    // Engine ADR 1018 — re-parenting a style nothing applies, and the
+    // list level / restart of a paragraph in no list, change no pixel.
+    c.push(inert(
+        "SetStyleBasedOn",
+        "styles-cascade",
+        "re-parenting a style no paragraph applies leaves every paragraph \
+         resolving as before",
+        |m| {
+            for id in ["ParagraphStyle/sweepA", "ParagraphStyle/sweepB"] {
+                m.apply_mutation(&Mutation::CreateParagraphStyle {
+                    self_id: Some(id.into()),
+                    name: Some(id.into()),
+                    based_on: None,
+                })
+                .expect("seed a style");
+            }
+            Mutation::SetStyleBasedOn {
+                collection: StyleCollection::Paragraph,
+                style_id: "ParagraphStyle/sweepA".into(),
+                based_on: Some("ParagraphStyle/sweepB".into()),
+            }
+        },
+    ));
+    c.push(inert(
+        "SetListLevel",
+        "styles-cascade",
+        "a paragraph in no list prints no marker at any level",
+        |m| Mutation::SetListLevel {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 0,
+            level: Some(2),
+            delta: None,
+        },
+    ));
+    c.push(inert(
+        "RestartNumbering",
+        "styles-cascade",
+        "a paragraph in no list has no count to restart",
+        |m| Mutation::RestartNumbering {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 0,
+            start_at: Some(3),
+            continue_numbering: false,
+        },
+    ));
+    // Engine ADR 1021 — the story's first word replaced by a wider one.
+    c.push(paints("FindReplace", "styles-cascade", |m| {
+        let word: String = m
+            .scene()
+            .stories
+            .iter()
+            .flat_map(|s| s.story.paragraphs.iter())
+            .flat_map(|p| p.runs.iter())
+            .flat_map(|r| r.text.split_whitespace())
+            .find(|w| w.chars().all(char::is_alphanumeric))
+            .expect("fixture has a word")
+            .to_string();
+        Mutation::FindReplace {
+            spec: paged_wire::FindSpec {
+                find: word,
+                match_case: true,
+                ..Default::default()
+            },
+            replace: "WWWWWWWW".into(),
+            replace_all: false,
+            paragraph_style: None,
+            character_style: None,
+        }
+    }));
     c.push(inert(
         "CreateNumberingList",
         "numbering",

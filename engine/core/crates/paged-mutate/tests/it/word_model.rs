@@ -19,6 +19,8 @@
 //! Engine ADR 1018 — Word's character and paragraph additions, list levels
 //! and style re-parenting through the operation layer, each undone
 //! exactly.
+// Test names carry their feature row (`…__feat__…`).
+#![allow(non_snake_case)]
 
 use std::io::Write;
 

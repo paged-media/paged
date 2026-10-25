@@ -2633,6 +2633,16 @@ pub(super) fn apply_set_property(
             | PropertyPath::CharacterUnderlineColor
             | PropertyPath::CharacterDoubleStrikethrough,
         ) => {
+            // An unknown underline kind is refused before any run splits.
+            if let (PropertyPath::CharacterUnderlineType, Value::Text(t)) = (path, value) {
+                if let Err(reason) = super::word::parse_underline_type(t) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason,
+                    });
+                }
+            }
             return apply_character_property(doc, story_id, *start, *end, node, path, value);
         }
         // SDK Phase 5 (D3 completion) — applied object style on any

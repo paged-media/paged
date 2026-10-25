@@ -19,6 +19,8 @@
 //! Engine ADRs 1018 and 1021 over the wire: Enter applies the Next Style,
 //! Find returns hits, Find & Replace is one undo step, and the list and
 //! style mutations reach the model.
+// Test names carry their feature row (`…__feat__…`).
+#![allow(non_snake_case)]
 
 use paged_canvas::{CanvasModel, CanvasOptions, Mutation};
 use paged_wire::{FindMode, FindSpec};

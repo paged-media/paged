@@ -21,6 +21,8 @@
 //! strikethrough as their strokes, hidden text taking no room unless the
 //! document shows it, and list levels numbering `1.` / `1.1.` with a
 //! multi-level restart.
+// Test names carry their feature row (`…__feat__…`).
+#![allow(non_snake_case)]
 
 use std::io::Write;
 use std::path::PathBuf;

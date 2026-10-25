@@ -20,6 +20,8 @@
 //! the underline kind and colour, double strikethrough, the highlight as
 //! InDesign's highlight underline, and a range's own shading and border,
 //! written where the model changed them and read back.
+// Test names carry their feature row (`…__feat__…`).
+#![allow(non_snake_case)]
 
 use crate::pkg;
 
