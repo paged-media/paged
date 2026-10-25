@@ -598,6 +598,46 @@
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.draw.tool.warp",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.twirl",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.pucker",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.bloat",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.scallop",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.crystallize",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.wrinkle",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.puppetWarp",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.perspectiveGrid",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.perspectiveSelect",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.image.tool.crop",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },
