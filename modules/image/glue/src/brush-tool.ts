@@ -64,6 +64,9 @@ import {
  *  the size affordance, the crosshair marks the dab centre). */
 export const PAINT_CURSOR: CursorSpec = { kind: "css", token: "crosshair" };
 
+/** The tools the Clone Source overlay shows under (WP5.8). */
+const OVERLAY_TOOLS: ReadonlySet<StrokeTool> = new Set(["clone", "heal"]);
+
 /** One gesture factory for all three paint tools; `tool` picks the wire
  *  name the engine freezes into the stroke. */
 export function makeBrushGesture(
@@ -159,6 +162,7 @@ export function makeBrushGesture(
     onDeactivate(_reason: DeactivateReason) {
       // A tool switch mid-drag abandons the stroke.
       abandon();
+      if (OVERLAY_TOOLS.has(tool)) void session.cloneOverlayAt(null, 0);
       host.overlay.setToolPreview(null);
       fit = null;
     },
@@ -188,6 +192,12 @@ export function makeBrushGesture(
       }
       if (!machine.down(point, e.pressure, e.pointerType as BrushPointerType))
         return;
+      // Auto-hide: the overlay steps aside while the stroke paints.
+      if (
+        OVERLAY_TOOLS.has(tool) &&
+        session.state().retouch.cloneSource.overlay.autoHide
+      )
+        void session.cloneOverlayAt(null, 0);
       renderTip(point);
       const mine = ++stroke;
       void (async () => {
@@ -215,6 +225,9 @@ export function makeBrushGesture(
       if (machine?.state().drawing) {
         machine.move(point, e.pressure, e.pointerType as BrushPointerType);
         void pump();
+      } else if (OVERLAY_TOOLS.has(tool)) {
+        // WP5.8 — the Clone Source overlay follows the hovering brush.
+        void session.cloneOverlayAt(point, session.state().brush.size / 2);
       }
       renderTip(point);
     },

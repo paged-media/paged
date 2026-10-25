@@ -700,6 +700,18 @@
     {
       "tool": "media.paged.image.tool.colorSampler",
       "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.contentAwareMove",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/retouch-wp58.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.remove",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/retouch-wp58.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.cafSampling",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/retouch-wp58.spec.ts); matrix rows are the follow-up"
     }
   ]
 }

@@ -114,6 +114,8 @@ defineMessages("menu", {
   "Surface blur…": "Surface blur…",
   "Texturizer…": "Texturizer…",
   "Trim…": "Trim…",
+  "Content-aware fill…": "Content-aware fill…",
+  "Clone source": "Clone source",
 });
 
 const C = "media.paged.image.command";
@@ -261,6 +263,11 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // than buried three levels into a plugin menu.
   ["Edit/Selection to path", "selectionToPath", "img-sel-conv"],
   ["Edit/Path to selection", "pathToSelection", "img-sel-conv"],
+
+  // WP5.8 — Photoshop's Edit ▸ Content-Aware Fill… (the workspace) and
+  // the Clone Source panel.
+  ["Edit/Content-aware fill…", "contentAwareFillWorkspace", "img-fill"],
+  ["Image/Clone source", "openCloneSource", "retouch"],
 ];
 
 /** Register every entry; one Disposable drops them all. */

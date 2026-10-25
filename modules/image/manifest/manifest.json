@@ -31,7 +31,8 @@
   "contributes": {
     "panels": [
       "media.paged.image.panel.adjustments",
-      "media.paged.image.panel.properties"
+      "media.paged.image.panel.properties",
+      "media.paged.image.panel.cloneSource"
     ],
     "commands": [
       "media.paged.image.command.openImage",
@@ -108,7 +109,9 @@
       "media.paged.image.command.average",
       "media.paged.image.command.imageSize",
       "media.paged.image.command.trim",
-      "media.paged.image.command.rotateArbitrary"
+      "media.paged.image.command.rotateArbitrary",
+      "media.paged.image.command.contentAwareFillWorkspace",
+      "media.paged.image.command.openCloneSource"
     ],
     "tools": [
       "media.paged.image.tool.crop",
@@ -136,7 +139,10 @@
       "media.paged.image.tool.sharpen",
       "media.paged.image.tool.spotHeal",
       "media.paged.image.tool.patch",
-      "media.paged.image.tool.type"
+      "media.paged.image.tool.type",
+      "media.paged.image.tool.contentAwareMove",
+      "media.paged.image.tool.remove",
+      "media.paged.image.tool.cafSampling"
     ],
     "importers": ["media.paged.image.importer.raster"],
     "exporters": [
@@ -809,6 +815,22 @@
         {
           "id": "media.paged.image.command.contentAwareFill",
           "title": "Content-aware fill",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.contentAwareFillWorkspace",
+          "title": "Content-aware fill… (workspace)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.openCloneSource",
+          "title": "Clone source panel",
           "args": {
             "kind": "struct",
             "fields": {}

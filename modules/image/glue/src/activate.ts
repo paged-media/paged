@@ -64,6 +64,16 @@ import {
   makeEyedropperGesture,
 } from "./sampler-tools";
 import { makePatchGesture } from "./patch-tool";
+import {
+  makeCafSamplingGesture,
+  makeContentAwareMoveGesture,
+  makeRemoveGesture,
+} from "./retouch-tools";
+import { makeCloneSourcePanel } from "./panels/sections/retouch-sections";
+import {
+  bindRetouchToolSettings,
+  retouchToolOptionFields,
+} from "./retouch-options";
 import { makeSelectionGesture } from "./selection-tool";
 import { makeBrushGesture, PAINT_CURSOR } from "./brush-tool";
 import { makeTypeGesture } from "./type-tool";
@@ -122,6 +132,9 @@ const CMD = defineMessages("image.command", {
   imageSize: "Image size…",
   trim: "Trim…",
   rotateArbitrary: "Rotate canvas by an arbitrary angle…",
+  contentAwareFillWorkspace: "Content-aware fill… (workspace)",
+  openCloneSource: "Clone source panel",
+  cloneSource: "Clone Source",
 });
 
 const TOOL = defineMessages("image.tool", {
@@ -151,6 +164,9 @@ const TOOL = defineMessages("image.tool", {
   sponge: "Sponge",
   blurBrush: "Blur (brush)",
   sharpenBrush: "Sharpen (brush)",
+  contentAwareMove: "Content-aware move",
+  remove: "Remove",
+  samplingBrush: "Sampling brush (content-aware fill)",
 });
 
 const IO = defineMessages("image.io", {
@@ -183,6 +199,10 @@ const BLUR_TOOL_ID = "media.paged.image.tool.blur";
 const SHARPEN_TOOL_ID = "media.paged.image.tool.sharpen";
 const SPOT_HEAL_TOOL_ID = "media.paged.image.tool.spotHeal";
 const PATCH_TOOL_ID = "media.paged.image.tool.patch";
+const CA_MOVE_TOOL_ID = "media.paged.image.tool.contentAwareMove";
+const REMOVE_TOOL_ID = "media.paged.image.tool.remove";
+const CAF_SAMPLING_TOOL_ID = "media.paged.image.tool.cafSampling";
+const CLONE_SOURCE_PANEL_ID = "media.paged.image.panel.cloneSource";
 const MARQUEE_RECT_TOOL_ID = "media.paged.image.tool.marqueeRect";
 const MARQUEE_ELLIPSE_TOOL_ID = "media.paged.image.tool.marqueeEllipse";
 const LASSO_TOOL_ID = "media.paged.image.tool.lasso";
@@ -221,6 +241,14 @@ export function activate(host: BundleHost): BundleHandle {
     title: t(CMD.image),
     icon: "panel-canvas",
     component: makeImagePanel(session),
+    defaultDock: "right",
+  });
+  // WP5.8 — the Clone Source panel (five sources, transform, overlay).
+  contributePanel(host, {
+    id: CLONE_SOURCE_PANEL_ID,
+    title: t(CMD.cloneSource),
+    icon: "panel-canvas",
+    component: makeCloneSourcePanel(session),
     defaultDock: "right",
   });
 
@@ -301,10 +329,23 @@ export function activate(host: BundleHost): BundleHandle {
         colorSampler: COLOR_SAMPLER_TOOL_ID,
       })
     : null;
-  const optionsFor = (toolId: string) =>
-    toolFields?.[toolId]
-      ? { options: { toolId, fields: toolFields[toolId] } }
-      : {};
+  // WP5.8 — the retouching tools' options (retouch-options.ts).
+  const retouchFields = host.supports("tools.settings@1")
+    ? retouchToolOptionFields({
+        clone: CLONE_TOOL_ID,
+        heal: HEAL_TOOL_ID,
+        spotHeal: SPOT_HEAL_TOOL_ID,
+        move: CA_MOVE_TOOL_ID,
+        remove: REMOVE_TOOL_ID,
+      })
+    : null;
+  const optionsFor = (toolId: string) => {
+    const fields = [
+      ...(toolFields?.[toolId] ?? []),
+      ...(retouchFields?.[toolId] ?? []),
+    ];
+    return fields.length ? { options: { toolId, fields } } : {};
+  };
 
   contributeTool(host, {
     id: CROP_TOOL_ID,
@@ -563,6 +604,7 @@ export function activate(host: BundleHost): BundleHandle {
   // (INV-REG-1 keeps tool shortcuts globally unique).
   contributeTool(host, {
     id: CLONE_TOOL_ID,
+    ...optionsFor(CLONE_TOOL_ID),
     title: t(TOOL.cloneStamp),
     icon: "tool-clone",
     group: CLONE_TOOL_ID,
@@ -573,6 +615,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   contributeTool(host, {
     id: HEAL_TOOL_ID,
+    ...optionsFor(HEAL_TOOL_ID),
     title: t(TOOL.healingBrush),
     icon: "tool-heal",
     group: HEAL_TOOL_ID,
@@ -613,6 +656,7 @@ export function activate(host: BundleHost): BundleHandle {
   // source then).
   contributeTool(host, {
     id: SPOT_HEAL_TOOL_ID,
+    ...optionsFor(SPOT_HEAL_TOOL_ID),
     title: t(TOOL.spotHealingBrush),
     icon: "tool-heal",
     group: HEAL_TOOL_ID,
@@ -630,6 +674,44 @@ export function activate(host: BundleHost): BundleHandle {
     group: HEAL_TOOL_ID,
     section: "drawType",
     gesture: () => makePatchGesture(host, session),
+  });
+
+  // ── WP5.8 retouching tools — all in the healing slot, no shortcuts
+  // (the register is full; Photoshop keeps them in this flyout too) ──
+  //
+  // CONTENT-AWARE MOVE: drag the selection where the object should go;
+  // the hole it leaves is filled and the moved pixels blend in.
+  contributeTool(host, {
+    id: CA_MOVE_TOOL_ID,
+    ...optionsFor(CA_MOVE_TOOL_ID),
+    title: t(TOOL.contentAwareMove),
+    icon: "tool-heal",
+    group: HEAL_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeContentAwareMoveGesture(host, session),
+  });
+  // REMOVE: paint over an object; it is filled from its surroundings on
+  // release (an `ml.inpaint` provider answers first when installed).
+  contributeTool(host, {
+    id: REMOVE_TOOL_ID,
+    ...optionsFor(REMOVE_TOOL_ID),
+    title: t(TOOL.remove),
+    icon: "tool-heal",
+    group: HEAL_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeRemoveGesture(host, session),
+  });
+  // SAMPLING BRUSH: paints the Content-Aware Fill workspace's sampling
+  // area (Alt erases); outside the workspace a click opens it.
+  contributeTool(host, {
+    id: CAF_SAMPLING_TOOL_ID,
+    title: t(TOOL.samplingBrush),
+    icon: "tool-heal",
+    group: HEAL_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeCafSamplingGesture(host, session),
   });
 
   // GENERATE — the `gen.*` family's editor reach. Fills the CURRENT
@@ -1027,6 +1109,24 @@ export function activate(host: BundleHost): BundleHandle {
       void session.fillSelection({ kind: "contentAware" });
     },
   });
+  // Edit ▸ Content-Aware Fill… — the workspace (WP5.8).
+  command({
+    id: "media.paged.image.command.contentAwareFillWorkspace",
+    title: t(CMD.contentAwareFillWorkspace),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      void session.openContentAwareFill();
+    },
+  });
+  command({
+    id: "media.paged.image.command.openCloneSource",
+    title: t(CMD.openCloneSource),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(CLONE_SOURCE_PANEL_ID);
+    },
+  });
 
   // Selection commands (the panel buttons + command-palette reach).
   command({
@@ -1148,6 +1248,13 @@ export function activate(host: BundleHost): BundleHandle {
     [EYEDROPPER_TOOL_ID]: "eyedropper",
     [COLOR_SAMPLER_TOOL_ID]: "eyedropper",
   });
+  const retouchSettingsSub = bindRetouchToolSettings(host, session, {
+    [CLONE_TOOL_ID]: "clone",
+    [HEAL_TOOL_ID]: "heal",
+    [SPOT_HEAL_TOOL_ID]: "spotHeal",
+    [CA_MOVE_TOOL_ID]: "move",
+    [REMOVE_TOOL_ID]: "remove",
+  });
   const willSave = host.supports("document.onWillSave@1")
     ? host.document.onWillSave(async () => {
         if (session.state().uncommitted) await session.commitToDocument();
@@ -1205,6 +1312,9 @@ export function activate(host: BundleHost): BundleHandle {
         SHARPEN_TOOL_ID,
         SPOT_HEAL_TOOL_ID,
         PATCH_TOOL_ID,
+        CA_MOVE_TOOL_ID,
+        REMOVE_TOOL_ID,
+        CAF_SAMPLING_TOOL_ID,
       ],
       // The context's OWN panel. Deliberately NOT the host panels it
       // serves (Layers, Character) — naming those here would put host
@@ -1347,6 +1457,7 @@ export function activate(host: BundleHost): BundleHandle {
       providerInvalidate?.dispose();
       willSave?.dispose();
       toolSettingsSub?.dispose();
+      retouchSettingsSub?.dispose();
       menuSub.dispose();
       providerInvalidate = null;
       for (const h of providerHandles.splice(0)) h.dispose();
@@ -1355,4 +1466,4 @@ export function activate(host: BundleHost): BundleHandle {
   };
 }
 
-export { manifest, PANEL_ID };
+export { manifest, PANEL_ID, CLONE_SOURCE_PANEL_ID };

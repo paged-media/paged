@@ -54,6 +54,8 @@ describe("imageBundle.activate", () => {
     load(fake);
     expect(fake.panels.ids()).toEqual([
       PANEL_ID,
+      // WP5.8 — the Clone Source panel.
+      "media.paged.image.panel.cloneSource",
       "media.paged.image.panel.properties",
     ]);
     expect(fake.commands.ids()).toEqual([
@@ -137,6 +139,9 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.channelToSelection",
       "media.paged.image.command.setType",
       "media.paged.image.command.contentAwareFill",
+      // WP5.8 — Edit ▸ Content-Aware Fill… and the Clone Source panel.
+      "media.paged.image.command.contentAwareFillWorkspace",
+      "media.paged.image.command.openCloneSource",
       "media.paged.image.command.selectAll",
       "media.paged.image.command.deselect",
       "media.paged.image.command.invertSelection",
@@ -177,6 +182,10 @@ describe("imageBundle.activate", () => {
       "media.paged.image.tool.sharpen",
       "media.paged.image.tool.spotHeal",
       "media.paged.image.tool.patch",
+      // WP5.8 — Content-Aware Move, Remove, the CAF sampling brush.
+      "media.paged.image.tool.contentAwareMove",
+      "media.paged.image.tool.remove",
+      "media.paged.image.tool.cafSampling",
       "media.paged.image.tool.type",
     ]);
     expect(fake.importers.ids()).toEqual(["media.paged.image.importer.raster"]);

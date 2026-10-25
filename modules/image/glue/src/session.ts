@@ -40,6 +40,12 @@ import { sha256Hex } from "@paged-media/helpers";
 
 import { latestWins } from "./coalesce";
 import {
+  initialRetouch,
+  makeRetouch,
+  type RetouchApi,
+  type RetouchState,
+} from "./retouch";
+import {
   filterDef,
   filterDefaults,
   scaledForProxy,
@@ -231,6 +237,7 @@ export interface FilterDialogState {
 
 /** Which dialog the panel shows on top (one at a time, as a modal). */
 export type ImageDialog =
+  | { kind: "contentAwareFill" }
   | { kind: "filter"; filter: FilterDialogState }
   | { kind: "imageSize" }
   | { kind: "trim" }
@@ -392,6 +399,10 @@ export interface ImageSessionState {
    *  set. Session state rather than stroke state: the anchor SURVIVES a
    *  stroke, which is what makes repeated retouching strokes usable. */
   cloneSource: { x: number; y: number; aligned: boolean } | null;
+  /** WP5.8 — the Content-Aware Fill workspace, the Clone Source panel's
+   *  five sources and overlay, the healing and Content-Aware Move options
+   *  (retouch.ts). */
+  retouch: RetouchState;
   /** The dodge / burn / sponge options, frozen into each such stroke. */
   tone: ToneOptions;
   /** The per-channel readout for the ingested source (R/G/B/A + luma),
@@ -424,7 +435,8 @@ export interface ImageSessionState {
   channelCurves: ChannelCurves | null;
 }
 
-export interface ImageSession {
+/** WP5.8 — the retouching verbs are `RetouchApi` (retouch.ts). */
+export interface ImageSession extends RetouchApi {
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -1571,6 +1583,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
     ptPerPx: null,
     cloneSource: null,
+    retouch: initialRetouch(),
     tone: { ...DEFAULT_TONE },
     channels: null,
     brushLibrary: null,
@@ -2866,7 +2879,50 @@ export function createImageSession(host: BundleHost): ImageSession {
     state.channelCurves = curves;
   };
 
+  // WP5.8 — retouching (retouch.ts), over the session's own plumbing.
+  const retouch = makeRetouch({
+    host,
+    state: () => state,
+    setDialog: (dlg) => {
+      state.dialog = dlg;
+      emit();
+    },
+    engine: () => engine,
+    emit,
+    setStatus,
+    adopt: async (out) => {
+      const src = state.source;
+      if (!src || !engine) return false;
+      const layered = out.handle === src.handle;
+      swapSource(src, out);
+      state.saveBack = null;
+      if (!layered) {
+        try {
+          engine.selectionTransfer(out.handle);
+        } catch (err) {
+          host.log.debug("selection transfer failed", err);
+        }
+      }
+      return recomposite();
+    },
+    showPixels: async (rgba, width, height) => {
+      const target = state.source?.elementId;
+      if (!target || !scene()) return false;
+      return submitLayer(target, rgba, width, height, await frameBox(target));
+    },
+    restoreFrame: async () => {
+      if (state.source?.elementId) await api.apply();
+    },
+    discardStroke: () => discardStroke(),
+    composite: async () => {
+      const src = state.source;
+      if (!src || !engine) return new Uint8Array(0);
+      return engine.tile(src.handle, 0, 0, src.width, src.height);
+    },
+  });
+
   const api: ImageSession = {
+    ...retouch,
     state: () => state,
 
     onDidChange(listener) {
@@ -3186,6 +3242,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
 
     async closeDialog() {
+      if (state.dialog?.kind === "contentAwareFill") {
+        await retouch.cancelContentAwareFill();
+        return;
+      }
       if (openFilter()) {
         await cancelFilter();
         return;
@@ -4707,6 +4767,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     setCloneSource([x, y]) {
       const aligned = state.cloneSource?.aligned ?? true;
       state.cloneSource = { x, y, aligned };
+      // The anchor belongs to the Clone Source panel's active source.
+      retouch.onAnchor(x, y);
       setStatus(t(S.cloneSourceSet, { x: Math.round(x), y: Math.round(y) }));
     },
 
@@ -4871,6 +4933,13 @@ export function createImageSession(host: BundleHost): ImageSession {
           );
         }
         if (TONE_TOOLS.includes(tool)) engine.brushSetTone(state.tone);
+        // WP5.8 — the Clone Source panel / healing options: sample mode,
+        // transform, offset, diffusion, spot type.
+        const sampling = retouch.strokeSampling(
+          tool,
+          state.cloneSource?.aligned ?? true,
+        );
+        if (sampling) await engine.brushSetSampling(sampling);
       } catch (err) {
         setStatus(t(S.paintFailed, { error: errText(err) }));
         return false;
@@ -4941,6 +5010,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       const layerName = state.layers.layers[state.layers.active]?.name ?? null;
       let painted: { handle: number; width: number; height: number };
       try {
+        // An Aligned clone carries this stroke's offset to the next one.
+        if (state.cloneSource?.aligned)
+          retouch.afterStroke(engine.brushSourceOffset());
         painted = await engine.brushCommit();
       } catch (err) {
         setStatus(t(S.paintCommitFailed, { error: errText(err) }));
