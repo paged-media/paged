@@ -37,6 +37,8 @@ export interface RecordInstance {
   address: string;
   query: string;
   record: number;
+  /** A Data Merge's frame (not a binding's). */
+  merge?: boolean;
 }
 
 /** The kinds that show one record wherever they are placed. */
@@ -74,7 +76,13 @@ export function recordInstances(
             ? merge.slice("merge-".length)
             : "";
       if (query)
-        out.push({ binding: merge, address, query, record: data.record });
+        out.push({
+          binding: merge,
+          address,
+          query,
+          record: data.record,
+          merge: true,
+        });
     } else if (data.kind === "recordFlow" && Array.isArray(data.records)) {
       const binding = typeof data.binding === "string" ? data.binding : "";
       const query = flows.get(binding);
@@ -127,6 +135,9 @@ export interface PlacedRecord {
   binding: string;
   address: string;
   record?: number;
+  /** A merged record's frames have no binding and no sync state: they are
+   *  what the merge wrote. */
+  status?: "linked";
 }
 
 /** Placements with the record each shows: a single-record binding's at the
@@ -178,7 +189,12 @@ export function withRecords(
     of.forEach((inst, k) => {
       const record = st.instances[k];
       if (typeof record === "number")
-        out.push({ binding: inst.binding, address: inst.address, record });
+        out.push({
+          binding: inst.binding,
+          address: inst.address,
+          record,
+          ...(inst.merge ? { status: "linked" as const } : {}),
+        });
     });
   }
   return out;

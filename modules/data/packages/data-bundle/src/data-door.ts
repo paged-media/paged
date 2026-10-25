@@ -71,7 +71,13 @@ export interface DataDoorDeps {
   /** The page items each binding is placed in, by ADR 131 address, with
    *  the record a per-record placement shows (editor ADR 291). */
   placements(): Promise<
-    readonly { binding: string; address: string; record?: number }[]
+    readonly {
+      binding: string;
+      address: string;
+      record?: number;
+      /** Said when the placement is not a binding's (a merged record). */
+      status?: DataPlacement["status"];
+    }[]
   >;
   /** A query's per-record status (editor ADR 291; the engine's
    *  `record_status`). */
@@ -425,14 +431,8 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     },
     async placements() {
       const out: DataPlacement[] = [];
-      const known = new Set(deps.bindings().map((b) => b.id));
       for (const p of await deps.placements())
-        out.push({
-          ...p,
-          // A merged record's frames (no binding: a Data Merge has no sync
-          // state) are what the merge wrote.
-          status: known.has(p.binding) ? statusOf(p.binding) : "linked",
-        });
+        out.push({ ...p, status: p.status ?? statusOf(p.binding) });
       return out;
     },
     async recordStatus(query) {

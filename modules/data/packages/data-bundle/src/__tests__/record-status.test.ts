@@ -43,8 +43,20 @@ describe("record markers [data.bind.record-status]", () => {
       el("x", null),
     ]);
     expect(got).toEqual([
-      { binding: "merge-q", address: "textFrame:m1", query: "q", record: 3 },
-      { binding: "merge-q", address: "textFrame:m2", query: "q", record: 4 },
+      {
+        binding: "merge-q",
+        address: "textFrame:m1",
+        query: "q",
+        record: 3,
+        merge: true,
+      },
+      {
+        binding: "merge-q",
+        address: "textFrame:m2",
+        query: "q",
+        record: 4,
+        merge: true,
+      },
       { binding: "rf", address: "textFrame:f0", query: "q", record: 0 },
       { binding: "rf", address: "textFrame:f0", query: "q", record: 2 },
     ]);
@@ -71,7 +83,13 @@ describe("record markers [data.bind.record-status]", () => {
       ],
       PAYLOAD,
       [
-        { binding: "merge-q", address: "rectangle:m", query: "q", record: 3 },
+        {
+          binding: "merge-q",
+          address: "rectangle:m",
+          query: "q",
+          record: 3,
+          merge: true,
+        },
         { binding: "rf", address: "textFrame:f", query: "q", record: 0 },
         { binding: "rf", address: "textFrame:f", query: "q", record: 2 },
       ],
@@ -81,7 +99,12 @@ describe("record markers [data.bind.record-status]", () => {
     expect(out).toEqual([
       { binding: "v", address: "textFrame:a", record: 1 },
       { binding: "t", address: "textFrame:b" },
-      { binding: "merge-q", address: "rectangle:m", record: 0 },
+      {
+        binding: "merge-q",
+        address: "rectangle:m",
+        record: 0,
+        status: "linked",
+      },
       { binding: "rf", address: "textFrame:f", record: 1 },
     ]);
   });

@@ -1,6 +1,6 @@
 // Editor ADR 291's per-record status over the REAL stack: real core and the
-// real data-js engine. A field is placed (a variable: it shows the first
-// record) and a page item carries a merged record's label; Update document
+// real data-js engine. A property is bound (it shows the first record) and a
+// page item carries a merged record's label; Update document
 // writes the document from the data. Then a source row changes, one is
 // added and the placed first one is deleted, and the data is read again:
 // the door reports which records are new and changed, how many placed ones
@@ -109,12 +109,18 @@ describe.skipIf(!ready && !required)(
         },
       } as never)) as { minted?: { element: { id: string } }[] };
       const frame = fr.minted![0]!.element.id;
-      const placed = await data.place(`textFrame:${frame}`, "q", "name");
-      // The rectangle shows merged record 1 (B-2), as a Data Merge labels it.
+      // A property binding shows the first record on the rectangle.
+      const bound = await data.bind({
+        target: "rectangle:urect",
+        path: "frameOpacity",
+        query: "q",
+        expr: "50",
+      });
+      // The text frame shows merged record 1 (B-2), as a Data Merge labels it.
       await dataHost.document.mutate({
         op: "setPluginMetadata",
         args: {
-          elementId: { kind: "rectangle", id: "urect" },
+          elementId: { kind: "textFrame", id: frame },
           key: BINDING_KEY,
           value: makeEnvelope({
             kind: "merge",
@@ -140,8 +146,8 @@ describe.skipIf(!ready && !required)(
           .map((p) => [p.binding, p.address, p.record])
           .sort();
       expect(await records()).toEqual([
-        ["merge-q", "rectangle:urect", 1],
-        [placed.binding, `textFrame:${frame}`, 0],
+        [bound.id, "rectangle:urect", 0],
+        ["merge-q", `textFrame:${frame}`, 1],
       ]);
 
       // B-2 costs more, D-4 is new, A-1 (the placed first record) is gone.
@@ -158,8 +164,8 @@ describe.skipIf(!ready && !required)(
         removed: 1,
         placed: [0],
       });
-      // The merged B-2 is row 0 now; the variable's record is gone.
-      expect(await records()).toEqual([["merge-q", "rectangle:urect", 0]]);
+      // The merged B-2 is row 0 now; the binding's first record is gone.
+      expect(await records()).toEqual([["merge-q", `textFrame:${frame}`, 0]]);
 
       // The grid reads a query as a table, its records numbered.
       const grid = await data.query(
