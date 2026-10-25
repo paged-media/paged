@@ -574,7 +574,7 @@ The heart of the editor and the cleanest fit for the binding model. **All C**, n
 **Disposition:** E · **Surface:** dock · **Phase:** later
 **Reads:** `selectionProperty:frameGradient`, `documentCollection:gradients` · **Writes:** `selectionProperty:frameGradient`, `collection`
 **Operations:** `SetProperty{FrameGradient}`, `CreateGradientSwatch`
-**Fields:** type (linear/radial), angle, gradient ramp with draggable stops + midpoints, reverse, per-stop color/location.
+**Fields:** type (linear/radial/conic), angle, gradient ramp with draggable stops + midpoints, reverse, per-stop colour (a swatch or an inline colour), location and opacity (slider + %); apply to Fill / Stroke, and the stroke gradient as Within / Along / Across (`frameGradientStrokeMode`, engine ADR 1007).
 **Notes:** The ramp (draggable multi-stop control) is bespoke → expert leaf. Writes the whole gradient as one property.
 
 #### `paged.color-themes`
