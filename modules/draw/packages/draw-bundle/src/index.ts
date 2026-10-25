@@ -1045,6 +1045,7 @@ export {
   importSvg,
   exportSvg,
   shapesFromSvgBytes,
+  svgImportUnitsFor,
   insertPathMutationsForShape,
   styleDefaultsForShape,
   resolveTargetPage,
