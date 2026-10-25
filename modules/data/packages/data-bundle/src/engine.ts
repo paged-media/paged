@@ -157,6 +157,14 @@ export interface DataEngineLike {
     height: number,
     metrics: unknown,
   ): boolean;
+  /** Data ADR 564: is a threaded story's text overset in its frames
+   *  (`[width, height][]` pt, in chain order), wrapped through each in
+   *  turn? Optional: a wasm built before it lacks it. */
+  text_overset_chain?(
+    text: string,
+    boxes: readonly (readonly [number, number])[],
+    metrics: unknown,
+  ): boolean;
   /** Editor ADR 291: the Data Merge placeholders of a text that name a field
    *  (`{ start, end, field, image }[]`, byte offsets as the host counts
    *  them). Optional: a wasm built before it lacks it. */

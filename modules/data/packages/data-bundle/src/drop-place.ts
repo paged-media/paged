@@ -34,8 +34,9 @@ export interface RecordDropDeps {
   ): void;
   /** Resolve binding `id` at `record` from now on (and save that). */
   fixRecord(id: string, record: number): void;
-  /** The variable's field is in the document (no second placement). */
-  placed(id: string): void;
+  /** The variable's field is in the document (no second placement), in
+   *  story `storyId`. */
+  placed(id: string, storyId: string): void;
   lowerBinding(id: string): Promise<void>;
   removeBinding(id: string): Promise<boolean>;
 }
@@ -184,7 +185,7 @@ export async function placeRecordOn(
     if (writes.length > 0) {
       if (!(await commitSpanVariables(d.host, writes)))
         throw new Error("the fields could not be placed");
-      for (const w of writes) d.placed(w.key);
+      for (const w of writes) d.placed(w.key, w.storyId);
     }
     for (const id of pictures) await d.lowerBinding(id);
   } catch (err) {

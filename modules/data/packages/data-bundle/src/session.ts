@@ -1083,6 +1083,20 @@ export function createSession(
   // edit (core normalises it to the run start, and anything inserted in front
   // moves it), so every write re-reads placeholders() for the address.
   const placedVariables = new Set<string>();
+  // Data ADR 564: the stories each variable binding was placed into (by the
+  // door, by Lower, by a record dropped on a design), so its text is checked
+  // for overset and its frame is in the placements. A text variable's
+  // instances are not fields the document lists by story: the session keeps
+  // where it put them.
+  const variableStories = new Map<string, Set<string>>();
+  /** A variable binding is in the document now, in `storyId` when known. */
+  function variablePlaced(id: string, storyId?: string | null): void {
+    placedVariables.add(id);
+    if (!storyId) return;
+    let stories = variableStories.get(id);
+    if (!stories) variableStories.set(id, (stories = new Set()));
+    stories.add(storyId);
+  }
   // D-13: the rule scope→query each rule binding evaluates against + its host
   // target (story range / table column). Caller-supplied.
   const ruleTargets = new Map<string, { query: string; target: RuleTarget }>();
@@ -1125,7 +1139,9 @@ export function createSession(
   >();
   let mergeFrames: TextTarget[] = [];
   const storyOfFrame = new Map<string, string>();
-  const variableFrames = new Map<string, string>();
+  // The pixel size of a picture placed from a plain link, read from the
+  // host once per placement (`assets.getPlacedImage`): frame id → pixels.
+  const linkedPixels = new Map<string, [number, number]>();
   let issuesTimer: ReturnType<typeof setTimeout> | null = null;
   let issuesToProblems = false;
   // The template each merge read last: a consumed template is gone from its
@@ -2262,7 +2278,8 @@ export function createSession(
     flowNotes.clear();
     mergeFrames = [];
     storyOfFrame.clear();
-    variableFrames.clear();
+    variableStories.clear();
+    linkedPixels.clear();
     ruleTargets.clear();
     remoteSources.clear();
     importedCsv.clear();
@@ -2660,6 +2677,7 @@ export function createSession(
     barcodeTargets,
     loweredInto,
     ruleTargets: ruleTargets as never,
+    variableStories,
     hostOids,
     hostElements,
     relink: relinkSources,
@@ -2686,21 +2704,21 @@ export function createSession(
     const addressOf = new Map<string, string>();
     for (const p of placed)
       if (!addressOf.has(p.binding)) addressOf.set(p.binding, p.address);
-    // A variable placed into a frame through the door: its frame, where the
-    // placements do not name one (a text variable's instances).
-    for (const [id, frame] of variableFrames)
-      if (!addressOf.has(id)) addressOf.set(id, `textFrame:${frame}`);
 
     // Overset: every story a variable is placed in, every frame a table or
     // a flow was lowered into, every frame of the last merge.
     const texts: TextTarget[] = [];
     if (placedVariables.size > 0) {
       // A placeholder field names its story; a text variable's instances
-      // do not (its field reads under the variable), so the frames the
-      // variable is placed in are read for theirs.
+      // do not (its field reads under the variable): the stories the
+      // session placed it into, and the frame its label names (a reopened
+      // document), are read instead.
       for (const f of await readFieldsQuietly())
         if (placedVariables.has(f.key) && !f.variable)
           texts.push({ binding: f.key, storyId: f.storyId });
+      for (const [binding, stories] of variableStories)
+        if (placedVariables.has(binding))
+          for (const storyId of stories) texts.push({ binding, storyId });
       for (const [binding, address] of addressOf)
         if (placedVariables.has(binding) && address.startsWith("textFrame:"))
           texts.push({
@@ -2759,6 +2777,7 @@ export function createSession(
               ]);
           return sizes;
         },
+        linkedPixelsOf,
       )),
     );
 
@@ -2816,15 +2835,19 @@ export function createSession(
     return out;
   }
 
-  /** Whether a one-frame story's text overflows its frame as the engine
-   *  wraps it at the host's advances (the host's own layout reported none:
-   *  a host without fonts never does). False where it cannot be measured. */
+  /** Whether a story's text overflows its frames (`frameIds`, in chain
+   *  order) as the engine wraps it at the host's advances through each
+   *  frame in turn (the host's own layout reported none: a host without
+   *  fonts never does). False where it cannot be measured. */
   async function measuredOverset(
     storyId: string,
-    frameId: string,
+    frameIds: readonly string[],
   ): Promise<boolean> {
     const e = engine;
     if (!e?.text_words || !e.text_overset) return false;
+    // A threaded story needs the chain rule; a wasm without it measures
+    // one-frame stories only.
+    if (frameIds.length > 1 && !e.text_overset_chain) return false;
     if (!host.supports("document.readStory@1")) return false;
     const content = await host.document.storyContent(storyId);
     if (!content) return false;
@@ -2834,11 +2857,19 @@ export function createSession(
       .replace(/[\r\u2028\u2029]/g, "\n")
       .replace(/\n+$/, "");
     if (text === "") return false;
-    const [g] = (await host.document.elementGeometry([
-      { kind: "textFrame", id: frameId } as ElementId,
-    ])) as { bounds?: [number, number, number, number] }[];
-    if (!g?.bounds) return false;
-    const [top, left, bottom, right] = g.bounds;
+    const geom = (await host.document.elementGeometry(
+      frameIds.map((id) => ({ kind: "textFrame", id }) as ElementId),
+    )) as {
+      id?: ElementId;
+      bounds?: [number, number, number, number];
+    }[];
+    const boxes: [number, number][] = [];
+    for (const [i, id] of frameIds.entries()) {
+      const g = geom.find((x) => String(x.id?.id) === id) ?? geom[i];
+      if (!g?.bounds) return false;
+      const [top, left, bottom, right] = g.bounds;
+      boxes.push([right - left, bottom - top]);
+    }
     const font = await storyFont(host, storyId, text);
     const words = e.text_words(text) as string[];
     const [metrics] = await measureWords(
@@ -2846,7 +2877,27 @@ export function createSession(
       { frames: [{ font }] } as never,
       [words],
     );
-    return e.text_overset(text, right - left, bottom - top, metrics);
+    return boxes.length === 1
+      ? e.text_overset(text, boxes[0]![0], boxes[0]![1], metrics)
+      : e.text_overset_chain!(text, boxes, metrics);
+  }
+
+  /** The pixel size of the picture placed from a plain link on `element`,
+   *  as the host reads the placed image (`assets.getPlacedImage`: the
+   *  engine's decoded copy, so null until it has drawn it). Read once per
+   *  placement: the answer carries the file's bytes. */
+  async function linkedPixelsOf(
+    element: ElementId,
+  ): Promise<[number, number] | null> {
+    const id = String(element.id);
+    const known = linkedPixels.get(id);
+    if (known) return known;
+    if (!host.supports("assets.images@1")) return null;
+    const placed = await host.assets.getPlacedImage(id);
+    if (!placed || !(placed.width > 0 && placed.height > 0)) return null;
+    const pixels: [number, number] = [placed.width, placed.height];
+    linkedPixels.set(id, pixels);
+    return pixels;
   }
 
   /** Our fields (placeholders and text variables), or none when they do not
@@ -3093,8 +3144,7 @@ export function createSession(
           story,
         );
         if (!placed) throw new Error(`the field ${field} could not be placed`);
-        placedVariables.add(id);
-        variableFrames.set(id, String(target.id));
+        variablePlaced(id, placed.storyId);
         emit();
         issuesSoon();
         return { binding: id, kind: "variable" };
@@ -3152,7 +3202,7 @@ export function createSession(
             recordOf.set(id, n);
             markDirty();
           },
-          placed: (id) => placedVariables.add(id),
+          placed: (id, storyId) => variablePlaced(id, storyId),
           lowerBinding: (id) => self.lowerBinding(id),
           removeBinding: (id) => self.removeBinding(id),
         },
@@ -3179,6 +3229,7 @@ export function createSession(
     async removeBinding(id, mode) {
       tableInto.delete(id);
       recordOf.delete(id);
+      variableStories.delete(id);
       return props.removeBinding(id, mode);
     },
     setAssetColumn(query, field, def) {
@@ -4252,7 +4303,7 @@ export function createSession(
                 null,
                 lowerCtx,
               );
-              if (placed) placedVariables.add(id);
+              if (placed) variablePlaced(id, placed.storyId);
             }
           } else if (lowerCtx) {
             // Already placed: the command re-resolves the live fields once.
@@ -4269,13 +4320,17 @@ export function createSession(
           if (status === "flagged")
             imageNotes.set(id, { missing: tr(ISSUES.noReference) });
           if (tgt) {
-            await commitLoweredImage(
+            const resolver = assetResolverOf(id);
+            linkedPixels.delete(tgt.elementId);
+            const placed = await commitLoweredImage(
               host,
               lowered as never,
               tgt.elementId,
               tgt.fit,
-              assetResolverOf(id),
+              resolver,
             );
+            // A plain link: the host is asked the picture's pixel size.
+            if (placed && !resolver) imageNotes.set(id, { linked: true });
           } else {
             host.log.info(
               `image binding "${id}" has no bound rectangle target — define it via addImageBinding`,
@@ -4315,7 +4370,7 @@ export function createSession(
         }
         if (ctx.variables!.length > 0) await settleLabel();
         const placed = await commitLoweredVariables(host, ctx.variables!, ctx);
-        for (const key of placed.keys()) placedVariables.add(key);
+        for (const [key, at] of placed) variablePlaced(key, at.storyId);
         // ADR 558: every property binding of the command in ONE batch.
         if (ctx.properties!.length > 0) {
           await props.applyProperties({
@@ -4533,7 +4588,7 @@ export function createSession(
               lowered as never,
               bindingId,
             );
-            if (placed) placedVariables.add(bindingId);
+            if (placed) variablePlaced(bindingId, placed.storyId);
           } else {
             // Placed earlier and since removed from the document. Placing it
             // again on every step would mint a frame per step; say so instead.
