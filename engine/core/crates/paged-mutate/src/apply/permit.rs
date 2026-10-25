@@ -61,6 +61,10 @@ pub struct Requirement {
     /// Needs `template.author` as well when the target item is a field
     /// (renaming a field's item renames the field).
     pub also_author_if_field: bool,
+    /// A character style applied to a story range (engine ADR 1017): `text.edit`
+    /// suffices when the story's text field allows this style, since
+    /// writing a value in its allowed styles is filling the field.
+    pub or_allowed_style: Option<String>,
 }
 
 impl Requirement {
@@ -85,6 +89,7 @@ fn req(permission: Permission, target: Target) -> Requirement {
         permission,
         target,
         also_author_if_field: false,
+        or_allowed_style: None,
     }
 }
 
@@ -338,6 +343,17 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
             req(P::TextEdit, Target::Item(to.clone())),
         ],
         O::UnlinkFrames { frame, .. } => vec![req(P::TextEdit, Target::Item(frame.clone()))],
+        O::ApplyStyle {
+            story_id,
+            style,
+            scope: crate::operation::StyleScope::Character,
+            cell: None,
+            ..
+        } => {
+            let mut r = story(P::TextStyle, story_id);
+            r.or_allowed_style = Some(style.clone());
+            vec![r]
+        }
         O::ApplyStyle { story_id, .. } | O::SetFlowGrowRule { story_id, .. } => {
             vec![story(P::TextStyle, story_id)]
         }
@@ -423,6 +439,50 @@ fn refused(r: &Requirement, permission: Permission) -> OperationError {
     }
 }
 
+/// Refuses text typed into a text field that holds a break its field does
+/// not take (engine ADR 1017), for a session the policy binds. The
+/// refusal is `NotPermitted` of `text.edit`, its target naming the break.
+pub fn check_breaks(
+    doc: &Document,
+    story_id: &str,
+    text: &str,
+    session: &SessionPolicy,
+) -> Result<(), OperationError> {
+    use paged_template::TextBreaks;
+    if session.unbound().is_some() {
+        return Ok(());
+    }
+    let found = TextBreaks::of_text(text);
+    if found == TextBreaks::None {
+        return Ok(());
+    }
+    let Some(item) = doc
+        .frame_for(story_id)
+        .and_then(|f| f.self_id.clone())
+        .or_else(|| path_host_of(doc, story_id))
+    else {
+        return Ok(());
+    };
+    let (index, _) = PolicyIndex::build(doc);
+    let Some(takes) = index.text_field(&item).and_then(|f| f.constraints.breaks) else {
+        return Ok(());
+    };
+    if found <= takes {
+        return Ok(());
+    }
+    Err(OperationError::NotPermitted {
+        permission: Permission::TextEdit.name().to_string(),
+        target: format!(
+            "story {story_id}: its field takes no {} breaks",
+            if found == TextBreaks::Paragraph {
+                "paragraph"
+            } else {
+                "line"
+            }
+        ),
+    })
+}
+
 /// Refuses `op` when `session` may not perform it on `doc`.
 pub fn check(
     doc: &Document,
@@ -465,11 +525,28 @@ pub fn check_requirements(
             (None, None) => unreachable!("an index is built whenever the session is bound"),
         };
         if !allowed.has(r.permission) {
-            return Err(refused(r, r.permission));
+            let by_field = match (&r.or_allowed_style, &r.target, &index) {
+                (Some(style), Target::Story(s), Some(ix)) if allowed.has(Permission::TextEdit) => {
+                    item_of_story(s)
+                        .and_then(|item| ix.text_field(&item).cloned())
+                        .is_some_and(|f| {
+                            paged_template::allowed_character_style(
+                                doc,
+                                &f.constraints.allowed_styles,
+                                style,
+                            )
+                            .is_some()
+                        })
+                }
+                _ => false,
+            };
+            if !by_field {
+                return Err(refused(r, r.permission));
+            }
         }
         if r.also_author_if_field {
             if let (Target::Item(id), Some(ix)) = (&r.target, &index) {
-                let is_field = ix.item(id).is_some_and(|p| p.field.is_some());
+                let is_field = ix.is_field_item(id);
                 if is_field && !allowed.has(Permission::TemplateAuthor) {
                     return Err(refused(r, Permission::TemplateAuthor));
                 }

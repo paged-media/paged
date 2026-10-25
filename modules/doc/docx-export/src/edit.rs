@@ -211,6 +211,11 @@ pub enum StructuralEdit {
         base: Option<RunFormat>,
         #[serde(default)]
         pieces: Vec<RunPiece>,
+        /// The new paragraph's own paragraph look when it is not `para`'s
+        /// (its direct properties and real Word style): the copied
+        /// `<w:pPr>` is rewritten to it, keeping what the look does not own.
+        #[serde(default)]
+        new_ppr: Option<(docx_core::ParaProps, Option<String>)>,
     },
     /// Split body run `run` of paragraph `block` into `pieces`, in order:
     /// each piece is a copy of the run's `<w:r>` (its attributes, its

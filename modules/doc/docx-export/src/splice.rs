@@ -33,7 +33,7 @@ use quick_xml::Reader;
 use paged_ooxml::xml::{attr_raw as attr, local_name};
 
 use crate::edit::RunFormat;
-use crate::rpr::{merge_rpr, render_text, RunSpecials, SpecialSource};
+use crate::rpr::{merge_rpr, render_text_from, RunSpecials, SpecialSource};
 use docx_core::{LINE_BREAK, SOFT_HYPHEN};
 
 /// A run to patch, addressed by source ordinals + the pre-rendered replacements.
@@ -65,6 +65,11 @@ pub struct ResolvedTarget {
     /// Split the run into these pieces, each a copy of it carrying its
     /// text (and its look, merged into the copy's `<w:rPr>`).
     pub split: Vec<SplitPiece>,
+    /// Where in `new_text` (char offsets) the children that sit INSIDE the
+    /// run's text (a drawing, a field character, a note reference between
+    /// two of its texts) go, in order. `None`: where the edit leaves them
+    /// ([`inside_offsets`]).
+    pub inside_at: Option<Vec<usize>>,
 }
 
 /// One piece of a split run ([`ResolvedTarget::split`]): its text and, when
@@ -89,6 +94,7 @@ impl ResolvedTarget {
             label: format!("run edit skipped: paragraph {para_ord} run {run_ord}"),
             rpr_merge: None,
             split: Vec::new(),
+            inside_at: None,
         }
     }
 }
@@ -577,6 +583,7 @@ pub fn patch_document_xml_cols(
                             label: ct.label.clone(),
                             rpr_merge: ct.rpr_merge.clone(),
                             split: ct.split.clone(),
+                            inside_at: None,
                         };
                         if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
                         {
@@ -620,6 +627,7 @@ pub fn patch_document_xml_cols(
                             label: ct.label.clone(),
                             rpr_merge: ct.rpr_merge.clone(),
                             split: ct.split.clone(),
+                            inside_at: None,
                         };
                         if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
                         {
@@ -1124,6 +1132,7 @@ pub fn clone_cell_paragraph(
     last_run: bool,
     base: Option<&RunFormat>,
     pieces: &[crate::edit::RunPiece],
+    new_ppr: Option<&[u8]>,
 ) -> Option<Vec<u8>> {
     let (start, end) = cell_paragraph_range(src, path)?;
     let (ppr, runs) = paragraph_parts(&src[start..end]);
@@ -1131,7 +1140,11 @@ pub fn clone_cell_paragraph(
         .copied()
         .flatten();
     let mut out = b"<w:p>".to_vec();
-    out.extend_from_slice(ppr.unwrap_or_default());
+    match new_ppr {
+        // Its own paragraph look over the copied `<w:pPr>`.
+        Some(new) => out.extend_from_slice(&crate::rpr::merge_ppr(ppr, new)),
+        None => out.extend_from_slice(ppr.unwrap_or_default()),
+    }
     if let (Some(base), false) = (base, pieces.is_empty()) {
         // The paragraph's runs as the canvas made them, each the copied
         // `<w:rPr>` with the piece's look merged in.
@@ -1235,7 +1248,7 @@ fn wt_text(reader: &mut Reader<&[u8]>) -> String {
 /// is refused. `<w:lastRenderedPageBreak/>` is only Word's layout cache, so
 /// it may move. And content the import drops ([`Special::Unplaceable`]) is refused
 /// wherever it sits.
-fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> {
+fn scan_run(src: &[u8], run_open_end: usize) -> Result<ScannedRun<'_>, String> {
     let body = &src[run_open_end..];
     let mut reader = Reader::from_reader(body);
     reader.config_mut().trim_text(false);
@@ -1251,7 +1264,8 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
     let mut pieces: Vec<Piece<'_>> = Vec::new();
     let mut first_text: Option<usize> = None;
     let mut last_text: Option<usize> = None;
-    let mut opaque: Vec<(usize, String)> = Vec::new();
+    let mut opaque: Vec<(usize, String, usize)> = Vec::new();
+    let mut chars = 0usize;
     let mut k = 0usize;
     loop {
         let start = reader.buffer_position() as usize;
@@ -1267,7 +1281,9 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
         let mut text_bearing = false;
         if ln == b"t" {
             if !empty {
-                pieces.push(Piece::Text(wt_text(&mut reader)));
+                let t = wt_text(&mut reader);
+                chars += t.chars().count();
+                pieces.push(Piece::Text(t));
             }
             text_bearing = true;
         } else {
@@ -1278,6 +1294,7 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
             let kind = special(&e);
             if let Special::Char(c) = kind {
                 pieces.push(Piece::Element(c, bytes));
+                chars += 1;
                 text_bearing = true;
             } else if matches!(kind, Special::Unplaceable) {
                 return Err(format!(
@@ -1287,7 +1304,7 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
                     String::from_utf8_lossy(bytes)
                 ));
             } else if ln != b"rPr" && ln != b"lastRenderedPageBreak" {
-                opaque.push((k, String::from_utf8_lossy(&name).into_owned()));
+                opaque.push((k, String::from_utf8_lossy(&name).into_owned(), chars));
             }
         }
         if text_bearing {
@@ -1295,14 +1312,23 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
             last_text = Some(k);
         }
     }
-    if let (Some(first), Some(last)) = (first_text, last_text) {
-        if let Some((_, name)) = opaque.iter().find(|(k, _)| first < *k && *k < last) {
-            return Err(format!(
-                "its <{name}> sits inside the run's text, and the edited text has no \
-                 place for it"
-            ));
-        }
-    }
+    // The children between two of the run's texts: the edited text is
+    // written around them (`splice_run`).
+    let inside: Vec<(usize, usize)> = match (first_text, last_text) {
+        (Some(first), Some(last)) => opaque
+            .iter()
+            .filter(|(k, _, _)| first < *k && *k < last)
+            .map(|(k, _, at)| (*k, *at))
+            .collect(),
+        _ => Vec::new(),
+    };
+    let old_text: String = pieces
+        .iter()
+        .map(|p| match p {
+            Piece::Text(t) => t.clone(),
+            Piece::Element(c, _) => c.to_string(),
+        })
+        .collect();
     let tracked = |c: char| {
         crate::rpr::word_element(c).is_some()
             || pieces
@@ -1320,7 +1346,48 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
             Piece::Element(c, bytes) => specials.push(*c, SpecialSource::Element(bytes)),
         }
     }
-    Ok(specials)
+    Ok(ScannedRun {
+        specials,
+        inside,
+        old_text,
+    })
+}
+
+/// What [`scan_run`] learns of a run: how it writes its special characters,
+/// the children inside its text (`(child ordinal, char offset in the old
+/// text)`), and its old text.
+struct ScannedRun<'a> {
+    specials: RunSpecials<'a>,
+    inside: Vec<(usize, usize)>,
+    old_text: String,
+}
+
+/// Where children at `at` (char offsets into `old`) go in `new`: a child
+/// before the edited span keeps its offset, one after it moves with the
+/// text after it, one inside it goes after the inserted text.
+pub(crate) fn inside_offsets(old: &str, new: &str, at: &[usize]) -> Vec<usize> {
+    let a: Vec<char> = old.chars().collect();
+    let b: Vec<char> = new.chars().collect();
+    let prefix = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let max_suffix = a.len().min(b.len()) - prefix;
+    let suffix = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take(max_suffix)
+        .take_while(|(x, y)| x == y)
+        .count();
+    at.iter()
+        .map(|&o| {
+            if o <= prefix {
+                o
+            } else if o >= a.len() - suffix {
+                o + b.len() - a.len()
+            } else {
+                b.len() - suffix
+            }
+        })
+        .collect()
 }
 
 /// Copy the rest of the run verbatim: consume its children up to `</w:r>`
@@ -1411,10 +1478,9 @@ fn patch_run(
 /// piece's look merged into the copy's `<w:rPr>`. A child that is not text
 /// (a drawing, a field character, a note reference) is kept once, in the
 /// piece at its place: one before the run's text goes with the first piece,
-/// one after it with the last ([`run_children`]). One inside the text has no
-/// place in an edited text, so the run is left as it was and the refusal
-/// recorded (as an edit of that run is refused, [`scan_run`]), as is any
-/// piece's own refusal.
+/// one after it with the last ([`run_children`]). One inside the text goes
+/// to the piece its place in the new text falls in, at that place (doc ADR
+/// 610). A piece's own refusal leaves the run as it was.
 fn split_run(
     reader: &mut Reader<&[u8]>,
     src: &[u8],
@@ -1430,13 +1496,36 @@ fn split_run(
     let run = &src[run_start..end];
     let open_len = run_open_end - run_start;
     let children = run_children(&src[run_open_end..end]);
-    if let Some(c) = children.iter().find(|c| c.place == Place::Inside) {
-        refusals.push(format!(
-            "{}: the run holds a <{}> inside its text, which no part of the split can keep \
-             in its place",
-            t.label, c.name
-        ));
-        return;
+    // A child inside the run's text goes to the piece its place in the new
+    // text falls in, at that place (`inside_offsets`).
+    let mut owner: Vec<(usize, usize)> = Vec::new();
+    if children.iter().any(|c| c.place == Place::Inside) {
+        let scanned = match scan_run(src, run_open_end) {
+            Ok(s) => s,
+            Err(reason) => {
+                refusals.push(format!("{}: {reason}", t.label));
+                return;
+            }
+        };
+        let full: String = t.split.iter().map(|p| p.text.as_str()).collect();
+        let at: Vec<usize> = scanned.inside.iter().map(|(_, o)| *o).collect();
+        let total = full.chars().count();
+        let mut starts = Vec::new();
+        let mut n = 0usize;
+        for p in &t.split {
+            starts.push(n);
+            n += p.text.chars().count();
+        }
+        for g in inside_offsets(&scanned.old_text, &full, &at) {
+            // At a boundary between two pieces it stays with the text
+            // before it (a note reference follows its word).
+            let i = if g >= total {
+                t.split.len().saturating_sub(1)
+            } else {
+                starts.iter().rposition(|&s| s < g).unwrap_or(0)
+            };
+            owner.push((i, g - starts.get(i).copied().unwrap_or(0)));
+        }
     }
     let last = t.split.len().saturating_sub(1);
     let mut pieces: Vec<u8> = Vec::new();
@@ -1445,11 +1534,20 @@ fn split_run(
         // The run's bytes without the children another piece keeps.
         let mut copy: Vec<u8> = Vec::with_capacity(run.len());
         let mut at = 0usize;
+        let mut inside_k = 0usize;
+        let mut mine: Vec<usize> = Vec::new();
         for c in &children {
             let drop = match c.place {
                 Place::Before => i != 0,
                 Place::After => i != last,
-                Place::Inside => false,
+                Place::Inside => {
+                    let (o, local) = owner.get(inside_k).copied().unwrap_or((0, 0));
+                    inside_k += 1;
+                    if o == i {
+                        mine.push(local);
+                    }
+                    o != i
+                }
             };
             if drop {
                 copy.extend_from_slice(&run[at..open_len + c.start]);
@@ -1469,6 +1567,7 @@ fn split_run(
             new_text: Some(piece.text.clone()),
             rpr_merge: piece.rpr_merge.clone(),
             split: Vec::new(),
+            inside_at: Some(mine),
             ..t.clone()
         };
         let mut c = 0usize;
@@ -1526,7 +1625,6 @@ fn holds_more_than_text(src: &[u8], open_end: usize) -> bool {
 struct OpaqueChild {
     start: usize,
     end: usize,
-    name: String,
     place: Place,
 }
 
@@ -1571,7 +1669,6 @@ fn run_children(body: &[u8]) -> Vec<OpaqueChild> {
             out.push(OpaqueChild {
                 start,
                 end,
-                name: String::from_utf8_lossy(&name).into_owned(),
                 place: if seen_text {
                     Place::After
                 } else {
@@ -1613,9 +1710,9 @@ fn splice_run(
     let new_rpr: Option<&[u8]> = merged.as_deref().or(t.new_rpr.as_deref());
     let mut rpr_pending: Option<&[u8]> = new_rpr;
     let mut text_done = false;
-    let originals = if t.new_text.is_some() {
+    let scanned = if t.new_text.is_some() {
         match scan_run(src, run_open_end) {
-            Ok(o) => o,
+            Ok(o) => Some(o),
             Err(reason) => {
                 refusals.push(format!("{}: {reason}", t.label));
                 skip_run(reader);
@@ -1623,17 +1720,72 @@ fn splice_run(
             }
         }
     } else {
-        RunSpecials::default()
+        None
     };
-    let rendered = || render_text(t.new_text.as_deref().unwrap_or(""), &originals);
+    let originals = scanned
+        .as_ref()
+        .map(|s| s.specials.clone())
+        .unwrap_or_default();
+    let new_text = t.new_text.as_deref().unwrap_or("");
+    // The new text in segments, one per stretch between two children inside
+    // it (one segment when there are none).
+    let inside: Vec<usize> = scanned
+        .as_ref()
+        .map(|s| s.inside.iter().map(|(k, _)| *k).collect())
+        .unwrap_or_default();
+    let segments: Vec<String> = match &scanned {
+        Some(sc) if !sc.inside.is_empty() => {
+            let at: Vec<usize> = sc.inside.iter().map(|(_, o)| *o).collect();
+            let mut cuts = match &t.inside_at {
+                Some(v) if v.len() == at.len() => v.clone(),
+                Some(_) => {
+                    refusals.push(format!(
+                        "{}: the run's content inside its text cannot be placed",
+                        t.label
+                    ));
+                    skip_run(reader);
+                    return;
+                }
+                None => inside_offsets(&sc.old_text, new_text, &at),
+            };
+            let chars: Vec<char> = new_text.chars().collect();
+            let mut prev = 0usize;
+            let mut segs = Vec::new();
+            for c in cuts.iter_mut() {
+                *c = (*c).clamp(prev, chars.len());
+                segs.push(chars[prev..*c].iter().collect());
+                prev = *c;
+            }
+            segs.push(chars[prev..].iter().collect());
+            segs
+        }
+        _ => vec![new_text.to_string()],
+    };
+    let mut seen: Vec<(char, usize)> = Vec::new();
+    let single = segments.len() == 1;
+    let mut render_seg = |i: usize| {
+        render_text_from(
+            segments.get(i).map(String::as_str).unwrap_or(""),
+            &originals,
+            &mut seen,
+            single,
+        )
+    };
+    // The segment the next text-bearing child carries (`None`: dropped).
+    let mut seg: Option<usize> = Some(0);
+    let mut k = 0usize;
 
     loop {
         let child_start = reader.buffer_position() as usize;
         match reader.read_event() {
             Ok(Event::Eof) | Err(_) => return,
             Ok(Event::Start(e)) => {
+                k += 1;
                 let name = e.name().as_ref().to_vec();
                 let ln = local_name(&name).to_vec();
+                if let Some(j) = inside.iter().position(|&i| i == k) {
+                    seg = Some(j + 1);
+                }
                 place_rpr_first(&ln, src, child_start, out, cursor, &mut rpr_pending);
                 if let (b"rPr", Some(rpr)) = (ln.as_slice(), new_rpr) {
                     let _ = reader.read_to_end(QName(&name));
@@ -1652,12 +1804,12 @@ fn splice_run(
                     if let Some(rpr) = rpr_pending.take() {
                         out.extend_from_slice(rpr);
                     }
-                    if !text_done {
-                        out.extend_from_slice(&rendered());
+                    if let Some(i) = seg.take() {
+                        out.extend_from_slice(&render_seg(i));
                         text_done = true;
                     }
-                    // The first text-bearing child carries the whole new text;
-                    // every later one in the same run is dropped (collapsed).
+                    // The first text-bearing child of a segment carries its
+                    // text; every later one is dropped (collapsed).
                     *cursor = end;
                     continue;
                 }
@@ -1665,8 +1817,12 @@ fn splice_run(
                 let _ = reader.read_to_end(QName(&name));
             }
             Ok(Event::Empty(e)) => {
+                k += 1;
                 let ln = local_name(e.name().as_ref()).to_vec();
                 let end = reader.buffer_position() as usize;
+                if let Some(j) = inside.iter().position(|&i| i == k) {
+                    seg = Some(j + 1);
+                }
                 place_rpr_first(&ln, src, child_start, out, cursor, &mut rpr_pending);
                 if let (b"rPr", Some(rpr)) = (ln.as_slice(), new_rpr) {
                     out.extend_from_slice(&src[*cursor..child_start]);
@@ -1678,8 +1834,8 @@ fn splice_run(
                     if let Some(rpr) = rpr_pending.take() {
                         out.extend_from_slice(rpr);
                     }
-                    if !text_done {
-                        out.extend_from_slice(&rendered());
+                    if let Some(i) = seg.take() {
+                        out.extend_from_slice(&render_seg(i));
                         text_done = true;
                     }
                     *cursor = end;
@@ -1697,7 +1853,7 @@ fn splice_run(
                     // last.
                     if t.new_text.is_some() && !text_done {
                         out.extend_from_slice(&src[*cursor..child_start]);
-                        out.extend_from_slice(&rendered());
+                        out.extend_from_slice(&render_seg(0));
                         *cursor = child_start;
                     }
                     return;
@@ -1833,15 +1989,8 @@ mod tests {
     }
 
     #[test]
-    fn content_inside_the_text_refuses_the_edit_and_keeps_the_run() {
-        // A footnote reference between two pieces of text would move behind
-        // the edited text; a `w:sym` with no Unicode equivalent (Wingdings'
-        // Windows logo) has no character to place at all.
-        for run in [
-            r#"<w:r><w:t>a</w:t><w:footnoteReference w:id="1"/><w:t>b</w:t></w:r>"#,
-            r#"<w:r><w:sym w:font="Wingdings" w:char="F0FF"/><w:t>b</w:t></w:r>"#,
-            r#"<w:r><w:t>a</w:t><w:br w:type="page"/><w:t>b</w:t></w:r>"#,
-        ] {
+    fn content_inside_the_text_stays_in_place_and_a_symbol_without_a_character_refuses() {
+        let patch = |run: &str| {
             let src = format!(
                 r#"<w:document xmlns:w="urn:w"><w:body><w:p>{run}</w:p></w:body></w:document>"#
             );
@@ -1857,24 +2006,36 @@ mod tests {
                 &BTreeMap::new(),
                 &BTreeMap::new(),
             );
-            assert_eq!(out, src.as_bytes(), "{run}: the run keeps its bytes");
-            assert_eq!(refused.len(), 1, "{run}");
+            (src, String::from_utf8(out).unwrap(), refused)
+        };
+        // A footnote reference or a page break between two pieces of text:
+        // the whole text changed, so it goes after the new text (doc ADR 610).
+        for (run, kept) in [
+            (
+                r#"<w:r><w:t>a</w:t><w:footnoteReference w:id="1"/><w:t>b</w:t></w:r>"#,
+                r#"<w:footnoteReference w:id="1"/>"#,
+            ),
+            (
+                r#"<w:r><w:t>a</w:t><w:br w:type="page"/><w:t>b</w:t></w:r>"#,
+                r#"<w:br w:type="page"/>"#,
+            ),
+        ] {
+            let (_, out, refused) = patch(run);
+            assert!(refused.is_empty(), "{refused:?}");
             assert!(
-                refused[0].starts_with("run edit skipped: paragraph 0 run 0: "),
-                "{refused:?}"
+                out.contains(&format!(
+                    r#"<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">xy</w:t>{kept}</w:r>"#
+                )),
+                "{out}"
             );
         }
-        // Word's layout cache may move; content outside the text stays put.
-        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:lastRenderedPageBreak/><w:t>a</w:t><w:lastRenderedPageBreak/><w:t>b</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#;
-        let mut t = ResolvedTarget::edit(0, 0);
-        t.new_text = Some("xy".into());
-        t.new_rpr = Some(b"<w:rPr><w:b/></w:rPr>".to_vec());
-        let out = String::from_utf8(patch_document_xml(src, &[t])).unwrap();
-        // The rPr goes FIRST (schema), ahead of the layout cache.
-        assert!(
-            out.contains(r#"<w:r><w:rPr><w:b/></w:rPr><w:lastRenderedPageBreak/><w:t xml:space="preserve">xy</w:t><w:lastRenderedPageBreak/><w:footnoteReference w:id="1"/></w:r>"#),
-            "{out}"
-        );
+        // A `w:sym` with no Unicode equivalent (Wingdings' Windows logo) has
+        // no character to place at all.
+        let (src, out, refused) =
+            patch(r#"<w:r><w:sym w:font="Wingdings" w:char="F0FF"/><w:t>b</w:t></w:r>"#);
+        assert_eq!(out, src, "the run keeps its bytes");
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].starts_with("run edit skipped: paragraph 0 run 0: "));
     }
 
     #[test]
@@ -2015,12 +2176,15 @@ mod tests {
             String::from_utf8(out).unwrap(),
             r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:drawing>D</w:drawing><w:t xml:space="preserve">ab</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">cd</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#
         );
-        // One inside the text has no place in either piece: refused, kept.
+        // One inside the text goes with the piece at its place: between
+        // `ab` and `cd`, the end of the first piece.
         let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>ab</w:t><w:footnoteReference w:id="1"/><w:t>cd</w:t></w:r></w:p></w:body></w:document>"#;
         let (out, refused) = split(src);
-        assert_eq!(out, src.to_vec(), "left as it was");
-        assert_eq!(refused.len(), 1);
-        assert!(refused[0].contains("footnoteReference"), "{refused:?}");
+        assert!(refused.is_empty(), "{refused:?}");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t xml:space="preserve">ab</w:t><w:footnoteReference w:id="1"/></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">cd</w:t></w:r></w:p></w:body></w:document>"#
+        );
     }
 
     #[test]

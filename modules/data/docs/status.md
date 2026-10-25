@@ -34,6 +34,10 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
   declared through the door too (`assetColumns`, `setAssetColumn`: an unknown query or field
   is refused, a change re-reads the query), from the Data panel's picture column editor;
 - paged.sheet edits a table of the document's data in place through `data@1`.
+- data issues ([ADR 564](adr/564-data-issues.md)): overset text (the host's frame chain, or the
+  engine's measured wrap where the host lays out without fonts), a missing or too coarse
+  picture (asset columns), an empty or failed value, records a flow left out; served as
+  `data@1` `issues()`, published to Problems, summed up in the Data panel.
 - the Data panel's drops (editor ADR 291) through `data@1`: a field onto a frame (`place`), a
   query as a table into a text frame's own story (`placeTable`; an update swaps it there and
   keeps the frame), a record onto a group or a frame (`placeRecord`: each `<<field>>` of its

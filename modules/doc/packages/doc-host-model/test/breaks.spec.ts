@@ -64,6 +64,9 @@ describe("a paragraph split by a break", () => {
       { kind: "paragraph", ...plain },
       { kind: "table", rows: 1, cols: 1, columnWidthsPt: [], cells: [] },
     ] as LoweredBlock[];
-    expect(pouredParagraphCount(blocks)).toBe(3);
+    // The two parts of the split paragraph, the plain one, and the table's.
+    expect(pouredParagraphCount(blocks)).toBe(4);
+    // Documents poured before: the table had no paragraph of its own.
+    expect(pouredParagraphCount(blocks, "joined")).toBe(3);
   });
 });

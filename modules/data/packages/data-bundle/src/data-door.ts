@@ -18,6 +18,7 @@ import type {
   DataBindingSpec,
   DataChange,
   DataEvaluation,
+  DataIssue,
   DataPipelineStep,
   DataPlacement,
   DataRecordStatus,
@@ -82,6 +83,9 @@ export interface DataDoorDeps {
   /** A query's per-record status (editor ADR 291; the engine's
    *  `record_status`). */
   recordStatus?(query: string): Promise<DataRecordStatus>;
+  /** What may be wrong with the placed content (data ADR 564), read now and
+   *  published to the Problems panel. */
+  issues(): Promise<readonly DataIssue[]>;
   /** Place a field on a page item (`kind:id`), the panel's drag to place. */
   place(
     target: string,
@@ -500,6 +504,9 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
       if (!deps.recordStatus)
         return { query, added: [], changed: [], removed: 0, placed: [] };
       return deps.recordStatus(query);
+    },
+    async issues() {
+      return deps.issues();
     },
     async assetColumns() {
       const out: DataAssetColumn[] = [];

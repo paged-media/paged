@@ -154,6 +154,7 @@ export async function placeEmbedded(
         sections: [storyId],
         ...(fileName ? { fileName } : {}),
         midPageColumns: true,
+        tableParagraphs: true,
       },
     });
   } catch (err) {
@@ -237,6 +238,7 @@ async function placeInOneBatch(
       blocks: ir.story.blocks.length,
       ...(fileName ? { fileName } : {}),
       midPageColumns: true,
+      tableParagraphs: true,
     },
   };
   const ops: Mutation[] = [
@@ -284,6 +286,7 @@ async function newStyleOps(
     "paragraphStyles",
     "characterStyles",
     "swatches",
+    "colorGroups",
   ] as const) {
     try {
       for (const row of await host.document.collection<{ selfId: string }>(
@@ -300,7 +303,7 @@ async function newStyleOps(
       spec?: { selfId?: string | null };
     };
     const id =
-      op.op === "createSwatch"
+      op.op === "createSwatch" || op.op === "createColorGroup"
         ? args.spec?.selfId
         : op.op === "createParagraphStyle" || op.op === "createCharacterStyle"
           ? args.selfId

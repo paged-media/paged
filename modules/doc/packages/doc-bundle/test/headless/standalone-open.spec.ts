@@ -51,6 +51,8 @@ const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 // price-table.docx: a heading, a 3 x 2 table, a body paragraph after it.
 const BODY = ["Price list", "Dear «Name»", "Kind regards"];
+// The native story: the table stands in a paragraph of its own.
+const STORY = ["Price list", "", "Dear «Name»", "Kind regards"];
 const CELLS = [
   "Item",
   "Price",
@@ -166,7 +168,7 @@ describe.skipIf(!docxPresent)(
       expect(pages.length).toBeGreaterThanOrEqual(1);
       // The blank 300 x 300 page is gone: the Word page took its place.
       expect(pages[0]!.sizePt?.map(Math.round)).not.toEqual([300, 300]);
-      expect(await storyTexts(h.host, await story())).toEqual(BODY);
+      expect(await storyTexts(h.host, await story())).toEqual(STORY);
       expect(
         await h.objects.query("plugin:media.paged.doc/docxDocument"),
       ).toHaveLength(1);

@@ -17,6 +17,8 @@
 
 import type { ActionStep, BundleHost } from "@paged-media/plugin-api";
 
+import { pixelSize } from "./issues";
+
 /** What a column does with its assets. */
 export interface AssetColumnDef {
   /** The actions each asset goes through before it is placed. */
@@ -27,7 +29,16 @@ export interface AssetColumnDef {
 
 /** An asset made ready, or why not. */
 export type AssetOutcome =
-  | { ok: true; uri: string; key: string; mediaType: string; cached: boolean }
+  | {
+      ok: true;
+      uri: string;
+      key: string;
+      mediaType: string;
+      cached: boolean;
+      /** Its pixel size, read from the header (data ADR 564's resolution
+       *  check); absent for a kind whose header is not read. */
+      pixels?: [number, number];
+    }
   | { ok: false; reason: string };
 
 const MEDIA_TYPES: Record<string, string> = {
@@ -217,12 +228,14 @@ export function createAssetPipeline(
           };
         }
       }
+      const pixels = pixelSize(bytes);
       return {
         ok: true,
         uri: dataUri(bytes, mediaType),
         key,
         mediaType,
         cached,
+        ...(pixels ? { pixels } : {}),
       };
     },
   };

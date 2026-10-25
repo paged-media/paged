@@ -71,3 +71,17 @@ The plan's fill edit context (D4) is not built as an edit context: the `template
 registers only the select, type, hand and zoom tools and removes the context toolbar, and the
 engine refuses what the template does not permit (engine ADR 1001), so an edit context would
 restate both. The Consequences above are updated accordingly.
+
+## Amendment — 2026-10-24: styled text and alternates
+
+A text field whose author listed character styles or breaks (engine
+[ADR 1017](../../../../engine/core/docs/adr/1017-styled-field-values-and-alternates.md)) is
+filled through a styled-text control (`apps/canvas/src/panels/template/styled-text.tsx`): a
+button per allowed style, Enter for a paragraph break and Shift+Enter for a line break only when
+the field takes them, and the value written as runs when the control loses focus. An
+`alternates` field is a picker of its members; choosing one is one `setTemplateFields`, one undo
+step. The overlay outlines an alternates field on the member it shows and names it. The Template
+panel edits a text field's allowed styles and breaks and makes an alternates field from two or
+more selected items (unnamed items are named after the field, the first stays shown). Evidence:
+`apps/canvas/test/panels/template-form-panel.dom.test.tsx`,
+`apps/canvas/test/panels/template-panel.dom.test.tsx`, `apps/canvas/tests/journey/focused/template-styled.journey.spec.ts`.

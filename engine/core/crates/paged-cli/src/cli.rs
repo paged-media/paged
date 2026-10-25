@@ -437,8 +437,9 @@ pub enum TemplateCommand {
     Fill {
         /// The template.
         template: PathBuf,
-        /// A JSON list of {name, value}, an object of name → text, or a file
-        /// holding either.
+        /// A JSON list of {name, value}, an object of name → text, styled runs
+        /// ([{text, style?} | {break}]), an alternate's name or a value, or a
+        /// file holding either.
         #[arg(long)]
         values: String,
         /// Where to write; the extension names the format.

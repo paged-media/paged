@@ -44,7 +44,8 @@ requireDocx("doc headless — table cells");
 // "first-item") | 1.20 (style Price) / "Line one" + "Line two" |
 // "For " + «Name».
 const FRAME = "docx_f0";
-const BODY = ["Price list", "Dear «Name»", "Kind regards"];
+// The native story: the table stands in a paragraph of its own.
+const BODY = ["Price list", "", "Dear «Name»", "Kind regards"];
 const CELLS = [
   "Item",
   "Price",
@@ -173,13 +174,14 @@ describe.skipIf(!docxPresent)(
       expect(await docxCells()).toEqual(CELLS);
     });
 
-    it("the paragraph after a table continues in the table's host paragraph", async () => {
+    it("the paragraph after a table is the one after the table's own", async () => {
       const b2 = docAddress("block", `${FRAME}/b2`);
       expect(await h.objects.set(b2, "text", "Hello")).toMatchObject({
         applied: true,
       });
       expect(await storyTexts(host, story)).toEqual([
         "Price list",
+        "",
         "Hello",
         "Kind regards",
       ]);
@@ -220,7 +222,7 @@ describe.skipIf(!docxPresent)(
       expect(out.filled).toBe(2);
       expect((await liveCells())[5]).toBe("For Ada");
       expect((await docxCells())[5]).toBe("For Ada");
-      expect((await storyTexts(host, story))[1]).toBe("Dear Ada");
+      expect((await storyTexts(host, story))[2]).toBe("Dear Ada");
     });
 
     describe("template fields in a cell", () => {
@@ -305,10 +307,10 @@ describe.skipIf(!docxPresent)(
         });
         expect((await liveCells())[5]).toBe("For Grace");
         expect((await docxCells())[5]).toBe("For Grace");
-        expect((await storyTexts(host, story))[1]).toBe("Dear Grace");
+        expect((await storyTexts(host, story))[2]).toBe("Dear Grace");
         await host.document.undo();
         expect((await liveCells())[5]).toBe("For «Name»");
-        expect((await storyTexts(host, story))[1]).toBe("Dear «Name»");
+        expect((await storyTexts(host, story))[2]).toBe("Dear «Name»");
       });
     });
   },

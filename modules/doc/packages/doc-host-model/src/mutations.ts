@@ -44,6 +44,15 @@ export function buildStyleMutations(ir: LoweredDoc): Mutation[] {
       },
     } as Mutation);
   }
+  // Doc ADR 609 — the "Word theme" group, once its swatches exist.
+  for (const group of ir.colorGroups ?? []) {
+    ops.push({
+      op: "createColorGroup",
+      args: {
+        spec: { selfId: group.id, name: group.name, members: group.members },
+      },
+    } as Mutation);
+  }
   for (const style of ir.styles) {
     ops.push(createStyleOp(style));
     for (const prop of style.props) {
@@ -267,6 +276,11 @@ export function buildTextPour(
      *  lines and pictures name their paragraph (core wire v65, RFI C-53);
      *  an engine without that address ignores the field. */
     paraBase?: number;
+    /** Start the text with a paragraph break: the text follows a native
+     *  table, whose paragraph holds only the table, so the first paragraph
+     *  is a new one after it (`paraBase` names that new paragraph). The
+     *  break is counted in `byteLength`, not in `breaks`. */
+    leadingBreak?: boolean;
   } = {},
 ): {
   mutations: Mutation[];
@@ -275,11 +289,9 @@ export function buildTextPour(
   carets: Mutation[];
   breaks: number;
 } {
-  const { text, ranges, images, links, length, breaks } = poured(
-    paragraphs,
-    styleBase,
-    opts.paraBase,
-  );
+  const body = poured(paragraphs, styleBase, opts.paraBase);
+  const { ranges, images, links, length, breaks } = body;
+  const text = (opts.leadingBreak ? "\n" : "") + body.text;
   const ops: Mutation[] = [];
   const carets: Mutation[] = [];
   if (text.length > 0) {
@@ -593,7 +605,45 @@ export type StoryStep =
       byteLength: number;
       mutations: (textBase: number, styleBase: number) => Mutation[];
     }
-  | { kind: "table"; insert: Mutation; cells: (tableId: string) => Mutation };
+  | {
+      kind: "table";
+      /** Insert an empty paragraph at the story's end first (an `insertText`
+       *  of one break there): the paragraph before the table is an empty
+       *  Word paragraph, which `insertTable` would otherwise take as the
+       *  table's own. */
+      breakBefore: boolean;
+      /** How far the step moves the story's end in the `insertText` space:
+       *  0 when the table takes the fresh story's one empty paragraph, else
+       *  1 (the break before the table's new paragraph). */
+      textLength: number;
+      insert: Mutation;
+      cells: (tableId: string) => Mutation;
+    };
+
+/**
+ * How a story's native tables stand among its paragraphs.
+ *
+ * - `"own"` — the pour's layout: each native table is a paragraph of its own
+ *   that holds only the table, between the paragraphs of the Word blocks
+ *   around it, as Word and InDesign have it.
+ * - `"joined"` — documents poured before that: the text after a table
+ *   continued in the table's paragraph (which the engine sets after that
+ *   text), and a table took an empty paragraph before it. Their save-back
+ *   and object-model writes still address them this way.
+ */
+export type TableLayout = "own" | "joined";
+
+/** Whether the LAST native paragraph a Word paragraph pours as is empty to
+ *  the engine (no characters, no inline picture): `insertTable` sets a table
+ *  into such a paragraph instead of a new one. A page/column break at the
+ *  paragraph's very end leaves an empty native paragraph after it. */
+export function endsEmpty(p: LoweredParagraph): boolean {
+  const length = p.runs.reduce((n, r) => n + Array.from(r.text).length, 0);
+  const images = p.images ?? [];
+  const trailing = (p.segments ?? []).filter((s) => s.at >= length);
+  if (trailing.length > 0) return !images.some((i) => (i.at ?? 0) >= length);
+  return length === 0 && images.length === 0;
+}
 
 /** Split the story's blocks into executable steps: consecutive paragraph blocks
  *  coalesce into one text step; each table becomes a table step. */
@@ -624,27 +674,40 @@ export function sectionBlocks(ir: LoweredDoc): LoweredBlock[][] {
 }
 
 /** How many native paragraphs a block list pours as: one per paragraph block,
- *  plus one per break that splits a paragraph (ADR 028/029). Save-back trims
+ *  plus one per break that splits a paragraph (ADR 028/029), plus one per
+ *  native table in the `"own"` layout ({@link TableLayout}). Save-back trims
  *  the section joins against this count. */
-export function pouredParagraphCount(blocks: readonly LoweredBlock[]): number {
+export function pouredParagraphCount(
+  blocks: readonly LoweredBlock[],
+  layout: TableLayout = "own",
+): number {
   const one = (p: LoweredParagraph) => 1 + (p.segments?.length ?? 0);
-  return blocks.reduce(
-    (n, b) =>
-      n +
-      (b.kind === "paragraph"
-        ? one(b)
-        : (b.flow ?? []).reduce((k, p) => k + one(p), 0)),
-    0,
-  );
+  return blocks.reduce((n, b) => {
+    if (b.kind === "paragraph") return n + one(b);
+    const flow = b.flow ?? [];
+    if (flow.length > 0) return n + flow.reduce((k, p) => k + one(p), 0);
+    return n + (layout === "own" ? 1 : 0);
+  }, 0);
 }
 
 /** {@link buildStory} over an explicit block list (one section's blocks).
  *
+ *  Every block gets native paragraphs of its own ({@link TableLayout}
+ *  `"own"`): a Word paragraph one (plus one per break that splits it), a
+ *  native table one that holds only the table. In the engine's `insertText`
+ *  space a table's paragraph has no characters but is still a paragraph (one
+ *  separator before it), and `insertTable` sets the table into the story's
+ *  last paragraph when that is empty, else into a new one at the end. So:
+ *  the text after a table starts with a break (its first paragraph is a new
+ *  one after the table's); a table after an empty Word paragraph gets an
+ *  empty paragraph inserted for it first; and only a table that opens the
+ *  story takes the fresh story's one empty paragraph.
+ *
  *  Blank lines are styled LAST, in a final step, once every paragraph of the
  *  story exists, one caret per blank line. A blank line has no characters,
  *  so consecutive ones share one offset (so do blank lines on either side of
- *  a table: its host paragraph has no characters either); each caret
- *  therefore also names its paragraph by index (core wire v65, RFI C-53).
+ *  a table: its paragraph has no characters either); each caret therefore
+ *  also names its paragraph by index (core wire v65, RFI C-53).
  *
  *  An engine without that address styles EVERY empty paragraph at the
  *  caret's offset and refuses a caret over empty paragraphs whose styles
@@ -666,19 +729,25 @@ export function buildStoryBlocks(
   // Each table's cell carets, filled in once its id is minted.
   const cellCarets: Mutation[][] = [];
   let hasCarets = false;
-  let nextParagraph = 0;
+  // The index of the story's last native paragraph; -1 while the story is
+  // fresh (its one empty paragraph holds nothing poured yet), so the first
+  // block lands in paragraph 0 and every later one in `last + 1`.
+  let last = -1;
+  // What the story ends in: a table, or an empty Word paragraph.
+  let endsInTable = false;
+  let endsInEmpty = false;
   const flush = () => {
     if (pending.length === 0) return;
     const paras = pending;
     pending = [];
-    const probe = buildTextPour(paras, storyId, 0);
+    const leadingBreak = endsInTable;
+    const probe = buildTextPour(paras, storyId, 0, 0, { leadingBreak });
     const slot = caretsByStep.length;
     caretsByStep.push([]);
-    // The story is fresh: its text starts in paragraph 0, each separator
-    // starts another, and a table takes one (the text after it continues
-    // in the table's own host paragraph).
-    const paraBase = nextParagraph;
-    nextParagraph += probe.breaks;
+    const paraBase = last + 1;
+    last = paraBase + probe.breaks;
+    endsInTable = false;
+    endsInEmpty = endsEmpty(paras[paras.length - 1]!);
     steps.push({
       kind: "text",
       length: probe.length,
@@ -687,6 +756,7 @@ export function buildStoryBlocks(
         const out = buildTextPour(paras, storyId, textBase, styleBase, {
           deferCarets: true,
           paraBase,
+          leadingBreak,
         });
         caretsByStep[slot] = out.carets;
         return out.mutations;
@@ -703,13 +773,19 @@ export function buildStoryBlocks(
     }
     if (block.kind === "table") {
       flush();
-      nextParagraph += 1;
+      const fresh = last < 0;
+      const breakBefore = !fresh && endsInEmpty;
+      last += 1;
+      endsInTable = true;
+      endsInEmpty = false;
       const table: LoweredTable = block;
       const slot = cellCarets.length;
       cellCarets.push([]);
       if (buildTableCellCarets(table, storyId, "").length > 0) hasCarets = true;
       steps.push({
         kind: "table",
+        breakBefore,
+        textLength: fresh ? 0 : 1,
         insert: buildTableInsert(table, storyId),
         cells: (tableId) => {
           cellCarets[slot] = buildTableCellCarets(table, storyId, tableId);
@@ -794,18 +870,43 @@ export function mergeSectionContents(
 
 /** Where each block of one story's blocks was poured: the index of the
  *  native paragraph a paragraph block starts in, and for a native table the
- *  index of the paragraph that hosts it and its ordinal among the story's
+ *  index of the paragraph that holds it and its ordinal among the story's
  *  tables. `null` for a table poured as text (its `flow`). Pure.
  *
- *  It replays what the engine does with the pour: a text step's first
- *  paragraph joins the story's last paragraph (the fresh story's one empty
- *  paragraph, or a table's host), each following one starts a paragraph,
- *  and a page/column break segment starts another; `insertTable` sets the
- *  table in the last paragraph when that is empty, else in a new one at the
- *  story's end — and the text after the table continues in that host. */
+ *  In the `"own"` layout ({@link buildStoryBlocks}) every block starts the
+ *  paragraph after the previous block's last one (the first takes the fresh
+ *  story's paragraph 0), and a page/column break segment starts another.
+ *
+ *  The `"joined"` layout replays the pour of documents poured before: a text
+ *  step's first paragraph joined the story's last paragraph (a table's
+ *  host), and `insertTable` set the table in the last paragraph when that was
+ *  empty, else in a new one at the story's end. */
 export function nativePlaces(
   blocks: readonly LoweredBlock[],
+  layout: TableLayout = "own",
 ): Array<{ paragraph: number; table?: number } | null> {
+  if (layout === "own") {
+    const own: Array<{ paragraph: number; table?: number } | null> = [];
+    let end = -1;
+    let ordinal = 0;
+    const pourOwn = (p: LoweredParagraph) => {
+      const at = end + 1;
+      end = at + (p.segments?.length ?? 0);
+      return at;
+    };
+    for (const b of blocks) {
+      if (b.kind === "paragraph") own.push({ paragraph: pourOwn(b) });
+      else if (b.flow && b.flow.length > 0) {
+        for (const p of b.flow) pourOwn(p);
+        own.push(null);
+      } else {
+        end += 1;
+        own.push({ paragraph: end, table: ordinal });
+        ordinal += 1;
+      }
+    }
+    return own;
+  }
   const out: Array<{ paragraph: number; table?: number } | null> = [];
   let last = 0;
   let lastEmpty = true;
@@ -863,12 +964,13 @@ function groupOf(
 export function bodyParagraphLocation(
   ir: LoweredDoc,
   block: number,
+  layout: TableLayout = "own",
 ): { story: number; paragraph: number; paragraphText: string } | null {
   const target = ir.story.blocks[block];
   if (!target || target.kind !== "paragraph") return null;
   if ((target.segments ?? []).length > 0) return null;
   const g = groupOf(ir, block);
-  const place = g ? nativePlaces(g.group)[g.index] : null;
+  const place = g ? nativePlaces(g.group, layout)[g.index] : null;
   if (!g || !place) return null;
   return {
     story: g.story,
@@ -956,6 +1058,7 @@ export function bodyRunLocation(
   ir: LoweredDoc,
   block: number,
   run: number,
+  layout: TableLayout = "own",
 ): {
   story: number;
   paragraph: number;
@@ -971,7 +1074,7 @@ export function bodyRunLocation(
     run >= target.runs.length
   )
     return null;
-  const at = bodyParagraphLocation(ir, block);
+  const at = bodyParagraphLocation(ir, block, layout);
   if (!at) return null;
   const texts = target.runs.map((r) => r.text);
   return {
