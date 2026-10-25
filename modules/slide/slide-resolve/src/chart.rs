@@ -75,7 +75,7 @@ pub(super) fn items(chart: &Chart, t: Affine, w: f64, h: f64, ctx: &Ctx) -> Vec<
                     text,
                 },
                 opacity,
-                shadow: None,
+                effects: Effects::default(),
                 meta: ItemMeta::default(),
             }
         };

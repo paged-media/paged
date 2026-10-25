@@ -19,46 +19,15 @@
 //! Colour resolution: scheme slots through the colour map and theme, then
 //! the transform chain (`lumMod`, `tint`, `alpha`, …) in document order.
 //!
-//! The arithmetic follows how PowerPoint draws: luminance and saturation
-//! transforms work in HSL; `tint` and `shade` work on linear-light RGB
-//! (scRGB), so a 50 % shade of a mid grey is not half its sRGB value. The
-//! conversions are `paged_ooxml::colour`'s, shared with paged.sheet (whose
-//! SpreadsheetML `tint` is the HSL one, a different operation). The
-//! PowerPoint oracle is the judge of each rule.
+//! The arithmetic is the shared DrawingML resolver's
+//! (`paged_ooxml::drawingml::color`, slide ADR 722), which doc and sheet
+//! resolve with too; this module says what a deck's scheme slots are: the
+//! colour map, PowerPoint's default map entries, the theme, and `phClr`.
+//! The PowerPoint oracle is the judge of each rule.
 
-use paged_ooxml::colour::{dml_shade, dml_tint, hsl_to_rgb, linear_to_srgb, rgb_to_hsl};
-use pptx_core::{Color, ColorBase, ColorMap, Theme};
-
-/// A resolved colour: sRGB 0–1 and alpha 0–1.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Rgba {
-    pub r: f64,
-    pub g: f64,
-    pub b: f64,
-    pub a: f64,
-}
-
-impl Rgba {
-    pub const BLACK: Rgba = Rgba {
-        r: 0.0,
-        g: 0.0,
-        b: 0.0,
-        a: 1.0,
-    };
-    pub fn from_hex(v: u32) -> Self {
-        Rgba {
-            r: ((v >> 16) & 0xff) as f64 / 255.0,
-            g: ((v >> 8) & 0xff) as f64 / 255.0,
-            b: (v & 0xff) as f64 / 255.0,
-            a: 1.0,
-        }
-    }
-    /// 0–255 channels, rounded.
-    pub fn bytes(&self) -> [u8; 3] {
-        let q = |x: f64| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
-        [q(self.r), q(self.g), q(self.b)]
-    }
-}
+use paged_ooxml::drawingml::{self, SchemeColors};
+pub use paged_ooxml::drawingml::Rgba;
+use pptx_core::{Color, ColorMap, Theme};
 
 /// What a colour resolves against.
 pub struct ColorCtx<'a> {
@@ -68,179 +37,42 @@ pub struct ColorCtx<'a> {
     pub placeholder: Option<Rgba>,
 }
 
-/// The preset colours DrawingML names (`a:prstClr`), the common subset.
-fn preset(name: &str) -> Option<u32> {
-    Some(match name {
-        "black" => 0x000000,
-        "white" => 0xffffff,
-        "red" => 0xff0000,
-        "green" => 0x008000,
-        "blue" => 0x0000ff,
-        "yellow" => 0xffff00,
-        "gray" | "grey" => 0x808080,
-        "darkGray" | "dkGray" => 0xa9a9a9,
-        "lightGray" | "ltGray" => 0xd3d3d3,
-        "orange" => 0xffa500,
-        "purple" => 0x800080,
-        "cyan" | "aqua" => 0x00ffff,
-        "magenta" | "fuchsia" => 0xff00ff,
-        "navy" => 0x000080,
-        "silver" => 0xc0c0c0,
-        "maroon" => 0x800000,
-        "olive" => 0x808000,
-        "teal" => 0x008080,
-        "lime" => 0x00ff00,
-        _ => return None,
-    })
-}
-
-/// Follow a scheme slot through the colour map to the theme's colour.
-fn scheme(name: &str, ctx: &ColorCtx) -> Option<Rgba> {
-    if name == "phClr" {
-        return ctx.placeholder;
+impl SchemeColors for ColorCtx<'_> {
+    /// Follow a scheme slot through the colour map to the theme's colour.
+    fn scheme(&self, name: &str) -> Option<Rgba> {
+        if name == "phClr" {
+            return self.placeholder;
+        }
+        let mapped = self
+            .map
+            .entries
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
+            .unwrap_or(match name {
+                // A map without these entries: PowerPoint's defaults.
+                "bg1" => "lt1",
+                "tx1" => "dk1",
+                "bg2" => "lt2",
+                "tx2" => "dk2",
+                other => other,
+            });
+        let (_, c) = self.theme?.colors.iter().find(|(k, _)| k == mapped)?;
+        // A theme slot is itself a colour (srgb or sys) with no further mapping.
+        Some(drawingml::resolve(c, &()))
     }
-    let mapped = ctx
-        .map
-        .entries
-        .iter()
-        .find(|(k, _)| k == name)
-        .map(|(_, v)| v.as_str())
-        .unwrap_or(match name {
-            // A map without these entries: PowerPoint's defaults.
-            "bg1" => "lt1",
-            "tx1" => "dk1",
-            "bg2" => "lt2",
-            "tx2" => "dk2",
-            other => other,
-        });
-    let theme = ctx.theme?;
-    let (_, c) = theme.colors.iter().find(|(k, _)| k == mapped)?;
-    // A theme slot is itself a colour (srgb or sys) with no further mapping.
-    Some(resolve(
-        c,
-        &ColorCtx {
-            theme: None,
-            map: ctx.map,
-            placeholder: None,
-        },
-    ))
 }
 
 /// Resolve a colour. An unresolvable scheme reference is black (and the
 /// caller may report it).
 pub fn resolve(c: &Color, ctx: &ColorCtx) -> Rgba {
-    let mut rgba = match &c.base {
-        ColorBase::Srgb(v) => Rgba::from_hex(*v),
-        ColorBase::Scheme(name) => scheme(name, ctx).unwrap_or(Rgba::BLACK),
-        ColorBase::System { last, name } => {
-            last.map(Rgba::from_hex).unwrap_or(if name == "window" {
-                Rgba::from_hex(0xffffff)
-            } else {
-                Rgba::BLACK
-            })
-        }
-        ColorBase::Preset(name) => preset(name).map(Rgba::from_hex).unwrap_or(Rgba::BLACK),
-        ColorBase::Hsl(h, s, l) => {
-            let (r, g, b) = hsl_to_rgb(
-                *h as f64 / 21_600_000.0,
-                *s as f64 / 100_000.0,
-                *l as f64 / 100_000.0,
-            );
-            Rgba { r, g, b, a: 1.0 }
-        }
-        ColorBase::ScRgb(r, g, b) => Rgba {
-            r: linear_to_srgb(*r as f64 / 100_000.0),
-            g: linear_to_srgb(*g as f64 / 100_000.0),
-            b: linear_to_srgb(*b as f64 / 100_000.0),
-            a: 1.0,
-        },
-    };
-    for (name, val) in &c.transforms {
-        let v = *val as f64 / 100_000.0;
-        match name.as_str() {
-            "lumMod" | "lumOff" | "satMod" | "satOff" | "hueMod" | "hueOff" | "hue" | "sat"
-            | "lum" => {
-                let (mut h, mut s, mut l) = rgb_to_hsl(rgba.r, rgba.g, rgba.b);
-                match name.as_str() {
-                    "lumMod" => l *= v,
-                    "lumOff" => l += v,
-                    "lum" => l = v,
-                    "satMod" => s *= v,
-                    "satOff" => s += v,
-                    "sat" => s = v,
-                    "hueMod" => h *= v,
-                    "hueOff" => h += *val as f64 / 21_600_000.0,
-                    "hue" => h = *val as f64 / 21_600_000.0,
-                    _ => {}
-                }
-                let (r, g, b) = hsl_to_rgb(h.rem_euclid(1.0), s.clamp(0.0, 1.0), l.clamp(0.0, 1.0));
-                rgba = Rgba { r, g, b, a: rgba.a };
-            }
-            "tint" => {
-                let f = |c: f64| dml_tint(c, v);
-                rgba = Rgba {
-                    r: f(rgba.r),
-                    g: f(rgba.g),
-                    b: f(rgba.b),
-                    a: rgba.a,
-                };
-            }
-            "shade" => {
-                let f = |c: f64| dml_shade(c, v);
-                rgba = Rgba {
-                    r: f(rgba.r),
-                    g: f(rgba.g),
-                    b: f(rgba.b),
-                    a: rgba.a,
-                };
-            }
-            "alpha" => rgba.a = v,
-            "alphaMod" => rgba.a *= v,
-            "alphaOff" => rgba.a += v,
-            "comp" => {
-                let (h, s, l) = rgb_to_hsl(rgba.r, rgba.g, rgba.b);
-                let (r, g, b) = hsl_to_rgb((h + 0.5).rem_euclid(1.0), s, l);
-                rgba = Rgba { r, g, b, a: rgba.a };
-            }
-            "inv" => {
-                rgba = Rgba {
-                    r: 1.0 - rgba.r,
-                    g: 1.0 - rgba.g,
-                    b: 1.0 - rgba.b,
-                    a: rgba.a,
-                }
-            }
-            "gray" => {
-                let y = 0.2126 * rgba.r + 0.7152 * rgba.g + 0.0722 * rgba.b;
-                rgba = Rgba {
-                    r: y,
-                    g: y,
-                    b: y,
-                    a: rgba.a,
-                };
-            }
-            "redMod" => rgba.r *= v,
-            "greenMod" => rgba.g *= v,
-            "blueMod" => rgba.b *= v,
-            "redOff" => rgba.r += v,
-            "greenOff" => rgba.g += v,
-            "blueOff" => rgba.b += v,
-            "red" => rgba.r = v,
-            "green" => rgba.g = v,
-            "blue" => rgba.b = v,
-            _ => {}
-        }
-    }
-    rgba.r = rgba.r.clamp(0.0, 1.0);
-    rgba.g = rgba.g.clamp(0.0, 1.0);
-    rgba.b = rgba.b.clamp(0.0, 1.0);
-    rgba.a = rgba.a.clamp(0.0, 1.0);
-    rgba
+    drawingml::resolve(c, ctx)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pptx_core::ColorBase;
 
     fn theme() -> Theme {
         Theme {

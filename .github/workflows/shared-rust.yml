@@ -17,6 +17,9 @@ on:
     paths:
       - "platform/shared/ooxml/**"
       - "platform/shared/dml-chart/**"
+      - "platform/shared/dml-native/**"
+      # dml-native builds on the engine model crate.
+      - "engine/core/crates/paged-model/**"
       - ".github/workflows/shared-rust.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -26,6 +29,8 @@ on:
     paths:
       - "platform/shared/ooxml/**"
       - "platform/shared/dml-chart/**"
+      - "platform/shared/dml-native/**"
+      - "engine/core/crates/paged-model/**"
       - ".github/workflows/shared-rust.yml"
       - ".cargo/config.toml"
       - "tooling/rust/**"
@@ -41,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [ooxml, dml-chart]
+        crate: [ooxml, dml-chart, dml-native]
     defaults:
       run:
         working-directory: platform/shared/${{ matrix.crate }}

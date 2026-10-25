@@ -132,7 +132,7 @@ fn solid(fill: &Option<pptx_core::Fill>, ctx: &TextCtx) -> Option<Rgba> {
     match fill {
         Some(pptx_core::Fill::Solid(c)) => Some(resolve_color(c, ctx.colors)),
         Some(pptx_core::Fill::Gradient(g)) => {
-            g.stops.first().map(|(_, c)| resolve_color(c, ctx.colors))
+            g.stops.first().map(|s| resolve_color(&s.color, ctx.colors))
         }
         _ => None,
     }

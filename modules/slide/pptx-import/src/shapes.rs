@@ -264,21 +264,9 @@ fn shape_style(el: &El) -> ShapeStyle {
 }
 
 /// `a:blipFill` / `p:blipFill`.
+/// A picture's blip fill.
 pub fn blip(el: &El, ctx: &Ctx) -> Blip {
-    let b = el.child(Ns::A, "blip");
-    let rel = |attr: &str| {
-        b.and_then(|b| b.attr_ns(Ns::R, attr))
-            .and_then(|id| ctx.rels.by_id(id))
-    };
-    Blip {
-        part: rel("embed").map(|r| ctx.resolve(&r.target)),
-        link: rel("link").map(|r| r.target.clone()),
-        src_rect: el.child(Ns::A, "srcRect").map(crate::paint::rect_attrs),
-        stretch: el.child(Ns::A, "tile").is_none(),
-        alpha: b
-            .and_then(|b| b.child(Ns::A, "alphaModFix"))
-            .and_then(|a| a.attr_i32("amt")),
-    }
+    crate::paint::blip(el, ctx)
 }
 
 fn pic(el: &El, ctx: &Ctx) -> Pic {

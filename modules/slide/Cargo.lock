@@ -384,6 +384,7 @@ version = "0.0.0"
 dependencies = [
  "flate2",
  "quick-xml",
+ "serde",
  "thiserror",
  "zip",
 ]
@@ -429,6 +430,7 @@ name = "pptx-core"
 version = "0.0.0"
 dependencies = [
  "dml-chart",
+ "paged-ooxml",
  "serde",
 ]
 

@@ -38,8 +38,8 @@ use serde::{Deserialize, Serialize};
 /// English Metric Units: 914 400 per inch, 12 700 per point.
 pub type Emu = i64;
 
-/// EMU per point.
-pub const EMU_PER_PT: f64 = 12_700.0;
+/// EMU per point (`paged_ooxml::units`).
+pub use paged_ooxml::units::EMU_PER_PT;
 
 /// A whole deck.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -486,21 +486,6 @@ pub struct Pic {
     pub blip: Blip,
 }
 
-/// `a:blipFill`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Blip {
-    /// The image part (resolved from the `r:embed` relationship).
-    pub part: Option<String>,
-    /// An `r:link` to an external image.
-    pub link: Option<String>,
-    /// `a:srcRect` l, t, r, b in 1 000ths of a percent.
-    pub src_rect: Option<RelRect>,
-    /// `a:stretch` (true) or `a:tile` (false).
-    pub stretch: bool,
-    /// `a:alphaModFix amt`, 1 000ths of a percent.
-    pub alpha: Option<i32>,
-}
-
 /// `p:grpSp`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Group {
@@ -617,108 +602,13 @@ pub struct TableBorders {
 
 // ─── paint ──────────────────────────────────────────────────────────
 
-/// A colour as authored: a base and its transform chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Color {
-    pub base: ColorBase,
-    /// In document order: (`lumMod`, 75000), (`alpha`, 50000), …
-    pub transforms: Vec<(String, i32)>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ColorBase {
-    /// `a:srgbClr val` as 0xRRGGBB.
-    Srgb(u32),
-    /// `a:schemeClr val` (bg1, tx1, accent1, phClr, …).
-    Scheme(String),
-    /// `a:sysClr val` + `lastClr`.
-    System { name: String, last: Option<u32> },
-    /// `a:prstClr val`.
-    Preset(String),
-    /// `a:hslClr`: hue in 60 000ths of a degree, sat/lum in 1 000ths of a percent.
-    Hsl(i32, i32, i32),
-    /// `a:scrgbClr`: linear r/g/b in 1 000ths of a percent.
-    ScRgb(i32, i32, i32),
-}
-
-/// A fill.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Fill {
-    None,
-    Solid(Color),
-    Gradient(Gradient),
-    Blip(Blip),
-    Pattern {
-        preset: String,
-        fg: Option<Color>,
-        bg: Option<Color>,
-    },
-    /// `a:grpFill` — use the group's fill.
-    Group,
-}
-
-/// `l t r b` in 1 000ths of a percent (`a:srcRect`, `a:fillToRect`).
-pub type RelRect = (i32, i32, i32, i32);
-
-/// `a:gradFill`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Gradient {
-    /// (position in 1 000ths of a percent, colour).
-    pub stops: Vec<(i32, Color)>,
-    /// `a:lin ang` (60 000ths of a degree) + `scaled`.
-    pub linear: Option<(i32, bool)>,
-    /// `a:path path` (circle / rect / shape) + `a:fillToRect` l, t, r, b.
-    pub path: Option<(String, Option<RelRect>)>,
-    pub rotate_with_shape: bool,
-}
-
-/// `a:ln`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Line {
-    pub width: Option<Emu>,
-    pub fill: Option<Fill>,
-    /// `a:prstDash val`.
-    pub dash: Option<String>,
-    /// `a:custDash` (dash, space) pairs in 1 000ths of a percent of the width.
-    pub custom_dash: Vec<(i32, i32)>,
-    /// `cap` (rnd / sq / flat).
-    pub cap: Option<String>,
-    /// round / bevel / miter.
-    pub join: Option<String>,
-    /// `cmpd` (sng / dbl / …).
-    pub compound: Option<String>,
-    pub head: Option<LineEnd>,
-    pub tail: Option<LineEnd>,
-}
-
-/// `a:headEnd` / `a:tailEnd`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct LineEnd {
-    pub kind: String,
-    pub w: Option<String>,
-    pub len: Option<String>,
-}
-
-/// `a:effectLst` — the effects the engine can carry; the rest go to diagnostics.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Effects {
-    pub outer_shadow: Option<Shadow>,
-    pub inner_shadow: Option<Shadow>,
-    /// `a:glow rad` + colour.
-    pub glow: Option<(Emu, Color)>,
-    /// `a:softEdge rad`.
-    pub soft_edge: Option<Emu>,
-}
-
-/// `a:outerShdw` / `a:innerShdw`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Shadow {
-    pub blur: Emu,
-    pub dist: Emu,
-    /// 60 000ths of a degree.
-    pub dir: i32,
-    pub color: Color,
-}
+// DrawingML paint is read once for doc, slide and sheet
+// (`paged_ooxml::drawingml`, slide ADR 722): the deck IR carries those
+// types as authored, in the file's units.
+pub use paged_ooxml::drawingml::{
+    Blip, BlipEffect, Blur, Color, ColorBase, Effects, Fill, FillOverlay, Glow, Gradient,
+    GradientStop, Line, LineEnd, Pattern, PresetShadow, Reflection, RelRect, Shade, Shadow, Tile,
+};
 
 // ─── text ───────────────────────────────────────────────────────────
 
