@@ -717,6 +717,18 @@ an unknown path (an outcome) and reads no row. paged.draw's SVG importer
 asks it before choosing between writing the rule and re-winding the
 contours for non-zero.
 
+`"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1016,
+protocol 77) are SVG in and out through the engine's `paged-svg`.
+`importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the
+engine for the import's ONE batch (`requestSvgImport`, a read) and applies
+it through `document.mutate`, so the write gate, the namespace check and
+the single undo step are the ordinary ones; the answer carries the
+engine's report of what was approximated or left out. `exportSvg({ pageId?,
+elementIds?, text?, minify?, region? })` is a read. Both answer an outcome
+on an engine before 77, never a throw. paged.draw's SVG importer and
+exporter delegate to them and keep their own TypeScript reader as the
+fallback for a host without the flags.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

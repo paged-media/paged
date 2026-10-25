@@ -75,6 +75,10 @@ import type {
   DocumentOpenedEvent,
   FrameChainLink,
   StoryContent,
+  SvgExportRequest,
+  SvgExportResult,
+  SvgImportRequest,
+  SvgImportResult,
   DocumentSurface,
   EditContextContribution,
   FrameSurfaceContribution,
@@ -102,6 +106,7 @@ import type {
   DataProviderSnapshot,
   Mutation,
   MutationInput,
+  PageId,
   MutateOptions,
   MutateWithBytesOptions,
   MutationOutcome,
@@ -357,6 +362,14 @@ export const HOST_FEATURES: readonly string[] = [
   // that would otherwise say even-odd with winding (paged.draw's SVG
   // importer) asks this flag first.
   "document.fillRule@1",
+  // Engine ADR 1016 (protocol v77) — SVG in and out through paged-svg.
+  // STATIC: the flag says this SDK forwards both doors. The worker
+  // handshake pins the protocol, and an engine without the messages
+  // answers an outcome (`applied: false` / `svg: null` with the reason),
+  // never a throw. paged.draw delegates its SVG importer and exporter here
+  // and keeps its own TypeScript reader for a host without the flags.
+  "document.importSvg@1",
+  "document.exportSvg@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -2503,6 +2516,20 @@ export function createBundleHost(
     };
   };
 
+  /** The page a page-scoped door acts on when the caller names none: the
+   *  document's active page, else its first. */
+  const activePageId = async (): Promise<PageId | null> => {
+    const meta = (await getEditor().client.documentMeta()) as {
+      activePage?: PageId | null;
+    };
+    if (meta.activePage) return meta.activePage;
+    const pages = (await getEditor().client.collection("pages")) as Array<{
+      selfId?: string;
+    }>;
+    const first = pages.find((p) => typeof p.selfId === "string");
+    return first ? (first.selfId as PageId) : null;
+  };
+
   const document: DocumentSurface = {
     async mutate(
       mutation: MutationInput,
@@ -2966,6 +2993,85 @@ export function createBundleHost(
       return reply.kind === "storyContentResult"
         ? (reply.payload.content ?? null)
         : null;
+    },
+    async importSvg(
+      bytes: Uint8Array,
+      options: SvgImportRequest = {},
+    ): Promise<SvgImportResult> {
+      // Engine ADR 1016 (protocol v77). The engine PLANS (a read) and the
+      // plan's one batch goes through `mutate`, so the write gate, the
+      // namespace check and the undo step are the ordinary ones.
+      const empty = { items: 0, notes: [] };
+      const { pageId: wanted, ...svgOptions } = options;
+      try {
+        const pageId = wanted ?? (await activePageId());
+        if (pageId === null) {
+          return {
+            applied: false,
+            report: empty,
+            error: "no page to import onto",
+          };
+        }
+        const reply = await getEditor().client.send({
+          kind: "requestSvgImport",
+          payload: { pageId, bytes: Array.from(bytes), options: svgOptions },
+        });
+        if (reply.kind !== "svgImportPlanned") {
+          return {
+            applied: false,
+            report: empty,
+            error: `the engine did not plan the import (${reply.kind}); it predates protocol 77`,
+          };
+        }
+        const plan = reply.payload;
+        if (!plan.mutation) {
+          return {
+            applied: false,
+            report: plan.report,
+            error: plan.error ?? "the SVG draws nothing",
+          };
+        }
+        const outcome = await document.mutate(plan.mutation as MutationInput);
+        return outcome.applied
+          ? { applied: true, outcome, report: plan.report }
+          : {
+              applied: false,
+              outcome,
+              report: plan.report,
+              error: String(outcome.error ?? "the batch was refused"),
+            };
+      } catch (error) {
+        return { applied: false, report: empty, error: String(error) };
+      }
+    },
+    async exportSvg(request: SvgExportRequest = {}): Promise<SvgExportResult> {
+      // Engine ADR 1016 (protocol v77): a pure read.
+      requireDocRead("document.exportSvg");
+      const empty = { items: 0, notes: [] };
+      const { pageId: wanted, elementIds, ...options } = request;
+      try {
+        const pageId = wanted ?? (await activePageId());
+        if (pageId === null) {
+          return { svg: null, report: empty, error: "no page to export" };
+        }
+        const reply = await getEditor().client.send({
+          kind: "exportSvg",
+          payload: { pageId, elementIds: [...(elementIds ?? [])], options },
+        });
+        if (reply.kind === "svgExported") {
+          return { svg: reply.payload.svg, report: reply.payload.report };
+        }
+        if (reply.kind === "exportSvgFailed") {
+          return { svg: null, report: empty, error: reply.payload.error };
+        }
+        return {
+          svg: null,
+          report: empty,
+          error: `the engine did not export (${reply.kind}); it predates protocol 77`,
+        };
+      } catch (error) {
+        return { svg: null, report: empty, error: String(error) };
+      }
     },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
       requireDocRead("document.onDidChange");
