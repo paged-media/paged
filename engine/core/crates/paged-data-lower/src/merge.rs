@@ -184,6 +184,39 @@ pub fn placeholder_fields(text: &str) -> Vec<String> {
     out
 }
 
+/// One Data Merge placeholder of a text: where it is (byte offsets, the
+/// host's text offsets) and the field it reads. `<<price>>` reads `price`;
+/// `<<@photo>>` is an image placeholder of `photo` (`image`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlaceholderSpan {
+    pub start: usize,
+    pub end: usize,
+    pub field: String,
+    pub image: bool,
+}
+
+/// Every placeholder of `text` that names a field (a `<<name>>` that is not
+/// a field reference stays literal text, as [`template_lines`] keeps it), in
+/// order. Filling a design with one record replaces each span by the
+/// record's field.
+pub fn placeholder_spans(text: &str) -> Vec<PlaceholderSpan> {
+    placeholders(text)
+        .into_iter()
+        .filter_map(|(start, name, end)| {
+            let (field, image) = match name.strip_prefix('@') {
+                Some(rest) => (rest, true),
+                None => (name, false),
+            };
+            is_field_ident(field).then(|| PlaceholderSpan {
+                start,
+                end,
+                field: field.to_string(),
+                image,
+            })
+        })
+        .collect()
+}
+
 /// `(start, name, end)` byte spans of every `<<name>>` in `text`.
 fn placeholders(text: &str) -> Vec<(usize, &str, usize)> {
     let mut out = Vec::new();
@@ -713,6 +746,28 @@ mod tests {
             "x & \" said \"\"hi\"\"\""
         );
         assert_eq!(template_lines("<<true>>").unreferenced, ["true"]);
+    }
+
+    #[test]
+    #[allow(non_snake_case)] // the `__feat__<id>` suffix links the test to its cockpit feature
+    fn data_lower_placeholder_spans_are_byte_spans_of_fields__feat__data_lower_merge_writer() {
+        let text = "Größe <<size>>\n<<@photo>> <<a b>> <<sku>><<true>>";
+        let spans = placeholder_spans(text);
+        let got: Vec<(&str, bool, &str)> = spans
+            .iter()
+            .map(|s| (s.field.as_str(), s.image, &text[s.start..s.end]))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("size", false, "<<size>>"),
+                ("photo", true, "<<@photo>>"),
+                ("sku", false, "<<sku>>"),
+            ]
+        );
+        // Byte offsets: the `ö` and `ß` are two bytes each.
+        assert_eq!(spans[0].start, 8);
+        assert!(placeholder_spans("no fields <<>> here").is_empty());
     }
 
     #[test]

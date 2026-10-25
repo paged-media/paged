@@ -209,7 +209,7 @@ import {
   setDataDoorSource,
   setDataDropHandler,
 } from "@paged-media/shell";
-import { placeDroppedField } from "../data-drop";
+import { placeDropped } from "../data-drop";
 import {
   cockpitActionsOf,
   createEditorScope,
@@ -572,12 +572,13 @@ function PluginBundles() {
     const dataBackend = hostOptions.shared.data;
     if (dataBackend) {
       setDataDoorSource(scope, dataBackend);
-      // Editor ADR 291: a field dropped on the document is placed there; a
-      // refusal (no frame under it, a line) reaches Problems.
+      // Editor ADR 291: a field, a table or a record dropped on the document
+      // is placed there; a refusal (no frame under it, a line, a design
+      // without a <<field>>) reaches Problems.
       setDataDropHandler(scope, (drag, at) => {
         const paged = pagedRef.current;
         if (!paged) return;
-        void placeDroppedField(
+        void placeDropped(
           paged,
           dataBackend.current()?.service ?? null,
           drag,

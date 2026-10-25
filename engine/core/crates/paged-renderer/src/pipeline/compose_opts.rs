@@ -269,8 +269,17 @@ pub(super) fn apply_paragraph_compose_options<'a>(
     if single_line {
         // InDesign's own defaults where the cascade is silent: a 36 pt
         // hyphenation zone and three hyphens in a row (both read off
-        // InDesign 20.0.1's `[No paragraph style]`).
-        let d = paged_text::SingleLineOptions::default();
+        // InDesign 20.0.1's `[No paragraph style]`). Word's first-fit has
+        // Word's: 0.25 in and no limit (engine ADR 1016).
+        let word = resolved
+            .composer
+            .as_ref()
+            .is_some_and(paged_model::Composer::is_word_first_fit);
+        let d = if word {
+            paged_text::SingleLineOptions::word()
+        } else {
+            paged_text::SingleLineOptions::default()
+        };
         let desired_ws = resolved.desired_word_spacing.unwrap_or(100.0);
         lopts.compose.single_line = Some(paged_text::SingleLineOptions {
             zone: resolved
@@ -285,6 +294,7 @@ pub(super) fn apply_paragraph_compose_options<'a>(
             max_stretch_ratio: ((resolved.maximum_word_spacing.unwrap_or(133.0) - desired_ws)
                 / 100.0)
                 .max(0.0),
+            word,
         });
     }
     if !single_line && (ls_min != 0.0 || ls_max != ls_desired) {

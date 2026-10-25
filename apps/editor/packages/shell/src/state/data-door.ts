@@ -49,15 +49,74 @@ export interface DataFieldDrag {
   field: string;
 }
 
-/** What the app does with a field dropped on the document viewport. */
-export type DataFieldDropHandler = (
-  drag: DataFieldDrag,
+/** The drag type of a Data panel table tab: a {@link DataTableDrag} as
+ *  JSON, placed as a table in the text frame it is dropped on. */
+export const DATA_TABLE_DRAG_TYPE = "application/x-paged-data-table";
+
+/** A query dragged out of the Data panel as a table: its shown fields, in
+ *  the order the grid shows them. */
+export interface DataTableDrag {
+  query: string;
+  fields: readonly string[];
+}
+
+/** The drag type of a Data panel grid row: a {@link DataRecordDrag} as
+ *  JSON, filling the design (a group, a frame) it is dropped on. */
+export const DATA_RECORD_DRAG_TYPE = "application/x-paged-data-record";
+
+/** One record dragged out of the Data panel (0-based). */
+export interface DataRecordDrag {
+  query: string;
+  record: number;
+}
+
+/** What was dropped on the document viewport. */
+export type DataDrop =
+  | ({ kind: "field" } & DataFieldDrag)
+  | ({ kind: "table" } & DataTableDrag)
+  | ({ kind: "record" } & DataRecordDrag);
+
+/** What the app does with a field, a table or a record dropped on the
+ *  document viewport. */
+export type DataDropHandler = (
+  drop: DataDrop,
   at: { clientX: number; clientY: number },
 ) => void;
 
+/** The drag types the viewport takes, the most specific first. */
+const DROP_TYPES = [
+  DATA_RECORD_DRAG_TYPE,
+  DATA_TABLE_DRAG_TYPE,
+  DATA_FIELD_DRAG_TYPE,
+] as const;
+
+/** A drag's JSON as the drop it names, or null when it is malformed. */
+function dropOf(type: string, data: string): DataDrop | null {
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(data) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (!raw || typeof raw.query !== "string") return null;
+  const query = raw.query;
+  if (type === DATA_FIELD_DRAG_TYPE)
+    return typeof raw.field === "string"
+      ? { kind: "field", query, field: raw.field }
+      : null;
+  if (type === DATA_TABLE_DRAG_TYPE)
+    return Array.isArray(raw.fields) &&
+      raw.fields.every((f) => typeof f === "string")
+      ? { kind: "table", query, fields: raw.fields as string[] }
+      : null;
+  return Number.isInteger(raw.record) && (raw.record as number) >= 0
+    ? { kind: "record", query, record: raw.record as number }
+    : null;
+}
+
 interface DataDoorStore {
   source: DataDoorSource | null;
-  drop: DataFieldDropHandler | null;
+  drop: DataDropHandler | null;
   revision: number;
   listeners: Set<() => void>;
   unhook: (() => void) | null;
@@ -125,36 +184,38 @@ export function useDataRevision(): number {
   );
 }
 
-/** Where a field dropped on the viewport goes: the app hit-tests the point
- *  and asks the data service to place it there. */
+/** Where a field, a table or a record dropped on the viewport goes: the app
+ *  hit-tests the point and asks the data service to place it there. */
 export function setDataDropHandler(
   scope: EditorScope,
-  handler: DataFieldDropHandler | null,
+  handler: DataDropHandler | null,
 ): void {
   scope.get(DATA_DOOR).drop = handler;
 }
 
 /** The viewport's side of drag to place: `accepts` says whether a drag
- *  carries a field this editor can place, `drop` places it. Both read the
- *  handler when they run (an event), never during render. */
-export function useDataFieldDrop(): {
+ *  carries a field, a table or a record this editor can place, `drop`
+ *  places it (`get` reads the drag's data of a type, as
+ *  `DataTransfer.getData`). Both read the handler when they run (an
+ *  event), never during render. */
+export function useDataDrop(): {
   accepts(types: readonly string[]): boolean;
-  drop(data: string, at: { clientX: number; clientY: number }): boolean;
+  drop(
+    get: (type: string) => string,
+    types: readonly string[],
+    at: { clientX: number; clientY: number },
+  ): boolean;
 } {
   const store = useScoped(DATA_DOOR);
   return {
-    accepts: (types) => !!store.drop && types.includes(DATA_FIELD_DRAG_TYPE),
-    drop(data, at) {
+    accepts: (types) =>
+      !!store.drop && DROP_TYPES.some((t) => types.includes(t)),
+    drop(get, types, at) {
       if (!store.drop) return false;
-      let drag: Partial<DataFieldDrag>;
-      try {
-        drag = JSON.parse(data) as Partial<DataFieldDrag>;
-      } catch {
-        return false;
-      }
-      if (typeof drag.query !== "string" || typeof drag.field !== "string")
-        return false;
-      store.drop({ query: drag.query, field: drag.field }, at);
+      const type = DROP_TYPES.find((t) => types.includes(t));
+      const drop = type ? dropOf(type, get(type)) : null;
+      if (!drop) return false;
+      store.drop(drop, at);
       return true;
     },
   };

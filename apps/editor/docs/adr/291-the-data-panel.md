@@ -92,10 +92,33 @@ Query), place (drag a field header onto a frame, or right-click any property).
 - Not part of this record, and not built yet:
   - per-record status (a record new or deleted in the source) and markers per record, which
     need the service to report which record each instance shows;
-  - a record dropped onto a grouped design, and a range dropped as a table;
   - double-click to jump to one record's instances (the field's instances are selectable).
 
   Each needs a door member it does not have today, and the panel says nothing it cannot back.
+- Amended 2026-10-24: `data@1` gained `placeTable(target, query, fields?)`,
+  `placeRecord(target, query, record)` and `loadSample()` (plugin-sdk 0.74.3-canary.24). The
+  shell's drop is general now: `setDataDropHandler` takes a `DataDrop` (`{kind: "field" |
+"table" | "record", …}`) and `useDataDrop` reads whichever Data panel drag type the drag
+  carries (`application/x-paged-data-field`, `-table`, `-record`).
+  - **A query dropped as a table.** The grid's **Drag as table** handle drags the query with
+    its shown columns, in the grid's order (`{query, fields}`). Dropped on a text frame,
+    paged.data defines a table binding of those columns and puts the table in that frame's own
+    story; an update swaps it there and never deletes the user's frame (`targets.tableIn` in
+    the saved session keeps the frame, and its table when known, across a reopen).
+  - **A record dropped on a design.** A grid row drags as one record (`{query, record}`), while
+    the grid shows the query's own order (no sort, filter or grouping: only then is a row's
+    place its record number). The drop fills the group under the point (the outermost, as a
+    click selects it), else the item: every `<<field>>` written in its text frames, as Data
+    Merge reads them, is replaced by a variable showing that record's field, in one undo step,
+    and a rectangle, oval or polygon named `<<@field>>` (or `<<field>>`) gets that record's
+    picture. The engine finds the placeholders (data-js `placeholder_spans`, data-lower's
+    merge reader) and resolves each binding at that record (`resolve_lowered_at`); the record
+    is saved with the session (`targets.record`), so a refresh keeps the design at it. A
+    design without a `<<field>>` is refused with the reason, and nothing is defined.
+  - **Sample data.** The first-run guide offers **Try it with sample data** when the service
+    has `loadSample`: paged.data loads a small made-up product list (sku, name, category,
+    price; no pictures, nothing fetched) as the source `sample_products` with the query
+    `sample` over it, and the panel shows that query's tab.
 - Amended 2026-10-24: record templates and their library, and the pagination inspector, are
   built, as paged.data's own panels (PM-0015 L4: they are the module's workflows, not the
   host's). **Record templates** lists the document's templates with the record flows using

@@ -48,7 +48,7 @@ import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { useWorkflowMode } from "../state/workflow-mode-context";
 import { useChromeRegions } from "../state/chrome-regions";
-import { DATA_FIELD_DRAG_TYPE, useDataFieldDrop } from "../state/data-door";
+import { useDataDrop } from "../state/data-door";
 import {
   TOUCH_TARGET_PX,
   useCompactLayout,
@@ -125,8 +125,9 @@ export function CockpitLayout({
   // Export-style modes replace the document viewport with a centred
   // work surface — no rulers / filmstrip around it (kit canvas.jsx).
   const isOverride = canvasOverride != null;
-  // Editor ADR 291: a Data panel field dropped on the document is placed.
-  const fieldDrop = useDataFieldDrop();
+  // Editor ADR 291: a Data panel field, table or record dropped on the
+  // document is placed.
+  const fieldDrop = useDataDrop();
 
   // The fill shapes (editor ADR 294). The form region is a column beside
   // the canvas; below the breakpoint `form-first` puts the form first and
@@ -167,10 +168,11 @@ export function CockpitLayout({
           if (
             !isOverride &&
             fieldDrop.accepts([...e.dataTransfer.types]) &&
-            fieldDrop.drop(e.dataTransfer.getData(DATA_FIELD_DRAG_TYPE), {
-              clientX: e.clientX,
-              clientY: e.clientY,
-            })
+            fieldDrop.drop(
+              (type) => e.dataTransfer.getData(type),
+              [...e.dataTransfer.types],
+              { clientX: e.clientX, clientY: e.clientY },
+            )
           ) {
             e.preventDefault();
             return;

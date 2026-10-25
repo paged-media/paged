@@ -561,6 +561,7 @@ fn fold_compose_options(h: &mut LayoutKeyHasher, options: &ComposeOptions) {
             h.add_u32(sl.ladder_limit as u32);
             h.add_f32(sl.letter_shrink_ratio);
             h.add_f32(sl.max_stretch_ratio);
+            h.add_bool(sl.word);
         }
         None => h.add_bool(false),
     }

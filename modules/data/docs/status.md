@@ -38,6 +38,13 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
   engine's measured wrap where the host lays out without fonts), a missing or too coarse
   picture (asset columns), an empty or failed value, records a flow left out; served as
   `data@1` `issues()`, published to Problems, summed up in the Data panel.
+- the Data panel's drops (editor ADR 291) through `data@1`: a field onto a frame (`place`), a
+  query as a table into a text frame's own story (`placeTable`; an update swaps it there and
+  keeps the frame), a record onto a group or a frame (`placeRecord`: each `<<field>>` of its
+  text frames becomes a variable at that record, found by the engine's `placeholder_spans`,
+  and a graphic frame named `<<@field>>` that record's picture; the record is saved, so a
+  refresh keeps it), and the first run's sample data (`loadSample`: a made-up product list
+  as `sample_products` and the query `sample`; `src/drop-place.ts`).
 
 Not built yet: the Data panel and the bind popover (editor ADRs 291, 292) and the remaining
 binding kinds headless. The record templates library and the pagination inspector that

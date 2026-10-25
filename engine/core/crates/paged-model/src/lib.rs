@@ -4900,6 +4900,13 @@ pub enum Composer {
     JapaneseParagraph,
     /// `"HL Single J"` — the Adobe Japanese Single-line Composer.
     JapaneseSingleLine,
+    /// `"Word First-fit"` — paged's own: one line at a time the way
+    /// Microsoft Word breaks it (no word space ever compressed, a hyphen
+    /// or dash the text has is an ordinary break, a word wider than the
+    /// measure split where it overflows). Not an Adobe composer: the
+    /// DOCX lowering sets it on every Word paragraph (engine ADR 1016).
+    /// IDML carries it verbatim, as it would any third-party composer.
+    WordFirstFit,
     /// Any other value, verbatim.
     Other(String),
 }
@@ -4915,6 +4922,7 @@ impl Composer {
             "HL Single Optyca" => Self::WorldReadySingleLine,
             "HL Composer J" => Self::JapaneseParagraph,
             "HL Single J" => Self::JapaneseSingleLine,
+            "Word First-fit" => Self::WordFirstFit,
             other => Self::Other(other.to_string()),
         }
     }
@@ -4928,17 +4936,27 @@ impl Composer {
             Self::WorldReadySingleLine => "HL Single Optyca",
             Self::JapaneseParagraph => "HL Composer J",
             Self::JapaneseSingleLine => "HL Single J",
+            Self::WordFirstFit => "Word First-fit",
             Self::Other(s) => s,
         }
     }
 
-    /// Whether this composer sets one line at a time. A composer we do
-    /// not know composes as the Paragraph Composer.
+    /// Whether this composer sets one line at a time (Word's first-fit
+    /// included). A composer we do not know composes as the Paragraph
+    /// Composer.
     pub fn is_single_line(&self) -> bool {
         matches!(
             self,
-            Self::SingleLine | Self::WorldReadySingleLine | Self::JapaneseSingleLine
+            Self::SingleLine
+                | Self::WorldReadySingleLine
+                | Self::JapaneseSingleLine
+                | Self::WordFirstFit
         )
+    }
+
+    /// Whether this is Word's first-fit ([`Self::WordFirstFit`]).
+    pub fn is_word_first_fit(&self) -> bool {
+        matches!(self, Self::WordFirstFit)
     }
 
     /// Whether this is one of InDesign's Japanese composers. Only they set
