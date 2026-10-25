@@ -135,8 +135,30 @@ Query), place (drag a field header onto a frame, or right-click any property).
   - The door's `query` reads a query by its name as a table (the query rides along as a CTE),
     which the grid of a query's tab needs.
 
-  Not built: the canvas markers do not show a record number, and a record stepped to in the
-  record preview is not tracked as placed (the first record is).
+  Not built: a record stepped to in the record preview is not tracked as placed (the first
+  record is).
+- Amended 2026-10-25: **the per-record status survives reopening**, and **the canvas markers
+  show the record**.
+  - The snapshot is saved with the session: the engine payload (paged.data's `session` part)
+    gains `applied`, per query the result the document was last written from, in a compact
+    form (`AppliedSnapshot`): the key fields used (the first column present and unique in
+    the result, else none, the whole row) and, per record in result order, a 64-bit FNV-1a
+    hash of its key and one of its content (every cell, typed), as 32 hex digits (16 with the
+    whole row as the key). No values are stored: about 35 bytes a record, whatever the row's
+    width, so 10 000 records add about 350 KB to the part. The status compares these: a record
+    whose key hash the snapshot lacks is new, one whose content hash differs changed; placed
+    records and instances are carried by key hash as before. A saved snapshot cannot be keyed
+    again, so asked with another key than its own (or when its key no longer identifies the
+    records now) it matches by the whole row. Within a session the full result is still held
+    and keyed as asked. A payload without `applied` loads with no snapshot (the additive
+    rule); the document label's recipe never carries it (it is state, and grows with the
+    data), so the labels path (`restore_from_labels`) is unchanged. Undo that reloads a session
+    version brings that version's snapshot. The Sync panel's row diff keeps its in-memory
+    snapshot only: it shows the values before, which the saved form does not keep.
+  - The field markers label a frame's top-left bracket with the record its placements name
+    (`DataPlacement.record`, counted from 1 as the grid and Data Merge count: `#3`, `#2 #5`
+    for a frame showing several), in the bracket's tone, a constant size on screen. Only a
+    placement that names a record is labelled. Overlay chrome: it never prints or exports.
 - Amended 2026-10-24: record templates and their library, and the pagination inspector, are
   built, as paged.data's own panels (PM-0015 L4: they are the module's workflows, not the
   host's). **Record templates** lists the document's templates with the record flows using
