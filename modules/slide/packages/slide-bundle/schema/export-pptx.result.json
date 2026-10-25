@@ -7,7 +7,21 @@
         "application/vnd.openxmlformats-officedocument.presentationml.presentation"
       ]
     },
-    "fileName": { "kind": "text" },
-    "diagnostics": { "kind": "list", "of": { "kind": "text" } }
+    "fileName": {
+      "kind": "text"
+    },
+    "diagnostics": {
+      "kind": "list",
+      "of": {
+        "kind": "text"
+      }
+    },
+    "notExported": {
+      "kind": "list",
+      "of": {
+        "kind": "text"
+      },
+      "summary": "What is on the slides that could not round-trip, one line each."
+    }
   }
 }

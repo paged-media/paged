@@ -124,7 +124,14 @@ export interface CanvasFurniture {
   readonly titleBar?: boolean;
   readonly rulers?: boolean;
   readonly thumbnails?: boolean;
+  /** The canvas is a preview: it pans and zooms and edits nothing. */
+  readonly preview?: boolean;
 }
+
+/** What a fill shape shows on a narrow screen (below 720 px): the form
+ *  first with the preview folded away, or the canvas with the active
+ *  field in a sheet. */
+export type CompactLayout = "form-first" | "field-sheet";
 
 /**
  * What an editor shows: a preset it extends and what it changes
@@ -132,7 +139,7 @@ export interface CanvasFurniture {
  * `@paged-media/editor/feature-ids.json`.
  */
 export interface EditorProfile {
-  /** The preset this profile starts from (`full`, `template-fill`, …). */
+  /** The preset this profile starts from (`full`, `template-fill`, `form`, …). */
   readonly extends?: string;
   /** Product name: the mode title and the title-bar badge. */
   readonly title?: string;
@@ -156,6 +163,9 @@ export interface EditorProfile {
   readonly features?: Readonly<Record<string, boolean>>;
   /** The session's role. */
   readonly role?: Role;
+  /** The layout below 720 px; `null` keeps the desktop layout. The
+   *  `template-fill` and `form` presets set one. */
+  readonly compact?: CompactLayout | null;
 }
 
 // ── Features (docs/composable-editor.md §6) ─────────────────────────────

@@ -522,6 +522,7 @@ export interface SlideObjectModelOptions {
     bytes: Uint8Array;
     fileName: string;
     diagnostics: string[];
+    notExported: string[];
   } | null>;
 }
 

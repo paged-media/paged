@@ -380,6 +380,77 @@ export interface KeybindingContribution {
   key: string;
   command: string;
   when?: VisibilityPredicate;
+  /**
+   * Extensions ADR 348 (C2) — bind the key only while an edit context is
+   * active: one this same bundle registered, or the document context the
+   * bundle holds (`host.shell.setDocumentContext`). A scoped binding
+   * outranks the host's own binding on the same key AND the host's text
+   * input while its context is active: inside a Word document Cmd+B is
+   * bold, not the host's chord, and Tab is a list level, not a tab
+   * character. Outside the context the binding does not exist.
+   *
+   * The host keeps a small reserved set nobody may scope over: Cmd+S,
+   * Cmd+P, Cmd+\ and Cmd+Shift+P (save, print, the chrome toggle, the
+   * command palette). Registering a scoped binding on one of them throws.
+   * Probe `supports("contribute.keybinding.scope@1")`.
+   */
+  scope?: { editContext: string };
+}
+
+// --------------------------------------------- control bar + status bar
+
+/**
+ * Extensions ADR 348 (C1) — a CONTROL-BAR GROUP: a bundle's segment in
+ * the host's control bar (the row above the canvas that is about the
+ * selection), shown while its edit context is active. Word's Home tab is
+ * the case that forced it: inside a Word document the bar shows the
+ * document's styles, the font, B/I/U and the paragraph buttons, the way
+ * the frame-level context segment shows the context's tools.
+ *
+ * `scope.editContext` names an edit context this same bundle registered
+ * (the group borrows its declaration, like a frame surface), or the
+ * document context the bundle holds. Groups render in `order`, after the
+ * host's own context segment.
+ */
+export interface ControlBarGroupContribution {
+  /** `<namespace>.<group>`, namespace-checked at register. */
+  id: string;
+  /** A short label the host may show before the group (Word's tab name
+   *  becomes a group label: "Home"). */
+  title?: string;
+  scope: { editContext: string };
+  /** Lower comes first. Default 100. */
+  order?: number;
+  render: ComponentType<ControlBarGroupProps>;
+}
+
+/** What the host hands a {@link ControlBarGroupContribution}'s component. */
+export interface ControlBarGroupProps {
+  /** The context the group is shown for. */
+  editContext: string;
+}
+
+/**
+ * Extensions ADR 348 (C3) — a STATUS-BAR ITEM: a short readout in the
+ * host's status bar under the canvas, shown while its edit context is
+ * active (Word's page X of Y, the word count, the zoom). Same scope rule
+ * as {@link ControlBarGroupContribution}. The host shows the status bar
+ * only while some item applies.
+ */
+export interface StatusItemContribution {
+  /** `<namespace>.<item>`, namespace-checked at register. */
+  id: string;
+  scope: { editContext: string };
+  /** `"start"` (the default) packs left, `"end"` right. */
+  align?: "start" | "end";
+  /** Lower comes first within its side. Default 100. */
+  order?: number;
+  render: ComponentType<StatusItemProps>;
+}
+
+/** What the host hands a {@link StatusItemContribution}'s component. */
+export interface StatusItemProps {
+  editContext: string;
 }
 
 // ----------------------------------------------- importers + exporters
@@ -502,6 +573,14 @@ export interface FrameSurfaceRegistry {
    *  (`supports("editContext.frameSurface.fullscreen@1")`). */
   readonly fullscreen?: boolean;
 }
+/** Control-bar groups (extensions ADR 348, C1). */
+export interface ControlBarGroupRegistry {
+  register(contribution: ControlBarGroupContribution): Disposable;
+}
+/** Status-bar items (extensions ADR 348, C3). */
+export interface StatusItemRegistry {
+  register(contribution: StatusItemContribution): Disposable;
+}
 /** W3.2 — the object-type registry (the shell owns hit-routing; a
  *  matching element's double-click enters its `editContextType`). */
 export interface ObjectTypeRegistry {
@@ -545,6 +624,13 @@ export interface ShellRegistries {
   /** Frame surfaces (extensions ADR 334). Optional likewise: without it
    *  the SDK warns and `supports("editContext.frameSurface@1")` is false. */
   frameSurfaces?: FrameSurfaceRegistry;
+  /** Control-bar groups (extensions ADR 348). Optional likewise: without
+   *  it the door warns and `supports("contribute.controlBarGroup@1")`'s
+   *  dynamic twin `controlBar.groups@1` is false. */
+  controlBarGroups?: ControlBarGroupRegistry;
+  /** Status-bar items (extensions ADR 348). Optional likewise
+   *  (`statusBar.items@1`). */
+  statusItems?: StatusItemRegistry;
 }
 
 // ---------------------------------------------------- overlay signals

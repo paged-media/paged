@@ -166,7 +166,7 @@ fn run(props: &RunProps, text: String, line_break: bool, ctx: &TextCtx) -> TextR
         baseline: props.baseline.unwrap_or(0) as f64 / 1000.0,
         rgb: rgba.bytes(),
         alpha: rgba.a,
-        link: props.hyperlink.as_ref().and_then(|h| h.url.clone()),
+        link: props.hyperlink.clone(),
         field: None,
     }
 }

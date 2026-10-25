@@ -27,7 +27,11 @@
 //                     leading · alignment · Preview
 //
 // (A plugin's edit context replaces the bar with its own segment —
-// ContextToolbar's job, unchanged.)
+// ContextToolbar's job, unchanged.) A document a bundle holds the DOCUMENT
+// CONTEXT for (a Word document opened as the whole document, extensions
+// ADR 348) shows that bundle's control-bar groups in place of the text and
+// document controls (editor ADR 298): the Word user's Home group, on every
+// page and with the caret anywhere.
 //
 // The row used to repeat five of the rail's tools, the one place above
 // the canvas where the selection's numbers belong. Every field reads and
@@ -49,6 +53,9 @@ import {
   type FontSummary,
 } from "@paged-media/client";
 import {
+  ContributedControlBarGroups,
+  useActiveScopeContext,
+  useHasControlBarGroups,
   usePageNavigation,
   useCamera,
   useCanvasClient,
@@ -137,22 +144,32 @@ const M = defineMessages("app.cockpitControlBar", {
 export function DesignControlBar() {
   const { elementSelection } = useSelection();
   const { contentSelection } = useContentSelection();
-  const body = contentSelection ? (
-    <TextControls />
-  ) : elementSelection.length > 0 ? (
-    <ObjectControls ids={elementSelection} />
-  ) : (
-    <DocumentControls />
-  );
+  const scoped = useActiveScopeContext();
+  const contributed = useHasControlBarGroups(scoped);
+  // Selected page items keep their own controls; text and the document
+  // level belong to the contributed groups when the document has some.
+  const kind = contributed
+    ? elementSelection.length > 0 && !contentSelection
+      ? "object"
+      : "contributed"
+    : contentSelection
+      ? "text"
+      : elementSelection.length > 0
+        ? "object"
+        : "document";
+  const body =
+    kind === "contributed" ? (
+      <ContributedControlBarGroups editContext={scoped} />
+    ) : kind === "text" ? (
+      <TextControls />
+    ) : kind === "object" ? (
+      <ObjectControls ids={elementSelection} />
+    ) : (
+      <DocumentControls />
+    );
   return (
     <div
-      data-control-bar={
-        contentSelection
-          ? "text"
-          : elementSelection.length > 0
-            ? "object"
-            : "document"
-      }
+      data-control-bar={kind}
       style={{
         display: "flex",
         alignItems: "center",

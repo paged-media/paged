@@ -32,7 +32,7 @@ test.describe("journey · embedding demos", () => {
     page,
   }) => {
     await page.goto("/demos/index.html");
-    await expect(page.locator("main.gallery a")).toHaveCount(13);
+    await expect(page.locator("main.gallery a")).toHaveCount(14);
   });
 
   test("business card: fill a field, Submit hands the values to the host @feat:editor-shell.solo-mode @level:happy", async ({

@@ -66,6 +66,19 @@ export {
 } from "./overlay";
 
 export {
+  activeScopeContext,
+  createControlBarGroupRegistry,
+  createDocumentContextStore,
+  createStatusItemRegistry,
+  type ControlBarGroupContribution,
+  type ControlBarGroupRegistry,
+  type DocumentContextStore,
+  type ScopedItemRegistry,
+  type StatusItemContribution,
+  type StatusItemRegistry,
+} from "./context-bar";
+
+export {
   createFrameSurfaceRegistry,
   type FrameSurfaceContribution,
   type FrameSurfaceProps,

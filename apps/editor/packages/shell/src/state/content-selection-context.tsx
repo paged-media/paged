@@ -62,6 +62,11 @@ interface ContentSelectionContextValue {
    *  selection drops it. `null` when none was chosen. */
   typingStyle: TypingStyle | null;
   setTypingStyle: (style: TypingStyle | null) => void;
+
+  /** Extensions ADR 348 — called after every `setContentSelection` (the
+   *  plugin host's `host.text.onDidChangeSelection`). Returns the
+   *  unsubscribe. */
+  subscribeSelection: (listener: () => void) => () => void;
 }
 
 /** A character style held for a caret (see `typingStyle`). */
@@ -114,6 +119,18 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   // ADR 248).
   const newestSelection = useRef(0);
   const [typingStyle, setTypingStyleRaw] = useState<TypingStyle | null>(null);
+  // The selection's listeners: one set for the provider's life.
+  const [selectionListeners] = useState(() => new Set<() => void>());
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  const subscribeSelection = useCallback(
+    (listener: () => void) => {
+      selectionListeners.add(listener);
+      return () => {
+        selectionListeners.delete(listener);
+      };
+    },
+    [selectionListeners],
+  );
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const setTypingStyle = useCallback(
     (style: TypingStyle | null) => {
@@ -131,6 +148,15 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   const setContentSelection = useCallback(
     (sel: ContentSelection | null) => {
       setContentSelectionRaw(sel);
+      // The ref leads the render, so a listener reads the new selection.
+      contentSelectionRef.current = sel;
+      for (const fn of [...selectionListeners]) {
+        try {
+          fn();
+        } catch {
+          /* a listener's failure is its own */
+        }
+      }
       // A new selection is a new insertion point: the style held for the
       // old caret goes (an insert applies it before it moves the caret).
       setTypingStyle(null);
@@ -155,7 +181,7 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
         setSelectionRects([]);
       }
     },
-    [client, setTypingStyle],
+    [client, setTypingStyle, selectionListeners],
   );
 
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
@@ -170,6 +196,7 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
       contentSelectionRef,
       typingStyle,
       setTypingStyle,
+      subscribeSelection,
     }),
     [
       contentSelection,
@@ -178,6 +205,7 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
       selectionRects,
       typingStyle,
       setTypingStyle,
+      subscribeSelection,
     ],
   );
 
