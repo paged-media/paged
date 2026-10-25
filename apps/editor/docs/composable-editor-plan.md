@@ -21,7 +21,7 @@ orientation only.
 - **§2 lists facts in the code that the concept did not account for.** The tasks are built
   around them. Read §2 before any task.
 
-## 0a. Progress (2026-10-23)
+## 0a. Progress (2026-10-25)
 
 | Task                                             | State                                                                                                                                           | Where                                                                               |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -50,10 +50,12 @@ orientation only.
 | Decision 5: text ranges are placeholder runs     | Done: no code; the concept and engine ADR 1017 say so                                                                                           | concept §7.3, §12                                                                   |
 | Decision 6: styled field values                  | Done: `allowedStyles` and `breaks` on a text field, `runs` values, the form's styled control, the Template panel's editors, CLI fill and check  | engine ADR 1017, `panels/template/styled-text.tsx`                                  |
 | Decision 7: frame alternates                     | Done: `alternates` fields in the document policy, the form's picker, Make alternates field, the overlay names the shown member, IDML round trip | engine ADR 1017                                                                     |
-| I docs and website                               | PRs open                                                                                                                                        | docs site, website                                                                  |
+| I docs and website                               | Done: merged                                                                                                                                    | docs site, website                                                                  |
 | Decision 1 (2026-10-24): no degraded mode        | Done: `createEditor` refuses an unisolated page with `EditorError` `notCrossOriginIsolated`, naming the iframe path                             | `src/embed/errors.ts`, PM-0013 amendment 2                                          |
 | Decision 2 (2026-10-24): stable ids              | Done: `deprecated-ids.json`, aliases with an `idDeprecated` event, the ledger guard, release notes                                              | `scripts/feature-ids.mjs`, `profile/deprecations.ts`, PM-0013 amendment 2           |
 | Decision 4 (2026-10-24): "Edit template"         | Done: the template notice in the full editor                                                                                                    | ADR 293, `panels/template/template-notice.tsx`                                      |
+| Decision 3 (2026-10-24): roles per session       | Done: no code; the role stays session state, never stored in the document                                                                       | concept §12                                                                         |
+| Decision 8 (2026-10-24): module leftovers        | Done in the same round: draw, image, sheet, doc, slide, web, publish, data and CLI leftovers                                                    | each module's `status.md`                                                           |
 | Mobile fill presets (decision 2026-10-24)        | Done: `form` preset; field sheet or form first below 720 px; 44 px targets; touch pan, pinch, zoom buttons; camera input                        | ADR 294, `packages/shell/src/state/compact.ts`                                      |
 
 Corrections to the plan found while building:
@@ -67,7 +69,7 @@ Corrections to the plan found while building:
 - Engine follow-ups found by the module work, and what became of them: a module's document-
   and page-level label now opens to a filler when a field of that module is open, and a story
   on a path is decided by the item that carries the path (engine ADR 1000, amendment of
-  2026-10-23); a placed PDF still always draws its first page.
+  2026-10-23); a placed PDF now shows the page the document names (engine ADR 1003).
 
 ## 1. Summary
 
