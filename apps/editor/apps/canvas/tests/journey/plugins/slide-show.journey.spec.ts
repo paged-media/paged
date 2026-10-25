@@ -102,6 +102,61 @@ test.describe("journey · paged.slide slide show", () => {
     await expect.poll(() => activePage(page), { timeout: 10_000 }).toBe(ids[3]);
   });
 
+  test("a slide's transition plays on WebGPU through the WGSL library, or cuts with a notice without it @feat:plugin-slide.slideshow @level:happy", async ({
+    page,
+  }) => {
+    const ids = await openDeck(page);
+    // Slide 2 gets a Push transition, as the Transition panel sets it.
+    const set = await page.evaluate(async (pageId) => {
+      const objects = (
+        globalThis as unknown as {
+          __canvas: {
+            objects: {
+              set(
+                a: string,
+                p: string,
+                v: unknown,
+              ): Promise<{ applied?: boolean }>;
+            };
+          };
+        }
+      ).__canvas.objects;
+      return objects.set(
+        `plugin:media.paged.slide/slide/${pageId}`,
+        "transitionKind",
+        "push",
+      );
+    }, ids[1]);
+    expect(set).toMatchObject({ applied: true });
+    await focusEditor(page);
+    await page.keyboard.press("F5");
+    await expect(stage(page)).toHaveAttribute("data-frame", "drawn", {
+      timeout: 20_000,
+    });
+    // Give the show's device time to compile the shaders.
+    await page.waitForTimeout(1500);
+    await page.keyboard.press("n");
+    await expect(stage(page)).toHaveAttribute("data-slide-number", "2");
+    await expect(stage(page)).toHaveAttribute(
+      "data-transition",
+      /^(gpu:push|cut:no-webgpu)/,
+      { timeout: 10_000 },
+    );
+    const how = await stage(page).getAttribute("data-transition");
+    // The GPU lane (real Chrome with WebGPU) must play the shader.
+    if (test.info().project.name === "journeys-gpu")
+      expect(how).toMatch(/^gpu:push/);
+    if (how?.startsWith("cut"))
+      await expect(
+        show(page).locator('[data-show-notice="no-webgpu"]'),
+      ).toBeVisible();
+    test
+      .info()
+      .annotations.push({ type: "transition", description: how ?? "" });
+    await page.keyboard.press("Escape");
+    await expect(show(page)).toHaveCount(0, { timeout: 10_000 });
+  });
+
   test("Shift+F5 starts on the current slide @feat:plugin-slide.slideshow @level:happy", async ({
     page,
   }) => {

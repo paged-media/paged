@@ -266,6 +266,8 @@ export function createCompositor(
         paint(null, frame, 1);
         return;
       }
+      // What the last transition was drawn with (tests and diagnostics).
+      container.dataset.transition = "cut";
       // The outgoing slide stays on the 2D canvas under the GPU's.
       const finish = () => paint(null, frame, 1);
       if (
@@ -278,6 +280,7 @@ export function createCompositor(
           finish,
         )
       ) {
+        container.dataset.transition = `gpu:${resolved.kind}`;
         paint(null, from, 1);
         return;
       }
@@ -287,6 +290,7 @@ export function createCompositor(
         toldNoGpu = true;
         opts.onNoGpu?.();
       }
+      if (gpuMissing) container.dataset.transition = "cut:no-webgpu";
       paint(null, frame, 1);
     },
     blank(color) {
