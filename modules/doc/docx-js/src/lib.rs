@@ -182,18 +182,32 @@ mod wasm {
                 tables: Vec<docx_export::TableContentIn>,
                 #[serde(default)]
                 colors: std::collections::BTreeMap<String, String>,
+                #[serde(default)]
+                styles: Vec<docx_export::StyleIn>,
             }
             let Cells {
                 cells,
                 tables,
                 colors,
+                styles,
             } = serde_json::from_str(content_json)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             let (bytes, skips) = session
-                .save_edited_from_content_cells_and_tables(&content, &cells, &tables, &colors)
+                .save_edited_full(&content, &cells, &tables, &colors, &styles)
                 .map_err(|e| JsValue::from_str(&e))?;
             *self.last_skips.borrow_mut() = skips;
             Ok(bytes)
+        }
+
+        /// The tokens of the document's Word styles in paged (a JSON string
+        /// array): the styles the bundle reads back for save-back.
+        pub fn style_tokens(&self) -> String {
+            let tokens = self
+                .session
+                .as_ref()
+                .map(|s| s.style_tokens())
+                .unwrap_or_default();
+            serde_json::to_string(&tokens).unwrap_or_else(|_| "[]".into())
         }
 
         /// The refusal ledger of the LAST `save_edited*` call, as a JSON string

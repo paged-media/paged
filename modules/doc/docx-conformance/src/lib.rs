@@ -2819,3 +2819,129 @@ pub fn hidden_text_docx() -> Vec<u8> {
     );
     w0_package(&document, Some(styles))
 }
+
+/// Doc ADR 609 — a theme part (Office 2013–2022 colours, Calibri Light /
+/// Calibri fonts) the theme builders share.
+pub const THEME_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme">
+  <a:themeElements>
+    <a:clrScheme name="Office">
+      <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>
+      <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
+      <a:dk2><a:srgbClr val="44546A"/></a:dk2>
+      <a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>
+      <a:accent1><a:srgbClr val="4472C4"/></a:accent1>
+      <a:accent2><a:srgbClr val="ED7D31"/></a:accent2>
+      <a:accent3><a:srgbClr val="A5A5A5"/></a:accent3>
+      <a:accent4><a:srgbClr val="FFC000"/></a:accent4>
+      <a:accent5><a:srgbClr val="5B9BD5"/></a:accent5>
+      <a:accent6><a:srgbClr val="70AD47"/></a:accent6>
+      <a:hlink><a:srgbClr val="0563C1"/></a:hlink>
+      <a:folHlink><a:srgbClr val="954F72"/></a:folHlink>
+    </a:clrScheme>
+    <a:fontScheme name="Office">
+      <a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>
+      <a:minorFont><a:latin typeface="Calibri"/><a:ea typeface="MS Mincho"/><a:cs typeface=""/></a:minorFont>
+    </a:fontScheme>
+    <a:fmtScheme name="Office"><a:fillStyleLst/><a:lnStyleLst/><a:effectStyleLst/><a:bgFillStyleLst/></a:fmtScheme>
+  </a:themeElements>
+</a:theme>"#;
+
+const THEME_CONTENT_TYPES: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+  <Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
+</Types>"#;
+
+const THEME_DOC_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>
+</Relationships>"#;
+
+/// Doc ADR 609/610 — the theme builder's styles: theme fonts in the
+/// defaults, a heading in the theme's heading face and Accent 1 darker 25 %,
+/// a character style in Accent 2, a plain body style to apply.
+pub const THEME_STYLES: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi" w:cstheme="minorBidi"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorHAnsi"/><w:color w:val="2F5496" w:themeColor="accent1" w:themeShade="BF"/><w:sz w:val="32"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="864" w:right="864"/><w:jc w:val="center"/></w:pPr><w:rPr><w:i/></w:rPr></w:style>
+  <w:style w:type="character" w:styleId="Emph"><w:name w:val="Emph"/><w:rPr><w:b/><w:color w:val="ED7D31" w:themeColor="accent2"/></w:rPr></w:style>
+</w:styles>"#;
+
+/// Doc ADR 609 — theme colours and fonts:
+///
+/// - block 0 `Title` in Heading1 (Calibri Light, Accent 1 darker 25 %).
+/// - block 1 `Accent ` (`w:color` Accent 2) + `light ` (Accent 1 lighter
+///   40 %, `w:themeTint="99"`) + `text ` (Text 1, mapped to Dark 1) +
+///   `plain` (`FF0000`, no theme).
+/// - block 2 `Shaded` with a run shading `w:themeFill="accent6"` and the
+///   East Asian theme font; `Styled` in the Emph character style.
+/// - block 3 `Body text.` (Normal: Calibri through the defaults).
+///
+/// `settings.xml` maps `t1` → `dark1` as Word writes it.
+pub fn theme_docx() -> Vec<u8> {
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS}>
+  <w:body>
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Title</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:color w:val="ED7D31" w:themeColor="accent2"/></w:rPr><w:t xml:space="preserve">Accent </w:t></w:r><w:r><w:rPr><w:color w:val="8EAADB" w:themeColor="accent1" w:themeTint="99"/></w:rPr><w:t xml:space="preserve">light </w:t></w:r><w:r><w:rPr><w:color w:val="000000" w:themeColor="text1"/></w:rPr><w:t xml:space="preserve">text </w:t></w:r><w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t>plain</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:rFonts w:eastAsiaTheme="minorEastAsia"/><w:shd w:val="clear" w:color="auto" w:fill="70AD47" w:themeFill="accent6"/></w:rPr><w:t xml:space="preserve">Shaded </w:t></w:r><w:r><w:rPr><w:rStyle w:val="Emph"/></w:rPr><w:t>Styled</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Body text.</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#
+    );
+    theme_package(&document, THEME_STYLES)
+}
+
+/// A package with styles, settings (`w:clrSchemeMapping`) and the theme.
+pub fn theme_package(document: &str, styles: &str) -> Vec<u8> {
+    let settings = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:clrSchemeMapping w:bg1="light1" w:t1="dark1" w:bg2="light2" w:t2="dark2" w:accent1="accent1" w:accent2="accent2" w:accent3="accent3" w:accent4="accent4" w:accent5="accent5" w:accent6="accent6" w:hyperlink="hyperlink" w:followedHyperlink="followedHyperlink"/></w:settings>"#;
+    zip_parts(&[
+        ("[Content_Types].xml", THEME_CONTENT_TYPES.as_bytes()),
+        ("_rels/.rels", ROOT_RELS.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+        ("word/_rels/document.xml.rels", THEME_DOC_RELS.as_bytes()),
+        ("word/styles.xml", styles.as_bytes()),
+        ("word/settings.xml", settings.as_bytes()),
+        ("word/theme/theme1.xml", THEME_XML.as_bytes()),
+        ("unknown/note.txt", b"carried through untouched"),
+    ])
+}
+
+/// Doc ADR 610 — save-back completeness: paragraphs to restyle, a run with a
+/// footnote reference between its texts, and a table whose cell gains a
+/// paragraph in its own style.
+///
+/// - block 0 `First paragraph.` (Normal).
+/// - block 1 `Second paragraph.` (Normal).
+/// - block 2 one run `Before` + `<w:footnoteReference>` + `after.`
+///   (a single `<w:r>`: the reference sits inside its text).
+/// - block 3 a 1×1 table: `Cell heading` in Heading1.
+/// - block 4 `End.`
+pub fn completeness_docx() -> Vec<u8> {
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS}>
+  <w:body>
+    <w:p><w:r><w:t>First paragraph.</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Second paragraph.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Before</w:t><w:footnoteReference w:id="1"/><w:t xml:space="preserve"> after.</w:t></w:r></w:p>
+    <w:tbl><w:tblPr><w:tblW w:w="5000" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="5000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="5000" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Cell heading</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+    <w:p><w:r><w:t>End.</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#
+    );
+    theme_package(&document, THEME_STYLES)
+}

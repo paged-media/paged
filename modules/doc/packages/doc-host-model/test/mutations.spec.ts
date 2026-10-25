@@ -100,6 +100,50 @@ const P = (
 ) => ({ paraStyleId, runs, sourceIndex: 0 });
 
 describe("buildStyleMutations", () => {
+  it("creates the Word theme colour group after its swatches (doc ADR 609)", () => {
+    const ir = memoIr();
+    ir.swatches.push({
+      id: "Color/docx-theme-accent1",
+      name: "Accent 1",
+      space: "RGB",
+      value: [68, 114, 196],
+      theme: { color: { slot: "accent1" }, rgb: "4472C4" },
+    });
+    ir.colorGroups = [
+      {
+        id: "ColorGroup/docx-word-theme",
+        name: "Word theme",
+        members: ["Color/docx-theme-accent1"],
+      },
+    ];
+    const ops = buildStyleMutations(ir);
+    const group = ops.findIndex((o) => o.op === "createColorGroup");
+    const lastSwatch = ops.map((o) => o.op).lastIndexOf("createSwatch");
+    expect(group).toBe(lastSwatch + 1);
+    expect(ops[group]).toEqual({
+      op: "createColorGroup",
+      args: {
+        spec: {
+          selfId: "ColorGroup/docx-word-theme",
+          name: "Word theme",
+          members: ["Color/docx-theme-accent1"],
+        },
+      },
+    });
+    // The swatch spec carries no theme metadata (the wire has none).
+    expect(ops[lastSwatch]).toEqual({
+      op: "createSwatch",
+      args: {
+        spec: {
+          selfId: "Color/docx-theme-accent1",
+          name: "Accent 1",
+          space: "RGB",
+          value: [68, 114, 196],
+        },
+      },
+    });
+  });
+
   it("emits swatch, then create + setStyleProperty per style, parents first", () => {
     const ops = buildStyleMutations(memoIr());
     expect(ops[0]).toEqual({

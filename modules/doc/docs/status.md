@@ -29,6 +29,49 @@ crate. That is the next lever if later waves outgrow the headroom.
 `opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
 fifth slower (see `Cargo.toml`).
 
+## W1 (plugin): Word theme and save-back completeness (2026-10-24)
+
+Word-parity wave W1, the plugin's part ([ADR 609](adr/609-styles-and-theme.md),
+[ADR 610](adr/610-save-back-across-sessions-and-new-parts.md)):
+
+- **Theme colours and fonts.** `word/theme/theme1.xml` is read with
+  `settings.xml`'s `w:clrSchemeMapping`. `w:color` / `w:shd` theme references
+  (with `w:themeTint` / `w:themeShade`) and `w:rFonts` theme fonts resolve to
+  concrete values on every run, style and the defaults, the reference kept
+  beside them (`RunProps::theme_color`, `font_theme`; East Asian and
+  complex-script faces and run shading are read, not lowered). The lowering
+  mints a "Word theme" colour group: the twelve scheme colours as named
+  swatches (`Accent 1`, `Dark 1`, `Hyperlink`, …) and every tint, shade and
+  text/background reference the document uses (`Accent 1, Lighter 40%`).
+  Tints and shades are swatches of their own: the engine's swatch tint is
+  spot/CMYK only and a shade has no tint. Theme fonts lower as their families.
+- **Theme references are written back.** An untouched run keeps its
+  `w:color` bytes; a written run in a theme swatch that still shows its import
+  colour gets `w:themeColor` (+ tint/shade) again, any other colour plain hex.
+  A theme swatch edited in paged (its display colour moved) writes its runs as
+  the new hex. A family equal to the theme's body or heading face is written
+  with `w:asciiTheme`.
+- **The paragraph style applied on the canvas is saved** (the overlay used to
+  drop it), when the lowering knows it or it is a style made in paged.
+- **`styles.xml` is spliced.** A Word style modified in paged (the properties
+  the import maps) has only the changed elements of its `w:rPr` / `w:pPr`
+  rewritten; a paragraph or character style made in paged is appended with its
+  `w:basedOn` and named by the paragraphs and runs in it. The bundle reads the
+  styles with `document.styleProperties`.
+- **A note reference, drawing or field character inside a run's text** stays
+  in place when the run is edited or split (it was refused).
+- **A paragraph added in a table cell** takes its own paragraph style, not its
+  neighbour's.
+- **Reopen-then-splice.** Export of a saved `.paged` reopened in another
+  session reads the stored original `.docx` part back (`host.parts.read`) and
+  splices as the importing session does; a headless test now covers canvas
+  edits after a reopen (the object-model path was already covered).
+- `numbering.xml` is never written.
+- Tests: `docx-conformance/tests/it/theme_saveback.rs` (builders
+  `theme_docx`, `completeness_docx`; fixture
+  `packages/doc-bundle/test/fixtures/theme-styles.docx`),
+  `packages/doc-bundle/test/headless/theme-saveback.spec.ts`.
+
 ## W0: tracked changes, content controls, hidden text (2026-10-24)
 
 The import no longer loses content silently (Word-parity program, wave W0;

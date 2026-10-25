@@ -450,6 +450,21 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ..Lowering::default()
     };
 
+    // The theme's scheme colours, each a named swatch whether the document
+    // uses it or not, so the "Word theme" group offers them all (doc ADR 609).
+    if let Some(theme) = &doc.theme {
+        for (slot, hex) in &theme.colors {
+            ctx.theme_swatch_for(
+                &docx_core::ThemeColorRef {
+                    slot: slot.clone(),
+                    tint: None,
+                    shade: None,
+                },
+                hex,
+            );
+        }
+    }
+
     // 0. docDefaults -> a base paragraph style every un-based style + un-styled
     //    paragraph inherits from (Word's Normal defaults: font, size, spacing).
     ctx.install_doc_defaults(&doc.styles.doc_defaults);
@@ -985,6 +1000,26 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     };
     let section = sections[0].clone();
     let styles = ctx.ordered_styles();
+    // The "Word theme" group: the scheme's colours, then every theme
+    // reference the document uses (tints, shades, text and background).
+    let color_groups = if doc.theme.is_some() {
+        vec![ir::LoweredColorGroup {
+            id: "ColorGroup/docx-word-theme".into(),
+            name: "Word theme".into(),
+            members: ctx
+                .swatches
+                .iter()
+                .filter(|s| s.theme.is_some())
+                .map(|s| s.id.clone())
+                .collect(),
+        }]
+    } else {
+        Vec::new()
+    };
+    let theme_fonts = doc.theme.as_ref().map(|t| ir::LoweredThemeFonts {
+        major: t.major.latin.clone(),
+        minor: t.minor.latin.clone(),
+    });
 
     LoweredDoc {
         swatches: ctx.swatches,
@@ -994,7 +1029,36 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         sections,
         even_and_odd_headers: doc.even_and_odd_headers,
         diagnostics: ctx.diagnostics,
+        color_groups,
+        theme_fonts,
     }
+}
+
+/// The swatch token of a theme colour reference (doc ADR 609):
+/// `Color/docx-theme-accent1`, `…-accent1-tint-99`, `…-accent1-shade-BF`.
+pub fn theme_swatch_token(r: &docx_core::ThemeColorRef) -> String {
+    let mut id = format!("Color/docx-theme-{}", r.slot);
+    if let Some(t) = r.tint {
+        id.push_str(&format!("-tint-{}", docx_core::ThemeColorRef::hex_byte(t)));
+    }
+    if let Some(s) = r.shade {
+        id.push_str(&format!("-shade-{}", docx_core::ThemeColorRef::hex_byte(s)));
+    }
+    id
+}
+
+/// The swatch name Word's colour picker gives a theme colour reference:
+/// `Accent 1`, `Accent 1, Lighter 40%`, `Accent 1, Darker 25%`.
+pub fn theme_swatch_name(r: &docx_core::ThemeColorRef) -> String {
+    let mut name = docx_core::theme::theme_color_name(&r.slot);
+    let pct = |v: u8| ((1.0 - v as f32 / 255.0) * 100.0).round() as i32;
+    if let Some(t) = r.tint {
+        name.push_str(&format!(", Lighter {}%", pct(t)));
+    }
+    if let Some(s) = r.shade {
+        name.push_str(&format!(", Darker {}%", pct(s)));
+    }
+    name
 }
 
 /// Mutable lowering state: the style table (id -> def, plus insertion order),
@@ -1205,8 +1269,30 @@ impl Lowering {
             name: format!("docx {hex}"),
             space: "RGB".into(),
             value: vec![r, g, b],
+            theme: None,
         });
         self.swatch_index.insert(hex.to_string(), id.clone());
+        id
+    }
+
+    /// Register a theme colour reference resolved to `hex` and return its
+    /// swatch token ([`theme_swatch_token`]).
+    fn theme_swatch_for(&mut self, r: &docx_core::ThemeColorRef, hex: &str) -> String {
+        let id = theme_swatch_token(r);
+        if self.swatches.iter().any(|s| s.id == id) {
+            return id;
+        }
+        let (red, green, blue) = parse_hex(hex).unwrap_or((0.0, 0.0, 0.0));
+        self.swatches.push(LoweredSwatch {
+            id: id.clone(),
+            name: theme_swatch_name(r),
+            space: "RGB".into(),
+            value: vec![red, green, blue],
+            theme: Some(ir::SwatchTheme {
+                color: r.clone(),
+                rgb: hex.to_ascii_uppercase(),
+            }),
+        });
         id
     }
 
@@ -2527,7 +2613,10 @@ impl Lowering {
             out.push(len("characterFontSize", half_pt_to_pt(half)));
         }
         if let Some(hex) = &r.color {
-            let swatch = self.swatch_for(hex);
+            let swatch = match &r.theme_color {
+                Some(t) => self.theme_swatch_for(t, hex),
+                None => self.swatch_for(hex),
+            };
             out.push(StyleProp {
                 path: "characterFillColor".into(),
                 value: PropValue::ColorRef(swatch),

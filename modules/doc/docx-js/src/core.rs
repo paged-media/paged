@@ -26,8 +26,8 @@
 
 use docx_core::DocxDocument;
 use docx_export::{
-    apply_edits, build_bindings, diff, overlay_cells, overlay_story_content, CellContentIn,
-    CellRunEdit, DocxBindings, EditSet, RunEdit, StoryContentIn, StructuralEdit,
+    apply_edits, build_bindings, diff, overlay_cells_known, overlay_story_content_known,
+    CellContentIn, CellRunEdit, DocxBindings, EditSet, RunEdit, StoryContentIn, StructuralEdit,
 };
 use docx_import::import_docx_with_package;
 use docx_lower::ir::{LoweredBlock, LoweredDoc};
@@ -49,6 +49,9 @@ pub struct DocSession {
     main_part: String,
     /// The native↔OOXML provenance map for edited save-back.
     bindings: DocxBindings,
+    /// The styles part name (`word/styles.xml`), when the package has one:
+    /// where style changes are written (doc ADR 610).
+    styles_part: Option<String>,
     /// What the target engine can lay out (ADR 029: span/split columns for
     /// a mid-page column change). The lowering, the skeleton and the
     /// save-back baseline all use it, so they stay aligned.
@@ -62,7 +65,9 @@ impl DocSession {
         let (model, package, main_part) =
             import_docx_with_package(bytes).map_err(|e| e.to_string())?;
         let bindings = build_bindings(&model);
+        let styles_part = docx_import::styles_part(&package, &main_part);
         Ok(DocSession {
+            styles_part,
             source: bytes.to_vec(),
             model,
             package,
@@ -282,14 +287,72 @@ impl DocSession {
         tables: &[docx_export::TableContentIn],
         colors: &std::collections::BTreeMap<String, String>,
     ) -> Result<(Vec<u8>, Vec<String>), String> {
+        self.save_edited_full(content, cells, tables, colors, &[])
+    }
+
+    /// The tokens of the document's Word styles in paged, paragraph and
+    /// character: the styles the host reads back (`styleProperties`) so a
+    /// change made to one in paged is written into `styles.xml`.
+    pub fn style_tokens(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .bindings
+            .para_token_to_style_id
+            .keys()
+            .chain(self.bindings.char_token_to_style_id.keys())
+            .cloned()
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// [`Self::save_edited_from_content_cells_and_tables`], plus the
+    /// document's styles as the host reads them (`styles`, doc ADR 610):
+    /// a Word style modified in paged is spliced into `styles.xml` in place,
+    /// a style created in paged is appended with its `w:basedOn`, and the
+    /// paragraphs and runs in a created style name it. A paragraph style
+    /// applied on the canvas is written as the paragraph's `w:pStyle`.
+    pub fn save_edited_full(
+        &self,
+        content: &StoryContentIn,
+        cells: &[CellContentIn],
+        tables: &[docx_export::TableContentIn],
+        colors: &std::collections::BTreeMap<String, String>,
+        styles: &[docx_export::StyleIn],
+    ) -> Result<(Vec<u8>, Vec<String>), String> {
         let baseline = self.lowered();
-        let mut edited = overlay_story_content(&baseline, content);
+        let mut coloured = baseline.clone();
+        docx_export::add_canvas_colors(&mut coloured, colors);
+        let plan =
+            docx_export::plan_styles(&self.model, &baseline, &coloured, &self.bindings, styles);
+        // The created styles' tokens name their new Word ids.
+        let mut bindings = self.bindings.clone();
+        for (token, id) in plan.created_ids(true) {
+            bindings
+                .para_token_to_style_id
+                .insert(token.to_string(), id.to_string());
+        }
+        for (token, id) in plan.created_ids(false) {
+            bindings
+                .char_token_to_style_id
+                .insert(token.to_string(), id.to_string());
+        }
+        let created = |t: &str| bindings.para_token_to_style_id.contains_key(t);
+        let mut edited = overlay_story_content_known(&baseline, content, &created);
         docx_export::add_canvas_colors(&mut edited, colors);
         let mut skips = docx_export::overlay_tables(&mut edited, tables);
-        skips.extend(overlay_cells(&mut edited, cells));
-        let edits = diff(&baseline, &edited, &self.bindings);
-        let (bytes, more) = self.save_edited(&edits)?;
-        skips.extend(more);
+        skips.extend(overlay_cells_known(&mut edited, cells, &created));
+        let edits = diff(&baseline, &edited, &bindings);
+        let mut package = self.package.clone();
+        skips.extend(
+            apply_edits(&mut package, &self.main_part, &bindings, &edits)
+                .map_err(|e| e.to_string())?,
+        );
+        skips.extend(
+            docx_export::apply_style_plan(&mut package, self.styles_part.as_deref(), &plan)
+                .map_err(|e| e.to_string())?,
+        );
+        let bytes = package.write().map_err(|e| e.to_string())?;
         Ok((bytes, skips))
     }
 }
