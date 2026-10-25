@@ -247,6 +247,7 @@ import {
   CLIPBOARD_KEYBINDINGS,
   CLIPBOARD_MENU_ITEMS,
 } from "../clipboard-commands";
+import { buildSvgCommands, SVG_MENU_ITEMS } from "../svg-commands";
 import {
   addPage,
   buildInsertCommands,
@@ -1403,10 +1404,20 @@ function CanvasAppIntegration() {
       system: browserClipboard(),
       deleteSelection: () => deleteSelection(objectDeps),
     });
+    // Engine ADR 1016 — File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG.
+    const svgCommands = buildSvgCommands({
+      report: (rows) =>
+        problemsSink.publish(
+          "paged.svg",
+          "svg",
+          rows.map((r) => ({ ...r, source: "svg" })),
+        ),
+    });
     const cmdDisposables = [
       ...commands,
       ...aiCommands,
       ...clipboardCommands,
+      ...svgCommands,
       CANVAS_CONTEXT_MENU_COMMAND,
       ...objectCommands,
       ...insertCommands,
@@ -1423,6 +1434,7 @@ function CanvasAppIntegration() {
       ...APP_MENU_ITEMS,
       SELECT_ALL_MENU_ITEM,
       ...CLIPBOARD_MENU_ITEMS,
+      ...SVG_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
