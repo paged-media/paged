@@ -122,6 +122,7 @@ import {
   notePluginLoaded,
 } from "../journal-sink";
 import { createGuardedLoader } from "../plugin-load-guard";
+import { answerScriptData } from "../script-data";
 import { buildTransformCommands } from "../transform-commands";
 import { cameraCentredOn, cameraForPage } from "../plugin-pages";
 import { applyProfile } from "../profiles/apply";
@@ -583,7 +584,14 @@ function PluginBundles() {
     // Editor ADRs 291, 292: the Data panel and the bind popover read the
     // document's data from the same shared backend the bundles meet at.
     const dataBackend = hostOptions.shared.data;
+    // Engine ADR 1014, amendment 2: a script's `paged.data.*` reads the same
+    // backend, through the worker's blocking bridge. The client is the
+    // shell's, stable for its lifetime.
+    const scriptClient = pagedRef.current?.client ?? null;
     if (dataBackend) {
+      scriptClient?.setScriptData((method, args) =>
+        answerScriptData(dataBackend.current()?.service ?? null, method, args),
+      );
       setDataDoorSource(scope, dataBackend);
       // Editor ADR 291: a field, a table or a record dropped on the document
       // is placed there; a refusal (no frame under it, a line, a design
@@ -671,6 +679,7 @@ function PluginBundles() {
       release();
       detachDocuments();
       detachIdentity();
+      if (dataBackend) scriptClient?.setScriptData(null);
     };
     // Mount-once by design; the ref keeps the handle live. The services
     // are the instance's, fixed for the editor's lifetime.
