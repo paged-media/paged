@@ -25,9 +25,10 @@ use image_conformance::harness::{assert_within, parity, RefTile};
 use image_conformance::Px;
 use image_kernels::families::band::{
     band_blend_if, band_broadcast_alpha, band_copy, band_extract, band_fade_neutral,
-    band_set_alpha, band_take, BandBlendIfParams, BandBroadcastAlphaParams, BandCopyParams,
-    BandExtractParams, BandFadeNeutralParams, BandSetAlphaParams, BandTakeParams, BAND_BLEND_IF,
-    BAND_BROADCAST_ALPHA, BAND_COPY, BAND_EXTRACT, BAND_FADE_NEUTRAL, BAND_SET_ALPHA, BAND_TAKE,
+    band_keep_alpha, band_set_alpha, band_take, BandBlendIfParams, BandBroadcastAlphaParams,
+    BandCopyParams, BandExtractParams, BandFadeNeutralParams, BandKeepAlphaParams, BandSetAlphaParams,
+    BandTakeParams, BAND_BLEND_IF, BAND_BROADCAST_ALPHA, BAND_COPY, BAND_EXTRACT, BAND_FADE_NEUTRAL,
+    BAND_KEEP_ALPHA, BAND_SET_ALPHA, BAND_TAKE,
 };
 
 /// A gradient where the four channels carry visibly distinct values —
@@ -229,4 +230,20 @@ fn band_blend_if_open_ramps_cover_everything() {
     let p = open_ramps();
     let c = band_blend_if(Px([0.1, 0.9, 0.3, 1.0]), Px([0.0, 0.0, 0.0, 0.0]), &p);
     assert_eq!(c, Px([1.0; 4]));
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn band_keep_alpha_parity__feat__image_editor_brush_engine() {
+    // in0 = a painted window, in1 = the base whose alpha must survive.
+    let painted = gradient_tile(48, 40);
+    // Every alpha class: opaque, transparent, the 0.5 line, and ramps.
+    let base = RefTile::from_fn(48, 40, |x, y| {
+        Px([0.9, 0.1, 0.4, ((x * 7 + y * 3) % 9) as f32 / 8.0])
+    });
+    let p = BandKeepAlphaParams::new();
+    match parity(&BAND_KEEP_ALPHA, band_keep_alpha, &[&painted, &base], &p) {
+        Some(r) => assert_within(r, &BAND_KEEP_ALPHA),
+        None => eprintln!("band.keep_alpha: no device, parity skipped"),
+    }
 }

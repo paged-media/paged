@@ -402,6 +402,20 @@
   tests:
     rust: ["image-conformance/tests/it/family_band.rs"]
 
+- id: band.keep_alpha
+  rust_path: families::band::BAND_KEEP_ALPHA
+  state_row: image.kernel.family-t0
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "elementary pointwise algebra / no reference reading"
+    - "rgb of in0, alpha of in1: Lock Transparent Pixels for every paint tool (image.editor.brush-engine)"
+  tests:
+    rust: ["image-conformance/tests/it/family_band.rs"]
+
 # ── minmax family ────────────────────────────────────────────
 
 - id: band.take

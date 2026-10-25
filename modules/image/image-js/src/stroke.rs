@@ -114,6 +114,30 @@ pub enum StrokeTool {
     /// window + membrane tone correction — lands under the coverage. No
     /// Alt-click; nothing is deposited until the stroke is resolved.
     SpotHeal,
+    /// SMUDGE: each dab deposits the paint the brush carries and picks
+    /// up what it lands on, so colour is dragged along the stroke.
+    /// Strength = how much it carries; finger painting starts it loaded
+    /// with the foreground. Sequential by nature (`stroke::engine`).
+    Smudge,
+    /// MIXER BRUSH: a smudge with a paint reservoir — wet (how much of
+    /// the canvas it picks up), load (how full of the foreground it is),
+    /// mix (canvas vs reservoir in what it lays down), flow.
+    Mixer,
+    /// HISTORY BRUSH: paints a HISTORY STATE of the layer back — a clone
+    /// at offset zero from another time instead of another place.
+    History,
+    /// ART HISTORY BRUSH: stylised strokes in the history state's
+    /// colours (style, area, tolerance, fidelity).
+    ArtHistory,
+    /// BACKGROUND ERASER: erases only the colour it samples under the
+    /// tip (continuous / once / the background swatch), within a
+    /// tolerance, contiguous or not, optionally protecting the
+    /// foreground colour.
+    BackgroundEraser,
+    /// COLOR REPLACEMENT: paints the foreground through hue /
+    /// saturation / colour / luminosity, only over the colour it samples
+    /// (the background eraser's sampling and limits).
+    ColorReplace,
 }
 
 impl StrokeTool {
@@ -131,6 +155,12 @@ impl StrokeTool {
             "blur" => StrokeTool::Blur,
             "sharpen" => StrokeTool::Sharpen,
             "spot-heal" => StrokeTool::SpotHeal,
+            "smudge" => StrokeTool::Smudge,
+            "mixer" => StrokeTool::Mixer,
+            "history" => StrokeTool::History,
+            "art-history" => StrokeTool::ArtHistory,
+            "background-eraser" => StrokeTool::BackgroundEraser,
+            "color-replace" => StrokeTool::ColorReplace,
             _ => return None,
         })
     }
@@ -148,7 +178,34 @@ impl StrokeTool {
             StrokeTool::Blur => "blur",
             StrokeTool::Sharpen => "sharpen",
             StrokeTool::SpotHeal => "spot-heal",
+            StrokeTool::Smudge => "smudge",
+            StrokeTool::Mixer => "mixer",
+            StrokeTool::History => "history",
+            StrokeTool::ArtHistory => "art-history",
+            StrokeTool::BackgroundEraser => "background-eraser",
+            StrokeTool::ColorReplace => "color-replace",
         }
+    }
+
+    /// Is this a WET tool — one whose every dab reads the result of the
+    /// dab before (smudge, mixer)? Those composite dab by dab instead of
+    /// accumulating coverage (`stroke::engine`).
+    pub fn wet(self) -> bool {
+        matches!(self, StrokeTool::Smudge | StrokeTool::Mixer)
+    }
+
+    /// Does it paint FROM another state of the layer (a history source)?
+    pub fn reads_history(self) -> bool {
+        matches!(self, StrokeTool::History | StrokeTool::ArtHistory)
+    }
+
+    /// Does its coverage pass a COLOUR GATE (sampling + limits +
+    /// tolerance) before it lands?
+    pub fn gated(self) -> bool {
+        matches!(
+            self,
+            StrokeTool::BackgroundEraser | StrokeTool::ColorReplace
+        )
     }
 
     /// Is this a FILTER STROKE — one that deposits no paint and instead
@@ -384,6 +441,18 @@ impl StrokeParams {
             StrokeTool::Dodge | StrokeTool::Burn | StrokeTool::Sponge => None,
             StrokeTool::Blur | StrokeTool::Sharpen => None,
             StrokeTool::SpotHeal => None,
+            StrokeTool::BackgroundEraser => Some(PaintMode::Erase),
+            // The colour replacement tool paints the foreground through
+            // the hue / saturation / colour / luminosity kernel the
+            // caller chose as its blend.
+            StrokeTool::ColorReplace => Some(PaintMode::Paint {
+                blend: self.blend,
+                color: self.color,
+            }),
+            // Their paint layer is a window (a history state, the
+            // carried paint) or a colour field — built in `composite`.
+            StrokeTool::Smudge | StrokeTool::Mixer => None,
+            StrokeTool::History | StrokeTool::ArtHistory => None,
         }
     }
 }
@@ -549,7 +618,36 @@ pub struct StrokeSession {
     clone_offset: Option<(f32, f32)>,
     /// The dodge / burn / sponge options.
     tone: ToneOptions,
+    /// Brush Settings — every dynamics pane and the paint tools'
+    /// options — frozen with the stroke (`set_dynamics`).
+    dynamics: image_gpu::dynamics::BrushDynamics,
+    /// The planner and its walk, built at the first sample of a stroke
+    /// that needs them (`stroke::engine`). `None` on the plain path.
+    brush: Option<engine::BrushRun>,
+    /// The sampled (bitmap) tip, or `None` for the computed tip.
+    tip_bitmap: Option<Arc<image_gpu::SampledTip>>,
+    /// The dual brush's bitmap tip, if it has one.
+    dual_bitmap: Option<Arc<image_gpu::SampledTip>>,
+    /// The texture pattern's straight RGBA8 pixels (`w`, `h`, bytes);
+    /// baked into a field with the Texture pane's settings at the first
+    /// sample.
+    texture_source: Option<(u32, u32, Arc<[u8]>)>,
+    texture: Option<Arc<image_gpu::brush::TextureField>>,
+    /// Canvas-extent straight RGBA8 a tool reads INSTEAD of the base: the
+    /// history state (history / art history brushes), or the composite
+    /// of every layer (smudge / mixer "sample all layers").
+    alt_source: Option<Arc<[u8]>>,
+    /// The smudge / mixer brush's carried paint.
+    wet: Option<engine::WetState>,
+    /// The colour the background eraser / colour replacement sampled
+    /// "once", at the first dab.
+    gate_sample: Option<[u8; 4]>,
 }
+
+/// The brush engine on top of the session: planned dabs, the colour
+/// gates, the wet tools, the art history brush.
+mod engine;
+pub use engine::tip_from_pixels;
 
 impl StrokeSession {
     /// Open a stroke on `image`. `selection` is the session's coverage
@@ -614,6 +712,15 @@ impl StrokeSession {
             clone_source: None,
             clone_offset: None,
             tone: ToneOptions::default(),
+            dynamics: image_gpu::dynamics::BrushDynamics::default(),
+            brush: None,
+            tip_bitmap: None,
+            dual_bitmap: None,
+            texture_source: None,
+            texture: None,
+            alt_source: None,
+            wet: None,
+            gate_sample: None,
         })
     }
 
@@ -742,6 +849,10 @@ impl StrokeSession {
                 self.clone_offset = Some((src.x - sample.x, src.y - sample.y));
             }
         }
+        if self.uses_engine() {
+            let pen = image_gpu::dynamics::PenSample::at(sample.x, sample.y, sample.pressure);
+            return self.extend_engine(ctx, pen).await;
+        }
         let dabs = self.plan(sample);
         for d in &dabs {
             let tip = self.params.tip_at(d.pressure);
@@ -778,6 +889,7 @@ impl StrokeSession {
         // a window of the image and cannot exist before the region does.
         let sampled = match self.params.solid_paint_mode() {
             Some(_) => None,
+            None if self.params.tool.reads_history() => None,
             None => {
                 let Some((dx, dy)) = self.clone_offset else {
                     // No anchor set: a clone with nowhere to read from
@@ -801,18 +913,39 @@ impl StrokeSession {
                 Some((rgba8_to_f16(&src_window), correction))
             }
         };
-        let mode = match (&self.params.solid_paint_mode(), &sampled) {
-            (Some(m), _) => *m,
-            (None, Some((src_f16, correction))) => PaintMode::Sample {
+        // A multi-coloured stroke (colour dynamics, the art history
+        // brush) paints its COLOUR FIELD as the paint layer; the history
+        // brush paints the history state's window.
+        let field = self.engine_paint_window(region);
+        let locked_erase = self.locked_erase_paint();
+        let mode = match (
+            &field,
+            &locked_erase,
+            &self.params.solid_paint_mode(),
+            &sampled,
+        ) {
+            (Some(win), _, _, _) => PaintMode::Sample {
+                blend: self.params.blend,
+                source_f16: win,
+                correction_f16: None,
+            },
+            (None, Some(m), _, _) => *m,
+            (None, None, Some(m), _) => *m,
+            (None, None, None, Some((src_f16, correction))) => PaintMode::Sample {
                 blend: self.params.blend,
                 source_f16: src_f16,
                 correction_f16: correction.as_deref(),
             },
-            (None, None) => return Ok(()),
+            (None, None, None, None) => return Ok(()),
         };
-        let out_f16 = composite_stroke_window(ctx, &mode, &base_f16, &mask, w, h)
+        let mut out_f16 = composite_stroke_window(ctx, &mode, &base_f16, &mask, w, h)
             .await
             .map_err(|e| IngestError::Pipeline(e.to_string()))?;
+        if self.dynamics.lock_alpha {
+            out_f16 = image_gpu::keep_alpha_window(ctx, &out_f16, &base_f16, w, h)
+                .await
+                .map_err(|e| IngestError::Pipeline(e.to_string()))?;
+        }
         let out = f16_to_rgba8(&out_f16);
         self.splice(region, &out);
         Ok(())
@@ -861,9 +994,14 @@ impl StrokeSession {
             }
             (None, _) => return Ok(()),
         };
-        let out_f16 = composite_stroke_window(ctx, &mode, &base_f16, &mask, region.w, region.h)
+        let mut out_f16 = composite_stroke_window(ctx, &mode, &base_f16, &mask, region.w, region.h)
             .await
             .map_err(|e| IngestError::Pipeline(e.to_string()))?;
+        if self.dynamics.lock_alpha {
+            out_f16 = image_gpu::keep_alpha_window(ctx, &out_f16, &base_f16, region.w, region.h)
+                .await
+                .map_err(|e| IngestError::Pipeline(e.to_string()))?;
+        }
         let out = f16_to_rgba8(&out_f16);
         self.splice(region, &out);
         Ok(())

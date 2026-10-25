@@ -31,6 +31,7 @@ stood, for decisions made earlier; their status says so.
 | [465](465-cpu-twins-for-region-filters.md) | Where no GPU exists, a region filter runs on shipped CPU twins | Accepted 2026-10-23 (an exception to 450; amended 2026-10-23: a mask as data) |
 | [466](466-core-raster-crates-are-shared.md) | The engine's raster crates are shared: the module's Rust may depend on them | Accepted 2026-10-24 (amends the isolation contract and 456) |
 | [467](467-cpu-resample-for-headless-actions.md) | The CPU resample is a supported backend for headless and batch actions | Accepted 2026-10-25 (an exception to 450) |
+| [471](471-brush-engine.md) | The brush engine: Brush Settings as a seeded dab planner over the one accumulator | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
