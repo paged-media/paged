@@ -712,6 +712,36 @@ impl WorkerCore {
                     },
                 }
             }
+            // Engine ADR 1016 — SVG in and out; both read only.
+            MainToWorkerKind::RequestSvgImport {
+                page_id,
+                bytes,
+                options,
+            } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                WorkerToMainKind::SvgImportPlanned(
+                    model.svg_import_plan(&page_id, &bytes.0, &options),
+                )
+            }
+            MainToWorkerKind::ExportSvg {
+                page_id,
+                element_ids,
+                options,
+            } => match self.model.as_ref() {
+                None => WorkerToMainKind::ExportSvgFailed {
+                    error: "no document".into(),
+                },
+                Some(model) => match model.export_svg(&page_id, &element_ids, &options) {
+                    Ok((svg, report)) => WorkerToMainKind::SvgExported { svg, report },
+                    Err(e) => WorkerToMainKind::ExportSvgFailed {
+                        error: e.to_string(),
+                    },
+                },
+            },
             MainToWorkerKind::RequestStyleProperties {
                 collection,
                 style_id,

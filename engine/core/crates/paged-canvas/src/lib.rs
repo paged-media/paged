@@ -67,6 +67,7 @@ pub mod selection;
 pub mod snap;
 pub mod snap_point;
 pub mod snapshot;
+pub mod svg_io;
 pub mod template;
 
 pub use camera::{Camera, CameraLayout, CameraSabLayout, CAMERA_SAB_BYTES};

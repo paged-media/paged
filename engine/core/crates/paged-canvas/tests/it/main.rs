@@ -116,6 +116,7 @@ mod spread_transform_hit;
 mod story_grow_rule_read;
 mod style_paths_word_lowering;
 mod style_properties;
+mod svg_io;
 mod swatch_address_color_values;
 mod swatch_library;
 mod table_cells_after_rebuild;

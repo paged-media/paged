@@ -11,6 +11,7 @@ members = [
     "crates/paged-pixel",
     "crates/paged-psd",
     "crates/paged-raster",
+    "crates/paged-svg",
     "crates/paged-compose",
     "crates/paged-gpu",
     "crates/paged-renderer",

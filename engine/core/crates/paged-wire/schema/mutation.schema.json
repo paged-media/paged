@@ -7398,6 +7398,11 @@
           "description": "The rule the frame's outline fills and clips by: `Value::Text`\n`\"NonZero\"` (IDML's rule, the default) or `\"EvenOdd\"`; `\"\"` clears\nto `\"NonZero\"`. On a TextFrame, Rectangle, Oval, Polygon or\nGraphicLine. No IDML attribute carries it: the IDML export re-winds\nan even-odd outline whose contours do not cross and reports the\nrest as lost. Paint-only (`frame_style`).",
           "type": "string",
           "const": "frameFillRule"
+        },
+        {
+          "description": "`GradientFillStart`: where a frame's gradient fill starts, in the\nitem's own (inner) coordinates — a linear axis begins there, a\nradial gradient is centred there with `FrameGradientFillLength` as\nits radius. `Value::Lengths` `[x, y]`; `[]` clears it to InDesign's\ndefault (the inner box's bottom-left corner). On a TextFrame,\nRectangle, Oval or Polygon. The IDML adapter reads and writes it.\nPaint-only (`frame_style`).",
+          "type": "string",
+          "const": "frameGradientFillStart"
         }
       ]
     },

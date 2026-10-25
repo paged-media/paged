@@ -149,6 +149,7 @@ is not written yet.
 | [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
 | [1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md) | Bindings live in labels, and the engine reads and applies them | Accepted 2026-10-24 |
 | [1015](1015-paged-action-the-action-registry.md) | `paged-action`: the action registry, chains, the cache key, and actions in JavaScript | Accepted 2026-10-24 |
+| [1016](1016-svg-in-and-out-through-paged-svg.md) | SVG in and out through `paged-svg` | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

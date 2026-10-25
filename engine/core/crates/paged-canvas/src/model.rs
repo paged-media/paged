@@ -7360,6 +7360,12 @@ impl CanvasModel {
                                 value: Some(Value::Length(f.gradient_fill_length)),
                             },
                             PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    f.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
                                 value: Some(Value::Length(f.gradient_stroke_angle)),
                             },
@@ -7707,6 +7713,12 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientFillLength,
                                 value: Some(Value::Length(f.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    f.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
@@ -8098,6 +8110,12 @@ impl CanvasModel {
                                 value: Some(Value::Length(p.gradient_fill_length)),
                             },
                             PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    p.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
                                 value: Some(Value::Length(p.gradient_stroke_angle)),
                             },
@@ -8485,6 +8503,12 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientFillLength,
                                 value: Some(Value::Length(o.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    o.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
@@ -12534,6 +12558,12 @@ impl CanvasModel {
             .ok_or_else(|| crate::channel::LoadError::Build(format!("no page {page_id}")))
     }
 
+    /// The faces registered for the document's text (engine ADR 1016's
+    /// SVG import lays text out with them).
+    pub(crate) fn document_fonts(&self) -> &[FontEntry] {
+        &self.font_registry
+    }
+
     /// Concept 3 — read accessors for the export session's begin.
     pub fn font_table(&self) -> &paged_renderer::FontTable {
         &self.font_table
@@ -14325,6 +14355,7 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameOverprintStroke
             | P::FrameGradientFillAngle
             | P::FrameGradientFillLength
+            | P::FrameGradientFillStart
             | P::FrameGradientStrokeAngle
             | P::FrameGradientStrokeLength
             | P::ImageContentTransform
