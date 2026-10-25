@@ -727,6 +727,16 @@ Additive at protocol 76 like the fill rule: an older engine makes a plain
 group of `clip: true` and refuses a group child. paged.draw's clipped
 repeat asks it before choosing a clip group over paste-into.
 
+Free page placement (engine ADR 1011) needs no flag: `placePage { page,
+originPt? }` is a new wire op, so protocol 77's handshake proves the engine
+has it. It puts a page (an artboard) at `originPt` on the canvas, absent
+returns it to the default vertical stack; the page order stays
+`movePage`'s. The vendored wire carries where every page sits —
+`DocumentHandle.pageOriginsPt`, `pageOriginsPt` beside every `pageSizesPt`,
+and the pages collection's `canvasOriginPt` / `canvasPlaced` / `boundsPt` —
+and the catalog the `pageCanvasOrigin` page path. An artboard's name is the
+page metadata entry `x-paged:paged.artboard` (`{"v":1,"data":{"name"}}`).
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

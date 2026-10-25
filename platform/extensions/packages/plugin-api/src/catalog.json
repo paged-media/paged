@@ -302,6 +302,13 @@
       "summary": "Move a page to follow another (omit/null: to the front)."
     },
     {
+      "name": "paged.placePage",
+      "params": "(pageId, [x, y]?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Put a page (an artboard) at [x, y] pt on the canvas (omit/null: its default slot)."
+    },
+    {
       "name": "paged.createMaster",
       "params": "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })",
       "returns": "bool",
@@ -1879,6 +1886,7 @@
     "applyMasterToPage",
     "duplicatePage",
     "movePage",
+    "placePage",
     "onMaster",
     "createMaster",
     "deleteMaster",
@@ -8447,6 +8455,23 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "page",
+      "path": "pageCanvasOrigin",
+      "type": {
+        "kind": "list",
+        "unit": "pt",
+        "of": "length"
+      },
+      "wire": "lengths",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
     },
     {
       "addressKind": "page",
@@ -20161,6 +20186,24 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "page",
+        "path": "pageCanvasOrigin",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "length"
+          }
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "lengths"
       },
       {
         "addressKind": "page",
