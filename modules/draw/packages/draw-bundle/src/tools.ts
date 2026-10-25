@@ -68,6 +68,12 @@ import {
   createShaperHandler,
 } from "./handlers/scrub-tools";
 import { createFlareHandler, createStarHandler } from "./handlers/star-flare";
+import { createLiquifyHandler } from "./handlers/liquify";
+import { createPuppetWarpHandler } from "./handlers/puppet-warp";
+import {
+  createPerspectiveGridHandler,
+  createPerspectiveSelectHandler,
+} from "./handlers/perspective";
 import {
   BLOB_BRUSH_OPTIONS,
   ERASER_OPTIONS,
@@ -76,6 +82,9 @@ import {
   RESHAPE_OPTIONS,
   STAR_OPTIONS,
   WIDTH_OPTIONS,
+  LIQUIFY_OPTIONS,
+  PUPPET_WARP_OPTIONS,
+  PERSPECTIVE_SELECT_OPTIONS,
   toolOptionsSpecOf,
 } from "./tool-options";
 
@@ -108,6 +117,16 @@ const M = defineMessages("draw.tools", {
   star: "Star",
   flare: "Flare",
   shaper: "Shaper",
+  warp: "Warp",
+  twirl: "Twirl",
+  pucker: "Pucker",
+  bloat: "Bloat",
+  scallop: "Scallop",
+  crystallize: "Crystallize",
+  wrinkle: "Wrinkle",
+  puppetWarp: "Puppet Warp",
+  perspectiveGrid: "Perspective Grid",
+  perspectiveSelect: "Perspective Selection",
 });
 
 const CROSS: CursorSpec = { kind: "css", token: "crosshair" };
@@ -185,6 +204,26 @@ export const WAVE3_TOOL_IDS = [
   "media.paged.draw.tool.star",
   "media.paged.draw.tool.flare",
   "media.paged.draw.tool.shaper",
+] as const;
+
+/** WP6.7 — the distortion tools (host-free, the PRO_TOOL_IDS pattern).
+ *  KEYLESS, for WAVE3_TOOL_IDS's reason: Illustrator's own keys (Warp
+ *  shift+r, Perspective Grid shift+p, Perspective Selection shift+v) are
+ *  all held, and `shift+o` stays reserved for the host's Artboard tool. */
+export const LIQUIFY_TOOL_IDS = [
+  "media.paged.draw.tool.warp",
+  "media.paged.draw.tool.twirl",
+  "media.paged.draw.tool.pucker",
+  "media.paged.draw.tool.bloat",
+  "media.paged.draw.tool.scallop",
+  "media.paged.draw.tool.crystallize",
+  "media.paged.draw.tool.wrinkle",
+] as const;
+export const DISTORTION_TOOL_IDS = [
+  ...LIQUIFY_TOOL_IDS,
+  "media.paged.draw.tool.puppetWarp",
+  "media.paged.draw.tool.perspectiveGrid",
+  "media.paged.draw.tool.perspectiveSelect",
 ] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
@@ -667,6 +706,68 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 11,
       cursor: CROSS,
       gesture: () => createFlareHandler(host),
+    },
+    // WP6.7 — THE LIQUIFY FAMILY: a flyout of their own (Illustrator's
+    // Width-tool group), Warp its face. Each tool's options are
+    // Illustrator's per-tool dialog (double-click the slot). Glyphs:
+    // REAL tokens of the host's map whose metaphor holds — an invented
+    // token renders the rail button glyphless.
+    ...(
+      [
+        ["warp", M.warp, "tool-smooth"],
+        ["twirl", M.twirl, "tool-rotate"],
+        ["pucker", M.pucker, "tool-scale"],
+        ["bloat", M.bloat, "tool-ellipse"],
+        ["scallop", M.scallop, "tool-curvature"],
+        ["crystallize", M.crystallize, "tool-polygon"],
+        ["wrinkle", M.wrinkle, "tool-pencil"],
+      ] as const
+    ).map(([kind, title, icon], i): ToolContribution => ({
+      id: `media.paged.draw.tool.${kind}`,
+      title: t(title),
+      icon,
+      group: "liquify",
+      section: "transform",
+      order: i + 1,
+      cursor: CROSS,
+      gesture: () => createLiquifyHandler(host, kind),
+      options: toolOptionsSpecOf(LIQUIFY_OPTIONS[kind]),
+    })),
+    // PUPPET WARP joins the host's Free Transform flyout, where
+    // Illustrator keeps it (Object ▸ Puppet warp switches to it too).
+    {
+      id: "media.paged.draw.tool.puppetWarp",
+      title: t(M.puppetWarp),
+      icon: "tool-freeTransform",
+      group: "transform",
+      section: "transform",
+      order: 12,
+      cursor: CROSS,
+      gesture: () => createPuppetWarpHandler(host),
+      options: toolOptionsSpecOf(PUPPET_WARP_OPTIONS),
+    },
+    // THE PERSPECTIVE GRID and PERSPECTIVE SELECTION share a flyout, as in
+    // Illustrator.
+    {
+      id: "media.paged.draw.tool.perspectiveGrid",
+      title: t(M.perspectiveGrid),
+      icon: "tool-shear",
+      group: "perspective",
+      section: "transform",
+      order: 1,
+      cursor: CROSS,
+      gesture: () => createPerspectiveGridHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.perspectiveSelect",
+      title: t(M.perspectiveSelect),
+      icon: "tool-directSelect",
+      group: "perspective",
+      section: "transform",
+      order: 2,
+      cursor: CROSS,
+      gesture: () => createPerspectiveSelectHandler(host),
+      options: toolOptionsSpecOf(PERSPECTIVE_SELECT_OPTIONS),
     },
   ];
 }

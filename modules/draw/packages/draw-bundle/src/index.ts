@@ -1632,3 +1632,88 @@ export {
   flareParamsOfGesture,
 } from "./handlers/star-flare";
 export { RESHAPE_OPTIONS, STAR_OPTIONS } from "./tool-options";
+
+// WP6.7 — the distortion tools: the Liquify family, Puppet Warp, the
+// Perspective Grid and Perspective Selection; their commands, the grid
+// store and its overlay layer.
+export { DISTORTION_TOOL_IDS, LIQUIFY_TOOL_IDS } from "./tools";
+export {
+  distortTargetsOn,
+  readDistortTargets,
+  writeDistorted,
+  rewriteFromPage,
+  tableThrough,
+  type DistortTarget,
+} from "./commands/distort-shared";
+export {
+  applyLiquifyStroke,
+  liquifyOptionsFrom,
+  runLiquifyStroke,
+  LIQUIFY_STROKE_COMMAND_ID,
+  LIQUIFY_COMMAND_IDS,
+  type LiquifyResult,
+} from "./commands/liquify";
+export {
+  applyPuppetWarp,
+  runPuppetWarp,
+  PUPPET_WARP_COMMAND_ID,
+  PUPPET_WARP_TOOL_COMMAND_ID,
+  PUPPET_WARP_TOOL_ID,
+  PUPPET_COMMAND_IDS,
+} from "./commands/puppet-warp";
+export {
+  gridFor,
+  saveGrid,
+  readPerspectiveLibrary,
+  writePerspectiveLibrary,
+  parsePerspectiveLibrary,
+  serializePerspectiveLibrary,
+  perspectiveGridShapes,
+  renderPerspectiveLayer,
+  installPerspectiveLayer,
+  perspectiveLinkOf,
+  withPerspectiveLink,
+  readPerspectiveLink,
+  writeOnPlane,
+  insertOnPlane,
+  runAttachToPerspective,
+  runReleaseFromPerspective,
+  runMoveOnPerspective,
+  runDrawOnPerspective,
+  PERSPECTIVE_COMMAND,
+  PERSPECTIVE_COMMAND_IDS,
+  PERSPECTIVE_PART,
+  PERSPECTIVE_LAYER_ID,
+  type PerspectiveLibrary,
+  type PerspectiveLink,
+} from "./commands/perspective";
+export {
+  createLiquifyHandler,
+  liquifyOptionsOf,
+  LIQUIFY_DWELL_MS,
+} from "./handlers/liquify";
+export { createPuppetWarpHandler } from "./handlers/puppet-warp";
+export {
+  createPerspectiveGridHandler,
+  createPerspectiveSelectHandler,
+  widgetCells,
+  widgetShapes,
+} from "./handlers/perspective";
+export {
+  polyShape,
+  ellipseShape,
+  squareShape,
+  tableShapes,
+} from "./handlers/preview-shapes";
+export {
+  LIQUIFY_OPTIONS,
+  WARP_OPTIONS,
+  TWIRL_OPTIONS,
+  PUCKER_OPTIONS,
+  BLOAT_OPTIONS,
+  SCALLOP_OPTIONS,
+  CRYSTALLIZE_OPTIONS,
+  WRINKLE_OPTIONS,
+  PUPPET_WARP_OPTIONS,
+  PERSPECTIVE_SELECT_OPTIONS,
+} from "./tool-options";
