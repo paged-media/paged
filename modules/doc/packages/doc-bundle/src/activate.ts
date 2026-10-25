@@ -28,8 +28,18 @@ import type {
 
 import { t } from "@paged-media/strings";
 
-import { DocEngine } from "./engine.js";
-import { DOC, OUTLINE } from "./messages.js";
+import { DocEngine, type OpenReport } from "./engine.js";
+import {
+  nativeDocx,
+  ODT_EXTENSIONS,
+  ODT_MIME_TYPES,
+  pasteLowered,
+  reportOpen,
+  reportRefusal,
+  WORD_EXTENSIONS,
+  WORD_MIME_TYPES,
+} from "./files.js";
+import { DOC, FILES, OUTLINE } from "./messages.js";
 import { contributeMenu } from "./menu";
 import { createDocStore, paragraphRange } from "./panels/outline-model.js";
 import {
@@ -68,6 +78,13 @@ const STANDALONE_FRAME = "docx_f0";
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
+/** What a host turns on in this bundle (doc ADR 616). */
+export interface DocBundleOptions {
+  /** Open OpenDocument text (.odt/.ott), read onto the Word model and saved
+   *  as .docx. Off by default while the reader is new. */
+  odt?: boolean;
+}
+
 /** The last-imported document: its source bytes (the preservation carrier the
  *  exporter re-emits) plus the story it was poured into — the address the DOC-03
  *  read-back uses to pull the EDITED content for save-back. */
@@ -87,6 +104,20 @@ interface LastDoc {
 }
 
 export function activate(host: BundleHost): BundleHandle {
+  return activateWith({})(host);
+}
+
+/** `activate` with options (doc ADR 616: the OpenDocument flag). */
+export function activateWith(
+  options: DocBundleOptions,
+): (host: BundleHost) => BundleHandle {
+  return (host) => activateDoc(host, options);
+}
+
+function activateDoc(
+  host: BundleHost,
+  options: DocBundleOptions,
+): BundleHandle {
   let last: LastDoc | null = null;
   const disposers: Array<() => void> = [];
   // The panel's document store: the RETAINED LoweredDoc (plain JSON — the
@@ -107,9 +138,27 @@ export function activate(host: BundleHost): BundleHandle {
     bytes: Uint8Array,
     mode: "open" | "place",
   ): Promise<{ frame: ElementId; story: string | null } | null> {
+    const originalName = name;
     const engine = await DocEngine.boot();
     try {
-      engine.loadDocx(bytes);
+      // Doc ADR 616 — the bytes decide the format: a template opens as a
+      // new untitled document, RTF and OpenDocument become a .docx, a .doc
+      // is refused with what to do instead.
+      let report: OpenReport;
+      try {
+        report = engine.openFile(bytes, name, options.odt ?? false);
+      } catch (err) {
+        const message = String(err).replace(/^Error: /, "");
+        reportRefusal(host, message);
+        docStore.setNotice({ severity: "error", message });
+        host.shell.openPanel(PANEL_ID);
+        throw new Error(message);
+      }
+      reportOpen(host, report);
+      const source = report.format === "docx" ? bytes : engine.sourceDocx();
+      const docName = report.saveName;
+      bytes = source;
+      name = docName;
       const ir = engine.lowered();
       const paragraphCounts = sectionBlocks(ir).map((blocks) =>
         pouredParagraphCount(blocks),
@@ -165,6 +214,20 @@ export function activate(host: BundleHost): BundleHandle {
           );
         }
       }
+      // ADR 293's rule for a template opened as a document: say so. A
+      // Word template opens as a new document; the panel names where it
+      // came from and that saving writes a new .docx.
+      docStore.setNotice(
+        report.untitled
+          ? {
+              severity: "info",
+              message: t(FILES.newFromTemplate, {
+                template: originalName,
+                name: docName,
+              }),
+            }
+          : null,
+      );
       host.shell.openPanel(PANEL_ID);
       return last.frameId
         ? { frame: last.frameId, story: last.storyIds[0] ?? null }
@@ -252,7 +315,7 @@ export function activate(host: BundleHost): BundleHandle {
     // A document opened from a saved file (or in another session) has no
     // import record here: its persisted state is the label on its frame,
     // as the typed exportDocx reads it.
-    if (!last) return exportPersisted();
+    if (!last) return (await exportPersisted()) ?? exportNative();
     const verbatim = { bytes: last.source, fileName: last.fileName };
     // The persisted state wins: object-model writes advance the label's .docx.
     const frame = last.frameId ? (last.frameId as { id: string }).id : null;
@@ -357,6 +420,40 @@ export function activate(host: BundleHost): BundleHandle {
     }
   }
 
+  /** Doc ADR 616 — "Save as .docx" for a document that did not come from
+   *  Word: a new package from its stories and styles. */
+  async function exportNative(): Promise<{
+    bytes: Uint8Array;
+    fileName: string;
+  } | null> {
+    const engine = await DocEngine.boot();
+    try {
+      const out = await nativeDocx(host, engine);
+      if (!out) return null;
+      host.diagnostics.set(
+        "media.paged.doc/save-back",
+        out.leftOut.map((message) => ({
+          severity: "warning" as const,
+          message,
+        })),
+      );
+      return { bytes: out.bytes, fileName: "document.docx" };
+    } finally {
+      engine.dispose();
+    }
+  }
+
+  /** Doc ADR 616 — RTF poured at the caret with its styles. */
+  async function pasteRtf(rtf: string): Promise<number> {
+    const engine = await DocEngine.boot();
+    try {
+      engine.openFile(new TextEncoder().encode(rtf), "paste.rtf");
+      return await pasteLowered(host, engine.lowered());
+    } finally {
+      engine.dispose();
+    }
+  }
+
   // Pick a .docx and place it (shared by the command + the panel button).
   // A refusal or a failed read reaches the panel inline: `host.log` is never
   // shown to the user.
@@ -367,7 +464,12 @@ export function activate(host: BundleHost): BundleHandle {
       host.shell.openPanel(PANEL_ID);
       return;
     }
-    const picked = await host.shell.pickFile({ accept: [".docx", ".dotx"] });
+    const picked = await host.shell.pickFile({
+      accept: [
+        ...WORD_EXTENSIONS.filter((e) => e !== ".doc"),
+        ...(options.odt ? ODT_EXTENSIONS : []),
+      ],
+    });
     const file = picked[0];
     if (!file) return;
     try {
@@ -435,13 +537,26 @@ export function activate(host: BundleHost): BundleHandle {
       host.contribute.importer({
         id: "media.paged.doc.importer.docx",
         title: t(DOC.importer),
-        extensions: [".docx", ".dotx"],
-        mimeTypes: [DOCX_MIME],
+        extensions: [...WORD_EXTENSIONS],
+        mimeTypes: [...WORD_MIME_TYPES],
         import: async ({ name, bytes }) => {
           await ingest(name, bytes, "open");
         },
       }).dispose,
     );
+    if (options.odt) {
+      disposers.push(
+        host.contribute.importer({
+          id: "media.paged.doc.importer.odt",
+          title: t(FILES.odtImporter),
+          extensions: [...ODT_EXTENSIONS],
+          mimeTypes: [...ODT_MIME_TYPES],
+          import: async ({ name, bytes }) => {
+            await ingest(name, bytes, "open");
+          },
+        }).dispose,
+      );
+    }
   }
 
   // Exporter: zero-edit save-back (verbatim carry-through of the retained OPC).
@@ -524,6 +639,8 @@ export function activate(host: BundleHost): BundleHandle {
     place: (name, bytes) => ingest(name, bytes, "place"),
     exportBytes: (state) => exportState(state),
     wordCommand: (id) => (word ? word.run(id) : Promise.resolve(false)),
+    saveAsDocx: () => exportDocx(),
+    pasteRtf,
   });
 
   // ADR 323 — the object properties as host-rendered PropertyFields (a

@@ -125,7 +125,10 @@ describe("media.paged.doc.command.placeDoc — the palette command (unit)", () =
       await waitFor(() => expect(s.opened).toContain(PANEL), {
         timeout: 4_000,
       });
-      expect(s.asked).toEqual([{ accept: [".docx", ".dotx"] }]);
+      // Doc ADR 616: every Word format the engine reads (not the refused .doc).
+      expect(s.asked).toEqual([
+        { accept: [".docx", ".dotx", ".docm", ".dotm", ".rtf"] },
+      ]);
       const args = frameOf(b.fake);
       expect(args.pageId).toBe("page-1");
       // [top, left, bottom, right] inside the Word page: positive margins.

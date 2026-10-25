@@ -5,12 +5,13 @@
 `docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-release` profile,
 then `wasm-opt -Oz`):
 
-|                     | bytes                |
-| ------------------- | -------------------- |
-| raw                 | 6,879,227 (6.56 MiB) |
-| gzip -9             | 1,876,393 (1.79 MiB) |
-| brotli -q 11        | 1,070,924 (1.02 MiB) |
-| manifest `maxBytes` | 8,388,608 (8 MiB)    |
+|                      | bytes                |
+| -------------------- | -------------------- |
+| raw (2026-10-25, W5) | 7,321,347 (6.98 MiB) |
+| raw                  | 6,879,227 (6.56 MiB) |
+| gzip -9              | 1,876,393 (1.79 MiB) |
+| brotli -q 11         | 1,070,924 (1.02 MiB) |
+| manifest `maxBytes`  | 8,388,608 (8 MiB)    |
 
 That leaves 1.44 MiB of headroom under the budget. The 8.64 MB in the editor's
 panel audit (2026-10-11) was measured before the `wasm-release` profile existed.
@@ -28,6 +29,41 @@ and `flat-opc`). So dropping schemas the plugin never reads means forking the
 crate. That is the next lever if later waves outgrow the headroom.
 `opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
 fifth slower (see `Cargo.toml`).
+
+## W5: files (2026-10-25)
+
+Word-parity wave W5 ([ADR 616](adr/616-files.md)). The engine decides the format by the
+bytes (`DocSession::open_file`) and turns each into the `.docx` the session works on:
+
+- **`.dotx` / `.dotm`** open as a new untitled document (`Untitled.docx` / `.docm`): only
+  the main part's content type changes; the panel says it came from the template and
+  that saving writes a new document (editor ADR 293's rule).
+- **`.docm`** keeps `vbaProject.bin` and its relationships byte for byte through
+  save-back, saves as `.docm`, and says the macros are never run.
+- **`.rtf`** (also RTF named `.doc`) is read by the new `docx-rtf` crate and written as
+  a new package (`docx_export::write_docx`).
+- **`.odt` / `.ott`** are read by the new `docx-odt` crate, behind a flag
+  (`docBundleWith({ odt: true })`; the docx-js `odt` feature). They save as `.docx`.
+- **`.doc`** is refused at the door: "save it as a Word Document (.docx)".
+- **"Save as .docx"** for a document not from Word: the exporter and
+  `media.paged.doc.command.saveAsDocx` write a new package from the stories, the styles
+  they use, their colours and the first page (`docx_export::native_document`). Not
+  written: tables, pictures, frames (not in the story read).
+- **Styled paste**: `media.paged.doc.command.pasteRtf` pours RTF at the caret. Paste from
+  the system clipboard needs contract C8 (`host.clipboard` carries text and tabular data
+  only); that is a follow-up.
+- **Tagged PDF (checked, not changed):** two engine gaps.
+  - Headings are tagged `P`: the PDF export maps a paragraph to `H1`–`H6` only from the
+    style's `pdf_export_tag`, which no wire property sets.
+  - The PDF has no outline from the headings: it comes only from document bookmarks, and
+    the Word lowering creates none.
+- Wasm: 6.98 MiB raw (+0.43 MiB).
+- Tests: `docx-rtf` (8), `docx-odt` (4), `docx-conformance/tests/it/files.rs` (8),
+  `packages/doc-bundle/test/headless/files.spec.ts` (7).
+- Word open-check (Word 16, macOS, `scripts/word-pagination-probe.sh`, 2026-10-25): the
+  packages written for `memo.rtf`, `minutes.odt`, `template-letter.dotx` and a native
+  document (heading, bold red run, bullet item) open in Word and save as PDF with their
+  text (`Memo` …, `Minutes` …, `Quarterly letter` …, `Plan` / `Ship it now` / `• One`).
 
 ## Text after native tables (2026-10-25)
 

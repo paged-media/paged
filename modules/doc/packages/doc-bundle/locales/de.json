@@ -122,5 +122,7 @@
   "doc.word.words": "{count, plural, one {# Wort} other {# Wörter}}",
   "doc.word.wordsOf": "{selected} von {total, plural, one {# Wort} other {# Wörtern}}",
   "doc.word.zoom": "{percent} %",
-  "menu.Insert Word document…": "Word-Dokument einfügen…"
+  "menu.Insert Word document…": "Word-Dokument einfügen…",
+  "doc.files.odtImporter": "OpenDocument-Text (.odt)",
+  "doc.files.newFromTemplate": "Ein neues Dokument aus der Vorlage {template}. Sie bearbeiten nicht die Vorlage: Speichern schreibt ein neues Word-Dokument ({name})."
 }

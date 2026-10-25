@@ -1214,6 +1214,7 @@ function typedCommands(
     bytes: Uint8Array,
   ) => Promise<{ frame: ElementId; story: string | null } | null>,
   exportBytes: (state: DocState) => Promise<Uint8Array | null>,
+  files: Pick<DocObjectModelDeps, "saveAsDocx" | "pasteRtf"> = {},
 ): TypedCommandContribution[] {
   const cmd = <A>(
     id: string,
@@ -1258,6 +1259,33 @@ function typedCommands(
             `failed: ${args.document} has no .docx part to export`,
           );
         return { bytes, fileName: state.data.fileName ?? "document.docx" };
+      },
+    ),
+    // Doc ADR 616 — "Save as .docx": the Word document the open document
+    // is (its save-back, or a new package for a document not from Word).
+    cmd<Record<string, never>>(
+      "media.paged.doc.command.saveAsDocx",
+      async () => {
+        const out = await files.saveAsDocx?.();
+        if (!out)
+          throw new Error(
+            "failed: the document has no text this host can read to write as .docx",
+          );
+        return out;
+      },
+    ),
+    // Doc ADR 616 — styled paste: RTF (Word's clipboard format) poured at
+    // the caret with its styles. The system clipboard does not carry RTF
+    // to bundles yet (contract C8), so the RTF comes as the argument.
+    cmd<{ rtf: string }>(
+      "media.paged.doc.command.pasteRtf",
+      async (_ctx, args) => {
+        const n = (await files.pasteRtf?.(args.rtf)) ?? 0;
+        if (n === 0)
+          throw new Error(
+            "unavailable: no text caret, or the RTF holds no paragraph",
+          );
+        return { paragraphs: n };
       },
     ),
     cmd<{ document: string; values: Record<string, string> }>(
@@ -1336,6 +1364,11 @@ export interface DocObjectModelDeps {
   /** Run a Word command by id (the Word chrome, ADR 608); false when the
    *  chrome is not contributed or the id is not a Word command. */
   wordCommand?(id: string): Promise<boolean>;
+  /** Doc ADR 616 — the open document as a .docx (save-back, or a new
+   *  package for a document that did not come from Word). */
+  saveAsDocx?(): Promise<{ bytes: Uint8Array; fileName: string } | null>;
+  /** Doc ADR 616 — pour RTF at the caret; the paragraphs inserted. */
+  pasteRtf?(rtf: string): Promise<number>;
 }
 
 /** The bundle's object model over `host` (headless). */
@@ -1351,7 +1384,7 @@ export function createDocObjectModel(
       mergeFieldKind(host),
     ],
     commands: [
-      ...typedCommands(host, deps.place, deps.exportBytes),
+      ...typedCommands(host, deps.place, deps.exportBytes, deps),
       ...wordTypedCommands(deps),
     ],
     // Editor plan G3a: a paragraph's text, a merge field, a list's items.
