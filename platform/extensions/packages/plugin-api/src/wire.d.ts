@@ -4230,6 +4230,17 @@ export class CanvasWorker {
      */
     setSceneCacheBudget(max_entries: number): void;
     /**
+     * Install the data door of script runs (core ADR 1014, amendment 2):
+     * `bridge(method, argsJson)` answers `paged.data.*` synchronously
+     * with an `{ ok }` / `{ error }` JSON envelope (see
+     * [`crate::script_data`]); the editor's worker blocks on shared
+     * memory until the main thread's data service has answered. A
+     * throw, or a non-string return, is the call's error. `undefined`
+     * removes the door, and `paged.data.*` throws "no data is
+     * attached" again.
+     */
+    setScriptDataBridge(bridge?: Function | null): void;
+    /**
      * Test hook: destroy the GPU device, as a GPU-process crash would
      * take it. The device's lost callback fires as it does for a real
      * loss. `false` without a presenter.
@@ -4330,6 +4341,7 @@ export interface InitOutput {
     readonly canvasworker_sceneCacheSize: (a: number) => number;
     readonly canvasworker_selectionGeometryJson: (a: number, b: number, c: number) => [number, number];
     readonly canvasworker_setSceneCacheBudget: (a: number, b: number) => void;
+    readonly canvasworker_setScriptDataBridge: (a: number, b: number) => void;
     readonly canvasworker_simulateGpuLoss: (a: number) => number;
     readonly canvasworker_submitSceneImageDirect: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
     readonly canvasworker_submitSceneImageTilesDirect: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
@@ -4374,8 +4386,8 @@ export interface InitOutput {
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__40: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__41: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__42: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuDeviceLostInfo__GpuDeviceLostInfo______true_: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
