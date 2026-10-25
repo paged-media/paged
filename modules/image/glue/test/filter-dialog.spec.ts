@@ -234,7 +234,9 @@ describe("the Filter dialog", () => {
     expect(stand.calls.every((c) => c.bound)).toBe(true);
     expect(stand.calls[1]!.args).toEqual([0, 10]);
     expect(await k.session.commitFilterDialog()).toBe(true);
-    expect(k.session.state().selection).toEqual(sel);
+    // The same area; its revision follows the frame's (the filter edited it).
+    const after = k.session.state().selection;
+    expect({ ...after, revision: 0 }).toEqual({ ...sel, revision: 0 });
     // Two steps: Select All (a selection change is a step, ADR 470) and
     // the filter.
     expect(depth(k)).toBe(2);
