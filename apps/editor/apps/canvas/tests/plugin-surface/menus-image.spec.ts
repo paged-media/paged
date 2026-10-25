@@ -19,7 +19,7 @@
 
 // PLUGIN MENUS — paged.image (modules/image/glue/src/menu.ts).
 //
-// A hundred and eight entries: a hundred and six under the Image menu (folded into
+// A hundred and fifteen entries: a hundred and thirteen under the Image menu (folded into
 // Plugins ▸ Image; shown as a context menu inside a raster frame) and two
 // under the host's Edit menu (Edit ▸ Selection to path, Edit ▸ Path to
 // selection).
@@ -1845,5 +1845,110 @@ test.describe.serial("plugin menus — paged.image", () => {
     expect(out.after, "opening a panel leaves the document alone").toBe(
       out.before,
     );
+  });
+
+  // ── the brush engine (WP5.7) ──────────────────────────────────────
+
+  test("Image/Brush/Brush settings — raises the Brush Settings panel", async () => {
+    covers("menu:Image/Brush/Brush settings");
+    await expectGreyedAndInert(bare, "Image/Brush/Brush settings");
+    const out = await clickEntry(
+      live,
+      "Image/Brush/Brush settings",
+      "media.paged.image.command.openBrushSettings",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.brushSettings" },
+    ]);
+    expect(out.after).toBe(out.before);
+  });
+
+  test("Image/Brush/Brush presets — raises the Brush Presets panel", async () => {
+    covers("menu:Image/Brush/Brush presets");
+    await expectGreyedAndInert(bare, "Image/Brush/Brush presets");
+    const out = await clickEntry(
+      live,
+      "Image/Brush/Brush presets",
+      "media.paged.image.command.openBrushPresets",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.brushPresets" },
+    ]);
+    expect(out.after).toBe(out.before);
+  });
+
+  test("Image/Brush/Define brush preset… — with no image open, raises the presets panel and defines nothing", async () => {
+    covers("menu:Image/Brush/Define brush preset…");
+    await expectGreyedAndInert(bare, "Image/Brush/Define brush preset…");
+    const out = await clickEntry(
+      live,
+      "Image/Brush/Define brush preset…",
+      "media.paged.image.command.defineBrushPreset",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.brushPresets" },
+    ]);
+    expect(out.after).toBe(out.before);
+  });
+
+  test("Image/Brush/Import brush presets… — raises the presets panel and asks for an .abr or .json", async () => {
+    covers("menu:Image/Brush/Import brush presets…");
+    await expectGreyedAndInert(bare, "Image/Brush/Import brush presets…");
+    const out = await clickEntry(
+      live,
+      "Image/Brush/Import brush presets…",
+      "media.paged.image.command.importBrushPresets",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.brushPresets" },
+      { door: "pickFile", arg: '{"accept":[".abr",".json"]}' },
+    ]);
+    expect(out.after).toBe(out.before);
+  });
+
+  test("Image/Brush/Export brush presets (.abr)… — saves brush-presets.abr", async () => {
+    covers("menu:Image/Brush/Export brush presets (.abr)…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Brush/Export brush presets (.abr)…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Brush/Export brush presets (.abr)…",
+      "media.paged.image.command.exportBrushPresetsAbr",
+    );
+    expect(out.shell).toEqual([
+      { door: "saveFile", arg: '{"suggestedName":"brush-presets.abr"}' },
+    ]);
+    expect(out.after).toBe(out.before);
+  });
+
+  test("Image/Brush/Export brush presets (.json)… — saves brush-presets.json", async () => {
+    covers("menu:Image/Brush/Export brush presets (.json)…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Brush/Export brush presets (.json)…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Brush/Export brush presets (.json)…",
+      "media.paged.image.command.exportBrushPresetsJson",
+    );
+    expect(out.shell).toEqual([
+      { door: "saveFile", arg: '{"suggestedName":"brush-presets.json"}' },
+    ]);
+    expect(out.after).toBe(out.before);
+  });
+
+  test("Image/Brush/Lock transparent pixels — runs toggleLockTransparent and leaves the document alone", async () => {
+    covers("menu:Image/Brush/Lock transparent pixels");
+    await expectGreyedAndInert(bare, "Image/Brush/Lock transparent pixels");
+    const out = await clickEntry(
+      live,
+      "Image/Brush/Lock transparent pixels",
+      "media.paged.image.command.toggleLockTransparent",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after).toBe(out.before);
   });
 });

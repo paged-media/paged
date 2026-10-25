@@ -101,3 +101,14 @@ starts.
   `moon.yml`), and an engine crate's change runs that module's gates.
 - An engine-native construct that IDML cannot carry is exported baked or reported as a loss,
   never dropped silently.
+
+## Amendment — 2026-10-25: DrawingML geometry is a shared crate
+
+The DrawingML preset geometry moves from paged.slide to `platform/shared/dml-geom` (slide
+ADR 717). Its consumers are modules (slide now, doc's shapes next), not the engine: the engine's
+model carries the outlines it draws, while the preset programs, adjust handles and connection
+sites are DrawingML's. So the lowest layer every consumer reaches is the shared platform code,
+not L2. It is its own Cargo workspace, a path dependency of the modules, and it keeps its old
+name in the slide workspace through a `package = "dml-geom"` alias, as this record asks of a
+moved crate. Adjust handles use `contribute.overlay` until the overlay-handles door (extensions
+340) lands.

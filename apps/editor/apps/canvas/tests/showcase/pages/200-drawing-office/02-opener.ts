@@ -19,20 +19,19 @@
 
 // Ch.14 opener — p77, C-Opener recto, and THE THESIS. The annual's
 // crest arrives as an SVG through the host importer registry, claimed
-// by `media.paged.draw.importer.svg`, and every contour lowers through
+// by `media.paged.draw.importer.svg`, and every shape lowers through
 // the SAME `insertPath` the pen tool commits. Nothing on this page is
 // an embedded picture.
 //
 // THE CREST'S COMPOUND SHAPES tell the second half of the thesis. The
-// importer lowers a multi-subpath SVG path as SIBLING contours (the
-// engine's `insertPath` takes one contour and one open flag), so the
-// annulus arrives as two same-fill discs — and under the engine's
-// NON-ZERO fill the inner disc paints a coin, not a hole. paged.draw's
-// Compound Path > Make then merges each pair into ONE Polygon whose
-// hole is real: draw-geometry re-winds the inner contour by nesting
-// depth before the `framePath` write, which is the only winding
-// implementation in that repo. The ring you can read the paper through
-// is the proof.
+// importer lands a multi-subpath SVG path as ONE compound Polygon
+// (modules/draw/docs/status.md, "SVG"): the first contour by
+// `insertPath`, the whole table by the `framePath` door Compound Path
+// > Make uses, and the file's `fill-rule="evenodd"` kept as the
+// element's own fill rule — so the annulus arrives as a ring and the
+// shield with its keyway cut, one Polygon each. (Until the importer
+// learned that, a ring landed as two sibling discs and this page merged
+// them by hand.) The ring you can read the paper through is the proof.
 //
 // `assets/annual-crest.svg` is authored in the annual's own 540×720
 // page space (the importer passes SVG user units through as page
@@ -54,9 +53,11 @@ import {
   specLabel,
 } from "../../annual-support";
 import { LAYER, STYLE, contentBox, p } from "../../names-annual";
-import { newRefs, type Ref } from "../../plugin-support";
+import { newRefs } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
-import { draw, polygons } from "./00-support";
+import { pathAnchors } from "../150-object/wire";
+import { polygons } from "./00-support";
+import { CREST_NAME, CREST_POLYGON_CONTOURS, CREST_SHAPES } from "./crest";
 
 const CREST_SVG = readFileSync(
   pathResolve(
@@ -64,16 +65,11 @@ const CREST_SVG = readFileSync(
     "..",
     "..",
     "assets",
-    "annual-crest.svg",
+    CREST_NAME,
   ),
   "utf8",
 );
-const CREST_NAME = "annual-crest.svg";
 const SVG_IMPORTER = "media.paged.draw.importer.svg";
-/** Contours in the crest, in file order: annulus outer + hole, shield
- *  plate + keyway, banner, motif. The order is the file's documented
- *  contract — this module addresses the import by it. */
-const CREST_CONTOURS = 6;
 
 /** Route the crest through the host importer registry — the same door
  *  File ▸ Open and drag-drop feed (the 06-vector recipe). */
@@ -116,7 +112,6 @@ async function importCrest(ctx: PageContext): Promise<string> {
 }
 
 export async function build(ctx: PageContext): Promise<PageReport> {
-  const { doc } = ctx;
   const elements: string[] = [];
   const notes: string[] = [];
   const page = p(77);
@@ -146,33 +141,25 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   expect(importer, `the SVG importer claimed ${CREST_NAME}`).toBe(SVG_IMPORTER);
   await expect
     .poll(async () => (await polygons(ctx)).length, {
-      message:
-        "one Polygon per crest contour (annulus ×2, shield ×2, banner, motif)",
+      message: "one Polygon per crest shape (annulus, shield, banner, motif)",
       timeout: 120_000,
     })
-    .toBe(before.length + CREST_CONTOURS);
+    .toBe(before.length + CREST_SHAPES);
   const imported = await newRefs(ctx.page, "polygon", before);
-  const [annulus, annulusHole, shield, keyway] = imported;
   for (const ref of imported) {
     await assignLayer(ctx, "polygon", ref.id, LAYER.content);
   }
 
-  // ── compound make ×2 — the holes become real ─────────────────────
-  // FIRST selected survives (keeps identity + paint); the hole contour
-  // is consumed into it and re-wound for the engine's non-zero fill.
-  const makeCompound = async (outerRef: Ref, holeRef: Ref): Promise<void> => {
-    const count = (await polygons(ctx)).length;
-    await doc.designer.selectElements([outerRef, holeRef]);
-    await draw(ctx, "makeCompoundPath");
-    await expect
-      .poll(async () => (await polygons(ctx)).length, {
-        message: "compound make consumed the hole contour",
-        timeout: 120_000,
-      })
-      .toBe(count - 1);
-  };
-  await makeCompound(annulus, annulusHole);
-  await makeCompound(shield, keyway);
+  // ── the compounds — each ring and its hole are ONE Polygon ───────
+  for (const [index, contours] of CREST_POLYGON_CONTOURS.entries()) {
+    if (contours < 2) continue;
+    const ref = imported[index]!;
+    const geom = await pathAnchors(ctx, { kind: "polygon", id: ref.id });
+    expect(
+      geom.subpathStarts.length,
+      `crest shape ${index} imported as one compound Polygon`,
+    ).toBe(contours);
+  }
 
   // ── the thesis, below the crest ──────────────────────────────────
   const thesis = await proseFrame(
@@ -181,11 +168,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [left, 486, right, 640],
     [
       {
-        text: "The crest above arrived as a file of curves — annual-crest.svg, fed to the host importer registry and claimed by paged.draw. The importer lowered every contour through the same insertPath the pen tool commits, so what stands on this page is six native polygons wearing real swatches, not an embedded picture of a drawing.",
+        text: "The crest above arrived as a file of curves — annual-crest.svg, fed to the host importer registry and claimed by paged.draw. The importer lowered every shape through the same insertPath the pen tool commits, so what stands on this page is four native polygons wearing real swatches, not an embedded picture of a drawing.",
         style: STYLE.bodyFirst,
       },
       {
-        text: "Two of those shapes are compound. The engine fills non-zero, and the importer delivers a compound path as sibling contours, so the annulus first painted as a solid coin; Compound Path > Make merged each pair into one polygon and re-wound the inner contour by nesting depth. The paper you can read through the ring is the whole argument of this chapter: a drawing tool that writes the document's own geometry, not a layer above it.",
+        text: "Two of those shapes are compound. The importer wrote each one's contours into a single polygon through the same door Compound Path > Make uses, and kept the file's even-odd fill rule on the element, so the inner contour of the annulus is a hole and not a coin. The paper you can read through the ring is the whole argument of this chapter: a drawing tool that writes the document's own geometry, not a layer above it.",
         style: STYLE.body,
       },
     ],
@@ -196,7 +183,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await specLabel(ctx, page, [
       "Specimen No. 115",
       "media.paged.draw.importer.svg",
-      "insertPath ×6 · makeCompoundPath ×2",
+      "insertPath ×4 · framePath ×2 · fill rule even-odd",
       "C-Opener",
     ]),
   );
@@ -208,7 +195,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ),
   );
 
-  // The two compound survivors + banner + motif remain.
+  // The two compounds + banner + motif.
   const drawn = await newRefs(ctx.page, "polygon", before);
   for (const ref of drawn) elements.push(ref.id);
 

@@ -136,6 +136,36 @@ import {
   type BrushMachine,
   type BrushSample,
 } from "./brush-machine";
+import {
+  DEFAULT_BRUSH_DYNAMICS,
+  DEFAULT_PAINT_TOOL_OPTIONS,
+  cloneDynamics,
+  dynamicsActive,
+  packDynamics,
+  patchDynamics,
+  type BrushDynamics,
+  type DynamicsPatch,
+  type PaintToolOptions,
+} from "./brush-dynamics";
+import {
+  abrToBrush,
+  decodeTipBitmap,
+  packExportValues,
+  type AbrPresetInfo,
+} from "./abr-preset";
+import {
+  addPreset,
+  applyPreset,
+  defaultPresets,
+  deletePreset,
+  deserializePresets,
+  movePreset,
+  nextPresetId,
+  renamePreset,
+  serializePresets,
+  untitledName,
+  type UserBrushPreset,
+} from "./brush-presets";
 
 /** The fixed v0 feather sigma (px) the `featherSelection` command uses
  *  when the caller passes none (a slider is a follow-up). */
@@ -436,6 +466,16 @@ export interface ImageSessionState {
    *  preset once it is edited, and pretending otherwise would mislabel
    *  a stroke's provenance. */
   brushPreset: number | null;
+  /** BRUSH SETTINGS — every dynamics pane, frozen into each stroke with
+   *  `brush` (`brush-dynamics.ts`). */
+  dynamics: BrushDynamics;
+  /** The options of the smudge, mixer, history, art history,
+   *  background eraser, colour replacement and magic eraser tools. */
+  paintTools: PaintToolOptions;
+  /** The Brush Presets library (stock, defined, imported), in order. */
+  brushPresets: readonly UserBrushPreset[];
+  /** The applied preset's id; cleared the moment a setting moves. */
+  brushPresetActive: string | null;
   /** The dialog on top of the panel, or null. */
   dialog: ImageDialog | null;
   /** The Layers list's search and filter. */
@@ -1020,11 +1060,37 @@ export interface ImageSession {
   applyBrushPreset(index: number): boolean;
   /** Forget the loaded library (the panel's Close). */
   closeBrushLibrary(): void;
+  /** Merge into Brush Settings (each pane, each jitter, field by field). */
+  setBrushDynamics(patch: DynamicsPatch): void;
+  /** Merge into one paint tool's options. */
+  setPaintToolOptions<K extends keyof PaintToolOptions>(
+    tool: K,
+    patch: Partial<PaintToolOptions[K]>,
+  ): void;
+  /** DEFINE BRUSH PRESET: the selection's pixels (the whole image without
+   *  one) become a sampled tip, added to the library and applied. */
+  defineBrushPreset(name?: string): Promise<boolean>;
+  /** Apply a library preset (Protect Texture keeps the current texture). */
+  applyUserPreset(id: string): boolean;
+  renameBrushPreset(id: string, name: string): void;
+  deleteBrushPreset(id: string): void;
+  moveBrushPreset(from: number, to: number): void;
+  /** Import an `.abr` library or a paged preset file (`.json`) into the
+   *  library. */
+  importBrushPresets(): Promise<boolean>;
+  /** Export the library: `abr` (Photoshop's format, what it can carry) or
+   *  `json` (the session's own format, every setting). */
+  exportBrushPresets(format: "abr" | "json"): Promise<boolean>;
+  /** MAGIC ERASER at an image-px point (one undo step). */
+  magicErase(point: [number, number]): Promise<boolean>;
   /** OPEN a stroke on the engine-held source with the current brush
    *  params + the bound selection (both frozen for its duration).
    *  GPU-only: false with an honest status when there is no device,
    *  nothing ingested, or the engine refuses. */
-  brushBegin(tool: StrokeTool): Promise<boolean>;
+  brushBegin(
+    tool: StrokeTool,
+    opts?: { smoothingRadiusPx?: number },
+  ): Promise<boolean>;
   /** Feed one pointer sample and re-submit the in-frame preview from the
    *  painted pixels. False when no stroke is open. */
   brushExtend(sample: BrushSample): Promise<boolean>;
@@ -1515,6 +1581,32 @@ const S = defineMessages("image.status", {
 });
 
 /** The Curves eyedroppers' names, as the status line says them. */
+const BS = defineMessages("image.brushEngine", {
+  defineNeedsImage: "Define Brush Preset needs an image — open one first.",
+  defineFailed: "Define Brush Preset: {error}",
+  defined: "Brush preset “{name}” defined — {w}×{h} px tip.",
+  applied: "Brush: {name}",
+  noSuchPreset: "No such brush preset.",
+  importChosenNothing: "No brush file chosen.",
+  importedJson:
+    "{count, plural, one {# brush preset} other {# brush presets}} imported from {name}.",
+  importedAbr:
+    "{count, plural, one {# brush preset} other {# brush presets}} imported from {name}.",
+  importFailed: "{name}: {error}",
+  exportedJson: "Brush presets exported ({name}).",
+  exportedAbr: "Brush presets exported as .abr ({name}).",
+  exportNoSaver: "This host wires no file saver (shell.saveFile@1).",
+  exportDeclined: "The brush presets were not saved.",
+  exportFailed: "Export failed: {error}",
+  textureNoPattern:
+    "Texture is on but no pattern is defined — define a pattern first; the stroke paints untextured.",
+  unknownDynamicsKeys: "The engine has settings this panel cannot set: {keys}.",
+  historyFailed: "History brush: {error}",
+  magicEraseFailed: "Magic eraser: {error}",
+  magicErased: "Erased the colour region at {x},{y}.",
+  noEngine: "The image engine could not start.",
+});
+
 const PICK = defineMessages("image.curvesPick", {
   black: "black",
   grey: "grey",
@@ -1736,6 +1828,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     brushLibrary: null,
     brushLibraryName: null,
     brushPreset: null,
+    dynamics: cloneDynamics(DEFAULT_BRUSH_DYNAMICS),
+    paintTools: structuredClone(DEFAULT_PAINT_TOOL_OPTIONS),
+    brushPresets: defaultPresets(),
+    brushPresetActive: null,
     dialog: null,
     layerFilter: NO_LAYER_FILTER,
     ppi: null,
@@ -2276,6 +2372,123 @@ export function createImageSession(host: BundleHost): ImageSession {
   /** Drop an in-flight stroke engine-side (the base pixels were never
    *  mutated, so this is a true restore). Shared by the explicit cancel
    *  and by every path that pulls the source out from under a stroke. */
+  /** IMPORT an `.abr` into the preset library: every preset mapped onto
+   *  the brush (`abr-preset.ts` — what cannot apply is reported), sampled
+   *  tips fetched by their index. */
+  const importAbrPresets = async (
+    name: string,
+    bytes: Uint8Array,
+  ): Promise<boolean> => {
+    const eng = await ensureEngine();
+    if (!eng) {
+      setStatus(t(BS.noEngine));
+      return false;
+    }
+    try {
+      const lib = eng.abrPresets(bytes);
+      let list = state.brushPresets;
+      for (const info of lib.presets as readonly AbrPresetInfo[]) {
+        const id = nextPresetId(list);
+        const tip =
+          info.sampleIndex !== undefined && info.sampleIndex !== null
+            ? decodeTipBitmap(eng.abrTip(bytes, info.sampleIndex), id)
+            : null;
+        const m = abrToBrush(info, tip);
+        const dynamics = patchDynamics(
+          cloneDynamics(DEFAULT_BRUSH_DYNAMICS),
+          m.dynamics,
+        );
+        list = addPreset(list, {
+          id,
+          name: info.name,
+          source: "abr",
+          params: {
+            size: m.params.size ?? state.brush.size,
+            hardness: m.params.hardness ?? state.brush.hardness,
+            spacing: m.params.spacing ?? state.brush.spacing,
+            opacity: m.params.opacity ?? 1,
+            flow: m.params.flow ?? 1,
+          },
+          dynamics,
+        });
+      }
+      const count = list.length - state.brushPresets.length;
+      state.brushPresets = list;
+      setStatus(t(BS.importedAbr, { count, name }));
+      return true;
+    } catch (err) {
+      setStatus(t(BS.importFailed, { name, error: errText(err) }));
+      return false;
+    }
+  };
+
+  /** EXPORT the library as an `.abr` — Photoshop's own format, carrying
+   *  what it can (the session's `.json` keeps every setting). */
+  const exportAbr = (
+    eng: ImageEngine,
+    list: readonly UserBrushPreset[],
+  ): Uint8Array => {
+    const keys = eng.abrExportKeys();
+    return eng.abrExport(
+      list.map((p) => ({
+        name: p.name,
+        values: packExportValues(keys, p).values,
+        bitmap: p.dynamics.bitmap,
+      })),
+    );
+  };
+
+  /** The stroke's seed: a deterministic sequence from the session's
+   *  start, so a recorded session replays its jitter too. */
+  let strokeSeed = 1;
+  /** Keys the engine reads that this glue cannot fill — reported once. */
+  let reportedUnknownKeys = false;
+
+  /** Freeze Brush Settings and the tool's options into the stroke the
+   *  engine just opened (`brush-dynamics.ts`). Skipped for a plain brush
+   *  with a computed tip, so that stroke stays the pre-engine one. */
+  const configureStroke = (
+    eng: ImageEngine,
+    tool: StrokeTool,
+    smoothingRadiusPx: number,
+  ) => {
+    const d = state.dynamics;
+    const engineTool =
+      tool === "smudge" ||
+      tool === "mixer" ||
+      tool === "history" ||
+      tool === "art-history" ||
+      tool === "background-eraser" ||
+      tool === "color-replace";
+    if (!engineTool && !dynamicsActive(d)) return;
+    strokeSeed = (Math.imul(strokeSeed, 1103515245) + 12345) & 0xffffff;
+    const tools = state.paintTools;
+    const mixer = tools.mixer.loadAfter
+      ? tools.mixer
+      : { ...tools.mixer, load: 0 };
+    const { values, unknown } = packDynamics(eng.brushDynamicsKeys(), {
+      dynamics: d,
+      tools: { ...tools, mixer },
+      seed: strokeSeed,
+      background: state.colors.bg,
+      smoothingRadiusPx: d.smoothing.amount > 0 ? smoothingRadiusPx : 0,
+    });
+    if (unknown.length > 0 && !reportedUnknownKeys) {
+      reportedUnknownKeys = true;
+      host.log.warn(t(BS.unknownDynamicsKeys, { keys: unknown.join(", ") }));
+    }
+    eng.brushSetDynamics(values);
+    if (d.bitmap) eng.brushSetTipBitmap(d.bitmap);
+    if (d.dual.enabled && d.dual.bitmap) eng.brushSetDualBitmap(d.dual.bitmap);
+    if (d.texture.enabled) {
+      if (patternHandle !== null) eng.brushSetTextureImage(patternHandle);
+      else setStatus(t(BS.textureNoPattern));
+    }
+    if (tool === "history" || tool === "art-history") {
+      eng.brushSetHistorySource(tools.history.source);
+    }
+  };
+
   const discardStroke = () => {
     if (engine && state.strokeActive) {
       try {
@@ -5181,7 +5394,199 @@ export function createImageSession(host: BundleHost): ImageSession {
       emit();
     },
 
-    async brushBegin(tool) {
+    setBrushDynamics(patch) {
+      state.dynamics = patchDynamics(state.dynamics, patch);
+      state.brushPresetActive = null;
+      emit();
+    },
+
+    setPaintToolOptions(tool, patch) {
+      state.paintTools = {
+        ...state.paintTools,
+        [tool]: { ...state.paintTools[tool], ...patch },
+      };
+      emit();
+    },
+
+    async defineBrushPreset(name) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(BS.defineNeedsImage));
+        return false;
+      }
+      let tip;
+      try {
+        tip = engine.brushTipFromSelection(src.handle);
+      } catch (err) {
+        setStatus(t(BS.defineFailed, { error: errText(err) }));
+        return false;
+      }
+      const id = nextPresetId(state.brushPresets);
+      const n = state.brushPresets.filter((p) => p.source === "defined").length;
+      const presetName = name?.trim() || untitledName(n + 1);
+      const dynamics = cloneDynamics(state.dynamics);
+      dynamics.bitmap = { id, ...tip };
+      const preset: UserBrushPreset = {
+        id,
+        name: presetName,
+        source: "defined",
+        params: {
+          size: Math.max(tip.width, tip.height),
+          hardness: state.brush.hardness,
+          spacing: 0.25,
+          opacity: state.brush.opacity,
+          flow: state.brush.flow,
+        },
+        dynamics,
+      };
+      state.brushPresets = addPreset(state.brushPresets, preset);
+      api.applyUserPreset(id);
+      setStatus(
+        t(BS.defined, { name: presetName, w: tip.width, h: tip.height }),
+      );
+      return true;
+    },
+
+    applyUserPreset(id) {
+      const p = state.brushPresets.find((x) => x.id === id);
+      if (!p) {
+        setStatus(t(BS.noSuchPreset));
+        return false;
+      }
+      const { params, dynamics } = applyPreset(p, state.dynamics);
+      state.brush = { ...state.brush, ...params };
+      state.dynamics = dynamics;
+      state.brushPresetActive = id;
+      state.brushPreset = null;
+      setStatus(t(BS.applied, { name: p.name }));
+      return true;
+    },
+
+    renameBrushPreset(id, name) {
+      state.brushPresets = renamePreset(state.brushPresets, id, name);
+      emit();
+    },
+
+    deleteBrushPreset(id) {
+      state.brushPresets = deletePreset(state.brushPresets, id);
+      if (state.brushPresetActive === id) state.brushPresetActive = null;
+      emit();
+    },
+
+    moveBrushPreset(from, to) {
+      state.brushPresets = movePreset(state.brushPresets, from, to);
+      emit();
+    },
+
+    async importBrushPresets() {
+      if (!host.supports("shell.pickFile@1")) {
+        setStatus(t(S.thisHostWiresNoFilePicker));
+        return false;
+      }
+      const picked = await host.shell.pickFile({ accept: [".abr", ".json"] });
+      const file = picked[0];
+      if (!file) {
+        setStatus(t(BS.importChosenNothing));
+        return false;
+      }
+      if (file.name.toLowerCase().endsWith(".json")) {
+        try {
+          const text = new TextDecoder().decode(file.bytes);
+          let list = state.brushPresets;
+          for (const p of deserializePresets(text)) {
+            const id = nextPresetId(list);
+            list = addPreset(list, {
+              ...p,
+              id,
+              source: "imported",
+              dynamics: p.dynamics.bitmap
+                ? { ...p.dynamics, bitmap: { ...p.dynamics.bitmap, id } }
+                : p.dynamics,
+            });
+          }
+          const count = list.length - state.brushPresets.length;
+          state.brushPresets = list;
+          setStatus(t(BS.importedJson, { count, name: file.name }));
+          return true;
+        } catch (err) {
+          setStatus(
+            t(BS.importFailed, { name: file.name, error: errText(err) }),
+          );
+          return false;
+        }
+      }
+      return await importAbrPresets(file.name, file.bytes);
+    },
+
+    async exportBrushPresets(format) {
+      if (!host.supports("shell.saveFile@1")) {
+        setStatus(t(BS.exportNoSaver));
+        return false;
+      }
+      let bytes: Uint8Array;
+      let name: string;
+      try {
+        if (format === "json") {
+          bytes = new TextEncoder().encode(
+            serializePresets(state.brushPresets),
+          );
+          name = "brush-presets.json";
+        } else {
+          const eng = await ensureEngine();
+          if (!eng) {
+            setStatus(t(BS.noEngine));
+            return false;
+          }
+          bytes = exportAbr(eng, state.brushPresets);
+          name = "brush-presets.abr";
+        }
+      } catch (err) {
+        setStatus(t(BS.exportFailed, { error: errText(err) }));
+        return false;
+      }
+      const ok = await host.shell.saveFile({
+        suggestedName: name,
+        bytes,
+        mimeType:
+          format === "json" ? "application/json" : "application/octet-stream",
+      });
+      setStatus(
+        ok
+          ? t(format === "json" ? BS.exportedJson : BS.exportedAbr, { name })
+          : t(BS.exportDeclined),
+      );
+      return ok;
+    },
+
+    async magicErase(point) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingToPaintOnIngestA));
+        return false;
+      }
+      if (!state.gpu) {
+        setStatus(t(S.webgpuUnavailablePaintingIsGpuOnly));
+        return false;
+      }
+      const o = state.paintTools.magicEraser;
+      const x = Math.floor(point[0]);
+      const y = Math.floor(point[1]);
+      let painted;
+      try {
+        painted = await engine.magicErase(src.handle, x, y, o);
+      } catch (err) {
+        setStatus(t(BS.magicEraseFailed, { error: errText(err) }));
+        return false;
+      }
+      swapSource(src, painted);
+      state.saveBack = null;
+      refreshSourceReadout();
+      if (src.elementId) await api.apply();
+      setStatus(t(BS.magicErased, { x, y }));
+      return true;
+    },
+
+    async brushBegin(tool, opts) {
       const src = state.source;
       if (!src || !engine) {
         setStatus(t(S.nothingToPaintOnIngestA));
@@ -5202,7 +5607,15 @@ export function createImageSession(host: BundleHost): ImageSession {
         return false;
       }
       try {
-        engine.brushBegin(src.handle, tool, state.brush);
+        // The colour replacement tool paints through its MODE (hue,
+        // saturation, colour or luminosity) instead of the brush's blend.
+        engine.brushBegin(
+          src.handle,
+          tool,
+          tool === "color-replace"
+            ? { ...state.brush, blend: state.paintTools.colorReplace.mode }
+            : state.brush,
+        );
         if (SAMPLING_TOOLS.includes(tool) && state.cloneSource) {
           // BEFORE the first extend: the offset is fixed at the first
           // dab, and an anchor arriving later would be ignored silently.
@@ -5213,6 +5626,7 @@ export function createImageSession(host: BundleHost): ImageSession {
           );
         }
         if (TONE_TOOLS.includes(tool)) engine.brushSetTone(state.tone);
+        configureStroke(engine, tool, opts?.smoothingRadiusPx ?? 0);
       } catch (err) {
         setStatus(t(S.paintFailed, { error: errText(err) }));
         return false;
@@ -5242,7 +5656,18 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (!src || !engine || !state.strokeActive) return false;
       let rgba: Uint8Array;
       try {
-        rgba = await engine.brushExtend(sample.x, sample.y, sample.pressure);
+        rgba =
+          sample.tiltX !== undefined || sample.tiltY !== undefined
+            ? await engine.brushExtendPen({
+                x: sample.x,
+                y: sample.y,
+                pressure: sample.pressure,
+                tiltX: sample.tiltX ?? 0,
+                tiltY: sample.tiltY ?? 0,
+                rotation: sample.rotation ?? 0,
+                wheel: sample.wheel ?? 1,
+              })
+            : await engine.brushExtend(sample.x, sample.y, sample.pressure);
       } catch (err) {
         setStatus(t(S.paintFailed, { error: errText(err) }));
         discardStroke();

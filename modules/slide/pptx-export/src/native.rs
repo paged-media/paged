@@ -77,6 +77,11 @@ pub struct Label {
     pub preset: Option<(String, Vec<(String, String)>)>,
     pub link: Option<Link>,
     pub frame: Option<String>,
+    /// The box the shape's outline was drawn for (slide ADR 717).
+    pub size: Option<(f64, f64)>,
+    /// A stroke-only element of a preset made in the editor: its preset is
+    /// written by the shape's outline element.
+    pub detail: bool,
 }
 
 fn s(v: &Value, k: &str) -> Option<String> {
@@ -123,6 +128,11 @@ pub fn parse_label(json: &str) -> Label {
             tooltip: s(l, "tooltip"),
         }),
         frame: s(&d, "frame"),
+        size: d
+            .get("box")
+            .and_then(Value::as_array)
+            .and_then(|b| Some((b.first()?.as_f64()?, b.get(1)?.as_f64()?))),
+        detail: s(&d, "part").as_deref() == Some("detail"),
     }
 }
 

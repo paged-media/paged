@@ -1472,3 +1472,29 @@ fn eta_reduced_function_names_round_trip__feat__sheet_fn_lookup_array() {
     // An unknown name that is no function keeps its spelling.
     assert_eq!(print_ooxml(&p("Bogus+1"), 0, &Ctx::new()), "Bogus+1");
 }
+
+/// An unknown function keeps its spelling (W1.0), and a `(args)` suffix
+/// after it is a call of its result: `NOSUCH(x,x)(1,2)`. The printer
+/// parenthesized that callee, `(NOSUCH(x,x))(1,2)`, which the parser does
+/// not read, so print/parse was not a fixpoint (found by the parse_formula
+/// fuzz target; the input is
+/// `fuzz/regressions/parse_formula-unknown-func-call-print-not-reparsable.txt`).
+#[test]
+fn a_call_of_an_unknown_function_prints_bare__feat__sheet_parser_dialect() {
+    let fuzz = "LAMBDZA(x,x)(1,2)\n";
+    let f = p(fuzz);
+    assert_eq!(pr(&f), "LAMBDZA(x,x)(1,2)");
+    assert_eq!(p(&pr(&f)).root, f.root);
+    for (input, canonical) in [
+        (
+            "LOGICHISQ.DIST(0,2,FALSENV)(1,\n0,1)\n",
+            "LOGICHISQ.DIST(0,2,FALSENV)(1,0,1)",
+        ),
+        ("LAMB(a,ISOMIMITTED(a))(0)\n", "LAMB(a,ISOMIMITTED(a))(0)"),
+        ("NOSUCH(1)(2)(3)", "NOSUCH(1)(2)(3)"),
+        ("LAMBDA(x,x+1)(2)", "LAMBDA(x,x+1)(2)"),
+    ] {
+        assert_eq!(roundtrip(input), canonical, "{input}");
+        assert_eq!(p(canonical).root, p(input).root, "{input}");
+    }
+}

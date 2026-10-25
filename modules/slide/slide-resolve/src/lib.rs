@@ -745,6 +745,18 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     },
                     frame: None,
                     link: sp.nv.hyperlink.clone(),
+                    flip: (x.flip_h, x.flip_v),
+                    connector: (sp.st_cxn.is_some() || sp.end_cxn.is_some()).then(|| {
+                        let end = |c: &pptx_core::CxnRef| CxnEnd {
+                            id: c.id,
+                            idx: c.idx,
+                            at: None,
+                        };
+                        Connector {
+                            st: sp.st_cxn.as_ref().map(end),
+                            end: sp.end_cxn.as_ref().map(end),
+                        }
+                    }),
                 },
             })
         }
@@ -928,6 +940,56 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
     }
 }
 
+/// Where each glued connector end's site is on the page (slide ADR 717):
+/// the site of the shape it names, on that shape's box. The editor routes a
+/// connector again when a site it is glued to moves away from this point.
+fn link_connectors(items: &mut [Item]) {
+    // Every drawn shape's box by shape id: its preset (a rectangle's sites
+    // for any other outline), size and placement. Groups and the members
+    // of a drawn chart or diagram are left out.
+    type Placed = (Option<(String, Vec<(String, String)>)>, f64, f64, [f64; 6]);
+    fn boxes(items: &[Item], out: &mut std::collections::HashMap<u32, Placed>) {
+        for it in items {
+            match &it.kind {
+                ItemKind::Group { children } => {
+                    if it.meta.frame.is_none() {
+                        boxes(children, out);
+                    }
+                }
+                _ => {
+                    out.insert(
+                        it.meta.shape_id,
+                        (it.meta.preset.clone(), it.w, it.h, it.transform),
+                    );
+                }
+            }
+        }
+    }
+    fn fill(items: &mut [Item], at: &std::collections::HashMap<u32, Placed>) {
+        for it in items {
+            if let ItemKind::Group { children } = &mut it.kind {
+                fill(children, at);
+            }
+            let Some(c) = it.meta.connector.as_mut() else {
+                continue;
+            };
+            for e in [c.st.as_mut(), c.end.as_mut()].into_iter().flatten() {
+                e.at = at.get(&e.id).and_then(|(preset, w, h, t)| {
+                    let (name, adj) = preset
+                        .as_ref()
+                        .map(|(n, a)| (n.as_str(), a.as_slice()))
+                        .unwrap_or(("rect", &[]));
+                    let sites = slide_geom::live::sites_on_page(name, adj, *w, *h, t);
+                    sites.get(e.idx as usize).map(|s| s.pos)
+                });
+            }
+        }
+    }
+    let mut placed = std::collections::HashMap::new();
+    boxes(items, &mut placed);
+    fill(items, &placed);
+}
+
 /// Resolve a shape tree, numbering each item by its place in the tree.
 fn ordered(shapes: &[Shape], space: &Space, ctx: &Ctx) -> Vec<Item> {
     shapes
@@ -1098,6 +1160,7 @@ pub fn resolve(deck: &Presentation) -> Deck {
             items.extend(background(b, &ctx, w, h));
         }
         items.extend(ordered(&s.shapes, &Space::PAGE, &ctx));
+        link_connectors(&mut items);
         out.slides.push(SlidePage {
             id: format!("p{}", i + 1),
             index: i,
