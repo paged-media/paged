@@ -24,8 +24,6 @@ import {
   type BrushPresetsSession,
 } from "../src/panels/brush-presets-panel";
 
-const ID = "panel:media.paged.image.panel.brushPresets";
-
 afterEach(() => {
   cleanup();
   setActiveStrings(createStrings());
