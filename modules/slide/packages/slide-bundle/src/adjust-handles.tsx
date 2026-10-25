@@ -77,13 +77,20 @@ export class HandlesModel implements Disposable {
   private readonly subs: Disposable[] = [];
   private generation = 0;
   private dragging = false;
+  /** The element selection as last announced (null: ask the host). */
+  private selected: readonly ElementId[] | null = null;
 
   constructor(
     private readonly host: BundleHost,
     private readonly engine: () => Promise<SlideEngine>,
   ) {
     this.subs.push(
-      host.selection.onDidChange(() => void this.refresh()),
+      // The ids the change carries: the host's own copy of the selection
+      // may not have caught up when the change is announced.
+      host.selection.onDidChange((ids) => {
+        this.selected = ids;
+        void this.refresh();
+      }),
       host.document.onDidChange(() => void this.refresh()),
     );
     void this.refresh();
@@ -103,9 +110,17 @@ export class HandlesModel implements Disposable {
 
   /** Read the selected element's handles again. */
   async refresh(): Promise<void> {
+    try {
+      await this.read();
+    } catch (err) {
+      this.host.log.warn(`paged.slide adjust handles: ${String(err)}`);
+    }
+  }
+
+  private async read(): Promise<void> {
     if (this.dragging) return;
     const gen = ++this.generation;
-    const sel = this.host.selection.get();
+    const sel = this.selected ?? this.host.selection.get();
     if (sel.length !== 1 || sel[0]!.kind !== "polygon") {
       if (this.state !== EMPTY) this.set(EMPTY);
       return;
@@ -182,7 +197,14 @@ export function adjustHandlesOverlay(model: HandlesModel): OverlayContribution {
   const Render: React.FC<OverlayProps> = ({ camera, pageRects }) => {
     const s = React.useSyncExternalStore(model.subscribe, model.snapshot);
     const rect = s.pageId ? pageRects.get(s.pageId) : undefined;
-    if (!rect || s.handles.length === 0) return null;
+    if (!rect || s.handles.length === 0)
+      return (
+        <g
+          data-slide-adjust-handles=""
+          data-count={0}
+          data-page={s.pageId ?? ""}
+        />
+      );
     const inv = 1 / (camera.scale || 1);
     const onDown = (index: number) => (e: React.PointerEvent<SVGElement>) => {
       // Win the pointer before the canvas starts a move or a marquee.
