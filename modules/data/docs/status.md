@@ -137,19 +137,26 @@ editor ADR 291 left to this module are built as its own panels (see Shipped).
   (`DataSession::record_status`, paged-data-session `record_status.rs`): records match by the
   key chosen in the Sync panel, else the first column unique in both results, else the whole
   row (a changed record is then a removal and an addition). Placed are a table's records, the
-  record a single-record binding shows (the first, or the record dropped on its design), and the records page items carry in their labels:
+  record a single-record binding shows (the first, the record dropped on its design, or the
+  record the preview stepper wrote into it), and the records page items carry in their labels:
   merged records (the merge label names its query) and record-flow frames (the paginator
   names each instance's row). The snapshot is saved with the session (2026-10-25): the
   payload's `applied` holds, per query, the key used and, per record, a 64-bit hash of its key
   and one of its content (no values; about 35 bytes a record), so after a reopen a record
-  changed in the data reads as changed. A saved snapshot cannot be keyed again: asked with
-  another key than its own, or when its key no longer identifies the records, it matches by
-  the whole row. It is not in the document label's recipe, and the Sync panel's row diff
-  ("What changed?") still starts empty after a reopen (it shows the values before, which the
-  snapshot does not keep). The canvas field markers label a frame with the record it shows
-  (`#3`). A record stepped to in
-  the preview stepper is not tracked as placed. The door's `query` also reads a query by its
-  name, as the Data panel's grid does.
+  changed in the data reads as changed. The values of that result are saved too (2026-10-25,
+  the payload's `applied_values`, a compact typed columnar form): the session part keeps
+  them beside the recipe (`appliedValues`), inline up to 64 KiB of JSON, else as their own
+  content-addressed part `data/<hash>.applied.json`, so the Sync panel's row diff ("What
+  changed?") shows the values before after a reopen, and the reopened status is keyed as
+  asked. A document saved before the values were keeps only the hashes: its row diff starts
+  empty, and its snapshot cannot be keyed again (asked with another key than its own, or
+  when its key no longer identifies the records, it matches by the whole row). Neither is in
+  the document label's recipe. The canvas field markers label a frame with the record it
+  shows (`#3`). A record stepped to in the preview stepper is placed: a variable, image or
+  barcode binding the stepper wrote shows that record (`targets.stepped`, saved with the
+  session), and a field refresh keeps it there; Lower writes each binding at its own record
+  again (the first, or a dropped record's) and drops it. Property and visibility bindings the
+  stepper applies through the object model are not tracked. The door's `query` also reads a query by its name, as the Data panel's grid does.
 - **Rule editor.** A rule's condition is checked as it is defined: a parse error or a field
   the data lacks is shown and the rule is not defined. "Preview" lists the records that fire,
   through the same evaluation that applies the rule. The style comes from the document's
@@ -392,8 +399,9 @@ query, expr }` (an expression property binding, which `apply` writes with the se
   written again as a whole when lowered ([ADR 551](adr/551-compiled-to-native-content.md)),
   so the panel says to lower it. Nothing marks a field `Overridden` when a user types into
   it; only an applied data set does. The row diff's "before" is recorded when the document
-  is written from the data (a lower or a field refresh), not when it is saved, so a
-  reopened document starts with every row new. Which bindings a change reaches is read
+  is written from the data (a lower or a field refresh), not when it is saved; it is saved
+  with the document (its values, editor ADR 291), so a reopened document diffs against it.
+  A document saved before 2026-10-25 reopens with every row new. Which bindings a change reaches is read
   from the fields their expressions name; a per-record binding is reported whenever rows
   are added or removed, because the record it shows can move.
 - **Record flow writes frames** (`src/flow-writer.ts`). Lowering a record flow
