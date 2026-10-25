@@ -89,17 +89,80 @@ fn host_run(spans: &[(u32, u32)], at: u32, side: Side) -> Option<usize> {
 /// hides nothing. The anchored objects and footnotes whose markers sat in
 /// a dropped run go with it; the rest are re-anchored in the shorter
 /// text. A table on the paragraph is filtered cell by cell.
+#[cfg(test)]
 pub(super) fn without_hidden_runs(
     paragraph: &Paragraph,
     declared: &BTreeMap<String, ConditionDef>,
 ) -> Option<Paragraph> {
-    let hides = |r: &CharacterRun| {
-        !r.applied_conditions.is_empty() && !run_prints(&r.applied_conditions, declared)
-    };
+    without_hidden_runs_by(
+        paragraph,
+        &HideRule {
+            declared,
+            hidden_text: None,
+        },
+    )
+}
+
+/// What hides a run: a condition that does not print, and — when the
+/// document is given — hidden text (engine ADR 1018), resolved through
+/// the run's styles.
+pub(super) struct HideRule<'a> {
+    pub declared: &'a BTreeMap<String, ConditionDef>,
+    pub hidden_text: Option<&'a paged_scene::Document>,
+}
+
+impl HideRule<'_> {
+    fn hides(&self, paragraph: &Paragraph, r: &CharacterRun) -> bool {
+        (!r.applied_conditions.is_empty() && !run_prints(&r.applied_conditions, self.declared))
+            || self.hidden_text.is_some_and(|doc| {
+                r.decorations.hidden.unwrap_or_else(|| {
+                    doc.resolved_run_attrs(paragraph, r)
+                        .decorations
+                        .hidden
+                        .unwrap_or(false)
+                })
+            })
+    }
+}
+
+/// Whether hidden text can leave anything out of `document`: it does not
+/// show hidden text, and a style or a run says hidden.
+pub(super) fn document_hides_text(document: &paged_scene::Document) -> bool {
+    if document.designmap.document_preference.show_hidden_text == Some(true) {
+        return false;
+    }
+    let styles = &document.styles;
+    styles
+        .character_styles
+        .values()
+        .any(|s| s.decorations.hidden == Some(true))
+        || styles
+            .paragraph_styles
+            .values()
+            .any(|s| s.decorations.hidden == Some(true))
+        || document
+            .stories
+            .iter()
+            .any(|s| s.story.paragraphs.iter().any(paragraph_has_hidden_run))
+}
+
+fn paragraph_has_hidden_run(p: &Paragraph) -> bool {
+    p.runs.iter().any(|r| r.decorations.hidden == Some(true))
+        || p.table.as_ref().is_some_and(|t| {
+            t.cells
+                .iter()
+                .any(|c| c.paragraphs.iter().any(paragraph_has_hidden_run))
+        })
+}
+
+/// `paragraph` without the runs `rule` hides, or `None` when it hides
+/// nothing (the conditions-only form is `without_hidden_runs`).
+pub(super) fn without_hidden_runs_by(paragraph: &Paragraph, rule: &HideRule) -> Option<Paragraph> {
+    let hides = |r: &CharacterRun| rule.hides(paragraph, r);
     let table = paragraph
         .table
         .as_ref()
-        .and_then(|t| table_without_hidden_runs(t, declared));
+        .and_then(|t| table_without_hidden_runs(t, rule));
     if table.is_none() && !paragraph.runs.iter().any(hides) {
         return None;
     }
@@ -172,14 +235,11 @@ pub(super) fn without_hidden_runs(
 
 /// `table` with every cell paragraph filtered, or `None` when no cell
 /// hides anything.
-fn table_without_hidden_runs(
-    table: &Table,
-    declared: &BTreeMap<String, ConditionDef>,
-) -> Option<Table> {
+fn table_without_hidden_runs(table: &Table, rule: &HideRule) -> Option<Table> {
     let mut out: Option<Table> = None;
     for (ci, cell) in table.cells.iter().enumerate() {
         for (pi, p) in cell.paragraphs.iter().enumerate() {
-            if let Some(filtered) = without_hidden_runs(p, declared) {
+            if let Some(filtered) = without_hidden_runs_by(p, rule) {
                 out.get_or_insert_with(|| table.clone()).cells[ci].paragraphs[pi] = filtered;
             }
         }

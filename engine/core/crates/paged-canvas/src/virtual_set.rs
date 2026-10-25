@@ -1224,6 +1224,12 @@ impl CanvasModel {
                         PropertyPath::DocumentGlobalLightAltitude => {
                             return Ok(Value::Length(light.global_light_altitude));
                         }
+                        // Engine ADR 1018 — Word's "show hidden text".
+                        PropertyPath::DocumentShowHiddenText => {
+                            return Ok(Value::Bool(
+                                scene.designmap.document_preference.show_hidden_text == Some(true),
+                            ));
+                        }
                         _ => {}
                     }
                     // ADR 162 — the document's footnote options.

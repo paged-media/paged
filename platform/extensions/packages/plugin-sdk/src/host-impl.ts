@@ -83,6 +83,11 @@ import type {
   DocumentSurface,
   EditContextContribution,
   FrameSurfaceContribution,
+  PresentationContribution,
+  PresentationState,
+  RenderedLayer,
+  RenderRect,
+  ViewContribution,
   ControlBarGroupContribution,
   StatusItemContribution,
   ElementId,
@@ -308,6 +313,11 @@ export const HOST_FEATURES: readonly string[] = [
   // Extensions ADR 334 — the frame-surface DOOR (static); whether a host
   // will mount it is the dynamic `editContext.frameSurface@1`.
   "contribute.frameSurface@1",
+  // Extensions ADR 345 — the presentation and module-view DOORS (static);
+  // a host that shows them is the dynamic `shell.present@1` /
+  // `shell.views@1`.
+  "contribute.presentation@1",
+  "contribute.view@1",
   // Extensions ADR 348 — the control-bar group and status-item DOORS
   // (static); a host that renders them is the dynamic
   // `controlBar.groups@1` / `statusBar.items@1`. The keybinding `scope`
@@ -439,6 +449,9 @@ export const HOST_FEATURES: readonly string[] = [
   // draws the whole page as a PNG — and the SDK answers null wherever
   // the reply cannot honour the request (no `region`, no `rgba`).
   "render.snapshot@2",
+  // Extensions ADR 346 — a page as layers (background + items), built on
+  // the snapshot doors above; static for the same reason.
+  "render.layers@1",
   // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
   // reason as storage.parts@1: the pinned engine is the server, and the worker
   // handshake refuses a protocol older than the pin — so a running bundle is
@@ -1317,7 +1330,19 @@ export type BundleTrust = "first-party";
  */
 export type ShellBackend = Omit<
   ShellSurface,
-  "saveFile" | "enterEditContext" | "exitEditContext" | "setDocumentContext"
+  | "saveFile"
+  | "enterEditContext"
+  | "exitEditContext"
+  | "setDocumentContext"
+  // Extensions ADR 345 — served by the editor's registries
+  // (`presentations`, `views`), not by the app's shell backend.
+  | "present"
+  | "exitPresent"
+  | "presentation"
+  | "onDidChangePresentation"
+  | "showView"
+  | "activeView"
+  | "onDidChangeView"
 > &
   Partial<Pick<ShellSurface, "saveFile" | "enterEditContext">> & {
     /** Leave the active edit context of `type` (extensions ADR 334); the
@@ -1870,6 +1895,10 @@ export function createBundleHost(
   // resolver that can never be consulted — refused loudly below rather
   // than accepted and silently inert.
   const registeredContexts = new Set<string>();
+  /** Extensions ADR 345 — the presentations and views THIS bundle
+   *  registered (it presents and shows only its own). */
+  const ownPresentations = new Set<string>();
+  const ownViews = new Set<string>();
   const bindingRegistry = options?.bindingProviders;
   /** Extensions ADR 348 — a scope names a context THIS bundle declared
    *  and registered (the contribution borrows its declaration). */
@@ -2235,6 +2264,58 @@ export function createBundleHost(
         return store.add(toDisposable(() => {}));
       }
       return store.add(reg.register(c));
+    },
+    // Extensions ADR 345 (C1) — a presentation the host shows on
+    // `shell.present`. Declared like an importer; registered on the
+    // host's presenter, which owns the screen and the windows.
+    presentation(c: PresentationContribution) {
+      assertNamespaced(c.id, "presentation");
+      requireDeclared(
+        lists(declared?.presentations, c.id),
+        "contribute.presentation",
+        `contributes.presentations[] must include "${c.id}"`,
+      );
+      const reg = getEditor()?.registries?.presentations;
+      if (!reg) {
+        log.warn(
+          `contribute.presentation("${c.id}") registered nothing — the host ` +
+            `wired no presenter (probe supports("shell.present@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      ownPresentations.add(c.id);
+      const d = reg.register(c);
+      return store.add(
+        toDisposable(() => {
+          ownPresentations.delete(c.id);
+          d.dispose();
+        }),
+      );
+    },
+    // Extensions ADR 345 (C5) — a module view that replaces the canvas.
+    view(c: ViewContribution) {
+      assertNamespaced(c.id, "view");
+      requireDeclared(
+        lists(declared?.views, c.id),
+        "contribute.view",
+        `contributes.views[] must include "${c.id}"`,
+      );
+      const reg = getEditor()?.registries?.views;
+      if (!reg) {
+        log.warn(
+          `contribute.view("${c.id}") registered nothing — the host wired ` +
+            `no view registry (probe supports("shell.views@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      ownViews.add(c.id);
+      const d = reg.register(c);
+      return store.add(
+        toDisposable(() => {
+          ownViews.delete(c.id);
+          d.dispose();
+        }),
+      );
     },
     // Extensions ADR 348 (C1, C3) — both borrow their context's
     // declaration, like a frame surface: a group for a context that can
@@ -3647,7 +3728,75 @@ export function createBundleHost(
         opts?.background === "paper" ? "paper" : "transparent",
       );
     },
+    // Extensions ADR 346 (C2) — a page as layers, on the doors above: the
+    // background is the page without the layered (and hidden) items, each
+    // item its own transparent image cropped to what it draws. One scale
+    // for all, so the layers composite back onto the background exactly.
+    async layers(pageId, opts) {
+      requireDocRead("render.layers");
+      const scale = opts?.scale ?? 1;
+      const dpi = scale * 72;
+      checkDpi(dpi, "host.render.layers (scale × 72)");
+      const items = Array.isArray(opts?.items) ? opts.items : [];
+      const hide = Array.isArray(opts?.hideItems) ? opts.hideItems : [];
+      const format =
+        opts?.format ??
+        (typeof createImageBitmap === "function" ? "bitmap" : "png");
+      const wire = format === "rgba" ? "rgba" : "png";
+      const bg = await render.snapshot(pageId, {
+        dpi,
+        hideItems: [...hide, ...items],
+        ...(wire === "rgba" ? { format: "rgba" as const } : {}),
+      });
+      if (!bg) return null;
+      const background = await toLayer(
+        null,
+        bg,
+        { x: 0, y: 0, width: bg.widthPx / scale, height: bg.heightPx / scale },
+        format,
+      );
+      const out: RenderedLayer[] = [];
+      for (const id of items) {
+        const el = await render.element(id, {
+          dpi,
+          format: wire,
+          background: "transparent",
+          ...(opts?.marginPt !== undefined ? { marginPt: opts.marginPt } : {}),
+        });
+        if (!el || el.pageId !== pageId) continue;
+        out.push(await toLayer(id, el, el.region, format));
+      }
+      return {
+        pageId,
+        scale,
+        layoutGeneration: bg.layoutGeneration,
+        background,
+        items: out,
+      };
+    },
   };
+
+  /** A snapshot reply as a layer in the asked format. */
+  async function toLayer(
+    id: ElementId | null,
+    shot: {
+      widthPx: number;
+      heightPx: number;
+      png: Uint8Array;
+      rgba?: Uint8Array;
+    },
+    region: RenderRect,
+    format: "bitmap" | "png" | "rgba",
+  ): Promise<RenderedLayer> {
+    const base = { id, widthPx: shot.widthPx, heightPx: shot.heightPx, region };
+    if (format === "rgba")
+      return { ...base, rgba: shot.rgba ?? new Uint8Array() };
+    if (format === "png") return { ...base, png: shot.png };
+    const bitmap = await createImageBitmap(
+      new Blob([shot.png as Uint8Array<ArrayBuffer>], { type: "image/png" }),
+    );
+    return { ...base, bitmap };
+  }
 
   // --------------------------------------------------------- text
   // Font measurement (S-13). A read door — no capability gate (like
@@ -4293,6 +4442,57 @@ export function createBundleHost(
         );
       }
       return took;
+    },
+    // Extensions ADR 345 (C1) — the presenter. Only this bundle's own
+    // presentations; the host owns where and how they are shown.
+    async present(request) {
+      if (!ownPresentations.has(request.id)) {
+        throw new Error(
+          `plugin-api: shell.present("${request.id}") — ${manifest.id} has ` +
+            `registered no presentation of that id.`,
+        );
+      }
+      const reg = getEditor()?.registries?.presentations;
+      if (!reg) return { presented: false, reason: "no presenter" };
+      return reg.present({
+        id: request.id,
+        target: request.target,
+        options: request.options ?? {},
+      });
+    },
+    async exitPresent() {
+      const reg = getEditor()?.registries?.presentations;
+      const now = reg?.current();
+      if (reg && now && ownPresentations.has(now.id)) await reg.exit();
+    },
+    presentation(): PresentationState | null {
+      return getEditor()?.registries?.presentations?.current() ?? null;
+    },
+    onDidChangePresentation(handler) {
+      const reg = getEditor()?.registries?.presentations;
+      if (!reg) return toDisposable(() => {});
+      return store.add(reg.onChange(() => handler(reg.current())));
+    },
+    // Extensions ADR 345 (C5) — module views.
+    showView(id) {
+      const reg = getEditor()?.registries?.views;
+      if (!reg) return false;
+      if (id !== null && !ownViews.has(id)) {
+        throw new Error(
+          `plugin-api: shell.showView("${id}") — ${manifest.id} has ` +
+            `registered no view of that id.`,
+        );
+      }
+      if (reg.active() === id) return false;
+      return reg.show(id);
+    },
+    activeView() {
+      return getEditor()?.registries?.views?.active() ?? null;
+    },
+    onDidChangeView(handler) {
+      const reg = getEditor()?.registries?.views;
+      if (!reg) return toDisposable(() => {});
+      return store.add(reg.onChange(() => handler(reg.active())));
     },
   };
 
@@ -5397,6 +5597,15 @@ export function createBundleHost(
   }
   if (getEditor()?.registries?.statusItems) {
     featureSet.add("statusBar.items@1");
+  }
+  if (getEditor()?.registries?.presentations) {
+    featureSet.add("shell.present@1");
+    if (getEditor()?.registries?.presentations?.secondary) {
+      featureSet.add("shell.present.secondary@1");
+    }
+  }
+  if (getEditor()?.registries?.views) {
+    featureSet.add("shell.views@1");
   }
   if (getEditor()?.registries?.frameSurfaces) {
     featureSet.add("editContext.frameSurface@1");

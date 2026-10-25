@@ -1367,6 +1367,20 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("convertNoteToText"),
             1,
         )
+        // Engine ADRs 1018 and 1021.
+        .function(guarded(paged_find), js_string!("find"), 2)
+        .function(guarded(paged_find_replace), js_string!("findReplace"), 3)
+        .function(guarded(paged_set_list_level), js_string!("setListLevel"), 4)
+        .function(
+            guarded(paged_restart_numbering),
+            js_string!("restartNumbering"),
+            4,
+        )
+        .function(
+            guarded(paged_set_style_based_on),
+            js_string!("setStyleBasedOn"),
+            3,
+        )
         .function(
             guarded(paged_create_bookmark),
             js_string!("createBookmark"),
@@ -4222,6 +4236,167 @@ fn paged_set_style_property(
         style_id,
         path,
         value,
+    }))
+}
+
+// ---------------------------------------------------- Word editing (ADRs 1018, 1021)
+
+/// The find options a script passes: `paged_wire::FindSpec` without `find`.
+#[derive(Default, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct FindOptions {
+    story_id: Option<String>,
+    mode: paged_wire::FindMode,
+    match_case: bool,
+    whole_word: bool,
+    paragraph_style: Option<String>,
+    character_style: Option<String>,
+    limit: Option<u32>,
+    replace_all: bool,
+    replace_paragraph_style: Option<String>,
+    replace_character_style: Option<String>,
+}
+
+impl FindOptions {
+    fn spec(&self, find: String) -> paged_wire::FindSpec {
+        paged_wire::FindSpec {
+            find,
+            story_id: self.story_id.clone(),
+            mode: self.mode,
+            match_case: self.match_case,
+            whole_word: self.whole_word,
+            paragraph_style: self.paragraph_style.clone(),
+            character_style: self.character_style.clone(),
+            limit: self.limit,
+        }
+    }
+}
+
+/// `paged.find(text, options?)` — the hits of `text` as a JSON string
+/// (engine ADR 1021); options `{ storyId, mode: "literal"|"wildcards"|
+/// "regex", matchCase, wholeWord, paragraphStyle, characterStyle, limit }`.
+/// A bad pattern returns `"[]"` with a warning.
+fn paged_find(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let find = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let options = from_js::<FindOptions>(args.get_or_undefined(1), ctx).unwrap_or_default();
+    let spec = options.spec(find);
+    let s = with_model(|m| match m.find_text(&spec) {
+        Ok(hits) => serde_json::to_string(&hits).unwrap_or_default(),
+        Err(e) => {
+            push_output(format!("[warn] paged.find — {e}; returning []"));
+            "[]".to_string()
+        }
+    });
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// `paged.findReplace(text, replace, options?)` — replace the first hit, or
+/// every hit with `{ replaceAll: true }`, in one undo step (engine ADR
+/// 1021). The find options of `paged.find`, plus `replaceParagraphStyle`
+/// / `replaceCharacterStyle`.
+fn paged_find_replace(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let find = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let replace = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let options = from_js::<FindOptions>(args.get_or_undefined(2), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::FindReplace {
+        spec: options.spec(find),
+        replace,
+        replace_all: options.replace_all,
+        paragraph_style: options.replace_paragraph_style.clone(),
+        character_style: options.replace_character_style.clone(),
+    }))
+}
+
+/// `paged.setListLevel(storyId, start, end, { level } | { delta })` — the
+/// list level of the paragraphs touching story chars `[start, end)`
+/// (engine ADR 1018).
+fn paged_set_list_level(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default)]
+    struct Spec {
+        level: Option<u32>,
+        delta: Option<i32>,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let spec = from_js::<Spec>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::SetListLevel {
+        story_id,
+        start,
+        end,
+        level: spec.level,
+        delta: spec.delta,
+    }))
+}
+
+/// `paged.restartNumbering(storyId, start, end, { startAt?,
+/// continueNumbering? })` — Word's Restart / Continue Numbering (engine
+/// ADR 1018).
+fn paged_restart_numbering(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Spec {
+        start_at: Option<i32>,
+        continue_numbering: bool,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let spec = from_js::<Spec>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::RestartNumbering {
+        story_id,
+        start,
+        end,
+        start_at: spec.start_at,
+        continue_numbering: spec.continue_numbering,
+    }))
+}
+
+/// `paged.setStyleBasedOn(collection, styleId, basedOn | null)` — re-parent
+/// a style; refused when it would inherit from itself (engine ADR 1018).
+fn paged_set_style_based_on(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let Some(collection) = from_js::<paged_mutate::StyleCollection>(args.get_or_undefined(0), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let style_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let parent = args.get_or_undefined(2);
+    let based_on = if parent.is_null_or_undefined() {
+        None
+    } else {
+        Some(parent.to_string(ctx)?.to_std_string_escaped())
+    };
+    Ok(apply_bool(&Mutation::SetStyleBasedOn {
+        collection,
+        style_id,
+        based_on,
     }))
 }
 

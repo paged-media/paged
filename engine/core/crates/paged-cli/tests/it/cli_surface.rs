@@ -41,9 +41,10 @@
 //! `ExportElements`; 42 of 73 with `paged template`, which sends
 //! `SetSessionPolicy` and `SetTemplateFields`; 42 of 75 with v76's two
 //! template-ingest kinds, which the Node CLI sends; 42 of 76 with ADR
-//! 1004's `AmendMutation`, which only a live session sends; 42 of 82 with
-//! v77's six undo-timeline kinds, engine ADR 1030, which only a live session sends; 42 of 84
-//! with v77's two SVG kinds, engine ADR 1031, which the CLI has no subcommand for yet; 42 of 85
+//! 1004's `AmendMutation`, which only a live session sends; 42 of 77 with
+//! ADR 1021's `RequestFindText`, the editor's results list; 42 of 83 with
+//! v77's six undo-timeline kinds, engine ADR 1030, which only a live session sends; 42 of 85
+//! with v77's two SVG kinds, engine ADR 1031, which the CLI has no subcommand for yet; 42 of 86
 //! with v77's `SetViewSettings`, which only a live canvas has a use for); what
 //! remains is almost entirely the first kind.
 //!
@@ -153,6 +154,8 @@ const UNREACHED: &[(&str, &str)] = &[
      "the Node CLI's `paged-node template ingest` sends these through the same worker core; the Rust CLI's `paged template` has no ingest yet"),
     ("AmendMutation",
      "a follow-up write joins the undo step of the edit that provoked it (engine ADR 1004): a module's reaction inside a live session; a subcommand is one write and exits, so no later write has an edit to join"),
+    ("RequestFindText",
+     "the Find & Replace results list (engine ADR 1021) is the editor's and scripts' (`paged.find`); the Rust CLI has no find verb yet, and replacing goes through `findReplace`, which `paged invoke` already reaches"),
     ("LabelStep",
      "the History panel's timeline (engine ADR 1030): it names, reads and moves through a live session's undo steps; a subcommand is one write and exits, so it has no timeline to read or move"),
     ("RequestUndoLog",
@@ -174,7 +177,7 @@ const UNREACHED: &[(&str, &str)] = &[
 ];
 
 /// Pinned so the list cannot grow quietly.
-const UNREACHED_COUNT: usize = 43;
+const UNREACHED_COUNT: usize = 44;
 
 /// Every `kind` the wire accepts, read out of serde's own error rather
 /// than kept as a list here — the same trick `wire_vocabulary.rs` uses
@@ -308,9 +311,9 @@ fn every_reason_is_a_reason() {
 
 /// The headline in the module doc, pinned against the code.
 #[test]
-fn the_cli_reaches_42_of_85() {
+fn the_cli_reaches_42_of_86() {
     assert_eq!(kinds_the_cli_sends().len(), 42);
-    assert_eq!(every_kind().len(), 85);
+    assert_eq!(every_kind().len(), 86);
 }
 
 /// The second axis, started (ADR 132): the CLI's own source names

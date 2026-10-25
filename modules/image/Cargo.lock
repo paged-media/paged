@@ -667,6 +667,7 @@ dependencies = [
  "image-pipeline",
  "paged-pixel",
  "paged-psd",
+ "paged-resample",
  "paged-test-resources",
  "png",
  "pollster",
@@ -720,6 +721,7 @@ dependencies = [
  "js-sys",
  "paged-pixel",
  "paged-psd",
+ "paged-resample",
  "paged-test-resources",
  "pollster",
  "skrifa",
@@ -1142,6 +1144,10 @@ dependencies = [
  "paged-pixel",
  "thiserror",
 ]
+
+[[package]]
+name = "paged-resample"
+version = "0.0.0"
 
 [[package]]
 name = "paged-test-resources"

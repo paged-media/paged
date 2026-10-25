@@ -1061,6 +1061,19 @@ impl WorkerCore {
                     Err(problems) => WorkerToMainKind::TemplateFieldsRefused { problems },
                 }
             }
+            MainToWorkerKind::RequestFindText { spec } => match self.model.as_ref() {
+                Some(m) => match m.find_text(&spec) {
+                    Ok(hits) => WorkerToMainKind::FoundText { hits, error: None },
+                    Err(e) => WorkerToMainKind::FoundText {
+                        hits: Vec::new(),
+                        error: Some(e),
+                    },
+                },
+                None => WorkerToMainKind::FoundText {
+                    hits: Vec::new(),
+                    error: Some("no document".to_string()),
+                },
+            },
             MainToWorkerKind::RequestDerivedTemplateFields { options } => {
                 WorkerToMainKind::DerivedTemplateFields {
                     derivation: self

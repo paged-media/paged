@@ -175,13 +175,13 @@ test.describe("journey · solo mode (paged.draw)", () => {
 
   // ── EVERY PROFILE ──────────────────────────────────────────────────
   //
-  // Table-driven, and the table is the point: the six profiles are NOT
-  // one shape with six names. Their document sizes differ because their
+  // Table-driven, and the table is the point: the seven profiles are NOT
+  // one shape with seven names. Their document sizes differ because their
   // applications differ — draw wants a square artboard, image a landscape
   // canvas, doc a LETTER PAGE (a word processor is page-shaped, and
   // giving it an artboard would be applying a template instead of asking
-  // what the thing is), and web/data keep pages because their product IS
-  // pagination.
+  // what the thing is), web/data keep pages because their product IS
+  // pagination, and slide is a 16:9 slide.
   //
   // Each row asserts the identity that makes that profile itself, plus
   // the two invariants every profile must hold.
@@ -230,6 +230,14 @@ test.describe("journey · solo mode (paged.draw)", () => {
       // KEEPS Layout AND Data: its headline verb GENERATES pages.
       menusPresent: ["Data", "File", "Layout"],
       menusAbsent: ["Draw", "Sheet"],
+    },
+    {
+      name: "paged.slide",
+      // A slide: landscape 16:9 at PowerPoint's size (ADR 307).
+      sizePt: [960, 540],
+      ownPanel: "media.paged.slide.panel.slides",
+      menusPresent: ["Slide", "File", "Type", "Object"],
+      menusAbsent: ["Layout", "Draw", "Data"],
     },
   ];
 

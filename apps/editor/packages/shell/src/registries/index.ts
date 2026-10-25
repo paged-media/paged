@@ -66,6 +66,22 @@ export {
 } from "./overlay";
 
 export {
+  createPresentationRegistry,
+  PRESENTATION_ATTR,
+  type PresentationContext,
+  type PresentationContribution,
+  type PresentationRegistry,
+  type PresentationRegistryOptions,
+} from "./presentation";
+
+export {
+  createViewRegistry,
+  type ViewContribution,
+  type ViewProps,
+  type ViewRegistry,
+} from "./view";
+
+export {
   activeScopeContext,
   createControlBarGroupRegistry,
   createDocumentContextStore,

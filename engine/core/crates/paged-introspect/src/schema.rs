@@ -674,6 +674,20 @@ pub const STROKE_TYPES: &[&str] = &[
 pub const STROKE_ALIGNMENT: &[&str] = &["CenterAlignment", "InsideAlignment", "OutsideAlignment"];
 /// Engine ADR 1006 — a frame's fill rule.
 pub const FILL_RULES: &[&str] = &["NonZero", "EvenOdd"];
+/// Engine ADR 1018 — Word's underline kinds (`UnderlineKind::as_name`).
+pub const UNDERLINE_KINDS: &[&str] = &[
+    "none",
+    "single",
+    "words",
+    "double",
+    "thick",
+    "dotted",
+    "dashed",
+    "dotDash",
+    "dotDotDash",
+    "wave",
+    "doubleWave",
+];
 pub const TEXT_WRAP_MODES: &[&str] = &[
     "None",
     "BoundingBoxTextWrap",

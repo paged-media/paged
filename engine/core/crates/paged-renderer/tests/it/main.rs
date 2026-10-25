@@ -105,3 +105,4 @@ mod text_z_order;
 mod transparency_targets;
 mod variables;
 mod vertical_text;
+mod word_decorations;

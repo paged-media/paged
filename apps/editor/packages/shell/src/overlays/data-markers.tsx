@@ -24,7 +24,12 @@
 // frame several bindings place into takes the worst of them. Brackets, not
 // a box, so a marker never reads as the selection's outline. A frame the
 // service names in an issue (`issues()`: overset text, a picture missing or
-// too coarse, a failed value) is marked in the error red too.
+// too coarse, a failed value) is marked in the error red too. A placement
+// that names the record it shows (a merged record's frame, a record-flow
+// frame, a design a record was dropped on: `DataPlacement.record`) labels
+// its frame's top-left bracket with that record's number, counted from 1 as
+// the Data panel and Data Merge count them (`#3`; `#2 #5` for a frame that
+// shows several). Overlay chrome: it never prints or exports.
 //
 // COST. Off by default, and nothing is read while it is off. On, one
 // `placements()` of the service and one batched `elementGeometry`, again
@@ -71,25 +76,52 @@ const STROKE: Record<DataMarkerTone, string> = {
   error: "var(--status-error)",
 };
 
-/** Per placed page item: its element and the worst state placing into it. */
+/** One placed page item: its element, the worst state placing into it and
+ *  the records its placements name (0-based, ascending, each once). */
+export interface PlacedItem {
+  element: ElementId;
+  tone: DataMarkerTone;
+  records: number[];
+}
+
+/** Per placed page item: its element, the worst state placing into it and
+ *  the records it shows. */
 export function markersOf(
   placements: readonly DataPlacement[],
-): Map<string, { element: ElementId; tone: DataMarkerTone }> {
-  const out = new Map<string, { element: ElementId; tone: DataMarkerTone }>();
+): Map<string, PlacedItem> {
+  const out = new Map<string, PlacedItem>();
   for (const p of placements) {
     const element = elementOfPlacement(p.address);
     if (!element) continue;
     const tone = toneOf(p.status);
-    const cur = out.get(p.address);
-    if (!cur || RANK[tone] > RANK[cur.tone])
-      out.set(p.address, { element, tone });
+    let cur = out.get(p.address);
+    if (!cur) {
+      cur = { element, tone, records: [] };
+      out.set(p.address, cur);
+    } else if (RANK[tone] > RANK[cur.tone]) cur.tone = tone;
+    const r = p.record;
+    if (
+      typeof r === "number" &&
+      Number.isInteger(r) &&
+      r >= 0 &&
+      !cur.records.includes(r)
+    ) {
+      cur.records.push(r);
+      cur.records.sort((a, b) => a - b);
+    }
   }
   return out;
+}
+
+/** The label of the records a frame shows (`#3`, `#2 #5`), or null. */
+export function recordLabel(records: readonly number[]): string | null {
+  return records.length > 0 ? records.map((r) => `#${r + 1}`).join(" ") : null;
 }
 
 interface Marker {
   address: string;
   tone: DataMarkerTone;
+  records: number[];
   geometry: ElementGeometryItem;
 }
 
@@ -114,7 +146,10 @@ async function readMarkers(
           i.severity !== "info" && i.address
             ? elementOfPlacement(i.address)
             : null;
-        if (element) placed.set(i.address!, { element, tone: "error" });
+        if (!element) continue;
+        const cur = placed.get(i.address!);
+        if (cur) cur.tone = "error";
+        else placed.set(i.address!, { element, tone: "error", records: [] });
       }
       if (!current()) return "superseded";
     }
@@ -127,7 +162,8 @@ async function readMarkers(
     for (const item of items) {
       const address = `${item.id.kind}:${String(item.id.id)}`;
       const m = placed.get(address);
-      if (m) out.push({ address, tone: m.tone, geometry: item });
+      if (m)
+        out.push({ address, tone: m.tone, records: m.records, geometry: item });
     }
     return out;
   } catch {
@@ -188,7 +224,12 @@ function DataMarkersRender(props: OverlayProps) {
   if (!on || !service) return <g data-data-markers="off" />;
 
   const inv = 1 / props.camera.scale;
-  const drawn: { key: string; tone: DataMarkerTone; d: string }[] = [];
+  const drawn: {
+    key: string;
+    tone: DataMarkerTone;
+    d: string;
+    label: { text: string; at: [number, number] } | null;
+  }[] = [];
   for (const m of markers) {
     const g = m.geometry;
     const pr = g.pageId ? props.pageRects.get(g.pageId) : undefined;
@@ -217,7 +258,13 @@ function DataMarkersRender(props: OverlayProps) {
       const b = at(x, y + dy * ay);
       d += `M${a[0]} ${a[1]}L${c[0]} ${c[1]}L${b[0]} ${b[1]}`;
     }
-    drawn.push({ key: m.address, tone: m.tone, d });
+    const text = recordLabel(m.records);
+    drawn.push({
+      key: m.address,
+      tone: m.tone,
+      d,
+      label: text ? { text, at: at(left, top) } : null,
+    });
   }
 
   return (
@@ -234,6 +281,26 @@ function DataMarkersRender(props: OverlayProps) {
           fill="none"
         />
       ))}
+      {drawn.map((m) =>
+        m.label ? (
+          // Above the top-left bracket, a constant size on screen.
+          <g
+            key={`record:${m.key}`}
+            transform={`translate(${m.label.at[0]}, ${m.label.at[1]}) scale(${inv})`}
+            pointerEvents="none"
+          >
+            <text
+              data-data-marker-record={m.key}
+              y={-4}
+              fontSize={10}
+              fontFamily="var(--font-mono)"
+              fill={STROKE[m.tone]}
+            >
+              {m.label.text}
+            </text>
+          </g>
+        ) : null,
+      )}
     </g>
   );
 }

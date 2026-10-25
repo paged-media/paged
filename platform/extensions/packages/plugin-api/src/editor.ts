@@ -456,6 +456,160 @@ export interface StatusItemProps {
   editContext: string;
 }
 
+// ------------------------------------------------------- presentation
+
+/**
+ * Extensions ADR 345 (C1) — where a presentation is shown:
+ *
+ * - `"screen"`: one surface filling the editor's window, in the browser's
+ *   full screen where it allows it (a slide show on one screen).
+ * - `"window"`: one surface in a window of its own; the editor stays as it
+ *   was.
+ * - `"secondary"`: two surfaces. The CONSOLE fills the editor's window (a
+ *   presenter view) and the AUDIENCE goes in a window of its own, placed
+ *   on another screen when the browser's Window Management permission is
+ *   granted. When the window cannot open (a blocked popup), the
+ *   presentation is shown on `"screen"` with the console role alone, and
+ *   `PresentResult.target` says so.
+ */
+export type PresentationTarget = "screen" | "window" | "secondary";
+
+/** Which surface of a presentation a render call fills: `"show"` the one
+ *  surface of a `screen` or `window` presentation, `"console"` and
+ *  `"audience"` the two of a `secondary` one. */
+export type PresentationRole = "show" | "console" | "audience";
+
+/**
+ * The message lane between the surfaces of one presentation: a
+ * `BroadcastChannel` named for the presentation, one end per surface, so
+ * a message posted by the console reaches the audience and back (a
+ * surface never receives its own messages). Messages are structured
+ * clones: plain data.
+ */
+export interface PresentationChannel {
+  post(message: unknown): void;
+  onMessage(handler: (message: unknown) => void): Disposable;
+}
+
+/** What the host hands a presentation's `render`. */
+export interface PresentationContext {
+  /** The presentation's id (the contribution's). */
+  id: string;
+  /** Where it is shown (`"screen"` after a refused secondary window). */
+  target: PresentationTarget;
+  role: PresentationRole;
+  /** The options `host.shell.present` was called with, as given. */
+  options: Readonly<Record<string, unknown>>;
+  /** The window the surface's element lives in: the editor's, or the one
+   *  the host opened. Listen for size changes here. */
+  window: Window;
+  channel: PresentationChannel;
+  /** End the presentation (every surface of it). */
+  exit(): void;
+}
+
+/**
+ * Extensions ADR 345 (C1) — a PRESENTATION: a full-screen surface a bundle
+ * draws into while it is shown (a slide show, a presenter view). The host
+ * owns the screen, the window and the chrome: it hides the editor's
+ * regions, gives the surface the whole window, and calls `render` once per
+ * surface with an empty element. `render` mounts whatever it wants (DOM,
+ * a canvas, WebGPU) and answers a cleanup the host calls when the
+ * presentation ends. Rendering is DOM, not React, because a surface can
+ * live in a window the bundle's React root does not reach.
+ *
+ * Keys pressed in a surface belong to it: the element is a key-owning
+ * container (`role="dialog"`, focused when shown), so the editor's own
+ * bindings leave plain keys alone, and a Cmd/Ctrl chord reaches the
+ * editor only if the surface's handler lets it bubble.
+ */
+export interface PresentationContribution {
+  /** `<namespace>.<presentation>`, namespace-checked at register. */
+  id: string;
+  title?: string;
+  render(
+    el: HTMLElement,
+    ctx: PresentationContext,
+  ): void | (() => void) | Disposable;
+}
+
+/** What `host.shell.present` asks for. */
+export interface PresentRequest {
+  /** One of THIS bundle's presentations. */
+  id: string;
+  target: PresentationTarget;
+  /** Handed to `render` as `ctx.options`. */
+  options?: Record<string, unknown>;
+}
+
+/** What `host.shell.present` answers. */
+export interface PresentResult {
+  presented: boolean;
+  /** Where it is shown; `"screen"` after a `"secondary"` request whose
+   *  window could not open. */
+  target?: PresentationTarget;
+  /** Why not (or why on another target), for the bundle's log. */
+  reason?: string;
+}
+
+/** The presentation being shown. */
+export interface PresentationState {
+  id: string;
+  target: PresentationTarget;
+  options: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Presentations (extensions ADR 345): the registry and the host's
+ * presenter. One presentation is shown at a time; presenting another ends
+ * the current one first.
+ */
+export interface PresentationRegistry {
+  register(contribution: PresentationContribution): Disposable;
+  present(request: PresentRequest): Promise<PresentResult>;
+  exit(): Promise<void>;
+  current(): PresentationState | null;
+  onChange(handler: () => void): Disposable;
+  /** False when the host can only present on its own window (no
+   *  `window.open`): `supports("shell.present.secondary@1")`. */
+  readonly secondary?: boolean;
+}
+
+// ------------------------------------------------------------- views
+
+/**
+ * Extensions ADR 345 (C5) — a module VIEW: a bundle's work surface that
+ * replaces the document canvas while it is shown (a slide sorter, an
+ * outline). The editor keeps everything else (menus, panels, the
+ * document), keeps the canvas alive behind it, and gives the canvas back
+ * when the view is closed. One view is shown at a time.
+ */
+export interface ViewContribution {
+  /** `<namespace>.<view>`, namespace-checked at register. */
+  id: string;
+  title: string;
+  render: ComponentType<ViewProps>;
+}
+
+/** What the host hands a {@link ViewContribution}'s component. */
+export interface ViewProps {
+  /** The view's id. */
+  id: string;
+  /** Give the canvas back (the same as `host.shell.showView(null)`). */
+  close(): void;
+}
+
+/** Views (extensions ADR 345): the registry and which one is shown. */
+export interface ViewRegistry {
+  register(contribution: ViewContribution): Disposable;
+  /** Show a registered view, or the canvas (`null`). False for an unknown
+   *  id. */
+  show(id: string | null): boolean;
+  /** The view shown, or null while the canvas is. */
+  active(): string | null;
+  onChange(handler: () => void): Disposable;
+}
+
 // ----------------------------------------------- importers + exporters
 // Document IO contributions (K-2 / S-06 ↔ plugin-image I-05). An IMPORTER
 // claims file extensions / MIME types; when the host opens a matching file
@@ -634,6 +788,13 @@ export interface ShellRegistries {
   /** Status-bar items (extensions ADR 348). Optional likewise
    *  (`statusBar.items@1`). */
   statusItems?: StatusItemRegistry;
+  /** Presentations (extensions ADR 345). Optional likewise: without it
+   *  `host.shell.present` answers `{ presented: false }` and
+   *  `supports("shell.present@1")` is false. */
+  presentations?: PresentationRegistry;
+  /** Module views that replace the canvas (extensions ADR 345, C5).
+   *  Optional likewise (`shell.views@1`). */
+  views?: ViewRegistry;
 }
 
 // ---------------------------------------------------- overlay signals

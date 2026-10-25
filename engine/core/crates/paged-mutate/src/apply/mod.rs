@@ -338,6 +338,35 @@ pub(crate) fn apply_inner(
             apply_edit_numbering_list(doc, list_id, spec)
         }
         Operation::DeleteNumberingList { list_id } => apply_delete_numbering_list(doc, list_id),
+        Operation::SetListLevel {
+            story_id,
+            start,
+            end,
+            level,
+            delta,
+        } => list_ops::apply_set_list_level(doc, story_id, *start, *end, *level, *delta),
+        Operation::RestartNumbering {
+            story_id,
+            start,
+            end,
+            start_at,
+            continue_numbering,
+        } => list_ops::apply_restart_numbering(
+            doc,
+            story_id,
+            *start,
+            *end,
+            *start_at,
+            *continue_numbering,
+        ),
+        Operation::SetParagraphListState { story_id, entries } => {
+            list_ops::apply_list_state(doc, story_id, entries)
+        }
+        Operation::SetStyleBasedOn {
+            collection,
+            style_id,
+            based_on,
+        } => apply_set_style_based_on(doc, *collection, style_id, based_on.as_deref()),
         Operation::SetStyleProperty {
             collection,
             style_id,
@@ -1157,15 +1186,20 @@ mod hyperlink;
 mod hyperlink_edit;
 mod insert_node;
 mod layer;
+mod list_ops;
 mod lock;
 mod note;
 pub mod permit;
 mod tracked_change;
+mod word;
 pub mod xml;
 /// ADR 132 — model → wire-spec readers, for the `Set` resolver: a
 /// virtual path on a swatch, gradient or numbering list is an edit of the
 /// whole spec, read here, merged and written back.
-pub use layer::{gradient_spec_from_entry, numbering_list_spec_from_def, swatch_spec_from_entry};
+pub use layer::{
+    based_on_makes_cycle, gradient_spec_from_entry, numbering_list_spec_from_def,
+    swatch_spec_from_entry,
+};
 pub use lock::is_locked;
 mod master;
 mod move_node;

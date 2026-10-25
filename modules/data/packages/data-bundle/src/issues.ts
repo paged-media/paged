@@ -92,14 +92,16 @@ export function effectivePpi(
 /** Overset text: every story `targets` names whose frame chain reports
  *  overflow, once per story, at the frame the text runs out of. `storyOf`
  *  finds a frame's story. A host that lays text out without fonts reports
- *  no overflow, so a one-frame story the host calls fitting is also
- *  `measure`d (the engine wraps its words at the host's advances, the rule
- *  Data Merge's overset uses). A read that fails reports nothing. */
+ *  no overflow, so a story the host calls fitting is also `measure`d over
+ *  its frames in chain order (the engine wraps its words at the host's
+ *  advances through each frame in turn, the rule Data Merge's overset
+ *  uses), and an overset one is named at the chain's last frame. A read
+ *  that fails reports nothing. */
 export async function oversetIssues(
   host: BundleHost,
   targets: readonly TextTarget[],
   storyOf: (frame: string) => Promise<string | null>,
-  measure?: (story: string, frame: string) => Promise<boolean>,
+  measure?: (story: string, frames: readonly string[]) => Promise<boolean>,
 ): Promise<DataIssue[]> {
   const byStory = new Map<string, TextTarget>();
   for (const t of targets) {
@@ -122,9 +124,15 @@ export async function oversetIssues(
       continue;
     }
     let over = links.find((l) => l.overflow);
-    if (!over && links.length === 1 && measure) {
+    if (!over && links.length > 0 && measure) {
       try {
-        if (await measure(story, links[0]!.frameId)) over = links[0];
+        if (
+          await measure(
+            story,
+            links.map((l) => l.frameId),
+          )
+        )
+          over = links[links.length - 1];
       } catch {
         // Not measurable now: the host's answer stands.
       }
@@ -154,19 +162,30 @@ export interface ImageNote {
   missing?: string;
   /** The placed picture's pixel size, when its bytes passed through. */
   pixels?: [number, number];
+  /** Placed from a plain link (no asset column): its bytes never passed
+   *  through, so its pixel size is asked of the host. */
+  linked?: boolean;
 }
 
 /** The picture issues: a missing one, or one coarser than
- *  {@link LOW_RESOLUTION_PPI} at its frame's size (`sizeOf` reads it). */
+ *  {@link LOW_RESOLUTION_PPI} at its frame's size (`sizeOf` reads it). A
+ *  picture placed from a plain link has its pixel size from `pixelsOf`
+ *  (the host's read of the placed image), or is not checked. */
 export async function imageIssues(
   notes: ReadonlyMap<string, ImageNote>,
   targetOf: (
     binding: string,
   ) => { element: ElementId; fit?: IdmlFit } | undefined,
   sizeOf: (elements: ElementId[]) => Promise<Map<string, [number, number]>>,
+  pixelsOf?: (element: ElementId) => Promise<[number, number] | null>,
 ): Promise<DataIssue[]> {
   const out: DataIssue[] = [];
-  const coarse: { binding: string; element: ElementId; fit?: IdmlFit }[] = [];
+  const coarse: {
+    binding: string;
+    element: ElementId;
+    fit?: IdmlFit;
+    pixels: [number, number];
+  }[] = [];
   for (const [binding, note] of notes) {
     const target = targetOf(binding);
     const address = target
@@ -180,7 +199,17 @@ export async function imageIssues(
         binding,
         ...(address ? { address } : {}),
       });
-    } else if (note.pixels && target) coarse.push({ binding, ...target });
+    } else if (note.pixels && target)
+      coarse.push({ binding, ...target, pixels: note.pixels });
+    else if (note.linked && target && pixelsOf) {
+      let pixels: [number, number] | null = null;
+      try {
+        pixels = await pixelsOf(target.element);
+      } catch {
+        pixels = null;
+      }
+      if (pixels) coarse.push({ binding, ...target, pixels });
+    }
   }
   if (coarse.length === 0) return out;
   let sizes: Map<string, [number, number]>;
@@ -191,8 +220,7 @@ export async function imageIssues(
   }
   for (const c of coarse) {
     const size = sizes.get(String(c.element.id));
-    const pixels = notes.get(c.binding)!.pixels!;
-    const ppi = size ? effectivePpi(pixels, size, c.fit) : null;
+    const ppi = size ? effectivePpi(c.pixels, size, c.fit) : null;
     if (ppi === null || ppi >= LOW_RESOLUTION_PPI) continue;
     out.push({
       kind: "lowResolution",

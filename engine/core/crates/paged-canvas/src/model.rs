@@ -2193,6 +2193,72 @@ fn into_entries(
         .collect()
 }
 
+/// Engine ADR 1018 — the five character additions of one level as the
+/// setters read them back: a flag unset is `""`, a colour unset `None`,
+/// the underline kind its name (`""` unset).
+fn decoration_values(
+    d: &paged_model::CharacterDecorations,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 5] {
+    use paged_mutate::{PropertyPath as P, Value as V};
+    let flag = |o: Option<bool>| o.map(V::Bool).unwrap_or(V::Text(String::new()));
+    [
+        (
+            P::CharacterHighlightColor,
+            V::ColorRef(d.highlight_color.clone()),
+        ),
+        (P::CharacterHidden, flag(d.hidden)),
+        (
+            P::CharacterUnderlineType,
+            V::Text(
+                d.underline_kind
+                    .map(|k| k.as_name().to_string())
+                    .unwrap_or_default(),
+            ),
+        ),
+        (
+            P::CharacterUnderlineColor,
+            V::ColorRef(d.underline_color.clone()),
+        ),
+        (
+            P::CharacterDoubleStrikethrough,
+            flag(d.double_strikethrough),
+        ),
+    ]
+}
+
+/// Engine ADR 1018 — a level's shading and border paths, read back.
+fn shading_border_values(
+    s: &paged_model::ParagraphShading,
+    b: &paged_model::ParagraphBorder,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 6] {
+    use paged_mutate::{PropertyPath as P, Value as V};
+    let flag = |o: Option<bool>| o.map(V::Bool).unwrap_or(V::Text(String::new()));
+    [
+        (P::ParagraphShadingOn, flag(s.on)),
+        (P::ParagraphShadingColor, V::ColorRef(s.color.clone())),
+        (P::ParagraphShadingTint, V::Length(s.tint)),
+        (P::ParagraphBorderOn, flag(b.on)),
+        (P::ParagraphBorderColor, V::ColorRef(b.color.clone())),
+        (P::ParagraphBorderWeight, V::Length(b.weight)),
+    ]
+}
+
+/// One entry per path of `values` (each level's array), collapsed: `None`
+/// when the levels disagree.
+fn collapsed_entries<const N: usize>(
+    values: &[[(paged_mutate::PropertyPath, paged_mutate::Value); N]],
+    paths: [(paged_mutate::PropertyPath, paged_mutate::Value); N],
+) -> Vec<crate::channel::PropertyEntry> {
+    paths
+        .iter()
+        .enumerate()
+        .map(|(i, (path, _))| crate::channel::PropertyEntry {
+            path: *path,
+            value: collapse_uniform(&values.iter().map(|v| v[i].1.clone()).collect::<Vec<_>>()),
+        })
+        .collect()
+}
+
 fn character_style_entries(
     d: &paged_model::CharacterStyleDef,
 ) -> Vec<crate::channel::PropertyEntry> {
@@ -2201,6 +2267,7 @@ fn character_style_entries(
         paged_mutate::PropertyPath::CharacterNoBreak,
         paged_mutate::Value::Bool(d.no_break.unwrap_or(false)),
     ));
+    pairs.extend(decoration_values(&d.decorations));
     into_entries(pairs)
 }
 
@@ -2215,6 +2282,8 @@ fn paragraph_style_entries(
     let count = |o: Option<u32>| V::Length(o.map(|n| n as f32));
     let span = &d.span_columns;
     let mut pairs = style_run_entries!(d);
+    pairs.extend(decoration_values(&d.decorations));
+    pairs.extend(shading_border_values(&d.shading, &d.border));
     pairs.extend([
         (
             P::ParagraphJustification,
@@ -3302,6 +3371,27 @@ impl CanvasModel {
         // (carries an inverse `TextOp`), so frame-shape mutations
         // synthesise an empty text op into the response. Future
         // convergence folds both into one shape.
+        // Engine ADR 1021 — a find-and-replace is the batch of the edits it
+        // makes, so Replace All is one undo step.
+        if let Mutation::FindReplace {
+            spec,
+            replace,
+            replace_all,
+            paragraph_style,
+            character_style,
+        } = mutation
+        {
+            let batch = self
+                .lower_find_replace(
+                    spec,
+                    replace,
+                    *replace_all,
+                    paragraph_style.as_deref(),
+                    character_style.as_deref(),
+                )
+                .map_err(|what| crate::channel::WorkerError::NotImplemented { what })?;
+            return self.apply_mutation(&batch);
+        }
         let lowered = match mutation {
             // Reads the layout, so it lowers here, where a build a batch
             // still owes can be settled first.
@@ -5009,6 +5099,42 @@ impl CanvasModel {
                 style_id: style_id.clone(),
                 path: *path,
                 value: value.clone(),
+            }),
+            // Engine ADR 1018.
+            Mutation::SetStyleBasedOn {
+                collection,
+                style_id,
+                based_on,
+            } => Some(Operation::SetStyleBasedOn {
+                collection: *collection,
+                style_id: style_id.clone(),
+                based_on: based_on.clone(),
+            }),
+            Mutation::SetListLevel {
+                story_id,
+                start,
+                end,
+                level,
+                delta,
+            } => Some(Operation::SetListLevel {
+                story_id: story_id.clone(),
+                start: *start,
+                end: *end,
+                level: *level,
+                delta: *delta,
+            }),
+            Mutation::RestartNumbering {
+                story_id,
+                start,
+                end,
+                start_at,
+                continue_numbering,
+            } => Some(Operation::RestartNumbering {
+                story_id: story_id.clone(),
+                start: *start,
+                end: *end,
+                start_at: *start_at,
+                continue_numbering: *continue_numbering,
             }),
             // ── W0.5 wire-expansion ─────────────────────────────────
             Mutation::InsertOval { page_id, bounds } => {
@@ -9045,6 +9171,9 @@ impl CanvasModel {
         let mut underlines: Vec<Option<bool>> = Vec::new();
         let mut strikethrus: Vec<Option<bool>> = Vec::new();
         let mut no_breaks: Vec<Option<bool>> = Vec::new();
+        // Engine ADR 1018.
+        let mut decorations = Vec::new();
+        let mut shadings = Vec::new();
         let mut ligatures: Vec<Option<bool>> = Vec::new();
         let mut space_before: Vec<Option<f32>> = Vec::new();
         let mut space_after: Vec<Option<f32>> = Vec::new();
@@ -9140,6 +9269,7 @@ impl CanvasModel {
                     paged_scene::ResolvedParagraphAttrs::from_paragraph(para)
                 };
                 space_before.push(rp.space_before);
+                shadings.push(shading_border_values(&rp.shading, &rp.border));
                 space_after.push(rp.space_after);
                 first_line_indent.push(rp.first_line_indent);
                 applied_paragraph_styles.push(para.paragraph_style.clone().unwrap_or_default());
@@ -9222,6 +9352,7 @@ impl CanvasModel {
                 underlines.push(rr.underline);
                 strikethrus.push(rr.strikethru);
                 no_breaks.push(rr.no_break);
+                decorations.push(decoration_values(&rr.decorations));
                 ligatures.push(rr.ligatures_on);
                 applied_conditions.push(run.applied_conditions.join(" "));
             }
@@ -9630,6 +9761,16 @@ impl CanvasModel {
                 }),
             },
         ];
+        // Engine ADR 1018 — Word's additions, per run and per paragraph.
+        let mut entries = entries;
+        entries.extend(collapsed_entries(
+            &decorations,
+            decoration_values(&Default::default()),
+        ));
+        entries.extend(collapsed_entries(
+            &shadings,
+            shading_border_values(&Default::default(), &Default::default()),
+        ));
 
         Some(ElementProperties {
             id: id.clone(),
@@ -10875,6 +11016,79 @@ impl CanvasModel {
     /// `ConvertNoteToText` (ADR 172): the note's place becomes a space and
     /// its text, its paragraphs the story's, as InDesign 20.0.1 converts
     /// one (`notes-probe`). One `ReplaceStoryParagraphs`: one undo.
+    /// Engine ADR 1021 — the hits of `spec` in the document as it stands.
+    pub fn find_text(
+        &self,
+        spec: &paged_wire::FindSpec,
+    ) -> Result<Vec<paged_wire::FindHit>, String> {
+        crate::find::find(&self.scene, spec)
+    }
+
+    /// Engine ADR 1021 — `findReplace` as one batch of text edits: per hit,
+    /// last first (so no edit moves an offset still to come), the hit's
+    /// text deleted, the replacement inserted, and the replacement styled
+    /// when asked. Refused when nothing matches or the replacement cannot
+    /// be written.
+    fn lower_find_replace(
+        &self,
+        spec: &paged_wire::FindSpec,
+        replace: &str,
+        replace_all: bool,
+        paragraph_style: Option<&str>,
+        character_style: Option<&str>,
+    ) -> Result<Mutation, String> {
+        let mut hits = crate::find::find(&self.scene, spec)?;
+        if hits.is_empty() {
+            return Err(format!("findReplace: nothing matches {:?}", spec.find));
+        }
+        if !replace_all {
+            hits.truncate(1);
+        }
+        let mut ops = Vec::with_capacity(hits.len() * 3);
+        for hit in hits.iter().rev() {
+            let text = crate::find::replacement_text(replace, spec.mode, hit)
+                .map_err(|e| format!("findReplace: {e}"))?;
+            ops.push(Mutation::DeleteRange {
+                story_id: hit.story_id.clone(),
+                start: hit.start,
+                end: hit.end,
+                cell: None,
+            });
+            if !text.is_empty() {
+                ops.push(Mutation::InsertText {
+                    story_id: hit.story_id.clone(),
+                    offset: hit.start,
+                    text: text.clone(),
+                    cell: None,
+                });
+            }
+            let chars = text.chars().filter(|c| *c != '\n').count() as u32;
+            for (style, scope) in [
+                (
+                    paragraph_style,
+                    paged_mutate::operation::StyleScope::Paragraph,
+                ),
+                (
+                    character_style,
+                    paged_mutate::operation::StyleScope::Character,
+                ),
+            ] {
+                if let Some(style) = style {
+                    ops.push(Mutation::ApplyStyle {
+                        story_id: hit.story_id.clone(),
+                        start: hit.char_start,
+                        end: hit.char_start + chars,
+                        style: style.to_string(),
+                        scope,
+                        cell: None,
+                        paragraph: None,
+                    });
+                }
+            }
+        }
+        Ok(Mutation::Batch { ops })
+    }
+
     fn lower_convert_note_to_text(
         &self,
         note_id: &str,

@@ -34,10 +34,12 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
   declared through the door too (`assetColumns`, `setAssetColumn`: an unknown query or field
   is refused, a change re-reads the query), from the Data panel's picture column editor;
 - paged.sheet edits a table of the document's data in place through `data@1`.
-- data issues ([ADR 564](adr/564-data-issues.md)): overset text (the host's frame chain, or the
-  engine's measured wrap where the host lays out without fonts), a missing or too coarse
-  picture (asset columns), an empty or failed value, records a flow left out; served as
-  `data@1` `issues()`, published to Problems, summed up in the Data panel.
+- data issues ([ADR 564](adr/564-data-issues.md)): overset text in every story the data
+  wrote into, text variables placed by Lower included (the host's frame chain, or the engine's
+  measured wrap where the host lays out without fonts, through every frame of a threaded
+  story), a missing or too coarse picture (asset columns, and plain links through the host's
+  placed-image read), an empty or failed value, records a flow left out; served as `data@1`
+  `issues()`, published to Problems, summed up in the Data panel.
 - the Data panel's drops (editor ADR 291) through `data@1`: a field onto a frame (`place`), a
   query as a table into a text frame's own story (`placeTable`; an update swaps it there and
   keeps the frame), a record onto a group or a frame (`placeRecord`: each `<<field>>` of its
@@ -137,8 +139,15 @@ editor ADR 291 left to this module are built as its own panels (see Shipped).
   row (a changed record is then a removal and an addition). Placed are a table's records, the
   record a single-record binding shows (the first, or the record dropped on its design), and the records page items carry in their labels:
   merged records (the merge label names its query) and record-flow frames (the paginator
-  names each instance's row). The snapshot is not saved: after opening a document nothing is
-  new or changed until the document is written from the data again. A record stepped to in
+  names each instance's row). The snapshot is saved with the session (2026-10-25): the
+  payload's `applied` holds, per query, the key used and, per record, a 64-bit hash of its key
+  and one of its content (no values; about 35 bytes a record), so after a reopen a record
+  changed in the data reads as changed. A saved snapshot cannot be keyed again: asked with
+  another key than its own, or when its key no longer identifies the records, it matches by
+  the whole row. It is not in the document label's recipe, and the Sync panel's row diff
+  ("What changed?") still starts empty after a reopen (it shows the values before, which the
+  snapshot does not keep). The canvas field markers label a frame with the record it shows
+  (`#3`). A record stepped to in
   the preview stepper is not tracked as placed. The door's `query` also reads a query by its
   name, as the Data panel's grid does.
 - **Rule editor.** A rule's condition is checked as it is defined: a parse error or a field

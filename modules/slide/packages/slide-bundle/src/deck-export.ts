@@ -29,6 +29,7 @@
 import type { BundleHost, Diagnostic } from "@paged-media/plugin-api";
 import { sha256Hex } from "@paged-media/helpers";
 
+import type { CommentsFile } from "./comments-model.js";
 import type { ExportedDeck, SlidePlan } from "./engine.js";
 import { parseState, type PluginMetadataEntry } from "./slides-model.js";
 
@@ -99,10 +100,14 @@ export async function pageFingerprints(host: BundleHost): Promise<string[]> {
 
 /** The plan: each page, in order, with the slide it came from. A page that
  *  came from no slide of the deck has an empty source part (the engine
- *  reports it). */
+ *  reports it). With the deck's comments kept (a deck imported since they
+ *  are), every page carries its list, empty included: the engine writes
+ *  back only the slides whose list changed. Without them, comments are
+ *  left out and the deck's own are written as they were. */
 export async function exportPlan(
   host: BundleHost,
   importedFingerprints: Readonly<Record<string, string>>,
+  comments: CommentsFile | null = null,
 ): Promise<SlidePlan[]> {
   const pages = await host.document.collection<{
     selfId: string;
@@ -120,6 +125,7 @@ export async function exportPlan(
       contentEdited: imported !== undefined && imported !== prints[i],
       pageId: p.selfId,
       layout: state.layout ?? null,
+      ...(comments ? { comments: comments.byPage[p.selfId] ?? [] } : {}),
     };
   });
 }

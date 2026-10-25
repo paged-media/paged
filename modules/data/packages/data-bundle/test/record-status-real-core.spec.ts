@@ -40,6 +40,19 @@ const READER: PluginManifest = {
   capabilities: { data: { read: true, write: true, bind: true } },
 };
 
+async function exportPaged(host: BundleHost): Promise<Uint8Array> {
+  const reply = (await host.editor.client.send({
+    kind: "exportPaged",
+    payload: {},
+  } as never)) as {
+    kind: string;
+    payload: { bytes?: number[]; error?: string };
+  };
+  if (reply.kind !== "pagedExported")
+    throw new Error(`exportPaged: ${reply.kind} ${reply.payload.error ?? ""}`);
+  return Uint8Array.from(reply.payload.bytes!);
+}
+
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
@@ -176,6 +189,97 @@ describe.skipIf(!ready && !required)(
       await expect(data.recordStatus("nope")).rejects.toThrow(
         /no query "nope"/,
       );
+    });
+
+    it("the status survives a save and a reopen: a row changed after it reads as changed", async () => {
+      expect(
+        ready,
+        "real core and the data-js wasm must both be available",
+      ).toBe(true);
+      const mod = await loadBundleModule();
+      const withReader = async (bytes?: Uint8Array) => {
+        const h = await openRealHost();
+        if (bytes) await h.load(bytes);
+        hosts.push(h);
+        let dataHost!: BundleHost;
+        h.loadBundle({
+          ...mod.dataBundle,
+          activate: (bh: BundleHost) => {
+            dataHost = bh;
+            return mod.dataBundle.activate(bh);
+          },
+        } as typeof mod.dataBundle);
+        let reader!: BundleHost;
+        h.loadBundle({
+          manifest: READER,
+          activate(bh: BundleHost) {
+            reader = bh;
+            return { dispose() {} };
+          },
+        } as never);
+        const s = mod.sessionFor(dataHost)!;
+        await s.whenRestored();
+        return { h, dataHost, s, data: reader.data };
+      };
+
+      // Session 1: place the first record, write the document, save.
+      const one = await withReader();
+      await one.s.registerCsvSource("products", CSV);
+      one.s.addQuery("q", "SELECT * FROM products", "recordStream");
+      await one.s.refreshData();
+      await one.data.bind({
+        target: "rectangle:urect",
+        path: "frameOpacity",
+        query: "q",
+        expr: "50",
+      });
+      await one.data.refresh();
+      expect(await one.data.recordStatus("q")).toEqual({
+        query: "q",
+        added: [],
+        changed: [],
+        removed: 0,
+        placed: [0],
+      });
+      await one.h.willSave.fire();
+      const part = JSON.parse(
+        new TextDecoder().decode(
+          (await one.dataHost.parts.read("session.json"))!,
+        ),
+      ) as {
+        engine: {
+          applied?: Record<string, { key?: string[]; rows: string[] }>;
+        };
+      };
+      // The snapshot rides in the session part: the key and, per record, a
+      // hash of its key and of its content, never the values.
+      expect(part.engine.applied?.q?.key).toEqual(["sku"]);
+      expect(part.engine.applied?.q?.rows).toHaveLength(3);
+      expect(JSON.stringify(part.engine.applied)).not.toContain("Hammer");
+      const saved = await exportPaged(one.h.host);
+
+      // Session 2: a fresh host opens the saved bytes.
+      const two = await withReader(saved);
+      await two.s.refreshData();
+      expect(await two.data.recordStatus("q")).toEqual({
+        query: "q",
+        added: [],
+        changed: [],
+        removed: 0,
+        placed: [0],
+      });
+      // A row changes in the data: it reads as changed, not as a baseline.
+      await two.data.write("products", [
+        { op: "set", row: 1, field: "price", value: 13 },
+      ]);
+      await two.s.refreshData();
+      expect(await two.data.recordStatus("q")).toEqual({
+        query: "q",
+        added: [],
+        changed: [1],
+        removed: 0,
+        placed: [0],
+      });
     });
   },
 );

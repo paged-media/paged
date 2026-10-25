@@ -1,6 +1,7 @@
 # ADR 706 — Slide transitions run on WebGPU, using the gl-transitions shader collection
 
-- **Status:** Accepted 2026-10-05.
+- **Status:** Accepted 2026-10-05. Amended 2026-10-25 by [ADR 721](721-transitions-and-shader-effects-are-pure-webgpu-wgsl.md):
+  the shaders are WGSL written for this module, not gl-transitions translated at build time.
 - **Scope:** the slideshow stage (`packages/slide-bundle`), `vendor/gl-transitions`, the transition
   mapping in `slide-js`
 

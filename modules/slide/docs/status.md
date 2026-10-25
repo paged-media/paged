@@ -1,6 +1,6 @@
 # paged.slide — status
 
-Read from the code on 2026-10-24.
+Read from the code on 2026-10-25.
 
 ## Built
 
@@ -58,6 +58,37 @@ Read from the code on 2026-10-24.
   move (PowerPoint's own; its Cmd+Shift+N and Cmd+D are the browser's new window and the
   editor's Place). A key is offered where its command is and no text caret is active; the
   editor's keybinding test holds the chords free of its own.
+- **Comments** (ADR 711, amendment 2026-10-25). PowerPoint's threaded comments (text, author,
+  date, status, replies, a position or a shape anchor) and its legacy comments are imported per
+  slide and kept in the container part `comments/comments.json`, by page id. The Comments panel
+  lists the active slide's threads: reply, resolve and reopen, delete, add a comment, show the
+  resolved ones. Open threads are marked on the slide with their author's initials (the host's
+  overlay layers). Typed commands add, reply to, resolve and delete comments. Export writes a
+  slide's comments back as one modern comment part when they changed (legacy ones converted),
+  extends `ppt/authors.xml`, and keeps the bytes of every slide whose comments did not change.
+- **The slide profile and Normal-view keys** (editor ADR 307). `?solo=paged.slide` opens the
+  editor as a presentation program: the Slides rail on the left, the slide at the deck's size,
+  Slide, Transition, Placeholder, Deck, Comments and Notes in the right dock. A deck holds the
+  `slideDeck` document context, and PowerPoint's keys are scoped to it: Cmd/Ctrl+M new slide,
+  Cmd/Ctrl+D duplicate slide while nothing is selected, PageUp and PageDown the previous and
+  next slide; Delete on a focused thumbnail deletes its slide. Previous slide, Next slide and New
+  comment are palette commands with typed twins and Slide menu entries.
+
+- **Slide show and presenter view** (ADR 716). Slide Show ▸ From Beginning (F5) and From Current
+  Slide (Shift+F5) fill the screen (extensions ADR 345): PowerPoint's keys (next, previous, a
+  number and Enter, black and white screens, Home/End, the slide grid, laser, pen, erase, Esc),
+  hidden slides skipped, automatic advance from the slides' timings, an end screen, loop on
+  request; the editor goes back to the slide the show ended on. Presenter View (Alt+F5) keeps a
+  console in the editor's window (the slide up, the next slide, notes with zoom, timer, clock,
+  slide x of y, grid, black screen) and opens the audience in a window of its own, synced over a
+  BroadcastChannel; without a second window it runs alone. Rehearse Timings writes each slide's
+  time into its transition in one undo step. Frames are the engine's page layers (extensions
+  ADR 346), prefetched, drawn without the editor's substituted-font highlight. Transitions play
+  through the WGSL shader library (ADR 721) on WebGPU, with the deck's effect options; without
+  WebGPU the show cuts and says so once.
+- **Slide Sorter** (View ▸ Slide Sorter, ADR 716): a module view in place of the canvas;
+  select, Shift/Cmd+click, drag to move the selection, hide, set the transition, double-click to
+  open a slide.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container
@@ -102,6 +133,18 @@ Read from the code on 2026-10-24.
 - **Links on import.** A run's `a:hlinkClick` becomes the engine's text hyperlink: a URL, the
   page of the slide it jumps to, or the show action as a `ppaction://` URL. A shape's click
   action is kept in its item metadata, along with its shape key, placeholder and preset.
+- **Transition shaders** (ADR 721; `src/show/shaders`). Every PowerPoint transition is a WGSL
+  shader over the two slide images: the 20 ECMA-376 effects, the 19 of PowerPoint 2010, the 12
+  `p15:prstTrans` presets, with random choosing from a pool and morph playing as a cross-fade.
+  One prelude declares the bindings and the `Uniforms` block, and `manifest.json` maps each
+  PowerPoint id and its attributes to a shader and its parameters. `createTransitionRenderer`
+  draws on the caller's WebGPU device, with lazy pipelines and ping-pong passes. Nine effects are
+  marked as 2.5D approximations in the manifest: vortex, honeycomb, ferris, prestige, fracture,
+  crush, airplane, origami and drape. Checked by naga (`slide-shaders`) and by the bun tests, and
+  in Chrome by `tests/gpu`: every shader compiles with Tint, progress 0 and 1 reproduce the
+  slides, golden frames hold at 0.25, 0.5 and 0.75, and every transition takes under 1 ms of
+  GPU time per 1080p frame on an M3 Max (most take under 0.2 ms). The show runtime that plays
+  them is the next part of M5.
 - **The PowerPoint oracle** (ADR 705). Scripts drive PowerPoint 16.113.3 to export PDF, per-shape
   geometry, first baselines and chart bars (`scripts/ppt-*`). Fixtures authored through PowerPoint:
   geometry, text, placeholders, motion, baselines.
@@ -125,6 +168,9 @@ Read from the code on 2026-10-24.
 | Export, per-slide identity and regeneration (ADR 711)              | eight fixtures (Rust): the unedited document; moving the first, a middle and the last shape of every slide; hiding each slide                                                        | unedited: the original bytes; each edit changes that slide part alone, and the shape reads back moved by exactly the edit, the same size                                                    |
 | Export of text, tables, new slides, new shapes, links              | fixtures (Rust) and the importer→editor→exporter path on the real engine, headless                                                                                                   | rewritten text reads back with the level, alignment, indents, bullets, size, font, weight and colour import drew; edits, new slides and links read back as the document held them           |
 | Regenerated decks open in PowerPoint                               | PowerPoint 16 opening and saving as PDF the decks the Rust tests write (`PAGED_SLIDE_EXPORT_DIR`): text edit, resize, delete, table cell, new slide, new shape, text and slide links | all eight open without a repair prompt, with every slide; the edited cell, the new slide's placeholders (title, five list levels) drawn on its layout                                       |
+| Comments, import                                                   | `comments` fixture (PowerPoint-saved: a thread with a reply, a resolved shape-anchored comment, a converted legacy one) and a legacy deck (Rust)                                     | every comment's text, author, date, status, position (EMU and 1/8 pt confirmed by PowerPoint's own conversion), anchor and replies read                                                     |
+| Comments, export                                                   | Rust fixtures and the importer→editor→exporter path headless and in the editor (journey): unchanged; added, replied, resolved, deleted; duplicate; legacy; new slide                 | unchanged: the original bytes; changed: only that slide's comment part and relationships, re-imported equal to what the document held                                                       |
+| Comment decks open in PowerPoint                                   | PowerPoint 16.113.3 opening and re-saving the six comment decks the Rust tests write                                                                                                 | no repair prompt; the re-saved decks read back with the same comments (PowerPoint drops the milliseconds of the date)                                                                       |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
 renderer with the fonts PowerPoint used, 48 dpi, SSIM per slide):
@@ -167,7 +213,6 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 
 - Editing layouts (master spreads) from the plugin, and layouts no slide uses (they are not
   imported).
-- Thumbnails show the editor's missing-font highlight; the slideshow needs snapshots without it.
 - PPTX export of what the native model cannot say yet, or what export does not write yet:
   effect changes (shadow, opacity on its own), edits inside charts and SmartArt, added, removed or
   merged table rows and columns, cell fills and borders, font styles other than bold and italic,
@@ -176,4 +221,4 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   reported in the export's diagnostics, and the shape is written as the deck had it. A notes
   master for a deck that has none. Transitions, timing, masters and layouts are still copied, not
   regenerated (later waves of ADR 711).
-- Slideshow and presenter view (M5); transitions are decided (ADR 706).
+- Animations in the show (per-item layers, wave 5), custom shows, ink saved as annotations.

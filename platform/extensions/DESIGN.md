@@ -2882,7 +2882,36 @@ stands in for. Four doors, shipped together:
   (`setTextSelection`) and reports the document context (`documentContext()`, dropped on load).
 - **Isolate.** The groups and status items are React in the host realm, like panels (§6).
 
-## 27. Named undo steps and the History panel (engine ADR 1030, editor ADR 285 — `document.undoLog@1`)
+## 27. Presentations, module views and page layers (ADRs 345, 346 — `shell.present@1`, `shell.views@1`, `render.layers@1`)
+
+A bundle's full-screen surface (a slide show), a second window for an audience, a work surface in
+place of the canvas (a slide sorter), and a page as composable layers.
+
+- **Presentation.** `contribute.presentation({ id, title?, render(el, ctx) })`, declared in
+  `contributes.presentations[]`. `host.shell.present({ id, target, options })` shows it on
+  `"screen"` (the editor's window, browser full screen where allowed), `"window"` (a window of
+  its own) or `"secondary"` (a `"console"` in the editor's window and an `"audience"` window);
+  a refused window falls back to the console on `"screen"` and says so. `render` is DOM (a
+  surface can live in another window) and answers a cleanup; `ctx` carries `role`, `target`,
+  `options`, the surface's `window`, `exit()` and `channel` (a BroadcastChannel per presentation,
+  one end per surface). `exitPresent`, `presentation()`, `onDidChangePresentation`. Only one's
+  own; call `present` from a user gesture.
+- **Keys.** Each surface root is a key-owning container (`role="dialog"`, focused): the editor's
+  bindings leave plain keys alone, chords reach it only if the surface lets them bubble.
+- **Module view.** `contribute.view({ id, title, render })` (React, `ViewProps`: `id`,
+  `close()`), declared in `contributes.views[]`; `host.shell.showView(id | null)`,
+  `activeView()`, `onDidChangeView`. Shown in the canvas's place; the canvas stays mounted.
+- **Layers.** `host.render.layers(pageId, { items?, hideItems?, scale?, format?, marginPt? })`:
+  the background without `items`/`hideItems` and each item alone, cropped, every layer with its
+  page `region`, at one scale; `"bitmap"` (decoded `ImageBitmap`s, the default in a browser),
+  `"png"` or `"rgba"`. Built on `render.snapshot` / `render.element`; never the canvas's markers.
+- **Probes.** `contribute.presentation@1`, `contribute.view@1`, `render.layers@1` (static);
+  `shell.present@1`, `shell.present.secondary@1`, `shell.views@1` (the editor's registries). The
+  harness wires a presenter and a view registry that keep state and draw nothing.
+- **Isolate.** A presentation's DOM surface becomes a transferred `OffscreenCanvas` and a
+  plain-data input stream; the channel is already message-passing.
+
+## 28. Named undo steps and the History panel (engine ADR 1030, editor ADR 285 — `document.undoLog@1`)
 
 Every step of the document's undo timeline has a name, and a bundle can read the timeline,
 move along it, and name the steps it makes (protocol 77).

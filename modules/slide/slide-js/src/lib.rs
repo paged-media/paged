@@ -186,6 +186,9 @@ pub struct SlideReport {
     pub timing_xml: Option<String>,
     /// Its top-level items, bottom to top.
     pub items: Vec<ItemReport>,
+    /// Its review comments (modern and legacy), for the bundle's comments
+    /// part (slide ADR 711).
+    pub comments: Vec<pptx_core::Comment>,
 }
 
 /// A top-level item: the page element it became and where it sits.
@@ -239,6 +242,12 @@ pub fn import(bytes: &[u8], name: &str) -> Result<(Vec<u8>, Report, Vec<u8>), St
                 notes: s.notes.clone(),
                 transition: s.transition.clone(),
                 timing_xml: s.timing_xml.clone(),
+                comments: deck
+                    .slides
+                    .iter()
+                    .find(|x| x.part == s.part)
+                    .map(|x| x.comments.clone())
+                    .unwrap_or_default(),
                 items: s
                     .items
                     .iter()

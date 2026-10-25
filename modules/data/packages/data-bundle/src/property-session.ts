@@ -82,6 +82,10 @@ export interface PropertyContext {
       target: { kind: string; storyId: string; [k: string]: unknown };
     }
   >;
+  /** The stories each variable binding was placed into (data ADR 564): a
+   *  text variable's instances are not listed by story, so its frame is
+   *  found through these. */
+  variableStories: Map<string, Set<string>>;
   /** Property bindings carried by an element: binding → oid. */
   hostOids: Map<string, string>;
   /** …and the element (raw `Self`) while this session knows it. */
@@ -229,6 +233,18 @@ export function propertyMethods(ctx: PropertyContext) {
         }
       } catch {
         // no field read: the variables stay in the document label
+      }
+    }
+    // A text variable (ADR 559): the first frame of a story it was placed
+    // into that still has one.
+    for (const id of variables) {
+      if (out.has(id)) continue;
+      for (const story of ctx.variableStories.get(id) ?? []) {
+        const frame = await firstFrame(story);
+        if (frame) {
+          out.set(id, { frame });
+          break;
+        }
       }
     }
     for (const [id, t] of ctx.ruleTargets) {
@@ -379,8 +395,17 @@ export function propertyMethods(ctx: PropertyContext) {
     const rules = [...restored.facts.storyHosted].filter(([id]) =>
       bindings.some((b) => b.id === id && b.kind === "rule"),
     );
+    // A variable's label names its frame: today's story of it is where the
+    // variable is (data ADR 564 checks it for overset).
+    // Placeholder fields name their stories: only text variables ask.
+    const variables =
+      restored.facts.storyHosted.size > 0 && (await textVariablesOn(host))
+        ? [...restored.facts.storyHosted].filter(([id]) =>
+            bindings.some((b) => b.id === id && b.kind === "variable"),
+          )
+        : [];
     const frameStory = new Map<string, string>();
-    if (rules.length > 0) {
+    if (rules.length > 0 || variables.length > 0) {
       try {
         for (const s of await host.document.collection<{ selfId: string }>(
           "stories",
@@ -407,6 +432,10 @@ export function propertyMethods(ctx: PropertyContext) {
     for (const [id, t] of restored.facts.image) ctx.imageTargets.set(id, t);
     for (const [id, t] of restored.facts.barcode) ctx.barcodeTargets.set(id, t);
     for (const [id, el] of restored.facts.lowered) ctx.loweredInto.set(id, el);
+    for (const [id, h] of variables) {
+      const story = frameStory.get(h.frame);
+      if (story) ctx.variableStories.set(id, new Set([story]));
+    }
     for (const [id, h] of rules) {
       const extra = h.extra as
         | {

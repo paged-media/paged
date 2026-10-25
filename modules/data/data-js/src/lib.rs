@@ -513,6 +513,22 @@ mod wasm {
             ))
         }
 
+        /// Is `text` overset in a threaded story whose frames are `boxes`
+        /// (`[width, height][]` pt, in chain order)? The text wraps through
+        /// each frame in turn at that frame's width (data ADR 564).
+        pub fn text_overset_chain(
+            &self,
+            text: &str,
+            boxes: JsValue,
+            metrics: JsValue,
+        ) -> Result<bool, JsValue> {
+            let boxes: Vec<(f64, f64)> = from_js(boxes)?;
+            let metrics: data_lower::merge::FrameMetrics = from_js(metrics)?;
+            Ok(data_lower::merge::text_overset_chain(
+                text, &boxes, &metrics,
+            ))
+        }
+
         /// Plan a §10 batch run over a query's result (`mode` is `BatchMode`):
         /// `{ mode, units: [{ label, recordIndices }], totalRecords }` — which
         /// records feed which output document (per-record / per-group / one

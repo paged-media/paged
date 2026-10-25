@@ -1156,6 +1156,41 @@
       "summary": "Reject a tracked deletion at its story offset: its text comes back where it stood, as InDesign rejects one. Undoable."
     },
     {
+      "name": "paged.find",
+      "params": "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})",
+      "returns": "string",
+      "kind": "read",
+      "summary": "Find text (literal, Word wildcards or a regex; ^p ^t ^l ^m work in every mode): a JSON array of hits with story, caret and character ranges and context."
+    },
+    {
+      "name": "paged.findReplace",
+      "params": "(text, replace, {replaceAll?, replaceParagraphStyle?, replaceCharacterStyle?, …find options})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Replace the first hit, or every hit, of a find; ^p ^t ^l ^& and $1 work in the replacement. One undo step."
+    },
+    {
+      "name": "paged.setListLevel",
+      "params": "(storyId, start, end, {level} | {delta})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Move the paragraphs touching story chars [start, end) to a list level 1–9, or by a delta (Tab / Shift+Tab). Undoable."
+    },
+    {
+      "name": "paged.restartNumbering",
+      "params": "(storyId, start, end, {startAt?, continueNumbering?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Restart the list count at the paragraphs touching [start, end) (or continue it). Undoable."
+    },
+    {
+      "name": "paged.setStyleBasedOn",
+      "params": "(collection, styleId, basedOn|null)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Re-parent a style; refused when it would inherit from itself. Undoable."
+    },
+    {
       "name": "paged.convertNoteToText",
       "params": "(noteId)",
       "returns": "bool",
@@ -1693,6 +1728,17 @@
     "characterNoBreak",
     "characterLigatures",
     "characterOtfFeatures",
+    "characterHighlightColor",
+    "characterHidden",
+    "characterUnderlineType",
+    "characterUnderlineColor",
+    "characterDoubleStrikethrough",
+    "paragraphShadingOn",
+    "paragraphShadingColor",
+    "paragraphShadingTint",
+    "paragraphBorderOn",
+    "paragraphBorderColor",
+    "paragraphBorderWeight",
     "paragraphLeftIndent",
     "paragraphRightIndent",
     "paragraphDropCapCharacters",
@@ -1870,6 +1916,10 @@
     "renameTableStyle",
     "deleteTableStyle",
     "setStyleProperty",
+    "setStyleBasedOn",
+    "setListLevel",
+    "restartNumbering",
+    "findReplace",
     "insertOval",
     "insertGuide",
     "moveGuide",
@@ -7542,6 +7592,222 @@
     },
     {
       "addressKind": "storyRange",
+      "path": "characterHighlightColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterHidden",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterUnderlineType",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "none",
+          "single",
+          "words",
+          "double",
+          "thick",
+          "dotted",
+          "dashed",
+          "dotDash",
+          "dotDotDash",
+          "wave",
+          "doubleWave"
+        ],
+        "open": true
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "single",
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyleRange",
+          "attribute": "UnderlineType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterUnderlineColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyleRange",
+          "attribute": "UnderlineColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterDoubleStrikethrough",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyleRange",
+          "attribute": "StrikeThroughType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphShadingOn",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphShadingOn",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphShadingColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphShadingColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphShadingTint",
+      "type": {
+        "kind": "number",
+        "unit": "percent"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0,
+        "max": 100.0
+      },
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphShadingTint",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphBorderOn",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphBorderOn",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphBorderColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphBorderColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphBorderWeight",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0
+      },
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphBorderWeight",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
       "path": "paragraphLeftIndent",
       "type": {
         "kind": "length",
@@ -9232,6 +9498,22 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentShowHiddenText",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
     },
     {
       "addressKind": "textVariable",
@@ -10948,6 +11230,299 @@
     {
       "addressKind": "style",
       "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterHighlightColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterHidden",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterUnderlineType",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "none",
+          "single",
+          "words",
+          "double",
+          "thick",
+          "dotted",
+          "dashed",
+          "dotDash",
+          "dotDotDash",
+          "wave",
+          "doubleWave"
+        ],
+        "open": true
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "single",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "UnderlineType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterUnderlineColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "UnderlineColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterDoubleStrikethrough",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "StrikeThroughType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphShadingOn",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphShadingOn",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphShadingColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphShadingColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphShadingTint",
+      "type": {
+        "kind": "number",
+        "unit": "percent"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0,
+        "max": 100.0
+      },
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphShadingTint",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphBorderOn",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphBorderOn",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphBorderColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphBorderColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphBorderWeight",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0
+      },
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphBorderWeight",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
         "character"
       ],
       "path": "characterFontSize",
@@ -11350,6 +11925,136 @@
         {
           "element": "CharacterStyle",
           "attribute": "NoBreak",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterHighlightColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterHidden",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterUnderlineType",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "none",
+          "single",
+          "words",
+          "double",
+          "thick",
+          "dotted",
+          "dashed",
+          "dotDash",
+          "dotDotDash",
+          "wave",
+          "doubleWave"
+        ],
+        "open": true
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "single",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyle",
+          "attribute": "UnderlineType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterUnderlineColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyle",
+          "attribute": "UnderlineColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterDoubleStrikethrough",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyle",
+          "attribute": "StrikeThroughType",
           "kind": "attr"
         }
       ]
@@ -15264,6 +15969,22 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentShowHiddenText",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
       },
       {
         "addressKind": "doc",
@@ -21162,6 +21883,216 @@
       },
       {
         "addressKind": "storyRange",
+        "path": "characterHighlightColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "colorRef"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterHidden",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterUnderlineType",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "none",
+            "single",
+            "words",
+            "double",
+            "thick",
+            "dotted",
+            "dashed",
+            "dotDash",
+            "dotDotDash",
+            "wave",
+            "doubleWave"
+          ]
+        },
+        "nullable": true,
+        "default": "single",
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "CharacterStyleRange",
+            "attribute": "UnderlineType",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterUnderlineColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "CharacterStyleRange",
+            "attribute": "UnderlineColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterDoubleStrikethrough",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "CharacterStyleRange",
+            "attribute": "StrikeThroughType",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphShadingOn",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphShadingOn",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphShadingColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphShadingColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphShadingTint",
+        "type": {
+          "kind": "number",
+          "unit": "percent"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0,
+          "max": 100.0
+        },
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphShadingTint",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphBorderOn",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphBorderOn",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphBorderColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphBorderColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphBorderWeight",
+        "type": {
+          "kind": "length"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0
+        },
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphBorderWeight",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
         "path": "paragraphLeftIndent",
         "type": {
           "kind": "length"
@@ -23632,6 +24563,313 @@
             "element": "ParagraphStyle",
             "attribute": "BalanceRaggedLines",
             "kind": "properties-child"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterHighlightColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "colorRef"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterHidden",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterUnderlineType",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "none",
+            "single",
+            "words",
+            "double",
+            "thick",
+            "dotted",
+            "dashed",
+            "dotDash",
+            "dotDotDash",
+            "wave",
+            "doubleWave"
+          ]
+        },
+        "nullable": true,
+        "default": "single",
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "UnderlineType",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "UnderlineType",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterUnderlineColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "UnderlineColor",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "UnderlineColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterDoubleStrikethrough",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "StrikeThroughType",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "StrikeThroughType",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphShadingOn",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphShadingOn",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphShadingColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphShadingColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphShadingTint",
+        "type": {
+          "kind": "number",
+          "unit": "percent"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0,
+          "max": 100.0
+        },
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "length",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphShadingTint",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphBorderOn",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphBorderOn",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphBorderColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphBorderColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphBorderWeight",
+        "type": {
+          "kind": "length"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0
+        },
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "length",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphBorderWeight",
+            "kind": "attr"
           }
         ]
       },

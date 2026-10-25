@@ -598,6 +598,95 @@ pub fn text_overset(text: &str, width: f64, height: f64, metrics: &FrameMetrics)
         && count_lines(text, width, &metrics.advances) as f64 * metrics.leading_pt > height + 0.5
 }
 
+/// Is `text` overset in a THREADED story whose frames are `boxes`
+/// (`(width, height)` pt each, in chain order) at `metrics`? The text is
+/// wrapped through the frames in turn: each frame holds the lines whose
+/// leading fits its height (half a point of slack, as [`text_overset`]),
+/// wrapped at that frame's width; what is left after the last frame is the
+/// overset (data ADR 564). A one-frame chain answers what [`text_overset`]
+/// answers. An empty text, or a leading of zero, never is; an empty chain
+/// always is (the text has nowhere to go).
+pub fn text_overset_chain(text: &str, boxes: &[(f64, f64)], metrics: &FrameMetrics) -> bool {
+    if text.is_empty() || metrics.leading_pt <= 0.0 {
+        return false;
+    }
+    let mut chain = Chain {
+        boxes,
+        leading: metrics.leading_pt,
+        frame: 0,
+        left: boxes
+            .first()
+            .map_or(0, |b| lines_in(b.1, metrics.leading_pt)),
+    };
+    let adv = |w: &str| metrics.advances.get(w).copied().unwrap_or(0.0);
+    let space = adv(" ");
+    for line in text.split('\n') {
+        // The width of the line being filled and what it holds so far.
+        let mut used: Option<(f64, f64)> = None;
+        for w in line.split(' ').filter(|w| !w.is_empty()) {
+            let a = adv(w);
+            if let Some((width, u)) = used {
+                if u + space + a <= width + 1e-6 {
+                    used = Some((width, u + space + a));
+                    continue;
+                }
+            }
+            // A new line (or, for a word wider than the column, the lines
+            // its width needs, each at the width of the frame it lands in).
+            let mut rest = a;
+            loop {
+                let Some(width) = chain.next_line() else {
+                    return true;
+                };
+                if width <= 0.0 || rest <= width {
+                    let wrapped = rest < a;
+                    let carry = if wrapped && (rest - width).abs() < 1e-9 {
+                        0.0
+                    } else {
+                        rest
+                    };
+                    used = Some((width, carry));
+                    break;
+                }
+                rest -= width;
+            }
+        }
+        if used.is_none() && chain.next_line().is_none() {
+            return true;
+        }
+    }
+    false
+}
+
+/// How many lines of `leading` a frame `height` tall holds ([`text_overset`]'s
+/// half-point slack).
+fn lines_in(height: f64, leading: f64) -> usize {
+    ((height + 0.5) / leading + 1e-9).floor().max(0.0) as usize
+}
+
+/// The frames of a threaded story as the wrap walks them: the frame being
+/// filled and the lines left in it.
+struct Chain<'a> {
+    boxes: &'a [(f64, f64)],
+    leading: f64,
+    frame: usize,
+    left: usize,
+}
+
+impl Chain<'_> {
+    /// Take the next line: the width of the frame it lands in, or `None`
+    /// when no frame of the chain has a line left.
+    fn next_line(&mut self) -> Option<f64> {
+        while self.left == 0 {
+            self.frame += 1;
+            let b = self.boxes.get(self.frame)?;
+            self.left = lines_in(b.1, self.leading);
+        }
+        self.left -= 1;
+        Some(self.boxes[self.frame].0)
+    }
+}
+
 /// The measured font of one template frame: its leading and the advance of
 /// every word [`merge_words`] listed for it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -717,6 +806,69 @@ mod tests {
         assert!(!text_overset("a a a a", 25.0, 24.0, &m));
         assert!(text_overset("a a a a", 25.0, 20.0, &m));
         assert!(!text_overset("", 25.0, 0.0, &m));
+    }
+
+    #[test]
+    #[allow(non_snake_case)] // the `__feat__<id>` suffix links the test to its cockpit feature
+    fn data_lower_text_overset_chain_wraps_through_the_frames__feat__data_issues() {
+        let m = FrameMetrics {
+            leading_pt: 12.0,
+            advances: [("a", 10.0), (" ", 5.0), ("long", 45.0)]
+                .into_iter()
+                .map(|(w, a)| (w.to_string(), a))
+                .collect(),
+        };
+        // Eight words, two a line at 25 pt: four lines. Two frames of two
+        // lines each hold them; a line less and the last frame overflows.
+        let text = "a a a a a a a a";
+        assert!(!text_overset_chain(text, &[(25.0, 24.0), (25.0, 24.0)], &m));
+        assert!(text_overset_chain(text, &[(25.0, 24.0), (25.0, 12.0)], &m));
+        // Each frame wraps at its own width: a wide second frame takes four
+        // words a line (a + 3 × (5 + 10) = 55 pt), so the six left after the
+        // first frame's line take two lines there, not three.
+        assert!(!text_overset_chain(text, &[(25.0, 12.0), (55.0, 24.0)], &m));
+        assert!(text_overset_chain(text, &[(25.0, 12.0), (25.0, 24.0)], &m));
+        // A frame too short for one line holds none: the text goes on.
+        assert!(!text_overset_chain(
+            text,
+            &[(25.0, 5.0), (25.0, 24.0), (25.0, 24.0)],
+            &m
+        ));
+        // A word wider than its column takes the lines its width needs,
+        // across frames too.
+        assert!(!text_overset_chain(
+            "long",
+            &[(20.0, 24.0), (20.0, 12.0)],
+            &m
+        ));
+        assert!(text_overset_chain("long", &[(20.0, 24.0)], &m));
+        // Empty lines are lines; an empty chain holds nothing.
+        assert!(text_overset_chain("a\n\na", &[(25.0, 24.0)], &m));
+        assert!(text_overset_chain("a", &[], &m));
+        assert!(!text_overset_chain("", &[], &m));
+        // One frame: exactly the one-frame rule.
+        for t in [
+            "a a a a",
+            "a a a a a",
+            "long a long",
+            "a\n\n\na",
+            "a  a",
+            "long",
+        ] {
+            for (w, h) in [
+                (25.0, 24.0),
+                (25.0, 20.0),
+                (20.0, 36.0),
+                (0.0, 12.0),
+                (60.0, 0.4),
+            ] {
+                assert_eq!(
+                    text_overset_chain(t, &[(w, h)], &m),
+                    text_overset(t, w, h, &m),
+                    "{t:?} in {w} × {h}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -2404,6 +2404,21 @@ pub(super) fn apply_set_property(
                 std::mem::replace(slot, (new_val != default).then_some(new_val)).unwrap_or(default);
             (Value::Bool(prev), frame_style_hint(node))
         }
+        // ---- engine ADR 1018 — show hidden text ---------------------
+        (NodeId::Document(_), PropertyPath::DocumentShowHiddenText) => {
+            let Value::Bool(show) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Bool".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.show_hidden_text;
+            // Off is stored as unset, InDesign's way with defaults, so the
+            // undo of a toggle restores the slot exactly.
+            let prev = std::mem::replace(slot, show.then_some(true)).unwrap_or(false);
+            // Every story with hidden text reflows: the whole document.
+            (Value::Bool(prev), InvalidationHint::default())
+        }
         // ---- R-11 — the document's global light ---------------------
         (
             NodeId::Document(_),
@@ -2643,8 +2658,23 @@ pub(super) fn apply_set_property(
             | PropertyPath::CharacterStrikethru
             | PropertyPath::CharacterNoBreak
             | PropertyPath::CharacterLigatures
-            | PropertyPath::CharacterOtfFeatures,
+            | PropertyPath::CharacterOtfFeatures
+            | PropertyPath::CharacterHighlightColor
+            | PropertyPath::CharacterHidden
+            | PropertyPath::CharacterUnderlineType
+            | PropertyPath::CharacterUnderlineColor
+            | PropertyPath::CharacterDoubleStrikethrough,
         ) => {
+            // An unknown underline kind is refused before any run splits.
+            if let (PropertyPath::CharacterUnderlineType, Value::Text(t)) = (path, value) {
+                if let Err(reason) = super::word::parse_underline_type(t) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason,
+                    });
+                }
+            }
             return apply_character_property(doc, story_id, *start, *end, node, path, value);
         }
         // SDK Phase 5 (D3 completion) — applied object style on any
@@ -2767,7 +2797,13 @@ pub(super) fn apply_set_property(
             | PropertyPath::ParagraphSingleWordJustification
             | PropertyPath::ParagraphLastLineIndent
             | PropertyPath::ParagraphBalanceRaggedLines
-            | PropertyPath::ParagraphAppliedNumberingList,
+            | PropertyPath::ParagraphAppliedNumberingList
+            | PropertyPath::ParagraphShadingOn
+            | PropertyPath::ParagraphShadingColor
+            | PropertyPath::ParagraphShadingTint
+            | PropertyPath::ParagraphBorderOn
+            | PropertyPath::ParagraphBorderColor
+            | PropertyPath::ParagraphBorderWeight,
         ) => {
             return apply_paragraph_property(doc, story_id, *start, *end, node, path, value);
         }

@@ -55,6 +55,7 @@ pub mod channel;
 pub mod element_selection;
 pub mod export;
 mod export_losses;
+pub mod find;
 pub mod geometry;
 pub mod gesture;
 mod group_box;

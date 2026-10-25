@@ -11,6 +11,8 @@
       "readNative": true,
       "openNative": true
     },
+    "rendering": ["overlay"],
+    "editContext": ["slideDeck"],
     "clipboard": "none",
     "keybindings": true,
     "assets": ["fonts"],
@@ -25,6 +27,9 @@
     "documents": {
       "open": true,
       "export": true
+    },
+    "gpu": {
+      "realm": "bundle"
     }
   },
   "contributes": {
@@ -35,17 +40,34 @@
       "media.paged.slide.command.moveSlideUp",
       "media.paged.slide.command.moveSlideDown",
       "media.paged.slide.command.importPptx",
-      "media.paged.slide.command.exportPptx"
+      "media.paged.slide.command.exportPptx",
+      "media.paged.slide.command.previousSlide",
+      "media.paged.slide.command.nextSlide",
+      "media.paged.slide.command.addComment",
+      "media.paged.slide.command.slideShowFromBeginning",
+      "media.paged.slide.command.slideShowFromCurrent",
+      "media.paged.slide.command.presenterView",
+      "media.paged.slide.command.rehearseTimings",
+      "media.paged.slide.command.slideSorter"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
     "exporters": ["media.paged.slide.exporter.pptx"],
+    "presentations": ["media.paged.slide.show"],
+    "views": ["media.paged.slide.view.sorter"],
+    "editContexts": [
+      {
+        "type": "slideDeck",
+        "entry": "doubleClick"
+      }
+    ],
     "panels": [
       "media.paged.slide.panel.slides",
       "media.paged.slide.panel.notes",
       "media.paged.slide.panel.slide",
       "media.paged.slide.panel.transition",
       "media.paged.slide.panel.placeholder",
-      "media.paged.slide.panel.deck"
+      "media.paged.slide.panel.deck",
+      "media.paged.slide.panel.comments"
     ],
     "partTypes": [
       {
@@ -107,6 +129,122 @@
           "title": "Export as a PowerPoint deck",
           "args": "schema/export-pptx.args.json",
           "result": "schema/export-pptx.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.addComment",
+          "title": "Add a comment",
+          "args": "schema/add-comment.args.json",
+          "result": "schema/add-comment.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.replyComment",
+          "title": "Reply to a comment",
+          "args": "schema/reply-comment.args.json",
+          "result": "schema/reply-comment.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.resolveComment",
+          "title": "Resolve or reopen a comment",
+          "args": "schema/resolve-comment.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.deleteComment",
+          "title": "Delete a comment",
+          "args": "schema/delete-comment.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.previousSlide",
+          "title": "Previous slide",
+          "args": "schema/empty.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.nextSlide",
+          "title": "Next slide",
+          "args": "schema/empty.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.slideShowFromBeginning",
+          "title": "Slide show from the beginning",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.slideShowFromCurrent",
+          "title": "Slide show from the current slide",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.presenterView",
+          "title": "Presenter view",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.rehearseTimings",
+          "title": "Rehearse timings",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.slideSorter",
+          "title": "Slide sorter",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
         }
       ],
       "templateFields": [

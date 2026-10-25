@@ -98,6 +98,11 @@ import type {
   PanelContribution,
   PathAnchorsResult,
   PluginManifest,
+  PresentationContribution,
+  PresentationRegistry,
+  PresentationState,
+  ViewContribution,
+  ViewRegistry,
   SchemaPanelContribution,
   SelectionMode,
   ToolContribution,
@@ -163,7 +168,9 @@ export interface RecordedContribution {
     | "importer"
     | "exporter"
     | "controlBarGroup"
-    | "statusItem";
+    | "statusItem"
+    | "presentation"
+    | "view";
   id: string;
   value:
     | ToolContribution
@@ -177,7 +184,9 @@ export interface RecordedContribution {
     | ImporterContribution
     | ExporterContribution
     | ControlBarGroupContribution
-    | StatusItemContribution;
+    | StatusItemContribution
+    | PresentationContribution
+    | ViewContribution;
 }
 
 export interface HarnessOptions
@@ -419,6 +428,13 @@ export interface HeadlessHost {
   controlBarGroupsContributed(): ControlBarGroupContribution[];
   /** Status-bar items registered through `contribute.statusItem`. */
   statusItemsContributed(): StatusItemContribution[];
+  /** Presentations registered through `contribute.presentation`
+   *  (extensions ADR 345). The harness wires a presenter that keeps the
+   *  state and renders nothing (no DOM headlessly): `shell.present`
+   *  answers presented on `"screen"`/`"window"` and on `"secondary"`. */
+  presentationsContributed(): PresentationContribution[];
+  /** Module views registered through `contribute.view`. */
+  viewsContributed(): ViewContribution[];
   /** Extensions ADR 348 (C4) — play the editor's caret: the text
    *  selection `host.text.selection()` answers (content offsets), or
    *  `null`. Notifies `onDidChangeSelection` listeners. The harness wires
@@ -826,6 +842,16 @@ function makeEngineEditor(
       >("controlBarGroup"),
       statusItems: recordingRegistry<StatusItemContribution, "statusItem">(
         "statusItem",
+      ),
+      // Extensions ADR 345 — a presenter and a view registry that keep
+      // state only: headlessly nothing is drawn.
+      presentations: recordingPresenter(
+        recordingRegistry<PresentationContribution, "presentation">(
+          "presentation",
+        ),
+      ),
+      views: recordingViews(
+        recordingRegistry<ViewContribution, "view">("view"),
       ),
     },
     selection: {
@@ -1336,6 +1362,16 @@ export async function createHeadlessHost(
         .filter((c) => c.kind === "statusItem")
         .map((c) => c.value as StatusItemContribution);
     },
+    presentationsContributed() {
+      return contributions
+        .filter((c) => c.kind === "presentation")
+        .map((c) => c.value as PresentationContribution);
+    },
+    viewsContributed() {
+      return contributions
+        .filter((c) => c.kind === "view")
+        .map((c) => c.value as ViewContribution);
+    },
     setTextSelection(sel) {
       textSel = sel ? { ...sel } : null;
       for (const fn of [...textSelListeners]) fn();
@@ -1549,6 +1585,8 @@ export type ContributionCategory =
   | "objectTypes"
   | "importers"
   | "exporters"
+  | "presentations"
+  | "views"
   | "objectModelKinds"
   | "objectModelCommands";
 
@@ -1561,6 +1599,8 @@ export const CONTRIBUTION_CATEGORIES: readonly ContributionCategory[] = [
   "objectTypes",
   "importers",
   "exporters",
+  "presentations",
+  "views",
   "objectModelKinds",
   "objectModelCommands",
 ];
@@ -1656,6 +1696,8 @@ export function diffManifestContributions(
     objectTypes: (c.objectTypes ?? []).map((e) => e.type),
     importers: c.importers ?? [],
     exporters: c.exporters ?? [],
+    presentations: c.presentations ?? [],
+    views: c.views ?? [],
     objectModelKinds: (c.objectModel?.kinds ?? []).map((k) => k.kind),
     objectModelCommands: (c.objectModel?.commands ?? []).map((k) => k.id),
   };
@@ -1790,6 +1832,8 @@ export async function checkManifestConformance(
       objectTypes: ids("objectType"),
       importers: ids("importer"),
       exporters: ids("exporter"),
+      presentations: ids("presentation"),
+      views: ids("view"),
       objectModelKinds: [...new Set(kinds)],
       objectModelCommands: [...new Set(commands)],
     };
@@ -1802,4 +1846,97 @@ export async function checkManifestConformance(
     loaded?.dispose();
     if (!given) h.dispose();
   }
+}
+
+// ------------------------------------------- presentations and views
+
+/** Extensions ADR 345 — the harness presenter: the registry's recording
+ *  plus the presentation state, no surface. */
+function recordingPresenter(registry: {
+  register(c: PresentationContribution): Disposable;
+}): PresentationRegistry {
+  const ids = new Set<string>();
+  let current: PresentationState | null = null;
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const l of [...listeners]) l();
+  };
+  return {
+    secondary: true,
+    register(c) {
+      ids.add(c.id);
+      const d = registry.register(c);
+      return {
+        dispose() {
+          ids.delete(c.id);
+          if (current?.id === c.id) {
+            current = null;
+            emit();
+          }
+          d.dispose();
+        },
+      };
+    },
+    async present(request) {
+      if (!ids.has(request.id))
+        return { presented: false, reason: "unknown presentation" };
+      current = {
+        id: request.id,
+        target: request.target,
+        options: request.options ?? {},
+      };
+      emit();
+      return { presented: true, target: request.target };
+    },
+    async exit() {
+      if (!current) return;
+      current = null;
+      emit();
+    },
+    current: () => current,
+    onChange(handler) {
+      listeners.add(handler);
+      return { dispose: () => void listeners.delete(handler) };
+    },
+  };
+}
+
+/** Extensions ADR 345 (C5) — the harness view registry. */
+function recordingViews(registry: {
+  register(c: ViewContribution): Disposable;
+}): ViewRegistry {
+  const ids = new Set<string>();
+  let active: string | null = null;
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const l of [...listeners]) l();
+  };
+  return {
+    register(c) {
+      ids.add(c.id);
+      const d = registry.register(c);
+      return {
+        dispose() {
+          ids.delete(c.id);
+          if (active === c.id) {
+            active = null;
+            emit();
+          }
+          d.dispose();
+        },
+      };
+    },
+    show(id) {
+      if (id !== null && !ids.has(id)) return false;
+      if (active === id) return false;
+      active = id;
+      emit();
+      return true;
+    },
+    active: () => active,
+    onChange(handler) {
+      listeners.add(handler);
+      return { dispose: () => void listeners.delete(handler) };
+    },
+  };
 }

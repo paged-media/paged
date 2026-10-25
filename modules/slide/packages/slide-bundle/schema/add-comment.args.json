@@ -1,0 +1,14 @@
+{
+  "kind": "struct",
+  "fields": {
+    "text": { "kind": "text", "multiline": true },
+    "slide": {
+      "kind": "ref",
+      "to": "plugin:media.paged.slide/slide",
+      "optional": true
+    },
+    "author": { "kind": "text", "optional": true },
+    "x": { "kind": "number", "unit": "pt", "optional": true },
+    "y": { "kind": "number", "unit": "pt", "optional": true }
+  }
+}

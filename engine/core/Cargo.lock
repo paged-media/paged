@@ -3356,6 +3356,8 @@ dependencies = [
  "paged-test-resources",
  "paged-text",
  "paged-wire",
+ "proptest",
+ "regress",
  "serde",
  "serde_json",
  "thiserror",
@@ -3771,6 +3773,7 @@ dependencies = [
  "paged-renderer",
  "paged-scene",
  "paged-template",
+ "proptest",
  "schemars",
  "serde",
  "serde_json",
@@ -3895,6 +3898,10 @@ dependencies = [
  "serde_json",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "paged-resample"
+version = "0.0.0"
 
 [[package]]
 name = "paged-run"

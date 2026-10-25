@@ -411,6 +411,12 @@ export interface PluginContributions {
   /** Exporter ids the bundle registers (K-2 / S-06). Must be namespaced
    *  by `id`. */
   exporters?: string[];
+  /** Presentation ids the bundle registers (extensions ADR 345). Must be
+   *  namespaced by `id`. */
+  presentations?: string[];
+  /** Module view ids the bundle registers (extensions ADR 345, C5). Must
+   *  be namespaced by `id`. */
+  views?: string[];
   /** `.paged` CONTAINER part-types this plugin persists (file-format.md
    *  §4 / §8.1). Each extended object is stored in three ROLES: `spec` (the
    *  canonical JSON definition — small, diffable, must round-trip), `source`

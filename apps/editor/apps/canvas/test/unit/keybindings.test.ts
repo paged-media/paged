@@ -38,7 +38,11 @@ import {
   type KeybindingContribution,
 } from "@paged-media/shell";
 
-import { SLIDE_KEYBINDINGS } from "@paged-media/slide";
+import {
+  DECK_CONTEXT,
+  SLIDE_KEYBINDINGS,
+  SLIDE_NORMAL_VIEW_KEYS,
+} from "@paged-media/slide";
 
 import { APP_KEYBINDINGS } from "../../src/app-commands";
 import { INSERT_KEYBINDINGS } from "../../src/insert-commands";
@@ -391,6 +395,47 @@ describe("the tables as a whole", () => {
       resolveBinding([...TABLES, ...slide], press("arrowup"), () => AT_ROOT)
         ?.command,
     ).not.toContain("media.paged.slide");
+  });
+
+  // Editor ADR 307: inside a deck (the slide bundle's document context)
+  // PowerPoint's Normal-view keys outrank the host's binding on the same
+  // key; outside one the host's keys are untouched.
+  test("in a deck, Cmd/Ctrl+M, Cmd/Ctrl+D and PageUp/PageDown are the slide verbs; outside one they stay the host's", () => {
+    covers(
+      "keybinding:cmd+m→media.paged.slide.command.newSlide",
+      "keybinding:cmd+d→media.paged.slide.command.duplicateSlide",
+      "keybinding:pageup→media.paged.slide.command.previousSlide",
+      "keybinding:pagedown→media.paged.slide.command.nextSlide",
+    );
+    const deck: KeybindingContribution[] = SLIDE_NORMAL_VIEW_KEYS.map((k) => ({
+      key: k.key,
+      command: k.command,
+      scope: { editContext: DECK_CONTEXT },
+      when: () => true,
+    }));
+    const all = [...TABLES, ...deck];
+    const inDeck = at({ documentContext: DECK_CONTEXT } as never);
+    for (const k of deck)
+      expect(
+        resolveBinding(all, press(k.key), () => inDeck)?.command,
+        k.key,
+      ).toBe(k.command);
+    // Outside a deck: Place keeps Cmd+D, the page keys page.
+    expect(resolveBinding(all, press("cmd+d"), () => AT_ROOT)?.command).toBe(
+      "paged.insert.placeImage",
+    );
+    expect(
+      resolveBinding(all, press("pagedown"), () => AT_ROOT)?.command,
+    ).not.toContain("media.paged.slide");
+    // A frame-level context above the deck (a sheet entered on a slide)
+    // takes the scope away.
+    const inSheet = at({
+      documentContext: DECK_CONTEXT,
+      editContext: { type: "sheet" },
+    } as never);
+    expect(
+      resolveBinding(all, press("cmd+m"), () => inSheet)?.command,
+    ).not.toBe("media.paged.slide.command.newSlide");
   });
 
   // Finding SH-9 (UX F-16), fixed: Cmd+0 and Cmd+1 (Zoom to 100%) worked

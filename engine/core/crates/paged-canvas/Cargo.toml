@@ -52,6 +52,10 @@ paged-store = { path = "../paged-store" }
 base64 = { workspace = true }
 serde = { workspace = true }
 serde_json = "1"
+# Engine ADR 1021 — find and replace. The ECMAScript regex engine Boa
+# already links into the worker (same version, same features), so search
+# adds no code to the wasm.
+regress = "0.12.0"
 tsify-next = { workspace = true }
 wasm-bindgen = { workspace = true }
 thiserror = { workspace = true }
@@ -80,6 +84,8 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console"] }
 
 [dev-dependencies]
+# Engine ADR 1021 — Find & Replace undo over random patterns.
+proptest = { version = "1", default-features = false, features = ["std"] }
 paged-test-resources.workspace = true
 # W1.24 (audit B17) — perf bench lane. `paged-gen` regenerates the bench
 # fixtures in setup (same path the fidelity corpus uses), so no fixture

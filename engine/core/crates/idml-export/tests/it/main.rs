@@ -88,6 +88,7 @@ mod toc_style_roundtrip;
 mod tracked_insertion_edit;
 mod transparency_targets_roundtrip;
 mod unmodelled_item_roundtrip;
+mod word_attrs;
 mod xml_element_edit;
 mod xml_structure_roundtrip;
 mod z_order_roundtrip;

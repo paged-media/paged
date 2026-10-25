@@ -376,6 +376,13 @@ export {
   type DocumentContextStore,
   type StatusItemContribution,
   type StatusItemRegistry,
+  createPresentationRegistry,
+  createViewRegistry,
+  PRESENTATION_ATTR,
+  type PresentationContribution,
+  type PresentationRegistry,
+  type ViewContribution,
+  type ViewRegistry,
 } from "./registries";
 
 // ── W3.2 — edit-context + object-type registries (B-02 / W-03) ──

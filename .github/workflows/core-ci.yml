@@ -121,13 +121,15 @@ jobs:
       # paged-pixel and paged-psd moved here from paged.image (PM-0014,
       # image ADR 466) and keep that module's dependency rule: they are
       # plain data, reaching no other engine crate and no module crate
-      # (paged-psd depends on paged-pixel only). Each guard asserts an
-      # EMPTY match, so a hit fails the step.
-      - name: guard — paged-pixel and paged-psd stay leaf crates
+      # (paged-psd depends on paged-pixel only). paged-resample, the CPU
+      # resample paged.image's actions run on (image ADR 467), is held to
+      # the same rule. Each guard asserts an EMPTY match, so a hit fails
+      # the step.
+      - name: guard — paged-pixel, paged-psd and paged-resample stay leaf crates
         run: |
-          if cargo tree -p paged-pixel -p paged-psd --edges normal --prefix none \
-               | grep -E '^(paged-|image-|idml-)' | grep -vE '^paged-(pixel|psd) '; then
-            echo "::error::paged-pixel / paged-psd reached another engine or module crate"
+          if cargo tree -p paged-pixel -p paged-psd -p paged-resample --edges normal --prefix none \
+               | grep -E '^(paged-|image-|idml-)' | grep -vE '^paged-(pixel|psd|resample) '; then
+            echo "::error::paged-pixel / paged-psd / paged-resample reached another engine or module crate"
             exit 1
           fi
       # The shipped wasm carries no conformance code: paged.image's

@@ -1,0 +1,13 @@
+[package]
+name = "paged-resample"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "CPU resampling of RGBA8 rasters: a separable Lanczos-3 / bilinear resize (premultiplied, the filter widened when shrinking) and a bilinear rotate-and-crop. The supported backend of headless and batch image actions (image ADR 467). Leaf crate: depends on nothing."
+
+[lints]
+workspace = true
+
+[dependencies]

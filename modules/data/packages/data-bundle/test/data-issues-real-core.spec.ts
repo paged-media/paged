@@ -54,7 +54,9 @@ describe.skipIf(!ready && !required)(
       for (const h of hosts.splice(0)) h.dispose?.();
     });
 
-    it("reports overset text at its frame and clears it when the frame grows; missing, coarse and empty too", async () => {
+    /** The bundle over the real stack, a consumer of its data door and a
+     *  6 pt-a-character font; one CSV source, one query, refreshed. */
+    async function boot() {
       expect(
         ready,
         "real core and the data-js wasm must both be available",
@@ -99,7 +101,6 @@ describe.skipIf(!ready && !required)(
       s.addQuery("q", "SELECT * FROM products", "recordStream");
       await s.refreshData();
       expect(await consumer.data.issues()).toEqual([]);
-
       const frameAt = async (bounds: number[]) => {
         const fr = (await dataHost.document.mutate({
           op: "batch",
@@ -112,6 +113,11 @@ describe.skipIf(!ready && !required)(
         } as never)) as { minted?: { element: { id: string } }[] };
         return fr.minted![0]!.element.id;
       };
+      return { h, dataHost, consumer, s, frameAt };
+    }
+
+    it("reports overset text at its frame and clears it when the frame grows; missing, coarse and empty too", async () => {
+      const { dataHost, consumer, s, frameAt } = await boot();
 
       // A long value in a small frame: overset, at that frame.
       const small = await frameAt([100, 100, 130, 200]);
@@ -189,6 +195,92 @@ describe.skipIf(!ready && !required)(
           severity: "warning",
           message: expect.stringMatching(/is \d+ ppi .* under 150 ppi/),
           binding: "img",
+          address: "rectangle:urect",
+        },
+      ]);
+    });
+
+    it("checks a variable Lower placed: its frame is in the placements and its overset is named there", async () => {
+      const { consumer, s } = await boot();
+      s.addVariableBinding("v_name", "v_name", "q", "name");
+      await s.lowerAll();
+      // Placed as a text variable in a frame Lower minted (160 × 60 pt).
+      const at = (await consumer.data.placements()).find(
+        (p) => p.binding === "v_name",
+      );
+      expect(at?.address).toMatch(/^textFrame:/);
+      const overset = (await consumer.data.issues()).filter(
+        (i) => i.kind === "overset",
+      );
+      expect(overset).toEqual([
+        {
+          kind: "overset",
+          severity: "warning",
+          message: expect.stringContaining("does not fit its frame"),
+          binding: "v_name",
+          address: at!.address,
+        },
+      ]);
+    });
+
+    it("measures a story threaded over two frames and names its overset at the last one", async () => {
+      const { dataHost, consumer, frameAt } = await boot();
+      const first = await frameAt([100, 100, 130, 200]);
+      const last = await frameAt([200, 100, 230, 200]);
+      const linked = await dataHost.document.mutate({
+        op: "linkFrames",
+        args: { from: first, to: last },
+      } as never);
+      expect(linked.applied).toBe(true);
+      const placed = await consumer.data.place(
+        `textFrame:${first}`,
+        "q",
+        "name",
+      );
+      // The host's chain reports no overflow (no fonts); the engine wraps
+      // the text through both frames and runs out at the second.
+      const story = (await dataHost.document.hitTest(
+        "usp" as never,
+        [150, 115],
+      ))!.storyId!;
+      const chain = await dataHost.document.frameChain(story);
+      expect(chain.map((l) => l.frameId)).toEqual([first, last]);
+      expect(chain.some((l) => l.overflow)).toBe(false);
+      expect(
+        (await consumer.data.issues()).filter((i) => i.kind === "overset"),
+      ).toEqual([
+        {
+          kind: "overset",
+          severity: "warning",
+          message: expect.stringContaining("does not fit its frame"),
+          binding: placed.binding,
+          address: `textFrame:${last}`,
+        },
+      ]);
+      // The second frame grows: the text fits the chain, the issue is gone.
+      const grown = await dataHost.document.mutate({
+        op: "resizeFrame",
+        args: { frameId: last, bounds: [200, 100, 700, 500] },
+      } as never);
+      expect(grown.applied).toBe(true);
+      expect(
+        (await consumer.data.issues()).filter((i) => i.kind === "overset"),
+      ).toEqual([]);
+    });
+
+    it("asks the host the pixel size of a picture placed from a plain link", async () => {
+      const { consumer, s } = await boot();
+      // No asset column: the reference is placed as the link it is.
+      s.addImageBinding("linked", "urect", "q", "photo");
+      await s.lowerBinding("linked");
+      expect(
+        (await consumer.data.issues()).filter((i) => i.binding === "linked"),
+      ).toEqual([
+        {
+          kind: "lowResolution",
+          severity: "warning",
+          message: expect.stringMatching(/is \d+ ppi .* under 150 ppi/),
+          binding: "linked",
           address: "rectangle:urect",
         },
       ]);
