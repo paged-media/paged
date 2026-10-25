@@ -741,6 +741,13 @@ export type WorkerToMain = WorkerToMainKind & {
 //   depth }` → `HistoryDepthApplied { depth }`. Additive on the same bump:
 //   `AmendMutation.label`, `CommitGesture.label`. New message kinds an older
 //   worker cannot answer, hence the bump.
+// v77 (rider) — SVG in and out of the engine (engine ADR 1018, `paged-svg`):
+//   `RequestSvgImport { pageId, bytes, options }` → `SvgImportPlanned`
+//   (the one batch to apply, one undo step, and the report of what was
+//   approximated or left out); `ExportSvg { pageId, elementIds, options }`
+//   → `SvgExported { svg, report }` / `ExportSvgFailed { error }`. The
+//   additive PropertyPath `frameGradientFillStart` rides it. New message
+//   kinds an older worker cannot answer, hence the bump.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -1553,6 +1560,31 @@ pub enum MainToWorkerKind {
     ExportElements {
         element_ids: Vec<crate::element_selection::ElementId>,
     },
+    /// v77 (engine ADR 1016) — plan the import of an SVG (or SVGZ) file
+    /// onto `page_id`: `paged-svg` reads it with usvg (`<use>`, `<defs>`,
+    /// CSS, units and transforms resolved) and lowers it to ONE batch of
+    /// native page items. Pure READ: the reply `SvgImportPlanned` carries
+    /// the batch for the caller to apply with `Mutate` (one undo step,
+    /// the ordinary mutation lane) and the report of what was
+    /// approximated or left out.
+    RequestSvgImport {
+        page_id: PageId,
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+        #[serde(default)]
+        options: paged_svg::SvgImportOptions,
+    },
+    /// v77 (engine ADR 1016) — write the page `page_id` as an SVG
+    /// document; with `element_ids`, nothing but those items, the view
+    /// box fitted to what they draw. Pure READ. Reply: `SvgExported`, or
+    /// `ExportSvgFailed`.
+    ExportSvg {
+        page_id: PageId,
+        #[serde(default)]
+        element_ids: Vec<crate::element_selection::ElementId>,
+        #[serde(default)]
+        options: paged_svg::SvgExportOptions,
+    },
     /// v65 — read one style definition's settable properties: every path
     /// `Mutation::SetStyleProperty` accepts for that collection, with the
     /// style's OWN value in the shape the setter takes (`""` /
@@ -2083,6 +2115,17 @@ pub enum WorkerToMainKind {
     /// atlas. Carries the source page's generation counters so the
     /// main thread can detect staleness before drawing.
     SnapshotReady(crate::snapshot::SnapshotPng),
+    /// v77 — `RequestSvgImport` reply: `mutation` is the batch to apply
+    /// (absent when the file draws nothing or could not be read, `error`
+    /// then says why), `report` what was approximated or left out.
+    SvgImportPlanned(paged_svg::SvgImportPlan),
+    /// v77 — `ExportSvg` reply: the document and its report.
+    SvgExported {
+        svg: String,
+        report: paged_svg::SvgReport,
+    },
+    /// v77 — `ExportSvg` refused (no document, an unknown page).
+    ExportSvgFailed { error: String },
     /// `RequestSnapshot` failed (e.g. unknown page id).
     SnapshotFailed {
         error: crate::snapshot::SnapshotError,

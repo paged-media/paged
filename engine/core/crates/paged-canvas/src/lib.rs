@@ -67,6 +67,7 @@ pub mod selection;
 pub mod snap;
 pub mod snap_point;
 pub mod snapshot;
+pub mod svg_io;
 pub mod template;
 pub mod undo_label;
 

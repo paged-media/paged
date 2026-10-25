@@ -127,6 +127,10 @@ export type {
   SecretsSurface,
   SecretMaterial,
   DocumentSurface,
+  SvgExportRequest,
+  SvgExportResult,
+  SvgImportRequest,
+  SvgImportResult,
   MutateOptions,
   UndoLog,
   UndoLogStep,
@@ -318,6 +322,18 @@ export type {
   SnapExclude,
   SnapSource,
   SnapSettings,
+} from "./wire.js";
+
+// Engine ADR 1016 — `host.document.importSvg` / `exportSvg`'s options and
+// their report.
+export type {
+  SvgExportOptions,
+  SvgImportOptions,
+  SvgImportText,
+  SvgNote,
+  SvgNoteSeverity,
+  SvgReport,
+  SvgTextMode,
 } from "./wire.js";
 
 // One element a mutation minted (`MutationOutcome.minted`): the element,

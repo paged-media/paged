@@ -1028,10 +1028,64 @@ export interface HitResult {
 export type SelectionMode = "replace" | "add" | "toggle";
 
 /**
+ * How a construct fared.
+ */
+export type SvgNoteSeverity = "approximated" | "dropped";
+
+/**
+ * How an SVG lands on the page. Every field is optional.
+ */
+export interface SvgImportOptions {
+    /**
+     * The page-local point (pt) the SVG\'s top-left corner lands on.
+     * Absent: the drawing is centred on the page.
+     */
+    origin?: [number, number] | null;
+    /**
+     * Points per SVG user unit (a CSS pixel). Absent: 1, the convention
+     * Illustrator and paged.draw read SVG by.
+     */
+    scale?: number | null;
+    /**
+     * What text becomes. Absent: [`SvgImportText::Auto`].
+     */
+    text?: SvgImportText | null;
+    /**
+     * Wrap the import in one group when it makes more than one item.
+     * Absent: true.
+     */
+    group?: boolean | null;
+}
+
+/**
  * How much a finding matters: an error makes the template unfit to hand
  * to a filler; a warning is worth a look.
  */
 export type FindingSeverity = "error" | "warning";
+
+/**
+ * How the export is written. Every field is optional.
+ */
+export interface SvgExportOptions {
+    /**
+     * Absent: [`SvgTextMode::Outlines`].
+     */
+    text?: SvgTextMode | null;
+    /**
+     * No line breaks and no indentation. Absent: false.
+     */
+    minify?: boolean | null;
+    /**
+     * Decimal places of coordinates (0–6). Absent: 3 (2 when minified).
+     */
+    precision?: number | null;
+    /**
+     * The page region written, `[x, y, width, height]` page-local pt.
+     * Absent: the whole page (or, for an export of some items, the box
+     * around what they draw).
+     */
+    region?: [number, number, number, number] | null;
+}
 
 /**
  * Inspector P1 — one node in the scene tree. Children are nested
@@ -1363,6 +1417,26 @@ export interface ItemPolicy {
      * Permissions taken away, whatever granted them.
      */
     deny?: Permission[];
+}
+
+/**
+ * One kind of loss, with how often it happened.
+ */
+export interface SvgNote {
+    /**
+     * A stable code (`\"filter\"`, `\"gradient.focal\"`, `\"text.outlined\"`,
+     * …) a caller can switch on; the codes are listed in engine ADR 1016.
+     */
+    code: string;
+    severity: SvgNoteSeverity;
+    /**
+     * What happened, in a sentence.
+     */
+    message: string;
+    /**
+     * How many times.
+     */
+    count: number;
 }
 
 /**
@@ -2506,6 +2580,27 @@ export interface DocumentStats {
 }
 
 /**
+ * The answer of [`plan_import`].
+ */
+export interface SvgImportPlan {
+    /**
+     * The one batch to apply (one undo step), or `None` when the file
+     * draws nothing or could not be read.
+     */
+    mutation: Mutation | null;
+    report: SvgReport;
+    /**
+     * The drawing\'s size on the page (pt).
+     */
+    width: number;
+    height: number;
+    /**
+     * Why the file could not be read, when it could not.
+     */
+    error: string | null;
+}
+
+/**
  * The canonical mutation primitive. A closed set, extended only with
  * deliberation. Collection mutations (swatches, styles) operate on the
  * document\'s `BTreeMap` palettes/stylesheets rather than the scene
@@ -2596,6 +2691,21 @@ export interface SnapSettings {
  * from.
  */
 export type AddressKind = "doc" | "textFrame" | "rectangle" | "oval" | "polygon" | "graphicLine" | "group" | "frame" | "page" | "spread" | "layer" | "master" | "story" | "storyRange" | "field" | "table" | "cell" | "style" | "swatch" | "gradient" | "colorGroup" | "numberingList" | "guide" | "condition" | "conditionSet" | "section" | "hyperlink" | "textVariable" | "plugin" | "handle";
+
+/**
+ * The report of one import or export.
+ */
+export interface SvgReport {
+    /**
+     * Import: the page items the plan creates (groups included).
+     * Export: the elements written.
+     */
+    items: number;
+    /**
+     * The losses, one row per code, in the order they first happened.
+     */
+    notes: SvgNote[];
+}
 
 /**
  * The segment the query landed on.
@@ -3052,6 +3162,16 @@ export type TemplateFieldKind = "text" | "textRun" | "variable" | "image" | "cho
  * `apply::permit`).
  */
 export type Permission = "select" | "text.edit" | "text.style" | "image.replace" | "image.crop" | "item.move" | "item.resize" | "item.rotate" | "item.flip" | "item.delete" | "item.duplicate" | "item.restack" | "item.visibility" | "appearance.fill" | "appearance.stroke" | "appearance.effects" | "appearance.opacity" | "appearance.other" | "document.add-item" | "document.pages" | "document.styles" | "document.metadata" | "template.author";
+
+/**
+ * What text becomes in the export.
+ */
+export type SvgTextMode = "outlines" | "text";
+
+/**
+ * What text becomes.
+ */
+export type SvgImportText = "auto" | "outlines";
 
 /**
  * What the resolver produced this pass. The canvas worker reads

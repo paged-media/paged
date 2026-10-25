@@ -78,6 +78,10 @@ import {
   type SelectionRect,
   type SnapLine,
   type SnapshotPng,
+  type SvgExportOptions,
+  type SvgImportOptions,
+  type SvgImportPlan,
+  type SvgReport,
   type TextCellAddr,
   type UndoLogEntryWire,
   type WordBounds,
@@ -1263,6 +1267,64 @@ export class CanvasClient {
     if (reply.kind === "exportIdmlFailed") {
       throw new Error(reply.payload.error);
     }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * v77 (engine ADR 1016) — plan the import of an SVG (or SVGZ) file onto
+   * `pageId`: the engine reads it with usvg and lowers it to ONE batch of
+   * native page items (paths, swatches, gradients, groups, clips, masks,
+   * pictures, text frames). A pure read: apply `plan.mutation` with
+   * {@link mutate} (one undo step). `plan.report` names what was
+   * approximated or left out; `plan.error` says why nothing could be read.
+   */
+  async svgImportPlan(
+    pageId: PageId,
+    bytes: Uint8Array,
+    options: SvgImportOptions = {},
+  ): Promise<SvgImportPlan> {
+    const reply = await this.send({
+      kind: "requestSvgImport",
+      payload: { pageId, bytes: Array.from(bytes), options },
+    });
+    if (reply.kind === "svgImportPlanned") return reply.payload;
+    if (reply.kind === "mutationFailed") {
+      throw new Error(`svg import refused (${reply.payload.error.kind})`);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * v77 (engine ADR 1016) — plan and apply an SVG import as one undo step.
+   * Resolves to the plan and the mutation's reply (`null` when the file
+   * draws nothing or could not be read).
+   */
+  async importSvg(
+    pageId: PageId,
+    bytes: Uint8Array,
+    options: SvgImportOptions = {},
+  ): Promise<{ plan: SvgImportPlan; reply: WorkerToMain | null }> {
+    const plan = await this.svgImportPlan(pageId, bytes, options);
+    if (!plan.mutation) return { plan, reply: null };
+    return { plan, reply: await this.mutate(plan.mutation) };
+  }
+
+  /**
+   * v77 (engine ADR 1016) — the page `pageId` as an SVG document; with
+   * `elementIds`, nothing but those items, the view box fitted to what
+   * they draw. Text is outlines unless `options.text` is `"text"`.
+   */
+  async exportSvg(
+    pageId: PageId,
+    elementIds: readonly ElementId[] = [],
+    options: SvgExportOptions = {},
+  ): Promise<{ svg: string; report: SvgReport }> {
+    const reply = await this.send({
+      kind: "exportSvg",
+      payload: { pageId, elementIds: [...elementIds], options },
+    });
+    if (reply.kind === "svgExported") return reply.payload;
+    if (reply.kind === "exportSvgFailed") throw new Error(reply.payload.error);
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
 

@@ -127,7 +127,8 @@ canary added is under [Releases](#releases).
   panel shows the fill's harmony and its shades / tints, warm / cool and vivid / muted
   variations; a click fills the selection (Alt-click strokes). The colour math is
   draw-geometry's `color-harmony.ts`.
-- **SVG.** An importer for `.svg` files and an exporter for the selection.
+- **SVG.** An importer for `.svg` files and an exporter for the selection, through the
+  engine's `paged-svg` where the host has it.
 - **Simplify with a live preview.** While the Path Options Simplify section is open, the
   simplified selection is drawn dashed over the canvas with its anchor counts, following
   every edit and selection change. A corner angle (0–180°) keeps anchors at least that sharp
@@ -403,16 +404,28 @@ path per shape, solid paints only. Recolouring a raster is pixel work and is not
   and may not line up. A rotated or skewed placement, or an oval or polygon frame, is cropped
   to the box around what is visible, so traced paths can extend past a non-rectangular clip.
   It reads only what the browser can decode.
-- **SVG** carries paths, basic shapes, group transforms and solid colours. Gradients, text,
-  images, `<use>` and `<defs>`, clip paths, masks and stylesheets are not read. Export
-  writes solid colours only. `fill-rule="evenodd"` is written as the element's native
-  fill rule (`frameFillRule`, engine ADR 1006), the contours kept as authored, so contours
-  that cross each other or themselves (a star drawn as one path) import exactly; export
-  writes the element's rule back as `fill-rule`. On an engine without the fill rule
-  (`document.fillRule@1` not supported) an even-odd shape is re-wound by nesting depth
-  instead, and crossing contours there paint their non-zero region. A shape stays one
-  path per contour when a contour after the first is open, or when the engine reports no
-  page origin.
+- **SVG** goes through the engine (`paged-svg`, engine ADR 1018) on a host with
+  `document.importSvg@1` / `document.exportSvg@1`. Import reads what usvg resolves —
+  `<use>`, `<defs>`, `<symbol>`, CSS stylesheets and classes, units, nested transforms,
+  markers — and makes native items: compound paths with their fill rule, swatches, linear
+  and radial gradients (stop opacity as a gradient feather), groups with opacity and
+  blend, clip paths (each clipped item pasted into its own frame of the clip shape),
+  one-shape masks as opacity masks, embedded pictures, and text frames when the font is a
+  document font (outlines otherwise). It is one undo step. What it approximates or leaves
+  out is logged by name from the engine's report: filters, patterns, external images,
+  text with no font, a focal or skewed radial gradient, a reflecting or repeating gradient,
+  a stroke gradient's start, a dash offset, a mask of several shapes. The shape lands where
+  the SVG draws it, each top-level shape its own element, and an unstroked shape has no
+  stroke. Export writes what the selection draws: fills and strokes, gradients, opacity and
+  blend, clips and masks, pictures as data URIs, and text as outlines (a conic gradient is
+  its mean colour; effects other than a drop shadow and a gradient feather are reported).
+- **On a host without those doors** (an engine before protocol 77) the module's own reader
+  runs, as before: paths, basic shapes, group transforms and solid colours only; gradients,
+  text, images, `<use>`, clip paths, masks and stylesheets are not read, an unstroked shape
+  gets a 1 pt black stroke, export writes solid colours only. `fill-rule="evenodd"` is the
+  element's native fill rule where the engine has it (`document.fillRule@1`), re-wound by
+  nesting depth otherwise; a shape stays one path per contour when a contour after the
+  first is open, or when the engine reports no page origin.
 
 ## Not built
 

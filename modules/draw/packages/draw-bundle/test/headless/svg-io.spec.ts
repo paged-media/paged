@@ -70,7 +70,7 @@ import {
 } from "../../src/io/svg";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { countingHost } from "../perf/counting-host";
-import { openHost } from "./host";
+import { openHost, tsLane } from "./host";
 
 const PAGE = F1_MULTI_SHAPE.pageId;
 /** The fixture page starts at its spread's origin. */
@@ -443,7 +443,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
 
   it("importSvg inserts the fixture shapes into the document", async () => {
     const before = await leafCount(h);
-    const ids = await importSvg(h.host, {
+    const ids = await importSvg(tsLane(h.host), {
       name: "fixture.svg",
       bytes: enc(FIXTURE_SVG),
       mimeType: "image/svg+xml",
@@ -468,7 +468,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
     // Import the fixture, select the inserts, export them to SVG, then
     // re-parse and compare geometry against the original parse.
     const baseline = await leafCount(h);
-    const ids = await importSvg(h.host, {
+    const ids = await importSvg(tsLane(h.host), {
       name: "rt.svg",
       bytes: enc(FIXTURE_SVG),
       mimeType: "image/svg+xml",
@@ -476,7 +476,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
     expect(ids.length).toBe(3);
     await h.host.selection.set(ids as never[]);
 
-    const result = await exportSvg(h.host);
+    const result = await exportSvg(tsLane(h.host));
     expect(result).not.toBeNull();
     expect(result!.fileName.endsWith(".svg")).toBe(true);
 
@@ -522,7 +522,10 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
   it("one undo removes the paths AND the swatches; one redo brings both back", async () => {
     const leaves = await leafCount(h);
     const swatches = (await swatchRows(h)).length;
-    const done = await commitSvgImport(h.host, file("undo.svg", FIXTURE_SVG));
+    const done = await commitSvgImport(
+      tsLane(h.host),
+      file("undo.svg", FIXTURE_SVG),
+    );
     expect(done).toEqual({
       shapes: 3,
       elements: 3,
@@ -558,7 +561,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
       `<g transform="translate(50 0)"><rect x="0" y="0" width="20" height="20" fill="#555555"/></g>` +
       `</g>` +
       `</svg>`;
-    const ids = await importSvg(h.host, file("order.svg", svg));
+    const ids = await importSvg(tsLane(h.host), file("order.svg", svg));
     // 1 + 1 + 1 + 1: every shape one element — the three-contour path
     // a compound — and no group node.
     expect(ids).toHaveLength(4);
@@ -607,7 +610,10 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
     const users = await creationDefaults(h);
     expect(users).toEqual(["Color/Black", "Color/Black", 7]);
 
-    const ids = await importSvg(h.host, file("defaults.svg", FIXTURE_SVG));
+    const ids = await importSvg(
+      tsLane(h.host),
+      file("defaults.svg", FIXTURE_SVG),
+    );
     const paints = [];
     for (const id of ids) paints.push(await paintOf(h, id));
     expect(paints).toEqual([
@@ -655,7 +661,10 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
     const swatchesBefore = (await swatchRows(h)).length;
     const before = new Set((await leafList(h)).map((id) => String(id.id)));
 
-    const done = await commitSvgImport(h.host, file("refused.svg", svg));
+    const done = await commitSvgImport(
+      tsLane(h.host),
+      file("refused.svg", svg),
+    );
     // Five shapes, seven contours, two of them unreadable. The compound
     // whose middle contour is refused is narrowed to its contours, and
     // the two the engine takes land as one element each.
@@ -709,7 +718,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
       `</svg>`;
     const leaves = await leafCount(h);
     const before = new Set((await leafList(h)).map((id) => String(id.id)));
-    const counted = countingHost(h.host);
+    const counted = countingHost(tsLane(h.host));
     const ids = await importSvg(counted.host, file("bisected.svg", svg));
     const made = (await leafList(h)).filter((id) => !before.has(String(id.id)));
     expect(ids).toEqual(made);
@@ -808,7 +817,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
 
   it("exportSvg returns null for an empty selection", async () => {
     await h.host.selection.set([]);
-    expect(await exportSvg(h.host)).toBeNull();
+    expect(await exportSvg(tsLane(h.host))).toBeNull();
   });
 
   it("File ▸ Export — the registered exporter — writes the selection as an SVG that parses back to the same shapes; nothing selected exports nothing", async () => {
@@ -817,7 +826,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg
       .exportersContributed()
       .find((c) => c.id === SVG_EXPORTER_ID);
     expect(exporter).toMatchObject({ extension: ".svg" });
-    const ids = await importSvg(h.host, {
+    const ids = await importSvg(tsLane(h.host), {
       name: "out.svg",
       bytes: enc(FIXTURE_SVG),
       mimeType: "image/svg+xml",

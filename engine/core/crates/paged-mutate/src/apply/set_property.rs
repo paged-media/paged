@@ -1407,6 +1407,38 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // ---- Engine ADR 1016 — the gradient fill's start ----------
+        // `[x, y]` in the item's inner coordinates; `[]` clears it.
+        (
+            NodeId::TextFrame(_) | NodeId::Rectangle(_) | NodeId::Polygon(_) | NodeId::Oval(_),
+            PropertyPath::FrameGradientFillStart,
+        ) => {
+            let new_val = match value {
+                Value::Lengths(v) if v.is_empty() => None,
+                Value::Lengths(v) if v.len() == 2 && v.iter().all(|x| x.is_finite()) => {
+                    Some([v[0], v[1]])
+                }
+                _ => {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason: "frameGradientFillStart takes lengths [x, y] (or [] to clear)"
+                            .into(),
+                    })
+                }
+            };
+            let slot = find_gradient_start_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = *slot;
+            *slot = new_val;
+            (
+                Value::Lengths(prev.map(|p| p.to_vec()).unwrap_or_default()),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
         // ---- SDK Phase 5 (v1 sweep) — drop-shadow per-field ----
         // Six fields on `frame.drop_shadow`. Each materialises a
         // default DropShadowSetting if the prior was `None`, then

@@ -152,6 +152,8 @@ is not written yet.
 | [1015](1015-paged-action-the-action-registry.md) | `paged-action`: the action registry, chains, the cache key, and actions in JavaScript | Accepted 2026-10-24; amended 2026-10-24 (`paged.actions.*`) |
 | [1016](1016-word-first-fit-composer.md) | Word's first-fit is a composer of its own | Accepted 2026-10-24 |
 | [1017](1017-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
+| [1015](1015-paged-action-the-action-registry.md) | `paged-action`: the action registry, chains, the cache key, and actions in JavaScript | Accepted 2026-10-24 |
+| [1018](1018-svg-in-and-out-through-paged-svg.md) | SVG in and out through `paged-svg` | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

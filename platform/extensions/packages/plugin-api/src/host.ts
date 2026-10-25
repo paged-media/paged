@@ -48,6 +48,9 @@ import type {
   StyleProperties,
   PropertyPath,
   Value,
+  SvgExportOptions,
+  SvgImportOptions,
+  SvgReport,
 } from "./wire.js";
 import type {
   CommandContribution,
@@ -1310,6 +1313,42 @@ export interface SwatchDisplay {
   outOfGamut: boolean;
 }
 
+/** `document.importSvg` options (engine ADR 1016). */
+export interface SvgImportRequest extends SvgImportOptions {
+  /** The page to import onto; the active page when absent. */
+  pageId?: PageId;
+}
+
+/** `document.importSvg`'s answer. */
+export interface SvgImportResult {
+  /** Whether the import's batch applied (one undo step). */
+  applied: boolean;
+  /** The batch's outcome: its `minted` items, the last one the
+   *  import's top item. Absent when nothing applied. */
+  outcome?: MutationOutcome;
+  /** What was approximated or left out. */
+  report: SvgReport;
+  /** Why nothing applied: an unreadable file, an empty drawing, a
+   *  refused batch, a host without the door. */
+  error?: string;
+}
+
+/** `document.exportSvg`'s request (engine ADR 1016). */
+export interface SvgExportRequest extends SvgExportOptions {
+  /** The page; the active page when absent. */
+  pageId?: PageId;
+  /** Nothing but these items, the view box fitted to them. */
+  elementIds?: readonly ElementId[];
+}
+
+/** `document.exportSvg`'s answer. */
+export interface SvgExportResult {
+  /** The SVG document, or `null` with `error`. */
+  svg: string | null;
+  report: SvgReport;
+  error?: string;
+}
+
 export interface DocumentSurface {
   /** The single write door. Accepts `MutationInput` — the vendored
    *  `Mutation` union PLUS the protocol-ahead ops the vendored wire
@@ -1515,6 +1554,37 @@ export interface DocumentSurface {
    *  `supports("document.readStory@1")`; a host without the v54 read backend
    *  throws `PluginApiNotImplemented` (a visible seam, never a fake value). */
   storyContent(storyId: string): Promise<StoryContent | null>;
+  /**
+   * Engine ADR 1016 (protocol v77) — import an SVG (or SVGZ) file as
+   * native page items, as ONE undo step. The engine reads it with usvg
+   * (`<use>`, `<defs>`, `<symbol>`, CSS, units and transforms resolved)
+   * and lowers it to paths and compound paths, swatches, gradients,
+   * groups, clips, opacity masks, placed pictures and text frames; the
+   * batch is applied through `mutate` (gated on
+   * `capabilities.document.write`). `report` names every construct that
+   * was approximated or left out (a filter, an external image, text in a
+   * font the document lacks, …).
+   *
+   * Lands on `options.pageId` (else the active page); `options.origin`
+   * is where the drawing's top-left lands (page-local pt; else centred).
+   * Never throws: a host or engine without the door answers
+   * `{ applied: false, error }`. Probe `supports("document.importSvg@1")`.
+   */
+  importSvg(
+    bytes: Uint8Array,
+    options?: SvgImportRequest,
+  ): Promise<SvgImportResult>;
+  /**
+   * Engine ADR 1016 (protocol v77) — a page, or some of its items, as an
+   * SVG document: paths with their fills and strokes, linear and radial
+   * gradients, opacity and blend modes, clips and masks, pictures as data
+   * URIs, and text as outlines or (`options.text: "text"`) as `<text>`
+   * naming its font. With `elementIds` the view box fits what they draw.
+   * Pure READ, gated on `capabilities.document.read`. Never throws: an
+   * engine without the door answers `{ svg: null, error }`. Probe
+   * `supports("document.exportSvg@1")`.
+   */
+  exportSvg(request?: SvgExportRequest): Promise<SvgExportResult>;
   /**
    * Every committed change to the document, whatever committed it: a
    * mutation, an undo or redo, a canvas gesture's commit, a script run
