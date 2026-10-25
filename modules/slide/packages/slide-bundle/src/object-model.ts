@@ -524,6 +524,9 @@ export interface SlideObjectModelOptions {
     diagnostics: string[];
     notExported: string[];
   } | null>;
+  /** More typed commands to register with the model: the slide show's
+   *  twins of its palette commands (show/contribute.ts). */
+  extraCommands?: readonly TypedCommandContribution[];
 }
 
 /** Register the slide object model on `host`. Headless: no DOM, no edit
@@ -1176,6 +1179,7 @@ export function contributeSlideObjectModel(
       importPptx,
       duplicateSlide,
       exportPptx,
+      ...(options.extraCommands ?? []),
     ] as readonly TypedCommandContribution[],
     // Editor plan G3a: a placeholder's text, whether a slide is shown.
     templateFields: slideTemplateFields(host),

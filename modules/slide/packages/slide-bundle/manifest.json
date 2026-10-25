@@ -25,6 +25,9 @@
     "documents": {
       "open": true,
       "export": true
+    },
+    "gpu": {
+      "realm": "bundle"
     }
   },
   "contributes": {
@@ -35,10 +38,17 @@
       "media.paged.slide.command.moveSlideUp",
       "media.paged.slide.command.moveSlideDown",
       "media.paged.slide.command.importPptx",
-      "media.paged.slide.command.exportPptx"
+      "media.paged.slide.command.exportPptx",
+      "media.paged.slide.command.slideShowFromBeginning",
+      "media.paged.slide.command.slideShowFromCurrent",
+      "media.paged.slide.command.presenterView",
+      "media.paged.slide.command.rehearseTimings",
+      "media.paged.slide.command.slideSorter"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
     "exporters": ["media.paged.slide.exporter.pptx"],
+    "presentations": ["media.paged.slide.show"],
+    "views": ["media.paged.slide.view.sorter"],
     "panels": [
       "media.paged.slide.panel.slides",
       "media.paged.slide.panel.notes",
@@ -107,6 +117,86 @@
           "title": "Export as a PowerPoint deck",
           "args": "schema/export-pptx.args.json",
           "result": "schema/export-pptx.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.slideShowFromBeginning",
+          "title": "Slide show from the beginning",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.slideShowFromCurrent",
+          "title": "Slide show from the current slide",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.presenterView",
+          "title": "Presenter view",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.rehearseTimings",
+          "title": "Rehearse timings",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.slideSorter",
+          "title": "Slide sorter",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
         }
       ],
       "templateFields": [

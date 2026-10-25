@@ -25,6 +25,7 @@
 // model claims (the report part is only a cache) — and a save-and-reopen
 // proves they travel in the document.
 
+import { SHOW_CMD } from "../../src/show/contribute";
 import { readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -93,7 +94,7 @@ beforeEach(async () => {
 afterEach(() => h.dispose());
 
 describe("[plugin-slide.object-model] slides, layouts, placeholders through host.objects", () => {
-  it("declares four kinds and four typed commands", async () => {
+  it("declares four kinds and its typed commands", async () => {
     const kinds = (await h.objects.kinds())
       .filter((k) => k.owner === "media.paged.slide")
       .map((k) => k.kind);
@@ -108,12 +109,16 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
       .filter((c) => c.owner === "media.paged.slide")
       .map((c) => c.id)
       .sort();
-    expect(commands).toEqual([
-      DUPLICATE_SLIDE_COMMAND,
-      EXPORT_PPTX_COMMAND,
-      IMPORT_PPTX_COMMAND,
-      NEW_SLIDE_COMMAND,
-    ]);
+    expect(commands).toEqual(
+      [
+        DUPLICATE_SLIDE_COMMAND,
+        EXPORT_PPTX_COMMAND,
+        IMPORT_PPTX_COMMAND,
+        NEW_SLIDE_COMMAND,
+        // The slide show's twins of its palette commands.
+        ...Object.values(SHOW_CMD),
+      ].sort(),
+    );
   });
 
   it("the import command opens a slide per page; the deck answers from its label", async () => {

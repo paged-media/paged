@@ -85,6 +85,48 @@ export const COMMANDS = defineMessages("slide.commands", {
   exportPptx: "Export PowerPoint deck…",
 });
 
+/** The slide show, the presenter view and the slide sorter (show/,
+ *  views/; slide ADR 716). */
+export const SHOW = defineMessages("slide.show", {
+  fromBeginning: "Slide show from the beginning",
+  fromCurrent: "Slide show from the current slide",
+  presenterView: "Presenter view",
+  rehearseTimings: "Rehearse timings",
+  slideSorter: "Slide sorter",
+  title: "Slide show",
+  endOfShow: "End of slide show. Click or press a key to exit.",
+  slideOf: "Slide {at} of {of}",
+  goTo: "Go to slide {number}",
+  next: "Next",
+  nextSlide: "Next slide",
+  previousSlide: "Previous slide",
+  endPreview: "End of slide show",
+  notes: "Notes",
+  noNotes: "No notes for this slide.",
+  zoomIn: "Make the notes larger",
+  zoomOut: "Make the notes smaller",
+  pause: "Pause the timer",
+  resume: "Resume the timer",
+  reset: "Reset the timer",
+  black: "Black screen",
+  grid: "See all slides",
+  laser: "Laser pointer",
+  pen: "Pen",
+  erase: "Erase the ink",
+  end: "End show",
+  recording: "Recording · slide {time} · total {total}",
+  noAudience:
+    "The audience window did not open; the presenter view is on this screen.",
+  hidden: "Hidden",
+  normalView: "Normal",
+  selected: "{count} selected",
+  hide: "Hide",
+  unhide: "Unhide",
+  transition: "Transition",
+  noTransition: "None",
+  sorterEmpty: "No slides. Open a PowerPoint deck with File ▸ Open.",
+});
+
 /** The menu items this bundle adds (menu.ts): the path stays English (it is
  *  the item's identity) and the shell shows each segment through this. */
 defineMessages("menu", {
@@ -96,6 +138,12 @@ defineMessages("menu", {
   "Delete slide": "Delete slide",
   "Move slide up": "Move slide up",
   "Move slide down": "Move slide down",
+  "Slide Show": "Slide Show",
+  "From Beginning": "From Beginning",
+  "From Current Slide": "From Current Slide",
+  "Presenter View": "Presenter View",
+  "Rehearse Timings": "Rehearse Timings",
+  "Slide Sorter": "Slide Sorter",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled

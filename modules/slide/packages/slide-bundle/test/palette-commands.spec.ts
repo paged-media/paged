@@ -46,6 +46,7 @@ import {
   contributeSlideCommands,
 } from "../src/commands";
 import { contributeMenu, MENU_ENTRIES } from "../src/menu";
+import { SHOW_CMD, SHOW_MENU } from "../src/show/contribute";
 import {
   DUPLICATE_SLIDE_COMMAND,
   NEW_SLIDE_COMMAND,
@@ -222,12 +223,12 @@ function setup(
 describe("paged.slide palette commands", () => {
   it("registers every command the manifest declares, with a menu entry each", () => {
     const s = setup();
-    expect([...s.commands.keys()].sort()).toEqual(
-      [...MANIFEST.contributes.commands].sort(),
-    );
-    expect(s.menus.map((m) => m.command).sort()).toEqual(
-      [...MANIFEST.contributes.commands].sort(),
-    );
+    // The slide show's commands are the show's (show/contribute.ts, its
+    // own suite); these are the deck verbs.
+    const show = new Set<string>(Object.values(SHOW_CMD));
+    const verbs = MANIFEST.contributes.commands.filter((c) => !show.has(c));
+    expect([...s.commands.keys()].sort()).toEqual([...verbs].sort());
+    expect(s.menus.map((m) => m.command).sort()).toEqual([...verbs].sort());
     // The file verbs in the host's File menu, the slide verbs in Slide.
     expect(s.menus.map((m) => m.path)).toEqual(MENU_ENTRIES.map(([p]) => p));
     for (const [path] of MENU_ENTRIES)
@@ -475,8 +476,10 @@ describe("paged.slide palette commands", () => {
       },
       parts: { read: async () => null },
     } as unknown as BundleHost);
-    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length);
-    expect(r.menus.length).toBe(MENU_ENTRIES.length);
+    // Every declared command but the Slide Sorter, which needs the view
+    // door this host does not have.
+    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 1);
+    expect(r.menus.length).toBe(MENU_ENTRIES.length + SHOW_MENU.length - 1);
     h.dispose();
     expect(r.commands.size).toBe(0);
     expect(r.menus.length).toBe(0);
