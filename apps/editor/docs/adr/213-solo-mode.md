@@ -102,3 +102,8 @@ so the reason given above for reusing `design` no longer binds; the presets keep
 layouts are unchanged. `scripts/solo-profiles-guard.mjs` is replaced by
 `scripts/profile-presets-guard.mjs`, which reads the presets as data and checks them against
 the surface inventory, including the bundle whose manifest the old guard could not read.
+
+## Amendment (2026-10-25): a seventh profile
+
+`paged.slide` joins the six: PowerPoint's Normal view at the deck's size, with the deck's
+keys scoped to its document context ([ADR 307](307-the-slide-profile.md)).

@@ -105,12 +105,19 @@ const SLIDE_PANEL = "media.paged.slide.panel.slide";
 const TRANSITION_PANEL = "media.paged.slide.panel.transition";
 const PLACEHOLDER_PANEL = "media.paged.slide.panel.placeholder";
 const DECK_PANEL = "media.paged.slide.panel.deck";
+const COMMENTS_PANEL = "media.paged.slide.panel.comments";
 const IMPORTER = "media.paged.slide.importer.pptx";
 const EXPORTER = "media.paged.slide.exporter.pptx";
 const NEW_SLIDE = "media.paged.slide.newSlide";
 const IMPORT_PPTX = "media.paged.slide.importPptx";
 const DUPLICATE_SLIDE = "media.paged.slide.duplicateSlide";
 const EXPORT_PPTX = "media.paged.slide.exportPptx";
+const ADD_COMMENT = "media.paged.slide.command.addComment";
+const REPLY_COMMENT = "media.paged.slide.command.replyComment";
+const RESOLVE_COMMENT = "media.paged.slide.command.resolveComment";
+const DELETE_COMMENT = "media.paged.slide.command.deleteComment";
+const PREVIOUS_SLIDE = "media.paged.slide.command.previousSlide";
+const NEXT_SLIDE = "media.paged.slide.command.nextSlide";
 
 /** The palette commands and the menu entry onto each (the bundle's
  *  `src/menu.ts`, restated). */
@@ -122,6 +129,9 @@ const PALETTE = {
   "media.paged.slide.command.moveSlideDown": "Slide/Move slide down",
   "media.paged.slide.command.importPptx": "File/Open PowerPoint deck…",
   "media.paged.slide.command.exportPptx": "File/Export PowerPoint deck…",
+  "media.paged.slide.command.previousSlide": "Slide/Previous slide",
+  "media.paged.slide.command.nextSlide": "Slide/Next slide",
+  "media.paged.slide.command.addComment": "Slide/New comment",
 } as const;
 
 const KIND = (k: string) => `plugin:media.paged.slide/${k}`;
@@ -139,17 +149,32 @@ const DECLARED = {
     TRANSITION_PANEL,
     PLACEHOLDER_PANEL,
     DECK_PANEL,
+    COMMENTS_PANEL,
   ],
   importers: [IMPORTER],
   exporters: [EXPORTER],
   partTypes: ["pptx", "slideImport"],
   objectKinds: ["deck", "slide", "layout", "placeholder"],
-  typedCommands: [NEW_SLIDE, IMPORT_PPTX, DUPLICATE_SLIDE, EXPORT_PPTX],
+  typedCommands: [
+    NEW_SLIDE,
+    IMPORT_PPTX,
+    DUPLICATE_SLIDE,
+    EXPORT_PPTX,
+    ADD_COMMENT,
+    REPLY_COMMENT,
+    RESOLVE_COMMENT,
+    DELETE_COMMENT,
+    PREVIOUS_SLIDE,
+    NEXT_SLIDE,
+  ],
+  /** The deck's document context (editor ADR 307): no frame is entered. */
+  editContexts: [{ type: "slideDeck", entry: "doubleClick" }],
   commands: Object.keys(PALETTE),
 } as const;
 
-/** Each panel's title, and what it is: the sorter and the notes are
- *  React panels; the other four are schema panels of property rows. */
+/** Each panel's title, and what it is: the sorter, the notes and the
+ *  comments are React panels; the other four are schema panels of property
+ *  rows. */
 const PANEL_TITLES: Record<string, string> = {
   [SLIDES_PANEL]: "Slides",
   [NOTES_PANEL]: "Notes",
@@ -157,6 +182,7 @@ const PANEL_TITLES: Record<string, string> = {
   [TRANSITION_PANEL]: "Transition",
   [PLACEHOLDER_PANEL]: "Placeholder",
   [DECK_PANEL]: "Deck",
+  [COMMENTS_PANEL]: "Comments",
 };
 const SCHEMA_PANELS = [
   SLIDE_PANEL,
@@ -230,7 +256,13 @@ interface CanvasGlobal {
       menus: {
         list(): Array<{ path: string; command: string; disabled?: boolean }>;
       };
-      keybindings: { list(): Array<{ key: string; command: string }> };
+      keybindings: {
+        list(): Array<{
+          key: string;
+          command: string;
+          scope?: { editContext: string };
+        }>;
+      };
       importers: {
         list(): Importer[];
         resolve(name: string, mime?: string): Importer | null;
@@ -383,6 +415,7 @@ test.describe("plugin surface · paged.slide", () => {
         commands: r.commands.list().map((x) => x.id),
         tools: r.tools.list().map((t) => t.id),
         editContexts: r.editContexts.list().map((e) => e.metadataKey ?? null),
+        editContextTypes: r.editContexts.list().map((e) => e.type),
         objectTypes: r.objectTypes.list().map((o) => o.metadataKey ?? null),
         registryNames: Object.keys(r),
         kinds: c.objects
@@ -416,7 +449,9 @@ test.describe("plugin surface · paged.slide", () => {
     );
     // …and declares nothing in the categories it does not use.
     expect(c.tools, "no tools are declared").toBeUndefined();
-    expect(c.editContexts, "no edit context is declared").toBeUndefined();
+    expect(c.editContexts, "the deck's document context").toEqual([
+      ...DECLARED.editContexts,
+    ]);
     expect(c.objectTypes, "no object type is declared").toBeUndefined();
 
     for (const id of c.panels) expect(live.panels, `panel ${id}`).toContain(id);
@@ -431,7 +466,9 @@ test.describe("plugin surface · paged.slide", () => {
     expect(
       live.tools.filter((id) => id.startsWith("media.paged.slide.")),
     ).toEqual([]);
-    expect(live.editContexts).not.toContain("x-paged:media.paged.slide");
+    // The deck context is registered (it is entered by no double-click: a
+    // deck holds it as its document context).
+    expect(live.editContextTypes).toContain("slideDeck");
     expect(live.objectTypes).not.toContain("x-paged:media.paged.slide");
 
     // The object model is live in the ONE shared object registry
@@ -462,7 +499,7 @@ test.describe("plugin surface · paged.slide", () => {
 
   // ── 2. PANELS ────────────────────────────────────────────────────
 
-  test("all six panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
+  test("all seven panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
     page,
   }) => {
     await bootBlank(page);
@@ -477,9 +514,11 @@ test.describe("plugin surface · paged.slide", () => {
     const byId = Object.fromEntries(panels.map((p) => [p.id, p]));
     expect(byId[SLIDES_PANEL].defaultDock).toBe("left");
     expect(byId[NOTES_PANEL].defaultDock).toBe("bottom");
-    // The two React panels carry their own glyph for the panel rail.
+    expect(byId[COMMENTS_PANEL].defaultDock).toBe("right");
+    // The three React panels carry their own glyph for the panel rail.
     expect(byId[SLIDES_PANEL].iconSvg).toBe(true);
     expect(byId[NOTES_PANEL].iconSvg).toBe(true);
+    expect(byId[COMMENTS_PANEL].iconSvg).toBe(true);
     for (const id of SCHEMA_PANELS)
       expect(byId[id].defaultDock, id).toBe("right");
 
@@ -539,8 +578,13 @@ test.describe("plugin surface · paged.slide", () => {
         timeout: 15_000,
       });
     }
+    // The Comments panel: outside a deck there is no slide to comment on.
+    await openPanel(page, COMMENTS_PANEL);
+    await expect(page.locator("[data-comments-panel]")).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // The real menu bar: Plugins ▸ Slide lists all six, none greyed
+    // The real menu bar: Plugins ▸ Slide lists all seven, none greyed
     // (paged.slide has no edit context, so no context withholds them),
     // and picking one opens it.
     await page.keyboard.press("Escape");
@@ -1044,14 +1088,22 @@ test.describe("plugin surface · paged.slide", () => {
             .filter(mine),
           keybindings: r.keybindings
             .list()
-            .filter((k) => mine(k.command) || panelShow(k.command))
+            .filter(
+              (k) => (mine(k.command) || panelShow(k.command)) && !k.scope,
+            )
             .map((k) => k.key),
+          // The Normal-view keys, scoped to the deck (editor ADR 307).
+          scopedKeys: r.keybindings
+            .list()
+            .filter((k) => mine(k.command) && k.scope)
+            .map((k) => `${k.key}@${k.scope!.editContext}→${k.command}`),
           // Every other binding (the shell's, the app's, other bundles')
-          // on a chord paged.slide binds.
+          // on a chord paged.slide binds unscoped (a scoped key outranks
+          // the host's only inside a deck, so sharing a chord is the point).
           collisions: (() => {
             const all = r.keybindings.list();
             const slideKeys = new Set(
-              all.filter((k) => mine(k.command)).map((k) => k.key),
+              all.filter((k) => mine(k.command) && !k.scope).map((k) => k.key),
             );
             return all
               .filter((k) => slideKeys.has(k.key) && !mine(k.command))
@@ -1069,10 +1121,13 @@ test.describe("plugin surface · paged.slide", () => {
       });
 
     const blank = await reach();
-    // Seven palette commands, titled for a user, in their own drawer.
+    // Ten palette commands, titled for a user, in their own drawer.
     expect(
       Object.fromEntries(blank.commands.map((x) => [x.id, x.title])),
     ).toEqual({
+      "media.paged.slide.command.previousSlide": "Previous slide",
+      "media.paged.slide.command.nextSlide": "Next slide",
+      "media.paged.slide.command.addComment": "New comment",
       "media.paged.slide.command.newSlide": "New slide",
       "media.paged.slide.command.duplicateSlide": "Duplicate slide",
       "media.paged.slide.command.deleteSlide": "Delete slide",
@@ -1122,6 +1177,17 @@ test.describe("plugin surface · paged.slide", () => {
       (await reach()).collisions,
       "no other binding on a slide chord",
     ).toEqual([]);
+    // PowerPoint's Normal-view keys, scoped to the deck's context.
+    expect((await reach()).scopedKeys.sort()).toEqual(
+      [
+        "cmd+m@slideDeck→media.paged.slide.command.newSlide",
+        "ctrl+m@slideDeck→media.paged.slide.command.newSlide",
+        "cmd+d@slideDeck→media.paged.slide.command.duplicateSlide",
+        "ctrl+d@slideDeck→media.paged.slide.command.duplicateSlide",
+        "pageup@slideDeck→media.paged.slide.command.previousSlide",
+        "pagedown@slideDeck→media.paged.slide.command.nextSlide",
+      ].sort(),
+    );
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
     await expect(
       page.locator(
@@ -1153,7 +1219,7 @@ test.describe("plugin surface · paged.slide", () => {
     await page.keyboard.press("Escape");
 
     // In a deck, on its first slide, the slide verbs are offered, except
-    // Move slide up (no slide above the first).
+    // Move slide up and Previous slide (no slide above the first).
     await openDeck(page, designer);
     await expect
       .poll(
@@ -1166,7 +1232,11 @@ test.describe("plugin surface · paged.slide", () => {
       )
       .toEqual(
         Object.keys(PALETTE)
-          .filter((id) => id !== "media.paged.slide.command.moveSlideUp")
+          .filter(
+            (id) =>
+              id !== "media.paged.slide.command.moveSlideUp" &&
+              id !== "media.paged.slide.command.previousSlide",
+          )
           .sort(),
       );
     await search("slide");

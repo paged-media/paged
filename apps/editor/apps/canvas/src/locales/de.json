@@ -1821,6 +1821,7 @@
   "app.soloProfiles.drawBlurb": "Pfade, Formen, Aussehen",
   "app.soloProfiles.imageBlurb": "Korrekturen, Auswahlen, Ebenen",
   "app.soloProfiles.sheetBlurb": "Arbeitsmappen, Bereiche, Diagramme",
+  "app.soloProfiles.slideBlurb": "Folien, Notizen, Kommentare",
   "app.soloProfiles.webBlurb": "HTML-Quelltext, Fluss, Backen",
   "app.spreadsPanel.empty": "Keine Druckbögen.",
   "app.spreadsPanel.loading": "Druckbögen werden geladen…",
