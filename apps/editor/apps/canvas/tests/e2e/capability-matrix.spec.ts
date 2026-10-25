@@ -1364,6 +1364,66 @@ const TEXT_PROBES: Probe[] = [
     },
     setupUndo: 1,
   },
+  // ── the Word model (engine ADRs 1018, 1021): a style's parent, list
+  //    levels and numbering restarts on a story range, find and replace ──
+  {
+    op: "setStyleBasedOn",
+    // Re-parents a scratch paragraph style onto no parent.
+    build: async ({ page }) => {
+      const id = await newStyle(page, "Paragraph");
+      return id
+        ? {
+            op: "setStyleBasedOn",
+            args: { collection: "paragraph", styleId: id, basedOn: null },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "setListLevel",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "setListLevel",
+            args: { storyId: fx.firstStory.selfId, start: 0, end: 1, level: 2 },
+          }
+        : null,
+  },
+  {
+    op: "restartNumbering",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "restartNumbering",
+            args: {
+              storyId: fx.firstStory.selfId,
+              start: 0,
+              end: 1,
+              startAt: 3,
+            },
+          }
+        : null,
+  },
+  {
+    op: "findReplace",
+    // Replaces a word the probe types into the first story first.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const storyId = fx.firstStory.selfId;
+      const typed = await tryMutate(page, {
+        op: "insertText",
+        args: { storyId, offset: 0, text: "Probeword " },
+      });
+      return typed.ok
+        ? {
+            op: "findReplace",
+            args: { spec: { find: "Probeword", storyId }, replace: "X" },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
   // ── the v62 re-capture: story-addressed doors the table had never
   //    heard of (the 94→117 drift; args from the generated .d.ts +
   //    the real consumers — showcase 11-tables, plugin-doc, D-01) ────
