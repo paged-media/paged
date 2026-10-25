@@ -948,7 +948,7 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("outlineStroke"),
             5,
         )
-        .function(guarded(paged_offset_path), js_string!("offsetPath"), 4)
+        .function(guarded(paged_offset_path), js_string!("offsetPath"), 5)
         .function(guarded(paged_simplify_path), js_string!("simplifyPath"), 2)
         .function(
             guarded(paged_pathfinder_boolean),
@@ -2761,8 +2761,9 @@ fn paged_outline_stroke(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
     }))
 }
 
-/// `paged.offsetPath(elemId, delta, join, miter)` — inset/outset a single
-/// closed contour (`Mutation::OffsetPath`).
+/// `paged.offsetPath(elemId, delta, join, miter, side?)` — inset/outset
+/// a path; `side` (`"both"` default, `"left"`, `"right"`) picks the side
+/// an OPEN contour is offset to (`Mutation::OffsetPath`, engine ADR 1019).
 fn paged_offset_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let id = args
         .get_or_undefined(0)
@@ -2777,11 +2778,18 @@ fn paged_offset_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> Js
         .to_string(ctx)?
         .to_std_string_escaped();
     let miter_limit = args.get_or_undefined(3).to_number(ctx)? as f32;
+    let side = args.get_or_undefined(4);
+    let side = if side.is_undefined() || side.is_null() {
+        None
+    } else {
+        Some(side.to_string(ctx)?.to_std_string_escaped())
+    };
     Ok(apply_bool(&Mutation::OffsetPath {
         element_id,
         delta,
         join,
         miter_limit,
+        side,
     }))
 }
 

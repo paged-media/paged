@@ -4228,6 +4228,7 @@ impl CanvasModel {
                 delta,
                 join,
                 miter_limit,
+                side,
             } => Some(Operation::SetProperty {
                 node: path_node_id_for(element_id)?,
                 path: PropertyPath::OffsetPath,
@@ -4235,6 +4236,7 @@ impl CanvasModel {
                     delta: *delta,
                     join: join.clone(),
                     miter_limit: *miter_limit,
+                    side: side.clone(),
                     prev_anchors: None,
                     prev_subpath_starts: None,
                     prev_subpath_open: None,

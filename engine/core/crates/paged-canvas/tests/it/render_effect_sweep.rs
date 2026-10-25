@@ -2622,6 +2622,7 @@ fn path_cases(c: &mut Vec<Case>) {
             delta: 24.0,
             join: "miter".into(),
             miter_limit: 4.0,
+            side: None,
         }
     }));
     c.push(paints("SimplifyPath", "geometry", |m| {

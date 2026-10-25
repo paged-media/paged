@@ -71,7 +71,9 @@ canary added is under [Releases](#releases).
   "Update automatically" does for them), show an action's refusal in the panel, and
   ask for a second click before deleting a graphic style or a symbol.
 - **Path commands.** Outline stroke, Offset (with miter, round or bevel joins and a miter
-  limit), Simplify, Join, Close, Average endpoints, Reverse path direction;
+  limit; a compound path keeps its holes, which move the other way, and an open path becomes
+  the band around it or, with `side: "left" | "right"` in the command's payload, one open
+  parallel path on that side), Simplify, Join, Close, Average endpoints, Reverse path direction;
   Pathfinder Unite, Subtract, Intersect, Exclude, Divide, Trim, Merge, Crop, Outline and
   Minus back; Make and Release compound path; five corner presets for rectangles, polygons
   and text frames; Select same fill, stroke, stroke weight (with a tolerance), opacity,
@@ -364,8 +366,10 @@ path per shape, solid paints only. Recolouring a raster is pixel work and is not
 - **Symbols.** An instance is re-created geometry with flat paint: no text, gradient stops,
   image content or per-instance override. Redefine and reset give its items new ids.
 - **Live paint** has no gap handling and cannot stroke edges (WP6.6 leaves both to the
-  engine's arrangement work, WP2.4). The engine refuses more than
-  12 inputs or 256 faces. A fill is inserted above the paths that bound it.
+  engine's arrangement work, WP2.4). The engine's arrangement (engine ADR 1019) takes up to
+  1000 inputs and 100 000 faces, and refuses an input past its work budget with a sentence
+  that names the stage rather than running on. A fill is inserted above the paths that
+  bound it.
 - **Region tools** work in raw path space: results are exact only when the inputs share one
   item transform. An element moved far enough off its page cannot be measured.
 - **Shape Builder.** A drag merges the faces it crosses into one path and an Alt-drag deletes

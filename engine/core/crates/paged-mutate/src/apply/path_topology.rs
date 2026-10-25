@@ -493,38 +493,33 @@ pub(super) fn apply_path_kernel_op(
                 delta,
                 join,
                 miter_limit,
+                side,
                 ..
             } => {
                 let join_k =
                     parse_join(join).ok_or_else(|| invalid(format!("unknown join \"{join}\"")))?;
-                let is_open = subpath_open.iter().any(|o| *o) || subpath_starts.len() > 1;
-                if is_open {
-                    // B-21: an OPEN path has no inside/outside, so its
-                    // offset is the both-sides band of width 2·|δ|
-                    // (Illustrator's Offset Path closes an open path into
-                    // an outline). Delegate to the stroke-outline kernel
-                    // with a butt cap (the band ends square at the path
-                    // endpoints). Closed single contours keep the
-                    // single-contour offset below.
-                    kurbo_kernel::outline_stroke(
-                        anchors,
-                        subpath_starts,
-                        subpath_open,
-                        2.0 * delta.abs(),
-                        StrokeCap::Butt,
-                        join_k,
-                        *miter_limit,
-                    )
-                } else {
-                    kurbo_kernel::offset_closed_path(
-                        anchors,
-                        subpath_starts,
-                        subpath_open,
-                        *delta,
-                        join_k,
-                        *miter_limit,
-                    )
-                }
+                let side_k =
+                    crate::stroke_kernel::OffsetSide::parse(side.as_deref()).ok_or_else(|| {
+                        invalid(format!(
+                            "unknown side \"{}\" (both | left | right)",
+                            side.as_deref().unwrap_or_default()
+                        ))
+                    })?;
+                // Engine ADR 1019: one closed contour is the single-contour
+                // offset; a compound path is offset per contour by its
+                // nesting (holes move the other way); an OPEN contour is the
+                // two-sided band of width 2·|δ| (B-21, Illustrator's own
+                // answer for an open path) or, with `side`, one open
+                // parallel path on that side.
+                crate::stroke_kernel::offset_path(
+                    anchors,
+                    subpath_starts,
+                    subpath_open,
+                    *delta,
+                    join_k,
+                    *miter_limit,
+                    side_k,
+                )
             }
             Value::SimplifyPath { tolerance, .. } => {
                 kurbo_kernel::simplify_path(anchors, subpath_starts, subpath_open, *tolerance)
@@ -580,11 +575,13 @@ pub(super) fn apply_path_kernel_op(
                 delta,
                 join,
                 miter_limit,
+                side,
                 ..
             } => Value::OffsetPath {
                 delta,
                 join,
                 miter_limit,
+                side,
                 prev_anchors: Some(snap_anchors.clone()),
                 prev_subpath_starts: Some(snap_starts.clone()),
                 prev_subpath_open: Some(snap_open.clone()),

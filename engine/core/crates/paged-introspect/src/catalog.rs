@@ -335,7 +335,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.pathPointSet", "(elemId, index, role, [x,y])", "bool", "write", "Write one Bezier handle (role = anchor|left|right)."),
         f!("paged.pathOpenAt", "(elemId, index)", "bool", "write", "Cut the path at the anchor at flat index."),
         f!("paged.outlineStroke", "(elemId, width, cap, join, miter)", "bool", "write", "Replace the path with its stroke-expansion outline."),
-        f!("paged.offsetPath", "(elemId, delta, join, miter)", "bool", "write", "Inset (delta<0) / outset (delta>0) a single closed contour."),
+        f!("paged.offsetPath", "(elemId, delta, join, miter, side?)", "bool", "write", "Inset (delta<0) / outset (delta>0) a path; compound paths keep their holes; side (both|left|right) offsets an open contour to one side."),
         f!("paged.simplifyPath", "(elemId, tolerance)", "bool", "write", "Re-express the path with fewer anchors within tolerance pt."),
         f!("paged.pathfinderBoolean", "(keptId, [otherIds], kind)", "bool", "author",
            "Pathfinder boolean (kind = union|intersect|subtract|exclude)."),

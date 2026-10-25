@@ -41,46 +41,39 @@
 //! those stay with it as extra subpaths (a compound path), exactly the
 //! way Illustrator's Divide keeps an annulus as one object.
 //!
-//! # Design — why the graph, not 2^N booleans
+//! # Design — one graph, one face walk (engine ADR 1019)
 //!
-//! Two designs were on the table.
+//! 1. **Split.** `flo_curves`' [`GraphPath`] (`from_merged_paths` +
+//!    `self_collide`) splits every input curve at every crossing,
+//!    including an input's crossings with itself. That is the only
+//!    numerically hard step, and it runs once.
+//! 2. **Walk.** [`crate::planar_dcel`] reads the collided graph into a
+//!    doubly-connected edge list — vertices merged, coincident edges
+//!    collapsed, half-edges sorted by angle at every vertex — and walks
+//!    every cycle once. Components nested inside a face become its holes.
+//! 3. **Label.** Crossing an edge flips membership of the inputs that
+//!    contributed it, so one breadth-first pass from the outside labels
+//!    every face with its signature. Each face is then checked with ONE
+//!    point-in-path test per input at an interior point; where the two
+//!    disagree (a crossing the collision pass resolved inexactly), the
+//!    point test wins.
+//! 4. **Group.** Adjacent faces with the same signature are one face
+//!    (an edge between them separates nothing), and every face's outline
+//!    is read off the walk: no booleans, no ray casting, no
+//!    `exterior_paths` — so the C-21 comparator is not on this path at
+//!    all.
 //!
-//! **(A) Face-walk the graph.** `flo_curves` 0.8's [`GraphPath`] *is* the
-//! planar graph: `from_merged_paths` + `self_collide` splits every input
-//! curve at every crossing. But it does not expose the one thing a face
-//! walk needs — the cyclic (by angle) order of edges around a vertex.
-//! `edges_for_point` yields storage order, `GraphEdgeRef`'s fields are
-//! `pub(crate)` (so a walker cannot even synthesise the refs it wants),
-//! and there is no twin/next accessor. A literal face walk would mean
-//! rebuilding a DCEL from `all_edges()` + geometry — re-deriving vertex
-//! identity from coordinates and re-solving tangential ordering that
-//! `self_collide` had already settled.
+//! Before the walk replaced it (B-22, 2026-08) each face was materialised
+//! by a ray-casting pass over the whole graph (O(F·E)) with a boolean
+//! fallback, which is why the caps were 12 inputs and 256 faces. They
+//! are now [`MAX_PLANAR_INPUTS`] and [`MAX_PLANAR_FACES`], behind an
+//! operation budget ([`PlanarLimits`]) that refuses with a named error
+//! ([`PlanarError::OverBudget`]) instead of running for minutes.
 //!
-//! **(B) Containment signature + boolean ops.** Exact, but enumerating
-//! every face costs `2^N` boolean chains and each chain re-runs the
-//! expensive curve-curve collision pass from scratch.
-//!
-//! What shipped is the hybrid the real API invites. `flo_curves` exposes
-//! the exact hook its own `path_add`/`path_sub`/`path_intersect` ride:
-//! [`GraphPath::set_edge_kinds_by_ray_casting`], whose predicate receives
-//! the PER-INPUT crossing counts (`PathLabel(i)` → `counts[i]`). So the
-//! arrangement is built ONCE (one `self_collide`), and each face's
-//! outline is then one `reset_edge_kinds` → `set_edge_kinds_by_ray_casting`
-//! → `heal_exterior_gaps` → `exterior_paths` pass over that shared graph.
-//! That is design B's semantics (signatures, exact outlines) at design
-//! A's cost profile (O(E) per face, not a fresh N-way boolean chain), and
-//! it runs through the very same numerical code path the shipped
-//! Unite / Intersect / Subtract already use.
-//!
-//! Which signatures are non-empty is discovered by probing: every face of
-//! the arrangement is bounded by at least one edge of the collided graph,
-//! so offsetting each edge's midpoint by ±ε along its normal (at three
-//! ε scales) lands inside the two faces it separates. Probing can only
-//! over-generate — a signature with no region materialises to nothing and
-//! is dropped — so false positives are free and only a missed face would
-//! hurt. [`PlanarArrangement::complete`] is the honest check on that: the
-//! summed face area is compared against the union area (computed on the
-//! same graph), and a mismatch is reported rather than hidden.
+//! [`PlanarArrangement::complete`] stays the honest check: the summed
+//! face area is compared against the area the walk's outer boundaries
+//! enclose minus the empty faces, and a walk that met an inconsistency
+//! says so.
 //!
 //! # Coordinate space
 //!
@@ -94,35 +87,27 @@
 //! - **Live Paint** — its PERSISTENT face/edge graph with gap detection
 //!   is out of scope here. That needs a document-resident object type
 //!   that survives edits, not a query (RFI B-22).
-//! - **`flo_curves` 0.8 `exterior_paths` can panic** (C-21, MITIGATED).
-//!   Its point sort uses an epsilon comparison on x
-//!   (`(x_a - x_b).abs() < 0.01`) that is not transitive, and rustc's
-//!   driftsort detects the violation and panics rather than returning
-//!   garbage. This is UPSTREAM and pre-existing — every shipped
-//!   `path_add` / `path_sub` / `path_intersect` ends in the same call, so
-//!   `pathfinderBoolean` carries the same hazard — but a dense
-//!   arrangement makes it easier to reach. Inputs are now snapped onto
-//!   [`PLANAR_ACCURACY`], a binary-exact grid coarser than that epsilon,
-//!   which collapses the comparator to a transitive lexicographic order
-//!   for every input-derived point; crossings the graph INVENTS are the
-//!   remaining residual, and `ray_collisions` has the same defect class
-//!   untouched. Both are written up in the C-21 section of
-//!   [`crate::bezier_conv`], together with why the fix cannot be the
-//!   `accuracy` argument alone and what a complete fix would take.
+//! - **Progress.** [`build_arrangement_with`] reports progress through a
+//!   callback; the wire has no progress channel for a read
+//!   (`RequestPlanarRegions` answers once), so the editor sees the
+//!   budget refusal, not a progress bar.
+//! - **C-21** (the `flo_curves` comparator) no longer applies to the
+//!   arrangement, but [`union_faces`] still runs one `flo_curves` sweep
+//!   and the inputs are still snapped onto [`PLANAR_ACCURACY`] — the
+//!   collision pass is `flo_curves` code too.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use flo_curves::bezier::path::{
-    path_add, path_intersect, path_intersects_ray, path_remove_overlapped_points, path_sub,
-    GraphPath, PathLabel, SimpleBezierPath,
+    path_intersects_ray, path_remove_overlapped_points, GraphPath, PathLabel, SimpleBezierPath,
 };
-use flo_curves::bezier::{BezierCurve, BezierCurveFactory, NormalCurve};
+use flo_curves::bezier::BezierCurve;
 use flo_curves::{Coord2, Coordinate2D};
 use paged_model::PathAnchor;
 
-use crate::bezier_conv::{
-    flo_to_idml_path, idml_path_to_flo, idml_path_to_flo_on_grid, BOOLEAN_GRID,
-};
+use crate::bezier_conv::{flo_to_idml_path, idml_path_to_flo_on_grid, BOOLEAN_GRID};
+use crate::planar_dcel::{AxisLine, Dcel, DcelError, P, UNBOUNDED};
 
 /// Subdivision accuracy handed to `flo_curves`, AND the grid every input
 /// path is snapped onto first. Matches [`crate::pathfinder`]'s constant —
@@ -131,13 +116,9 @@ use crate::bezier_conv::{
 ///
 /// **C-21 — load-bearing for crash-safety; do not lower it.** It has to
 /// stay strictly above `flo_curves` 0.8.0's hardcoded 0.01 sort epsilon,
-/// because that is what makes the point sort inside `exterior_paths` a
-/// strict weak ordering; below it, Rust's driftsort detects the broken
-/// comparator and PANICS (`panic = abort` in the wasm worker, so it is an
-/// unrecoverable abort, not a bad result). A power of two is what makes
-/// the separation exact in f64 — `1/64` is the finest one above 0.01.
-/// Full derivation, and the residuals this does not cover, in the C-21
-/// section of [`crate::bezier_conv`]. Pinned by
+/// because [`union_faces`] still ends in `exterior_paths`, whose point
+/// sort is only a strict weak ordering on this grid. Full derivation in
+/// the C-21 section of [`crate::bezier_conv`]. Pinned by
 /// `planar_accuracy_grid_separates_above_the_flo_curves_sort_epsilon`.
 const PLANAR_ACCURACY: f64 = BOOLEAN_GRID;
 
@@ -149,35 +130,79 @@ const _: () = assert!(
     "C-21: PLANAR_ACCURACY must stay strictly above flo_curves' 0.01 sort epsilon"
 );
 
-/// Hard cap on the number of input paths a FULL face enumeration
-/// accepts. Face count grows as 2^N in the worst case (N shapes in
-/// general position), and every face costs a ray-casting pass over the
-/// whole arrangement, so an uncapped call is an easy way to hang a
-/// worker thread.
-///
-/// Past the cap [`build_arrangement`] returns
+/// Cap on the number of input paths. Past it every entry point returns
 /// [`PlanarError::TooManyInputs`] and does NO work — it never silently
-/// truncates to the first 12. The point query
-/// ([`face_at_point`]) is not capped by face count (it materialises one
-/// signature), but takes the same input cap so a caller can't smuggle a
-/// 200-path arrangement in through the hover door.
-pub const MAX_PLANAR_INPUTS: usize = 12;
+/// truncates.
+pub const MAX_PLANAR_INPUTS: usize = 1000;
 
-/// Hard cap on the number of faces a full enumeration will materialise.
-/// Hitting it returns [`PlanarError::TooManyFaces`] — again a refusal,
-/// not a truncation, because a truncated arrangement is worse than none
-/// (its faces no longer tile the union, and every verb built on it would
+/// Cap on the number of faces a full enumeration materialises. Hitting
+/// it returns [`PlanarError::TooManyFaces`] — a refusal, not a
+/// truncation, because a truncated arrangement is worse than none (its
+/// faces no longer tile the union, and every verb built on it would
 /// silently drop artwork).
-///
-/// A BACKSTOP, not the usual limit: 12 simple shapes arrange into O(n²)
-/// ≈ 150 faces at worst, so this only fires on pathological inputs —
-/// compound paths with dozens of contours, or heavily self-intersecting
-/// ones, where the face count is driven by contours rather than by
-/// elements.
-pub const MAX_PLANAR_FACES: usize = 256;
+pub const MAX_PLANAR_FACES: usize = 100_000;
+
+/// Cap on the edges of the collided graph (each crossing adds two).
+pub const MAX_PLANAR_EDGES: usize = 1_000_000;
+
+/// Cap on the curve pairs whose bounding boxes overlap — the work the
+/// collision pass will do, counted BEFORE it starts.
+pub const MAX_PLANAR_COLLISION_PAIRS: u64 = 4_000_000;
 
 /// Relative tolerance for the "do the faces tile the union?" check.
 const AREA_TOLERANCE: f64 = 1e-3;
+
+/// The arrangement's budget. An operation budget, not a wall-clock one:
+/// it is deterministic (the same inputs are refused on every machine)
+/// and it needs no clock, which the wasm worker does not have.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlanarLimits {
+    pub max_inputs: usize,
+    pub max_faces: usize,
+    pub max_edges: usize,
+    pub max_collision_pairs: u64,
+}
+
+impl Default for PlanarLimits {
+    fn default() -> Self {
+        PlanarLimits {
+            max_inputs: MAX_PLANAR_INPUTS,
+            max_faces: MAX_PLANAR_FACES,
+            max_edges: MAX_PLANAR_EDGES,
+            max_collision_pairs: MAX_PLANAR_COLLISION_PAIRS,
+        }
+    }
+}
+
+/// The stages a build passes through, for progress and for the budget
+/// refusal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanarStage {
+    /// Splitting every curve at every crossing.
+    Collide,
+    /// Building the edge list and walking the faces.
+    Walk,
+    /// Reading each face's outline and checking its signature.
+    Faces,
+}
+
+impl PlanarStage {
+    fn name(self) -> &'static str {
+        match self {
+            PlanarStage::Collide => "collision",
+            PlanarStage::Walk => "face walk",
+            PlanarStage::Faces => "face outlines",
+        }
+    }
+}
+
+/// One progress report: `done` of `total` units of `stage`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlanarProgress {
+    pub stage: PlanarStage,
+    pub done: u64,
+    pub total: u64,
+}
 
 /// Honest refusals from the arrangement kernel.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -188,6 +213,12 @@ pub enum PlanarError {
     TooManyFaces { cap: usize },
     /// Fewer than one input carried usable geometry.
     NoGeometry,
+    /// A stage would exceed its share of the [`PlanarLimits`] budget.
+    OverBudget {
+        stage: PlanarStage,
+        work: u64,
+        budget: u64,
+    },
 }
 
 impl std::fmt::Display for PlanarError {
@@ -202,6 +233,16 @@ impl std::fmt::Display for PlanarError {
                 "planar arrangement resolved more than {cap} faces; refine the selection"
             ),
             PlanarError::NoGeometry => write!(f, "no input carried usable path geometry"),
+            PlanarError::OverBudget {
+                stage,
+                work,
+                budget,
+            } => write!(
+                f,
+                "planar arrangement is over its budget in the {} stage ({work} > {budget}); \
+                 refine the selection",
+                stage.name()
+            ),
         }
     }
 }
@@ -230,6 +271,20 @@ pub struct PlanarFace {
     pub inside: (f32, f32),
 }
 
+/// How much work a build did — deterministic counts, the arrangement's
+/// work budget (`paged-perf`'s planar budgets gate on them).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PlanarStats {
+    /// Curve pairs whose boxes overlap: what the collision pass clipped.
+    pub collision_pairs: u64,
+    /// Edges of the face walk (after merging and pruning).
+    pub edges: usize,
+    /// Elementary faces the walk found (empty ones included).
+    pub elementary_faces: usize,
+    /// Faces whose edge-toggled signature the point test corrected.
+    pub signature_corrections: usize,
+}
+
 /// The full arrangement of N input paths.
 #[derive(Debug, Clone)]
 pub struct PlanarArrangement {
@@ -241,18 +296,59 @@ pub struct PlanarArrangement {
     pub union_area: f64,
     /// Summed face area.
     pub faces_area: f64,
-    /// `faces_area ≈ union_area` — the faces tile the union. `false`
-    /// means the probe pass missed a region (a sliver thinner than the
-    /// finest probe offset); the faces returned are still real, the set
-    /// is just not exhaustive. Callers that must be exact should refuse
-    /// rather than proceed.
+    /// `faces_area ≈ union_area` and the walk was consistent — the faces
+    /// tile the union. `false` means a region was lost (a sliver thinner
+    /// than the arrangement's resolution, or a crossing the collision
+    /// pass resolved inconsistently); the faces returned are still real,
+    /// the set is just not exhaustive. Callers that must be exact should
+    /// refuse rather than proceed.
     pub complete: bool,
+    /// The work the build did.
+    pub stats: PlanarStats,
+    /// The walk the faces were read from, kept so unions of faces come
+    /// off the same edges ([`PlanarArrangement::union_of`]).
+    graph: Arc<Dcel>,
+    /// Elementary DCEL faces per entry of `faces`.
+    members: Vec<Vec<u32>>,
 }
 
 impl PlanarArrangement {
     /// Look a face up by its stable id.
     pub fn face(&self, id: &str) -> Option<&PlanarFace> {
         self.faces.iter().find(|f| f.id == id)
+    }
+
+    /// The union of the faces whose ids are listed, read off the face
+    /// walk: the half-edges with a listed face on one side and anything
+    /// else on the other, chained. Boundaries two listed faces share
+    /// dissolve; unknown ids are ignored. `(anchors, subpath_starts)`,
+    /// empty when nothing is selected.
+    pub fn union_of(&self, ids: &[&str]) -> (Vec<PathAnchor>, Vec<usize>) {
+        let mut selected = vec![false; self.graph.faces.len()];
+        for (face, members) in self.faces.iter().zip(&self.members) {
+            if ids.contains(&face.id.as_str()) {
+                for m in members {
+                    selected[*m as usize] = true;
+                }
+            }
+        }
+        let group = |f: u32| -> u32 {
+            if f != UNBOUNDED && selected[f as usize] {
+                0
+            } else {
+                UNBOUNDED
+            }
+        };
+        let mut cycles: Vec<(f64, Vec<u32>)> = self
+            .graph
+            .boundary_walk(&group)
+            .into_iter()
+            .map(|(_, hes)| (self.graph.cycle_area(&hes), hes))
+            .filter(|(area, hes)| !is_sliver_cycle(&self.graph, hes, *area))
+            .collect();
+        // Outer contours first, largest first; holes after.
+        cycles.sort_by(|a, b| b.0.total_cmp(&a.0));
+        contours_to_anchors(&self.graph, cycles.iter().map(|(_, hes)| hes.as_slice()))
     }
 }
 
@@ -261,105 +357,283 @@ impl PlanarArrangement {
 // ---------------------------------------------------------------------------
 
 /// Build the full arrangement of `inputs` (each a flat anchor list +
-/// `subpath_starts`, the idml path representation).
+/// `subpath_starts`, the idml path representation) within the default
+/// [`PlanarLimits`].
 pub fn build_arrangement(
     inputs: &[(Vec<PathAnchor>, Vec<usize>)],
 ) -> Result<PlanarArrangement, PlanarError> {
-    if inputs.len() > MAX_PLANAR_INPUTS {
+    build_arrangement_with(inputs, &PlanarLimits::default(), &mut |_| {})
+}
+
+/// [`build_arrangement`] with an explicit budget and a progress callback.
+pub fn build_arrangement_with(
+    inputs: &[(Vec<PathAnchor>, Vec<usize>)],
+    limits: &PlanarLimits,
+    progress: &mut dyn FnMut(PlanarProgress),
+) -> Result<PlanarArrangement, PlanarError> {
+    if inputs.len() > limits.max_inputs {
         return Err(PlanarError::TooManyInputs {
             count: inputs.len(),
-            cap: MAX_PLANAR_INPUTS,
+            cap: limits.max_inputs,
         });
     }
     let flo = to_flo(inputs)?;
-    let mut graph = build_graph(&flo);
+    let n = flo.len();
 
-    // Probe both sides of every arrangement edge to discover which
-    // signatures actually carry area.
-    let candidates = probe_signatures(&graph, &flo);
-    if candidates.len() > MAX_PLANAR_FACES {
-        return Err(PlanarError::TooManyFaces {
-            cap: MAX_PLANAR_FACES,
-        });
+    // --- collide (budgeted before it starts) ---------------------------
+    let collision_pairs = check_collision_budget(&flo, limits.max_collision_pairs)?;
+    progress(PlanarProgress {
+        stage: PlanarStage::Collide,
+        done: 0,
+        total: 1,
+    });
+    let graph = build_graph(&flo);
+    progress(PlanarProgress {
+        stage: PlanarStage::Collide,
+        done: 1,
+        total: 1,
+    });
+
+    // --- walk ----------------------------------------------------------
+    // Elementary faces include the empty ones (holes nobody fills) and
+    // the pieces a same-signature group is made of, so the walk gets
+    // headroom over the output cap.
+    let dcel = Dcel::build(
+        &graph,
+        &axis_lines(&flo),
+        limits.max_edges,
+        limits.max_faces.saturating_mul(4),
+    )
+    .map_err(|e| match e {
+        DcelError::TooManyEdges { edges, cap } => PlanarError::OverBudget {
+            stage: PlanarStage::Walk,
+            work: edges as u64,
+            budget: cap as u64,
+        },
+        DcelError::TooManyFaces { .. } => PlanarError::TooManyFaces {
+            cap: limits.max_faces,
+        },
+    })?;
+    drop(graph);
+    progress(PlanarProgress {
+        stage: PlanarStage::Walk,
+        done: 1,
+        total: 1,
+    });
+
+    let mut dcel = dcel;
+    let total_faces = dcel.faces.len() as u64;
+
+    // --- one point test per face: interior point + signature -----------
+    let input_boxes: Vec<[f64; 4]> = flo.iter().map(|paths| paths_bbox(paths)).collect();
+    let mut inside_of: Vec<Option<P>> = Vec::with_capacity(dcel.faces.len());
+    let mut disagreements = 0usize;
+    for f in 0..dcel.faces.len() as u32 {
+        if f % 1024 == 0 {
+            progress(PlanarProgress {
+                stage: PlanarStage::Faces,
+                done: f as u64,
+                total: total_faces,
+            });
+        }
+        let inside = if dcel.faces[f as usize].area > 0.0 {
+            dcel.interior_point(f)
+        } else {
+            None
+        };
+        if let Some(p) = inside {
+            if let Some(sig) = signature_at_boxed(&flo, &input_boxes, Coord2(p.0, p.1)) {
+                let sig: Vec<u32> = sig.into_iter().map(|i| i as u32).collect();
+                if sig != dcel.faces[f as usize].signature {
+                    disagreements += 1;
+                    dcel.faces[f as usize].signature = sig;
+                }
+            }
+        }
+        inside_of.push(inside);
     }
 
-    let n = flo.len();
+    // --- group adjacent faces of one signature --------------------------
+    let nf = dcel.faces.len();
+    let mut parent: Vec<u32> = (0..nf as u32).collect();
+    fn find(parent: &mut [u32], mut x: u32) -> u32 {
+        while parent[x as usize] != x {
+            let p = parent[x as usize];
+            parent[x as usize] = parent[p as usize];
+            x = p;
+        }
+        x
+    }
+    for e in 0..dcel.edges.len() {
+        let (f, g) = (dcel.he_face[2 * e], dcel.he_face[2 * e + 1]);
+        if f == UNBOUNDED || g == UNBOUNDED || f == g {
+            continue;
+        }
+        let sig_f = &dcel.faces[f as usize].signature;
+        if sig_f.is_empty() || *sig_f != dcel.faces[g as usize].signature {
+            continue;
+        }
+        let (rf, rg) = (find(&mut parent, f), find(&mut parent, g));
+        if rf != rg {
+            parent[rf.max(rg) as usize] = rf.min(rg);
+        }
+    }
+    let mut group_of: Vec<u32> = vec![UNBOUNDED; nf];
+    let mut group_members: Vec<Vec<u32>> = Vec::new();
+    let mut group_index: BTreeMap<u32, u32> = BTreeMap::new();
+    for f in 0..nf as u32 {
+        if dcel.faces[f as usize].signature.is_empty() {
+            continue;
+        }
+        let root = find(&mut parent, f);
+        let g = *group_index.entry(root).or_insert_with(|| {
+            group_members.push(Vec::new());
+            (group_members.len() - 1) as u32
+        });
+        group_of[f as usize] = g;
+        group_members[g as usize].push(f);
+    }
+
+    // --- outlines: one boundary walk for every group at once ------------
+    let mut cycles_of_group: Vec<Vec<Vec<u32>>> = vec![Vec::new(); group_members.len()];
+    for (g, hes) in dcel.boundary_walk(&|f: u32| {
+        if f == UNBOUNDED {
+            UNBOUNDED
+        } else {
+            group_of[f as usize]
+        }
+    }) {
+        cycles_of_group[g as usize].push(hes);
+    }
+
     let mut faces: Vec<PlanarFace> = Vec::new();
-    for signature in &candidates {
-        let loops = materialize(&mut graph, &flo, signature);
-        for (anchors, starts, area, inside) in split_components(&loops) {
-            // VALIDATE (found by the property sweep): `heal_exterior_gaps`
-            // bridges skipped edges by walking up to three hops, and on a
-            // dense five-path arrangement one such bridge closed a loop
-            // around a NEIGHBOURING region — two faces came back with
-            // different signatures over the very same 11 pt². A component
-            // of signature S must contain points whose containment set IS
-            // S, so re-derive it at the component's interior point and
-            // drop the impostor. Components too thin to place a probe in
-            // are kept unvalidated rather than guessed away.
-            let inside = match inside {
-                Some(p) => {
-                    let actual = signature_at(&flo, Coord2(p.0 as f64, p.1 as f64));
-                    if actual.is_some_and(|sig| sig != *signature) {
-                        continue;
-                    }
-                    p
-                }
-                None => anchors.first().map(|a| a.anchor).unwrap_or((0.0, 0.0)),
+    let mut members_of: Vec<Vec<u32>> = Vec::new();
+    for (g, cycles) in cycles_of_group.into_iter().enumerate() {
+        let signature: Vec<usize> = dcel.faces[group_members[g][0] as usize]
+            .signature
+            .iter()
+            .map(|i| *i as usize)
+            .collect();
+        for (outer, holes, area) in components_of(&dcel, cycles) {
+            if is_sliver_cycle(&dcel, &outer, area) {
+                continue;
+            }
+            // Members inside this component (one component per group in
+            // all but pinched cases).
+            let members: Vec<u32> = if group_members[g].len() == 1 {
+                group_members[g].clone()
+            } else {
+                group_members[g]
+                    .iter()
+                    .copied()
+                    .filter(|m| match inside_of[*m as usize] {
+                        Some(p) => dcel.winding_of(&outer, p) != 0,
+                        None => true,
+                    })
+                    .collect()
             };
+            let inside = members
+                .iter()
+                .filter_map(|m| inside_of[*m as usize].map(|p| (dcel.faces[*m as usize].area, p)))
+                .max_by(|a, b| a.0.total_cmp(&b.0))
+                .map(|(_, p)| (p.0 as f32, p.1 as f32));
+            let mut contours: Vec<&[u32]> = vec![outer.as_slice()];
+            contours.extend(holes.iter().map(|h| h.as_slice()));
+            let (anchors, subpath_starts) = contours_to_anchors(&dcel, contours.into_iter());
+            if anchors.is_empty() {
+                continue;
+            }
+            let inside = inside.unwrap_or(anchors[0].anchor);
             faces.push(PlanarFace {
                 id: String::new(), // assigned below, after ordering
                 signature: signature.clone(),
                 anchors,
-                subpath_starts: starts,
+                subpath_starts,
                 area,
                 inside,
             });
-            if faces.len() > MAX_PLANAR_FACES {
+            members_of.push(members);
+            if faces.len() > limits.max_faces {
                 return Err(PlanarError::TooManyFaces {
-                    cap: MAX_PLANAR_FACES,
+                    cap: limits.max_faces,
                 });
             }
         }
     }
+    progress(PlanarProgress {
+        stage: PlanarStage::Faces,
+        done: total_faces,
+        total: total_faces,
+    });
 
     // Deterministic order: by signature, then by the component's
     // top-left-most anchor (rounded, so float wobble can't reshuffle
     // ids between calls).
-    faces.sort_by(|a, b| {
-        a.signature
-            .cmp(&b.signature)
-            .then_with(|| key_cmp(order_key(a), order_key(b)))
+    let mut order: Vec<usize> = (0..faces.len()).collect();
+    order.sort_by(|a, b| {
+        faces[*a]
+            .signature
+            .cmp(&faces[*b].signature)
+            .then_with(|| key_cmp(order_key(&faces[*a]), order_key(&faces[*b])))
     });
+    let mut sorted_faces = Vec::with_capacity(faces.len());
+    let mut sorted_members = Vec::with_capacity(faces.len());
+    let mut slots: Vec<Option<PlanarFace>> = faces.into_iter().map(Some).collect();
+    let mut member_slots: Vec<Option<Vec<u32>>> = members_of.into_iter().map(Some).collect();
+    for i in order {
+        sorted_faces.push(slots[i].take().expect("each face once"));
+        sorted_members.push(member_slots[i].take().expect("each face once"));
+    }
     let mut per_signature: BTreeMap<Vec<usize>, usize> = BTreeMap::new();
-    for face in faces.iter_mut() {
+    for face in sorted_faces.iter_mut() {
         let slot = per_signature.entry(face.signature.clone()).or_insert(0);
         face.id = face_id(&face.signature, *slot);
         *slot += 1;
     }
 
-    let faces_area: f64 = faces.iter().map(|f| f.area).sum();
-    let union_area = region_area(&materialize_union(&mut graph, &flo));
-    let complete = (faces_area - union_area).abs() <= AREA_TOLERANCE * union_area.max(1.0);
+    // The union is what the walk's outer boundaries enclose, less the
+    // bounded faces nothing covers; a face lost on the way (a sliver, or
+    // a group the walk could not close) shows up as a difference.
+    let faces_area: f64 = sorted_faces.iter().map(|f| f.area).sum();
+    let enclosed: f64 = dcel
+        .top_level
+        .iter()
+        .map(|c| dcel.cycles[*c as usize].area.abs())
+        .sum();
+    let empty: f64 = dcel
+        .faces
+        .iter()
+        .filter(|f| f.signature.is_empty())
+        .map(|f| f.area.max(0.0))
+        .sum();
+    let union_area = (enclosed - empty).max(0.0);
+    let complete =
+        dcel.consistent && (faces_area - union_area).abs() <= AREA_TOLERANCE * union_area.max(1.0);
+    let stats = PlanarStats {
+        collision_pairs,
+        edges: dcel.edges.len(),
+        elementary_faces: dcel.faces.len(),
+        signature_corrections: disagreements,
+    };
 
     Ok(PlanarArrangement {
-        faces,
+        faces: sorted_faces,
         input_count: n,
         union_area,
         faces_area,
         complete,
+        stats,
+        graph: Arc::new(dcel),
+        members: sorted_members,
     })
 }
 
 /// The Shape Builder hover query: which face lies under `point`?
 ///
-/// Cheap relative to a full enumeration — the signature comes from N
-/// point-in-path tests against the ORIGINAL inputs, and only that one
-/// signature is materialised. `None` when the point is outside every
-/// input (no face there).
-///
-/// Ids agree with [`build_arrangement`]'s for the same inputs: the
-/// component ordering rule is shared.
+/// `None` (without building anything) when the point is outside every
+/// input. Otherwise the arrangement is built and the face whose region
+/// holds the point is returned — the same face, with the same id,
+/// [`build_arrangement`] reports.
 pub fn face_at_point(
     inputs: &[(Vec<PathAnchor>, Vec<usize>)],
     point: (f32, f32),
@@ -376,33 +650,17 @@ pub fn face_at_point(
     if signature.is_empty() {
         return Ok(None);
     }
-    let mut graph = build_graph(&flo);
-    let loops = materialize(&mut graph, &flo, &signature);
-    // Same filter AND ordering rule `build_arrangement` uses — both,
-    // because the component INDEX is half the face id: validating in one
-    // place and not the other would renumber the components and hand
-    // back an id that names a different face.
-    let mut components: Vec<Component> = split_components(&loops)
-        .into_iter()
-        .filter(|(_, _, _, inside)| match inside {
-            Some(p) => signature_at(&flo, Coord2(p.0 as f64, p.1 as f64))
-                .is_none_or(|sig| sig == signature),
-            None => true,
-        })
-        .collect();
-    components.sort_by(|a, b| key_cmp(component_key(&a.0), component_key(&b.0)));
-    for (slot, (anchors, starts, area, inside)) in components.into_iter().enumerate() {
-        let flo_component = idml_path_to_flo(&anchors, &starts);
-        if point_inside(&flo_component, p).unwrap_or(false) {
-            let inside = inside.unwrap_or(point);
-            return Ok(Some(PlanarFace {
-                id: face_id(&signature, slot),
-                signature,
-                anchors,
-                subpath_starts: starts,
-                area,
-                inside,
-            }));
+    let arrangement = build_arrangement(inputs)?;
+    let q = (point.0 as f64, point.1 as f64);
+    for (face, members) in arrangement.faces.iter().zip(&arrangement.members) {
+        if face.signature != signature {
+            continue;
+        }
+        if members
+            .iter()
+            .any(|m| arrangement.graph.face_contains(*m, q))
+        {
+            return Ok(Some(face.clone()));
         }
     }
     Ok(None)
@@ -411,8 +669,11 @@ pub fn face_at_point(
 /// Union a set of faces into one path (Shape Builder's click/drag
 /// output). Shared boundaries between adjacent faces DISSOLVE — the
 /// result is one clean outline, not a compound path with internal
-/// edges — because the merge runs through `path_add`, the same union
-/// `pathfinderBoolean`'s Unite rides.
+/// edges.
+///
+/// For faces of one [`PlanarArrangement`], prefer
+/// [`PlanarArrangement::union_of`], which reads the union off the face
+/// walk instead of running a `flo_curves` sweep.
 pub fn union_faces(faces: &[&PlanarFace]) -> (Vec<PathAnchor>, Vec<usize>) {
     // C-21: face outlines come back through f32 anchors, so re-snap
     // before the sweep — `path_remove_overlapped_points` ends in
@@ -429,9 +690,7 @@ pub fn union_faces(faces: &[&PlanarFace]) -> (Vec<PathAnchor>, Vec<usize>) {
     // Faces are pairwise disjoint, so an even-odd sweep over their
     // combined contours IS their union — and it dissolves the edges two
     // adjacent faces share (each such edge has inside on both sides, so
-    // it never comes back out as exterior). `path_remove_overlapped_points`
-    // is flo_curves' name for exactly that sweep; it self-collides once
-    // instead of running one `path_add` per face.
+    // it never comes back out as exterior).
     let merged: Vec<SimpleBezierPath> = path_remove_overlapped_points(&loops, PLANAR_ACCURACY);
     let merged: Vec<SimpleBezierPath> = merged.into_iter().filter(|p| !is_sliver(p)).collect();
     flo_to_idml_path(&merged)
@@ -451,6 +710,7 @@ pub fn arrangement_edges(
         });
     }
     let flo = to_flo(inputs)?;
+    check_collision_budget(&flo, MAX_PLANAR_COLLISION_PAIRS)?;
     let graph = build_graph(&flo);
     let mut out: Vec<(usize, Vec<PathAnchor>)> = Vec::new();
     for edge_ref in graph.all_edge_refs().collect::<Vec<_>>() {
@@ -490,12 +750,8 @@ pub fn arrangement_edges(
 fn to_flo(
     inputs: &[(Vec<PathAnchor>, Vec<usize>)],
 ) -> Result<Vec<Vec<SimpleBezierPath>>, PlanarError> {
-    // C-21: everything downstream of here — the graph, the boolean
-    // fallback chain, the union — ends in `exterior_paths`, so the
-    // arrangement is built on grid-snapped geometry throughout. Snapping
-    // ONCE here also keeps the graph pass and the boolean fallback
-    // operating on identical inputs, which is what lets their results be
-    // compared for completeness.
+    // Snapped ONCE here, so the collision pass, the point tests and the
+    // standalone union all see identical geometry (C-21).
     let flo: Vec<Vec<SimpleBezierPath>> = inputs
         .iter()
         .map(|(anchors, starts)| idml_path_to_flo_on_grid(anchors, starts, PLANAR_ACCURACY))
@@ -504,6 +760,91 @@ fn to_flo(
         return Err(PlanarError::NoGeometry);
     }
     Ok(flo)
+}
+
+/// Count the curve pairs whose bounding boxes overlap — exactly the pairs
+/// the collision pass will clip against each other — with a sweep over
+/// x, and refuse before any of that work starts when the count passes
+/// `budget`.
+fn check_collision_budget(flo: &[Vec<SimpleBezierPath>], budget: u64) -> Result<u64, PlanarError> {
+    let mut boxes: Vec<[f64; 4]> = Vec::new();
+    for paths in flo {
+        for (start, segments) in paths {
+            let mut from = *start;
+            for (c1, c2, end) in segments {
+                let xs = [from.x(), c1.x(), c2.x(), end.x()];
+                let ys = [from.y(), c1.y(), c2.y(), end.y()];
+                boxes.push([
+                    xs.iter().copied().fold(f64::INFINITY, f64::min),
+                    ys.iter().copied().fold(f64::INFINITY, f64::min),
+                    xs.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+                    ys.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+                ]);
+                from = *end;
+            }
+        }
+    }
+    boxes.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    let mut pairs: u64 = 0;
+    // The sweep's own work is bounded too: a pathological input whose
+    // boxes all overlap in x but not in y still stops here.
+    let mut scanned: u64 = 0;
+    for i in 0..boxes.len() {
+        for j in (i + 1)..boxes.len() {
+            if boxes[j][0] > boxes[i][2] {
+                break;
+            }
+            scanned += 1;
+            if boxes[j][1] <= boxes[i][3] && boxes[i][1] <= boxes[j][3] {
+                pairs += 1;
+            }
+            if pairs > budget || scanned > budget.saturating_mul(4) {
+                return Err(PlanarError::OverBudget {
+                    stage: PlanarStage::Collide,
+                    work: pairs.max(scanned / 4),
+                    budget,
+                });
+            }
+        }
+    }
+    Ok(pairs)
+}
+
+/// Every horizontal or vertical straight segment of the inputs (on the
+/// grid already: the inputs are snapped).
+fn axis_lines(flo: &[Vec<SimpleBezierPath>]) -> Vec<AxisLine> {
+    let mut out = Vec::new();
+    for paths in flo {
+        for (start, segments) in paths {
+            let mut from = *start;
+            for (c1, c2, end) in segments {
+                let on = |p: &Coord2, q: &Coord2| {
+                    (p.x() - q.x()).abs() < 1e-9 && (p.y() - q.y()).abs() < 1e-9
+                };
+                let straight_h = from.y() == end.y() && c1.y() == from.y() && c2.y() == from.y();
+                let straight_v = from.x() == end.x() && c1.x() == from.x() && c2.x() == from.x();
+                if !on(&from, end) {
+                    if straight_v {
+                        out.push(AxisLine {
+                            vertical: true,
+                            at: from.x(),
+                            from: from.y().min(end.y()),
+                            to: from.y().max(end.y()),
+                        });
+                    } else if straight_h {
+                        out.push(AxisLine {
+                            vertical: false,
+                            at: from.y(),
+                            from: from.x().min(end.x()),
+                            to: from.x().max(end.x()),
+                        });
+                    }
+                }
+                from = *end;
+            }
+        }
+    }
+    out
 }
 
 /// Merge every input (labelled by its index) into one graph and split
@@ -519,163 +860,141 @@ fn build_graph(flo: &[Vec<SimpleBezierPath>]) -> GraphPath<Coord2, PathLabel> {
         .collect();
     let mut graph = GraphPath::from_merged_paths(labelled.iter().map(|(p, l)| (*p, *l)));
     graph.self_collide(PLANAR_ACCURACY);
-    // Mirrors what flo_curves' own arithmetic entry points do between
-    // `collide` and `exterior_paths`. C-21: in 0.8.0 this call is a
-    // NO-OP — `Coordinate::round` is `fn round(self, f64) -> Self` and
-    // `GraphPath::round` invokes it as a statement, discarding the
-    // result — which is exactly why core snaps its own inputs in
-    // `to_flo` instead of trusting it. Kept so the graph picks the
-    // rounding up for free if upstream ever assigns.
-    graph.round(PLANAR_ACCURACY);
     graph
 }
 
-/// Mark the edges bounding the region whose signature is exactly
-/// `signature`, then read the loops back out.
-///
-/// FALLBACK (found by the property sweep, not by reasoning): flo_curves'
-/// ray-casting marks an edge exterior only when a ray crosses it away
-/// from an intersection and away from the curve's ends, and it then
-/// tries to bridge whatever it skipped with `heal_exterior_gaps`
-/// (`MAX_HEAL_DEPTH` = 3). With TWO labels — every case the shipped
-/// boolean ops exercise — that always closed. With a five-path
-/// arrangement and a predicate as selective as "the signature is exactly
-/// this", one region came back with 10 exterior edges that formed no
-/// closed loop, so `exterior_paths` returned nothing for a 418 pt² face.
-/// When the graph pass reports unhealed gaps or yields nothing, this
-/// falls back to the design-B formula — `(∩ signature) − (∪ rest)` over
-/// the ORIGINAL inputs, the same `path_intersect` / `path_sub` chain
-/// `pathfinder_boolean` ships — which resolves those regions exactly.
-/// The graph pass stays the primary because it is O(E) per face and
-/// keeps adjacent faces sharing literally the same edges.
-fn materialize(
-    graph: &mut GraphPath<Coord2, PathLabel>,
-    flo: &[Vec<SimpleBezierPath>],
-    signature: &[usize],
-) -> Vec<SimpleBezierPath> {
-    let n = flo.len();
-    let mut wanted = vec![false; n];
-    for i in signature {
-        wanted[*i] = true;
+/// Group one face's boundary cycles into components: every positive
+/// cycle is an outer contour; every negative one a hole of the smallest
+/// outer contour around it. `(outer, holes, area)`.
+fn components_of(dcel: &Dcel, cycles: Vec<Vec<u32>>) -> Vec<(Vec<u32>, Vec<Vec<u32>>, f64)> {
+    let mut outers: Vec<(Vec<u32>, f64, Vec<Vec<u32>>)> = Vec::new();
+    let mut holes: Vec<(Vec<u32>, f64)> = Vec::new();
+    for c in cycles {
+        let area = dcel.cycle_area(&c);
+        if area > 0.0 {
+            outers.push((c, area, Vec::new()));
+        } else {
+            holes.push((c, area));
+        }
     }
-    graph.reset_edge_kinds();
-    graph.set_edge_kinds_by_ray_casting(|counts| {
-        (0..n).all(|i| (counts.get(i).copied().unwrap_or(0) & 1 != 0) == wanted[i])
-    });
-    let healed = graph.heal_exterior_gaps();
-    let loops = graph.exterior_paths::<SimpleBezierPath>();
-    if healed && !loops.is_empty() {
-        return loops;
+    outers.sort_by(|a, b| a.1.total_cmp(&b.1));
+    for (hole, _) in holes {
+        if outers.is_empty() {
+            break;
+        }
+        let probe = dcel.cubic(hole[0]).eval(0.5);
+        let host = if outers.len() == 1 {
+            0
+        } else {
+            outers
+                .iter()
+                .position(|(o, _, _)| dcel.winding_of(o, probe) != 0)
+                .unwrap_or(outers.len() - 1)
+        };
+        outers[host].2.push(hole);
     }
-    boolean_chain(flo, signature)
+    outers
+        .into_iter()
+        .map(|(o, area, hs)| {
+            let hole_area: f64 = hs.iter().map(|h| dcel.cycle_area(h).abs()).sum();
+            (o, hs, (area - hole_area).max(0.0))
+        })
+        .collect()
 }
 
-/// `(∩ signature) − (∪ rest)` over the original inputs — the exact
-/// region a signature names, computed the way the shipped Pathfinder
-/// booleans compute theirs. The empty-operand short-circuits in
-/// `path_intersect` / `path_sub` return the OTHER operand, so an empty
-/// accumulator has to be caught before every step rather than fed in.
-fn boolean_chain(flo: &[Vec<SimpleBezierPath>], signature: &[usize]) -> Vec<SimpleBezierPath> {
-    let mut acc: Vec<SimpleBezierPath> = Vec::new();
-    for i in signature {
-        if flo[*i].is_empty() {
-            return Vec::new();
-        }
-        acc = if acc.is_empty() {
-            flo[*i].clone()
-        } else {
-            path_intersect::<SimpleBezierPath>(&acc, &flo[*i], PLANAR_ACCURACY)
-        };
-        if acc.is_empty() {
-            return Vec::new();
-        }
-    }
-    for (i, other) in flo.iter().enumerate() {
-        if signature.contains(&i) || other.is_empty() {
+/// Half-edge cycles → one anchor table with a subpath per cycle.
+fn contours_to_anchors<'a>(
+    dcel: &Dcel,
+    contours: impl Iterator<Item = &'a [u32]>,
+) -> (Vec<PathAnchor>, Vec<usize>) {
+    let f = |p: P| (p.0 as f32, p.1 as f32);
+    let mut anchors = Vec::new();
+    let mut starts = Vec::new();
+    for hes in contours {
+        if hes.is_empty() {
             continue;
         }
-        acc = path_sub::<SimpleBezierPath>(&acc, other, PLANAR_ACCURACY);
-        if acc.is_empty() {
-            return Vec::new();
+        starts.push(anchors.len());
+        let k = hes.len();
+        // Start where `flo_curves`' exterior walk (which the faces used to
+        // come from) starts: the first vertex in ITS point order — x
+        // quantised into 0.01 pt columns, then y — so an outline that did
+        // not change keeps its first anchor.
+        let column = |p: P| (p.0 / 0.01).floor();
+        let first = (0..k)
+            .min_by(|a, b| {
+                let (pa, pb) = (dcel.cubic(hes[*a]).p0, dcel.cubic(hes[*b]).p0);
+                column(pa)
+                    .total_cmp(&column(pb))
+                    .then(pa.1.total_cmp(&pb.1))
+            })
+            .unwrap_or(0);
+        for j in 0..k {
+            let i = (first + j) % k;
+            let c = dcel.cubic(hes[i]);
+            let prev = dcel.cubic(hes[(i + k - 1) % k]);
+            anchors.push(PathAnchor {
+                anchor: f(c.p0),
+                left: f(prev.c2),
+                right: f(c.c1),
+            });
         }
     }
-    acc
+    (anchors, starts)
 }
 
-/// The union of every input, off the same graph — the denominator of
-/// the completeness check. Same fallback as [`materialize`]: a union the
-/// graph pass can't close is recomputed as a `path_add` chain.
-fn materialize_union(
-    graph: &mut GraphPath<Coord2, PathLabel>,
-    flo: &[Vec<SimpleBezierPath>],
-) -> Vec<SimpleBezierPath> {
-    let n = flo.len();
-    graph.reset_edge_kinds();
-    graph.set_edge_kinds_by_ray_casting(move |counts| {
-        (0..n).any(|i| counts.get(i).copied().unwrap_or(0) & 1 != 0)
-    });
-    let healed = graph.heal_exterior_gaps();
-    let loops = graph.exterior_paths::<SimpleBezierPath>();
-    if healed && !loops.is_empty() {
-        return loops;
-    }
-    let mut acc: Vec<SimpleBezierPath> = Vec::new();
-    for paths in flo.iter().filter(|p| !p.is_empty()) {
-        acc = if acc.is_empty() {
-            paths.clone()
-        } else {
-            path_add::<SimpleBezierPath>(&acc, paths, PLANAR_ACCURACY)
-        };
-    }
-    acc
+/// A cycle thinner than the arrangement's resolution everywhere (area
+/// below `accuracy × perimeter`): a lens two nearly coincident curves
+/// leave, not a region.
+fn is_sliver_cycle(dcel: &Dcel, hes: &[u32], area: f64) -> bool {
+    let perimeter: f64 = hes
+        .iter()
+        .map(|h| {
+            let c = dcel.cubic(*h);
+            ((c.p3.0 - c.p0.0).powi(2) + (c.p3.1 - c.p0.1).powi(2)).sqrt()
+        })
+        .sum();
+    area.abs() < PLANAR_ACCURACY * perimeter
 }
 
-/// Discover the non-empty signatures by stepping off both sides of
-/// every arrangement edge. Over-generation is harmless (an empty
-/// signature materialises to nothing); under-generation is what the
-/// completeness check catches, so probe at three ε scales.
-fn probe_signatures(
-    graph: &GraphPath<Coord2, PathLabel>,
+fn paths_bbox(paths: &[SimpleBezierPath]) -> [f64; 4] {
+    let mut b = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    for (start, segments) in paths {
+        for p in std::iter::once(start).chain(segments.iter().flat_map(|(c1, c2, e)| [c1, c2, e])) {
+            b[0] = b[0].min(p.x());
+            b[1] = b[1].min(p.y());
+            b[2] = b[2].max(p.x());
+            b[3] = b[3].max(p.y());
+        }
+    }
+    b
+}
+
+/// [`signature_at`] with each input's bounding box tested first, so a
+/// face only pays for the inputs that could contain it.
+fn signature_at_boxed(
     flo: &[Vec<SimpleBezierPath>],
-) -> Vec<Vec<usize>> {
-    let diagonal = bbox_diagonal(flo).max(1e-3);
-    let scales = [1e-2_f64, 1e-3, 1e-4];
-    let mut found: std::collections::BTreeSet<Vec<usize>> = std::collections::BTreeSet::new();
-    for edge_ref in graph.all_edge_refs().collect::<Vec<_>>() {
-        let edge = graph.get_edge(edge_ref);
-        let mid = edge.point_at_pos(0.5);
-        let normal = edge.normal_at_pos(0.5);
-        let len = (normal.x() * normal.x() + normal.y() * normal.y()).sqrt();
-        if !len.is_finite() || len < 1e-12 {
+    boxes: &[[f64; 4]],
+    point: Coord2,
+) -> Option<Vec<usize>> {
+    let mut signature = Vec::new();
+    for (i, paths) in flo.iter().enumerate() {
+        let b = boxes[i];
+        if point.x() < b[0] || point.x() > b[2] || point.y() < b[1] || point.y() > b[3] {
             continue;
         }
-        let unit = Coord2(normal.x() / len, normal.y() / len);
-        for scale in scales {
-            let eps = diagonal * scale;
-            for side in [1.0_f64, -1.0] {
-                let probe = Coord2(
-                    mid.x() + unit.x() * eps * side,
-                    mid.y() + unit.y() * eps * side,
-                );
-                let mut signature: Vec<usize> = Vec::new();
-                let mut usable = true;
-                for (i, paths) in flo.iter().enumerate() {
-                    match point_inside(paths, probe) {
-                        Some(true) => signature.push(i),
-                        Some(false) => {}
-                        None => {
-                            usable = false;
-                            break;
-                        }
-                    }
-                }
-                if usable && !signature.is_empty() {
-                    found.insert(signature);
-                }
-            }
+        match point_inside(paths, point) {
+            Some(true) => signature.push(i),
+            Some(false) => {}
+            None => return None,
         }
     }
-    found.into_iter().collect()
+    Some(signature)
 }
 
 /// The containment signature at a point: which inputs' interiors hold
@@ -747,113 +1066,9 @@ fn point_inside(paths: &[SimpleBezierPath], point: Coord2) -> Option<bool> {
     None
 }
 
-/// One connected component of a signature's region:
-/// `(anchors, subpath_starts, area, interior point)`. The interior
-/// point is `None` when no probe landed strictly inside (a region too
-/// thin for any offset to fall in); such a component is kept but cannot
-/// be signature-validated.
-type Component = (Vec<PathAnchor>, Vec<usize>, f64, Option<(f32, f32)>);
-
-/// Group the loops of one signature's region into connected components:
-/// a loop at even nesting depth is a component's outer contour, and the
-/// loops whose immediate parent it is are that component's holes.
-fn split_components(loops: &[SimpleBezierPath]) -> Vec<Component> {
-    let usable: Vec<&SimpleBezierPath> = loops
-        .iter()
-        .filter(|p| !p.1.is_empty() && !is_sliver(p))
-        .collect();
-    if usable.is_empty() {
-        return Vec::new();
-    }
-    // depth[k] = how many other loops contain loop k.
-    let mut depth = vec![0usize; usable.len()];
-    let mut contained_by: Vec<Vec<usize>> = vec![Vec::new(); usable.len()];
-    for k in 0..usable.len() {
-        let probe = usable[k].0;
-        for (j, other) in usable.iter().enumerate() {
-            if j == k {
-                continue;
-            }
-            if point_inside(std::slice::from_ref(*other), probe).unwrap_or(false) {
-                depth[k] += 1;
-                contained_by[k].push(j);
-            }
-        }
-    }
-    let mut out = Vec::new();
-    for k in 0..usable.len() {
-        if !depth[k].is_multiple_of(2) {
-            continue;
-        }
-        // Holes of component k: loops whose deepest container is k.
-        let mut member_loops: Vec<&SimpleBezierPath> = vec![usable[k]];
-        for (j, containers) in contained_by.iter().enumerate() {
-            if j == k || depth[j] != depth[k] + 1 {
-                continue;
-            }
-            if containers.contains(&k) {
-                member_loops.push(usable[j]);
-            }
-        }
-        let owned: Vec<SimpleBezierPath> = member_loops.iter().map(|p| (*p).clone()).collect();
-        let (anchors, starts) = flo_to_idml_path(&owned);
-        if anchors.is_empty() {
-            continue;
-        }
-        let outer = path_area(usable[k]).abs();
-        let holes: f64 = member_loops
-            .iter()
-            .skip(1)
-            .map(|p| path_area(p).abs())
-            .sum();
-        let area = (outer - holes).max(0.0);
-        out.push((anchors, starts, area, interior_point(&owned)));
-    }
-    out
-}
-
-/// A point strictly inside a component: step off its outer contour
-/// along the inward normal, shrinking until the probe lands inside.
-fn interior_point(component: &[SimpleBezierPath]) -> Option<(f32, f32)> {
-    let (start, segments) = component.first()?;
-    let mut scale = 1e-2_f64;
-    let diag = bbox_diagonal(std::slice::from_ref(&component.to_vec())).max(1e-3);
-    for _ in 0..6 {
-        for (idx, (cp1, cp2, end)) in segments.iter().enumerate() {
-            let from = if idx == 0 {
-                *start
-            } else {
-                segments[idx - 1].2
-            };
-            let curve = flo_curves::bezier::Curve::from_points(from, (*cp1, *cp2), *end);
-            let mid = curve.point_at_pos(0.5);
-            let normal = curve.normal_at_pos(0.5);
-            let len = (normal.x() * normal.x() + normal.y() * normal.y()).sqrt();
-            if !len.is_finite() || len < 1e-12 {
-                continue;
-            }
-            for side in [1.0_f64, -1.0] {
-                let eps = diag * scale * side;
-                let probe = Coord2(
-                    mid.x() + normal.x() / len * eps,
-                    mid.y() + normal.y() / len * eps,
-                );
-                if point_inside(component, probe) == Some(true) {
-                    return Some((probe.x() as f32, probe.y() as f32));
-                }
-            }
-        }
-        scale /= 4.0;
-    }
-    None
-}
-
 /// True when a loop is thinner than the arrangement's own numerical
 /// resolution EVERYWHERE — area below `accuracy × perimeter` means an
-/// average width under `accuracy`. Two arcs that should have been
-/// coincident but round to a hair apart leave exactly such a lens
-/// behind; it is a collision artefact, not a region, and no real face
-/// can be resolved at that width anyway.
+/// average width under `accuracy`.
 fn is_sliver(path: &SimpleBezierPath) -> bool {
     let (start, segments) = path;
     let mut perimeter = 0.0;
@@ -869,43 +1084,28 @@ fn is_sliver(path: &SimpleBezierPath) -> bool {
 /// integrand is degree 5 in `t`, so a 3-point Gauss-Legendre rule
 /// integrates it EXACTLY — no flattening, no tolerance.
 fn path_area(path: &SimpleBezierPath) -> f64 {
-    const NODES: [f64; 3] = [
-        0.5 - 0.5 * 0.774_596_669_241_483_4,
-        0.5,
-        0.5 + 0.5 * 0.774_596_669_241_483_4,
-    ];
-    const WEIGHTS: [f64; 3] = [5.0 / 18.0, 8.0 / 18.0, 5.0 / 18.0];
     let (start, segments) = path;
     let mut total = 0.0;
     let mut from = *start;
     for (cp1, cp2, end) in segments {
-        let (p0, p1, p2, p3) = (from, *cp1, *cp2, *end);
-        for (t, w) in NODES.iter().zip(WEIGHTS.iter()) {
-            let mt = 1.0 - t;
-            let (b0, b1, b2, b3) = (mt * mt * mt, 3.0 * mt * mt * t, 3.0 * mt * t * t, t * t * t);
-            let x = p0.x() * b0 + p1.x() * b1 + p2.x() * b2 + p3.x() * b3;
-            let y = p0.y() * b0 + p1.y() * b1 + p2.y() * b2 + p3.y() * b3;
-            let (d0, d1, d2) = (3.0 * mt * mt, 6.0 * mt * t, 3.0 * t * t);
-            let dx = (p1.x() - p0.x()) * d0 + (p2.x() - p1.x()) * d1 + (p3.x() - p2.x()) * d2;
-            let dy = (p1.y() - p0.y()) * d0 + (p2.y() - p1.y()) * d1 + (p3.y() - p2.y()) * d2;
-            total += w * (x * dy - y * dx);
-        }
+        let c = crate::planar_dcel::Cubic {
+            p0: (from.x(), from.y()),
+            c1: (cp1.x(), cp1.y()),
+            c2: (cp2.x(), cp2.y()),
+            p3: (end.x(), end.y()),
+        };
+        total += c.area_term();
         from = *end;
     }
-    total / 2.0
+    total
 }
 
 /// Unsigned area of a region given as a loop set.
 ///
-/// Deliberately orientation-AGNOSTIC. `exterior_paths` does not promise
-/// a consistent winding across disconnected components — a region made
-/// of two islands can come back with one loop clockwise and the other
-/// anticlockwise — so summing signed areas silently subtracts one island
-/// from the other. (That is exactly how the property sweep caught this:
-/// a three-shape case reported a union of 335 pt² for 851 pt² of faces.)
-/// Nesting depth is the invariant that holds instead: a loop at even
-/// depth is an outer contour and adds, a loop at odd depth is a hole and
-/// subtracts.
+/// Deliberately orientation-AGNOSTIC: nesting depth decides — a loop at
+/// even depth is an outer contour and adds, a loop at odd depth is a
+/// hole and subtracts.
+#[cfg(test)]
 fn region_area(loops: &[SimpleBezierPath]) -> f64 {
     let usable: Vec<&SimpleBezierPath> = loops.iter().filter(|p| !p.1.is_empty()).collect();
     let mut total = 0.0;
@@ -925,25 +1125,6 @@ fn region_area(loops: &[SimpleBezierPath]) -> f64 {
         }
     }
     total.max(0.0)
-}
-
-fn bbox_diagonal(flo: &[Vec<SimpleBezierPath>]) -> f64 {
-    let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
-    let (mut max_x, mut max_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
-    for paths in flo {
-        for (start, segments) in paths {
-            for p in std::iter::once(start).chain(segments.iter().map(|(_, _, end)| end)) {
-                min_x = min_x.min(p.x());
-                min_y = min_y.min(p.y());
-                max_x = max_x.max(p.x());
-                max_y = max_y.max(p.y());
-            }
-        }
-    }
-    if !min_x.is_finite() {
-        return 0.0;
-    }
-    ((max_x - min_x).powi(2) + (max_y - min_y).powi(2)).sqrt()
 }
 
 fn face_id(signature: &[usize], component: usize) -> String {
@@ -988,7 +1169,7 @@ fn key_cmp(a: (f64, f64), b: (f64, f64)) -> std::cmp::Ordering {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bezier_conv::FLO_SORT_EPSILON;
+    use crate::bezier_conv::{idml_path_to_flo, FLO_SORT_EPSILON};
 
     /// A closed circle as four cubic arcs (the standard 0.5523 kappa).
     fn circle(cx: f32, cy: f32, r: f32) -> Vec<PathAnchor> {

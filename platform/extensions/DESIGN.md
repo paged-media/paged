@@ -308,7 +308,8 @@ door cannot afford:
 
 - `found: false` + `reason` — the query could not be answered at all:
   no document, an id that doesn't resolve, or more than the kernel's
-  `MAX_PLANAR_INPUTS` (12) inputs / more than 256 faces. The engine
+  `MAX_PLANAR_INPUTS` (1000) inputs / more than 100 000 faces / past the
+  work budget (engine ADR 1019). The engine
   REFUSES rather than truncating, and a caller that rendered that as an
   empty face list would tell the user "these paths divide into nothing".
   paged.draw already surfaces `reason` verbatim on a status binding;

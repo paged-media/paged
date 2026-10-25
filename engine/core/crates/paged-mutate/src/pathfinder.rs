@@ -102,6 +102,18 @@ pub fn pathfinder_boolean(
     if flo_inputs.iter().all(|p| p.is_empty()) {
         return (Vec::new(), Vec::new());
     }
+    // Engine ADR 1019 — the four Shape Modes are SELECTIONS of the planar
+    // arrangement's faces, read off its face walk: Unite every face,
+    // Intersect the faces inside all inputs, Minus Front the faces inside
+    // the top input only, Exclude the faces inside an odd number. One
+    // kernel for these and the region verbs, and none of `flo_curves`'
+    // per-operation sweeps (the boolean property suite found them losing
+    // area where two inputs are tangent or a grid step apart). The
+    // arrangement refuses past its budget; the sweeps below remain the
+    // answer for that case.
+    if let Some(result) = arrangement_boolean(inputs, kind) {
+        return result;
+    }
     let result: Vec<SimpleBezierPath> = match kind {
         PathfinderKind::Union => {
             let mut acc: Vec<SimpleBezierPath> = flo_inputs[0].clone();
@@ -177,6 +189,40 @@ pub fn pathfinder_boolean(
         crate::orientation::Turn::CounterClockwise,
     );
     (anchors, starts)
+}
+
+/// [`pathfinder_boolean`] through the planar arrangement. `None` when the
+/// arrangement refuses the input (over its budget, no geometry).
+fn arrangement_boolean(
+    inputs: &[(Vec<PathAnchor>, Vec<usize>)],
+    kind: PathfinderKind,
+) -> Option<(Vec<PathAnchor>, Vec<usize>)> {
+    let arrangement = crate::planar::build_arrangement(inputs).ok()?;
+    let n = inputs.len();
+    let ids: Vec<&str> = arrangement
+        .faces
+        .iter()
+        .filter(|f| match kind {
+            PathfinderKind::Union => true,
+            PathfinderKind::Intersect => f.signature.len() == n,
+            PathfinderKind::Subtract => f.signature.as_slice() == [0],
+            PathfinderKind::Exclude => f.signature.len() % 2 == 1,
+        })
+        .map(|f| f.id.as_str())
+        .collect();
+    if ids.is_empty() {
+        return Some((Vec::new(), Vec::new()));
+    }
+    let (mut anchors, starts) = arrangement.union_of(&ids);
+    // C-81 — counter-clockwise on the page, holes the other way.
+    let closed = vec![false; starts.len()];
+    crate::orientation::orient_contours(
+        &mut anchors,
+        &starts,
+        &closed,
+        crate::orientation::Turn::CounterClockwise,
+    );
+    Some((anchors, starts))
 }
 
 #[cfg(test)]
