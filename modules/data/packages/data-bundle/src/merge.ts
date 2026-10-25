@@ -674,20 +674,68 @@ export async function storyFaces(
       f.path === "characterLeading" &&
       typeof (f.value as { value?: unknown }).value === "number",
   );
+  // A run's size and face set by its character style, else its paragraph's
+  // style (not on the run itself), as the object model reads the style.
+  const styleFace = new Map<
+    string,
+    { sizePt?: number; family?: string; style?: string }
+  >();
+  const faceOfStyle = async (
+    family: "character" | "paragraph",
+    name: string | null | undefined,
+  ) => {
+    if (!name) return {};
+    // A run names its style by the style's id (`CharacterStyle/<id>`), which
+    // is the rest of the style's address.
+    const key = `${family}/${name}`;
+    const known = styleFace.get(key);
+    if (known) return known;
+    const read: { sizePt?: number; family?: string; style?: string } = {};
+    const objects = (
+      host as {
+        objects?: {
+          get(a: string, p: string): Promise<unknown>;
+        };
+      }
+    ).objects;
+    if (objects) {
+      const get = async (path: string) => {
+        try {
+          return (
+            (await objects.get(`style:${key}`, path)) as {
+              value?: unknown;
+            }
+          )?.value;
+        } catch {
+          return undefined;
+        }
+      };
+      const size = await get("characterFontSize");
+      if (typeof size === "number" && size > 0) read.sizePt = size;
+      const fam = await get("characterFontFamily");
+      if (typeof fam === "string" && fam !== "") read.family = fam;
+      const sty = await get("characterFontStyle");
+      if (typeof sty === "string" && sty !== "") read.style = sty;
+    }
+    styleFace.set(key, read);
+    return read;
+  };
   const fonts: TemplateFrameInfo["font"][] = [];
   const faceOf = new Map<string, number>();
   const runs: { text: string; face: number }[] = [];
   const last = content.paragraphs.length - 1;
-  content.paragraphs.forEach((p, i) => {
+  for (const [i, p] of content.paragraphs.entries()) {
     let face = runs.length > 0 ? runs[runs.length - 1]!.face : 0;
+    const para = await faceOfStyle("paragraph", p.paragraphStyle);
     for (const r of p.runs) {
+      const char = await faceOfStyle("character", r.characterStyle);
       const sizePt =
         typeof r.pointSize === "number" && r.pointSize > 0
           ? r.pointSize
-          : base.sizePt;
+          : (char.sizePt ?? para.sizePt ?? base.sizePt);
       const font = {
-        family: r.font ?? base.family,
-        style: r.fontStyle ?? base.style,
+        family: r.font ?? char.family ?? para.family ?? base.family,
+        style: r.fontStyle ?? char.style ?? para.style ?? base.style,
         sizePt,
         leadingPt: fixedLeading ? base.leadingPt : sizePt * AUTO_LEADING,
       };
@@ -703,7 +751,7 @@ export async function storyFaces(
       if (t !== "") runs.push({ text: t, face });
     }
     if (i < last) runs.push({ text: "\n", face });
-  });
+  }
   if (fonts.length === 0) fonts.push(base);
   // The trailing breaks hold no line the story needs.
   while (runs.length > 0) {

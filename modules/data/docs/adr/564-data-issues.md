@@ -102,19 +102,15 @@ address) and the record when known.
 - The Data panel shows one line ("2 texts do not fit · 1 picture missing") that selects the
   frames concerned, and the canvas field markers draw an issue's frame in the error red
   (editor ADR 291, amended 2026-10-24).
-- A text variable's instances are found where paged.data placed them; one the user copies into
-  another story by hand is not checked there. No host read lists them: `StoryContent`'s
-  `RunContent` does not carry the engine run's `text_variable` (the model has it; the
-  story-content read drops it), core's selector index lists placeholder runs as `field:`
-  addresses but not text-variable runs, and `placeholders()` lists placeholder fields only.
-  A run whose text equals the variable's value is not an instance, so the stories are not
-  matched by text. Closing it needs one of those reads (a `textVariable` member on
-  `RunContent` is the smallest). Rules are not checked separately: they style the stories the
+- Every story a data field's text variable has an instance in is checked, a copy the user
+  pasted by hand included: a story's runs name the variable they are an instance of
+  (`RunContent.textVariable`, engine protocol 76 additive), and paged.data reads every story's
+  runs once per document state. Rules are not checked separately: they style the stories the
   variables are in.
-- The measured wrap is greedy and per word, as Data Merge's is. A size or font set by a
-  character or paragraph style, not directly on the run, is measured at the story's; a story
-  whose size is mixed has no story size, so such runs read at 12 pt. Text wrap and tables are
-  the host's to report (Decision, "Whose word it is").
+- The measured wrap is greedy and per word, as Data Merge's is. A run's size and face come
+  from the run, else its character style, else its paragraph's style (read through the object
+  model), else the story's. Text wrap and table rows are the host's to report (Decision, "Whose
+  word it is"): where the host lays out, its overflow is the composer's and complete.
 
 ## Amendments
 
@@ -132,3 +128,8 @@ address) and the record when known.
   table's overflow names its cells in the message; a cell is not named or measured (no host
   read of a row's grow rule). A copied text variable instance stays unchecked: no host read
   lists the instances (Consequences).
+- Amended 2026-10-25: copied instances and style sizes. `RunContent.textVariable` (plugin-sdk
+  0.74.3-canary.30) names the variable a run is an instance of, so every story holding one of
+  paged.data's text variables is checked, a hand-pasted copy included. A run without its own
+  size is measured at its character style's size, else its paragraph style's (`style:<family>/
+  <id>` through the object model).

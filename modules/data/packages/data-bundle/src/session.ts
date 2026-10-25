@@ -2701,6 +2701,56 @@ export function createSession(
   const objectsUp = () => objectsOf(host) !== null;
 
   // ── data issues (data ADR 564) ──────────────────────────────────────────
+  /** The stories each data field's text variable has an instance in, read
+   *  from every story's runs (a run names the variable it is an instance
+   *  of): the copies a user pasted by hand as well as the session's own.
+   *  Read once per document state. */
+  let instanceStories: {
+    at: number;
+    stories: Map<string, Set<string>>;
+  } | null = null;
+  async function variableInstanceStories(): Promise<Map<string, Set<string>>> {
+    if (instanceStories?.at === docChanges) return instanceStories.stories;
+    const out = new Map<string, Set<string>>();
+    const objects = objectsOf(host);
+    if (objects) {
+      try {
+        const bindingOf = new Map<string, string>();
+        for (const address of await objects.query(
+          'textVariable[name^="paged:"]',
+        )) {
+          const name = (await objects.get(address, "textVariableName")) as {
+            value?: unknown;
+          };
+          if (typeof name?.value !== "string") continue;
+          const id = address.slice("textVariable:".length);
+          bindingOf.set(bareVariableId(id), name.value.slice("paged:".length));
+        }
+        if (bindingOf.size > 0)
+          for (const address of await objects.query("story")) {
+            const storyId = address.slice("story:".length);
+            const content = await host.document.storyContent(storyId);
+            for (const para of content?.paragraphs ?? [])
+              for (const run of para.runs) {
+                const v = run.textVariable;
+                const binding = v
+                  ? bindingOf.get(bareVariableId(v))
+                  : undefined;
+                if (!binding) continue;
+                let set = out.get(binding);
+                if (!set) out.set(binding, (set = new Set()));
+                set.add(storyId);
+              }
+          }
+      } catch {
+        // a host without the object model or story reads: the session's own
+        // placements are still checked
+      }
+    }
+    instanceStories = { at: docChanges, stories: out };
+    return out;
+  }
+
   /** What may be wrong with the placed content, read now: the engine's own
    *  answers (sync state, resolved values, the paginator's overflow) and the
    *  host's geometry (frame chains, frame sizes). */
@@ -2733,6 +2783,11 @@ export function createSession(
         if (placedVariables.has(f.key) && !f.variable)
           texts.push({ binding: f.key, storyId: f.storyId });
       for (const [binding, stories] of variableStories)
+        if (placedVariables.has(binding))
+          for (const storyId of stories) texts.push({ binding, storyId });
+      // Every story an instance of the field's text variable is in, a copy
+      // pasted by hand included (a run names its variable, data ADR 564).
+      for (const [binding, stories] of await variableInstanceStories())
         if (placedVariables.has(binding))
           for (const storyId of stories) texts.push({ binding, storyId });
       for (const [binding, address] of addressOf)
@@ -5508,4 +5563,9 @@ export function createSession(
     },
   };
   return self;
+}
+
+/** A text variable's id without the `TextVariable/` a run may name it by. */
+function bareVariableId(id: string): string {
+  return id.startsWith("TextVariable/") ? id.slice("TextVariable/".length) : id;
 }
