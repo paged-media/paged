@@ -84,6 +84,11 @@ import {
 } from "./protocol";
 import { CameraBuffer, type Camera } from "./sab/camera";
 import { GestureBuffer } from "./sab/gesture";
+import {
+  allocateDataBridge,
+  DataBridgeHost,
+  type DataCallAnswerer,
+} from "./sab/data-bridge";
 import type { JournalEntry, UncapturedLedger } from "./journal";
 
 /** What {@link CanvasClient.snapshotBackendInfo} reports. */
@@ -410,6 +415,8 @@ export class CanvasClient {
   private fatal: Error | null = null;
   /** ADR 323 — answers a suspended script's `plugin:` calls. */
   private hostObjects: HostObjectsAnswerer | null = null;
+  /** Engine ADR 1014, amendment 2 — answers a script's `paged.data.*`. */
+  private dataBridge: DataBridgeHost | null = null;
   /** See {@link markSaved}: replies that may have changed the document,
    *  counted, and the count at the last save (`null`: never saved since
    *  the load). */
@@ -1940,6 +1947,28 @@ export class CanvasClient {
   }
 
   /**
+   * Engine ADR 1014, amendment 2 — install the answerer for a script's
+   * `paged.data.tables / records / query / evaluate`: `answer(method, args)`
+   * is called with the interpreter's positional arguments and resolves to
+   * the value the script gets (a throw is the script's error). The worker
+   * blocks on shared memory while it waits, so this needs cross-origin
+   * isolation; without `SharedArrayBuffer` it is a no-op and
+   * `paged.data.*` keeps throwing "no data is attached". `null` removes
+   * it. Returns whether the door is installed.
+   */
+  setScriptData(answer: DataCallAnswerer | null): boolean {
+    if (!answer || typeof SharedArrayBuffer === "undefined") {
+      if (this.dataBridge) this.worker.postMessage({ kind: "dataBridge" });
+      this.dataBridge = null;
+      return false;
+    }
+    const buffer = allocateDataBridge();
+    this.dataBridge = new DataBridgeHost(buffer, answer);
+    this.worker.postMessage({ kind: "dataBridge", buffer });
+    return true;
+  }
+
+  /**
    * Phase B — begin a gesture against the listed elements. Resolves
    * to the worker's handle; pass it to subsequent
    * `updateGesture` / `commitGesture` / `cancelGesture` calls.
@@ -2639,6 +2668,8 @@ export class CanvasClient {
     // Side-channel: binary loadDocument reply (skip the JSON envelope
     // because the request payload was binary, see `loadDocument`).
     const raw = event.data as { kind?: string };
+    // A script's `paged.data` call, while the worker blocks on its answer.
+    if (this.dataBridge?.handle(raw)) return;
     if (raw && raw.kind === "loadDocumentBinaryReply") {
       const r = event.data as { seq: number; replyJson: string };
       const pending = this.loadDocPending.get(r.seq);
