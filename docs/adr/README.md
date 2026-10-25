@@ -29,5 +29,5 @@ keeps its text.
 | [PM-0011](PM-0011-dependency-updates-and-supply-chain.md) | Dependency updates by Renovate; licences and advisories checked daily over every workspace |
 | [PM-0012](PM-0012-engine-adr-range.md) | The engine's records continue at 1000–1099; its 200–209 keep their numbers |
 | [PM-0013](PM-0013-editor-package.md) | A fourth public package, `@paged-media/editor`: the editor bundled, the engine from `@paged-media/paged`, React a peer |
-| [PM-0014](PM-0014-capability-layering.md) | A capability lives at the lowest layer every consumer can reach; modules may path-depend on engine crates |
+| [PM-0014](PM-0014-capability-layering.md) | A capability lives at the lowest layer every consumer can reach; modules may path-depend on engine crates (amended 2026-10-25: DrawingML geometry in `platform/shared/dml-geom`) |
 | [PM-0015](PM-0015-data-and-actions-are-platform-layers.md) | Data and actions are platform layers: bindings in the engine, `data@1` and `actions@1`, Turso replaces DuckDB, one script interpreter |
