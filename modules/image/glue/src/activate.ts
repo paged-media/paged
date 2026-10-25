@@ -129,6 +129,22 @@ const CMD = defineMessages("image.command", {
   newFillPattern: "New fill layer: pattern",
   newAdjustment: "New adjustment layer: {kind}",
   blendingOptions: "Blending options of the active layer…",
+  layerStyleBevel: "Layer style: bevel and emboss…",
+  layerStyleStroke: "Layer style: stroke…",
+  layerStyleInnerShadow: "Layer style: inner shadow…",
+  layerStyleInnerGlow: "Layer style: inner glow…",
+  layerStyleSatin: "Layer style: satin…",
+  layerStyleColorOverlay: "Layer style: colour overlay…",
+  layerStyleGradientOverlay: "Layer style: gradient overlay…",
+  layerStylePatternOverlay: "Layer style: pattern overlay…",
+  layerStyleOuterGlow: "Layer style: outer glow…",
+  layerStyleDropShadow: "Layer style: drop shadow…",
+  copyLayerStyle: "Copy layer style",
+  pasteLayerStyle: "Paste layer style",
+  clearLayerStyle: "Clear layer style",
+  globalLight: "Global light…",
+  toggleEffects: "Hide or show all effects",
+  scaleEffects: "Scale effects…",
   rasterizeLayer: "Rasterize the active layer",
   layerViaCopy: "Layer via copy",
   layerViaCut: "Layer via cut",
@@ -927,6 +943,73 @@ export function activate(host: BundleHost): BundleHandle {
       () => session.unlinkLayer(session.state().layers.active),
     ],
     ["newLayerComp", CMD.newLayerComp, () => session.newLayerComp()],
+    // LAYER ▸ LAYER STYLE (WP5.4): each effect opens the Layer Style
+    // dialog on its pane (adding it with Photoshop's defaults, one undo
+    // step); the rest act on the active layer.
+    [
+      "layerStyleBevel",
+      CMD.layerStyleBevel,
+      () => session.openLayerStyle("bevel"),
+    ],
+    [
+      "layerStyleStroke",
+      CMD.layerStyleStroke,
+      () => session.openLayerStyle("stroke"),
+    ],
+    [
+      "layerStyleInnerShadow",
+      CMD.layerStyleInnerShadow,
+      () => session.openLayerStyle("innerShadow"),
+    ],
+    [
+      "layerStyleInnerGlow",
+      CMD.layerStyleInnerGlow,
+      () => session.openLayerStyle("innerGlow"),
+    ],
+    [
+      "layerStyleSatin",
+      CMD.layerStyleSatin,
+      () => session.openLayerStyle("satin"),
+    ],
+    [
+      "layerStyleColorOverlay",
+      CMD.layerStyleColorOverlay,
+      () => session.openLayerStyle("colorOverlay"),
+    ],
+    [
+      "layerStyleGradientOverlay",
+      CMD.layerStyleGradientOverlay,
+      () => session.openLayerStyle("gradientOverlay"),
+    ],
+    [
+      "layerStylePatternOverlay",
+      CMD.layerStylePatternOverlay,
+      () => session.openLayerStyle("patternOverlay"),
+    ],
+    [
+      "layerStyleOuterGlow",
+      CMD.layerStyleOuterGlow,
+      () => session.openLayerStyle("outerGlow"),
+    ],
+    [
+      "layerStyleDropShadow",
+      CMD.layerStyleDropShadow,
+      () => session.openLayerStyle("dropShadow"),
+    ],
+    ["copyLayerStyle", CMD.copyLayerStyle, () => session.copyLayerStyle()],
+    ["pasteLayerStyle", CMD.pasteLayerStyle, () => session.pasteLayerStyle()],
+    ["clearLayerStyle", CMD.clearLayerStyle, () => session.clearLayerStyle()],
+    [
+      "globalLight",
+      CMD.globalLight,
+      () => session.openStyleDialog("globalLight"),
+    ],
+    ["toggleEffects", CMD.toggleEffects, () => session.setEffectsVisible()],
+    [
+      "scaleEffects",
+      CMD.scaleEffects,
+      () => session.openStyleDialog("scaleEffects"),
+    ],
   ] as const) {
     command({
       id: `media.paged.image.command.${suffix}`,

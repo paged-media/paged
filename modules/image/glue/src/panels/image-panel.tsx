@@ -26,6 +26,13 @@
 // crop geometry are the engine's deterministic Rust (image_core / the
 // reduce histogram); this leaf only renders + forwards.
 
+import {
+  GlobalLightDialog,
+  LayerStyleDialog,
+  ScaleEffectsDialog,
+  StylesSection,
+} from "./sections/layer-style";
+import { styleOptionsFromBits } from "../layer-style";
 import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
@@ -2525,6 +2532,49 @@ export function makeImagePanel(session: ImageSession) {
             onCancel={() => void session.closeDialog()}
           />
         )}
+        {s.dialog?.kind === "layerStyle" &&
+          (() => {
+            const i = s.dialog.index;
+            const l = s.layers.layers[i];
+            return l ? (
+              <LayerStyleDialog
+                layer={l}
+                style={s.layerStyle}
+                options={styleOptionsFromBits(l.styleOptions)}
+                light={s.globalLight}
+                pane={s.dialog.pane}
+                disabled={s.busy}
+                onPane={(p) => session.setLayerStylePane(p)}
+                onStyle={(st) => void session.setLayerStyle(i, st)}
+                onOptions={(o) => void session.setLayerStyleOptions(i, o)}
+                onGlobalLight={(a, alt) => void session.setGlobalLight(a, alt)}
+                onUsePattern={() => session.stylePattern()}
+                onMoreBlending={() => session.openBlendingOptions(i)}
+                onClose={() => void session.closeDialog()}
+              />
+            ) : null;
+          })()}
+        {s.dialog?.kind === "globalLight" && (
+          <GlobalLightDialog
+            light={s.globalLight}
+            disabled={s.busy}
+            onApply={(a, alt) =>
+              void session
+                .setGlobalLight(a, alt)
+                .then(() => session.closeDialog())
+            }
+            onClose={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "scaleEffects" && (
+          <ScaleEffectsDialog
+            disabled={s.busy}
+            onApply={(pct) =>
+              void session.scaleEffects(pct).then(() => session.closeDialog())
+            }
+            onClose={() => void session.closeDialog()}
+          />
+        )}
         {s.dialog?.kind === "blendingOptions" &&
           (() => {
             const i = s.dialog.index;
@@ -3430,6 +3480,7 @@ export function makeImagePanel(session: ImageSession) {
               }
               onUnlink={() => session.unlinkLayer(s.layers.active)}
               onBlendingOptions={() => session.openBlendingOptions()}
+              onLayerStyle={() => void session.openLayerStyle()}
               onRasterize={() => void session.rasterizeLayer(s.layers.active)}
             />
             <LayerVerbs
@@ -3480,6 +3531,18 @@ export function makeImagePanel(session: ImageSession) {
               onUpdate={(id) => session.updateLayerComp(id)}
               onDelete={(id) => session.deleteLayerComp(id)}
               onRename={(id, name) => session.renameLayerComp(id, name)}
+            />
+            <StylesSection
+              presets={s.stylePresets}
+              hasStyle={s.layerStyle !== null}
+              hasClipboard={s.styleClipboard !== null}
+              disabled={disabled}
+              onApply={(name) => void session.applyStylePreset(name)}
+              onSave={(name) => session.saveStylePreset(name)}
+              onDelete={(name) => session.deleteStylePreset(name)}
+              onCopy={() => session.copyLayerStyle()}
+              onPaste={() => void session.pasteLayerStyle()}
+              onClear={() => void session.clearLayerStyle()}
             />
           </>
         ) : null}

@@ -28,6 +28,20 @@
 // the layers go into the document's parts and their composite replaces
 // the frame's placed image, as one document undo step.
 
+import {
+  builtInPresets,
+  cloneStyle,
+  effectEnabled,
+  emptyStyle,
+  setEffectEnabled,
+  styleOptionsBits,
+  type EffectKind,
+  type GlobalLight,
+  type LayerStyle,
+  type PatternRef,
+  type StyleOptions,
+  type StylePreset,
+} from "./layer-style";
 import type {
   BundleHost,
   ColorPickerProps,
@@ -247,7 +261,13 @@ export type ImageDialog =
   | { kind: "imageSize" }
   | { kind: "trim" }
   | { kind: "rotate" }
-  | { kind: "blendingOptions"; index: number };
+  | { kind: "blendingOptions"; index: number }
+  | { kind: "layerStyle"; index: number; pane: LayerStylePane }
+  | { kind: "globalLight" }
+  | { kind: "scaleEffects"; index: number };
+
+/** The pane the Layer Style dialog shows: an effect, or Blending Options. */
+export type LayerStylePane = EffectKind | "blending";
 
 /** The Layers list's search and filter (Photoshop's filter bar): rows
  *  whose name contains `query`, of `kind`, with colour label `color`. */
@@ -438,6 +458,15 @@ export interface ImageSessionState {
   brushPreset: number | null;
   /** The dialog on top of the panel, or null. */
   dialog: ImageDialog | null;
+  /** Copy Layer Style's clipboard (null: nothing copied). */
+  styleClipboard: LayerStyle | null;
+  /** The Styles panel's presets (built-in, then saved). */
+  stylePresets: StylePreset[];
+  /** The document's Global Light. */
+  globalLight: GlobalLight;
+  /** The style of the layer the Layer Style dialog edits (else the active
+   *  layer's), read with the layers — what the panel renders. */
+  layerStyle: LayerStyle | null;
   /** The Layers list's search and filter. */
   layerFilter: LayerFilter;
   /** The resolution the image declares, in pixels per inch (read from a
@@ -653,6 +682,46 @@ export interface ImageSession {
   /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
    *  active one by default): fill opacity, knockout and Blend If. */
   openBlendingOptions(index?: number): boolean;
+  /** Layer ▸ Layer Style ▸ <effect>… / Blending Options: the Layer Style
+   *  dialog on `pane` for layer `index` (the active one). Opening it on an
+   *  effect the layer does not have adds it with Photoshop's defaults
+   *  (one undo step), as Photoshop's menu does. */
+  openLayerStyle(pane?: LayerStylePane, index?: number): Promise<boolean>;
+  /** Show another pane of the open Layer Style dialog. */
+  setLayerStylePane(pane: LayerStylePane): void;
+  /** Layer ▸ Layer Style ▸ Global Light… / Scale Effects… (the active
+   *  layer's): their small dialogs. */
+  openStyleDialog(kind: "globalLight" | "scaleEffects"): boolean;
+  /** The layer's style (null: none). */
+  layerStyle(index: number): LayerStyle | null;
+  /** Set (null: clear) a layer's style; a dialog's edits to one layer are
+   *  one undo step. */
+  setLayerStyle(index: number, style: LayerStyle | null): Promise<boolean>;
+  /** Blending Options' style switches. */
+  setLayerStyleOptions(index: number, opts: StyleOptions): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Copy Layer Style (the active layer's). */
+  copyLayerStyle(): boolean;
+  /** Layer ▸ Layer Style ▸ Paste Layer Style onto the active layer and the
+   *  layers linked with it (one undo step). */
+  pasteLayerStyle(): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Clear Layer Style (the active layer's). */
+  clearLayerStyle(): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Global Light. */
+  setGlobalLight(angle: number, altitude: number): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Scale Effects (percent) on the active layer. */
+  scaleEffects(percent: number): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Hide / Show All Effects (toggles when `on` is
+   *  not given). */
+  setEffectsVisible(on?: boolean): Promise<boolean>;
+  /** Styles panel: apply the preset `name` to the active layer. */
+  applyStylePreset(name: string): Promise<boolean>;
+  /** Styles panel: New Style… — the active layer's style saved as `name`. */
+  saveStylePreset(name: string): boolean;
+  /** Styles panel: delete a saved preset (a built-in one stays). */
+  deleteStylePreset(name: string): boolean;
+  /** The defined pattern (Edit ▸ Define Pattern) made available to the
+   *  styles, returned as the reference an effect stores; null without one. */
+  stylePattern(): PatternRef | null;
   /** Close the Image dialog (a filter dialog is cancelled). */
   closeDialog(): Promise<void>;
   /** IMAGE ▸ Trim away `by` (transparent pixels, or the top-left or
@@ -1218,6 +1287,11 @@ export function elementIdOf(value: unknown): string | null {
  *  and refusal a session action reports, in the editor's language when
  *  the action runs. */
 const S = defineMessages("image.status", {
+  noLayerStyleToCopy: "The active layer has no layer style",
+  layerStyleCopied: "Layer style copied",
+  noLayerStyleToPaste: "No layer style copied yet: use Copy layer style",
+  noLayerStyleToClear: "The active layer has no layer style to clear",
+  noSuchStylePreset: 'No style called "{name}"',
   nothingIngestedIngestAPlacedImage:
     "Nothing ingested — ingest a placed image first.",
   frameDeselectedInFramePreviewCleared:
@@ -1577,7 +1651,18 @@ const E = defineMessages("image.effect", {
 
 /** The Photoshop-parity layer verbs (WP5.3): their names, as the
  *  status line reports them, and their outcomes. */
+/** The name the defined pattern goes by in a style. */
+const STYLE_PATTERN_NAME = "Pattern";
+
 const L = defineMessages("image.layerOps", {
+  layerStyle: "Layer style",
+  clearLayerStyle: "Clear layer style",
+  pasteLayerStyle: "Paste layer style",
+  blendingOptions: "Blending options",
+  globalLight: "Global light",
+  scaleEffects: "Scale effects",
+  showEffects: "Show all effects",
+  hideEffects: "Hide all effects",
   newAdjustmentLayer: "New adjustment layer",
   adjustment: "Adjustment",
   newFillLayer: "New fill layer",
@@ -1737,6 +1822,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     brushLibraryName: null,
     brushPreset: null,
     dialog: null,
+    styleClipboard: null,
+    stylePresets: builtInPresets(),
+    globalLight: { angle: 120, altitude: 30 },
+    layerStyle: null,
     layerFilter: NO_LAYER_FILTER,
     ppi: null,
     curvesPicker: null,
@@ -2040,6 +2129,12 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       state.layers = engine.layers();
       state.history = engine.layersHistory();
+      state.globalLight = engine.globalLight();
+      const styled =
+        state.dialog?.kind === "layerStyle"
+          ? state.dialog.index
+          : state.layers.active;
+      state.layerStyle = engine.layerStyle(styled);
     } catch (err) {
       host.log.debug("layer readout failed", err);
       state.layers = EMPTY_LAYER_STACK;
@@ -5807,6 +5902,197 @@ export function createImageSession(host: BundleHost): ImageSession {
     setLayerFilter(patch) {
       state.layerFilter = { ...state.layerFilter, ...patch };
       emit();
+    },
+
+    async openLayerStyle(pane = "blending", index) {
+      if (!engine || !state.source || state.layers.layers.length === 0) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      const at = index ?? state.layers.active;
+      if (pane !== "blending") {
+        const style = api.layerStyle(at) ?? emptyStyle();
+        if (!effectEnabled(style, pane)) {
+          const pattern =
+            pane === "patternOverlay"
+              ? (api.stylePattern() ?? undefined)
+              : undefined;
+          // The effect is added whether or not the composite can be
+          // redrawn here (a realm without WebGPU still edits the style).
+          try {
+            engine.layerSetStyle(
+              at,
+              setEffectEnabled(style, pane, true, pattern),
+            );
+          } catch (err) {
+            setStatus(
+              t(S.whatFailed, { what: t(L.layerStyle), error: errText(err) }),
+            );
+            refreshLayers();
+            emit();
+            return false;
+          }
+          await recomposite();
+        }
+      }
+      state.dialog = { kind: "layerStyle", index: at, pane };
+      refreshLayers();
+      emit();
+      return true;
+    },
+
+    setLayerStylePane(pane) {
+      if (state.dialog?.kind !== "layerStyle") return;
+      state.dialog = { ...state.dialog, pane };
+      emit();
+    },
+
+    openStyleDialog(kind) {
+      if (!engine || !state.source || state.layers.layers.length === 0) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      state.dialog =
+        kind === "globalLight"
+          ? { kind }
+          : { kind, index: state.layers.active };
+      emit();
+      return true;
+    },
+
+    layerStyle(index) {
+      if (!engine || !state.source) return null;
+      try {
+        return engine.layerStyle(index);
+      } catch {
+        return null;
+      }
+    },
+
+    setLayerStyle(index, style) {
+      return layerOp(style ? L.layerStyle : L.clearLayerStyle, () =>
+        engine!.layerSetStyle(index, style),
+      );
+    },
+
+    setLayerStyleOptions(index, opts) {
+      return layerOp(L.blendingOptions, () =>
+        engine!.layerSetStyleOptions(index, styleOptionsBits(opts)),
+      );
+    },
+
+    copyLayerStyle() {
+      const style = api.layerStyle(state.layers.active);
+      if (!style) {
+        setStatus(t(S.noLayerStyleToCopy));
+        emit();
+        return false;
+      }
+      state.styleClipboard = style;
+      setStatus(t(S.layerStyleCopied));
+      emit();
+      return true;
+    },
+
+    pasteLayerStyle() {
+      const style = state.styleClipboard;
+      if (!style) {
+        setStatus(t(S.noLayerStyleToPaste));
+        emit();
+        return Promise.resolve(false);
+      }
+      const active = state.layers.active;
+      const link = state.layers.layers[active]?.link ?? null;
+      const targets = state.layers.layers
+        .map((l, i) =>
+          i === active || (link !== null && l.link === link) ? i : -1,
+        )
+        .filter((i) => i >= 0);
+      return layerOp(L.pasteLayerStyle, () =>
+        engine!.layersPasteStyle(targets, style),
+      );
+    },
+
+    clearLayerStyle() {
+      const at = state.layers.active;
+      if (!api.layerStyle(at)) {
+        setStatus(t(S.noLayerStyleToClear));
+        emit();
+        return Promise.resolve(false);
+      }
+      return api.setLayerStyle(at, null);
+    },
+
+    setGlobalLight(angle, altitude) {
+      return layerOp(L.globalLight, () =>
+        engine!.setGlobalLight(angle, altitude),
+      );
+    },
+
+    scaleEffects(percent) {
+      const at = state.layers.active;
+      return layerOp(L.scaleEffects, () =>
+        engine!.layerScaleEffects(at, percent),
+      );
+    },
+
+    setEffectsVisible(on) {
+      const at = state.layers.active;
+      const row = state.layers.layers[at];
+      const next = on ?? !(row?.styleOn ?? false);
+      return layerOp(next ? L.showEffects : L.hideEffects, () =>
+        engine!.layerSetEffectsVisible(at, next),
+      );
+    },
+
+    applyStylePreset(name) {
+      const preset = state.stylePresets.find((p) => p.name === name);
+      if (!preset) {
+        setStatus(t(S.noSuchStylePreset, { name }));
+        emit();
+        return Promise.resolve(false);
+      }
+      return api.setLayerStyle(state.layers.active, cloneStyle(preset.style));
+    },
+
+    saveStylePreset(name) {
+      const style = api.layerStyle(state.layers.active);
+      const trimmed = name.trim();
+      if (!style || trimmed === "") {
+        setStatus(t(S.noLayerStyleToCopy));
+        emit();
+        return false;
+      }
+      state.stylePresets = [
+        ...state.stylePresets.filter((p) => p.name !== trimmed || p.builtIn),
+        { name: trimmed, style: cloneStyle(style) },
+      ];
+      emit();
+      return true;
+    },
+
+    deleteStylePreset(name) {
+      const before = state.stylePresets.length;
+      state.stylePresets = state.stylePresets.filter(
+        (p) => p.builtIn || p.name !== name,
+      );
+      emit();
+      return state.stylePresets.length !== before;
+    },
+
+    stylePattern() {
+      if (!engine || patternHandle === null || !state.pattern) return null;
+      const { width, height } = state.pattern;
+      try {
+        const rgba = engine.tile(patternHandle, 0, 0, width, height);
+        engine.defineStylePattern(STYLE_PATTERN_NAME, rgba, width, height);
+        return { name: STYLE_PATTERN_NAME, id: STYLE_PATTERN_NAME };
+      } catch (err) {
+        host.log.debug("style pattern failed", err);
+        return null;
+      }
     },
 
     openBlendingOptions(index) {
