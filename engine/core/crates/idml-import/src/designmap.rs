@@ -666,6 +666,8 @@ fn read_preference(e: &quick_xml::events::BytesStart, out: &mut DesignMap) {
     if e.name().as_ref() == b"DocumentPreference" {
         let f = |name: &[u8]| -> f32 { attr(e, name).and_then(|s| s.parse().ok()).unwrap_or(0.0) };
         out.document_preference = DocumentPreference {
+            // Not an IDML attribute (engine ADR 1018).
+            show_hidden_text: None,
             bleed_top: f(b"DocumentBleedTopOffset"),
             bleed_bottom: f(b"DocumentBleedBottomOffset"),
             bleed_inside_or_left: f(b"DocumentBleedInsideOrLeftOffset"),

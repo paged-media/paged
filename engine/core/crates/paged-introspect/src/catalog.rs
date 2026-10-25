@@ -498,6 +498,16 @@ fn host_functions() -> Vec<HostFn> {
            "Accept a tracked deletion at its story offset (paged.collection(\"trackedChanges\")): the text stays deleted. Undoable."),
         f!("paged.rejectTrackedChange", "(storyId, offset)", "bool", "author",
            "Reject a tracked deletion at its story offset: its text comes back where it stood, as InDesign rejects one. Undoable."),
+        f!("paged.find", "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})", "string", "read",
+           "Find text (literal, Word wildcards or a regex; ^p ^t ^l ^m work in every mode): a JSON array of hits with story, caret and character ranges and context."),
+        f!("paged.findReplace", "(text, replace, {replaceAll?, replaceParagraphStyle?, replaceCharacterStyle?, …find options})", "bool", "author",
+           "Replace the first hit, or every hit, of a find; ^p ^t ^l ^& and $1 work in the replacement. One undo step."),
+        f!("paged.setListLevel", "(storyId, start, end, {level} | {delta})", "bool", "author",
+           "Move the paragraphs touching story chars [start, end) to a list level 1–9, or by a delta (Tab / Shift+Tab). Undoable."),
+        f!("paged.restartNumbering", "(storyId, start, end, {startAt?, continueNumbering?})", "bool", "author",
+           "Restart the list count at the paragraphs touching [start, end) (or continue it). Undoable."),
+        f!("paged.setStyleBasedOn", "(collection, styleId, basedOn|null)", "bool", "author",
+           "Re-parent a style; refused when it would inherit from itself. Undoable."),
         f!("paged.convertNoteToText", "(noteId)", "bool", "author",
            "Convert to Text: an editorial note's place becomes a space and the note's text, its paragraphs the story's."),
         f!("paged.createBookmark", "(name, {page?, destination?, parent?, index?})", "string|null", "author",
@@ -935,6 +945,17 @@ property_paths! {
         CharacterNoBreak => "characterNoBreak" : bool_().default_bool(false).idml(idml![attr(CharacterStyleRange | CharacterStyle, NoBreak)]),
         CharacterLigatures => "characterLigatures" : bool_().default_bool(true).idml(idml![attr(CharacterStyleRange | CharacterStyle, Ligatures)]),
         CharacterOtfFeatures => "characterOtfFeatures" : text(),
+        CharacterHighlightColor => "characterHighlightColor" : color(),
+        CharacterHidden => "characterHidden" : bool_().default_bool(false),
+        CharacterUnderlineType => "characterUnderlineType" : enum_open(UNDERLINE_KINDS).default_text("single").idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, UnderlineType)]),
+        CharacterUnderlineColor => "characterUnderlineColor" : color().idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, UnderlineColor)]),
+        CharacterDoubleStrikethrough => "characterDoubleStrikethrough" : bool_().default_bool(false).idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, StrikeThroughType)]),
+        ParagraphShadingOn => "paragraphShadingOn" : bool_().default_bool(false).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingOn)]),
+        ParagraphShadingColor => "paragraphShadingColor" : color().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingColor)]),
+        ParagraphShadingTint => "paragraphShadingTint" : pct().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingTint)]),
+        ParagraphBorderOn => "paragraphBorderOn" : bool_().default_bool(false).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphBorderOn)]),
+        ParagraphBorderColor => "paragraphBorderColor" : color().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphBorderColor)]),
+        ParagraphBorderWeight => "paragraphBorderWeight" : length_pos().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphBorderWeight)]),
         ParagraphLeftIndent => "paragraphLeftIndent" : length().default_num(0.0).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, LeftIndent)]),
         ParagraphRightIndent => "paragraphRightIndent" : length().default_num(0.0).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, RightIndent)]),
         ParagraphDropCapCharacters => "paragraphDropCapCharacters" : count().range(0.0, 150.0).default_num(0.0).idml(idml![attr(ParagraphStyleRange, DropCapCharacters)]),
@@ -1020,6 +1041,7 @@ property_paths! {
         DocumentFootnoteSpacer => "documentFootnoteSpacer" : length_pos().default_num(0.0).idml(idml![attr(FootnoteOption, Spacer)]), "doc",
         DocumentFootnoteRuleOn => "documentFootnoteRuleOn" : bool_().default_bool(true).idml(idml![attr(FootnoteOption, RuleOn)]), "doc",
         DocumentFootnoteContinuingRuleOn => "documentFootnoteContinuingRuleOn" : bool_().default_bool(true).idml(idml![attr(FootnoteOption, ContinuingRuleOn)]), "doc",
+        DocumentShowHiddenText => "documentShowHiddenText" : bool_().default_bool(false), "doc",
         TextVariableName => "textVariableName" : text().idml(idml![attr(TextVariable, Name)]), "textVariable",
         TextVariableType => "textVariableType" : enum_open(TEXT_VARIABLE_TYPES).idml(idml![attr(TextVariable, VariableType)]), "textVariable",
         TextVariableContents => "textVariableContents" : text().idml(idml![child(CustomTextVariablePreference, Contents)]), "textVariable",
@@ -1416,7 +1438,10 @@ mod tests {
         // 244 -> 245: ADR 1006 — a frame's fill rule.
         //
         // 245 -> 246: ADR 1010 — a group is a clip group.
-        assert_eq!(cat.settable_paths.len(), 246, "settable path count drifted");
+        //
+        // 246 -> 257: ADR 1018 — Word's character additions (five) and the
+        // paragraph's own shading and border (six).
+        assert_eq!(cat.settable_paths.len(), 257, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

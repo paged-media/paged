@@ -1104,6 +1104,44 @@ keys = [
 ]
 
 [[unseen]]
+reason = "Engine ADR 1018: the underline's stroke style and colour and the strikethrough's stroke style, InDesign's own attributes on a range or style (the Underline Options / Strikethrough Options panels). They carry Word's underline kinds, underline colour and double strikethrough (`StrikeThroughType` ThinThin); no census document changes them from their defaults."
+keys = [
+  "CharacterStyle@StrikeThroughType",
+  "CharacterStyle@UnderlineColor",
+  "CharacterStyle@UnderlineType",
+  "CharacterStyleRange@StrikeThroughType",
+  "CharacterStyleRange@UnderlineColor",
+  "CharacterStyleRange@UnderlineType",
+  "ParagraphStyle@StrikeThroughType",
+  "ParagraphStyle@UnderlineColor",
+  "ParagraphStyle@UnderlineType",
+]
+
+[[unseen]]
+reason = "Engine ADR 1018: paragraph shading and border set on a paragraph itself rather than its style (Word's direct w:shd / w:pBdr). InDesign writes the same ParagraphShading* / ParagraphBorder* attributes on a <ParagraphStyleRange> as on a <ParagraphStyle>; the census documents set the offsets, origins, corners and flags below only on styles."
+keys = [
+  "ParagraphStyleRange@ParagraphBorderBottomLeftCornerOption",
+  "ParagraphStyleRange@ParagraphBorderBottomOffset",
+  "ParagraphStyleRange@ParagraphBorderBottomRightCornerOption",
+  "ParagraphStyleRange@ParagraphBorderLeftOffset",
+  "ParagraphStyleRange@ParagraphBorderRightOffset",
+  "ParagraphStyleRange@ParagraphBorderTint",
+  "ParagraphStyleRange@ParagraphBorderTopLeftCornerOption",
+  "ParagraphStyleRange@ParagraphBorderTopOffset",
+  "ParagraphStyleRange@ParagraphBorderTopRightCornerOption",
+  "ParagraphStyleRange@ParagraphBorderWidth",
+  "ParagraphStyleRange@ParagraphShadingBottomOffset",
+  "ParagraphStyleRange@ParagraphShadingBottomOrigin",
+  "ParagraphStyleRange@ParagraphShadingClipToFrame",
+  "ParagraphStyleRange@ParagraphShadingLeftOffset",
+  "ParagraphStyleRange@ParagraphShadingOverprint",
+  "ParagraphStyleRange@ParagraphShadingRightOffset",
+  "ParagraphStyleRange@ParagraphShadingSuppressPrinting",
+  "ParagraphStyleRange@ParagraphShadingTopOffset",
+  "ParagraphStyleRange@ParagraphShadingTopOrigin",
+]
+
+[[unseen]]
 reason = "The engine's older tab-stop record. InDesign writes <TabList><ListItem type=\"record\">, which is read as well (ParagraphStyleRange@TabList/ListItem/*)."
 elements = ["TabStop"]
 

@@ -246,6 +246,7 @@ fn build() -> (CanvasModel, Targets) {
         &mut m,
         Mutation::CreateNumberingList {
             spec: paged_mutate::NumberingListSpec {
+                levels: Default::default(),
                 self_id: Some("NumberingList/probe".into()),
                 name: Some("Probe".into()),
                 continue_across_stories: None,

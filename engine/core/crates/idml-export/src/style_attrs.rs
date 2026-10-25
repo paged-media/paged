@@ -133,6 +133,14 @@ pub(crate) fn paragraph_style_attrs(s: &ParagraphStyleDef) -> Vec<(&'static str,
             ("Ligatures", s.ligatures_on),
         ],
     );
+    crate::emit::decoration_attrs(
+        &mut out,
+        &s.decorations,
+        s.underline,
+        s.strikethru,
+        s.point_size,
+    );
+    crate::emit::shading_border_attrs(&mut out, &s.shading, &s.border);
     push_strs(&mut out, &[("KerningMethod", &s.kerning_method)]);
     push_otf(&mut out, &s.otf);
     // `true` on a style whose nested / line / GREP list is empty — one
@@ -251,6 +259,13 @@ pub(crate) fn character_style_attrs(s: &CharacterStyleDef) -> Vec<(&'static str,
             ("Ligatures", s.ligatures_on),
             ("NoBreak", s.no_break),
         ],
+    );
+    crate::emit::decoration_attrs(
+        &mut out,
+        &s.decorations,
+        s.underline,
+        s.strikethru,
+        s.point_size,
     );
     // InDesign writes the ruby flag as a number (`RubyFlag="1"`).
     if let Some(f) = s.ruby_flag {
@@ -394,7 +409,9 @@ pub(crate) fn paragraph_style_attr_patch(
                 grid_alignment_patch(key, raw, s.grid_alignment, s.grid_align_first_line_only)
             })
             .or_else(|| paragraph_rule_patch(key, raw, &RULE_ABOVE, &s.rule_above))
-            .or_else(|| paragraph_rule_patch(key, raw, &RULE_BELOW, &s.rule_below)),
+            .or_else(|| paragraph_rule_patch(key, raw, &RULE_BELOW, &s.rule_below))
+            .or_else(|| crate::emit::decoration_patch(key, raw, &s.decorations, s.underline))
+            .or_else(|| crate::emit::shading_border_patch(key, raw, &s.shading, &s.border)),
     }
 }
 
@@ -458,7 +475,7 @@ pub(crate) fn character_style_attr_patch(
         b"KentenPlacement" => Some(preserving_f32_patch(raw, s.marks.kenten_placement)),
         b"KentenPosition" => Some(opt_string_patch(&s.marks.kenten_position)),
         b"KentenAlignment" => Some(opt_string_patch(&s.marks.kenten_alignment)),
-        _ => None,
+        _ => crate::emit::decoration_patch(key, raw, &s.decorations, s.underline),
     }
 }
 

@@ -347,3 +347,48 @@ fn delete_numbering_list() {
     );
     assert!(!lists(&mut m).to_string().contains(id.as_str()));
 }
+
+#[test]
+fn set_style_based_on() {
+    covers!("script:paged.setStyleBasedOn");
+    let mut m = blank();
+    ok(
+        &mut m,
+        "paged.createParagraphStyle({name: 'Base'}); paged.createParagraphStyle({name: 'Child'});",
+    );
+    let ids: Vec<String> = m
+        .scene()
+        .styles
+        .paragraph_styles
+        .values()
+        .filter(|d| matches!(d.name.as_deref(), Some("Base") | Some("Child")))
+        .map(|d| d.self_id.clone())
+        .collect();
+    let base = ids
+        .iter()
+        .find(|id| m.scene().styles.paragraph_styles[*id].name.as_deref() == Some("Base"))
+        .unwrap()
+        .clone();
+    let child = ids.iter().find(|id| **id != base).unwrap().clone();
+    writes(
+        &mut m,
+        &format!("paged.setStyleBasedOn('paragraph', {child:?}, {base:?})"),
+        "true",
+    );
+    // The cycle is refused.
+    refuses(
+        &mut m,
+        &format!("paged.setStyleBasedOn('paragraph', {base:?}, {child:?})"),
+        "false",
+    );
+    refuses(
+        &mut m,
+        "paged.setStyleBasedOn('nonsense', 'x', null)",
+        "false",
+    );
+    throws(
+        &mut m,
+        "paged.setStyleBasedOn('paragraph', Symbol('s'), null)",
+        SYMBOL_TO_STRING,
+    );
+}

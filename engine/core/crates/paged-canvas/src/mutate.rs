@@ -404,7 +404,16 @@ fn apply_insert_text(
     //
     // The implementation walks segments and splits as needed,
     // chaining the resulting locate() to the next insertion point.
+    // Engine ADR 1018 — Enter at a paragraph's end gives the new
+    // paragraph its style's Next Style, as InDesign and Word do. Only for
+    // a lone paragraph break (the Return key), never for pasted text.
+    let enter_at_end = (text == "\n")
+        .then(|| paragraph_end_at(paragraphs, offset))
+        .flatten();
     insert_segments(paragraphs, offset, text);
+    if let Some(pi) = enter_at_end {
+        apply_next_style(doc, story_id, cell, pi);
+    }
     Ok(AppliedText {
         story_id: story_id.into(),
         inverse: TextOp::DeleteRange {
@@ -421,6 +430,50 @@ fn apply_insert_text(
             keep_run,
         },
     })
+}
+
+/// The paragraph `offset` ends, when it stands at the end of one (past its
+/// last character; empty runs after it do not count).
+fn paragraph_end_at(paragraphs: &[paged_model::Paragraph], offset: u32) -> Option<usize> {
+    match locate(paragraphs, offset) {
+        Locate::InRun {
+            paragraph_idx,
+            run_idx,
+            byte_in_run,
+        } => {
+            let p = &paragraphs[paragraph_idx];
+            let rest_empty = p.runs[run_idx + 1..].iter().all(|r| r.text.is_empty());
+            (byte_in_run == p.runs[run_idx].text.len() && rest_empty).then_some(paragraph_idx)
+        }
+        Locate::EndOfStory { paragraph_idx } => Some(paragraph_idx),
+        Locate::AtParagraphBreak { .. } => None,
+    }
+}
+
+/// Give paragraph `pi + 1` (just made by Enter at the end of `pi`) the
+/// Next Style of `pi`'s paragraph style, when that names a style the
+/// document has. Undo needs nothing more: the inverse delete joins the
+/// two paragraphs and the joined one keeps `pi`'s attributes.
+fn apply_next_style(doc: &mut Document, story_id: &str, cell: &Option<TextCellAddr>, pi: usize) {
+    let Ok(paragraphs) = find_paragraphs_mut(doc, story_id, cell) else {
+        return;
+    };
+    let Some(current) = paragraphs.get(pi).and_then(|p| p.paragraph_style.clone()) else {
+        return;
+    };
+    let styles = &doc.styles.paragraph_styles;
+    let Some(next) = styles
+        .get(&current)
+        .and_then(|d| d.next_style.clone())
+        .filter(|n| *n != current && styles.contains_key(n))
+    else {
+        return;
+    };
+    if let Ok(paragraphs) = find_paragraphs_mut(doc, story_id, cell) {
+        if let Some(p) = paragraphs.get_mut(pi + 1) {
+            p.paragraph_style = Some(next);
+        }
+    }
 }
 
 /// `text` with every paragraph return spelled `\n`: `\r\n`, `\r` and

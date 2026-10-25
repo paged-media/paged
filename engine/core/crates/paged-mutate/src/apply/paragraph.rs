@@ -1007,6 +1007,11 @@ pub(super) fn apply_paragraph_field(
         }
         // W0.2 — whole rule structs.
         PropertyPath::ParagraphRuleAbove => set_para_rule_field(path, value, &mut para.rule_above),
+        // Engine ADR 1018 — direct shading and border.
+        p if super::word::is_shading_border_path(p) => {
+            super::word::set_shading_border_field(&mut para.shading, &mut para.border, p, value)
+                .expect("a shading / border path")
+        }
         PropertyPath::ParagraphRuleBelow => set_para_rule_field(path, value, &mut para.rule_below),
         // W0.2 — whole `<TabList>` replacement. The captured prior is
         // returned as a `Value::TabStops` so the inverse restores the
@@ -1353,6 +1358,11 @@ pub(super) fn apply_character_field_on_run(
         // defaulted run must restore the visible ON state (punch-list).
         PropertyPath::CharacterLigatures => {
             set_run_bool_field(run, path, value, true, |r| &mut r.ligatures_on)
+        }
+        // Engine ADR 1018 — Word's character additions.
+        p if super::word::is_decoration_path(p) => {
+            super::word::set_decoration_field(&mut run.decorations, &mut run.underline, p, value)
+                .expect("a decoration path")
         }
         _ => Err(OperationError::UnsupportedProperty {
             node: NodeId::StoryRange {

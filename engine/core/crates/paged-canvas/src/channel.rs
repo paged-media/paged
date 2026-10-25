@@ -731,6 +731,14 @@ export type WorkerToMain = WorkerToMainKind & {
 //   `TooLarge` / `NothingDrawn`.
 //   An older worker ignores the new fields and answers a whole-page PNG,
 //   which a caller detects by the reply's missing `format` / `region`.
+// Rides v76 (unreleased; added before first consumer sync, governance rule
+//   4) — engine ADRs 1018 and 1021: the mutations setStyleBasedOn,
+//   setListLevel, restartNumbering and findReplace (Operations
+//   SetStyleBasedOn, SetListLevel, RestartNumbering and the inverse-only
+//   SetParagraphListState); `RequestFindText { spec }` → `FoundText { hits,
+//   error? }`. Additive: twelve property paths (Word's character and
+//   paragraph additions, `documentShowHiddenText`) and
+//   `NumberingListSpec.levels`.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(76);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -1379,6 +1387,10 @@ pub enum MainToWorkerKind {
         #[serde(default)]
         options: paged_template::DeriveOptions,
     },
+    /// Engine ADR 1021 — the hits of `spec` (story, caret and character
+    /// ranges, context), for a results list. Reads only. Reply:
+    /// `FoundText`. // rides v76 (added before first consumer sync).
+    RequestFindText { spec: paged_wire::FindSpec },
     /// v76 — "Open as template": the derived fields (those named in
     /// `only`, when given) written as the template's policy, and each
     /// tagged range made a placeholder run, as ONE batch mutation (one undo
@@ -2216,6 +2228,13 @@ pub enum WorkerToMainKind {
     /// v75 — `SetTemplateFields` refused before anything applied.
     TemplateFieldsRefused {
         problems: Vec<crate::template::TemplateFieldProblem>,
+    },
+    /// Engine ADR 1021 — `RequestFindText` reply: the hits in story order,
+    /// or `error` (a bad pattern; no document) with none.
+    FoundText {
+        hits: Vec<paged_wire::FindHit>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
     /// v76 — `RequestDerivedTemplateFields` reply. Empty with no document.
     DerivedTemplateFields {
