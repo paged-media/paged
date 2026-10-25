@@ -184,11 +184,76 @@ fn r3(v: f64) -> f64 {
     (v * 1000.0).round() / 1000.0
 }
 
+/// The bounding box of anchors' anchor points: `[top, left, bottom, right]`
+/// (a path item's bounds, as the engine and the importer keep them).
+fn anchor_bounds(a: &[Anchor]) -> Option<[f64; 4]> {
+    let mut b = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
+    for p in a {
+        b = [
+            b[0].min(p[0].1),
+            b[1].min(p[0].0),
+            b[2].max(p[0].1),
+            b[3].max(p[0].0),
+        ];
+    }
+    (b[0] <= b[2]).then_some(b)
+}
+
 fn anchors_of(e: &Element) -> Vec<Anchor> {
     e.anchors
         .iter()
         .map(|a| [(a[0][0], a[0][1]), (a[1][0], a[1][1]), (a[2][0], a[2][1])])
         .collect()
+}
+
+/// A path's anchors mapped onto its box, when the two disagree: the
+/// engine's resize of one path item writes its bounds and leaves its
+/// anchors (`None` when they agree).
+fn anchors_on_bounds(e: &Element) -> Option<Vec<Anchor>> {
+    let a = anchors_of(e);
+    let (now, was) = (e.bounds?, anchor_bounds(&a)?);
+    if e.kind != "polygon" || now.iter().zip(was).all(|(x, y)| (x - y).abs() < 0.01) {
+        return None;
+    }
+    let axis = |lo: f64, hi: f64, nlo: f64, nhi: f64| {
+        if (hi - lo).abs() < 1e-9 {
+            (1.0, nlo - lo)
+        } else {
+            let s = (nhi - nlo) / (hi - lo);
+            (s, nlo - s * lo)
+        }
+    };
+    let (sx, ox) = axis(was[1], was[3], now[1], now[3]);
+    let (sy, oy) = axis(was[0], was[2], now[0], now[2]);
+    Some(
+        a.iter()
+            .map(|p| p.map(|(x, y)| (x * sx + ox, y * sy + oy)))
+            .collect(),
+    )
+}
+
+/// Refit an element: its anchors as they are, or, when they are still the
+/// preset for its box but its bounds moved, the anchors on its bounds.
+fn refit_element(
+    prst: &str,
+    adj: &[(String, String)],
+    w: f64,
+    h: f64,
+    e: &Element,
+) -> Option<Refit> {
+    let r = refit_preset(prst, adj, w, h, &anchors_of(e), &e.starts, &e.transform)?;
+    match (&r, anchors_on_bounds(e)) {
+        (Refit::Same, Some(mapped)) => {
+            refit_preset(prst, adj, w, h, &mapped, &e.starts, &e.transform)
+        }
+        _ => Some(r),
+    }
+}
+
+/// A path write with the bounds its anchors give (the engine keeps a
+/// path's bounds beside its anchors and does not derive them).
+fn path_bounds(a: &[Anchor]) -> Option<[f64; 4]> {
+    anchor_bounds(a).map(|b| b.map(r3))
 }
 
 fn wire_anchors(a: &[Anchor]) -> Vec<[[f64; 2]; 3]> {
@@ -266,9 +331,7 @@ pub fn follow(elements: &[Element]) -> Vec<Write> {
         let (Some((prst, adj)), Some((w, h))) = (label.preset(), label.size()) else {
             continue;
         };
-        let Some(Refit::Regenerated(r)) =
-            refit_preset(&prst, &adj, w, h, &anchors_of(e), &e.starts, &e.transform)
-        else {
+        let Some(Refit::Regenerated(r)) = refit_element(&prst, &adj, w, h, e) else {
             continue;
         };
         let mut nl = label.clone();
@@ -278,6 +341,7 @@ pub fn follow(elements: &[Element]) -> Vec<Write> {
         writes.push(Write {
             id: e.id.clone(),
             kind: e.kind.clone(),
+            bounds: path_bounds(&a),
             anchors: Some(wire_anchors(&a)),
             starts: Some(s),
             transform: Some(r.transform),
@@ -314,6 +378,7 @@ pub fn follow(elements: &[Element]) -> Vec<Write> {
                     continue;
                 };
                 let (a, s, _) = flatten(&part_of(&out.subpaths, part));
+                w2.bounds = path_bounds(&a);
                 w2.anchors = Some(wire_anchors(&a));
                 w2.starts = Some(s);
             } else if let Some([t, l, b, rr]) = sib.bounds {
@@ -431,6 +496,7 @@ pub fn follow(elements: &[Element]) -> Vec<Write> {
         writes.push(Write {
             id: e.id.clone(),
             kind: e.kind.clone(),
+            bounds: path_bounds(&a),
             anchors: Some(wire_anchors(&a)),
             starts: Some(s),
             transform: Some(routed.transform),
@@ -465,12 +531,7 @@ pub fn handles(e: &Element) -> Vec<PageHandle> {
         // A glued connector is routed, not adjusted by hand (yet).
         return Vec::new();
     }
-    if e.kind == "polygon"
-        && !matches!(
-            refit_preset(&prst, &adj, w, h, &anchors_of(e), &e.starts, &e.transform),
-            Some(Refit::Same)
-        )
-    {
+    if e.kind == "polygon" && !matches!(refit_element(&prst, &adj, w, h, e), Some(Refit::Same)) {
         return Vec::new();
     }
     geom::handles(&prst, &adj, w, h)
@@ -540,6 +601,7 @@ pub fn adjust(elements: &[Element], target: &str, index: usize, point: [f64; 2])
             };
             let sub = part_of(&out.subpaths, part);
             let (a, s, _) = flatten(&sub);
+            wr.bounds = path_bounds(&a);
             wr.anchors = Some(wire_anchors(&a));
             wr.starts = Some(s);
             if e.id == target {
@@ -883,6 +945,27 @@ mod tests {
         assert!((min_x - 16.2).abs() < 0.01, "{min_x}");
         apply_writes(&mut els, &w);
         assert!(follow(&els).is_empty());
+    }
+
+    #[test]
+    fn a_box_resized_without_its_anchors_is_followed() {
+        // The engine's resize of one path writes its bounds alone.
+        let mut e = poly(
+            "u1",
+            "roundRect",
+            &[],
+            200.0,
+            100.0,
+            [1.0, 0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            json!({}),
+        );
+        e.bounds = Some([0.0, 0.0, 50.0, 400.0]);
+        let w = follow(std::slice::from_ref(&e));
+        assert_eq!(w.len(), 1);
+        let l = Label::parse(w[0].label.as_deref().unwrap()).unwrap();
+        assert_eq!(l.size(), Some((400.0, 50.0)));
+        assert_eq!(w[0].bounds, Some([0.0, 0.0, 50.0, 400.0]));
     }
 
     #[test]

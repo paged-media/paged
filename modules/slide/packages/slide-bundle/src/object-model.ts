@@ -94,6 +94,8 @@ import duplicateSlideArgs from "../schema/duplicate-slide.args.json" with { type
 import duplicateSlideResult from "../schema/duplicate-slide.result.json" with { type: "json" };
 import exportPptxArgs from "../schema/export-pptx.args.json" with { type: "json" };
 import exportPptxResult from "../schema/export-pptx.result.json" with { type: "json" };
+import insertShapeArgs from "../schema/insert-shape.args.json" with { type: "json" };
+import insertShapeResult from "../schema/insert-shape.result.json" with { type: "json" };
 
 export const PLUGIN_ID = "media.paged.slide";
 /** The label key every slide label is written under (the host derives the
@@ -109,6 +111,7 @@ export const NEW_SLIDE_COMMAND = "media.paged.slide.newSlide";
 export const IMPORT_PPTX_COMMAND = "media.paged.slide.importPptx";
 export const DUPLICATE_SLIDE_COMMAND = "media.paged.slide.duplicateSlide";
 export const EXPORT_PPTX_COMMAND = "media.paged.slide.exportPptx";
+export const INSERT_SHAPE_COMMAND = "media.paged.slide.insertShape";
 
 export const SLIDE_SCHEMA = slideRows as unknown as readonly PropertySchema[];
 export const LAYOUT_SCHEMA = layoutRows as unknown as readonly PropertySchema[];
@@ -524,6 +527,15 @@ export interface SlideObjectModelOptions {
     diagnostics: string[];
     notExported: string[];
   } | null>;
+  /** Insert a preset as a live preset (Insert ▸ Shapes, ADR 717): the new
+   *  outline element's address, or null with the reason. */
+  insertShape?(args: {
+    prst: string;
+    pageId: string;
+    center: [number, number];
+    w?: number;
+    h?: number;
+  }): Promise<{ address: Address } | { refused: string }>;
 }
 
 /** Register the slide object model on `host`. Headless: no DOM, no edit
@@ -1169,6 +1181,45 @@ export function contributeSlideObjectModel(
     },
   };
 
+  const insertShape: TypedCommandContribution<
+    {
+      prst: string;
+      slide: string;
+      x?: number;
+      y?: number;
+      w?: number;
+      h?: number;
+    },
+    { shape: string }
+  > = {
+    id: INSERT_SHAPE_COMMAND,
+    title: t(MODEL.insertShape),
+    args: insertShapeArgs as ValueType,
+    result: insertShapeResult as ValueType,
+    async handler(_ctx, args) {
+      if (!options.insertShape)
+        throw new Error("failed: this host cannot insert shapes");
+      const pageId = slidePageId(args.slide);
+      const page = (
+        await host.document.collection<{
+          selfId: string;
+          sizePt?: [number, number];
+        }>("pages")
+      ).find((p) => p.selfId === pageId);
+      if (!page) throw new Error(`unknownAddress: no slide ${args.slide}`);
+      const [pw, ph] = page.sizePt ?? [960, 540];
+      const out = await options.insertShape({
+        prst: args.prst,
+        pageId,
+        center: [args.x ?? pw / 2, args.y ?? ph / 2],
+        w: args.w,
+        h: args.h,
+      });
+      if ("refused" in out) throw new Error(`failed: ${out.refused}`);
+      return { shape: out.address };
+    },
+  };
+
   return host.contribute.objectModel({
     kinds: [deckKind, slideKind, layoutKind, placeholderKind],
     commands: [
@@ -1176,6 +1227,7 @@ export function contributeSlideObjectModel(
       importPptx,
       duplicateSlide,
       exportPptx,
+      insertShape,
     ] as readonly TypedCommandContribution[],
     // Editor plan G3a: a placeholder's text, whether a slide is shown.
     templateFields: slideTemplateFields(host),

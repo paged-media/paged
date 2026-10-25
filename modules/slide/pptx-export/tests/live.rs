@@ -123,7 +123,10 @@ fn elements(doc: &Document, page: usize) -> Vec<Element> {
                         anchors: wire(&p.anchors),
                         starts: p.subpath_starts.clone(),
                         transform: t64(p.item_transform),
-                        bounds: None,
+                        bounds: Some(
+                            [p.bounds.top, p.bounds.left, p.bounds.bottom, p.bounds.right]
+                                .map(f64::from),
+                        ),
                     })
                 }
                 FrameRef::TextFrame(i) => {
@@ -183,6 +186,14 @@ fn write(doc: &mut Document, page: usize, writes: &[Write]) {
             }
             if let Some(t) = w.transform {
                 p.item_transform = Some(t.map(f));
+            }
+            if let Some([t, l, b, r]) = w.bounds {
+                p.bounds = Bounds {
+                    top: f(t),
+                    left: f(l),
+                    bottom: f(b),
+                    right: f(r),
+                };
             }
         }
         if let Some(tf) = sp

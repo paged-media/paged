@@ -44,6 +44,7 @@ import {
   DUPLICATE_SLIDE_COMMAND,
   EXPORT_PPTX_COMMAND,
   IMPORT_PPTX_COMMAND,
+  INSERT_SHAPE_COMMAND,
   NEW_SLIDE_COMMAND,
   SLIDE_SCHEMA,
   PLACEHOLDER_SCHEMA,
@@ -93,7 +94,7 @@ beforeEach(async () => {
 afterEach(() => h.dispose());
 
 describe("[plugin-slide.object-model] slides, layouts, placeholders through host.objects", () => {
-  it("declares four kinds and four typed commands", async () => {
+  it("declares four kinds and five typed commands", async () => {
     const kinds = (await h.objects.kinds())
       .filter((k) => k.owner === "media.paged.slide")
       .map((k) => k.kind);
@@ -112,6 +113,7 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
       DUPLICATE_SLIDE_COMMAND,
       EXPORT_PPTX_COMMAND,
       IMPORT_PPTX_COMMAND,
+      INSERT_SHAPE_COMMAND,
       NEW_SLIDE_COMMAND,
     ]);
   });

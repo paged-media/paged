@@ -72,6 +72,23 @@ export const MODEL = defineMessages("slide.model", {
   importPptx: "Open a PowerPoint deck",
   duplicateSlide: "Duplicate slide",
   exportPptx: "Export as a PowerPoint deck",
+  insertShape: "Insert a shape",
+});
+
+/** The Shapes panel (Insert ▸ Shapes) and its categories, PowerPoint's. */
+export const SHAPES = defineMessages("slide.shapes", {
+  title: "Shapes",
+  empty: "Go to a slide to insert shapes.",
+  insert: "Insert {name}",
+  lines: "Lines",
+  rectangles: "Rectangles",
+  basicShapes: "Basic Shapes",
+  blockArrows: "Block Arrows",
+  equation: "Equation Shapes",
+  flowchart: "Flowchart",
+  starsAndBanners: "Stars and Banners",
+  callouts: "Callouts",
+  actionButtons: "Action Buttons",
 });
 
 /** The palette commands (commands.ts). */
@@ -83,6 +100,7 @@ export const COMMANDS = defineMessages("slide.commands", {
   moveSlideDown: "Move slide down",
   importPptx: "Open PowerPoint deck…",
   exportPptx: "Export PowerPoint deck…",
+  insertShapes: "Insert shape…",
 });
 
 /** The menu items this bundle adds (menu.ts): the path stays English (it is
@@ -96,6 +114,7 @@ defineMessages("menu", {
   "Delete slide": "Delete slide",
   "Move slide up": "Move slide up",
   "Move slide down": "Move slide down",
+  "Shapes…": "Shapes…",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled

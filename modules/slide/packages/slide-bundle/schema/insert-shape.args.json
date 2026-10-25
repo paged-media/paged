@@ -1,0 +1,11 @@
+{
+  "kind": "struct",
+  "fields": {
+    "prst": { "kind": "text" },
+    "slide": { "kind": "ref", "to": "plugin:media.paged.slide/slide" },
+    "x": { "kind": "number", "unit": "pt", "optional": true },
+    "y": { "kind": "number", "unit": "pt", "optional": true },
+    "w": { "kind": "number", "unit": "pt", "optional": true },
+    "h": { "kind": "number", "unit": "pt", "optional": true }
+  }
+}

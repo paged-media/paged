@@ -25,7 +25,8 @@
     "documents": {
       "open": true,
       "export": true
-    }
+    },
+    "rendering": ["overlay"]
   },
   "contributes": {
     "commands": [
@@ -35,7 +36,8 @@
       "media.paged.slide.command.moveSlideUp",
       "media.paged.slide.command.moveSlideDown",
       "media.paged.slide.command.importPptx",
-      "media.paged.slide.command.exportPptx"
+      "media.paged.slide.command.exportPptx",
+      "media.paged.slide.command.insertShapes"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
     "exporters": ["media.paged.slide.exporter.pptx"],
@@ -45,7 +47,8 @@
       "media.paged.slide.panel.slide",
       "media.paged.slide.panel.transition",
       "media.paged.slide.panel.placeholder",
-      "media.paged.slide.panel.deck"
+      "media.paged.slide.panel.deck",
+      "media.paged.slide.panel.shapes"
     ],
     "partTypes": [
       {
@@ -107,6 +110,12 @@
           "title": "Export as a PowerPoint deck",
           "args": "schema/export-pptx.args.json",
           "result": "schema/export-pptx.result.json"
+        },
+        {
+          "id": "media.paged.slide.insertShape",
+          "title": "Insert a shape",
+          "args": "schema/insert-shape.args.json",
+          "result": "schema/insert-shape.result.json"
         }
       ],
       "templateFields": [
