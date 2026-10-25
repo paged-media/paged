@@ -125,8 +125,10 @@ export function recordStyle(cue: RecordCue): CSSProperties {
 export function recordAttrs(
   cue: RecordCue,
   t: (m: (typeof RM)[keyof typeof RM]) => string,
+  hint?: string,
 ): Record<string, string | undefined> {
   const said = [
+    hint ?? null,
     cue.tone === "added" ? t(RM.added) : null,
     cue.tone === "changed" ? t(RM.changed) : null,
     cue.placed ? `${t(RM.placed)} · ${t(RM.selectHint)}` : null,

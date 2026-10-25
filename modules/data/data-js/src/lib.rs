@@ -466,6 +466,14 @@ mod wasm {
             to_js_json(&plan)
         }
 
+        /// The Data Merge placeholders of a text that name a field
+        /// (`PlaceholderSpan[]`: `{ start, end, field, image }`, byte offsets
+        /// as the host counts them) — what filling a design with one record
+        /// replaces.
+        pub fn placeholder_spans(&self, text: &str) -> Result<JsValue, JsValue> {
+            to_js(&data_lower::merge::placeholder_spans(text))
+        }
+
         /// The distinct words of a merge plan's texts per template frame
         /// (`string[][]`, the space included) — what the writer measures
         /// against the host's fonts before asking [`merge_overset`].

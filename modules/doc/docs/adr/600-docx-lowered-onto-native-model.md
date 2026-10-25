@@ -92,3 +92,8 @@ still lists tables, images, lists and standalone open as future work.
 - [ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md), [ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md), [ADR 310](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/310-one-write-door.md), [ADR 305](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/305-doors-always-present.md) — the plugin shape, native content, the write door, and how an older engine is detected
 - [ADR 007](https://github.com/paged-media/core/blob/main/docs/adr/007-carry-through-rendering-honesty.md), [ADR 028](https://github.com/paged-media/core/blob/main/docs/adr/028-pagination-rules-are-engine-owned.md), [ADR 024](https://github.com/paged-media/editor/blob/main/docs/adr/024-context-sensitivity-is-a-core-concept.md) — report instead of imitating; the engine-owned break rules; the edit context declaration
 - [ADR 020](https://github.com/paged-media/plugin-web/blob/main/docs/adr/020-paged-web-native-engine-defer-frame-threading.md) — the opposite choice for HTML: an in-plugin engine painted into a frame
+
+## Amendment 2026-10-24 (ADR 617)
+
+First-fit line breaking is now `paragraphComposer = "Word First-fit"`, the engine's own Word
+composer (engine ADR 1016), not InDesign's Single-line Composer `"HL Single"`.

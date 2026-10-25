@@ -38,6 +38,8 @@ import { createDataRegistry } from "@paged-media/plugin-sdk";
 import {
   createEditorScope,
   DATA_FIELD_DRAG_TYPE,
+  DATA_RECORD_DRAG_TYPE,
+  DATA_TABLE_DRAG_TYPE,
   setDataDoorSource,
 } from "@paged-media/shell";
 
@@ -395,6 +397,109 @@ describe("Data panel", () => {
       query: "products",
       field: "sku",
     });
+  });
+
+  test("a query drags out as a table of its shown columns, a row as a record [editor-shell.data-panel]", async () => {
+    covers("panel:paged.data");
+    const { scope } = serve([{ ...TABLE, kind: "query", writable: false }]);
+    const h = await mountPanel(DataPanel, {
+      id: "paged.data",
+      document: "none",
+      scope,
+    });
+    await settle();
+    const drag = (el: Element) => {
+      const data: Record<string, string> = {};
+      fireEvent.dragStart(el, {
+        dataTransfer: {
+          setData: (type: string, value: string) => void (data[type] = value),
+        },
+      });
+      return data;
+    };
+    // Hide `cat`: the table carries the shown columns, in order.
+    fireEvent.click(
+      [...h.root.querySelectorAll("button")].find(
+        (b) => b.textContent === "Columns",
+      )!,
+    );
+    const cat = [...h.root.querySelectorAll("[data-data-columns] label")].find(
+      (l) => l.textContent === "cat",
+    )!;
+    fireEvent.click(cat.querySelector("input")!);
+    await settle();
+    const handle = h.root.querySelector("[data-data-table-drag]")!;
+    expect(handle.getAttribute("draggable")).toBe("true");
+    expect(JSON.parse(drag(handle)[DATA_TABLE_DRAG_TYPE]!)).toEqual({
+      query: "products",
+      fields: ["sku", "price"],
+    });
+    const row = h.root.querySelector("[data-data-row='1']")!;
+    expect(row.getAttribute("draggable")).toBe("true");
+    expect(JSON.parse(drag(row)[DATA_RECORD_DRAG_TYPE]!)).toEqual({
+      query: "products",
+      record: 1,
+    });
+    // Sorted, a row's place is not its record number: it does not drag.
+    fireEvent.click(h.root.querySelector("[data-data-header='price']")!);
+    await settle();
+    expect(
+      h.root.querySelector("[data-data-row='1']")?.getAttribute("draggable"),
+    ).toBe("false");
+  });
+
+  test("the first run offers the sample data; loaded, its query's tab shows [editor-shell.data-panel]", async () => {
+    covers("panel:paged.data");
+    const backend = createDataRegistry();
+    const scope = createEditorScope();
+    setDataDoorSource(scope, backend);
+    const tables: DataTableInfo[] = [];
+    const sample: DataTableInfo = {
+      ...TABLE,
+      name: "sample",
+      kind: "query",
+      writable: false,
+    };
+    let handle!: ReturnType<typeof backend.serve>;
+    act(() => {
+      handle = backend.serve("media.paged.data", {
+        tables: () => tables,
+        records: async () => recordSet(ROWS),
+        query: async (sql) =>
+          recordSet(run(sql.replace('"sample"', '"products"'))),
+        async loadSample() {
+          tables.push(TABLE, sample);
+          handle.changed({ table: "sample", revision: "1" });
+          return "sample";
+        },
+      });
+    });
+    const h = await mountPanel(DataPanel, {
+      id: "paged.data",
+      document: "none",
+      scope,
+    });
+    await settle();
+    const button = h.root.querySelector("[data-data-sample]") as HTMLElement;
+    expect(button.textContent).toBe("Try it with sample data");
+    fireEvent.click(button);
+    await settle();
+    expect(
+      h.root
+        .querySelector("[data-data-tab='sample']")
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
+  test("a service without sample data offers none", async () => {
+    const { scope } = serve([]);
+    const h = await mountPanel(DataPanel, {
+      id: "paged.data",
+      document: "none",
+      scope,
+    });
+    await settle();
+    expect(h.root.querySelector("[data-data-sample]")).toBeNull();
   });
 
   test("a source table's headers do not drag", async () => {
