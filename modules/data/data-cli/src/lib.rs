@@ -230,6 +230,7 @@ mod tests {
             variables: Default::default(),
             locales: Default::default(),
             transforms: Vec::new(),
+            applied: Default::default(),
         };
         let mut results = HashMap::new();
         results.insert(

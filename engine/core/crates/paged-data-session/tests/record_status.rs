@@ -258,3 +258,127 @@ fn a_record_flow_names_the_row_each_instance_shows__feat__data_bind_record_statu
     let st = s.record_status(&q(), &Default::default()).unwrap();
     assert!(st.placed.is_empty());
 }
+
+/// The session as a document reopens it: the payload through JSON, the
+/// source imported again (the store is the data, not the recipe).
+fn reopen(s: &DataSession) -> DataSession {
+    let json = serde_json::to_string(&s.payload()).unwrap();
+    let mut r = DataSession::from_payload(serde_json::from_str(&json).unwrap(), 0);
+    r.store_import("p", Format::Csv, CSV, None).unwrap();
+    refresh(&mut r);
+    r
+}
+
+#[test]
+fn the_payload_keeps_the_applied_snapshot_compact__feat__data_bind_record_status() {
+    let mut s = session("SELECT * FROM p");
+    assert!(s.payload().applied.is_empty(), "nothing written from yet");
+    s.mark_rows_applied();
+    let payload = s.payload();
+    let snap = &payload.applied["q"];
+    assert_eq!(snap.key, ["sku"]);
+    assert_eq!(snap.rows.len(), 3);
+    // A key hash and a content hash per record, no values.
+    assert!(snap
+        .rows
+        .iter()
+        .all(|r| r.len() == 32 && r.chars().all(|c| c.is_ascii_hexdigit())));
+    let json = serde_json::to_string(&payload).unwrap();
+    assert!(!json.contains("Hammer"), "{json}");
+    // The round trip is exact, and a reopened session saves it again.
+    let r = reopen(&s);
+    assert_eq!(r.payload(), payload);
+    // A payload written before the snapshot existed loads without one.
+    let mut old: serde_json::Value = serde_json::to_value(&payload).unwrap();
+    old.as_object_mut().unwrap().remove("applied");
+    let mut o = DataSession::from_payload(serde_json::from_value(old).unwrap(), 0);
+    o.store_import("p", Format::Csv, CSV, None).unwrap();
+    refresh(&mut o);
+    assert!(o.record_status(&q(), &Default::default()).unwrap().baseline);
+}
+
+#[test]
+fn after_a_reopen_a_changed_row_reads_as_changed__feat__data_bind_record_status() {
+    let mut s = session("SELECT * FROM p");
+    bind(
+        &mut s,
+        serde_json::json!({"id": "v", "kind": "variable", "target": "ph",
+            "query": "q", "expr": "name"}),
+    );
+    s.mark_rows_applied();
+    let mut r = reopen(&s);
+    let opts = RecordStatusOptions {
+        instances: vec![1, 2],
+        ..Default::default()
+    };
+    let st = r.record_status(&q(), &opts).unwrap();
+    assert!(!st.baseline, "the snapshot came back with the document");
+    assert!(st.added.is_empty() && st.changed.is_empty());
+    assert_eq!(st.placed, [0, 1, 2]);
+
+    edit(
+        &mut r,
+        serde_json::json!([
+            {"op": "set", "row": 1, "field": "price", "value": 13},
+            {"op": "insert", "values": {"sku": "D-4", "name": "Spade", "price": 20}},
+            {"op": "delete", "row": 0}
+        ]),
+    );
+    let st = r.record_status(&q(), &opts).unwrap();
+    assert_eq!(st.key, ["sku"]);
+    assert_eq!(st.added, [2]);
+    assert_eq!(st.changed, [0], "B-2, its price changed");
+    assert_eq!(st.removed, 1);
+    assert_eq!(st.instances, [Some(0), Some(1)]);
+    assert_eq!(st.first, None);
+
+    // Another key than the saved one: the snapshot holds no values to key
+    // again, so the whole row is the identity (a change is new + removed).
+    let by_name = RecordStatusOptions {
+        key: Some(vec!["name".into()]),
+        ..Default::default()
+    };
+    let st = r.record_status(&q(), &by_name).unwrap();
+    assert!(st.key.is_empty());
+    assert!(st.changed.is_empty());
+    assert_eq!(st.added, [0, 2]);
+
+    // Writing the document again replaces the saved snapshot.
+    r.mark_query_applied(&q());
+    let st = r.record_status(&q(), &opts).unwrap();
+    assert!(st.added.is_empty() && st.changed.is_empty() && st.removed == 0);
+    assert_eq!(r.payload().applied["q"].rows.len(), 3);
+}
+
+#[test]
+fn a_saved_whole_row_snapshot_matches_rows_by_content__feat__data_bind_record_status() {
+    // No unique column (two rows read `true`): the whole row is the key.
+    let mut s = session("SELECT price > 8 AS big FROM p");
+    s.mark_rows_applied();
+    let snap = &s.payload().applied["q"];
+    assert!(snap.key.is_empty());
+    assert!(
+        snap.rows.iter().all(|r| r.len() == 16),
+        "one hash per record"
+    );
+    let mut r = reopen(&s);
+    let opts = RecordStatusOptions {
+        instances: vec![2],
+        ..Default::default()
+    };
+    let st = r.record_status(&q(), &opts).unwrap();
+    assert!(!st.baseline);
+    assert!(st.key.is_empty());
+    assert!(st.added.is_empty() && st.changed.is_empty());
+    assert_eq!(st.instances, [Some(2)]);
+    // Rake at 50 is big now: its old row is gone, the new one is not new
+    // (the whole row is its identity, and `true` was there).
+    edit(
+        &mut r,
+        serde_json::json!([{"op": "set", "row": 2, "field": "price", "value": 50}]),
+    );
+    let st = r.record_status(&q(), &opts).unwrap();
+    assert!(st.changed.is_empty());
+    assert_eq!(st.removed, 1);
+    assert_eq!(st.instances, [None]);
+}
