@@ -4831,6 +4831,50 @@
           ]
         },
         {
+          "description": "v77 (engine ADR 1011) — put a page (an artboard) at `origin_pt`\non the canvas: its top-left in document points. Absent returns the\npage to its default slot, the vertical stack the canvas always\nshowed. The page's content keeps its page coordinates and moves\nwith it; no other page moves; the page ORDER is `movePage`'s. One\nundo step (a `batch` of them, e.g. rearranging every artboard, is\none too). Lowers to `set(page, page.canvasOrigin)`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "placePage"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "page": {
+                  "$ref": "#/$defs/PageId"
+                },
+                "originPt": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "format": "float"
+                    },
+                    {
+                      "type": "number",
+                      "format": "float"
+                    }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "default": null
+                }
+              },
+              "required": [
+                "page"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — insert a `<Section>` anchored at `at_page`.",
           "type": "object",
           "properties": {
@@ -6065,6 +6109,11 @@
           "description": "Editor-ops (Page tool) — a page's `GeometricBounds`\n`[top, left, bottom, right]` in the page's INNER coordinate\nsystem (`Value::Bounds`). Only `NodeId::Page` carries it.\nItems keep their coordinates (InDesign's layout-adjust off);\n`spread_origin` re-derives on rebuild.",
           "type": "string",
           "const": "pageBounds"
+        },
+        {
+          "description": "Engine ADR 1011 — a page's place on the canvas (its artboard\nposition): `Value::Lengths([x, y])`, the page's top-left in\ndocument points; the empty list returns the page to its default\nslot (`paged_model::canvas_layout`). Only `NodeId::Page` carries\nit. Content keeps its page coordinates, so it moves with the page.",
+          "type": "string",
+          "const": "pageCanvasOrigin"
         },
         {
           "description": "SDK Phase 5 (v1 sweep) — drop-shadow per-field editors.\nAll five operate on the frame's `drop_shadow:\nOption<DropShadowSetting>`. Writing to any of them\nmaterialises a default DropShadowSetting if the prior\nwas `None`, then sets the named field. Use\n`FrameDropShadow` (the boolean toggle, defined below) to\nfully clear the shadow.\n\n`FrameDropShadowMode` carries the IDML mode string\n(\"Drop\" / \"Inner\" / etc); the renderer only branches on\n\"Drop\" today, others fall back to it.",

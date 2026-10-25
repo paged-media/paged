@@ -629,6 +629,8 @@ fn sample(row: &SchemaRow, current: &Value, t: &Targets) -> Value {
                 leader: None,
             }])
         }
+        // Engine ADR 1011 — a page's place on the canvas, `[x, y]` pt.
+        ValueType::List if row.path == "pageCanvasOrigin" => Value::Lengths(vec![900.0, 40.0]),
         ValueType::Transform => Value::Transform(Some([1.0, 0.0, 0.0, 1.0, 3.0, 4.0])),
         ValueType::Struct if row.wire == Wire::SwatchColor => {
             Value::SwatchColor(paged_mutate::SwatchColorSpec {

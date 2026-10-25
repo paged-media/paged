@@ -4696,6 +4696,7 @@
             "applyMasterToPage",
             "duplicatePage",
             "movePage",
+            "placePage",
             "onMaster",
             "createMaster",
             "deleteMaster",
@@ -6840,5 +6841,5 @@
       ]
     }
   ],
-  "protocol": 76
+  "protocol": 77
 }

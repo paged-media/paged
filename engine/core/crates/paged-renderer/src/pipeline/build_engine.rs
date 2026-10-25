@@ -987,6 +987,8 @@ pub(super) fn build_document_inner(
                 height_pt: bounds_in_spread.height(),
                 spread_origin: (bounds_in_spread.left, bounds_in_spread.top),
                 spread_transform,
+                // Resolved for every page once the loop has sized them all.
+                canvas_origin: (0.0, 0.0),
                 list: page_list,
                 layout_generation: 0,
                 numbering_generation: 0,
@@ -1000,6 +1002,22 @@ pub(super) fn build_document_inner(
             });
         }
         spread_page_ranges.push(start..pages.len());
+    }
+    // Engine ADR 1011 — each page's place on the canvas: its own
+    // `canvas_origin`, else its slot in the default vertical stack.
+    let origins = paged_model::canvas_layout(
+        pages
+            .iter()
+            .zip(
+                document
+                    .spreads
+                    .iter()
+                    .flat_map(|parsed| parsed.spread.pages.iter()),
+            )
+            .map(|(built, page)| ((built.width_pt, built.height_pt), page.canvas_origin)),
+    );
+    for (built, origin) in pages.iter_mut().zip(origins) {
+        built.canvas_origin = origin;
     }
     total_stats.pages = pages.len();
     // Surface that one or more page labels were computed rather than
@@ -1025,6 +1043,7 @@ pub(super) fn build_document_inner(
             height_pt: 792.0,
             spread_origin: (0.0, 0.0),
             spread_transform: Transform::IDENTITY,
+            canvas_origin: (0.0, 0.0),
             list: DisplayList::new(),
             layout_generation: 0,
             numbering_generation: 0,

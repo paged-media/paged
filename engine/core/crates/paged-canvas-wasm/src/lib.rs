@@ -280,16 +280,20 @@ mod wasm {
         /// a flat `[page_id_len, ...page_id_utf8, w_pt, h_pt]`-style
         /// blob? No — wasm-bindgen handles `Vec<JsValue>` poorly.
         /// Easier: each call returns one page; iterate by index.
-        /// Returns `None` past the end. Tuple is `[page_id, w_pt, h_pt]`
-        /// serialised as a JS array.
+        /// Returns `None` past the end. Tuple is `[page_id, w_pt, h_pt,
+        /// x_pt, y_pt]` serialised as a JS array; `x_pt` / `y_pt` (v77) are
+        /// the page's top-left on the canvas (engine ADR 1011).
         #[wasm_bindgen(js_name = pageInfo)]
         pub fn page_info(&self, index: usize) -> Option<js_sys::Array> {
             let model = self.core.model.as_ref()?;
             let page = model.built().pages.get(index)?;
-            let arr = js_sys::Array::new_with_length(3);
+            let arr = js_sys::Array::new_with_length(5);
             arr.set(0, JsValue::from_str(page.id.as_str()));
             arr.set(1, JsValue::from_f64(page.width_pt as f64));
             arr.set(2, JsValue::from_f64(page.height_pt as f64));
+            // v77 (engine ADR 1011) — the page's top-left on the canvas.
+            arr.set(3, JsValue::from_f64(page.canvas_origin.0 as f64));
+            arr.set(4, JsValue::from_f64(page.canvas_origin.1 as f64));
             Some(arr)
         }
 
@@ -657,14 +661,14 @@ mod wasm {
             };
 
             // Per-page transform: doc-space (pt) → surface-space
-            // (device px). The page's origin in doc space is the
-            // cumulative y from stacked layout; the camera adds its
-            // pan + scale; dpr brings CSS px → device px.
+            // (device px). The page's origin in doc space is its place on
+            // the canvas (engine ADR 1011: `BuiltPage::canvas_origin`, the
+            // default vertical stack unless the page was placed); the
+            // camera adds its pan + scale; dpr brings CSS px → device px.
             //
             // Two-pass approach so the scene cache can borrow mut
             // immutably for present_scenes: pass 1 builds + caches,
             // pass 2 reads cache + builds the (scene, transform) list.
-            const PAGE_GAP_PT: f32 = 24.0;
             let k = scale * dpr;
             let viewport_w = presenter.width() as f32;
             let viewport_h = presenter.height() as f32;
@@ -673,12 +677,12 @@ mod wasm {
             // Visibility = surface-space bbox intersects [0..vw, 0..vh].
             // Below-visibility-threshold pages don't get touched, so
             // their cache entries become LRU candidates.
-            let mut y_pt = 0.0_f32;
             let mut visible_indices: Vec<usize> = Vec::new();
             for (idx, built_page) in model.built().pages.iter().enumerate() {
+                let (x_pt, y_pt) = built_page.canvas_origin;
                 let surface_top = ty * dpr + y_pt * k;
                 let surface_bottom = surface_top + built_page.height_pt * k;
-                let surface_left = tx * dpr;
+                let surface_left = tx * dpr + x_pt * k;
                 let surface_right = surface_left + built_page.width_pt * k;
                 let visible = surface_right > 0.0
                     && surface_left < viewport_w
@@ -695,22 +699,20 @@ mod wasm {
                         self.scene_cache.insert(idx, scene);
                     }
                 }
-                y_pt += built_page.height_pt + PAGE_GAP_PT;
             }
 
             // Pass 2: build the (scene, transform) list. The cache
             // entries are guaranteed present for every visible page
             // after pass 1.
             let mut pages: Vec<(&paged_gpu::VelloScene, [f32; 6])> = Vec::new();
-            let mut y_pt = 0.0_f32;
             for (idx, built_page) in model.built().pages.iter().enumerate() {
                 if visible_indices.contains(&idx) {
-                    let transform = [k, 0.0, 0.0, k, tx * dpr, ty * dpr + y_pt * k];
+                    let (x_pt, y_pt) = built_page.canvas_origin;
+                    let transform = [k, 0.0, 0.0, k, tx * dpr + x_pt * k, ty * dpr + y_pt * k];
                     if let Some(scene) = self.scene_cache.entries.get(&idx) {
                         pages.push((scene, transform));
                     }
                 }
-                y_pt += built_page.height_pt + PAGE_GAP_PT;
             }
 
             // Linear-RGB background matching the CPU path (#e5e7eb).
