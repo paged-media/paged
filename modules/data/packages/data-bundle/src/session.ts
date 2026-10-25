@@ -17,14 +17,33 @@
  */
 
 // The in-memory session: the bundle's state machine over the engine
-// (`data-js`) + the query engine (DuckDB-WASM). It holds the binding recipe
+// (`data-js`, with the query store inside it). It holds the binding recipe
 // (sources / queries / binding defs), boots the engines lazily (honest about
 // missing artifacts), runs the resolve → lower → mutate pipeline, and exposes a
 // read-only snapshot the panels render. ZERO binding/expression semantics live
 // here (CLAUDE.md hard rule) — it orchestrates the Rust engine.
 
+import { createDataDoor, type DataDoor } from "./data-door";
+import {
+  imageIssues,
+  issueDiagnostics,
+  ISSUES_DIAGNOSTICS_KEY,
+  oversetIssues,
+  type ImageNote,
+  type TextTarget,
+} from "./issues";
+import { createAssetPipeline, type AssetColumnDef } from "./assets";
+import {
+  placeRecordOn,
+  sampleCsv,
+  SAMPLE_QUERY,
+  SAMPLE_SOURCE,
+  SAMPLE_SQL,
+} from "./drop-place";
+import type { TransformDefJson } from "./engine";
 import type {
   BundleHost,
+  DataIssue,
   DataProviderHandle,
   DataProviderRegistration,
   ElementId,
@@ -49,16 +68,15 @@ import {
   type VisibilityTargetKind,
 } from "../../data-host-model/src";
 
-import {
-  bootEngine,
-  ENGINE_NOT_BUILT,
-  ingestColumnBatch,
-  type DataEngineLike,
-} from "./engine";
+import { bootEngine, ENGINE_NOT_BUILT, type DataEngineLike } from "./engine";
 import { hostWasm } from "./bin-url";
 import { t as tr } from "@paged-media/strings";
-import { BINDINGS, SOURCES, STATUS } from "./messages";
+import { BINDINGS, ISSUES, SOURCES, STATUS } from "./messages";
 import { reviewMethods, type ReviewSession } from "./review";
+import {
+  recordTemplateMethods,
+  type RecordTemplateMethods,
+} from "./record-templates";
 import {
   DATA_PART_DIR,
   SESSION_PART,
@@ -100,29 +118,25 @@ import { contentPatch, type PayloadJson } from "./labels";
 import {
   mergeRecords as writeMerge,
   readMergeTemplate,
+  measureWords,
+  storyFont,
   type MergeResult,
   type MergeTemplate,
   type TemplatePageRow,
   type RecordsPerPage,
 } from "./merge";
 import { documentElements, planRelower, type RelowerTarget } from "./relower";
-import {
-  bootDuckDB,
-  DUCKDB_NOT_VENDORED,
-  type DuckDBHandle,
-} from "./query/duckdb";
+import { STORE_MISSING, storeHandle, type QueryHandle } from "./query/store";
 import {
   formatOfFile,
-  loadIntoDuckDB,
-  quoteIdent,
+  loadIntoStore,
   sourceNameOf,
   type ImportFormat,
-  type XlsxImport,
 } from "./query/import";
 import {
   checkQuery,
-  diagnoseDuckDBError,
-  previewSql,
+  diagnoseStoreError,
+  trimSql,
   type SqlDiagnostic,
 } from "./query/sql";
 import {
@@ -142,6 +156,7 @@ import {
   commitLoweredVisibility,
   commitRule,
   failedBatchChild,
+  frameStory,
   resolveElementId,
   type LowerContext,
 } from "./lower";
@@ -212,6 +227,10 @@ async function readLiveChain(
   });
 }
 
+/** How long after a placement or an edit the issues are read again for the
+ *  Problems panel (data ADR 564): a burst of edits reads them once. */
+const ISSUES_DELAY_MS = 250;
+
 /** How `subscribeChainReflow` coalesces a burst of reflow events. */
 export interface ReflowOptions {
   /** The quiet period after the last relevant event before re-paginating
@@ -251,7 +270,7 @@ function engineFit(fit?: IdmlFit): "fit" | "fill" | "crop" {
 /** A read-only snapshot for the panels. */
 export interface SessionState {
   /** Honest status of the engines (the panel renders it, never fakes it). */
-  status: "idle" | "ready" | "engine-missing" | "duckdb-missing" | "error";
+  status: "idle" | "ready" | "engine-missing" | "error";
   message: string;
   sources: string[];
   queries: string[];
@@ -299,7 +318,7 @@ export interface ImportResult {
   error?: string;
 }
 
-/** A query preview: the first rows as DuckDB renders them, or why not. */
+/** A query preview: the first rows as the store renders them, or why not. */
 export interface QueryPreview {
   columns: { name: string; type: string }[];
   rows: (string | null)[][];
@@ -545,8 +564,61 @@ export function hasDocumentsDoors(host: BundleHost): boolean {
 
 /** The session API the panels + commands drive. */
 export interface DataSourceSession
-  extends ReviewSession, PropertyMethods, CatalogueMethods {
+  extends
+    ReviewSession,
+    PropertyMethods,
+    CatalogueMethods,
+    RecordTemplateMethods {
   getState(): SessionState;
+  /** The data door this session serves (`data@1`, extensions ADR 343). */
+  dataDoor(): DataDoor;
+  /** Publish the data issues to Problems after each placement and edit
+   *  (data ADR 564): the bundle turns it on where the host has a Problems
+   *  sink (`diagnostics.publish@1`, asked once at activation). */
+  publishIssuesToProblems(on: boolean): void;
+  /** Editor ADR 291's drag to place: a field dropped on a page item. Into a
+   *  text frame it is a variable at the start of the frame's story, onto a
+   *  graphic frame its picture (an image binding). */
+  placeField(
+    query: string,
+    field: string,
+    target: ElementId,
+  ): Promise<{ binding: string; kind: string }>;
+  /** Editor ADR 291: a query dropped on a text frame as a table — a table
+   *  binding of `fields` (in order) in the frame's own story. */
+  placeTable(
+    query: string,
+    fields: readonly string[],
+    target: ElementId,
+  ): Promise<{ binding: string; kind: string }>;
+  /** Editor ADR 291: a record dropped on a design (a group or a frame):
+   *  each `<<field>>` of its text frames becomes a variable showing that
+   *  record's field, a graphic frame named `<<@field>>` its picture
+   *  (`drop-place.ts`). Refused when the design holds no `<<field>>`. */
+  placeRecord(
+    query: string,
+    record: number,
+    target: ElementId,
+  ): Promise<{ binding: string; kind: string }[]>;
+  /** Editor ADR 291's first run: a small product list as a source and a
+   *  query over it, refreshed; the query's name. */
+  loadSample(): Promise<string>;
+  /** The record a binding placed by a dropped record shows, if any. */
+  recordOfBinding(id: string): number | undefined;
+  /** Data ADR 563 — declare (or, with null, undeclare) `<query>.<field>` an
+   *  asset column: an image binding over it fetches (consented origins
+   *  only), keeps (by content hash) and runs the chain before placing. */
+  setAssetColumn(
+    query: string,
+    field: string,
+    def: AssetColumnDef | null,
+  ): void;
+  assetColumns(): Record<string, AssetColumnDef>;
+  /** Define (or redefine) a transform (data ADR 562); it runs at the next
+   *  refresh, before the queries. Null when the engine has no transforms. */
+  defineTransform(def: TransformDefJson): Promise<string | null>;
+  removeTransform(id: string): Promise<boolean>;
+  listTransforms(): Promise<TransformDefJson[]>;
   /** host.objects (ADR 323): the document ops of a definition change made
    *  with `{ labels: "defer" }` — the element labels the recipe asks for,
    *  plus the document label naming the new session version — for the
@@ -578,7 +650,7 @@ export interface DataSourceSession
   requestConsentForRemote(name: string): Promise<boolean>;
   /** Load a remote source (edit-time fetch, M1): the consent gate runs FIRST
    *  — an unconsented origin returns inert without touching the network. On
-   *  grant: fetch the bytes, hand them to the DuckDB query lane exactly like
+   *  grant: fetch the bytes, hand them to the query store exactly like
    *  an imported file, define the source on the engine, and record the
    *  engine-computed content-hash invalidation key. */
   loadRemoteSource(name: string): Promise<void>;
@@ -599,11 +671,11 @@ export interface DataSourceSession
   ): Promise<ImportResult>;
   /** Read another worksheet of an imported workbook into the same source. */
   selectSheet(source: string, sheet: string): Promise<ImportResult>;
-  /** The columns of a source table (name and DuckDB type), for the query
-   *  builders. Empty when the source is unknown or DuckDB is unavailable. */
+  /** The columns of a source table (name and type), for the query
+   *  builders. Empty when the source is unknown or the engine is missing. */
   describeSource(source: string): Promise<{ name: string; type: string }[]>;
   /** Run a query for a preview of its first `limit` rows (default 50), as
-   *  DuckDB renders the values. Guarded like every query (query/sql.ts);
+   *  the store renders the values. Guarded like every query (query/sql.ts);
    *  nothing is ingested and no binding changes. */
   previewQuery(sql: string, limit?: number): Promise<QueryPreview>;
   /** Define or replace a query after the guard admits it; returns the
@@ -693,7 +765,7 @@ export interface DataSourceSession
     },
     target: RuleTarget,
   ): void;
-  /** Re-run every query through DuckDB and ingest the results (no document
+  /** Re-run every query in the store and ingest the results (no document
    *  writes) — updates sync states. */
   refreshData(): Promise<void>;
   /** §8 change report — "what changed since last sync". Diffs every binding's
@@ -1026,10 +1098,10 @@ export function createSession(
 
   // ── persistence (the `session` container part, persist.ts) ───────────────
   // The imported CSV text per source: the bytes the session saves, so a reopen
-  // can register the source in DuckDB again.
+  // can load the source into the store again.
   const importedCsv = new Map<string, string>();
-  // Restored sources not yet in DuckDB: registered on DuckDB's first boot, so
-  // opening a document never boots DuckDB by itself.
+  // Restored sources not yet in the store: loaded when the store is first
+  // used, so opening a document reads no data by itself.
   const pendingCsv = new Map<string, string>();
   // Where table / record-flow bindings were last lowered (checked on restore).
   const loweredInto = new Map<string, ElementId>();
@@ -1037,7 +1109,25 @@ export function createSession(
   // module each barcode binding drew last, so a re-lower or a preview step
   // replaces them instead of adding a duplicate.
   const tableAt = new Map<string, LoweredTableAt>();
+  // Editor ADR 291: the text frame a dropped table lives in (the user's frame,
+  // never deleted by a re-lower), and the record a binding placed by a
+  // dropped record shows (every refresh resolves it at that record).
+  const tableInto = new Map<string, { frame: ElementId; storyId: string }>();
+  const recordOf = new Map<string, number>();
   const barcodeMinted = new Map<string, ElementId[]>();
+  // Data ADR 564 — what the last placements left to check for issues: each
+  // image binding's outcome, each record flow's frames and unplaced records,
+  // the last merge's frames by record, and each frame's story once read.
+  const imageNotes = new Map<string, ImageNote>();
+  const flowNotes = new Map<
+    string,
+    { frames: string[]; storyId?: string; unplaced: number; total: number }
+  >();
+  let mergeFrames: TextTarget[] = [];
+  const storyOfFrame = new Map<string, string>();
+  const variableFrames = new Map<string, string>();
+  let issuesTimer: ReturnType<typeof setTimeout> | null = null;
+  let issuesToProblems = false;
   // The template each merge read last: a consumed template is gone from its
   // page, and a re-merge reuses it.
   const mergeTemplates = new Map<string, MergeTemplate>();
@@ -1061,7 +1151,10 @@ export function createSession(
   const PERSIST_DEBOUNCE_MS = 250;
 
   let engine: DataEngineLike | null = null;
-  let duck: DuckDBHandle | null = null;
+  // The query store (ADR 561) of `engine`: it lives in the engine, so it goes
+  // when the engine does (`storeOf` says whose it is).
+  let store: QueryHandle | null = null;
+  let storeOf: DataEngineLike | null = null;
   const diagnostics: SessionDiagnostic[] = [];
   const relinkSources: string[] = [];
   const state: SessionState = {
@@ -1083,6 +1176,9 @@ export function createSession(
   // both (it starts from "— / —" only when nothing has run).
   const recordCounts = new Map<string, number>();
   const previewAt = new Map<string, number>();
+  /** Data ADR 562 / editor ADR 291's pipeline: each transform's and query's
+   *  outcome at the last run (its rows, or why it gave none). */
+  const lastRuns = new Map<string, { rowCount?: number; error?: string }>();
   /** The data set last applied to the document (saved with the session). */
   let appliedSet: string | null = null;
   // ADR 560: template fields bound to the data, and the catalogues made.
@@ -1127,7 +1223,7 @@ export function createSession(
     sheets?: string[];
   }
   const importedFiles = new Map<string, ImportedFile>();
-  // Restored files not yet in DuckDB (registered on DuckDB's first boot).
+  // Restored files not yet in the store (loaded when it is first used).
   const pendingFiles = new Map<string, ImportedFile>();
   // The file a CSV / TSV source came from (display only).
   const csvFileNames = new Map<
@@ -1243,6 +1339,21 @@ export function createSession(
     return planRelower(elements, target, { pages: pages as never, minted });
   }
 
+  /** An ADR 131 address (`textFrame:u12`) as an element id. */
+  function elementOfAddress(address: string): ElementId {
+    const [kind, ...rest] = address.split(":");
+    return { kind, id: rest.join(":") } as ElementId;
+  }
+
+  /** Resolve a binding at the record it shows: the record a dropped record
+   *  fixed (editor ADR 291), else the first. */
+  function resolveFor(e: DataEngineLike, id: string): unknown {
+    const at = recordOf.get(id);
+    return at !== undefined && typeof e.resolve_lowered_at === "function"
+      ? e.resolve_lowered_at(id, at)
+      : e.resolve_lowered(id);
+  }
+
   /** The page a lowering starts on: the active page, else the first. */
   async function startPage(): Promise<string | null> {
     const meta = await host.document.meta();
@@ -1279,6 +1390,19 @@ export function createSession(
     for (const [id, t] of visibilityTargets) targets.visibility[id] = { ...t };
     for (const [id, t] of ruleTargets) targets.rule[id] = { ...t };
     for (const [id, el] of loweredInto) targets.lowered[id] = el;
+    if (tableInto.size > 0) {
+      targets.tableIn = {};
+      for (const [id, at] of tableInto) {
+        const known = tableAt.get(id);
+        targets.tableIn[id] = {
+          ...at,
+          ...(known?.frame.id === at.frame.id
+            ? { tableId: known.tableId }
+            : {}),
+        };
+      }
+    }
+    if (recordOf.size > 0) targets.record = Object.fromEntries(recordOf);
     const data: PersistedData[] = [];
     for (const [source, text] of importedCsv) {
       const stored = await storeData(
@@ -1324,6 +1448,9 @@ export function createSession(
       refresh: Object.fromEntries(refreshPolicies),
       ...(previewAt.size > 0 ? { preview: Object.fromEntries(previewAt) } : {}),
       ...(appliedSet !== null ? { dataSet: appliedSet } : {}),
+      ...(assetColumns.size > 0
+        ? { assets: Object.fromEntries(assetColumns) }
+        : {}),
       ...(catalogue.fields.length > 0 || Object.keys(catalogue.runs).length > 0
         ? {
             catalogue: {
@@ -1439,16 +1566,15 @@ export function createSession(
    * written (no CSV source, a handle without twins) or the query does not
    * run over text, and then says so.
    */
-  async function asWritten(e: DataEngineLike, query: string): Promise<string> {
+  async function asWritten(query: string): Promise<string> {
     const q = queries.get(query);
     const csv = [...importedCsv.keys()];
-    const d = duck as DuckDBHandle | null;
-    if (!q || csv.length === 0 || !d?.queryColumnsAsWritten) return query;
+    if (!q || csv.length === 0) return query;
     try {
-      const batch = await d.queryColumnsAsWritten(q.sql, csv);
-      if (!batch) return query;
+      const d = await ensureStore();
       const id = `${query}${AS_WRITTEN}`;
-      ingestColumnBatch(e, id, batch);
+      if ((await d.ingestAsWritten(id, trimSql(q.sql), csv)) === null)
+        return query;
       return id;
     } catch (err) {
       report({
@@ -1568,21 +1694,20 @@ export function createSession(
       });
       return;
     }
-    // Reload the version without rebooting either engine: an undo must stay
-    // cheap. DuckDB keeps its tables; a source whose saved data differs from
-    // what is loaded is loaded again, the rest is left as it is.
+    // Reload the version without rebooting the engine: an undo must stay
+    // cheap. The store keeps its tables; a source whose saved data differs
+    // from what is loaded is loaded again, the rest is left as it is.
     const loaded = { csv: new Map(importedCsv), files: new Map(importedFiles) };
     await resetState({ keepEngines: true });
     restorePromise = restoreInternal(bytes, true);
     await restorePromise;
-    const kept = duck as DuckDBHandle | null;
-    if (!kept) return;
+    const kept = store as QueryHandle | null;
+    if (!kept || storeOf !== engine) return;
     for (const [name, text] of [...pendingCsv]) {
       pendingCsv.delete(name);
       if (loaded.csv.get(name) === text) continue;
       try {
-        await kept.exec(`DROP TABLE IF EXISTS ${quoteIdent(name)}`);
-        await kept.registerCsv(name, text);
+        await kept.importCsv(name, text);
       } catch (err) {
         report({
           level: "error",
@@ -1597,16 +1722,7 @@ export function createSession(
       if (was && was.sheet === f.sheet && sameBytes(was.bytes, f.bytes))
         continue;
       try {
-        const e = f.format === "xlsx" ? await ensureEngine() : null;
-        await kept.exec(`DROP TABLE IF EXISTS ${quoteIdent(name)}`);
-        await loadIntoDuckDB(
-          kept,
-          name,
-          f.format,
-          f.bytes,
-          xlsxReader(e),
-          f.sheet,
-        );
+        await loadIntoStore(kept, name, f.format, f.bytes, f.sheet);
       } catch (err) {
         report({
           level: "error",
@@ -1938,17 +2054,23 @@ export function createSession(
     }
   }
 
-  async function ensureDuck(): Promise<DuckDBHandle> {
-    if (duck) return duck;
-    try {
-      const d = await bootDuckDB({
-        resolveWasm: hostWasm(rawHost),
-        onFallback: (reason) => rawHost.log.warn(reason),
-      });
-      duck = d;
+  /** The query store of the engine (ADR 561): made with it, and on first use
+   *  it takes the sources a restore left pending. */
+  async function ensureStore(): Promise<QueryHandle> {
+    const e = await ensureEngine();
+    if (store && storeOf === e) return store;
+    const d = storeHandle(e);
+    if (!d) {
+      state.status = "engine-missing";
+      state.message = STORE_MISSING;
+      throw new Error(STORE_MISSING);
+    }
+    store = d;
+    storeOf = e;
+    {
       for (const [name, text] of [...pendingCsv]) {
         try {
-          await d.registerCsv(name, text);
+          await d.importCsv(name, text);
           pendingCsv.delete(name);
         } catch (err) {
           report({
@@ -1960,15 +2082,7 @@ export function createSession(
       }
       for (const [name, f] of [...pendingFiles]) {
         try {
-          const e = f.format === "xlsx" ? await ensureEngine() : null;
-          await loadIntoDuckDB(
-            d,
-            name,
-            f.format,
-            f.bytes,
-            xlsxReader(e),
-            f.sheet,
-          );
+          await loadIntoStore(d, name, f.format, f.bytes, f.sheet);
           pendingFiles.delete(name);
         } catch (err) {
           report({
@@ -1979,29 +2093,11 @@ export function createSession(
         }
       }
       return d;
-    } catch (err) {
-      state.status = "duckdb-missing";
-      state.message = err instanceof Error ? err.message : DUCKDB_NOT_VENDORED;
-      throw err;
     }
   }
 
   function sync(): void {
     state.queries = Array.from(queries.keys());
-  }
-
-  /** The data engine's worksheet reader (xlsx imports). */
-  function xlsxReader(
-    e: DataEngineLike | null,
-  ): (bytes: Uint8Array, sheet?: string) => XlsxImport {
-    return (bytes, sheet) => {
-      if (!e || typeof e.xlsx_import !== "function") {
-        throw new Error(
-          "the engine wasm predates the XLSX reader — rebuild scripts/build-wasm.sh",
-        );
-      }
-      return e.xlsx_import(bytes, sheet) as XlsxImport;
-    };
   }
 
   /** Is this source a remote one, a local one, or unknown? */
@@ -2044,8 +2140,9 @@ export function createSession(
   }
 
   /** On open, act on `onOpen` policies: a consented remote source is fetched
-   *  again; when any source asks for it, the queries re-run (this boots
-   *  DuckDB — the user chose it for this document). Never throws. */
+   *  again; when any source asks for it, the queries re-run (this loads the
+   *  data into the store — the user chose it for this document). Never
+   *  throws. */
   async function applyOnOpen(): Promise<void> {
     const onOpen = [...refreshPolicies]
       .filter(([, p]) => p.policy === "onOpen")
@@ -2084,9 +2181,9 @@ export function createSession(
 
       // Hand the bytes to the query lane exactly like an imported file: the
       // source becomes a table named after it, whatever its format.
-      const d = await ensureDuck();
+      const d = await ensureStore();
       const e = await ensureEngine();
-      await loadIntoDuckDB(d, name, r.format, bytes, xlsxReader(e));
+      await loadIntoStore(d, name, r.format, bytes);
 
       // Define the descriptor on the engine + record the content-hash
       // invalidation key (computed in Rust; the engine never fetches).
@@ -2136,7 +2233,7 @@ export function createSession(
   /** Drop everything this session holds for the current document (another
    *  document opened, or an undo named another session version). An undo
    *  keeps the engines (`keepEngines`): the data engine takes the version's
-   *  recipe, and DuckDB keeps its tables (see `followLabel`). */
+   *  recipe, and the store in it keeps its tables (see `followLabel`). */
   async function resetState(
     opts: { keepEngines?: boolean } = {},
   ): Promise<void> {
@@ -2151,6 +2248,7 @@ export function createSession(
     diagnostics.length = 0;
     queries.clear();
     recordCounts.clear();
+    lastRuns.clear();
     previewAt.clear();
     appliedSet = null;
     catalogue.fields.length = 0;
@@ -2160,6 +2258,11 @@ export function createSession(
     imageTargets.clear();
     barcodeTargets.clear();
     placedVariables.clear();
+    imageNotes.clear();
+    flowNotes.clear();
+    mergeFrames = [];
+    storyOfFrame.clear();
+    variableFrames.clear();
     ruleTargets.clear();
     remoteSources.clear();
     importedCsv.clear();
@@ -2171,6 +2274,8 @@ export function createSession(
     poller.stopAll();
     state.polling = [];
     loweredInto.clear();
+    tableInto.clear();
+    recordOf.clear();
     hostOids.clear();
     hostElements.clear();
     relinkSources.length = 0;
@@ -2185,9 +2290,8 @@ export function createSession(
     if (!opts.keepEngines) {
       engine?.free();
       engine = null;
-      const oldDuck = duck;
-      duck = null;
-      void oldDuck?.close();
+      store = null;
+      storeOf = null;
     }
     state.status = "idle";
     state.message = tr(STATUS.noSources);
@@ -2232,8 +2336,8 @@ export function createSession(
   }
 
   /** Restore the document's `session` part: the engine recipe, the locale and
-   *  the sync decisions, the host-side targets, the imported data (registered
-   *  in DuckDB on its first boot) and remote descriptors (inert). Then reconcile
+   *  the sync decisions, the host-side targets, the imported data (loaded into
+   *  the store when it is first used) and remote descriptors (inert). Then reconcile
    *  with the document: which variable fields are placed, and whether each
    *  recorded table is still there and still labelled with its binding. */
   async function restoreInternal(
@@ -2320,8 +2424,19 @@ export function createSession(
       ruleTargets.set(id, t);
     for (const [id, el] of Object.entries(saved.targets.lowered))
       loweredInto.set(id, el);
+    for (const [id, t] of Object.entries(saved.targets.tableIn ?? {})) {
+      tableInto.set(id, { frame: t.frame, storyId: t.storyId });
+      if (t.tableId)
+        tableAt.set(id, {
+          frame: t.frame,
+          storyId: t.storyId,
+          tableId: t.tableId,
+        });
+    }
+    for (const [id, n] of Object.entries(saved.targets.record ?? {}))
+      if (Number.isInteger(n) && n >= 0) recordOf.set(id, n);
 
-    // Imported data: back into DuckDB when it first boots.
+    // Imported data: back into the store when it is first used.
     for (const d of saved.data) {
       if (d.format !== "csv") {
         const fileBytes = await loadFile(d, (path) => host.parts.read(path));
@@ -2372,6 +2487,9 @@ export function createSession(
     catalogue.fields.push(...(saved.catalogue?.fields ?? []));
     Object.assign(catalogue.runs, saved.catalogue?.runs ?? {});
 
+    assetColumns.clear();
+    for (const [k, d] of Object.entries(saved.assets ?? {}))
+      assetColumns.set(k, d);
     for (const [name, p] of Object.entries(saved.refresh ?? {})) {
       const policy = readPolicy(p);
       if (policy.policy !== "manual") refreshPolicies.set(name, policy);
@@ -2470,6 +2588,8 @@ export function createSession(
     }),
     host.document.onDidChange((ev) => {
       docChanges += 1;
+      // An edit can make placed text fit or not (data ADR 564).
+      issuesSoon();
       // Undo/redo can take a placed field away or bring it back; a stale
       // "placed" would make Lower skip placing it again. It can also take
       // the session label back: the session follows it.
@@ -2546,9 +2666,552 @@ export function createSession(
   });
   const objectsUp = () => objectsOf(host) !== null;
 
+  // ── data issues (data ADR 564) ──────────────────────────────────────────
+  /** What may be wrong with the placed content, read now: the engine's own
+   *  answers (sync state, resolved values, the paginator's overflow) and the
+   *  host's geometry (frame chains, frame sizes). */
+  async function computeIssues(): Promise<DataIssue[]> {
+    const e = engine;
+    if (!e) return [];
+    const payload = (e.payload() ?? {}) as {
+      bindings?: { id: string; kind: string }[];
+    };
+    const out: DataIssue[] = [];
+    let placed: readonly { binding: string; address: string }[] = [];
+    try {
+      placed = await props.placements();
+    } catch {
+      placed = [];
+    }
+    const addressOf = new Map<string, string>();
+    for (const p of placed)
+      if (!addressOf.has(p.binding)) addressOf.set(p.binding, p.address);
+    // A variable placed into a frame through the door: its frame, where the
+    // placements do not name one (a text variable's instances).
+    for (const [id, frame] of variableFrames)
+      if (!addressOf.has(id)) addressOf.set(id, `textFrame:${frame}`);
+
+    // Overset: every story a variable is placed in, every frame a table or
+    // a flow was lowered into, every frame of the last merge.
+    const texts: TextTarget[] = [];
+    if (placedVariables.size > 0) {
+      // A placeholder field names its story; a text variable's instances
+      // do not (its field reads under the variable), so the frames the
+      // variable is placed in are read for theirs.
+      for (const f of await readFieldsQuietly())
+        if (placedVariables.has(f.key) && !f.variable)
+          texts.push({ binding: f.key, storyId: f.storyId });
+      for (const [binding, address] of addressOf)
+        if (placedVariables.has(binding) && address.startsWith("textFrame:"))
+          texts.push({
+            binding,
+            frame: address.slice("textFrame:".length),
+          });
+    }
+    for (const [id, el] of loweredInto)
+      if (el.kind === "textFrame" && !flowNotes.has(id))
+        texts.push({ binding: id, frame: String(el.id) });
+    for (const [id, note] of flowNotes) {
+      if (note.storyId) texts.push({ binding: id, storyId: note.storyId });
+      else for (const frame of note.frames) texts.push({ binding: id, frame });
+    }
+    texts.push(...mergeFrames);
+    out.push(
+      ...(await oversetIssues(
+        host,
+        texts,
+        async (frame) => {
+          const known = storyOfFrame.get(frame);
+          if (known) return known;
+          const story = await frameStory(host, frame);
+          if (story) storyOfFrame.set(frame, story);
+          return story;
+        },
+        measuredOverset,
+      )),
+    );
+
+    // Pictures: missing, or too coarse for their frames.
+    out.push(
+      ...(await imageIssues(
+        imageNotes,
+        (id) => {
+          const t = imageTargets.get(id);
+          if (!t) return undefined;
+          const at = addressOf.get(id);
+          const kind = at?.slice(0, at.indexOf(":")) || "rectangle";
+          return {
+            element: { kind, id: t.elementId } as ElementId,
+            fit: t.fit,
+          };
+        },
+        async (elements) => {
+          const sizes = new Map<string, [number, number]>();
+          const geom = (await host.document.elementGeometry(elements)) as {
+            id: ElementId;
+            bounds?: [number, number, number, number];
+          }[];
+          for (const g of geom)
+            if (g.bounds)
+              sizes.set(String(g.id.id), [
+                g.bounds[3] - g.bounds[1],
+                g.bounds[2] - g.bounds[0],
+              ]);
+          return sizes;
+        },
+      )),
+    );
+
+    // Values: a failed binding, an empty placed variable.
+    for (const b of payload.bindings ?? []) {
+      const address = addressOf.get(b.id);
+      const at = address ? { address } : {};
+      if (syncStatus(e, b.id) === "error") {
+        const why = [...diagnostics]
+          .reverse()
+          .find((d) => d.binding === b.id && d.level === "error")?.message;
+        out.push({
+          kind: "error",
+          severity: "error",
+          message: why
+            ? tr(ISSUES.failed, { binding: b.id, reason: why })
+            : tr(ISSUES.failedUnknown, { binding: b.id }),
+          binding: b.id,
+          ...at,
+        });
+        continue;
+      }
+      if (b.kind !== "variable" || !placedVariables.has(b.id)) continue;
+      const lowered = resolvedQuietly(e, b.id);
+      if (
+        lowered?.kind === "variable" &&
+        !lowered.hidden &&
+        (lowered.text ?? "") === ""
+      )
+        out.push({
+          kind: "emptyValue",
+          severity: "info",
+          message: tr(ISSUES.emptyValue, { binding: b.id }),
+          binding: b.id,
+          ...at,
+        });
+    }
+
+    // Flows: records the paginator could not place.
+    for (const [id, note] of flowNotes) {
+      if (note.unplaced <= 0) continue;
+      const first = note.frames[0];
+      out.push({
+        kind: "unplacedRecords",
+        severity: "warning",
+        message: tr(ISSUES.unplaced, {
+          binding: id,
+          count: note.unplaced,
+          total: note.total,
+        }),
+        binding: id,
+        ...(first ? { address: `textFrame:${first}` } : {}),
+      });
+    }
+    return out;
+  }
+
+  /** Whether a one-frame story's text overflows its frame as the engine
+   *  wraps it at the host's advances (the host's own layout reported none:
+   *  a host without fonts never does). False where it cannot be measured. */
+  async function measuredOverset(
+    storyId: string,
+    frameId: string,
+  ): Promise<boolean> {
+    const e = engine;
+    if (!e?.text_words || !e.text_overset) return false;
+    if (!host.supports("document.readStory@1")) return false;
+    const content = await host.document.storyContent(storyId);
+    if (!content) return false;
+    const text = content.paragraphs
+      .map((p) => p.runs.map((r) => r.text).join(""))
+      .join("\n")
+      .replace(/[\r\u2028\u2029]/g, "\n")
+      .replace(/\n+$/, "");
+    if (text === "") return false;
+    const [g] = (await host.document.elementGeometry([
+      { kind: "textFrame", id: frameId } as ElementId,
+    ])) as { bounds?: [number, number, number, number] }[];
+    if (!g?.bounds) return false;
+    const [top, left, bottom, right] = g.bounds;
+    const font = await storyFont(host, storyId, text);
+    const words = e.text_words(text) as string[];
+    const [metrics] = await measureWords(
+      host,
+      { frames: [{ font }] } as never,
+      [words],
+    );
+    return e.text_overset(text, right - left, bottom - top, metrics);
+  }
+
+  /** Our fields (placeholders and text variables), or none when they do not
+   *  read now; reports nothing (an issue read is not a command). */
+  async function readFieldsQuietly(): Promise<PlaceholderField[]> {
+    try {
+      const all =
+        (await host.document.placeholders()) as readonly PlaceholderField[];
+      return [
+        ...all.filter((f) => f.plugin === FIELD_PLUGIN),
+        ...(await readTextVariableFields(rawHost)),
+      ];
+    } catch {
+      return [];
+    }
+  }
+
+  /** A variable's resolved value as the engine lowers it, or null. */
+  function resolvedQuietly(
+    e: DataEngineLike,
+    id: string,
+  ): { kind?: string; text?: string | null; hidden?: boolean } | null {
+    try {
+      return e.resolve_lowered(id) as {
+        kind?: string;
+        text?: string | null;
+        hidden?: boolean;
+      } | null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Read the issues and publish them to the Problems panel (an empty list
+   *  clears what was published). */
+  async function publishIssues(): Promise<DataIssue[]> {
+    const issues = await computeIssues();
+    host.diagnostics.set(ISSUES_DIAGNOSTICS_KEY, issueDiagnostics(issues));
+    return issues;
+  }
+
+  /** Publish the issues soon after a placement or an edit, where a Problems
+   *  panel listens (`diagnostics.publish@1`) and something is placed: off
+   *  the command's own path, one read for a burst of changes. */
+  function issuesSoon(): void {
+    if (!issuesToProblems) return;
+    const anything =
+      placedVariables.size > 0 ||
+      loweredInto.size > 0 ||
+      imageNotes.size > 0 ||
+      flowNotes.size > 0 ||
+      mergeFrames.length > 0;
+    if (!anything && host.diagnostics.get(ISSUES_DIAGNOSTICS_KEY).length === 0)
+      return;
+    if (issuesTimer) clearTimeout(issuesTimer);
+    issuesTimer = setTimeout(() => {
+      issuesTimer = null;
+      void publishIssues().catch(() => {});
+    }, ISSUES_DELAY_MS);
+  }
+
+  // Extensions ADR 343 — the data door paged.data serves (`data-door.ts`).
+  const door = createDataDoor({
+    ensureStore,
+    sourceNames: () => sourceNames,
+    queries: () => [...queries.values()],
+    transforms: () => (engine?.transforms?.() ?? []).map((t) => t.id),
+    transformDefs: () => engine?.transforms?.() ?? [],
+    lastRun: (id) => lastRuns.get(id),
+    // A transform defined through the door runs at once, so the pipeline
+    // shows its rows or its error without a refresh of the queries.
+    defineTransform: async (def) => {
+      const refused = await self.defineTransform(def);
+      if (refused) return refused;
+      await runTransforms();
+      return null;
+    },
+    removeTransform: async (id) => {
+      const removed = await self.removeTransform(id);
+      if (removed) lastRuns.delete(id);
+      return removed;
+    },
+    addPropertyBinding: (id, spec) => props.addPropertyBinding(id, spec),
+    removeBinding: (id) => props.removeBinding(id),
+    syncStatusOf: (id) => (engine ? syncStatus(engine, id) : null),
+    place: async (target, query, field) => {
+      const [kind, ...rest] = target.split(":");
+      return self.placeField(query, field, {
+        kind,
+        id: rest.join(":"),
+      } as ElementId);
+    },
+    placeTable: (target, query, fields) =>
+      self.placeTable(query, fields, elementOfAddress(target)),
+    placeRecord: (target, query, record) =>
+      self.placeRecord(query, record, elementOfAddress(target)),
+    loadSample: () => self.loadSample(),
+    recordOf: (id) => recordOf.get(id),
+    placements: () => props.placements(),
+    issues: () => publishIssues(),
+    assetColumns: () => self.assetColumns(),
+    setAssetColumn: (query, field, def) =>
+      self.setAssetColumn(query, field, def),
+    refresh: async () => {
+      await self.refreshData();
+      await self.lowerAll();
+    },
+    evaluate: async (query, expr, record) => {
+      const e = await ensureEngine();
+      if (typeof e.evaluate_at !== "function")
+        return {
+          display: "",
+          value: null,
+          error: "this data engine cannot preview (rebuild it)",
+        };
+      return e.evaluate_at(query, expr, record);
+    },
+    bindings: () =>
+      ((engine?.payload() as { bindings?: unknown[] } | undefined)?.bindings ??
+        []) as ReturnType<Parameters<typeof createDataDoor>[0]["bindings"]>,
+  });
+
+  // Data ADR 563 — asset columns (`<query>.<field>` → its pipeline).
+  const assetColumns = new Map<string, AssetColumnDef>();
+  const assets = createAssetPipeline(host, {
+    consentedOrigins: () => consentedOriginsSafe(),
+  });
+  /** The asset resolver of an image binding over an asset column, if any. */
+  function assetResolverOf(bindingId: string) {
+    const b = (
+      (
+        engine?.payload() as
+          | {
+              bindings?: {
+                id: string;
+                kind: string;
+                query?: string;
+                expr?: string;
+              }[];
+            }
+          | undefined
+      )?.bindings ?? []
+    ).find((x) => x.id === bindingId);
+    const def =
+      b?.kind === "image" && b.query && b.expr
+        ? assetColumns.get(`${b.query}.${b.expr.trim()}`)
+        : undefined;
+    if (!def) return undefined;
+    return async (uri: string) => {
+      const r = await assets.resolve(uri, def);
+      imageNotes.set(
+        bindingId,
+        r.ok ? (r.pixels ? { pixels: r.pixels } : {}) : { missing: r.reason },
+      );
+      return r.ok ? { uri: r.uri } : { reason: r.reason };
+    };
+  }
+
+  /** Data ADR 562: run the transforms, in order (a refresh does before the
+   *  queries); each outcome is kept for the pipeline and a derived table
+   *  that came out is announced. */
+  async function runTransforms(): Promise<void> {
+    await ensureStore();
+    const e = await ensureEngine();
+    for (const run of e.run_transforms?.() ?? []) {
+      if ("Err" in run.outcome) {
+        lastRuns.set(run.transform, { error: run.outcome.Err });
+        report({
+          level: "error",
+          source: "query",
+          message: `transform "${run.transform}" gave no table: ${run.outcome.Err}`,
+        });
+      } else {
+        lastRuns.set(run.transform, { rowCount: run.outcome.Ok });
+        door.touched(run.transform);
+      }
+    }
+  }
+
+  /** Why a transform cannot be defined, or null: its id names a new table
+   *  (not a source's or a query's), and it reads sources and the transforms
+   *  that run before it. */
+  function transformRefusal(
+    def: TransformDefJson,
+    defined: readonly TransformDefJson[],
+  ): string | null {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(def.id ?? ""))
+      return `"${def.id ?? ""}" is not a table name (letters, digits and _, not starting with a digit)`;
+    if (sourceNames.includes(def.id))
+      return `"${def.id}" is a source table: a transform yields a table of its own`;
+    if (queries.has(def.id))
+      return `"${def.id}" is a query: a transform yields a table of its own`;
+    if (typeof def.source !== "string" || def.source.trim() === "")
+      return "a transform has a source: (tables, params) => rows";
+    const at = defined.findIndex((t) => t.id === def.id);
+    const before = new Set(
+      (at < 0 ? defined : defined.slice(0, at)).map((t) => t.id),
+    );
+    for (const input of def.inputs ?? []) {
+      if (input === def.id) return `a transform cannot read its own table`;
+      if (!sourceNames.includes(input) && !before.has(input))
+        return `no table "${input}" to read (a source, or a transform that runs before this one)`;
+    }
+    if (
+      def.params !== undefined &&
+      (def.params === null ||
+        typeof def.params !== "object" ||
+        Array.isArray(def.params))
+    )
+      return "a transform's params are an object";
+    return null;
+  }
+
   let preObjectWrite: string | null = null;
   const self: DataSourceSession = {
     ...props,
+    dataDoor: () => door,
+    publishIssuesToProblems(on) {
+      issuesToProblems = on;
+    },
+    async placeField(query, field, target) {
+      const id = `${field.replace(/[^A-Za-z0-9_]/g, "_")}-${Date.now().toString(36)}`;
+      if (target.kind === "textFrame") {
+        const story = await frameStory(host, String(target.id));
+        if (!story)
+          throw new Error(
+            `the text frame ${String(target.id)} has no story to place a field into`,
+          );
+        self.addVariableBinding(id, id, query, field);
+        const e = await ensureEngine();
+        const lowered = e.resolve_lowered(id) as { kind?: string } | null;
+        if (lowered?.kind !== "variable")
+          throw new Error(
+            `the field ${field} does not resolve (refresh the data first)`,
+          );
+        const placed = await commitLoweredVariable(
+          host,
+          lowered as never,
+          id,
+          story,
+        );
+        if (!placed) throw new Error(`the field ${field} could not be placed`);
+        placedVariables.add(id);
+        variableFrames.set(id, String(target.id));
+        emit();
+        issuesSoon();
+        return { binding: id, kind: "variable" };
+      }
+      if (["rectangle", "oval", "polygon"].includes(String(target.kind))) {
+        self.addImageBinding(id, String(target.id), query, field);
+        await self.lowerBinding(id);
+        emit();
+        return { binding: id, kind: "image" };
+      }
+      throw new Error(
+        `a field is placed into a text frame or onto a graphic frame, not on a ${String(target.kind)}`,
+      );
+    },
+    async placeTable(query, fields, target) {
+      if (target.kind !== "textFrame")
+        throw new Error(
+          `a table is placed into a text frame, not on a ${String(target.kind)}`,
+        );
+      if (fields.length === 0)
+        throw new Error(`the query ${query} has no field to make a table of`);
+      const story = await frameStory(host, String(target.id));
+      if (!story)
+        throw new Error(
+          `the text frame ${String(target.id)} has no story to place a table into`,
+        );
+      const id = `${query.replace(/[^A-Za-z0-9_]/g, "_")}-table-${Date.now().toString(36)}`;
+      self.addTableBinding(
+        id,
+        id,
+        query,
+        fields.map((f) => ({ header: f, expr: f })),
+      );
+      tableInto.set(id, { frame: target, storyId: story });
+      await self.lowerBinding(id);
+      if (!loweredInto.has(id)) {
+        const why = state.message;
+        await self.removeBinding(id);
+        throw new Error(
+          `the table could not be placed${why ? `: ${why}` : ""}`,
+        );
+      }
+      emit();
+      return { binding: id, kind: "table" };
+    },
+    async placeRecord(query, record, target) {
+      const out = await placeRecordOn(
+        {
+          host,
+          engine: ensureEngine,
+          addVariableBinding: (id, t, q, x) =>
+            self.addVariableBinding(id, t, q, x),
+          addImageBinding: (id, t, q, x) => self.addImageBinding(id, t, q, x),
+          fixRecord: (id, n) => {
+            recordOf.set(id, n);
+            markDirty();
+          },
+          placed: (id) => placedVariables.add(id),
+          lowerBinding: (id) => self.lowerBinding(id),
+          removeBinding: (id) => self.removeBinding(id),
+        },
+        query,
+        record,
+        target,
+      );
+      emit();
+      return out;
+    },
+    async loadSample() {
+      if (!sourceNames.includes(SAMPLE_SOURCE)) {
+        await self.registerCsvSource(SAMPLE_SOURCE, sampleCsv());
+        if (!sourceNames.includes(SAMPLE_SOURCE))
+          throw new Error(state.message || "the sample data was not loaded");
+      }
+      if (!queries.has(SAMPLE_QUERY))
+        self.addQuery(SAMPLE_QUERY, SAMPLE_SQL, "recordStream");
+      await self.refreshData();
+      emit();
+      return SAMPLE_QUERY;
+    },
+    recordOfBinding: (id) => recordOf.get(id),
+    async removeBinding(id, mode) {
+      tableInto.delete(id);
+      recordOf.delete(id);
+      return props.removeBinding(id, mode);
+    },
+    setAssetColumn(query, field, def) {
+      const key = `${query}.${field}`;
+      if (def) assetColumns.set(key, { ...def });
+      else assetColumns.delete(key);
+      markDirty();
+      emit();
+    },
+    assetColumns: () => Object.fromEntries(assetColumns),
+    async defineTransform(def) {
+      const e = await ensureEngine();
+      if (typeof e.define_transform !== "function")
+        return "this data engine has no transforms (rebuild it)";
+      const refused = transformRefusal(def, e.transforms?.() ?? []);
+      if (refused) return refused;
+      try {
+        e.define_transform(def);
+      } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+      }
+      markDirty();
+      emit();
+      return null;
+    },
+    async removeTransform(id) {
+      const e = await ensureEngine();
+      const removed = e.remove_transform?.(id) ?? false;
+      if (removed) {
+        markDirty();
+        emit();
+      }
+      return removed;
+    },
+    async listTransforms() {
+      return (await ensureEngine()).transforms?.() ?? [];
+    },
     async beforeObjectWrite() {
       preObjectWrite = null;
       if (labelHash !== null || !labelActive) return;
@@ -2588,6 +3251,15 @@ export function createSession(
       setMessage: (message) => {
         state.message = message;
       },
+    }),
+    ...recordTemplateMethods({
+      host,
+      ensureEngine,
+      engineNow: () => engine,
+      startPage,
+      markDirty,
+      emit,
+      report,
     }),
     ...reviewMethods({
       host,
@@ -2637,8 +3309,8 @@ export function createSession(
       const relinked = relinkSources.indexOf(name);
       if (relinked >= 0) relinkSources.splice(relinked, 1);
       try {
-        const d = await ensureDuck();
-        await d.registerCsv(name, csvText);
+        const d = await ensureStore();
+        await d.importCsv(name, csvText);
         const e = await ensureEngine();
         // NOTE: SourceKind is internally tagged — the `kind` object nests its
         // own `kind` discriminant (proven by test-integration/pipeline.e2e.mjs;
@@ -2649,20 +3321,16 @@ export function createSession(
           capability: "inline",
         });
         if (!sourceNames.includes(name)) sourceNames.push(name);
+        door.touched(name);
         importedCsv.set(name, csvText);
         pendingCsv.delete(name);
         state.status = "ready";
         state.message = tr(STATUS.sourceRegistered, { name });
         markDirty();
       } catch (err) {
-        // Keep the more specific engine-missing / duckdb-missing status the
-        // boot helpers set; anything else is an import error.
-        if (
-          state.status !== "engine-missing" &&
-          state.status !== "duckdb-missing"
-        ) {
-          state.status = "error";
-        }
+        // Keep the more specific engine-missing status the boot helpers
+        // set; anything else is an import error.
+        if (state.status !== "engine-missing") state.status = "error";
         state.message = tr(STATUS.importFailed, { name, error: errText(err) });
         report({ level: "error", source: "import", message: state.message });
       }
@@ -2744,16 +3412,10 @@ export function createSession(
         return { source: name, format };
       }
       try {
-        const d = await ensureDuck();
+        const d = await ensureStore();
         const e = await ensureEngine();
-        const out = await loadIntoDuckDB(
-          d,
-          name,
-          format,
-          bytes,
-          xlsxReader(e),
-          options?.sheet,
-        );
+        const out = await loadIntoStore(d, name, format, bytes, options?.sheet);
+        door.touched(name);
         e.define_source({
           id: name,
           kind: {
@@ -2800,12 +3462,7 @@ export function createSession(
           ...(out.sheets !== undefined ? { sheets: out.sheets } : {}),
         };
       } catch (err) {
-        if (
-          state.status !== "engine-missing" &&
-          state.status !== "duckdb-missing"
-        ) {
-          state.status = "error";
-        }
+        if (state.status !== "engine-missing") state.status = "error";
         const error = `Import of "${fileName}" failed: ${errText(err)}`;
         state.message = error;
         report({ level: "error", source: "import", message: error });
@@ -2826,9 +3483,8 @@ export function createSession(
     async describeSource(source) {
       if (!sourceNames.includes(source)) return [];
       try {
-        const d = await ensureDuck();
-        const desc = await d.rows(`DESCRIBE ${quoteIdent(source)}`);
-        return desc.rows.map((r) => ({ name: r[0] ?? "", type: r[1] ?? "" }));
+        const d = await ensureStore();
+        return d.describe(`SELECT * FROM "${source.replace(/"/g, '""')}"`);
       } catch (err) {
         report({
           level: "warn",
@@ -2841,9 +3497,9 @@ export function createSession(
 
     async previewQuery(sql, limit = 50) {
       const empty = { columns: [], rows: [], total: null };
-      let d: DuckDBHandle;
+      let d: QueryHandle;
       try {
-        d = await ensureDuck();
+        d = await ensureStore();
       } catch (err) {
         return {
           ...empty,
@@ -2852,48 +3508,38 @@ export function createSession(
       }
       const refused = checkQuery(sql);
       if (refused) return { ...empty, diagnostic: refused };
+      const text = trimSql(sql);
       try {
-        const limited = previewSql(sql, limit);
-        const desc = await d.rows(`DESCRIBE ${limited}`);
-        const columns = desc.rows.map((r) => ({
-          name: r[0] ?? "",
-          type: r[1] ?? "",
-        }));
-        // DuckDB renders every value (dates, decimals with their scale, …)
-        // the way it would print them.
-        const shown = await d.rows(
-          `SELECT COLUMNS(*)::VARCHAR FROM (${limited})`,
-        );
-        const count = await d.rows(
-          `SELECT count(*) FROM (\n${sql.replace(/[\s;]+$/, "")}\n)`,
-        );
-        const total = Number(count.rows[0]?.[0] ?? NaN);
+        // The store renders every value the way a bound field displays it
+        // (a decimal with its scale, a date as YYYY-MM-DD).
+        const p = await d.preview(text, Math.max(0, Math.floor(limit)));
         return {
-          columns,
-          rows: shown.rows,
-          total: Number.isFinite(total) ? total : null,
+          columns: p.columns,
+          rows: p.rows,
+          total: p.count,
           diagnostic: null,
         };
       } catch (err) {
-        return { ...empty, diagnostic: diagnoseDuckDBError(err, 1) };
+        return { ...empty, diagnostic: diagnoseStoreError(err, text) };
       }
     },
 
     async saveQuery(id, sql, shape = "recordStream") {
-      let d: DuckDBHandle;
+      let d: QueryHandle;
       try {
-        d = await ensureDuck();
+        d = await ensureStore();
       } catch (err) {
         return { kind: "Engine", message: errText(err) };
       }
       const refused = checkQuery(sql);
       if (refused) return refused;
+      const text = trimSql(sql);
       try {
-        await d.rows(`DESCRIBE ${previewSql(sql, 0)}`);
+        await d.describe(text);
       } catch (err) {
-        return diagnoseDuckDBError(err, 1);
+        return diagnoseStoreError(err, text);
       }
-      this.addQuery(id, sql.replace(/[\s;]+$/, "").trim(), shape);
+      this.addQuery(id, text, shape);
       return null;
     },
 
@@ -3336,13 +3982,16 @@ export function createSession(
 
     async refreshData() {
       try {
-        const e = await ensureEngine();
-        const d = await ensureDuck();
+        const d = await ensureStore();
+        // Data ADR 562: the transforms run first, in order; each derived
+        // table is then a table the queries read.
+        await runTransforms();
         for (const q of queries.values()) {
           // A document's queries are code (§11): only a SELECT over the
           // source tables runs (query/sql.ts).
           const refused = checkQuery(q.sql);
           if (refused) {
+            lastRuns.set(q.id, { error: refused.message });
             report({
               level: "error",
               source: "query",
@@ -3351,22 +4000,15 @@ export function createSession(
             continue;
           }
           try {
-            // Typed column buffers (one copy per column); a re-delivery of the
-            // same data is recognised by the engine and decodes nothing.
-            let rows: number;
-            if (typeof d.queryColumns === "function") {
-              const batch = await d.queryColumns(q.sql);
-              ingestColumnBatch(e, q.id, batch);
-              rows = batch.row_count;
-            } else {
-              const records = await d.query(q.sql);
-              e.ingest_result(q.id, records);
-              rows = records.row_count ?? 0;
-            }
-            // What was delivered is what the engine holds: no engine call.
+            // The rows go from the store to the binding session inside the
+            // engine; a re-delivery of the same data changes nothing.
+            const rows = await d.ingest(q.id, trimSql(q.sql));
             keepRecordCount(q.id, rows);
+            lastRuns.set(q.id, { rowCount: rows });
+            door.touched(q.id);
           } catch (err) {
-            const diag = diagnoseDuckDBError(err);
+            const diag = diagnoseStoreError(err);
+            lastRuns.set(q.id, { error: `${diag.kind}: ${diag.message}` });
             report({
               level: "error",
               source: "query",
@@ -3489,6 +4131,11 @@ export function createSession(
             loweredInto.set(id, res.frames[0]);
             markDirty();
           }
+          flowNotes.set(id, {
+            frames: res.frames.map((f) => String(f.id)),
+            unplaced: res.total - res.placed,
+            total: res.total,
+          });
           state.status = res.ok ? "ready" : "error";
           state.message = tr(STATUS.recordFlowFrames, {
             id,
@@ -3544,17 +4191,25 @@ export function createSession(
           state.message = tr(STATUS.loweredBarcode, { id });
           return;
         }
-        const lowered = e.resolve_lowered(id) as { kind?: string } | null;
+        const lowered = resolveFor(e, id) as { kind?: string } | null;
         if (lowered?.kind === "table") {
           const plan = await relowerPlan({ kind: "table", binding: id });
           const known = tableAt.get(id);
+          // A dropped table stays in the user's frame: never deleted, its
+          // table swapped in place (or, unaddressable, placed in it again).
+          const into = tableInto.get(id);
           const inPlace =
-            known && plan.reuse && plan.reuse.id === known.frame.id
+            known &&
+            ((plan.reuse && plan.reuse.id === known.frame.id) ||
+              (into && into.frame.id === known.frame.id))
               ? known
               : undefined;
+          const own = (m: Mutation) =>
+            !!into &&
+            (m.args as { frameId?: unknown }).frameId === into.frame.id;
           // A labelled frame whose table we cannot address goes, too.
-          const clear = [...plan.remove];
-          if (plan.reuse && !inPlace)
+          const clear = plan.remove.filter((m) => !own(m as Mutation));
+          if (plan.reuse && !inPlace && plan.reuse.id !== into?.frame.id)
             clear.push({
               op: "deleteFrame",
               args: { frameId: plan.reuse.id as string },
@@ -3568,6 +4223,7 @@ export function createSession(
               inPlace,
               clear,
               onTable: (at) => tableAt.set(id, at),
+              ...(into ? { into } : {}),
             },
           );
           if (frameId) {
@@ -3604,12 +4260,17 @@ export function createSession(
         } else if (lowered?.kind === "image") {
           // D-14: place onto the bound rectangle (caller-supplied target).
           const tgt = imageTargets.get(id);
+          const status = (lowered as { status?: string }).status;
+          imageNotes.delete(id);
+          if (status === "flagged")
+            imageNotes.set(id, { missing: tr(ISSUES.noReference) });
           if (tgt) {
             await commitLoweredImage(
               host,
               lowered as never,
               tgt.elementId,
               tgt.fit,
+              assetResolverOf(id),
             );
           } else {
             host.log.info(
@@ -3626,6 +4287,7 @@ export function createSession(
         }
         state.status = "ready";
         state.message = tr(STATUS.lowered, { id });
+        issuesSoon();
       } catch (err) {
         state.status = "error";
         state.message = err instanceof Error ? err.message : String(err);
@@ -3663,6 +4325,7 @@ export function createSession(
       if (ctx.refreshFields) await this.refreshFields();
       // The document is now written from these results: the row diff's "before".
       await this.markApplied();
+      issuesSoon();
     },
 
     async recordCount(queryId) {
@@ -3886,6 +4549,7 @@ export function createSession(
               lowered as never,
               tgt.elementId,
               tgt.fit,
+              assetResolverOf(bindingId),
             );
           }
         }
@@ -3944,11 +4608,13 @@ export function createSession(
         { value: string | null } | "kept" | "failed" | "same"
       >();
       const ours = fields.filter((f) => bindingKinds.get(f.key) === "variable");
-      if (typeof e.refresh_field_values === "function" && ours.length > 0) {
+      // A field placed by a dropped record resolves at its record (below).
+      const atZero = ours.filter((f) => !recordOf.has(f.key));
+      if (typeof e.refresh_field_values === "function" && atZero.length > 0) {
         let decided: FieldRefreshOut[] = [];
         try {
           decided =
-            (e.refresh_field_values([...new Set(ours.map((f) => f.key))]) as
+            (e.refresh_field_values([...new Set(atZero.map((f) => f.key))]) as
               FieldRefreshOut[] | null) ?? [];
         } catch (err) {
           report({
@@ -3982,7 +4648,7 @@ export function createSession(
             r = "kept";
           } else {
             try {
-              const lowered = e.resolve_lowered(f.key) as {
+              const lowered = resolveFor(e, f.key) as {
                 kind?: string;
                 text?: string;
                 hidden?: boolean;
@@ -4016,6 +4682,7 @@ export function createSession(
 
       const written = await writeFields("refresh", writes);
       await this.markApplied();
+      issuesSoon();
       const kept = [...resolved.values()].filter((r) => r === "kept").length;
       state.status = "ready";
       state.message =
@@ -4043,7 +4710,18 @@ export function createSession(
       // topology is host-read (frameChain), not caller-supplied.
       const e = await ensureEngine();
       const chain = await readLiveChain(host, storyId);
-      return e.lower_record_flow(bindingId, chain, undefined);
+      const flow = e.lower_record_flow(bindingId, chain, undefined) as {
+        placed?: number;
+        total?: number;
+      } | null;
+      if (typeof flow?.total === "number" && typeof flow.placed === "number")
+        flowNotes.set(bindingId, {
+          frames: chain.map((c) => c.frame),
+          storyId,
+          unplaced: flow.total - flow.placed,
+          total: flow.total,
+        });
+      return flow;
     },
 
     subscribeChainReflow(bindingId, storyId, onRepaginate, options) {
@@ -4546,7 +5224,7 @@ export function createSession(
         Pick<DataEngineLike, "plan_merge" | "merge_words" | "merge_overset">
       >;
       const result = await writeMerge(host, engineForMerge, template, {
-        query: await asWritten(e, options.query),
+        query: await asWritten(options.query),
         recordsPerPage: options.recordsPerPage ?? { mode: "single" },
         removeBlankLines: options.removeBlankLines ?? false,
         template: mode,
@@ -4557,6 +5235,15 @@ export function createSession(
         pageHandles: labelActive,
       });
       if (result.ok) mergeTemplates.set(mergeId, template);
+      mergeFrames = result.records.flatMap((r) =>
+        r.frames.map((f) => ({
+          binding: mergeId,
+          storyId: f.storyId,
+          frame: String(f.element.id),
+          record: r.record,
+        })),
+      );
+      issuesSoon();
       for (const d of result.diagnostics) {
         report({
           level: result.ok ? "warn" : "error",
@@ -4691,15 +5378,17 @@ export function createSession(
     dispose() {
       if (persistTimer) clearTimeout(persistTimer);
       persistTimer = null;
+      if (issuesTimer) clearTimeout(issuesTimer);
+      issuesTimer = null;
       for (const d of hostSubs.splice(0)) d.dispose();
       poller.stopAll();
       listeners.clear();
       for (const h of providerHandles.values()) h.dispose();
       providerHandles.clear();
-      void duck?.close();
       engine?.free();
       engine = null;
-      duck = null;
+      store = null;
+      storeOf = null;
     },
   };
   return self;

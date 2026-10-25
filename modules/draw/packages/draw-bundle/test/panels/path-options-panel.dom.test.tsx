@@ -64,6 +64,7 @@ import {
   PATH_OPTION_SECTION_TITLES,
   SELECT_SAME_TOLERANCE_NOTE,
   WIDTH_PROFILE_SECTION_NOTE,
+  RASTERIZE_SECTION_NOTE,
   SIMPLIFY_PREVIEW_ENGINE_NOTE,
 } from "../../src";
 import { MENU_COMMAND_PREFIX, MENU_ENTRIES } from "../../src/menu";
@@ -443,9 +444,9 @@ describe("Path options panel — rendered against the engine", () => {
       panel.change(field("simplify.tolerance"), "20");
       await drive(() => Promise.resolve(), panel.work);
       await drive(() => Promise.resolve(), panel.work);
-      expect(panel.get("[data-draw-pathopts-simplify-preview]").textContent).toMatch(
-        /7 → 2/,
-      );
+      expect(
+        panel.get("[data-draw-pathopts-simplify-preview]").textContent,
+      ).toMatch(/7 → 2/);
       expect(h.overlayLayers().some((l) => l.shapes.length === 1)).toBe(true);
       expect(panel.work.mutations).toEqual([]);
       expect(panel.get("[data-draw-pathopts-simplify-note]").textContent).toBe(
@@ -485,6 +486,45 @@ describe("Path options panel — rendered against the engine", () => {
       expect((await tableOf(WOB)).subpathOpen?.[0]).toBe(false);
       await drive(() => h.host.document.undo(), panel.work);
       expect(shapeOf(await tableOf(WOB))).toEqual(shapeOf(before));
+    });
+
+    it("RASTERIZE: the resolution and ground typed are what is drawn; the shape becomes one image frame, ONE undo restores [plugin-platform.render-snapshot-v2]", async () => {
+      const panel = await mountPanel(h, makePathOptionsPanel);
+      const leavesBefore = await leafIds(h);
+      await drive(() => h.host.selection.set([SQ]), panel.work);
+      await panel.click(header("rasterize"));
+      expect(panel.get("[data-draw-pathopts-rasterize-note]").textContent).toBe(
+        t(RASTERIZE_SECTION_NOTE),
+      );
+      expect(panel.get(apply("rasterize")).textContent).toBe(
+        "Rasterize 1 object",
+      );
+      panel.change(field("rasterize.ppi"), "36");
+      panel.change(select("rasterize.background"), "paper");
+      const sent = await sentTo(h, () => panel.click(apply("rasterize")));
+      expect(sent).toHaveLength(1);
+      const ops = (sent[0] as { args: { ops: { op: string; args: never }[] } })
+        .args.ops;
+      expect(ops.map((o) => o.op)).toEqual([
+        "insertFrame",
+        "bindCreated",
+        "placeImage",
+        "deleteFrame",
+      ]);
+      // 36 ppi = half a pixel per pt: the PNG is half the 100 pt square
+      // (its stroke, if any, a pixel or two more).
+      const uri = (ops[2].args as { uri: string }).uri;
+      const png = Uint8Array.from(atob(uri.split(",")[1]!), (c) =>
+        c.charCodeAt(0),
+      );
+      const width = new DataView(png.buffer).getUint32(16);
+      expect(width).toBeGreaterThanOrEqual(50);
+      expect(width).toBeLessThanOrEqual(56);
+      expect((await leafIds(h)).map((id) => String(id.id))).not.toContain(
+        String(SQ.id),
+      );
+      await drive(() => h.host.document.undo(), panel.work);
+      expect(await leafIds(h)).toEqual(leavesBefore);
     });
 
     it("OUTLINE STROKE: untouched it outlines the element's OWN stroke; an override width replaces it", async () => {
@@ -887,12 +927,15 @@ describe("Path options panel — rendered against the engine", () => {
     afterAll(() => h?.dispose());
     afterEach(() => teardownPanels(h));
 
-    it("every “…” row of the menu RAISES a section — Image trace is the one that still does not", () => {
+    it("every “…” row of the menu RAISES a panel — Path Options at a section, or its own (Image Trace, Recolor Artwork)", () => {
       const raisers = new Set(
         Object.values(PATH_OPTIONS_COMMANDS).map((id) =>
           id.slice(MENU_COMMAND_PREFIX.length + 1),
         ),
       );
+      // The two "…" rows whose parameters live in a panel of their own
+      // (WP6.6 Image Trace, WP6.5 Recolor Artwork).
+      const ownPanel = new Set(["imageTraceOptions", "recolorArtworkOptions"]);
       const ellipsis = MENU_ENTRIES.filter(([path]) => path.endsWith("…"));
       expect(ellipsis.map(([path]) => path)).toEqual([
         "Draw/Path/Outline stroke options…",
@@ -907,18 +950,22 @@ describe("Path options panel — rendered against the engine", () => {
         "Object/Insert polar grid…",
         "Object/Insert star…",
         "Object/Insert flare…",
+        "Object/Rasterize…",
         "Edit/Select same/Stroke weight within…",
         "Draw/Image trace…",
+        "Edit/Edit colors/Recolor artwork…",
       ]);
       expect(
         ellipsis
-          .filter(([, suffix]) => !raisers.has(suffix))
+          .filter(([, suffix]) => !raisers.has(suffix) && !ownPanel.has(suffix))
           .map(([path]) => path),
-      ).toEqual(["Draw/Image trace…"]);
+      ).toEqual([]);
       // And nothing WITHOUT an ellipsis raises a dialog.
       expect(
         MENU_ENTRIES.filter(
-          ([path, suffix]) => !path.endsWith("…") && raisers.has(suffix),
+          ([path, suffix]) =>
+            !path.endsWith("…") &&
+            (raisers.has(suffix) || ownPanel.has(suffix)),
         ),
       ).toEqual([]);
     });

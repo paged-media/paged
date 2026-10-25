@@ -54,8 +54,8 @@ pub struct ParagraphContentIn {
 /// One read-back run: its text, its applied character style, and the
 /// direct character formatting the canvas gave it (each `None` = none). A
 /// run with direct formatting overlays as an edit style over its character
-/// style ([`run_token`]); `tracking` has no Word property here and is not
-/// written.
+/// style ([`run_token`]); `tracking` becomes Word's character spacing at
+/// the run's size (`w:spacing`).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunContentIn {
@@ -121,6 +121,9 @@ impl RunContentIn {
         }
         if let Some(p) = &self.position {
             push("characterPosition", PropValue::Text(p.clone()));
+        }
+        if let Some(t) = self.tracking {
+            push("characterTracking", PropValue::Length(t));
         }
         out
     }
@@ -217,7 +220,64 @@ fn fold_segments(
 /// story holds no native table, its cells come through [`overlay_cells`]); a
 /// paragraph's runs become the runs read back, a directly formatted run with
 /// an edit style ([`run_token`]), and the differ maps them onto the Word runs.
+///
+/// This is the layout of documents poured before native tables took a
+/// paragraph of their own: the paragraph after a table continued in the
+/// table's paragraph, so a native table has no read-back paragraph. The
+/// bundle's pour now gives each native table its own paragraph
+/// ([`overlay_story_content_in`] with [`TableParagraphs::Own`]).
+///
+/// A paragraph takes the paragraph style read back when the lowering knows
+/// it (a Word style, a style the lowering synthesized): the paragraph
+/// style applied on the canvas is saved (ADR 610). A style the lowering does
+/// not know (the engine's own default) leaves the paragraph's as it was;
+/// [`overlay_story_content_with`] names the styles made in paged too.
 pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) -> LoweredDoc {
+    overlay_story_content_with(baseline, content, TableParagraphs::Joined, &|_| false)
+}
+
+/// Where the native tables of a read-back story stand among its paragraphs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TableParagraphs {
+    /// Each native table is a paragraph of its own (holding only the table),
+    /// between the paragraphs of the Word blocks around it: the pour's layout.
+    Own,
+    /// A native table has no paragraph of its own: the paragraph after it
+    /// continued in the table's paragraph (documents poured before the
+    /// tables took their own; the default when the bundle does not say).
+    #[default]
+    Joined,
+}
+
+/// [`overlay_story_content`] for a story whose native tables stand as
+/// `tables` says: with [`TableParagraphs::Own`] each native table consumes
+/// the one read-back paragraph that holds it.
+pub fn overlay_story_content_in(
+    baseline: &LoweredDoc,
+    content: &StoryContentIn,
+    tables: TableParagraphs,
+) -> LoweredDoc {
+    overlay_story_content_with(baseline, content, tables, &|_| false)
+}
+
+/// [`overlay_story_content`], with `created` answering for the paragraph
+/// styles made in paged that save-back writes into `styles.xml`.
+pub fn overlay_story_content_known(
+    baseline: &LoweredDoc,
+    content: &StoryContentIn,
+    created: &dyn Fn(&str) -> bool,
+) -> LoweredDoc {
+    overlay_story_content_with(baseline, content, TableParagraphs::Joined, created)
+}
+
+/// The overlay with both choices: where native tables stand (`tables`) and
+/// which paragraph styles were made in paged (`created`).
+pub fn overlay_story_content_with(
+    baseline: &LoweredDoc,
+    content: &StoryContentIn,
+    tables: TableParagraphs,
+    created: &dyn Fn(&str) -> bool,
+) -> LoweredDoc {
     let mut edited = baseline.clone();
     // The edit styles are gathered here while the blocks are borrowed.
     let mut styles = std::mem::take(&mut edited.styles);
@@ -226,10 +286,14 @@ pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) ->
         let p = match block {
             LoweredBlock::Paragraph(p) => p,
             LoweredBlock::Table(t) => {
-                // A native table is not in the read-back paragraphs. One
-                // that FLOWED as text is: skip its paragraphs (the Word
-                // table is left as it was).
+                // A table that FLOWED as text is in the read-back
+                // paragraphs: skip them (the Word table is left as it was).
                 ci += t.flow.iter().map(|p| 1 + p.segments.len()).sum::<usize>();
+                // A native table poured into a paragraph of its own: that
+                // paragraph holds no Word text, skip it.
+                if t.flow.is_empty() && tables == TableParagraphs::Own {
+                    ci += 1;
+                }
                 continue;
             }
         };
@@ -240,6 +304,15 @@ pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) ->
         let end = (ci + parts).min(content.paragraphs.len());
         let folded = fold_segments(p, &content.paragraphs[ci..end]);
         ci = end;
+        if let Some(style) = folded
+            .paragraph_style
+            .as_deref()
+            .filter(|t| known_para_style(&styles, t) || created(t))
+        {
+            if p.para_style_id.as_deref() != Some(style) {
+                p.para_style_id = Some(style.to_string());
+            }
+        }
         // The run list as read back: the differ maps it onto the Word runs
         // character by character (text edits, runs the engine joined, a
         // run split by a new look, direct formatting).
@@ -247,6 +320,60 @@ pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) ->
     }
     edited.styles = styles;
     edited
+}
+
+/// Whether `token` is a paragraph style of the lowering (a Word style or
+/// one it synthesized).
+fn known_para_style(styles: &[LoweredStyle], token: &str) -> bool {
+    styles
+        .iter()
+        .any(|s| s.collection == StyleCollection::Paragraph && s.id == token)
+}
+
+/// Give `edited` the swatches the canvas made that the import did not
+/// (`colors`: swatch id → the RGB the host displays it in, `RRGGBB`, a
+/// leading `#` allowed), so the differ resolves a run filled with one to
+/// its `w:color` — any document swatch, CMYK, spot or Lab included, is
+/// written as the hex it shows. A value that is not six hex digits is left
+/// out (the run's colour is then not written).
+///
+/// A theme colour's swatch (doc ADR 609) the user edited shows another
+/// colour now: it takes that colour, so its runs are written with the new
+/// hex instead of the theme reference. A display within 2 of the import's
+/// colour per channel is the same colour (colour management may round).
+pub fn add_canvas_colors(
+    edited: &mut LoweredDoc,
+    colors: &std::collections::BTreeMap<String, String>,
+) {
+    for (id, hex) in colors {
+        let hex = hex.trim_start_matches('#');
+        if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            continue;
+        }
+        let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).map(f32::from);
+        let (Ok(r), Ok(g), Ok(b)) = (channel(0), channel(2), channel(4)) else {
+            continue;
+        };
+        if let Some(sw) = edited.swatches.iter_mut().find(|s| &s.id == id) {
+            let moved = sw.theme.is_some()
+                && sw.value.len() >= 3
+                && [r, g, b]
+                    .iter()
+                    .zip(&sw.value)
+                    .any(|(new, old)| (new - old).abs() > 2.0);
+            if moved {
+                sw.value = vec![r, g, b];
+            }
+            continue;
+        }
+        edited.swatches.push(docx_lower::ir::LoweredSwatch {
+            id: id.clone(),
+            name: id.clone(),
+            space: "RGB".into(),
+            value: vec![r, g, b],
+            theme: None,
+        });
+    }
 }
 
 /// One native table cell as the host reads it back: the table's `block` in
@@ -286,12 +413,24 @@ pub struct CellContentIn {
 /// and deletes. With the cell's styled read (`paragraphs`), a kept
 /// paragraph takes the runs read back instead, as a body paragraph does
 /// ([`overlay_story_content`]), so runs split by a new look and direct
-/// formatting are written too; a paragraph added in the cell still takes
-/// its neighbour's look. A table poured as text, or a cell that is not in the
+/// formatting are written too, and a paragraph added in the cell takes the
+/// runs read back (its words' own looks over its neighbour's). A table poured as text, or a cell that is not in the
 /// lowering, is left as it was and reported in the returned ledger.
 pub fn overlay_cells(edited: &mut LoweredDoc, cells: &[CellContentIn]) -> Vec<String> {
+    overlay_cells_known(edited, cells, &|_| false)
+}
+
+/// [`overlay_cells`], with `created` answering for the paragraph styles made
+/// in paged: a paragraph added in a cell takes the paragraph style read back
+/// when it is a style the lowering knows or one of these (ADR 610), not its
+/// neighbour's.
+pub fn overlay_cells_known(
+    edited: &mut LoweredDoc,
+    cells: &[CellContentIn],
+    created: &dyn Fn(&str) -> bool,
+) -> Vec<String> {
     let mut styles = std::mem::take(&mut edited.styles);
-    let skips = overlay_cells_into(edited, &mut styles, cells);
+    let skips = overlay_cells_into(edited, &mut styles, cells, created);
     edited.styles = styles;
     skips
 }
@@ -300,6 +439,7 @@ fn overlay_cells_into(
     edited: &mut LoweredDoc,
     styles: &mut Vec<LoweredStyle>,
     cells: &[CellContentIn],
+    created: &dyn Fn(&str) -> bool,
 ) -> Vec<String> {
     let mut skips = Vec::new();
     for c in cells {
@@ -321,17 +461,21 @@ fn overlay_cells_into(
             skips.push(format!("block {}: no cell {}", c.block, c.cell));
             continue;
         };
-        // The styled read, when it agrees with the text read.
+        // The styled read, when it agrees with the text read (an emptied
+        // cell can read back with no paragraph at all: then the text read,
+        // one empty paragraph, is the one to follow).
         let styled = c.paragraphs.as_ref().filter(|ps| {
-            ps.iter()
-                .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
-                .collect::<Vec<_>>()
-                .join("\n")
-                == c.text
+            ps.len() == c.text.split('\n').count()
+                && ps
+                    .iter()
+                    .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    == c.text
         });
         let texts: Vec<String> = c.text.split('\n').map(str::to_string).collect();
         if texts.len() != cell.paragraphs.len() {
-            cell.paragraphs = restructure_cell(&cell.paragraphs, &texts, styled, styles);
+            cell.paragraphs = restructure_cell(&cell.paragraphs, &texts, styled, styles, created);
             continue;
         }
         if let Some(read) = styled {
@@ -351,6 +495,157 @@ fn overlay_cells_into(
             }
         }
     }
+    skips
+}
+
+/// A native table whose ROW count changed on the canvas (rows added or
+/// removed), read back whole: each live row's cells' texts (a cell's
+/// paragraphs joined by `\n`, as the engine reads a cell), in order.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableContentIn {
+    pub block: usize,
+    pub rows: Vec<Vec<String>>,
+}
+
+/// Overlay tables whose rows were added or removed on the canvas onto the
+/// `edited` lowering. The live rows are aligned with the lowered rows by
+/// their text, as the differ aligns them (`row_key`, `lcs_align`): a kept
+/// row keeps its cells and takes the live texts (its runs patched, its
+/// paragraphs aligned as a cell's are), an added row is a copy of the row
+/// before it (or, above every kept row, of the first kept one) with the
+/// live texts, and a removed row goes. The differ then writes the rows as
+/// `InsertRow` / `DeleteRow` and the kept rows' cells as cell edits. A
+/// table with merged cells, or whose column count changed, is left as it
+/// was and reported: a merged cell spans rows the alignment would split,
+/// and a column op needs the column's identity, which a row of texts does
+/// not carry.
+pub fn overlay_tables(edited: &mut LoweredDoc, tables: &[TableContentIn]) -> Vec<String> {
+    let mut styles = std::mem::take(&mut edited.styles);
+    let mut skips = Vec::new();
+    for t in tables {
+        let Some(LoweredBlock::Table(tb)) = edited.story.blocks.get_mut(t.block) else {
+            skips.push(format!(
+                "block {}: no table to write the rows into",
+                t.block
+            ));
+            continue;
+        };
+        if !tb.flow.is_empty() {
+            skips.push(format!(
+                "block {}: a table poured as text keeps its Word rows",
+                t.block
+            ));
+            continue;
+        }
+        if tb.cells.iter().any(|c| c.row_span > 1 || c.col_span > 1) {
+            skips.push(format!(
+                "block {}: rows added or removed in a table with merged cells are not saved; it keeps its Word rows",
+                t.block
+            ));
+            continue;
+        }
+        if t.rows.iter().any(|r| r.len() != tb.cols as usize) {
+            skips.push(format!(
+                "block {}: columns added or removed on the canvas are not saved; the table keeps its Word columns",
+                t.block
+            ));
+            continue;
+        }
+        let rows = crate::diff::rows_of(tb);
+        let old: Vec<String> = rows.iter().map(|r| crate::diff::row_key(tb, r)).collect();
+        // The differ's key: a cell's paragraphs' runs, joined without a
+        // separator.
+        let new: Vec<String> = t
+            .rows
+            .iter()
+            .map(|r| {
+                r.iter()
+                    .map(|c| c.replace('\n', ""))
+                    .collect::<Vec<_>>()
+                    .join("\u{1f}")
+            })
+            .collect();
+        let steps = crate::diff::lcs_align(&old, &new);
+        let first_kept = steps.iter().find_map(|s| match s {
+            Align::Match(b, _) => Some(*b),
+            _ => None,
+        });
+        let heights = std::mem::take(&mut tb.row_heights_pt);
+        let mut cells: Vec<docx_lower::ir::LoweredCell> = Vec::new();
+        let mut new_heights: Vec<f32> = Vec::new();
+        let mut anchor: Option<usize> = None;
+        for step in steps {
+            let (from, e, kept) = match step {
+                Align::Match(b, e) => {
+                    anchor = Some(b);
+                    (b, e, true)
+                }
+                Align::Del(_) => continue,
+                Align::Ins(e) => match anchor.or(first_kept) {
+                    Some(b) => (b, e, false),
+                    None => continue, // a table with no row to copy
+                },
+            };
+            for &ci in &rows[from] {
+                let mut cell = tb.cells[ci].clone();
+                let text = &t.rows[e][cell.col as usize];
+                let texts: Vec<String> = text.split('\n').map(str::to_string).collect();
+                cell.row = e as u32;
+                if kept {
+                    if texts.len() == cell.paragraphs.len() {
+                        for (p, new) in cell.paragraphs.iter_mut().zip(&texts) {
+                            if let Err(why) = patch_paragraph(p, new) {
+                                skips.push(format!(
+                                    "block {} row {e} column {}: {why}",
+                                    t.block, cell.col
+                                ));
+                            }
+                        }
+                    } else {
+                        cell.paragraphs =
+                            restructure_cell(&cell.paragraphs, &texts, None, &mut styles, &|_| {
+                                false
+                            });
+                    }
+                } else {
+                    // A new row's cell: one paragraph per line, in the look
+                    // of the copied cell's first paragraph and run.
+                    let model = cell.paragraphs.first().cloned().unwrap_or_default();
+                    let run_style = model.runs.first().and_then(|r| r.char_style_id.clone());
+                    cell.paragraphs = texts
+                        .iter()
+                        .map(|line| LoweredParagraph {
+                            para_style_id: model.para_style_id.clone(),
+                            list: model.list,
+                            source_index: model.source_index,
+                            runs: if line.is_empty() {
+                                Vec::new()
+                            } else {
+                                vec![LoweredRun {
+                                    text: line.clone(),
+                                    char_style_id: run_style.clone(),
+                                    ..Default::default()
+                                }]
+                            },
+                            ..Default::default()
+                        })
+                        .collect();
+                }
+                cells.push(cell);
+            }
+            if let Some(h) = heights.get(from) {
+                new_heights.push(*h);
+            }
+        }
+        cells.sort_by_key(|c| (c.row, c.col));
+        tb.rows = t.rows.len() as u32;
+        tb.cells = cells;
+        if !heights.is_empty() {
+            tb.row_heights_pt = new_heights;
+        }
+    }
+    edited.styles = styles;
     skips
 }
 
@@ -374,6 +669,7 @@ fn restructure_cell(
     texts: &[String],
     styled: Option<&Vec<ParagraphContentIn>>,
     styles: &mut Vec<LoweredStyle>,
+    created: &dyn Fn(&str) -> bool,
 ) -> Vec<LoweredParagraph> {
     let old: Vec<String> = paras
         .iter()
@@ -414,15 +710,30 @@ fn restructure_cell(
                 } else {
                     from.runs.first()
                 };
+                let mut runs = vec![LoweredRun {
+                    text: texts[e].clone(),
+                    char_style_id: run.and_then(|r| r.char_style_id.clone()),
+                    ..Default::default()
+                }];
+                // Its runs as read, formatting included: the differ writes
+                // them as the copy's runs; and its own paragraph style, when
+                // the canvas gave it one save-back can write.
+                let mut para_style_id = from.para_style_id.clone();
+                if let Some(rp) = styled.and_then(|ps| ps.get(e)) {
+                    overlay_runs(styles, &mut runs, &rp.runs);
+                    if let Some(t) = rp
+                        .paragraph_style
+                        .as_deref()
+                        .filter(|t| known_para_style(styles, t) || created(t))
+                    {
+                        para_style_id = Some(t.to_string());
+                    }
+                }
                 out.push(LoweredParagraph {
-                    para_style_id: from.para_style_id.clone(),
+                    para_style_id,
                     list: from.list,
                     source_index: from.source_index,
-                    runs: vec![LoweredRun {
-                        text: texts[e].clone(),
-                        char_style_id: run.and_then(|r| r.char_style_id.clone()),
-                        ..Default::default()
-                    }],
+                    runs,
                     ..Default::default()
                 });
             }
@@ -579,6 +890,54 @@ mod tests {
     fn edits(base: &LoweredDoc, content: &StoryContentIn) -> crate::EditSet {
         let edited = overlay_story_content(base, content);
         crate::diff(base, &edited, &crate::DocxBindings::default())
+    }
+
+    /// Word: "Before", a table, "After". The read-back story as each layout
+    /// pours it, with "After" edited to "After all".
+    #[test]
+    fn a_native_table_takes_its_own_read_back_paragraph_in_the_own_layout() {
+        use docx_lower::ir::{LoweredCell, LoweredTable};
+        let mut base = para_doc(&["Before"]);
+        base.story.blocks.push(LoweredBlock::Table(LoweredTable {
+            rows: 1,
+            cols: 1,
+            cells: vec![LoweredCell::default()],
+            ..Default::default()
+        }));
+        base.story
+            .blocks
+            .push(LoweredBlock::Paragraph(LoweredParagraph {
+                runs: runs(&["After"]),
+                ..Default::default()
+            }));
+        let story = |texts: &[&str]| StoryContentIn {
+            self_id: "s".into(),
+            paragraphs: texts
+                .iter()
+                .map(|t| ParagraphContentIn {
+                    paragraph_style: None,
+                    runs: vec![plain(t)],
+                })
+                .collect(),
+        };
+        let after = |edited: &LoweredDoc| match &edited.story.blocks[2] {
+            LoweredBlock::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect::<String>(),
+            LoweredBlock::Table(_) => unreachable!(),
+        };
+        // Own: the table's paragraph (empty) stands between the two.
+        let own = overlay_story_content_in(
+            &base,
+            &story(&["Before", "", "After all"]),
+            TableParagraphs::Own,
+        );
+        assert_eq!(after(&own), "After all");
+        // Joined: "After" continued in the table's paragraph.
+        let joined = overlay_story_content(&base, &story(&["Before", "After all"]));
+        assert_eq!(after(&joined), "After all");
+        // The own layout read as joined would put the table's empty
+        // paragraph into "After": the layouts are not interchangeable.
+        let wrong = overlay_story_content(&base, &story(&["Before", "", "After all"]));
+        assert_eq!(after(&wrong), "");
     }
 
     #[test]

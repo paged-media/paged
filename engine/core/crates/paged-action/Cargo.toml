@@ -1,0 +1,24 @@
+[package]
+name = "paged-action"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Actions (core ADR 1015, PM-0015): named, typed, pure steps over an asset, a table, a selection or a value; the registry, the chain runner and the content-addressed cache key the SDK's actions@1 uses too, and actions written in JavaScript, run in a sandboxed Boa context."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = "1"
+sha2 = "0.11"
+thiserror = "2"
+# The engine's interpreter (paged-script uses the same version): a JS action
+# runs in a bare context with no host functions.
+boa_engine = { version = "0.22", default-features = false, optional = true }
+
+[features]
+default = ["js"]
+js = ["dep:boa_engine"]

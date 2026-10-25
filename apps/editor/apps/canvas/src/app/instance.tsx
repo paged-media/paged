@@ -29,6 +29,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import type { CanvasClient, Role } from "@paged-media/client";
 import type {
   CommandContribution,
+  IdAliases,
   PagedEditor,
   PanelContribution,
   ShellRegistries,
@@ -307,6 +308,8 @@ export interface EditorInstance {
   readonly scope: EditorScope;
   /** What the editor keeps while it runs. */
   readonly services: EditorServices;
+  /** Deprecated ids, read as their replacements (PM-0013, amendment 2). */
+  readonly idAliases: IdAliases;
   /** Where the engine's wasm is served, when the host names it; else the
    *  build's own asset. */
   readonly engineWasm?: string;

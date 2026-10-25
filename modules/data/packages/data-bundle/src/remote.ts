@@ -27,7 +27,7 @@ import { t } from "@paged-media/strings";
 
 import { SOURCES as M } from "./messages";
 
-/** The remote formats the M1 fetch lane hands to DuckDB. */
+/** The remote formats the M1 fetch lane hands to the query store. */
 export type RemoteFormat = "csv" | "tsv" | "json" | "parquet";
 
 /** One remote source's panel-visible state. INERT until its origin is

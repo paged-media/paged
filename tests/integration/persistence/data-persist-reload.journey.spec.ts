@@ -25,7 +25,7 @@
 // (paged/media.paged.data/session.json) and restored when a document opens.
 // This journey drives that through the real editor:
 //
-//   · IMPORT + BIND — import a CSV in the Sources panel (DuckDB boots), define
+//   · IMPORT + BIND — import a CSV in the Sources panel (the engine boots), define
 //     a variable binding on the `name` column in the Bindings panel, Lower:
 //     a tagged field with the first record's value lands in the document.
 //   · SAVE — Save (.paged) through the real command; the will-save hook
@@ -33,8 +33,8 @@
 //   · REOPEN — File ▸ New (nothing of the document stays), then File ▸ Open
 //     the saved file: the Bindings panel lists the binding again and the
 //     Sources panel lists the source, with no re-import.
-//   · REFRESH — stepping the preview to record 2 re-runs the query in DuckDB
-//     (the restored CSV is registered on DuckDB's first boot) and writes the
+//   · REFRESH — stepping the preview to record 2 re-runs the query in the store
+//     (the restored CSV is loaded into the store on first use) and writes the
 //     SAME field in place; Lower again re-resolves it without placing a
 //     second field.
 //   · UNDO — Edit ▸ Undo puts the previous field value back; the session part
@@ -45,8 +45,8 @@
 //     holds that version as `sessions/<hash>.json`, and the reopened document
 //     still names it. (Before 69 these checks are skipped.)
 //
-// Gate: under REQUIRE_REAL_DUCKDB=1 a DuckDB that does not boot FAILS the
-// journey (data-duckdb-gate.ts); otherwise it skips and says why.
+// Gate: under REQUIRE_REAL_ENGINE=1 a data engine that does not boot FAILS the
+// journey (data-engine-gate.ts); otherwise it skips and says why.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
@@ -60,7 +60,7 @@ import {
 } from "../../../apps/editor/apps/canvas/tests/e2e/harness/read-zip";
 import { openPanel } from "../../../apps/editor/apps/canvas/tests/fidelity/canvas-driver";
 import { Designer } from "../../../apps/editor/apps/canvas/tests/journey/driver/designer";
-import { skipWithoutDuckDB } from "../../../apps/editor/apps/canvas/tests/journey/plugins/data-duckdb-gate";
+import { skipWithoutEngine } from "../../../apps/editor/apps/canvas/tests/journey/plugins/data-engine-gate";
 import {
   dataFields as engineDataFields,
   sessionLabel,
@@ -125,9 +125,9 @@ async function importCsv(page: Page, designer: Designer): Promise<void> {
   } catch {
     const got =
       (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
-    skipWithoutDuckDB(
+    skipWithoutEngine(
       got,
-      `the data-persist-reload journey needs DuckDB-WASM to boot (engine status "${got}")`,
+      `the data-persist-reload journey needs the data engine to boot (engine status "${got}")`,
     );
   }
 }
@@ -230,7 +230,7 @@ test.describe("journey · paged.data persistence", () => {
         "the reopened document names the same version",
       ).toBe(labelled);
 
-    // ── 4. REFRESH — step to record 2: DuckDB re-runs the restored query ──
+    // ── 4. REFRESH — step to record 2: the store re-runs the restored query ──
     await openPanel(page, BINDINGS_PANEL);
     await page.getByRole("button", { name: /refresh data/i }).click();
     await expect(page.getByText(/Data refreshed from sources/)).toBeVisible({

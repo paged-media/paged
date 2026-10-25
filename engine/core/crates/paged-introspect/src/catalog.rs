@@ -861,6 +861,7 @@ property_paths! {
         FrameContentBlendMode => "frameContentBlendMode" : enum_open(BLEND_MODES).default_text("Normal").idml(idml![attr(BlendingSetting, BlendMode)]),
         GroupIsolateBlending => "groupIsolateBlending" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, IsolateBlending)]),
         GroupKnockout => "groupKnockout" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, KnockoutGroup)]),
+        GroupClip => "groupClip" : bool_().default_bool(false),
         // R-11 — the drop shadow's remaining attributes.
         FrameDropShadowBlendMode => "frameDropShadowBlendMode" : enum_open(BLEND_MODES).default_text("Multiply").idml(idml![attr(DropShadowSetting, BlendMode)]),
         FrameDropShadowSpread => "frameDropShadowSpread" : pct().default_num(0.0).idml(idml![attr(DropShadowSetting, Spread)]),
@@ -1418,9 +1419,11 @@ mod tests {
         //
         // 244 -> 245: ADR 1006 — a frame's fill rule.
         //
-        // 245 -> 247: ADR 1007 — a frame's stroke gradient mode and its
+        // 245 -> 246: ADR 1010 — a group is a clip group.
+        //
+        // 246 -> 248: ADR 1007 — a frame's stroke gradient mode and its
         // gradient's start point.
-        assert_eq!(cat.settable_paths.len(), 247, "settable path count drifted");
+        assert_eq!(cat.settable_paths.len(), 248, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

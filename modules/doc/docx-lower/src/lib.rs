@@ -63,10 +63,11 @@ const PARA_PREFIX: &str = "ParagraphStyle/docx-";
 const START_PARAGRAPH: &str = "paragraphStartParagraph";
 
 /// The paragraph composer's property path (settable from core protocol 65)
-/// and IDML's name for the Adobe Single-line Composer, the native analogue
-/// of Word's first-fit line breaking.
+/// and the engine's Word first-fit composer (engine ADR 1016, doc ADR 617):
+/// Word's own line breaking, not InDesign's Single-line Composer, which
+/// compresses justified lines Word would break.
 pub const PARAGRAPH_COMPOSER: &str = "paragraphComposer";
-pub const SINGLE_LINE_COMPOSER: &str = "HL Single";
+pub const WORD_FIRST_FIT_COMPOSER: &str = "Word First-fit";
 
 /// IDML's span/split columns (`SpanColumnType` and companions; settable from
 /// core protocol 64, ADR 028 addendum). A mid-page column change lowers to
@@ -450,6 +451,21 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ..Lowering::default()
     };
 
+    // The theme's scheme colours, each a named swatch whether the document
+    // uses it or not, so the "Word theme" group offers them all (doc ADR 609).
+    if let Some(theme) = &doc.theme {
+        for (slot, hex) in &theme.colors {
+            ctx.theme_swatch_for(
+                &docx_core::ThemeColorRef {
+                    slot: slot.clone(),
+                    tint: None,
+                    shade: None,
+                },
+                hex,
+            );
+        }
+    }
+
     // 0. docDefaults -> a base paragraph style every un-based style + un-styled
     //    paragraph inherits from (Word's Normal defaults: font, size, spacing).
     ctx.install_doc_defaults(&doc.styles.doc_defaults);
@@ -658,6 +674,47 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                  They are preserved in the source .docx and round-trip on save; Word's \
                  pages may hold less text where they took space",
                 doc.unplaced_vml
+            ),
+            3,
+        ));
+    }
+
+    // W0 — what the import shows simplified rather than drops.
+    let held = doc.held;
+    if held.tracked_changes > 0 {
+        let mut msg = format!(
+            "{} tracked change(s) shown as accepted; review them in Word. Insertions \
+             show as plain text, deletions are not shown, formatting changes show \
+             the new formatting; the markup is kept in the .docx on save, and an \
+             edit that reaches it is refused",
+            held.tracked_changes
+        );
+        if held.deleted_marks_kept > 0 {
+            msg.push_str(&format!(
+                ". {} paragraph(s) whose mark is a tracked deletion stay paragraphs of \
+                 their own (accepting would join each to the next)",
+                held.deleted_marks_kept
+            ));
+        }
+        ctx.diagnostics.push(Diagnostic::warning(msg, 3));
+    }
+    if held.hidden_runs > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} hidden run(s) not shown (Word's hidden text, as with hidden text \
+                 turned off); they are kept in the .docx on save",
+                held.hidden_runs
+            ),
+            3,
+        ));
+    }
+    if held.content_controls > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} content control(s) kept as plain content: their text shows, the \
+                 controls stay in the .docx on save, and an edit of text inside one \
+                 is refused",
+                held.content_controls
             ),
             3,
         ));
@@ -944,6 +1001,26 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     };
     let section = sections[0].clone();
     let styles = ctx.ordered_styles();
+    // The "Word theme" group: the scheme's colours, then every theme
+    // reference the document uses (tints, shades, text and background).
+    let color_groups = if doc.theme.is_some() {
+        vec![ir::LoweredColorGroup {
+            id: "ColorGroup/docx-word-theme".into(),
+            name: "Word theme".into(),
+            members: ctx
+                .swatches
+                .iter()
+                .filter(|s| s.theme.is_some())
+                .map(|s| s.id.clone())
+                .collect(),
+        }]
+    } else {
+        Vec::new()
+    };
+    let theme_fonts = doc.theme.as_ref().map(|t| ir::LoweredThemeFonts {
+        major: t.major.latin.clone(),
+        minor: t.minor.latin.clone(),
+    });
 
     LoweredDoc {
         swatches: ctx.swatches,
@@ -953,7 +1030,36 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         sections,
         even_and_odd_headers: doc.even_and_odd_headers,
         diagnostics: ctx.diagnostics,
+        color_groups,
+        theme_fonts,
     }
+}
+
+/// The swatch token of a theme colour reference (doc ADR 609):
+/// `Color/docx-theme-accent1`, `…-accent1-tint-99`, `…-accent1-shade-BF`.
+pub fn theme_swatch_token(r: &docx_core::ThemeColorRef) -> String {
+    let mut id = format!("Color/docx-theme-{}", r.slot);
+    if let Some(t) = r.tint {
+        id.push_str(&format!("-tint-{}", docx_core::ThemeColorRef::hex_byte(t)));
+    }
+    if let Some(s) = r.shade {
+        id.push_str(&format!("-shade-{}", docx_core::ThemeColorRef::hex_byte(s)));
+    }
+    id
+}
+
+/// The swatch name Word's colour picker gives a theme colour reference:
+/// `Accent 1`, `Accent 1, Lighter 40%`, `Accent 1, Darker 25%`.
+pub fn theme_swatch_name(r: &docx_core::ThemeColorRef) -> String {
+    let mut name = docx_core::theme::theme_color_name(&r.slot);
+    let pct = |v: u8| ((1.0 - v as f32 / 255.0) * 100.0).round() as i32;
+    if let Some(t) = r.tint {
+        name.push_str(&format!(", Lighter {}%", pct(t)));
+    }
+    if let Some(s) = r.shade {
+        name.push_str(&format!(", Darker {}%", pct(s)));
+    }
+    name
 }
 
 /// Mutable lowering state: the style table (id -> def, plus insertion order),
@@ -1061,7 +1167,7 @@ impl Lowering {
         let mut para = defaults.para.clone();
         para.widow_control.get_or_insert(true);
         let mut props = self.para_props(&para);
-        props.extend(self.run_props(&defaults.run));
+        props.extend(self.run_props(&defaults.run, defaults.run.size_half_pts));
         // Word's own defaults where docDefaults is silent, which are not the
         // engine's: 10 pt type (the engine's is 12 pt) and no automatic
         // hyphenation unless the settings turn it on (the engine's is on).
@@ -1071,12 +1177,11 @@ impl Lowering {
         props.push(boolean("paragraphHyphenation", self.auto_hyphenation));
         // Word breaks a paragraph's lines first-fit, one line at a time; the
         // engine's default (InDesign's Paragraph Composer) weighs the whole
-        // paragraph and often breaks a word earlier. The Adobe Single-line
-        // Composer is the native first-fit. Every paragraph style lowered
-        // from Word roots here, so all of them inherit it (an engine before
-        // protocol 65 refuses the path; the style batch then applies op by
-        // op and says so).
-        props.push(text(PARAGRAPH_COMPOSER, SINGLE_LINE_COMPOSER));
+        // paragraph and often breaks a word earlier. The engine's Word
+        // first-fit composer breaks the way Word does (ADR 617). Every
+        // paragraph style lowered from Word roots here, so all of them
+        // inherit it.
+        props.push(text(PARAGRAPH_COMPOSER, WORD_FIRST_FIT_COMPOSER));
         // Word sets text without pair kerning and without ligatures unless
         // a document asks (`w:kern`, `w14:ligatures`, neither imported yet);
         // the engine's defaults are InDesign's, both on. Compared with Word
@@ -1164,8 +1269,30 @@ impl Lowering {
             name: format!("docx {hex}"),
             space: "RGB".into(),
             value: vec![r, g, b],
+            theme: None,
         });
         self.swatch_index.insert(hex.to_string(), id.clone());
+        id
+    }
+
+    /// Register a theme colour reference resolved to `hex` and return its
+    /// swatch token ([`theme_swatch_token`]).
+    fn theme_swatch_for(&mut self, r: &docx_core::ThemeColorRef, hex: &str) -> String {
+        let id = theme_swatch_token(r);
+        if self.swatches.iter().any(|s| s.id == id) {
+            return id;
+        }
+        let (red, green, blue) = parse_hex(hex).unwrap_or((0.0, 0.0, 0.0));
+        self.swatches.push(LoweredSwatch {
+            id: id.clone(),
+            name: theme_swatch_name(r),
+            space: "RGB".into(),
+            value: vec![red, green, blue],
+            theme: Some(ir::SwatchTheme {
+                color: r.clone(),
+                rgb: hex.to_ascii_uppercase(),
+            }),
+        });
         id
     }
 
@@ -1193,7 +1320,8 @@ impl Lowering {
                         props.push(len("characterLeading", pt));
                         self.style_leading.insert(id.clone(), pt);
                     }
-                    props.extend(self.run_props(&s.run));
+                    let size = self.resolve_face(None, Some(&s.style_id)).1;
+                    props.extend(self.run_props(&s.run, size));
                     self.record_style(LoweredStyle {
                         id,
                         name: s.name.clone().unwrap_or_else(|| s.style_id.clone()),
@@ -1207,7 +1335,14 @@ impl Lowering {
                     });
                 }
                 StyleKind::Character => {
-                    let props = self.run_props(&s.run);
+                    // A character style's spacing at its own size, else the
+                    // document's (the paragraph it lands in is not known).
+                    let size = self
+                        .style_chain(Some(&s.style_id))
+                        .iter()
+                        .find_map(|st| st.run.size_half_pts)
+                        .or(self.word_defaults.run.size_half_pts);
+                    let props = self.run_props(&s.run, size);
                     self.record_style(LoweredStyle {
                         id: format!("{CHAR_PREFIX}{}", sanitize(&s.style_id)),
                         name: s.name.clone().unwrap_or_else(|| s.style_id.clone()),
@@ -1346,9 +1481,8 @@ impl Lowering {
         // clips the picture). The engine (InDesign's rule, core `17d3d3d`)
         // grows a line for its object only under AUTO leading; under a fixed
         // one the object overlaps the lines above. So a body paragraph with
-        // a picture takes auto leading, which a leading of 0 asks for. Its
-        // text lines then step 1.2 x their size rather than Word's pitch:
-        // close, and nothing for a picture alone in its paragraph.
+        // a picture takes auto leading, which a leading of 0 asks for, at
+        // the percentage that makes its text lines step Word's pitch.
         let exact = {
             let style = self.style_of(p).map(str::to_owned);
             self.resolve_spacing(p.props.line_spacing, style.as_deref())
@@ -1358,6 +1492,19 @@ impl Lowering {
             can_carry.is_some() && !exact && p.runs.iter().any(|r| !r.images.is_empty());
         if grows_for_picture {
             props.push(len("characterLeading", 0.0));
+            // Auto leading scaled to Word's pitch, so the paragraph's text
+            // lines keep Word's step (13.8 pt for 12 pt Times New Roman, not
+            // 1.2 x 12) while the picture's line still grows to the picture
+            // (ADR 617).
+            let style = self.style_of(p).map(str::to_owned);
+            let first = p.runs.iter().find(|r| !r.text.is_empty());
+            let size_pt = self
+                .resolve_face(first, style.as_deref())
+                .1
+                .map_or(10.0, |h| h as f32 / 2.0);
+            if let Some(pitch) = self.paragraph_pitch(p).filter(|_| size_pt > 0.0) {
+                props.push(len("paragraphAutoLeading", pitch / size_pt * 100.0));
+            }
         } else if let Some(pt) = self.paragraph_pitch(p) {
             let inherited = self
                 .para_base(explicit.clone())
@@ -1520,13 +1667,14 @@ impl Lowering {
         } else {
             self.run_pitches(p)
         };
+        let run_style = self.style_of(p).map(str::to_string);
         let mut runs: Vec<LoweredRun> = p
             .runs
             .iter()
             .filter(|r| !r.text.is_empty())
             .enumerate()
             .map(|(i, r)| {
-                let mut run = self.lower_run(r);
+                let mut run = self.lower_run(r, run_style.as_deref());
                 if let Some(pt) = run_leadings.get(i).copied().flatten() {
                     run.char_style_id = Some(self.synthesize(
                         StyleCollection::Character,
@@ -1623,7 +1771,7 @@ impl Lowering {
         )
     }
 
-    fn lower_run(&mut self, r: &Run) -> LoweredRun {
+    fn lower_run(&mut self, r: &Run, para_style: Option<&str>) -> LoweredRun {
         for sym in &r.symbols {
             let font = sym.font.clone().unwrap_or_else(|| "no font".into());
             if sym.char.is_some() {
@@ -1637,7 +1785,8 @@ impl Lowering {
             .style_id
             .as_ref()
             .map(|id| format!("{CHAR_PREFIX}{}", sanitize(id)));
-        let mut props = self.run_props(&r.props);
+        let size = self.resolve_face(Some(r), para_style).1;
+        let mut props = self.run_props(&r.props, size);
 
         // A hyperlink run gets the conventional look — blue + underline — unless
         // the run already sets those directly. The blue/underline is the
@@ -2447,7 +2596,11 @@ impl Lowering {
             .collect()
     }
 
-    fn run_props(&mut self, r: &RunProps) -> Vec<StyleProp> {
+    /// A run's Word properties as engine style properties. `size_half_pts`
+    /// is the size the run resolves to (its own, its styles', the
+    /// document's), which Word's absolute character spacing is relative to
+    /// as the engine's tracking (1/1000 em).
+    fn run_props(&mut self, r: &RunProps, size_half_pts: Option<u32>) -> Vec<StyleProp> {
         let mut out = Vec::new();
         if let Some(font) = &r.font {
             out.push(StyleProp {
@@ -2472,7 +2625,10 @@ impl Lowering {
             out.push(len("characterFontSize", half_pt_to_pt(half)));
         }
         if let Some(hex) = &r.color {
-            let swatch = self.swatch_for(hex);
+            let swatch = match &r.theme_color {
+                Some(t) => self.theme_swatch_for(t, hex),
+                None => self.swatch_for(hex),
+            };
             out.push(StyleProp {
                 path: "characterFillColor".into(),
                 value: PropValue::ColorRef(swatch),
@@ -2511,8 +2667,27 @@ impl Lowering {
         if let Some(half) = r.baseline_half_pts {
             out.push(len("characterBaselineShift", half as f32 / 2.0));
         }
+        if let Some(tw) = r.spacing_twips {
+            let size_pt = size_half_pts.map_or(10.0, half_pt_to_pt);
+            out.push(len("characterTracking", tracking_of_twips(tw, size_pt)));
+        }
         out
     }
+}
+
+/// Word's character spacing (`w:spacing/@w:val`, twentieths of a point) as
+/// the engine's tracking (thousandths of an em) at `size_pt`.
+pub fn tracking_of_twips(twips: i32, size_pt: f32) -> f32 {
+    if size_pt <= 0.0 {
+        return 0.0;
+    }
+    twips as f32 / 20.0 / size_pt * 1000.0
+}
+
+/// The engine's tracking at `size_pt` as Word's character spacing in
+/// twentieths of a point (the inverse of [`tracking_of_twips`]).
+pub fn twips_of_tracking(tracking: f32, size_pt: f32) -> i32 {
+    (tracking / 1000.0 * size_pt * 20.0).round() as i32
 }
 
 /// A Word tab stop's `w:val` as the engine's IDML `Alignment` (and its
@@ -2811,6 +2986,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             }));
         }
@@ -2867,6 +3043,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             })
         };
@@ -2934,6 +3111,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             }));
         }
@@ -2970,6 +3148,7 @@ mod tests {
                     mark_half_pts: None,
                     source_para_ord: 0,
                     source_cell: None,
+                    held: Default::default(),
                     bookmarks: Vec::new(),
                 }],
                 grid_span: 1,
@@ -2984,6 +3163,7 @@ mod tests {
                 column_widths: vec![2000],
                 rows,
                 cell_margins: docx_core::CellMargins::default(),
+                content_control_rows: false,
             }));
             let l = lower(&doc);
             match &l.story.blocks[0] {
@@ -3014,6 +3194,7 @@ mod tests {
                 mark_half_pts: size,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             }));
         }
@@ -3096,6 +3277,7 @@ mod tests {
             mark_half_pts: None,
             source_para_ord: 0,
             source_cell: None,
+            held: Default::default(),
             bookmarks: Vec::new(),
         }));
 
@@ -3256,6 +3438,7 @@ mod tests {
                 right: Some(60),
                 ..Default::default()
             },
+            content_control_rows: false,
         }));
         let l = lower(&doc);
         let LoweredBlock::Table(t) = &l.story.blocks[0] else {
@@ -3479,13 +3662,14 @@ mod tests {
         );
     }
 
-    /// Word breaks lines first-fit; the native analogue is the Adobe
-    /// Single-line Composer. Every paragraph style lowered from Word roots
+    /// Word breaks lines first-fit; the engine's Word first-fit composer
+    /// does the same (ADR 617). Every paragraph style lowered from Word roots
     /// in the docDefaults base style, which selects it, so every Word
     /// paragraph (body, headings, list items, synthesized direct formatting)
     /// inherits it.
     #[test]
-    fn every_word_paragraph_style_inherits_the_single_line_composer__feat__plugin_doc_read_path() {
+    fn every_word_paragraph_style_inherits_the_word_first_fit_composer__feat__plugin_doc_read_path()
+    {
         let mut doc = DocxDocument::default();
         doc.styles.styles.push(Style {
             style_id: "Normal".into(),
@@ -3525,7 +3709,7 @@ mod tests {
         let root = by_id[format!("{PARA_PREFIX}Default").as_str()];
         assert_eq!(
             composer(root),
-            Some(PropValue::Text(SINGLE_LINE_COMPOSER.into()))
+            Some(PropValue::Text(WORD_FIRST_FIT_COMPOSER.into()))
         );
         // Every paragraph style chains to it, and none overrides it.
         for s in l

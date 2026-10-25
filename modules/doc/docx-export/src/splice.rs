@@ -33,7 +33,7 @@ use quick_xml::Reader;
 use paged_ooxml::xml::{attr_raw as attr, local_name};
 
 use crate::edit::RunFormat;
-use crate::rpr::{merge_rpr, render_text, RunSpecials, SpecialSource};
+use crate::rpr::{merge_rpr, render_text_from, RunSpecials, SpecialSource};
 use docx_core::{LINE_BREAK, SOFT_HYPHEN};
 
 /// A run to patch, addressed by source ordinals + the pre-rendered replacements.
@@ -65,6 +65,11 @@ pub struct ResolvedTarget {
     /// Split the run into these pieces, each a copy of it carrying its
     /// text (and its look, merged into the copy's `<w:rPr>`).
     pub split: Vec<SplitPiece>,
+    /// Where in `new_text` (char offsets) the children that sit INSIDE the
+    /// run's text (a drawing, a field character, a note reference between
+    /// two of its texts) go, in order. `None`: where the edit leaves them
+    /// ([`inside_offsets`]).
+    pub inside_at: Option<Vec<usize>>,
 }
 
 /// One piece of a split run ([`ResolvedTarget::split`]): its text and, when
@@ -89,6 +94,7 @@ impl ResolvedTarget {
             label: format!("run edit skipped: paragraph {para_ord} run {run_ord}"),
             rpr_merge: None,
             split: Vec::new(),
+            inside_at: None,
         }
     }
 }
@@ -113,6 +119,8 @@ pub struct ResolvedCellTarget {
     pub rpr_merge: Option<(RunFormat, RunFormat)>,
     /// As [`ResolvedTarget::split`].
     pub split: Vec<SplitPiece>,
+    /// All the run's text is gone: as [`ResolvedTarget::delete`].
+    pub delete: bool,
 }
 
 /// A COLUMN-level structural action on one table. Applied to the `<w:tblGrid>`
@@ -135,6 +143,8 @@ pub struct ResolvedRowTarget {
     pub delete: bool,
     /// Pre-rendered `<w:tr>…</w:tr>` fragments to emit after this row's `</w:tr>`.
     pub insert_after: Vec<Vec<u8>>,
+    /// Pre-rendered `<w:tr>…</w:tr>` fragments to emit before this row's `<w:tr>`.
+    pub insert_before: Vec<Vec<u8>>,
 }
 
 /// A paragraph-level structural action, addressed by `<w:p>` ordinal.
@@ -168,10 +178,54 @@ pub struct CellParaAction {
     pub append_runs: Vec<Vec<u8>>,
 }
 
-/// Are we inside a table cell? (The body-paragraph counters must ignore cell
-/// content, and vice versa.)
-fn in_cell(stack: &[Vec<u8>]) -> bool {
-    stack.iter().any(|n| n.as_slice() == b"tc")
+/// Whether the open elements end in `names` (the last one being the parent
+/// of the element at hand).
+fn ends_with(stack: &[Vec<u8>], names: &[&[u8]]) -> bool {
+    stack.len() >= names.len()
+        && stack[stack.len() - names.len()..]
+            .iter()
+            .zip(names)
+            .all(|(a, b)| a.as_slice() == *b)
+}
+
+/// The element at hand is a direct child of a BODY paragraph (`body › p`).
+/// Only those children carry the run and wrapper ordinals the import
+/// records: a paragraph inside a content control, a text box or a cell is
+/// not one, and its runs must not shift the body paragraph's counts.
+fn at_body_para(stack: &[Vec<u8>]) -> bool {
+    ends_with(stack, &[b"body", b"p"])
+}
+
+/// The element at hand is a direct child of a hyperlink / fldSimple that is
+/// itself a direct child of a body paragraph.
+fn at_body_wrapper(stack: &[Vec<u8>]) -> bool {
+    ends_with(stack, &[b"body", b"p", b"hyperlink"])
+        || ends_with(stack, &[b"body", b"p", b"fldSimple"])
+}
+
+/// The element at hand is a direct child of a CELL paragraph (`tc › p`).
+fn at_cell_para(stack: &[Vec<u8>]) -> bool {
+    ends_with(stack, &[b"tc", b"p"])
+}
+
+/// As [`at_body_wrapper`], inside a cell paragraph.
+fn at_cell_wrapper(stack: &[Vec<u8>]) -> bool {
+    ends_with(stack, &[b"tc", b"p", b"hyperlink"]) || ends_with(stack, &[b"tc", b"p", b"fldSimple"])
+}
+
+/// The element at hand sits at body level: a child of `<w:body>`, or of the
+/// content of a body-level block content control (`body › (sdt ›
+/// sdtContent)*`). A table there is one the import counts; one in a text box
+/// or a note is not.
+fn at_body_level(stack: &[Vec<u8>]) -> bool {
+    let Some(i) = stack.iter().position(|n| n.as_slice() == b"body") else {
+        return false;
+    };
+    let rest = &stack[i + 1..];
+    rest.len().is_multiple_of(2)
+        && rest
+            .chunks(2)
+            .all(|c| c[0].as_slice() == b"sdt" && c[1].as_slice() == b"sdtContent")
 }
 
 /// Run-edits-only convenience over [`patch_document_xml_full`] (tests).
@@ -281,11 +335,16 @@ pub fn patch_document_xml_cols(
     let mut open_cell_para: Option<CellParaAction> = None;
     // Column locator: the `<w:gridCol>` index inside the open `<w:tblGrid>`.
     let mut gc_ord: i64 = -1;
-    // `<w:tbl>` nesting depth. A NESTED table's rows/cells sit under their own
-    // `<w:tbl>`, so without this they would be counted against the OUTER table
-    // and an edit aimed at an outer row would land inside the nested one.
-    // Only depth 1 (a body-level table) is addressed.
-    let mut tbl_depth: i32 = 0;
+    // The open `<w:tbl>`s, each marked addressable or not. A NESTED table's
+    // rows/cells sit under their own `<w:tbl>`, so without this they would be
+    // counted against the OUTER table and an edit aimed at an outer row would
+    // land inside the nested one. Only a body-level table with no table open
+    // around it (`top`) is addressed; a table in a text box is not.
+    let mut tbls: Vec<bool> = Vec::new();
+    let top = |tbls: &[bool]| tbls == [true];
+    // Targets the pass met, so one it never met is reported, not dropped.
+    let mut met_runs = vec![false; targets.len()];
+    let mut met_cells = vec![false; cells.len()];
 
     loop {
         // The byte offset of the `<` that begins the event we are about to read
@@ -325,7 +384,7 @@ pub fn patch_document_xml_cols(
                     }
                 }
                 // Increment 3 — wrapper elements whose runs carry their own address.
-                if parent == Some(b"p".as_ref()) && !in_cell(&stack) {
+                if at_body_para(&stack) {
                     if ln == b"hyperlink" {
                         hl_ord += 1;
                         wrap_run_ord = -1;
@@ -337,17 +396,26 @@ pub fn patch_document_xml_cols(
                     }
                 }
                 // A `<w:r>` inside an open wrapper resolves on the wrapper path.
-                if ln == b"r" && open_wrapper.is_some() && parent != Some(b"p".as_ref()) {
+                if ln == b"r" && open_wrapper.is_some() && at_body_wrapper(&stack) {
                     wrap_run_ord += 1;
-                    if let Some(t) = targets.iter().find(|t| {
+                    if let Some(i) = targets.iter().position(|t| {
                         t.wrapper == open_wrapper
                             && t.para_ord as i64 == p_ord
                             && t.run_ord as i64 == wrap_run_ord
                     }) {
+                        met_runs[i] = true;
+                        let t = &targets[i];
+                        if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
+                        {
+                            let _ = reader.read_to_end(QName(&name));
+                            out.extend_from_slice(&src[cursor..event_start]);
+                            cursor = reader.buffer_position() as usize;
+                            continue;
+                        }
                         patch_run(
                             &mut reader,
                             src,
-                            t,
+                            &emptied(t),
                             event_start,
                             &mut out,
                             &mut cursor,
@@ -357,13 +425,18 @@ pub fn patch_document_xml_cols(
                     }
                 }
                 // Increment 3 — replace a targeted paragraph's `<w:pPr>`.
-                if ln == b"pPr" && parent == Some(b"p".as_ref()) && !in_cell(&stack) {
+                if ln == b"pPr" && at_body_para(&stack) {
                     if let Some((_, pt)) = open_para.as_ref() {
                         if let Some(ppr) = pt.new_ppr.clone() {
                             let _ = reader.read_to_end(QName(&name));
                             let end = reader.buffer_position() as usize;
                             out.extend_from_slice(&src[cursor..event_start]);
-                            out.extend_from_slice(&ppr);
+                            // Keep what the edit does not own (numbering,
+                            // borders, line spacing, the section's sectPr …).
+                            out.extend_from_slice(&crate::rpr::merge_ppr(
+                                Some(&src[event_start..end]),
+                                &ppr,
+                            ));
                             cursor = end;
                             ppr_done = true;
                             continue;
@@ -372,20 +445,28 @@ pub fn patch_document_xml_cols(
                 }
                 // --- table-cell locator path (tbl → tr → tc → p → r) ---
                 if ln == b"tbl" {
-                    tbl_depth += 1;
-                    if tbl_depth == 1 {
+                    let addressable = tbls.is_empty() && at_body_level(&stack);
+                    if addressable {
                         tbl_ord += 1;
                         tr_ord = -1;
                     }
+                    tbls.push(addressable);
                 }
-                if ln == b"tblGrid" && parent == Some(b"tbl".as_ref()) && tbl_depth == 1 {
+                if ln == b"tblGrid" && parent == Some(b"tbl".as_ref()) && top(&tbls) {
                     gc_ord = -1;
                 }
-                if ln == b"tr" && parent == Some(b"tbl".as_ref()) && tbl_depth == 1 {
+                if ln == b"tr" && parent == Some(b"tbl".as_ref()) && top(&tbls) {
                     tr_ord += 1;
                     tc_ord = -1;
                     open_row = rows.get(&(tbl_ord as u32, tr_ord as u32)).cloned();
                     if let Some(rt) = open_row.as_ref() {
+                        if !rt.insert_before.is_empty() {
+                            out.extend_from_slice(&src[cursor..event_start]);
+                            for frag in &rt.insert_before {
+                                out.extend_from_slice(frag);
+                            }
+                            cursor = event_start;
+                        }
                         if rt.delete {
                             let _ = reader.read_to_end(QName(&name));
                             let end = reader.buffer_position() as usize;
@@ -399,7 +480,7 @@ pub fn patch_document_xml_cols(
                         }
                     }
                 }
-                if ln == b"tc" && parent == Some(b"tr".as_ref()) && tbl_depth == 1 {
+                if ln == b"tc" && parent == Some(b"tr".as_ref()) && top(&tbls) {
                     tc_ord += 1;
                     cp_ord = -1;
                     // Column ops: the grid is uniform here (guarded upstream), so
@@ -437,7 +518,7 @@ pub fn patch_document_xml_cols(
                         }
                     }
                 }
-                if ln == b"p" && parent == Some(b"tc".as_ref()) && tbl_depth == 1 {
+                if ln == b"p" && parent == Some(b"tc".as_ref()) && top(&tbls) {
                     cp_ord += 1;
                     cr_ord = -1;
                     c_hl_ord = -1;
@@ -463,7 +544,7 @@ pub fn patch_document_xml_cols(
                     }
                 }
                 // A cell paragraph's wrappers, and the runs inside the open one.
-                if parent == Some(b"p".as_ref()) && in_cell(&stack) && tbl_depth == 1 {
+                if at_cell_para(&stack) && top(&tbls) {
                     if ln == b"hyperlink" {
                         c_hl_ord += 1;
                         c_wrap_run_ord = -1;
@@ -477,12 +558,11 @@ pub fn patch_document_xml_cols(
                 }
                 if ln == b"r"
                     && open_cell_wrapper.is_some()
-                    && parent != Some(b"p".as_ref())
-                    && in_cell(&stack)
-                    && tbl_depth == 1
+                    && at_cell_wrapper(&stack)
+                    && top(&tbls)
                 {
                     c_wrap_run_ord += 1;
-                    if let Some(ct) = cells.iter().find(|c| {
+                    if let Some(i) = cells.iter().position(|c| {
                         c.wrapper == open_cell_wrapper
                             && c.table_ord as i64 == tbl_ord
                             && c.row as i64 == tr_ord
@@ -490,22 +570,32 @@ pub fn patch_document_xml_cols(
                             && c.para as i64 == cp_ord
                             && c.run_ord as i64 == c_wrap_run_ord
                     }) {
+                        met_cells[i] = true;
+                        let ct = &cells[i];
                         let t = ResolvedTarget {
                             para_ord: 0,
                             run_ord: 0,
                             new_text: ct.new_text.clone(),
                             new_rpr: ct.new_rpr.clone(),
-                            delete: false,
+                            delete: ct.delete,
                             insert_after: Vec::new(),
                             wrapper: None,
                             label: ct.label.clone(),
                             rpr_merge: ct.rpr_merge.clone(),
                             split: ct.split.clone(),
+                            inside_at: None,
                         };
+                        if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
+                        {
+                            let _ = reader.read_to_end(QName(&name));
+                            out.extend_from_slice(&src[cursor..event_start]);
+                            cursor = reader.buffer_position() as usize;
+                            continue;
+                        }
                         patch_run(
                             &mut reader,
                             src,
-                            &t,
+                            &emptied(&t),
                             event_start,
                             &mut out,
                             &mut cursor,
@@ -514,10 +604,9 @@ pub fn patch_document_xml_cols(
                         continue;
                     }
                 }
-                if ln == b"r" && parent == Some(b"p".as_ref()) && in_cell(&stack) && tbl_depth == 1
-                {
+                if ln == b"r" && at_cell_para(&stack) && top(&tbls) {
                     cr_ord += 1;
-                    if let Some(ct) = cells.iter().find(|c| {
+                    if let Some(i) = cells.iter().position(|c| {
                         c.wrapper.is_none()
                             && c.table_ord as i64 == tbl_ord
                             && c.row as i64 == tr_ord
@@ -525,22 +614,32 @@ pub fn patch_document_xml_cols(
                             && c.para as i64 == cp_ord
                             && c.run_ord as i64 == cr_ord
                     }) {
+                        met_cells[i] = true;
+                        let ct = &cells[i];
                         let t = ResolvedTarget {
                             para_ord: 0,
                             run_ord: 0,
                             new_text: ct.new_text.clone(),
                             new_rpr: ct.new_rpr.clone(),
-                            delete: false,
+                            delete: ct.delete,
                             insert_after: Vec::new(),
                             wrapper: None,
                             label: ct.label.clone(),
                             rpr_merge: ct.rpr_merge.clone(),
                             split: ct.split.clone(),
+                            inside_at: None,
                         };
+                        if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
+                        {
+                            let _ = reader.read_to_end(QName(&name));
+                            out.extend_from_slice(&src[cursor..event_start]);
+                            cursor = reader.buffer_position() as usize;
+                            continue;
+                        }
                         patch_run(
                             &mut reader,
                             src,
-                            &t,
+                            &emptied(&t),
                             event_start,
                             &mut out,
                             &mut cursor,
@@ -549,7 +648,7 @@ pub fn patch_document_xml_cols(
                         continue;
                     }
                 }
-                if ln == b"r" && parent == Some(b"p".as_ref()) && !in_cell(&stack) {
+                if ln == b"r" && at_body_para(&stack) {
                     r_ord += 1;
                     // A pending pPr insert + prepends land before the first run.
                     if let Some((_, pt)) = open_para.as_ref() {
@@ -572,9 +671,16 @@ pub fn patch_document_xml_cols(
                             prepended = true;
                         }
                     }
-                    if let Some(t) = find_target(targets, p_ord, r_ord) {
+                    if let Some(i) = targets.iter().position(|t| {
+                        t.wrapper.is_none()
+                            && t.para_ord as i64 == p_ord
+                            && t.run_ord as i64 == r_ord
+                    }) {
+                        met_runs[i] = true;
+                        let t = &targets[i];
                         let run_start = event_start;
-                        if t.delete {
+                        if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
+                        {
                             let _ = reader.read_to_end(QName(&name));
                             let end = reader.buffer_position() as usize;
                             out.extend_from_slice(&src[cursor..run_start]);
@@ -588,7 +694,7 @@ pub fn patch_document_xml_cols(
                         patch_run(
                             &mut reader,
                             src,
-                            t,
+                            &emptied(t),
                             run_start,
                             &mut out,
                             &mut cursor,
@@ -610,7 +716,7 @@ pub fn patch_document_xml_cols(
             Ok(Event::Empty(e)) => {
                 let ln = local_name(e.name().as_ref()).to_vec();
                 let parent = stack.last().map(Vec::as_slice);
-                if ln == b"gridCol" && parent == Some(b"tblGrid".as_ref()) && tbl_depth == 1 {
+                if ln == b"gridCol" && parent == Some(b"tblGrid".as_ref()) && top(&tbls) {
                     gc_ord += 1;
                     if let Some(action) = columns.get(&(tbl_ord as u32)) {
                         let end = reader.buffer_position() as usize;
@@ -638,11 +744,35 @@ pub fn patch_document_xml_cols(
                     fld_ord = -1;
                     open_wrapper = None;
                 }
-                if ln == b"r" && parent == Some(b"p".as_ref()) {
-                    r_ord += 1; // an empty `<w:r/>` has no text/rPr to patch
+                // An empty `<w:r/>` has no text/rPr to patch, but it counts,
+                // as it does in the import; so does an empty wrapper.
+                if ln == b"r" {
+                    if at_body_para(&stack) {
+                        r_ord += 1;
+                    } else if at_body_wrapper(&stack) && open_wrapper.is_some() {
+                        wrap_run_ord += 1;
+                    } else if at_cell_para(&stack) && top(&tbls) {
+                        cr_ord += 1;
+                    } else if at_cell_wrapper(&stack) && open_cell_wrapper.is_some() && top(&tbls) {
+                        c_wrap_run_ord += 1;
+                    }
+                }
+                if at_body_para(&stack) {
+                    if ln == b"hyperlink" {
+                        hl_ord += 1;
+                    } else if ln == b"fldSimple" {
+                        fld_ord += 1;
+                    }
+                }
+                if at_cell_para(&stack) && top(&tbls) {
+                    if ln == b"hyperlink" {
+                        c_hl_ord += 1;
+                    } else if ln == b"fldSimple" {
+                        c_fld_ord += 1;
+                    }
                 }
                 // An empty cell paragraph (`<w:p/>`) counts like any other.
-                if ln == b"p" && parent == Some(b"tc".as_ref()) && tbl_depth == 1 {
+                if ln == b"p" && parent == Some(b"tc".as_ref()) && top(&tbls) {
                     cp_ord += 1;
                     cr_ord = -1;
                     open_cell_para = None;
@@ -683,17 +813,23 @@ pub fn patch_document_xml_cols(
                 let ln = local_name(e.name().as_ref()).to_vec();
                 stack.pop();
                 if ln == b"tbl" {
-                    tbl_depth -= 1;
+                    tbls.pop();
                 }
+                // Only the wrapper that opened closes it (one nested in a
+                // content control or another wrapper never opened one).
                 if ln == b"hyperlink" || ln == b"fldSimple" {
-                    open_wrapper = None;
-                    open_cell_wrapper = None;
+                    if at_body_para(&stack) {
+                        open_wrapper = None;
+                    }
+                    if at_cell_para(&stack) {
+                        open_cell_wrapper = None;
+                    }
                 }
                 // A cell paragraph closes: its appended runs go before its
                 // `</w:p>`, the paragraphs queued after it after.
                 if ln == b"p"
                     && stack.last().map(Vec::as_slice) == Some(b"tc".as_ref())
-                    && tbl_depth == 1
+                    && top(&tbls)
                 {
                     if let Some(a) = open_cell_para.take() {
                         out.extend_from_slice(&src[cursor..event_start]);
@@ -741,6 +877,17 @@ pub fn patch_document_xml_cols(
     }
 
     out.extend_from_slice(&src[cursor..]);
+    // A target the pass never met is not silently dropped.
+    for (t, met) in targets.iter().zip(&met_runs) {
+        if !met {
+            refusals.push(format!("{}: its run is not in the document part", t.label));
+        }
+    }
+    for (c, met) in cells.iter().zip(&met_cells) {
+        if !met {
+            refusals.push(format!("{}: its run is not in the document part", c.label));
+        }
+    }
     (out, refusals)
 }
 
@@ -983,6 +1130,9 @@ pub fn clone_cell_paragraph(
     path: docx_core::CellPath,
     text: &str,
     last_run: bool,
+    base: Option<&RunFormat>,
+    pieces: &[crate::edit::RunPiece],
+    new_ppr: Option<&[u8]>,
 ) -> Option<Vec<u8>> {
     let (start, end) = cell_paragraph_range(src, path)?;
     let (ppr, runs) = paragraph_parts(&src[start..end]);
@@ -990,8 +1140,27 @@ pub fn clone_cell_paragraph(
         .copied()
         .flatten();
     let mut out = b"<w:p>".to_vec();
-    out.extend_from_slice(ppr.unwrap_or_default());
-    if !text.is_empty() {
+    match new_ppr {
+        // Its own paragraph look over the copied `<w:pPr>`.
+        Some(new) => out.extend_from_slice(&crate::rpr::merge_ppr(ppr, new)),
+        None => out.extend_from_slice(ppr.unwrap_or_default()),
+    }
+    if let (Some(base), false) = (base, pieces.is_empty()) {
+        // The paragraph's runs as the canvas made them, each the copied
+        // `<w:rPr>` with the piece's look merged in.
+        for piece in pieces.iter().filter(|p| !p.text.is_empty()) {
+            out.extend_from_slice(b"<w:r>");
+            let merged = piece.format.as_ref().and_then(|f| merge_rpr(rpr, base, f));
+            match merged {
+                // A look with nothing left to say needs no `<w:rPr>`.
+                Some(m) if m.as_slice() == b"<w:rPr></w:rPr>" => {}
+                Some(m) => out.extend_from_slice(&m),
+                None => out.extend_from_slice(rpr.unwrap_or_default()),
+            }
+            out.extend_from_slice(&crate::rpr::render_wt(&piece.text));
+            out.extend_from_slice(b"</w:r>");
+        }
+    } else if !text.is_empty() {
         out.extend_from_slice(b"<w:r>");
         out.extend_from_slice(rpr.unwrap_or_default());
         out.extend_from_slice(&crate::rpr::render_wt(text));
@@ -999,12 +1168,6 @@ pub fn clone_cell_paragraph(
     }
     out.extend_from_slice(b"</w:p>");
     Some(out)
-}
-
-fn find_target(targets: &[ResolvedTarget], p: i64, r: i64) -> Option<&ResolvedTarget> {
-    targets
-        .iter()
-        .find(|t| t.wrapper.is_none() && t.para_ord as i64 == p && t.run_ord as i64 == r)
 }
 
 /// What a run child is to the run's text.
@@ -1085,7 +1248,7 @@ fn wt_text(reader: &mut Reader<&[u8]>) -> String {
 /// is refused. `<w:lastRenderedPageBreak/>` is only Word's layout cache, so
 /// it may move. And content the import drops ([`Special::Unplaceable`]) is refused
 /// wherever it sits.
-fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> {
+fn scan_run(src: &[u8], run_open_end: usize) -> Result<ScannedRun<'_>, String> {
     let body = &src[run_open_end..];
     let mut reader = Reader::from_reader(body);
     reader.config_mut().trim_text(false);
@@ -1101,7 +1264,8 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
     let mut pieces: Vec<Piece<'_>> = Vec::new();
     let mut first_text: Option<usize> = None;
     let mut last_text: Option<usize> = None;
-    let mut opaque: Vec<(usize, String)> = Vec::new();
+    let mut opaque: Vec<(usize, String, usize)> = Vec::new();
+    let mut chars = 0usize;
     let mut k = 0usize;
     loop {
         let start = reader.buffer_position() as usize;
@@ -1117,7 +1281,9 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
         let mut text_bearing = false;
         if ln == b"t" {
             if !empty {
-                pieces.push(Piece::Text(wt_text(&mut reader)));
+                let t = wt_text(&mut reader);
+                chars += t.chars().count();
+                pieces.push(Piece::Text(t));
             }
             text_bearing = true;
         } else {
@@ -1128,6 +1294,7 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
             let kind = special(&e);
             if let Special::Char(c) = kind {
                 pieces.push(Piece::Element(c, bytes));
+                chars += 1;
                 text_bearing = true;
             } else if matches!(kind, Special::Unplaceable) {
                 return Err(format!(
@@ -1137,7 +1304,7 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
                     String::from_utf8_lossy(bytes)
                 ));
             } else if ln != b"rPr" && ln != b"lastRenderedPageBreak" {
-                opaque.push((k, String::from_utf8_lossy(&name).into_owned()));
+                opaque.push((k, String::from_utf8_lossy(&name).into_owned(), chars));
             }
         }
         if text_bearing {
@@ -1145,14 +1312,23 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
             last_text = Some(k);
         }
     }
-    if let (Some(first), Some(last)) = (first_text, last_text) {
-        if let Some((_, name)) = opaque.iter().find(|(k, _)| first < *k && *k < last) {
-            return Err(format!(
-                "its <{name}> sits inside the run's text, and the edited text has no \
-                 place for it"
-            ));
-        }
-    }
+    // The children between two of the run's texts: the edited text is
+    // written around them (`splice_run`).
+    let inside: Vec<(usize, usize)> = match (first_text, last_text) {
+        (Some(first), Some(last)) => opaque
+            .iter()
+            .filter(|(k, _, _)| first < *k && *k < last)
+            .map(|(k, _, at)| (*k, *at))
+            .collect(),
+        _ => Vec::new(),
+    };
+    let old_text: String = pieces
+        .iter()
+        .map(|p| match p {
+            Piece::Text(t) => t.clone(),
+            Piece::Element(c, _) => c.to_string(),
+        })
+        .collect();
     let tracked = |c: char| {
         crate::rpr::word_element(c).is_some()
             || pieces
@@ -1170,7 +1346,48 @@ fn scan_run(src: &[u8], run_open_end: usize) -> Result<RunSpecials<'_>, String> 
             Piece::Element(c, bytes) => specials.push(*c, SpecialSource::Element(bytes)),
         }
     }
-    Ok(specials)
+    Ok(ScannedRun {
+        specials,
+        inside,
+        old_text,
+    })
+}
+
+/// What [`scan_run`] learns of a run: how it writes its special characters,
+/// the children inside its text (`(child ordinal, char offset in the old
+/// text)`), and its old text.
+struct ScannedRun<'a> {
+    specials: RunSpecials<'a>,
+    inside: Vec<(usize, usize)>,
+    old_text: String,
+}
+
+/// Where children at `at` (char offsets into `old`) go in `new`: a child
+/// before the edited span keeps its offset, one after it moves with the
+/// text after it, one inside it goes after the inserted text.
+pub(crate) fn inside_offsets(old: &str, new: &str, at: &[usize]) -> Vec<usize> {
+    let a: Vec<char> = old.chars().collect();
+    let b: Vec<char> = new.chars().collect();
+    let prefix = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let max_suffix = a.len().min(b.len()) - prefix;
+    let suffix = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take(max_suffix)
+        .take_while(|(x, y)| x == y)
+        .count();
+    at.iter()
+        .map(|&o| {
+            if o <= prefix {
+                o
+            } else if o >= a.len() - suffix {
+                o + b.len() - a.len()
+            } else {
+                b.len() - suffix
+            }
+        })
+        .collect()
 }
 
 /// Copy the rest of the run verbatim: consume its children up to `</w:r>`
@@ -1258,10 +1475,12 @@ fn patch_run(
 /// Replace one `<w:r>` by its pieces ([`ResolvedTarget::split`]): each a
 /// copy of the run — its start tag, its `<w:rPr>`, its other children —
 /// with the piece's text spliced in as an edit of the run would be, and the
-/// piece's look merged into the copy's `<w:rPr>`. Only a run of text is
-/// split: one holding anything else (a drawing, a field character, a note
-/// reference) would have it copied into every piece, so it is left as it
-/// was and the refusal is recorded, as is any piece's own refusal.
+/// piece's look merged into the copy's `<w:rPr>`. A child that is not text
+/// (a drawing, a field character, a note reference) is kept once, in the
+/// piece at its place: one before the run's text goes with the first piece,
+/// one after it with the last ([`run_children`]). One inside the text goes
+/// to the piece its place in the new text falls in, at that place (doc ADR
+/// 610). A piece's own refusal leaves the run as it was.
 fn split_run(
     reader: &mut Reader<&[u8]>,
     src: &[u8],
@@ -1275,17 +1494,68 @@ fn split_run(
     skip_run(reader);
     let end = reader.buffer_position() as usize;
     let run = &src[run_start..end];
-    if let Some(other) = non_text_child(&src[run_open_end..end]) {
-        refusals.push(format!(
-            "{}: the run holds a <{other}>, which splitting it would copy into every part",
-            t.label
-        ));
-        return;
+    let open_len = run_open_end - run_start;
+    let children = run_children(&src[run_open_end..end]);
+    // A child inside the run's text goes to the piece its place in the new
+    // text falls in, at that place (`inside_offsets`).
+    let mut owner: Vec<(usize, usize)> = Vec::new();
+    if children.iter().any(|c| c.place == Place::Inside) {
+        let scanned = match scan_run(src, run_open_end) {
+            Ok(s) => s,
+            Err(reason) => {
+                refusals.push(format!("{}: {reason}", t.label));
+                return;
+            }
+        };
+        let full: String = t.split.iter().map(|p| p.text.as_str()).collect();
+        let at: Vec<usize> = scanned.inside.iter().map(|(_, o)| *o).collect();
+        let total = full.chars().count();
+        let mut starts = Vec::new();
+        let mut n = 0usize;
+        for p in &t.split {
+            starts.push(n);
+            n += p.text.chars().count();
+        }
+        for g in inside_offsets(&scanned.old_text, &full, &at) {
+            // At a boundary between two pieces it stays with the text
+            // before it (a note reference follows its word).
+            let i = if g >= total {
+                t.split.len().saturating_sub(1)
+            } else {
+                starts.iter().rposition(|&s| s < g).unwrap_or(0)
+            };
+            owner.push((i, g - starts.get(i).copied().unwrap_or(0)));
+        }
     }
+    let last = t.split.len().saturating_sub(1);
     let mut pieces: Vec<u8> = Vec::new();
     let mut refused: Vec<String> = Vec::new();
-    for piece in &t.split {
-        let mut r = Reader::from_reader(run);
+    for (i, piece) in t.split.iter().enumerate() {
+        // The run's bytes without the children another piece keeps.
+        let mut copy: Vec<u8> = Vec::with_capacity(run.len());
+        let mut at = 0usize;
+        let mut inside_k = 0usize;
+        let mut mine: Vec<usize> = Vec::new();
+        for c in &children {
+            let drop = match c.place {
+                Place::Before => i != 0,
+                Place::After => i != last,
+                Place::Inside => {
+                    let (o, local) = owner.get(inside_k).copied().unwrap_or((0, 0));
+                    inside_k += 1;
+                    if o == i {
+                        mine.push(local);
+                    }
+                    o != i
+                }
+            };
+            if drop {
+                copy.extend_from_slice(&run[at..open_len + c.start]);
+                at = open_len + c.end;
+            }
+        }
+        copy.extend_from_slice(&run[at..]);
+        let mut r = Reader::from_reader(copy.as_slice());
         r.config_mut().trim_text(false);
         // The `<w:r …>` start tag.
         if !matches!(r.read_event(), Ok(Event::Start(_))) {
@@ -1297,19 +1567,20 @@ fn split_run(
             new_text: Some(piece.text.clone()),
             rpr_merge: piece.rpr_merge.clone(),
             split: Vec::new(),
+            inside_at: Some(mine),
             ..t.clone()
         };
         let mut c = 0usize;
         splice_run(
             &mut r,
-            run,
+            &copy,
             &sub,
             open_end,
             &mut pieces,
             &mut c,
             &mut refused,
         );
-        pieces.extend_from_slice(&run[c..]);
+        pieces.extend_from_slice(&copy[c..]);
     }
     if !refused.is_empty() {
         refusals.extend(refused);
@@ -1320,17 +1591,61 @@ fn split_run(
     *cursor = end;
 }
 
-/// The first child of a run's content (`body`, after its start tag) that
-/// is neither its `<w:rPr>`, text, a character Word writes as an element,
-/// nor Word's layout cache — what a split would duplicate.
-fn non_text_child(body: &[u8]) -> Option<String> {
+/// Where a run child that is not text sits relative to the run's text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Place {
+    Before,
+    Inside,
+    After,
+}
+
+/// A run whose text is all gone ([`ResolvedTarget::delete`]) is removed
+/// when it holds nothing but text; one holding more (a drawing, a field
+/// character, a note reference) keeps it and is emptied instead, in body
+/// paragraphs and table cells alike: what the text edit did not touch
+/// stays. `t` as patched: emptied when it is a delete, else as it is.
+fn emptied(t: &ResolvedTarget) -> std::borrow::Cow<'_, ResolvedTarget> {
+    if !t.delete {
+        return std::borrow::Cow::Borrowed(t);
+    }
+    let mut e = t.clone();
+    e.delete = false;
+    e.new_text = Some(String::new());
+    std::borrow::Cow::Owned(e)
+}
+
+/// Whether the `<w:r>` whose start tag ends at `open_end` holds a child
+/// that is not text ([`run_children`]).
+fn holds_more_than_text(src: &[u8], open_end: usize) -> bool {
+    !run_children(&src[open_end..]).is_empty()
+}
+
+/// A run child that is not text ([`run_children`]): its byte range within
+/// the run's content and its place.
+struct OpaqueChild {
+    start: usize,
+    end: usize,
+    place: Place,
+}
+
+/// The children of a run's content (`body`, after its start tag) that are
+/// neither its `<w:rPr>`, text, a character Word writes as an element, nor
+/// Word's layout cache — what a split must not duplicate — with their place
+/// relative to the run's text. A run with no text puts them all `Before`.
+fn run_children(body: &[u8]) -> Vec<OpaqueChild> {
     let mut reader = Reader::from_reader(body);
     reader.config_mut().trim_text(false);
+    let mut out: Vec<OpaqueChild> = Vec::new();
+    let mut seen_text = false;
+    // Opaque children after the last text seen so far (they become `Inside`
+    // when text follows them).
+    let mut since_text: Vec<usize> = Vec::new();
     loop {
+        let start = reader.buffer_position() as usize;
         let (e, empty) = match reader.read_event() {
             Ok(Event::Start(e)) => (e.into_owned(), false),
             Ok(Event::Empty(e)) => (e.into_owned(), true),
-            Ok(Event::End(_)) | Ok(Event::Eof) | Err(_) => return None,
+            Ok(Event::End(_)) | Ok(Event::Eof) | Err(_) => break,
             Ok(_) => continue,
         };
         let name = e.name().as_ref().to_vec();
@@ -1338,14 +1653,31 @@ fn non_text_child(body: &[u8]) -> Option<String> {
         if !empty {
             let _ = reader.read_to_end(QName(&name));
         }
-        let plain = ln == b"rPr"
-            || ln == b"t"
-            || ln == b"lastRenderedPageBreak"
-            || matches!(special(&e), Special::Char(_));
-        if !plain {
-            return Some(String::from_utf8_lossy(&name).into_owned());
+        let end = reader.buffer_position() as usize;
+        if ln == b"t" || matches!(special(&e), Special::Char(_)) {
+            if seen_text {
+                for k in since_text.drain(..) {
+                    out[k].place = Place::Inside;
+                }
+            }
+            since_text.clear();
+            seen_text = true;
+        } else if ln != b"rPr" && ln != b"lastRenderedPageBreak" {
+            if seen_text {
+                since_text.push(out.len());
+            }
+            out.push(OpaqueChild {
+                start,
+                end,
+                place: if seen_text {
+                    Place::After
+                } else {
+                    Place::Before
+                },
+            });
         }
     }
+    out
 }
 
 /// Walk one targeted `<w:r>`'s direct children, splicing its `<w:rPr>` and/or
@@ -1378,9 +1710,9 @@ fn splice_run(
     let new_rpr: Option<&[u8]> = merged.as_deref().or(t.new_rpr.as_deref());
     let mut rpr_pending: Option<&[u8]> = new_rpr;
     let mut text_done = false;
-    let originals = if t.new_text.is_some() {
+    let scanned = if t.new_text.is_some() {
         match scan_run(src, run_open_end) {
-            Ok(o) => o,
+            Ok(o) => Some(o),
             Err(reason) => {
                 refusals.push(format!("{}: {reason}", t.label));
                 skip_run(reader);
@@ -1388,17 +1720,72 @@ fn splice_run(
             }
         }
     } else {
-        RunSpecials::default()
+        None
     };
-    let rendered = || render_text(t.new_text.as_deref().unwrap_or(""), &originals);
+    let originals = scanned
+        .as_ref()
+        .map(|s| s.specials.clone())
+        .unwrap_or_default();
+    let new_text = t.new_text.as_deref().unwrap_or("");
+    // The new text in segments, one per stretch between two children inside
+    // it (one segment when there are none).
+    let inside: Vec<usize> = scanned
+        .as_ref()
+        .map(|s| s.inside.iter().map(|(k, _)| *k).collect())
+        .unwrap_or_default();
+    let segments: Vec<String> = match &scanned {
+        Some(sc) if !sc.inside.is_empty() => {
+            let at: Vec<usize> = sc.inside.iter().map(|(_, o)| *o).collect();
+            let mut cuts = match &t.inside_at {
+                Some(v) if v.len() == at.len() => v.clone(),
+                Some(_) => {
+                    refusals.push(format!(
+                        "{}: the run's content inside its text cannot be placed",
+                        t.label
+                    ));
+                    skip_run(reader);
+                    return;
+                }
+                None => inside_offsets(&sc.old_text, new_text, &at),
+            };
+            let chars: Vec<char> = new_text.chars().collect();
+            let mut prev = 0usize;
+            let mut segs = Vec::new();
+            for c in cuts.iter_mut() {
+                *c = (*c).clamp(prev, chars.len());
+                segs.push(chars[prev..*c].iter().collect());
+                prev = *c;
+            }
+            segs.push(chars[prev..].iter().collect());
+            segs
+        }
+        _ => vec![new_text.to_string()],
+    };
+    let mut seen: Vec<(char, usize)> = Vec::new();
+    let single = segments.len() == 1;
+    let mut render_seg = |i: usize| {
+        render_text_from(
+            segments.get(i).map(String::as_str).unwrap_or(""),
+            &originals,
+            &mut seen,
+            single,
+        )
+    };
+    // The segment the next text-bearing child carries (`None`: dropped).
+    let mut seg: Option<usize> = Some(0);
+    let mut k = 0usize;
 
     loop {
         let child_start = reader.buffer_position() as usize;
         match reader.read_event() {
             Ok(Event::Eof) | Err(_) => return,
             Ok(Event::Start(e)) => {
+                k += 1;
                 let name = e.name().as_ref().to_vec();
                 let ln = local_name(&name).to_vec();
+                if let Some(j) = inside.iter().position(|&i| i == k) {
+                    seg = Some(j + 1);
+                }
                 place_rpr_first(&ln, src, child_start, out, cursor, &mut rpr_pending);
                 if let (b"rPr", Some(rpr)) = (ln.as_slice(), new_rpr) {
                     let _ = reader.read_to_end(QName(&name));
@@ -1417,12 +1804,12 @@ fn splice_run(
                     if let Some(rpr) = rpr_pending.take() {
                         out.extend_from_slice(rpr);
                     }
-                    if !text_done {
-                        out.extend_from_slice(&rendered());
+                    if let Some(i) = seg.take() {
+                        out.extend_from_slice(&render_seg(i));
                         text_done = true;
                     }
-                    // The first text-bearing child carries the whole new text;
-                    // every later one in the same run is dropped (collapsed).
+                    // The first text-bearing child of a segment carries its
+                    // text; every later one is dropped (collapsed).
                     *cursor = end;
                     continue;
                 }
@@ -1430,8 +1817,12 @@ fn splice_run(
                 let _ = reader.read_to_end(QName(&name));
             }
             Ok(Event::Empty(e)) => {
+                k += 1;
                 let ln = local_name(e.name().as_ref()).to_vec();
                 let end = reader.buffer_position() as usize;
+                if let Some(j) = inside.iter().position(|&i| i == k) {
+                    seg = Some(j + 1);
+                }
                 place_rpr_first(&ln, src, child_start, out, cursor, &mut rpr_pending);
                 if let (b"rPr", Some(rpr)) = (ln.as_slice(), new_rpr) {
                     out.extend_from_slice(&src[*cursor..child_start]);
@@ -1443,8 +1834,8 @@ fn splice_run(
                     if let Some(rpr) = rpr_pending.take() {
                         out.extend_from_slice(rpr);
                     }
-                    if !text_done {
-                        out.extend_from_slice(&rendered());
+                    if let Some(i) = seg.take() {
+                        out.extend_from_slice(&render_seg(i));
                         text_done = true;
                     }
                     *cursor = end;
@@ -1462,7 +1853,7 @@ fn splice_run(
                     // last.
                     if t.new_text.is_some() && !text_done {
                         out.extend_from_slice(&src[*cursor..child_start]);
-                        out.extend_from_slice(&rendered());
+                        out.extend_from_slice(&render_seg(0));
                         *cursor = child_start;
                     }
                     return;
@@ -1598,15 +1989,8 @@ mod tests {
     }
 
     #[test]
-    fn content_inside_the_text_refuses_the_edit_and_keeps_the_run() {
-        // A footnote reference between two pieces of text would move behind
-        // the edited text; a `w:sym` with no Unicode equivalent (Wingdings'
-        // Windows logo) has no character to place at all.
-        for run in [
-            r#"<w:r><w:t>a</w:t><w:footnoteReference w:id="1"/><w:t>b</w:t></w:r>"#,
-            r#"<w:r><w:sym w:font="Wingdings" w:char="F0FF"/><w:t>b</w:t></w:r>"#,
-            r#"<w:r><w:t>a</w:t><w:br w:type="page"/><w:t>b</w:t></w:r>"#,
-        ] {
+    fn content_inside_the_text_stays_in_place_and_a_symbol_without_a_character_refuses() {
+        let patch = |run: &str| {
             let src = format!(
                 r#"<w:document xmlns:w="urn:w"><w:body><w:p>{run}</w:p></w:body></w:document>"#
             );
@@ -1622,24 +2006,36 @@ mod tests {
                 &BTreeMap::new(),
                 &BTreeMap::new(),
             );
-            assert_eq!(out, src.as_bytes(), "{run}: the run keeps its bytes");
-            assert_eq!(refused.len(), 1, "{run}");
+            (src, String::from_utf8(out).unwrap(), refused)
+        };
+        // A footnote reference or a page break between two pieces of text:
+        // the whole text changed, so it goes after the new text (doc ADR 610).
+        for (run, kept) in [
+            (
+                r#"<w:r><w:t>a</w:t><w:footnoteReference w:id="1"/><w:t>b</w:t></w:r>"#,
+                r#"<w:footnoteReference w:id="1"/>"#,
+            ),
+            (
+                r#"<w:r><w:t>a</w:t><w:br w:type="page"/><w:t>b</w:t></w:r>"#,
+                r#"<w:br w:type="page"/>"#,
+            ),
+        ] {
+            let (_, out, refused) = patch(run);
+            assert!(refused.is_empty(), "{refused:?}");
             assert!(
-                refused[0].starts_with("run edit skipped: paragraph 0 run 0: "),
-                "{refused:?}"
+                out.contains(&format!(
+                    r#"<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">xy</w:t>{kept}</w:r>"#
+                )),
+                "{out}"
             );
         }
-        // Word's layout cache may move; content outside the text stays put.
-        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:lastRenderedPageBreak/><w:t>a</w:t><w:lastRenderedPageBreak/><w:t>b</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#;
-        let mut t = ResolvedTarget::edit(0, 0);
-        t.new_text = Some("xy".into());
-        t.new_rpr = Some(b"<w:rPr><w:b/></w:rPr>".to_vec());
-        let out = String::from_utf8(patch_document_xml(src, &[t])).unwrap();
-        // The rPr goes FIRST (schema), ahead of the layout cache.
-        assert!(
-            out.contains(r#"<w:r><w:rPr><w:b/></w:rPr><w:lastRenderedPageBreak/><w:t xml:space="preserve">xy</w:t><w:lastRenderedPageBreak/><w:footnoteReference w:id="1"/></w:r>"#),
-            "{out}"
-        );
+        // A `w:sym` with no Unicode equivalent (Wingdings' Windows logo) has
+        // no character to place at all.
+        let (src, out, refused) =
+            patch(r#"<w:r><w:sym w:font="Wingdings" w:char="F0FF"/><w:t>b</w:t></w:r>"#);
+        assert_eq!(out, src, "the run keeps its bytes");
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].starts_with("run edit skipped: paragraph 0 run 0: "));
     }
 
     #[test]
@@ -1664,7 +2060,76 @@ mod tests {
     }
 
     #[test]
-    fn a_split_copies_the_run_per_piece_and_refuses_a_run_holding_more_than_text() {
+    fn an_emptied_run_is_removed_unless_it_holds_more_than_text_in_body_and_cell() {
+        let run_ops =
+            |src: &[u8], body: Option<ResolvedTarget>, cell: Option<ResolvedCellTarget>| {
+                let (out, refused) = patch_document_xml_cols(
+                    src,
+                    &body.into_iter().collect::<Vec<_>>(),
+                    &BTreeMap::new(),
+                    &cell.into_iter().collect::<Vec<_>>(),
+                    &BTreeMap::new(),
+                    &BTreeMap::new(),
+                    &BTreeMap::new(),
+                );
+                assert!(refused.is_empty(), "{refused:?}");
+                String::from_utf8(out).unwrap()
+            };
+        let delete_body = |run: u32| {
+            let mut t = ResolvedTarget::edit(0, run);
+            t.delete = true;
+            t
+        };
+        let delete_cell = |run: u32| ResolvedCellTarget {
+            table_ord: 0,
+            row: 0,
+            cell: 0,
+            para: 0,
+            run_ord: run,
+            wrapper: None,
+            new_text: None,
+            new_rpr: None,
+            label: "cell".into(),
+            rpr_merge: None,
+            split: Vec::new(),
+            delete: true,
+        };
+        // A run of text only: removed, in a body paragraph and in a cell.
+        let body = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>a</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>b</w:t><w:tab/></w:r></w:p></w:body></w:document>"#;
+        assert_eq!(
+            run_ops(body, Some(delete_body(1)), None),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>a</w:t></w:r></w:p></w:body></w:document>"#
+        );
+        let cell = br#"<w:document xmlns:w="urn:w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>a</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>b</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#;
+        assert_eq!(
+            run_ops(cell, None, Some(delete_cell(1))),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>a</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#
+        );
+        // A run holding a note reference keeps it, its text emptied: the
+        // same in both.
+        let body = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>a</w:t><w:footnoteReference w:id="2"/></w:r></w:p></w:body></w:document>"#;
+        assert_eq!(
+            run_ops(body, Some(delete_body(0)), None),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t xml:space="preserve"></w:t><w:footnoteReference w:id="2"/></w:r></w:p></w:body></w:document>"#
+        );
+        let cell = br#"<w:document xmlns:w="urn:w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>a</w:t><w:footnoteReference w:id="2"/></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#;
+        assert_eq!(
+            run_ops(cell, None, Some(delete_cell(0))),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t><w:footnoteReference w:id="2"/></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#
+        );
+        // A body run inside a hyperlink is removed too (it was left as it
+        // was before).
+        let body = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:hyperlink r:id="x"><w:r><w:t>a</w:t></w:r><w:r><w:t>b</w:t></w:r></w:hyperlink></w:p></w:body></w:document>"#;
+        let mut t = delete_body(1);
+        t.wrapper = Some(crate::bindings::Wrapper::Hyperlink(0));
+        assert_eq!(
+            run_ops(body, Some(t), None),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:hyperlink r:id="x"><w:r><w:t>a</w:t></w:r></w:hyperlink></w:p></w:body></w:document>"#
+        );
+    }
+
+    #[test]
+    fn a_split_copies_the_run_per_piece_and_keeps_other_content_once() {
         use crate::edit::RunFormat;
         let bold = RunFormat {
             props: docx_core::RunProps {
@@ -1702,11 +2167,24 @@ mod tests {
             String::from_utf8(out).unwrap(),
             r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r w:rsidR="7"><w:rPr><w:lang w:val="de"/></w:rPr><w:t xml:space="preserve">ab</w:t></w:r><w:r w:rsidR="7"><w:rPr><w:b/><w:lang w:val="de"/></w:rPr><w:t xml:space="preserve">cd</w:t></w:r></w:p></w:body></w:document>"#
         );
-        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>abcd</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#;
+        // A note reference after the text stays once, with the last piece;
+        // a drawing before it with the first.
+        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:drawing>D</w:drawing><w:t>abcd</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#;
         let (out, refused) = split(src);
-        assert_eq!(out, src.to_vec(), "left as it was");
-        assert_eq!(refused.len(), 1);
-        assert!(refused[0].contains("footnoteReference"), "{refused:?}");
+        assert!(refused.is_empty(), "{refused:?}");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:drawing>D</w:drawing><w:t xml:space="preserve">ab</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">cd</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#
+        );
+        // One inside the text goes with the piece at its place: between
+        // `ab` and `cd`, the end of the first piece.
+        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>ab</w:t><w:footnoteReference w:id="1"/><w:t>cd</w:t></w:r></w:p></w:body></w:document>"#;
+        let (out, refused) = split(src);
+        assert!(refused.is_empty(), "{refused:?}");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t xml:space="preserve">ab</w:t><w:footnoteReference w:id="1"/></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">cd</w:t></w:r></w:p></w:body></w:document>"#
+        );
     }
 
     #[test]

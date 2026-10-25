@@ -115,3 +115,10 @@ change its product pages and nothing else (data
 [ADR 560](../../../../modules/data/docs/adr/560-template-fields-are-binding-targets.md)).
 Evidence: `crates/paged-mutate/tests/it/template_policy.rs`
 `a_page_policy_opens_that_page_and_its_copies_and_no_other`.
+
+## Amendment — 2026-10-24: styled values and alternates
+
+A text field may list the character styles and the breaks its value takes, and a character-scope
+`ApplyStyle` in an allowed style needs only `text.edit` on it; an `alternates` field in the
+document's policy grants each member `item.visibility`, and a member's name is the author's:
+[ADR 1017](1017-styled-field-values-and-alternates.md).

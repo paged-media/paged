@@ -220,6 +220,16 @@
       "sites": []
     },
     {
+      "id": "view.dataMarkers",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Show data markers: the data field markers overlay (editor ADR 291)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "dataMarkers: false",
+      "sites": []
+    },
+    {
       "id": "view.screenMode",
       "kind": "view-option",
       "storage": "memory",

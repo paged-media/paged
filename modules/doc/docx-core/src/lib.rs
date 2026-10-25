@@ -36,7 +36,9 @@
 use serde::{Deserialize, Serialize};
 
 pub mod symbols;
+pub mod theme;
 pub use symbols::symbol_char;
+pub use theme::{Shading, Theme, ThemeColorRef, ThemeFonts};
 
 /// A parsed Word document: the body in reading order, the style catalog, and the
 /// sections (page geometry).
@@ -88,6 +90,39 @@ pub struct DocxDocument {
     /// [`Image`]). The lowering reports them.
     #[serde(default)]
     pub unplaced_vml: u32,
+    /// What the body holds that the import shows differently from Word's
+    /// review view (tracked changes, hidden text, content controls). The
+    /// lowering reports it.
+    #[serde(default)]
+    pub held: BodyHeld,
+    /// The document theme (`word/theme/theme1.xml` with `settings.xml`'s
+    /// `w:clrSchemeMapping`), when the package has one (doc ADR 609).
+    /// Theme colour and font references are already resolved through it
+    /// on every [`RunProps`]; the lowering mints its colours as the
+    /// "Word theme" swatch group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<Theme>,
+}
+
+/// Counts of body constructs the import shows in a simplified form, for the
+/// lowering's diagnostics.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BodyHeld {
+    /// Tracked changes (`w:ins`, `w:del`, `w:moveFrom`, `w:moveTo`, a
+    /// paragraph mark's insertion or deletion, `w:rPrChange`,
+    /// `w:pPrChange`): shown as if accepted (insertions as text, deletions
+    /// not at all, the new formatting).
+    pub tracked_changes: u32,
+    /// Paragraphs whose mark is a tracked deletion but that keep content:
+    /// accepting would join them to the next paragraph, which the import
+    /// does not do.
+    pub deleted_marks_kept: u32,
+    /// Runs formatted hidden (`w:vanish`, directly or through their
+    /// character style): not shown, as in Word with hidden text off.
+    pub hidden_runs: u32,
+    /// Content controls (`w:sdt`, run, block, row and cell level) whose
+    /// content is shown as plain content.
+    pub content_controls: u32,
 }
 
 /// A top-level body block.
@@ -153,6 +188,32 @@ pub struct Paragraph {
     /// paragraph by one.
     #[serde(default)]
     pub bookmarks: Vec<String>,
+    /// What this paragraph holds that the canvas does not show or that sits
+    /// on another XML path — what save-back must keep (ADR 602, 2026-10-24
+    /// amendment).
+    #[serde(default)]
+    pub held: ParagraphHeld,
+}
+
+/// A paragraph's held content: the facts save-back needs to refuse an edit
+/// rather than lose something the user never saw.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ParagraphHeld {
+    /// The paragraph sits inside a block-level content control (`w:sdt` →
+    /// `w:sdtContent` → `w:p`, in the body or in a cell), or in a row or
+    /// cell content control: the patcher cannot address it.
+    #[serde(default)]
+    pub in_content_control: bool,
+    /// Runs left out of [`Paragraph::runs`]: tracked deletions and moves
+    /// away (`w:del`, `w:moveFrom`) and hidden runs (`w:vanish`). Their
+    /// bytes stay in the source; deleting the paragraph would remove them.
+    #[serde(default)]
+    pub unshown_runs: u32,
+    /// Its `w:pPr` records a tracked change (`w:pPrChange`, or the mark's
+    /// `w:ins` / `w:del` / `w:moveFrom` / `w:moveTo` / `w:rPrChange`): a
+    /// rewritten `w:pPr` would drop it.
+    #[serde(default)]
+    pub tracked_ppr: bool,
 }
 
 /// A footnote or endnote (`w:footnote` / `w:endnote` in the notes part), keyed by
@@ -210,10 +271,10 @@ pub enum ListKind {
 }
 
 /// Where a run came from in `word/document.xml` — the provenance the M2 save-back
-/// patcher needs to locate the exact `<w:r>` to rewrite. Only a `DirectRun`
-/// (a direct `<w:r>` child of the `<w:p>`, at ordinal `n`) is patchable in the
-/// current increment; runs flattened out of `<w:hyperlink>`/`<w:fldSimple>`/complex
-/// fields sit on a different locator path and are marked non-patchable.
+/// patcher needs to locate the exact `<w:r>` to rewrite: a direct `<w:r>`
+/// child of the `<w:p>`, or one inside a `<w:hyperlink>` / `<w:fldSimple>`
+/// child, each by its ordinal. Runs inside tracked changes and content
+/// controls sit on other paths and are marked so the patcher refuses them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RunSource {
     /// The `n`-th direct `<w:r>` child of the paragraph (0-based). A COMPLEX
@@ -227,6 +288,13 @@ pub enum RunSource {
     /// The `run_ord`-th `<w:r>` inside the `field_ord`-th `<w:fldSimple>` child.
     /// The instruction lives on the wrapper's `w:instr` attribute.
     Field { field_ord: u32, run_ord: u32 },
+    /// Inside a tracked insertion or move (`w:ins` / `w:moveTo`), shown as
+    /// accepted. Not patchable: an edit would have to say whether it is
+    /// itself tracked, and the run sits on another XML path.
+    Tracked,
+    /// Inside a run-level content control (`w:sdt` → `w:sdtContent`), or a
+    /// wrapper the patcher does not walk inside one. Not patchable.
+    ContentControl,
 }
 
 /// A line break inside a paragraph (U+2028 LINE SEPARATOR): what a Word
@@ -745,6 +813,10 @@ pub struct ParaProps {
     pub contextual_spacing: Option<bool>,
     /// `w:tabs` — explicit tab stops (empty = inherit).
     pub tabs: Vec<TabStop>,
+    /// `w:shd` — the paragraph's shading (its fill; doc ADR 609). Read, not
+    /// yet lowered: the engine has no paragraph shading on text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shading: Option<Shading>,
 }
 
 /// A tab stop (`w:tab`).
@@ -781,6 +853,32 @@ pub struct RunProps {
     /// `w:position/@w:val` — baseline shift in half-points (signed; positive
     /// raises).
     pub baseline_half_pts: Option<i32>,
+    /// `w:spacing/@w:val` — character spacing (added after each character)
+    /// in twentieths of a point, signed. The engine's tracking is relative
+    /// (1/1000 em), so the lowering and the save-back convert it at the
+    /// run's effective size.
+    #[serde(default)]
+    pub spacing_twips: Option<i32>,
+    /// `w:color/@w:themeColor` (+ tint, shade): the theme colour [`Self::color`]
+    /// resolves (doc ADR 609). Save-back writes the reference again while
+    /// the colour is unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_color: Option<ThemeColorRef>,
+    /// `w:rFonts/@w:asciiTheme` (else `@w:hAnsiTheme`): the theme font
+    /// [`Self::font`] resolves (`minorHAnsi`, `majorHAnsi`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_theme: Option<String>,
+    /// `w:rFonts/@w:eastAsia`, resolved through `@w:eastAsiaTheme`. Read,
+    /// not yet lowered (the engine has one family per run).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_east_asia: Option<String>,
+    /// `w:rFonts/@w:cs`, resolved through `@w:cstheme`. Read, not lowered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_cs: Option<String>,
+    /// `w:shd` on the run (its fill). Read, not yet lowered: the engine has
+    /// no character shading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shading: Option<Shading>,
 }
 
 /// Paragraph alignment (`w:jc`).
@@ -859,6 +957,11 @@ pub struct Table {
     /// `w:tblPr/w:tblCellMar` — the table's default cell margins (twips).
     #[serde(default)]
     pub cell_margins: CellMargins,
+    /// Some of its rows or cells sit inside content controls (`w:sdt` around
+    /// `w:tr` or `w:tc`): shown as plain rows and cells, but the patcher's row
+    /// and column ordinals skip them, so row and column edits are refused.
+    #[serde(default)]
+    pub content_control_rows: bool,
 }
 
 /// Cell margins in twips, each side as declared (`None` = not declared

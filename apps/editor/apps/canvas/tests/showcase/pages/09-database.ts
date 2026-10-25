@@ -25,7 +25,7 @@
 //   bindings  →  refreshData()  →  lower the bindings into the document
 //
 // A CSV goes in through the sources panel's host file-picker door; the
-// session boots the vendored DuckDB-WASM engine (~36 MiB, a pthread
+// session boots the data engine (the data-js wasm, a
 // Worker) and registers the table. The field-mapping wizard asks the
 // Rust engine for each column's binding EXPRESSION — the bundle never
 // decides the mapping — and the confirmed columns become variable
@@ -62,7 +62,7 @@
 //
 // RECIPE FROM: `tests/journey/plugins/data-render.journey.spec.ts`
 // (import → wire → lower → render), `data.journey.spec.ts` (the honest
-// DuckDB degrade) and `data-barcode.journey.spec.ts` (symbology + the
+// engine degrade) and `data-barcode.journey.spec.ts` (symbology + the
 // `{v, data}` envelope — `{v, payload}` is rejected by the host gate and
 // sinks the whole enclosing batch in silence, which is why that spec
 // exists).
@@ -121,7 +121,7 @@ const STATUS_SLOT: Bounds = [576, 72, 716, 540];
 const HEADING = "Publishing from a database";
 
 const CAPTION =
-  "A CSV registers through the plugin's DuckDB query engine, its columns become " +
+  "A CSV registers through the plugin's query store, its columns become " +
   "bindings with engine-authored expressions, and the resolved values lower into " +
   "the document as native content. The field below is live: it re-resolves against " +
   "the data rather than being pasted in as text.";
@@ -177,7 +177,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   const tap = new ConsoleTap(page, /\[data\]|barcode|lower:|variable "/i);
   let engineNote =
-    "The DuckDB-WASM query engine did not boot in this lane, so nothing was published.";
+    "The data engine did not boot in this lane, so nothing was published.";
   try {
     // ── 1. REGISTER A SOURCE ────────────────────────────────────────
     // The import goes through the host file-picker door
@@ -211,7 +211,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         "unknown";
       notes.push(
         `the CSV source never reached "ready" (engine status "${got}"): the vendored ` +
-          "DuckDB-WASM dist is absent or this context is not cross-origin isolated. " +
+          "data engine wasm is absent. " +
           "No query ran, no binding resolved, and this page claims no data rows.",
       );
       elements.push(await labelFrame(doc, pageId, STATUS_SLOT, engineNote));
@@ -431,7 +431,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       );
       engineNote =
         "The name above is a tagged placeholder field, not pasted text: the engine " +
-        "resolved it from the CSV through DuckDB and a data refresh re-resolves it in " +
+        "resolved it from the CSV through the store and a data refresh re-resolves it in " +
         "place. ";
     } else {
       notes.push(

@@ -1,0 +1,8 @@
+$ paged-node data <TMP>/fixture.paged --data <TMP>/records.csv --table data --limit 2 --format text --plugins=@paged-media/data
+# exit 0
+# stdout
+title	ink
+First	10
+Second	20
+# stderr
+(empty)

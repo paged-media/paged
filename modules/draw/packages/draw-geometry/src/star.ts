@@ -170,9 +170,7 @@ export function flareParts(spec: FlareSpec): FlareParts {
   for (let i = 0; i < ringCount; i++) {
     // Spread along the line (jittered), the LAST ring at the end point.
     const at =
-      i === ringCount - 1
-        ? 1
-        : 0.15 + (0.85 * (i + 0.5 * rand())) / ringCount;
+      i === ringCount - 1 ? 1 : 0.15 + (0.85 * (i + 0.5 * rand())) / ringCount;
     const rr = Math.max(0.5, Math.abs(spec.ringRadius) * (0.2 + 0.8 * rand()));
     rings.push(ellipseToPath(cx + dx * at, cy + dy * at, rr, rr));
   }

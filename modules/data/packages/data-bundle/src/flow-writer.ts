@@ -41,13 +41,18 @@ import type {
 import { BINDING_KEY, makeEnvelope } from "../../data-host-model/src";
 import type { Bounds } from "./merge";
 
-type Block =
+export type FlowBlock =
   | { block: "groupHeader"; text: string; level: number; continued: boolean }
   | { block: "record"; cells: string[]; heightPt: number }
   | { block: "groupFooter"; cells: string[]; heightPt: number };
 
-interface PaginatedFlow {
-  frames: { frame: string; page: string; blocks: Block[]; usedPt: number }[];
+export interface PaginatedFlow {
+  frames: {
+    frame: string;
+    page: string;
+    blocks: FlowBlock[];
+    usedPt: number;
+  }[];
   overflow: boolean;
   placed: number;
   total: number;
@@ -59,7 +64,7 @@ export interface FlowEngine {
 
 /** A paginated frame's text: one paragraph per header, record field line and
  *  footer. A re-emitted header is marked as continued. */
-export function flowFrameText(blocks: readonly Block[]): string {
+export function flowFrameText(blocks: readonly FlowBlock[]): string {
   const lines: string[] = [];
   for (const b of blocks) {
     if (b.block === "groupHeader")
@@ -76,7 +81,51 @@ export interface FlowWriteResult {
   pages: PageId[];
   mutateCalls: number;
   overflow: boolean;
+  /** Records the paginator placed, of how many (0 of 0 before it ran). */
+  placed: number;
+  total: number;
   diagnostics: string[];
+}
+
+/** A page's margin box, page-local `[top, left, bottom, right]` (a margin
+ *  the page does not report counts as none). */
+export function marginBox(page: {
+  sizePt: [number, number];
+  marginTopPt?: number;
+  marginLeftPt?: number;
+  marginBottomPt?: number;
+  marginRightPt?: number;
+}): Bounds {
+  const [pw, ph] = page.sizePt;
+  return [
+    page.marginTopPt ?? 0,
+    page.marginLeftPt ?? 0,
+    ph - (page.marginBottomPt ?? 0),
+    pw - (page.marginRightPt ?? 0),
+  ];
+}
+
+/** Paginate a record flow the way lowering places it: one frame of
+ *  `heightPt` per page, as many as the flow needs (a chain long enough for
+ *  every block to take a frame of its own). The binding's own options
+ *  (repeated and continued headers) apply. */
+export function paginateOverPages(
+  engine: FlowEngine,
+  binding: string,
+  heightPt: number,
+): PaginatedFlow {
+  const probe = engine.lower_record_flow(
+    binding,
+    [{ frame: "all", page: "all", heightPt: Number.MAX_SAFE_INTEGER }],
+    undefined,
+  ) as PaginatedFlow;
+  const blocks = probe.frames.reduce((n, f) => n + f.blocks.length, 0);
+  const chain = Array.from({ length: Math.max(1, blocks) }, (_, i) => ({
+    frame: `f${i}`,
+    page: `p${i}`,
+    heightPt,
+  }));
+  return engine.lower_record_flow(binding, chain, undefined) as PaginatedFlow;
 }
 
 /**
@@ -109,34 +158,12 @@ export async function commitRecordFlow(
       pages: [],
       mutateCalls: 0,
       overflow: false,
+      placed: 0,
+      total: 0,
       diagnostics: ["flow: no start page"],
     };
-  const [pw, ph] = page.sizePt;
-  const box: Bounds = [
-    page.marginTopPt,
-    page.marginLeftPt,
-    ph - page.marginBottomPt,
-    pw - page.marginRightPt,
-  ];
-  const height = box[2] - box[0];
-
-  // A chain long enough for every block to take a frame of its own.
-  const probe = engine.lower_record_flow(
-    binding,
-    [{ frame: "all", page: "all", heightPt: Number.MAX_SAFE_INTEGER }],
-    undefined,
-  ) as PaginatedFlow;
-  const blocks = probe.frames.reduce((n, f) => n + f.blocks.length, 0);
-  const chain = Array.from({ length: Math.max(1, blocks) }, (_, i) => ({
-    frame: `f${i}`,
-    page: `p${i}`,
-    heightPt: height,
-  }));
-  const flow = engine.lower_record_flow(
-    binding,
-    chain,
-    undefined,
-  ) as PaginatedFlow;
+  const box = marginBox(page);
+  const flow = paginateOverPages(engine, binding, box[2] - box[0]);
   if (flow.overflow)
     diagnostics.push(`flow: ${flow.total - flow.placed} record(s) did not fit`);
   const used = flow.frames.length;
@@ -147,6 +174,8 @@ export async function commitRecordFlow(
       pages: [],
       mutateCalls: 0,
       overflow: flow.overflow,
+      placed: flow.placed,
+      total: flow.total,
       diagnostics,
     };
 
@@ -169,6 +198,8 @@ export async function commitRecordFlow(
         pages: [],
         mutateCalls,
         overflow: flow.overflow,
+        placed: flow.placed,
+        total: flow.total,
         diagnostics: [...diagnostics, `flow: adding pages was refused`],
       };
     }
@@ -187,6 +218,8 @@ export async function commitRecordFlow(
       pages: out,
       mutateCalls,
       overflow: flow.overflow,
+      placed: flow.placed,
+      total: flow.total,
       diagnostics: [
         ...diagnostics,
         "flow: the added pages are not where expected",
@@ -228,6 +261,8 @@ export async function commitRecordFlow(
       pages: out,
       mutateCalls,
       overflow: flow.overflow,
+      placed: flow.placed,
+      total: flow.total,
       diagnostics: [...diagnostics, "flow: the frame batch was refused"],
     };
   }
@@ -240,6 +275,8 @@ export async function commitRecordFlow(
     pages: out,
     mutateCalls,
     overflow: flow.overflow,
+    placed: flow.placed,
+    total: flow.total,
     diagnostics,
   };
 }

@@ -61,6 +61,7 @@ import {
 import { dashArrayFrom, MAX_DASH_PAIRS } from "../commands/dash";
 import { supportsDuplicate, DUPLICATE_ENGINE } from "../commands/transform";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
+import { MAX_RASTERIZE_PPI, MIN_RASTERIZE_PPI } from "../commands/rasterize";
 import {
   outlineParamsFrom,
   supportsPathOps,
@@ -185,6 +186,14 @@ const M = defineMessages("draw.pathOptionsPanel", {
   profileStart: "Width at the start (pt)",
   profileMiddle: "Width in the middle (pt)",
   profileEnd: "Width at the end (pt)",
+  ppi: "Resolution (ppi)",
+  background: "Background",
+  transparent: "Transparent",
+  white: "White",
+  rasterizeNote:
+    "Replaces the selection with one image of it at this resolution, effects and text included, cropped to what it draws. The image goes to the front of its layer. One undo step.",
+  rasterizeN:
+    "{count, plural, one {Rasterize # object} other {Rasterize # objects}}",
   title: "Path options",
 });
 
@@ -229,6 +238,9 @@ export const SELECT_SAME_TOLERANCE_NOTE = M.selectSameNote;
 
 /** What the Width profile section says, verbatim (pinned by a test). */
 export const WIDTH_PROFILE_SECTION_NOTE = M.widthProfileNote;
+
+/** What the Rasterize section says, verbatim (pinned by a test). */
+export const RASTERIZE_SECTION_NOTE = M.rasterizeNote;
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -891,6 +903,23 @@ export function makePathOptionsPanel(host: BundleHost): {
               </div>
             </>
           );
+        case "rasterize":
+          return (
+            <>
+              {numberRow("rasterize", "ppi", s.t(M.ppi), {
+                step: 1,
+                min: MIN_RASTERIZE_PPI,
+                max: MAX_RASTERIZE_PPI,
+              })}
+              {selectRow("rasterize", "background", s.t(M.background), [
+                { value: "transparent", label: s.t(M.transparent) },
+                { value: "paper", label: s.t(M.white) },
+              ])}
+              <div style={mutedStyle} data-draw-pathopts-rasterize-note>
+                {s.t(RASTERIZE_SECTION_NOTE)}
+              </div>
+            </>
+          );
       }
     };
 
@@ -910,9 +939,10 @@ export function makePathOptionsPanel(host: BundleHost): {
           const needsSelection = SELECTION_SECTIONS.has(section);
           const selects = section === "selectSameWeight";
           const reflects = section === "reflect";
+          const rasterizes = section === "rasterize";
           // A path operation needs a PATH; Select same needs a reference;
-          // Reflect takes any object (groups included).
-          const have = selects || reflects ? selected : targets;
+          // Reflect and Rasterize take any object (groups included).
+          const have = selects || reflects || rasterizes ? selected : targets;
           return (
             <div
               key={section}
@@ -938,7 +968,7 @@ export function makePathOptionsPanel(host: BundleHost): {
                     <div style={mutedStyle} data-draw-pathopts-needs-selection>
                       {selects
                         ? s.t(M.needReference)
-                        : reflects
+                        : reflects || rasterizes
                           ? s.t(M.needSomething)
                           : s.t(M.needPath)}
                     </div>
@@ -958,9 +988,11 @@ export function makePathOptionsPanel(host: BundleHost): {
                       ? s.t(M.selectMatching)
                       : reflects
                         ? s.t(M.reflectN, { count: selected })
-                        : needsSelection
-                          ? s.t(M.applyToN, { count: targets })
-                          : s.t(M.insert)}
+                        : rasterizes
+                          ? s.t(M.rasterizeN, { count: selected })
+                          : needsSelection
+                            ? s.t(M.applyToN, { count: targets })
+                            : s.t(M.insert)}
                   </button>
                 </div>
               )}

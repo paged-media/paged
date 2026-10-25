@@ -24,10 +24,10 @@
 //! the run parameters (which record-flow binding, the batch mode, the frame
 //! chain); [`run_job`] produces the per-document lowered IR.
 //!
-//! The query engine is deliberately **NOT embedded** (§3 license boundary): the
-//! user's platform materializes the results (a warehouse extract, native DuckDB,
-//! files) and hands them in, exactly as the in-app bundle hands DuckDB-WASM
-//! results to `ingest_result`. And nothing renders here — `runs[].flow` is the
+//! The job carries its results materialised: the user's platform hands them in
+//! (a warehouse extract, a query it ran, files), the way a host hands
+//! `ingest_result` a `RecordSet`. The engine's store (`data-store`) can make
+//! them from the source files themselves; this runner takes what it is given. And nothing renders here — `runs[].flow` is the
 //! `PaginatedFlow` IR the core's headless export turns into documents (§10:
 //! "nothing bypasses the normal render/export pipeline").
 //!
@@ -229,6 +229,7 @@ mod tests {
             }],
             variables: Default::default(),
             locales: Default::default(),
+            transforms: Vec::new(),
         };
         let mut results = HashMap::new();
         results.insert(

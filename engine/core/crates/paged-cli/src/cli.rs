@@ -282,6 +282,12 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// The bindings a document carries (paged.data), read and applied by
+    /// the engine (core ADR 1014).
+    Data {
+        #[command(subcommand)]
+        what: DataCommand,
+    },
     /// List, read and write a `.paged` container's content parts.
     Parts {
         #[command(subcommand)]
@@ -372,6 +378,50 @@ pub enum Command {
 }
 
 #[derive(Debug, clap::Subcommand)]
+pub enum DataCommand {
+    /// The bindings the document's labels carry, with the object each
+    /// writes and the source files the recipe asks for.
+    Bindings {
+        /// IDML or `.paged` document.
+        doc: PathBuf,
+        /// Answer JSON.
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        assets: DocumentOptions,
+    },
+    /// Resolve the bindings at one record and write their values.
+    ///
+    /// Each `--source ID=FILE` is imported into the store under the
+    /// recipe's source id; every query passes the query guard first (a
+    /// document's queries are code it carries). Property bindings are
+    /// written on the objects their selectors name, variable bindings on
+    /// their text variables, as `paged set` writes. Bindings the headless
+    /// lane cannot write yet (images, tables, barcodes, record flows,
+    /// rules) are listed, not skipped.
+    Apply {
+        /// IDML or `.paged` document.
+        doc: PathBuf,
+        /// A source's file, repeatable: `--source products=products.csv`.
+        #[arg(long = "source", value_name = "ID=FILE")]
+        sources: Vec<String>,
+        /// The record (0-based) the bindings resolve at.
+        #[arg(long, default_value_t = 0)]
+        record: usize,
+        /// Write the result here. The format follows the extension.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Answer JSON.
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        pdf: crate::export::PdfOptions,
+        #[command(flatten)]
+        assets: DocumentOptions,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
 pub enum TemplateCommand {
     /// The template's fields, their kinds and values.
     Fields {
@@ -387,8 +437,9 @@ pub enum TemplateCommand {
     Fill {
         /// The template.
         template: PathBuf,
-        /// A JSON list of {name, value}, an object of name → text, or a file
-        /// holding either.
+        /// A JSON list of {name, value}, an object of name → text, styled runs
+        /// ([{text, style?} | {break}]), an alternate's name or a value, or a
+        /// file holding either.
         #[arg(long)]
         values: String,
         /// Where to write; the extension names the format.

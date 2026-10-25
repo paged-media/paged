@@ -23,31 +23,38 @@ orientation only.
 
 ## 0a. Progress (2026-10-23)
 
-| Task                                             | State                                                                                                                                   | Where                                                                               |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| A1–A6 profiles, regions, presets                 | Done                                                                                                                                    | ADR 274, `packages/shell/src/profile/`, `apps/canvas/src/profiles/`                 |
-| B1–B3 features                                   | Done                                                                                                                                    | ADR 275, `apps/canvas/feature-ids.json`                                             |
-| C1–C8, C11 engine policy                         | Done                                                                                                                                    | engine ADRs 1000, 1001 (protocol 75)                                                |
-| C9, C10 XML tags ↔ fields, F5 open as template   | Done (protocol 76): tagged ranges become placeholder runs; paged writes XML tags; File ▸ Open as template; `paged-node template ingest` | engine ADR 1002, `paged-template/src/derive.rs`, `idml-export/src/xml_structure.rs` |
-| D1–D5 filling in the editor                      | Done                                                                                                                                    | ADR 276, `panels/template/`                                                         |
-| E2, E3, E5 host actions, handle, host components | Done                                                                                                                                    | `apps/canvas/src/embed/create-editor.ts`                                            |
-| E4 theme and strings                             | Done                                                                                                                                    | `setTheme`, `docs/theme-tokens.json`, `platform/shared/strings`                     |
-| E6 iframe bridge                                 | Done; scripts run over it too (`runScript`), the old `paged:run` bridge stays for the docs playground                                   | `embed.html`, `src/embed/{bridge,connect}.ts`                                       |
-| E7 example host                                  | Done as the demo pages                                                                                                                  | `apps/canvas/demos/`                                                                |
-| E10 the whole editor in strings                  | Done: 5,036 messages, German shipped; extensions through `host.strings`                                                                 | extensions ADR 333, strings guard in CI                                             |
-| E1 instance safety                               | Done: two editors on a page, scoped styles, root-held keys and portals, a storage adapter                                               | ADR 277, `scripts/instance-guard.mjs`                                               |
-| E8 the npm package                               | Done; first publish needs the npm trusted publisher (a user action)                                                                     | `apps/editor/packages/editor`, PM-0013                                              |
-| E9 embedding docs                                | Done                                                                                                                                    | docs site PR                                                                        |
-| F1, F2 Template panel, preview as filler         | Done                                                                                                                                    | `panels/template/template-panel.tsx`                                                |
-| F6 the CLI                                       | Done: `paged-node template fields, kinds, fill, check, ingest` and `paged template fields, fill, check`                                 | `apps/cli/src/template.ts`, `paged-cli/src/template.rs`                             |
-| F7 server rendering                              | Done                                                                                                                                    | `engine-serve` `POST /run` `template`                                               |
-| F8 catalogues                                    | Done                                                                                                                                    | data ADR 560                                                                        |
-| F3 preflight, F4 author overlay                  | Done: the `templateFindings` collection, the Template panel's Problems, markers on the author's field outlines                          | `paged-template/src/preflight.rs`                                                   |
-| G1, G2 module field kinds, routing               | Done                                                                                                                                    | extensions ADR 335, engine ADR 1000 amendment                                       |
-| G3 field kinds of every module                   | Done, `pdf.page` included (a placed PDF shows the page the document names, engine ADR 1003)                                             | each module's `template-fields.ts`                                                  |
-| G4 coverage gaps                                 | Largely done: CLI imports and bytes, typed commands per module; open items listed in G4                                                 |                                                                                     |
-| H demos                                          | Done: gallery of ten pages, journeys                                                                                                    | `apps/canvas/demos/`                                                                |
-| I docs and website                               | PRs open                                                                                                                                | docs site, website                                                                  |
+| Task                                             | State                                                                                                                                           | Where                                                                               |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| A1–A6 profiles, regions, presets                 | Done                                                                                                                                            | ADR 274, `packages/shell/src/profile/`, `apps/canvas/src/profiles/`                 |
+| B1–B3 features                                   | Done                                                                                                                                            | ADR 275, `apps/canvas/feature-ids.json`                                             |
+| C1–C8, C11 engine policy                         | Done                                                                                                                                            | engine ADRs 1000, 1001 (protocol 75)                                                |
+| C9, C10 XML tags ↔ fields, F5 open as template   | Done (protocol 76): tagged ranges become placeholder runs; paged writes XML tags; File ▸ Open as template; `paged-node template ingest`         | engine ADR 1002, `paged-template/src/derive.rs`, `idml-export/src/xml_structure.rs` |
+| D1–D5 filling in the editor                      | Done                                                                                                                                            | ADR 276, `panels/template/`                                                         |
+| E2, E3, E5 host actions, handle, host components | Done                                                                                                                                            | `apps/canvas/src/embed/create-editor.ts`                                            |
+| E4 theme and strings                             | Done                                                                                                                                            | `setTheme`, `docs/theme-tokens.json`, `platform/shared/strings`                     |
+| E6 iframe bridge                                 | Done; scripts run over it too (`runScript`), the old `paged:run` bridge stays for the docs playground                                           | `embed.html`, `src/embed/{bridge,connect}.ts`                                       |
+| E7 example host                                  | Done as the demo pages                                                                                                                          | `apps/canvas/demos/`                                                                |
+| E10 the whole editor in strings                  | Done: 5,036 messages, German shipped; extensions through `host.strings`                                                                         | extensions ADR 333, strings guard in CI                                             |
+| E1 instance safety                               | Done: two editors on a page, scoped styles, root-held keys and portals, a storage adapter                                                       | ADR 277, `scripts/instance-guard.mjs`                                               |
+| E8 the npm package                               | Done; first publish needs the npm trusted publisher (a user action)                                                                             | `apps/editor/packages/editor`, PM-0013                                              |
+| E9 embedding docs                                | Done                                                                                                                                            | docs site PR                                                                        |
+| F1, F2 Template panel, preview as filler         | Done                                                                                                                                            | `panels/template/template-panel.tsx`                                                |
+| F6 the CLI                                       | Done: `paged-node template fields, kinds, fill, check, ingest` and `paged template fields, fill, check`                                         | `apps/cli/src/template.ts`, `paged-cli/src/template.rs`                             |
+| F7 server rendering                              | Done                                                                                                                                            | `engine-serve` `POST /run` `template`                                               |
+| F8 catalogues                                    | Done                                                                                                                                            | data ADR 560                                                                        |
+| F3 preflight, F4 author overlay                  | Done: the `templateFindings` collection, the Template panel's Problems, markers on the author's field outlines                                  | `paged-template/src/preflight.rs`                                                   |
+| G1, G2 module field kinds, routing               | Done                                                                                                                                            | extensions ADR 335, engine ADR 1000 amendment                                       |
+| G3 field kinds of every module                   | Done, `pdf.page` included (a placed PDF shows the page the document names, engine ADR 1003)                                                     | each module's `template-fields.ts`                                                  |
+| G4 coverage gaps                                 | Done: CLI imports and bytes, typed commands per module, headless module content; what stays by design is listed in G4                           |                                                                                     |
+| H demos                                          | Done: a gallery of thirteen pages (module fields and PDF/X-4 included), journeys                                                                | `apps/canvas/demos/`                                                                |
+| Decision 5: text ranges are placeholder runs     | Done: no code; the concept and engine ADR 1017 say so                                                                                           | concept §7.3, §12                                                                   |
+| Decision 6: styled field values                  | Done: `allowedStyles` and `breaks` on a text field, `runs` values, the form's styled control, the Template panel's editors, CLI fill and check  | engine ADR 1017, `panels/template/styled-text.tsx`                                  |
+| Decision 7: frame alternates                     | Done: `alternates` fields in the document policy, the form's picker, Make alternates field, the overlay names the shown member, IDML round trip | engine ADR 1017                                                                     |
+| I docs and website                               | PRs open                                                                                                                                        | docs site, website                                                                  |
+| Decision 1 (2026-10-24): no degraded mode        | Done: `createEditor` refuses an unisolated page with `EditorError` `notCrossOriginIsolated`, naming the iframe path                             | `src/embed/errors.ts`, PM-0013 amendment 2                                          |
+| Decision 2 (2026-10-24): stable ids              | Done: `deprecated-ids.json`, aliases with an `idDeprecated` event, the ledger guard, release notes                                              | `scripts/feature-ids.mjs`, `profile/deprecations.ts`, PM-0013 amendment 2           |
+| Decision 4 (2026-10-24): "Edit template"         | Done: the template notice in the full editor                                                                                                    | ADR 293, `panels/template/template-notice.tsx`                                      |
+| Mobile fill presets (decision 2026-10-24)        | Done: `form` preset; field sheet or form first below 720 px; 44 px targets; touch pan, pinch, zoom buttons; camera input                        | ADR 294, `packages/shell/src/state/compact.ts`                                      |
 
 Corrections to the plan found while building:
 
@@ -991,7 +998,7 @@ id, method, args }`, answered by `paged:reply`; plus `paged:event`. `ArrayBuffer
      editor's worker resolves the wasm from that package (as `apps/cli` already does through
      `resolveCanvasWasm`), with the `assetBase` override for hosts that move files.
   2. Wasm and workers ship as files in `dist/assets/`, resolved via `assetBase` (E1 step 7).
-     Module wasm stays hosted where ADR 220 says. The `paged.data` bundle (DuckDB) is
+     Module wasm stays hosted where ADR 220 says. The `paged.data` bundle is
      optional: excluded unless the profile names it, and fetched from the module host.
   3. Exports: `.` (`createEditor`, types), `./iframe` (`connectEditor`), `./presets` (preset
      data for host-side tooling), `./feature-ids.json`, `./style.css` only if E1 cannot scope
@@ -1218,7 +1225,11 @@ first, since they unblock several modules at once:
 4. **Headless rendering of module content.** Image composites with adjustments need a GPU and
    web frames are not stored as rendered content, so a headless PDF shows stale pixels or a
    fallback. Fail loudly (`pending` reported by `template check`), and bake web frames before
-   export.
+   export. **Done:** every PDF `paged-node` writes bakes each web frame to native items through
+   paged.web's typed `bakeWebFrame` first and takes the bake's undo steps back afterwards; any
+   module object whose `pending` row reads true is listed in the export's diagnostics and by
+   `template check`, and `template fill -o x.pdf` refuses to write it
+   (`apps/cli/src/module-content.ts`, `cli-module-content.spec.ts`).
 5. **The Rust CLI** has no plugin host; the module surface is `paged-node` only, and its docs say
    so.
 
@@ -1232,7 +1243,12 @@ Per module:
   command stays for a host without it; `modules/draw/docs/status.md`). Since the ADRs'
   amendments a script's edits are followed too (a run is one step its reply names), a typed
   recipe parameter write rebuilds its artwork in the same step (`ObjectWrite.followUp`),
-  `mutateWithBytes` takes `amend`, and the recipe panels carry the on/off checkbox.
+  `mutateWithBytes` takes `amend`, and the recipe panels carry the on/off checkbox. The
+  leftovers are closed (2026-10-24): an Objects on a Path Update, which moves its own sources,
+  notes its step so the automatic update does not place the objects a second time in it, and
+  every recipe panel's note says what the automatic update does; what stays (a script run
+  that names no step, recipe records outside undo, the width profile as an outline) is
+  inherent and `status.md` says why.
 - **image:** done. Crop, rotate, flip and canvas size take a named image (`cropImage`,
   `canvasSize`, the quarter turns and flips with an `image`); a typed `applyAdjustment`; the
   session-only commands refuse headless with `unmapped:` instead of doing nothing. Filters with a
@@ -1249,7 +1265,12 @@ alpha?, feather? }` (polygons in image pixels, filled together by an even–odd 
   canvas is the same image at another size; another crop or no selection is refused with the
   reason, as it is headless. A kept selection is set back into the engine when its frame's
   image reopens and is the live selection again. A Playwright spec makes a marquee selection and checks that only
-  its pixels change and one undo restores them (`modules/image/docs/status.md`).
+  its pixels change and one undo restores them (`modules/image/docs/status.md`). The leftovers
+  (2026-10-24, image ADR 465 amendment of that day): a kept selection belongs to the stored
+  revision it was made on, follows a quarter turn or flip committed on its frame (the editor's
+  own turns and flips now carry the live selection too) and is refused, with the reason, on a
+  revision it was not carried to. What stays is by rule: another crop's offset is unknown, and
+  a selection is session state, never written to the document (ADR 460).
 - **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
   `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
 chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a defined name
@@ -1267,6 +1288,13 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   chain's first pagination and every area of a print area are one batch on a host with in-batch
   handles); `apps/cli/test/cli-sheet.spec.ts` runs
   placement, a view and chart delete through `paged-node invoke` (`modules/sheet/docs/status.md`).
+  The leftovers (2026-10-24, sheet ADR 522 amendment 2): a chart placed by the version that
+  recorded its box but not its art follows a move made before reopening; a renamed sheet's
+  placed tables and chains are re-stamped with the new name and found again on reopen. Left,
+  with the reason in `status.md`: a first pagination on a host that cannot amend (none in this
+  repository) keeps no record until its first refresh, a chartsheet's chart stays in the file
+  (deleting it is deleting the sheet), and an older version sees charts renumbered after a
+  delete (it counts chart parts).
 - **data:** done. `paged-node apply`, `merge` and `generate` drive paged.data through its typed
   commands only: `importSource` (a file's bytes as a source), a `query` object, `previewQuery`,
   `defineBinding` (the session binding kinds), `defineProperty` (a `property` binding with an
@@ -1285,13 +1313,25 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   A changed run list is saved back too, in body paragraphs and cells: formatting given to part
   of a run splits that `w:r` (the parts keep its `w:rPr`, the changed one gets only what
   changed), direct formatting the engine can express is written, untouched runs stay byte for
-  byte (the engine reads a cell's styled `paragraphs`).
+  byte (the engine reads a cell's styled `paragraphs`). Since the leftovers round: tracking as
+  `w:spacing` (imported back as tracking), a canvas colour from the host's swatch display, a
+  run holding a drawing, field character or note reference split around it, a paragraph added
+  in a cell with its words' looks, a run whose text is gone removed (emptied where it holds
+  more than text) in body and cells alike, and rows added or removed on the canvas saved as
+  `w:tr` inserts and deletes. Reported, with the reason: columns added or removed on the
+  canvas, rows changed in a table with merged cells, and a non-text child between two texts of
+  one run (`modules/doc/docs/status.md`).
 - **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,
   and New, Duplicate, Delete, Move up and Move down of the active slide under Plugins ▸ Slide,
-  each offered only where it applies (`modules/slide/docs/status.md`).
-- **web:** `importHtml`; turn an existing frame into a web frame; diagnostics as a row.
+  each offered only where it applies, each slide verb with a key that the editor leaves free
+  (Option+Cmd+N, Option+Shift+Cmd+N, Option+Cmd+Backspace, Cmd+Up, Cmd+Down; silent with a text
+  caret) (`modules/slide/docs/status.md`).
+- **web:** done. The typed `importHtml` (a whole file split into its lanes, sanitised) and
+  `makeWebFrame` (an existing frame made a web frame, from a starter template), the
+  `webFrame.diagnostics` row (what the source panel lints) and `webFrame.page` (the page number
+  `{{frame.page}}` renders as); a headless PDF bakes the frames first (shared gap 4).
 - **publish / pdf:** done. Bookmarks and tagged PDF are options of the typed `exportPdf`; every
   PDF `paged-node` writes (`template fill -o x.pdf`, `merge`, `generate`, `-o x.pdf`) goes
   through it when paged.publish is loaded. The typed `preflight` and `paged-node preflight`
@@ -1302,6 +1342,9 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   `--no-paged` leaves it out; the Rust `paged package` the same). Fonts are collected only
   from faces the engine holds and the files `--fonts` names (an IDML carries none); a face
   whose licence restricts embedding is reported, not copied (`modules/publish/docs/status.md`).
+  Both stay by design: a package can hold only the font files it is given, and a licence that
+  forbids copying a face is the font vendor's rule. A PDF import that leaves pages out past
+  its cap says so (`sourcePageCount`, a log line).
 
 ## 9b. Workstream H — Demos
 
@@ -1366,22 +1409,24 @@ the canvas, a script (`paged.*`) and a plugin, because "every caller" is the cla
 
 ## 12. ADR ledger and numbering
 
-| Record                                                                   | Range        | Number  | Lands with |
-| ------------------------------------------------------------------------ | ------------ | ------- | ---------- |
-| The editor profile is runtime data (amends 213)                          | editor       | 274     | A4         |
-| Features gate what is offered                                            | editor       | 275     | B2         |
-| Filling a template                                                       | editor       | 276     | D5         |
-| The editor mounts as an instance                                         | editor       | 277     | E1         |
-| Host actions are commands                                                | editor       | 278     | E2         |
-| The embedding API and the iframe bridge                                  | editor       | 279     | E6         |
-| The editor speaks through a string catalogue                             | editor       | 280     | E10        |
-| Contribution titles may be message keys                                  | extensions   | 333     | E10        |
-| The engine's ADR range                                                   | repository   | PM-0012 | before C1  |
-| A template policy lives in labels, and operations are checked against it | engine       | 1000    | C1, C3, C4 |
-| The session has a role; three doors; typed refusals                      | engine       | 1001    | C2, C5, C6 |
-| The XML structure is model data and is written                           | engine       | 1002    | C10        |
-| Template fields are binding targets                                      | modules/data | 560     | F8         |
-| A fourth public package                                                  | repository   | PM-0013 | E8         |
+| Record                                                                   | Range        | Number  | Lands with     |
+| ------------------------------------------------------------------------ | ------------ | ------- | -------------- |
+| The editor profile is runtime data (amends 213)                          | editor       | 274     | A4             |
+| Features gate what is offered                                            | editor       | 275     | B2             |
+| Filling a template                                                       | editor       | 276     | D5             |
+| The fill presets on phones and tablets                                   | editor       | 294     | §14            |
+| The editor mounts as an instance                                         | editor       | 277     | E1             |
+| Host actions are commands                                                | editor       | 278     | E2             |
+| The embedding API and the iframe bridge                                  | editor       | 279     | E6             |
+| The editor speaks through a string catalogue                             | editor       | 280     | E10            |
+| Contribution titles may be message keys                                  | extensions   | 333     | E10            |
+| The engine's ADR range                                                   | repository   | PM-0012 | before C1      |
+| A template policy lives in labels, and operations are checked against it | engine       | 1000    | C1, C3, C4     |
+| The session has a role; three doors; typed refusals                      | engine       | 1001    | C2, C5, C6     |
+| The XML structure is model data and is written                           | engine       | 1002    | C10            |
+| Styled field values and alternates                                       | engine       | 1017    | decisions 6, 7 |
+| Template fields are binding targets                                      | modules/data | 560     | F8             |
+| A fourth public package                                                  | repository   | PM-0013 | E8             |
 
 **Decided:** the engine gets a new, non-overlapping range, set by **PM-0012** before C1 lands.
 The proposed range is 1000–1099; no record in the repository uses a four-digit number today.
@@ -1396,7 +1441,7 @@ that those records keep their numbers, cited with their component ("core ADR 205
 | A permission gap: a write path that bypasses all three doors          | a filler can change what the template forbids  | exhaustive classifier; a test per wire `Mutation` kind in a filler session; server-side `template check` as the backstop     |
 | Text-path enforcement needs story→frame resolution on every keystroke | typing latency                                 | cache the story→field map in `PolicyIndex`; measure with the existing perf lane before and after                             |
 | Constraint checks that need layout (overset, shrink)                  | slow sets, layout re-entrancy                  | run after apply inside the batch; `shrink` bounded in steps; benchmark on long stories                                       |
-| Package size: bundling every module                                   | slow first load for embedders                  | profile-driven bundle loading (ADR 222), DuckDB excluded by default, a size budget in the release checks                     |
+| Package size: bundling every module                                   | slow first load for embedders                  | profile-driven bundle loading (ADR 222), paged.data excluded by default, a size budget in the release checks                 |
 | Surface ids become a public contract                                  | renames break hosts                            | the feature-id inventory (B3) with deprecation aliases; a check that a removed id is listed as deprecated for one release    |
 | Cross-origin isolation for npm hosts                                  | partners cannot set COOP/COEP                  | the iframe path; document `credentialless` COEP; open question in the concept                                                |
 | The XML writer (C10) changes exported packages                        | InDesign rejects or alters a written structure | unchanged imports keep the byte-identical copy path; the corpus round-trip lane; the writer follows InDesign 20's own output |
@@ -1417,3 +1462,11 @@ Taken on 2026-10-21:
 5. **The `editor` role and the policy:** only `author` writes the template policy by default;
    a host may allow it for an editor session through an override (C7).
 6. **Strings:** the whole editor and its bundles, in this project (E10).
+
+Taken on 2026-10-24, with the concept's former open questions (concept §12, "Decided on
+2026-10-24"): the iframe is the path for hosts without cross-origin isolation; `feature-ids.json`
+is the public id list, with a deprecation window and aliases; the `template-fill` and `form`
+presets become usable on phones and tablets; roles stay per session; placeholder runs are the
+text-range mechanism; text fields take author-allowed character styles and breaks; choice fields
+can offer frame alternates; and the module leftovers each module's `status.md` lists are fixed in
+the same round, not tracked for later.

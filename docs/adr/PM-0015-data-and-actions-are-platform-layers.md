@@ -133,7 +133,7 @@ interpreter gains `paged.data.*` and `paged.actions.*`.
 | data 561 | Turso is the data engine; the `QueryEngine` seam; supersedes 015 |
 | data 562 | Transforms: JavaScript over tables, stored in the document, run in the engine's interpreter |
 | data 563 | Asset columns: fetch, content-addressed cache, action chains per column |
-| core 1014 | Bindings are part of the document model |
+| core 1014 | Bindings are part of the document model ([accepted](../../engine/core/docs/adr/1014-bindings-live-in-labels-and-the-engine-applies-them.md) as: they live in labels, and the engine reads and applies them) |
 | core 1015 | `paged-action`: the action registry, chain runner and cache key; `paged.actions.*` in the interpreter |
 | extensions 343 | The `data@1` door, public, with its harness fake and CLI verbs |
 | extensions 344 | The `actions@1` door, public, with its harness fake and CLI verbs |

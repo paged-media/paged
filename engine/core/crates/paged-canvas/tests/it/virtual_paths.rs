@@ -324,6 +324,7 @@ fn build() -> (CanvasModel, Targets) {
     let grouped = m
         .apply_mutation(&Mutation::CreateGroup {
             member_ids: vec![frame.clone(), second],
+            clip: false,
         })
         .expect("group");
     let group = grouped

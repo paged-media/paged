@@ -145,6 +145,13 @@ draw B-02). The headless harness records both
   `hitTest(pageId, pt, filter)` [draw: scissors/anchor tools],
   `elementGeometry(ids)`, `tree()`,
   `planarRegions(elementIds, point?)` (§4.3c).
+  Since 0.74.3-canary.16 (engine WP2.7, additive) the `spreads` collection
+  names each spread's pages (`pageIds`) and its top-level items with the
+  page each sits on (`members`, by `elementGeometry`'s centre rule; `null`
+  on the pasteboard), and a `pages` row carries its place in the spread
+  (`indexInSpread`, with `pageOrigin`), its spine side (`bindingEdge`) and
+  its inside / outside margins (`marginInsidePt`, `marginOutsidePt`) beside
+  the physical four. Older engines omit the fields.
 - `undo()` / `redo()` — shared history, no plugin-local stacks.
 - `onDidChange(l)` — typed events for every committed change (every panel
   audit showed this exact subscribe pattern, hand-rolled 20+ times in
@@ -391,6 +398,31 @@ the id does not resolve; or the address is structural (`storyRange`,
 `table`, `tableCell` — those never nest in groups, and answer without a
 read at all). A caller that needs to tell them apart still has `tree()`.
 A pure read, gated on `capabilities.document.read` like every other.
+
+### 4.3e `host.render` — page and item images [ADR 323 · ADR 338]
+
+`render.snapshot(pageId, options)` draws a page with the engine's own
+renderer (`render.snapshot@1`: a whole page as a PNG, items left out on
+request). `render.snapshot@2` adds what a feature that works on PIXELS
+needs: `only` (the named items alone, in their stacking order — a story
+by its `storyRange` draws its whole thread), `clip` (a page region in pt,
+grown to whole pixels and answered as `region`), `dpi`, `format: "rgba"`
+(straight-alpha RGBA8 in `rgba`), `background: "transparent"` and `trim`
+(crop to what was drawn — the one way to learn what a stroke and its
+effects cover). `render.element(id, { dpi, format, background })` is one
+item, cropped to it; plugin-sdk's `rasterizeElements(host, ids, { ppi })`
+does several and answers the `insertFrame` bounds that put the image
+exactly over them.
+
+**Consumer (the promotion rule):** paged.draw's Object ▸ Rasterize…
+(`draw-bundle/src/commands/rasterize.ts`), one undo step; paged.image's
+type layers and vector smart objects are the next two.
+
+**Honesty across engines.** The fields are additive on protocol 76, so an
+engine before them answers a whole-page PNG. The SDK returns `null` where
+the reply cannot be what was asked (no `rgba`, no `region`), never the
+wrong image, and the flag stays static like @1. The worker's GPU snapshot
+path draws only v1 requests; any @2 option is drawn on the CPU rasterizer.
 
 ### 4.4 `host.selection`, `host.viewport`
 
@@ -684,6 +716,16 @@ does not prove the engine has it: an older engine refuses the write as
 an unknown path (an outcome) and reads no row. paged.draw's SVG importer
 asks it before choosing between writing the rule and re-winding the
 contours for non-zero.
+
+`"document.clipGroups@1"` (engine ADR 1010) says the vendored wire
+carries clip groups — `createGroup { memberIds, clip: true }`, whose
+top-most member clips the rest and paints nothing, and the `groupClip`
+path — that `pasteInto` / `releaseFrom` take a group (a grouped item
+stands for its outermost group), and that `tree()` lists a frame's
+pasted-in children under it, a clip group's row marked `clip: true`.
+Additive at protocol 76 like the fill rule: an older engine makes a plain
+group of `clip: true` and refuses a group child. paged.draw's clipped
+repeat asks it before choosing a clip group over paste-into.
 
 ### 4.9 `host.editor` — the marked escape hatch
 
@@ -1489,8 +1531,8 @@ The K-3 design note
 ([`docs/design/worker-capability.md`](docs/design/worker-capability.md)) is
 the deliberation record; this section is the contract summary. The
 deferral (Wave 3b, no-speculative-surface) lifts because two real
-consumers exist: paged.image's decode pool and paged.data's DuckDB
-worker. A bundle never touches `new Worker()` directly — the SDK owns the
+consumers exist: paged.image's decode pool and (until data ADR 561
+removed it) paged.data's DuckDB worker. A bundle never touches `new Worker()` directly — the SDK owns the
 primitive, the manifest gates it, the host budgets + tears it down (the
 same posture as every other door).
 
@@ -2661,10 +2703,8 @@ publish of `@paged-media/ai`. Record: [ADR 324](docs/adr/324-node-cli-over-the-h
 - **`get <addr>` without a path** is `getAll`: heavy rows and `content` are
   skipped unless `--content` (§21.8).
 - **apply / merge** run on TODAY's paged.data session (`sessionFor(host)`,
-  canary.10): DuckDB runs in-process (its own `AsyncDuckDBDispatcher` over
-  the Node blocking build — `@duckdb/duckdb-wasm` 1.29.0, an optional peer —
-  driving the bundle's shipped engine wasm), behind narrow `fetch(file:.wasm)`
-  / `Worker` / extension-XHR shims (`src/node-shims.ts`). `apply` carries an
+  canary.10): the bundle's engine wasm, its query store inside it (data ADR
+  561), behind a narrow `fetch(file:.wasm)` shim (`src/node-shims.ts`). `apply` carries an
   INTERIM `property` binding (field → typed property, one
   `host.objects.batch`); expressions wait for Binding::Property (Wave 5).
 - **The bin is `paged-node` (2026-10-16).** Core's Rust CLI installs a
@@ -2745,3 +2785,80 @@ over the frame's content box while the context is active on it (editor ADR 281).
   `host.document.styleProperties(collection, styleId)` (resolved through `BasedOn`) and
   `host.document.swatchDisplay(ids)` (display colours after colour management, CMYK, gamut);
   probes `document.styleProperties@1`, `document.swatchDisplay@1`.
+
+## 25. The data and actions doors (ADRs 343, 344 — `data@1`, `actions@1`; PM-0015)
+
+**Why two doors, not one.** Data is the document's state that one module owns (paged.data's
+sources, queries, store and bindings); actions are stateless steps any module may offer. So
+`host.data` has a SERVE side, one service per editor, while `host.actions` is a registry with
+no owner. Both are cross-bundle, so each has a shared backend the editor builds once and
+injects (`createDataRegistry`, `createActionRegistry`), as `dataProviders` has. The per-bundle
+capability gates (`capabilities.data.{serve, read, write, bind}`, `capabilities.actions.{register,
+run}`) live in the surfaces (`doors-data-actions.ts`).
+
+**The record shape is the provider shape.** `records` and `query` answer a `ProviderRecordSet`,
+so a `dataProviders@1` consumer reads `data@1` with the same code, and paged.sheet's
+range-as-dataset and sheet-from-dataset paths carry over.
+
+**The host routes, the service decides.** The host checks the role and whether a service is
+live; whatever the service leaves out (`write` on a read-only one) is refused with that reason.
+The SQL guard is the service's (paged.data runs its own; the engine's CLI the same rules in Rust,
+core ADR 1014), never the host's.
+
+**Actions are cached by content, not by call.** `hash(input) . hash(chain)` over canonical forms
+(bytes as they are, JSON with sorted keys), each step's parameters merged over its defaults. A
+chain's kinds are checked before anything runs. The cache is the registry's (256 entries, LRU),
+so two bundles running the same chain share the result; `actionKey` lets a caller keep its own
+(an asset column's bytes).
+
+**Tests.** The harness injects both backends; `fakeDataService` serves in-memory tables and
+answers `SELECT * FROM <table>` only, refusing other SQL rather than imitating it.
+
+## 26. The editing doors (ADR 348 — control bar, scoped keys, status bar, `host.text` selection)
+
+A content type whose content is native text (paged.doc: a Word document lowered to engine
+stories) needs the editor's own text editing plus the chrome and keys of the application it
+stands in for. Four doors, shipped together:
+
+- **C1 `contribute.controlBarGroup({ id, title?, scope: { editContext }, order?, render })`.**
+  A segment of the host's control bar while the context is active: in the frame context's
+  segment, or (for a document context, below) in place of the host's text and document
+  controls. Selected page items keep the host's object controls. The component gets
+  `{ editContext }`.
+- **C2 the keybinding `scope: { editContext }`.** The binding exists only while its context is
+  active and then outranks every host binding on the key (guarded, unguarded or
+  precedence-ranked) AND the canvas text input: `useTextEditing` asks the registry
+  (`claims(event)`) before it acts, so Tab can be a list level and Cmd+B bold. It never takes a
+  key from a panel's field or an input-method composition. Reserved, refused at registration:
+  Cmd+S, Cmd+P, Cmd+\ and Cmd+Shift+P (`RESERVED_HOST_KEYS`). Keys the browser keeps (Cmd+1–9,
+  Cmd+T, Cmd+N, Cmd+W, Cmd+Q, Cmd+M, Cmd+H) never reach a page; a bundle offers those actions
+  elsewhere. Combos name the space bar `space`.
+- **C3 `contribute.statusItem({ id, scope, align?, order?, render })`.** A readout in a status
+  bar under the canvas, which exists only while an item applies.
+- **C4 `host.text` selection doors.** `selection()` (content offsets, null in a table cell —
+  the C-9 gap), `onDidChangeSelection`, `properties(paths)` (the EFFECTIVE values through the
+  style cascade, `{ value }` | `"mixed"` | `null`; a collapsed caret reads the character before
+  it), `format(writes)` and `applyStyle(scope, styleId)`: one batch of `setElementProperty` on
+  the selection's story range, one undo step. Paragraph paths cover the touched paragraphs; a
+  character path covers the selection, the word around a collapsed caret (refused between
+  words), or with `extent: "paragraphs"` the touched paragraphs whole (line spacing as
+  `characterLeading`). The SDK converts the selection's content offsets (UTF-8 bytes, one
+  synthetic `\n` per paragraph) to the character offsets a story range counts; passing one as
+  the other formats the wrong text from the second paragraph on. Find and replace is NOT in C4:
+  the engine's `FindReplace` op is not on main; it joins as an additive member when it lands.
+- **The document context, `host.shell.setDocumentContext(type | null)`.** A Word document
+  opened as the whole document has no frame to enter, yet is Word content on every page. A
+  bundle declares that the open document is one of its registered context types; the scoped
+  contributions follow `editContext ?? documentContext` (`contextScopeActive`). It changes
+  nothing else (tool rail, panels, selection). The host drops it on every document load and on
+  the bundle's disposal; the bundle sets it again for a document it recognises.
+- **Gates.** Every scope names an edit context declared in `contributes.editContexts[]` and
+  registered by the same bundle first (borrowed, like a frame surface §24); ids are namespaced;
+  keybindings still need `capabilities.keybindings`. No new manifest field.
+- **Probes.** Static doors: `contribute.controlBarGroup@1`, `contribute.statusItem@1`,
+  `contribute.keybinding.scope@1`. Host backing: `controlBar.groups@1`, `statusBar.items@1`,
+  `text.selection@1`, `text.format@1`, `shell.documentContext@1`.
+- **Harness.** `createHeadlessHost` records groups and status items
+  (`controlBarGroupsContributed()`, `statusItemsContributed()`), plays the caret
+  (`setTextSelection`) and reports the document context (`documentContext()`, dropped on load).
+- **Isolate.** The groups and status items are React in the host realm, like panels (§6).

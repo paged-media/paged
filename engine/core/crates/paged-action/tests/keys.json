@@ -1,0 +1,91 @@
+{
+  "about": "Cache keys of actions recorded from the SDK's actionKey (plugin-sdk doors-data-actions.ts, extensions ADR 344); paged-action's key (core ADR 1015) must give the same.",
+  "cases": [
+    {
+      "name": "an asset through one step",
+      "input": {
+        "kind": "asset",
+        "bytes": [0, 10, 255],
+        "mediaType": "image/x-gray"
+      },
+      "steps": [
+        {
+          "action": "media.paged.image/invert",
+          "params": {
+            "strength": 1
+          }
+        }
+      ],
+      "key": "15bd632867855ae660ea977c3e4f8a4d.cf943e889ef45fd0508a0760013facf0"
+    },
+    {
+      "name": "a value with unsorted keys and numbers JavaScript writes plainly",
+      "input": {
+        "kind": "value",
+        "value": {
+          "b": 1.5,
+          "a": [1, 2, -0.25],
+          "c": "é ü \"q\""
+        }
+      },
+      "steps": [
+        {
+          "action": "x",
+          "params": {
+            "q": 2,
+            "p": 1e21
+          }
+        }
+      ],
+      "key": "423b57620ac3fa8ab650e484f1d1625e.329ea7ad4e72b813892f0eb8c911290d"
+    },
+    {
+      "name": "a table through a chain",
+      "input": {
+        "kind": "table",
+        "value": {
+          "schema": {
+            "fields": [
+              {
+                "name": "sku",
+                "ty": "text"
+              }
+            ]
+          },
+          "columns": [["A-1", "B-2"]],
+          "rowCount": 2
+        }
+      },
+      "steps": [
+        {
+          "action": "data/filter",
+          "params": {
+            "where": "sku > 'A'"
+          }
+        },
+        {
+          "action": "data/sort",
+          "params": {
+            "by": ["sku"],
+            "tiny": 1.5e-7
+          }
+        }
+      ],
+      "key": "ec5dad380c8037c130ffd4ea7a8ca60c.d1281de396294d1d9d8652ceadb110ce"
+    },
+    {
+      "name": "a selection",
+      "input": {
+        "kind": "selection",
+        "value": ["rectangle:u1", "textFrame:u2"]
+      },
+      "steps": [
+        {
+          "action": "draw/recolor",
+          "params": {}
+        }
+      ],
+      "key": "ef5fc2a2b4dfb26a6dfecda04b177e99.ed8f661ddc0f9a22c18b068f3eb84220"
+    }
+  ]
+}

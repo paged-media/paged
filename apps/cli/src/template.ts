@@ -40,10 +40,11 @@
 // `{ "$file": "<path>" }`.
 
 import { readFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 
 import { flagBool, flagStr, type OptionSpec } from "./args";
 import { CliError, EXIT } from "./errors";
+import { pendingContent, pendingLine } from "./module-content";
 import type { CliSession } from "./session";
 import type { Verb } from "./verbs";
 
@@ -60,6 +61,8 @@ interface FieldRow {
     name: string;
     kind: string;
     module?: { kind: string; def?: unknown } | null;
+    constraints?: { allowedStyles?: string[]; breaks?: string | null } | null;
+    members?: string[];
   };
   targetId: string;
   storyId?: string | null;
@@ -165,7 +168,21 @@ async function fill(
       return ref ? [[r.field.name, ref] as const] : [];
     }),
   );
-  const engine = values.filter((v) => !modules.has(v.name));
+  // Engine ADR 1017: a text given to an alternates field names the member
+  // to show.
+  const alternates = new Set(
+    rows.filter((r) => r.field.kind === "alternates").map((r) => r.field.name),
+  );
+  const engine = values
+    .filter((v) => !modules.has(v.name))
+    .map((v) => {
+      const o = v.value as { kind?: string; text?: string } | null;
+      return alternates.has(v.name) &&
+        o?.kind === "text" &&
+        typeof o.text === "string"
+        ? { name: v.name, value: { kind: "alternate", member: o.text } }
+        : v;
+    });
   if (engine.length > 0) {
     const reply = await send(s, "setTemplateFields", { values: engine });
     if (reply.kind === "templateFieldsRefused")
@@ -207,6 +224,22 @@ async function fill(
     });
 }
 
+/** What a field takes beyond its kind (engine ADR 1017): a text field's
+ *  allowed styles and breaks, an alternates field's members. */
+function describe(r: FieldRow): string {
+  const c = r.field.constraints ?? {};
+  const parts = [
+    ...(c.allowedStyles?.length
+      ? [`styles: ${c.allowedStyles.join(", ")}`]
+      : []),
+    ...(c.breaks ? [`breaks: ${c.breaks}`] : []),
+    ...(r.field.members?.length
+      ? [`alternates: ${r.field.members.join(" | ")}`]
+      : []),
+  ];
+  return parts.length ? `\t${parts.join("; ")}` : "";
+}
+
 /** The values a filled document holds, as `fill` takes them. */
 function valuesOf(rows: readonly FieldRow[]): FieldValue[] {
   return rows.flatMap((r) =>
@@ -228,7 +261,8 @@ function readValues(cwd: string, arg: string): FieldValue[] {
       `--values is not JSON: ${(err as Error).message}`,
     );
   }
-  // `{ "name": "text" | value }` is accepted beside the wire's list.
+  // `{ "name": "text" | boolean | runs | value }` is accepted beside the
+  // wire's list; a list is a styled value's runs (engine ADR 1017).
   if (Array.isArray(parsed)) return parsed as FieldValue[];
   if (parsed && typeof parsed === "object") {
     return Object.entries(parsed as Record<string, unknown>).map(
@@ -239,7 +273,9 @@ function readValues(cwd: string, arg: string): FieldValue[] {
             ? { kind: "text", text: v }
             : typeof v === "boolean"
               ? { kind: "visible", visible: v }
-              : v,
+              : Array.isArray(v)
+                ? { kind: "runs", runs: v }
+                : v,
       }),
     );
   }
@@ -299,7 +335,7 @@ async function snapshot(s: CliSession): Promise<Map<string, string>> {
 const VALUES: OptionSpec = {
   name: "values",
   value: "json|file",
-  help: "the field values: a JSON list of {name, value}, an object of name → text, or a file holding either",
+  help: "the field values: a JSON list of {name, value}, an object of name → text, styled runs ([{text, style?} | {break}]), an alternate's name or a value, or a file holding either",
 };
 
 interface Derivation {
@@ -396,7 +432,7 @@ export const template: Verb = {
           ? rows
               .map(
                 (r) =>
-                  `${r.field.name}\t${r.field.kind}\t${JSON.stringify(r.value ?? null)}`,
+                  `${r.field.name}\t${r.field.kind}\t${JSON.stringify(r.value ?? null)}${describe(r)}`,
               )
               .join("\n")
           : "no fields",
@@ -410,6 +446,17 @@ export const template: Verb = {
       if (!out) throw new CliError(EXIT.usage, "template fill needs -o <file>");
       const s = await session(doc);
       await fill(s, readValues(cwd, valuesArg), cwd);
+      // A PDF of content this session cannot draw (an edited picture whose
+      // composite needs a GPU) would show the old picture: refused, loudly.
+      if (extname(out).toLowerCase() === ".pdf") {
+        const pending = await pendingContent(s);
+        if (pending.length > 0)
+          throw new CliError(
+            EXIT.failed,
+            `template fill: ${pending.length} object(s) cannot be drawn here; write .paged and export it where they render`,
+            { pending: pending.map(pendingLine) },
+          );
+      }
       const saved = await s.save(out);
       return {
         json: { ...saved, fields: await fields(s) },
@@ -455,11 +502,17 @@ export const template: Verb = {
         if (wanted.get(key) !== actual.get(key)) differences.push(key);
       }
       const ok = differences.length === 0;
+      // Content a headless session draws as an older picture: not a change
+      // outside the fields, but what a PDF written here would get wrong.
+      const pending = await pendingContent(submitted);
       return {
-        json: { ok, values, differences },
-        text: ok
-          ? "ok: only the template's fields differ"
-          : `changed outside the template's fields:\n${differences.join("\n")}`,
+        json: { ok, values, differences, pending },
+        text: [
+          ok
+            ? "ok: only the template's fields differ"
+            : `changed outside the template's fields:\n${differences.join("\n")}`,
+          ...pending.map(pendingLine),
+        ].join("\n"),
         exit: ok ? EXIT.ok : EXIT.failed,
       };
     }

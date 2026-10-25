@@ -1,6 +1,6 @@
 # paged.slide — status
 
-Read from the code on 2026-10-14.
+Read from the code on 2026-10-24.
 
 ## Built
 
@@ -53,6 +53,11 @@ Read from the code on 2026-10-14.
   slide active, more than one slide to delete, a neighbour to pass) and acts on the active slide;
   New and Duplicate run the typed commands, so the palette, a script and the Node CLI make the
   same slide; each is one undo step. A bare invoke that cannot act logs why and does nothing.
+  Each slide verb has a key, a Cmd chord with its Ctrl twin (`SLIDE_KEYBINDINGS`): Option+Cmd+N
+  new slide, Option+Shift+Cmd+N duplicate, Option+Cmd+Backspace delete, Cmd+Up and Cmd+Down
+  move (PowerPoint's own; its Cmd+Shift+N and Cmd+D are the browser's new window and the
+  editor's Place). A key is offered where its command is and no text caret is active; the
+  editor's keybinding test holds the chords free of its own.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container
@@ -65,34 +70,61 @@ Read from the code on 2026-10-14.
   machine has wins); preview-and-print, restricted and bitmap-only faces are not used, and the
   import names each with the reason. A deck document opened again gets its faces back from the
   source deck it keeps.
-- **PPTX export, first part** (M4; `pptx-export`, ADR 704). File ▸ Export as PowerPoint writes
-  the deck back from the original the importer kept: the document's slides in page order, a
-  duplicated slide as a slide part of its own, deleted slides dropped with their relationships
-  and notes, each slide's hidden flag and speaker notes (a notes slide is created from the notes
-  master when a slide gains notes), sections kept contiguous. An unedited document exports the
-  original bytes. What is on a slide is written as the deck had it: a page whose content differs
-  from its slide's at import (a content fingerprint kept as a part) is reported, as is a slide
-  made in the editor, which is not written yet.
+- **PPTX export** (M4; `pptx-export`, ADR 704, ADR 711). File ▸ Export as PowerPoint writes the
+  deck from the original the importer kept and the document itself (the host's `.paged`
+  serialization):
+  - **Slides:** in page order. A duplicated slide gets a slide part of its own. A deleted slide
+    is dropped with its relationships and notes. Hidden flags and speaker notes are written; a
+    notes slide is created from the notes master when a slide gains notes. Sections stay
+    contiguous.
+  - **Byte identity per slide:** a slide the document did not change keeps its part, its
+    relationships and its notes byte for byte, and an unedited document exports the original
+    file.
+  - **An edited slide** is its original XML with only the edited shapes rewritten, and only the
+    edited parts of each:
+    - placement (in its group's space), outline (a resized preset stays a preset, a reshaped one
+      becomes custom geometry), fill and line;
+    - text, paragraph by paragraph: an unchanged paragraph keeps its XML, a changed one is
+      written as differences from the shape's inherited defaults (list level from `Body Ln`,
+      bullets, runs' font, size, bold, italic, underline, colour as a theme colour while it still
+      is one, hyperlinks);
+    - a picture's crop or image, a table's cell text, column widths and row heights.
+  - **Shapes made in the editor** are written whole (shapes, text boxes, ovals, lines, pictures,
+    groups); deleted shapes are dropped. Shapes the document never drew (hidden ones, OLE
+    objects, content parts) keep their place.
+  - **Slides made in the editor** become new slide parts on their layout. Their placeholders are
+    written as differences from the layout's.
+  - **Links:** text hyperlinks (URL, slide, show action) and shape click actions round-trip, and
+    a link to a deleted slide is removed with its relationship.
+  - **Reporting:** what cannot round-trip yet is listed in the export's diagnostics, one line per
+    shape (see Not built yet). A host that cannot serialize the document gets the deck's slides
+    as they were, and the edited pages are reported.
+- **Links on import.** A run's `a:hlinkClick` becomes the engine's text hyperlink: a URL, the
+  page of the slide it jumps to, or the show action as a `ppaction://` URL. A shape's click
+  action is kept in its item metadata, along with its shape key, placeholder and preset.
 - **The PowerPoint oracle** (ADR 705). Scripts drive PowerPoint 16.113.3 to export PDF, per-shape
   geometry, first baselines and chart bars (`scripts/ppt-*`). Fixtures authored through PowerPoint:
   geometry, text, placeholders, motion, baselines.
 
 ## Verified
 
-| What                                                               | Against                                                                                                  | Result                                                                                                                                                                                      |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shape geometry                                                     | PowerPoint's per-shape geometry, fixtures and corpus                                                     | 412 fixture and 1 504 corpus shapes within 1 pt                                                                                                                                             |
-| First baseline and line pitch, percentage spacing                  | `baselines` fixture (5 fonts × 3 sizes × 4 spacings)                                                     | within the PDF's 0.96 pt quantum + 1 % of the size                                                                                                                                          |
-| Chart bars                                                         | PowerPoint's PDF, 44 bars in 4 corpus charts                                                             | within 3 pt (label widths are not measured at import)                                                                                                                                       |
-| Table styles                                                       | `tables` and `tablestyles` fixtures: 150 tables, all 74 built-in styles                                  | every cell's fill within 4 RGB units, text weight and colour exact, every border by colour and width                                                                                        |
-| SmartArt                                                           | `smartart` fixture                                                                                       | every block within 1 pt, text colours exact                                                                                                                                                 |
-| Engine placement                                                   | the published canvas-wasm, headless, all five fixtures                                                   | a page per slide; every drawn item within 0.5 pt of the import                                                                                                                              |
-| Export of slide order, duplicates, deletions, hidden slides, notes | PowerPoint 16.113.3 opening the written decks (a fixture and a corpus deck)                              | opens without a repair prompt; every page pixel-identical to the expected original slide, in the planned order; notes read back by PowerPoint, line breaks kept                             |
-| Embedded fonts, whole faces                                        | `fonts-full` fixture: PowerPoint embedding Lato (4 styles) and Gloria Hallelujah                         | every glyph's outline and program, every advance and every other table identical to the source fonts                                                                                        |
-| Embedded fonts, subsets                                            | `fonts` fixture: PowerPoint's default subsets, Caveat added                                              | every glyph a subset holds is the source's; each holds every character of the deck's text                                                                                                   |
-| Embedded fonts in the wild                                         | 350 faces from 29 real-world decks (PowerPoint for Windows and Mac; TrueType and CFF; subsets and whole) | all decode and parse back; 12 faces matched to installed originals: 17 761 glyphs identical, `cvt `/`fpgm`/`prep`/`VDMX` identical, `hdmx` identical for every glyph a subset holds         |
-| Embedded fonts in the engine                                       | the published canvas-wasm and SDK 0.2.55-canary.0, headless                                              | before: every embedded family missing; after the faces go through the document-font door: none, each style served as the deck's face; File ▸ Open of the deck opens it with nothing missing |
-| Export of an unedited deck                                         | four fixtures (Rust), the importer→exporter path headless and in the editor                              | byte-identical to the original                                                                                                                                                              |
+| What                                                               | Against                                                                                                                                                                              | Result                                                                                                                                                                                      |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shape geometry                                                     | PowerPoint's per-shape geometry, fixtures and corpus                                                                                                                                 | 412 fixture and 1 504 corpus shapes within 1 pt                                                                                                                                             |
+| First baseline and line pitch, percentage spacing                  | `baselines` fixture (5 fonts × 3 sizes × 4 spacings)                                                                                                                                 | within the PDF's 0.96 pt quantum + 1 % of the size                                                                                                                                          |
+| Chart bars                                                         | PowerPoint's PDF, 44 bars in 4 corpus charts                                                                                                                                         | within 3 pt (label widths are not measured at import)                                                                                                                                       |
+| Table styles                                                       | `tables` and `tablestyles` fixtures: 150 tables, all 74 built-in styles                                                                                                              | every cell's fill within 4 RGB units, text weight and colour exact, every border by colour and width                                                                                        |
+| SmartArt                                                           | `smartart` fixture                                                                                                                                                                   | every block within 1 pt, text colours exact                                                                                                                                                 |
+| Engine placement                                                   | the published canvas-wasm, headless, all five fixtures                                                                                                                               | a page per slide; every drawn item within 0.5 pt of the import                                                                                                                              |
+| Export of slide order, duplicates, deletions, hidden slides, notes | PowerPoint 16.113.3 opening the written decks (a fixture and a corpus deck)                                                                                                          | opens without a repair prompt; every page pixel-identical to the expected original slide, in the planned order; notes read back by PowerPoint, line breaks kept                             |
+| Embedded fonts, whole faces                                        | `fonts-full` fixture: PowerPoint embedding Lato (4 styles) and Gloria Hallelujah                                                                                                     | every glyph's outline and program, every advance and every other table identical to the source fonts                                                                                        |
+| Embedded fonts, subsets                                            | `fonts` fixture: PowerPoint's default subsets, Caveat added                                                                                                                          | every glyph a subset holds is the source's; each holds every character of the deck's text                                                                                                   |
+| Embedded fonts in the wild                                         | 350 faces from 29 real-world decks (PowerPoint for Windows and Mac; TrueType and CFF; subsets and whole)                                                                             | all decode and parse back; 12 faces matched to installed originals: 17 761 glyphs identical, `cvt `/`fpgm`/`prep`/`VDMX` identical, `hdmx` identical for every glyph a subset holds         |
+| Embedded fonts in the engine                                       | the published canvas-wasm and SDK 0.2.55-canary.0, headless                                                                                                                          | before: every embedded family missing; after the faces go through the document-font door: none, each style served as the deck's face; File ▸ Open of the deck opens it with nothing missing |
+| Export of an unedited deck                                         | four fixtures (Rust), the importer→exporter path headless and in the editor                                                                                                          | byte-identical to the original                                                                                                                                                              |
+| Export, per-slide identity and regeneration (ADR 711)              | eight fixtures (Rust): the unedited document; moving the first, a middle and the last shape of every slide; hiding each slide                                                        | unedited: the original bytes; each edit changes that slide part alone, and the shape reads back moved by exactly the edit, the same size                                                    |
+| Export of text, tables, new slides, new shapes, links              | fixtures (Rust) and the importer→editor→exporter path on the real engine, headless                                                                                                   | rewritten text reads back with the level, alignment, indents, bullets, size, font, weight and colour import drew; edits, new slides and links read back as the document held them           |
+| Regenerated decks open in PowerPoint                               | PowerPoint 16 opening and saving as PDF the decks the Rust tests write (`PAGED_SLIDE_EXPORT_DIR`): text edit, resize, delete, table cell, new slide, new shape, text and slide links | all eight open without a repair prompt, with every slide; the edited cell, the new slide's placeholders (title, five list levels) drawn on its layout                                       |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
 renderer with the fonts PowerPoint used, 48 dpi, SSIM per slide):
@@ -136,7 +168,12 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 - Editing layouts (master spreads) from the plugin, and layouts no slide uses (they are not
   imported).
 - Thumbnails show the editor's missing-font highlight; the slideshow needs snapshots without it.
-- PPTX export of slide content: shapes, text, pictures and tables regenerated from the
-  document for an edited slide or one made in the editor (M4, second part). A notes master for a
-  deck that has none.
+- PPTX export of what the native model cannot say yet, or what export does not write yet:
+  effect changes (shadow, opacity on its own), edits inside charts and SmartArt, added, removed or
+  merged table rows and columns, cell fills and borders, font styles other than bold and italic,
+  palette edits (a swatch's new colour does not mark its shapes edited), a picture frame's
+  reshaped outline, placeholders other than text ones on a slide made in the editor. Each is
+  reported in the export's diagnostics, and the shape is written as the deck had it. A notes
+  master for a deck that has none. Transitions, timing, masters and layouts are still copied, not
+  regenerated (later waves of ADR 711).
 - Slideshow and presenter view (M5); transitions are decided (ADR 706).

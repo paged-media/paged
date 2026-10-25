@@ -22,7 +22,7 @@
 // which runs JavaScriptCore. The editor ships to Chromium, which runs V8, and
 // the two engines validate, compile and link wasm independently. So each
 // wasm is also booted in headless Chromium, whether or not a journey reaches
-// the lane that loads it (draw's trace kernel, data's DuckDB extensions,
+// the lane that loads it (draw's trace kernel, data's query engine,
 // pdf's import mapper, the engine's library):
 //
 //   - the page fetches it with the sha384 the module host stamps on it, on a
@@ -31,7 +31,7 @@
 //   - a wasm-bindgen module boots through its own glue (compile,
 //     instantiate, link every import, run the start function) and must hand
 //     back its exports;
-//   - a plain module (DuckDB's engine and extensions) is compiled, which
+//   - a plain module (a wasm without wasm-bindgen glue) is compiled, which
 //     validates every function body, and must export something.
 //
 // The browser is driven by the Playwright library (playwright-core) inside

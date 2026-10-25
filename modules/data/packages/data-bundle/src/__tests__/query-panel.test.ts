@@ -213,7 +213,7 @@ describe("data query panel [data.query.seam]", () => {
     ]);
   });
 
-  it("a refused or failing query shows DuckDB's class and position; a good one saves under its id [data.query.seam] [data.query.panel]", async () => {
+  it("a refused or failing query shows the store's class and position; a good one saves under its id [data.query.seam] [data.query.panel]", async () => {
     const saves: [string, string][] = [];
     let verdict: unknown = {
       kind: "Binder",

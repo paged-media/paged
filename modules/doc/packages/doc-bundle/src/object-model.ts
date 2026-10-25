@@ -53,6 +53,7 @@
 // No DOCX semantics here: which runs a field spans is the engine's answer,
 // where a run was poured is doc-host-model's.
 
+import { WORD_COMMAND } from "./word/commands.js";
 import type { LoweredDoc, LoweredParagraph } from "@paged-media/doc-host-model";
 import {
   bodyParagraphLocation,
@@ -94,6 +95,7 @@ import {
   plannedState,
   readDocBytes,
   readLowered,
+  tableLayoutOf,
   type DocState,
 } from "./doc-state.js";
 
@@ -455,7 +457,11 @@ async function commitPlans(
       return { storyId, start, end: start + utf8(at.paragraphText) };
     };
     const paragraphAt = (block: number) => {
-      const at = bodyParagraphLocation(plan.ir, block);
+      const at = bodyParagraphLocation(
+        plan.ir,
+        block,
+        tableLayoutOf(plan.state.data),
+      );
       if (!at)
         throw new Rejected(
           `block ${block} has no place in a story this document can write`,
@@ -565,7 +571,12 @@ async function commitPlans(
         });
         continue;
       }
-      const at = bodyRunLocation(plan.ir, n.block, n.run);
+      const at = bodyRunLocation(
+        plan.ir,
+        n.block,
+        n.run,
+        tableLayoutOf(plan.state.data),
+      );
       if (!at)
         throw new Rejected(
           `block ${n.block} run ${n.run} has no place in a story this document can write`,
@@ -1291,6 +1302,27 @@ function typedCommands(
   ];
 }
 
+/** The typed twins of the Word commands (ADR 323): no arguments, an empty
+ *  result; each runs the same command the shortcut and the control bar run,
+ *  on the host's current text selection. */
+function wordTypedCommands(
+  deps: DocObjectModelDeps,
+): TypedCommandContribution[] {
+  return Object.values(WORD_COMMAND).map(
+    (id) =>
+      ({
+        ...decl(id),
+        handler: async () => {
+          if (!(await deps.wordCommand?.(id)))
+            throw new Error(
+              `unavailable: ${id} needs the Word chrome (an edit context and a text selection)`,
+            );
+          return {};
+        },
+      }) as TypedCommandContribution,
+  );
+}
+
 // ------------------------------------------------------------ entry
 
 export interface DocObjectModelDeps {
@@ -1301,6 +1333,9 @@ export interface DocObjectModelDeps {
   ): Promise<{ frame: ElementId; story: string | null } | null>;
   /** A document's bytes for export: its save-back, or the stored part. */
   exportBytes(state: DocState): Promise<Uint8Array | null>;
+  /** Run a Word command by id (the Word chrome, ADR 608); false when the
+   *  chrome is not contributed or the id is not a Word command. */
+  wordCommand?(id: string): Promise<boolean>;
 }
 
 /** The bundle's object model over `host` (headless). */
@@ -1315,7 +1350,10 @@ export function createDocObjectModel(
       runKind(host),
       mergeFieldKind(host),
     ],
-    commands: typedCommands(host, deps.place, deps.exportBytes),
+    commands: [
+      ...typedCommands(host, deps.place, deps.exportBytes),
+      ...wordTypedCommands(deps),
+    ],
     // Editor plan G3a: a paragraph's text, a merge field, a list's items.
     templateFields: docTemplateFields(host),
     batch: (ops) => planDocOps(host, ops),

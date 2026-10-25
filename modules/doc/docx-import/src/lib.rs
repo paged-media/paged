@@ -26,12 +26,12 @@
 //! an unparseable main document part is a hard error.
 
 use docx_core::{
-    Block, BreakKind, CellPath, DocxDocument, Float, FloatPosition, FloatWrap, HeaderFooter,
-    HeaderFooterKind, HeaderFooterRef, HeaderFooterSet, Image, Justification, LineRule,
-    LineSpacing, ListKind, ListMarker, MergeField, Note, NoteProps, NoteRestart, ParaProps,
-    Paragraph, PositionalTab, PtabAlignment, PtabBase, Run, RunBreak, RunProps, RunSource,
-    RunSymbol, Section, SectionKind, Style, StyleCatalog, StyleKind, TabStop, VertAlign,
-    LINE_BREAK, SOFT_HYPHEN,
+    Block, BodyHeld, BreakKind, CellPath, DocxDocument, Float, FloatPosition, FloatWrap,
+    HeaderFooter, HeaderFooterKind, HeaderFooterRef, HeaderFooterSet, Image, Justification,
+    LineRule, LineSpacing, ListKind, ListMarker, MergeField, Note, NoteProps, NoteRestart,
+    ParaProps, Paragraph, ParagraphHeld, PositionalTab, PtabAlignment, PtabBase, Run, RunBreak,
+    RunProps, RunSource, RunSymbol, Section, SectionKind, Style, StyleCatalog, StyleKind, TabStop,
+    VertAlign, LINE_BREAK, SOFT_HYPHEN,
 };
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_office_word as w10;
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_vml as vml;
@@ -44,6 +44,9 @@ use paged_ooxml::ooxmlsdk::simple_type::{
 };
 use paged_ooxml::{parse_root, part_dir, rels, resolve_target, OoxmlError, OpcPackage};
 
+mod theme;
+use docx_core::Theme;
+
 /// Import context threaded through the body mapping: the numbering resolver and
 /// the image (media-part) resolver.
 struct ImportCtx<'a> {
@@ -55,6 +58,71 @@ struct ImportCtx<'a> {
     /// Legacy VML drawings (`w:pict`) that are not an inline picture, and so
     /// are not placed (floating shapes, text boxes, org charts…).
     unplaced_vml: std::cell::Cell<u32>,
+    /// Tracked changes, hidden runs and content controls met so far (the
+    /// body's are what the document reports).
+    held: std::cell::Cell<BodyHeld>,
+    /// Character styles that hide their text (`w:vanish` on, through
+    /// `basedOn`).
+    hidden_styles: std::collections::HashSet<String>,
+    /// The document theme, for theme colours and fonts (doc ADR 609).
+    theme: Option<Theme>,
+}
+
+impl ImportCtx<'_> {
+    fn bump(&self, f: impl FnOnce(&mut BodyHeld)) {
+        let mut h = self.held.get();
+        f(&mut h);
+        self.held.set(h);
+    }
+
+    /// Whether a run is hidden text: its own `w:vanish`, else its character
+    /// style's.
+    fn hidden(&self, r: &wml::Run, style_id: Option<&str>) -> bool {
+        let own = r.run_properties.as_deref().and_then(|p| {
+            p.run_properties_choice.iter().find_map(|c| match c {
+                wml::RunPropertiesChoice::Vanish(v) => Some(on(&v.val)),
+                _ => None,
+            })
+        });
+        own.unwrap_or_else(|| style_id.is_some_and(|id| self.hidden_styles.contains(id)))
+    }
+}
+
+/// The character styles whose text is hidden: `w:vanish` on in the style or,
+/// where the style says nothing, in the style it is based on.
+fn hidden_styles(styles: &wml::Styles) -> std::collections::HashSet<String> {
+    let mut own = std::collections::HashMap::new();
+    for s in &styles.style {
+        if !matches!(s.r#type, Some(wml::StyleValues::Character)) {
+            continue;
+        }
+        let Some(id) = s.style_id.clone() else {
+            continue;
+        };
+        let vanish = s
+            .style_run_properties
+            .as_deref()
+            .and_then(|r| r.vanish.as_ref())
+            .map(|v| on(&v.val));
+        own.insert(id, (vanish, s.based_on.as_ref().map(|b| b.val.clone())));
+    }
+    own.keys()
+        .filter(|id| {
+            let mut at = Some((*id).clone());
+            // `basedOn` chains are short; the bound stops a cycle.
+            for _ in 0..16 {
+                let Some((vanish, based_on)) = at.as_ref().and_then(|a| own.get(a)) else {
+                    return false;
+                };
+                if let Some(v) = vanish {
+                    return *v;
+                }
+                at = based_on.clone();
+            }
+            false
+        })
+        .cloned()
+        .collect()
 }
 
 /// A paragraph style's own `w:numPr` (`numId`, `ilvl`) and its `basedOn`.
@@ -192,11 +260,36 @@ pub fn import_docx_with_package(
     let doc_bytes = pkg.require(&main_part)?;
     let wml_doc: wml::Document = parse_root(&main_part, doc_bytes)?;
 
+    // Body mapping borrows the package (image resolution); scope the borrow so
+    // the package can be moved into the return value once mapping is done.
+    // settings.xml (optional): even/odd headers and the document-wide note
+    // numbering.
+    let settings = settings_part(&pkg, &main_part)
+        .and_then(|name| pkg.part(&name).map(|b| (name, b)))
+        .and_then(|(name, b)| parse_root::<wml::Settings>(&name, b).ok());
+    // The theme part (optional), with settings' colour mapping (doc ADR
+    // 609): theme colours and fonts resolve through it everywhere below.
+    let theme = theme::theme_part(&pkg, &main_part)
+        .and_then(|name| pkg.part(&name))
+        .and_then(theme::parse_theme)
+        .map(|mut t| {
+            if let Some(m) = settings
+                .as_ref()
+                .and_then(|s| s.color_scheme_mapping.as_ref())
+            {
+                t.mapping = theme::color_mapping(m);
+            }
+            t
+        });
+
     // The styles part is optional.
     let wml_styles = styles_part(&pkg, &main_part)
         .and_then(|name| pkg.part(&name).map(|b| (name, b)))
         .and_then(|(name, b)| parse_root::<wml::Styles>(&name, b).ok());
-    let styles = wml_styles.as_ref().map(map_styles).unwrap_or_default();
+    let styles = wml_styles
+        .as_ref()
+        .map(|w| map_styles(w, theme.as_ref()))
+        .unwrap_or_default();
     let style_lists = wml_styles
         .as_ref()
         .map(StyleLists::from_styles)
@@ -209,13 +302,6 @@ pub fn import_docx_with_package(
         .map(|n| NumberingTable::from_numbering(&n))
         .unwrap_or_default();
 
-    // Body mapping borrows the package (image resolution); scope the borrow so
-    // the package can be moved into the return value once mapping is done.
-    // settings.xml (optional): even/odd headers and the document-wide note
-    // numbering.
-    let settings = settings_part(&pkg, &main_part)
-        .and_then(|name| pkg.part(&name).map(|b| (name, b)))
-        .and_then(|(name, b)| parse_root::<wml::Settings>(&name, b).ok());
     let even_and_odd_headers = settings
         .as_ref()
         .and_then(|s| s.even_and_odd_headers.as_ref())
@@ -257,7 +343,7 @@ pub fn import_docx_with_package(
         .and_then(|s| s.auto_hyphenation.as_ref())
         .is_some_and(|a| on(&a.val));
 
-    let (body, sections, notes, headers_footers, unplaced_vml) = {
+    let (body, sections, notes, headers_footers, unplaced_vml, held) = {
         let doc_rels = pkg
             .part(&rels::rels_part_name(&main_part))
             .map(rels::Relationships::parse)
@@ -266,6 +352,9 @@ pub fn import_docx_with_package(
             numbering,
             style_lists,
             unplaced_vml: std::cell::Cell::new(0),
+            held: std::cell::Cell::new(BodyHeld::default()),
+            hidden_styles: wml_styles.as_ref().map(hidden_styles).unwrap_or_default(),
+            theme: theme.clone(),
             images: ImageResolver {
                 rels: doc_rels,
                 package: &pkg,
@@ -277,6 +366,8 @@ pub fn import_docx_with_package(
             .as_deref()
             .map(|b| map_body(b, &ctx))
             .unwrap_or_default();
+        // The body's held constructs (notes and headers are not placed).
+        let held = ctx.held.get();
         let notes = map_notes(&pkg, &main_part, &ctx);
         let headers_footers = map_headers_footers(&pkg, &main_part, &mut sections, &refs, &ctx);
         (
@@ -285,6 +376,7 @@ pub fn import_docx_with_package(
             notes,
             headers_footers,
             ctx.unplaced_vml.get(),
+            held,
         )
     };
 
@@ -300,6 +392,8 @@ pub fn import_docx_with_package(
         auto_hyphenation,
         add_paragraph_spacing,
         unplaced_vml,
+        held,
+        theme,
     };
     Ok((doc, pkg, main_part))
 }
@@ -574,7 +668,7 @@ fn main_document_part(pkg: &OpcPackage) -> Option<String> {
 }
 
 /// The styles part name (via the main document's `.rels`).
-fn styles_part(pkg: &OpcPackage, main_part: &str) -> Option<String> {
+pub fn styles_part(pkg: &OpcPackage, main_part: &str) -> Option<String> {
     let rels_name = rels::rels_part_name(main_part);
     let rels_bytes = pkg.part(&rels_name)?;
     let rels = rels::Relationships::parse(rels_bytes);
@@ -719,58 +813,135 @@ fn numbering_sample(fmt: &wml::NumberFormatValues) -> &'static str {
 type MappedBody = (Vec<Block>, Vec<Section>, Vec<Vec<HeaderFooterRefIn>>);
 
 fn map_body(body: &wml::Body, ctx: &ImportCtx) -> MappedBody {
-    let mut blocks = Vec::new();
-    // Ordinal among the direct `<w:p>` children of `<w:body>` — the save-back
-    // patcher's paragraph key. Only body paragraphs advance it (tables and any
-    // dropped body child do not), matching "the Nth `<w:p>` under `<w:body>`".
-    let mut para_ord = 0u32;
-    // Ordinal among the direct `<w:tbl>` children of `<w:body>` (cell provenance).
-    let mut table_ord = 0u32;
-    // ADR 029 — a paragraph whose `pPr` carries a `sectPr` ENDS a section
-    // (that `sectPr` describes the section it closes); the body-level
-    // `sectPr` describes the last one.
-    let mut sections = Vec::new();
-    let mut refs = Vec::new();
-    let mut section_start = 0usize;
-    // Bookmarks started between paragraphs belong to the next one.
-    let mut pending_bookmarks: Vec<String> = Vec::new();
+    let mut walk = BodyWalk {
+        ctx,
+        blocks: Vec::new(),
+        para_ord: 0,
+        table_ord: 0,
+        sections: Vec::new(),
+        refs: Vec::new(),
+        section_start: 0,
+        pending_bookmarks: Vec::new(),
+    };
     for choice in &body.body_choice {
         match choice {
-            wml::BodyChoice::BookmarkStart(b) => pending_bookmarks.push(b.name.clone()),
-            wml::BodyChoice::Paragraph(p) => {
-                let mut para = map_paragraph(p, ctx, para_ord, None);
-                if !pending_bookmarks.is_empty() {
-                    pending_bookmarks.append(&mut para.bookmarks);
-                    para.bookmarks = std::mem::take(&mut pending_bookmarks);
-                }
-                blocks.push(Block::Paragraph(para));
-                para_ord += 1;
-                if let Some(sp) = p
-                    .paragraph_properties
-                    .as_deref()
-                    .and_then(|pp| pp.section_properties.as_deref())
-                {
-                    let mut section = map_section(sp);
-                    section.first_block = section_start;
-                    sections.push(section);
-                    refs.push(section_refs(sp));
-                    section_start = blocks.len();
-                }
-            }
-            wml::BodyChoice::Table(t) => {
-                blocks.push(Block::Table(map_table(t, ctx, table_ord)));
-                table_ord += 1;
-            }
+            wml::BodyChoice::BookmarkStart(b) => walk.pending_bookmarks.push(b.name.clone()),
+            wml::BodyChoice::Paragraph(p) => walk.paragraph(p, false),
+            wml::BodyChoice::Table(t) => walk.table(t),
+            wml::BodyChoice::SdtBlock(sdt) => walk.content_control(sdt),
             _ => {}
         }
     }
     if let Some(sp) = body.section_properties.as_deref() {
         let mut section = map_section(sp);
-        section.first_block = section_start;
-        sections.push(section);
-        refs.push(section_refs(sp));
+        section.first_block = walk.section_start;
+        walk.sections.push(section);
+        walk.refs.push(section_refs(sp));
     }
-    (blocks, sections, refs)
+    (walk.blocks, walk.sections, walk.refs)
+}
+
+/// The body walk: blocks in reading order, with the ordinals the save-back
+/// patcher locates on.
+struct BodyWalk<'c, 'a> {
+    ctx: &'c ImportCtx<'a>,
+    blocks: Vec<Block>,
+    // Ordinal among the direct `<w:p>` children of `<w:body>` — the save-back
+    // patcher's paragraph key. Only body paragraphs advance it (tables, a
+    // paragraph inside a content control and any dropped body child do not),
+    // matching "the Nth `<w:p>` under `<w:body>`".
+    para_ord: u32,
+    // Ordinal among the body-level `<w:tbl>`s (cell provenance): a direct child
+    // of `<w:body>`, or one inside a body-level block content control, which
+    // the patcher counts alike.
+    table_ord: u32,
+    // ADR 029 — a paragraph whose `pPr` carries a `sectPr` ENDS a section
+    // (that `sectPr` describes the section it closes); the body-level
+    // `sectPr` describes the last one.
+    sections: Vec<Section>,
+    refs: Vec<Vec<HeaderFooterRefIn>>,
+    section_start: usize,
+    // Bookmarks started between paragraphs belong to the next one.
+    pending_bookmarks: Vec<String>,
+}
+
+impl BodyWalk<'_, '_> {
+    fn paragraph(&mut self, p: &wml::Paragraph, in_content_control: bool) {
+        let mut para = map_paragraph(p, self.ctx, self.para_ord, None);
+        para.held.in_content_control = in_content_control;
+        if !in_content_control {
+            self.para_ord += 1;
+        }
+        if !self.pending_bookmarks.is_empty() {
+            self.pending_bookmarks.append(&mut para.bookmarks);
+            para.bookmarks = std::mem::take(&mut self.pending_bookmarks);
+        }
+        let sect = p
+            .paragraph_properties
+            .as_deref()
+            .and_then(|pp| pp.section_properties.as_deref());
+        if mark_deleted(p) {
+            // A tracked deletion of the paragraph mark joins the paragraph to
+            // the next one once accepted. With nothing left in it, accepting
+            // removes it: so is it here (its bytes stay in the source). One
+            // that keeps content stays a paragraph of its own.
+            if sect.is_none() && !para.runs.iter().any(run_has_content) {
+                self.pending_bookmarks = std::mem::take(&mut para.bookmarks);
+                return;
+            }
+            self.ctx.bump(|h| h.deleted_marks_kept += 1);
+        }
+        self.blocks.push(Block::Paragraph(para));
+        if let Some(sp) = sect {
+            let mut section = map_section(sp);
+            section.first_block = self.section_start;
+            self.sections.push(section);
+            self.refs.push(section_refs(sp));
+            self.section_start = self.blocks.len();
+        }
+    }
+
+    fn table(&mut self, t: &wml::Table) {
+        self.blocks
+            .push(Block::Table(map_table(t, self.ctx, self.table_ord)));
+        self.table_ord += 1;
+    }
+
+    /// A block-level content control (`w:sdt`): its content is shown as plain
+    /// content — a Word table of contents is one, holding its cached
+    /// entries. Its paragraphs are not on the patcher's path; its tables are.
+    fn content_control(&mut self, sdt: &wml::SdtBlock) {
+        self.ctx.bump(|h| h.content_controls += 1);
+        for c in sdt
+            .sdt_content_block
+            .iter()
+            .flat_map(|c| &c.sdt_content_block_choice)
+        {
+            match c {
+                wml::SdtContentBlockChoice::BookmarkStart(b) => {
+                    self.pending_bookmarks.push(b.name.clone())
+                }
+                wml::SdtContentBlockChoice::Paragraph(p) => self.paragraph(p, true),
+                wml::SdtContentBlockChoice::Table(t) => self.table(t),
+                wml::SdtContentBlockChoice::SdtBlock(inner) => self.content_control(inner),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Whether a paragraph's mark is a tracked deletion (`w:pPr/w:rPr/w:del` or
+/// `w:moveFrom`).
+fn mark_deleted(p: &wml::Paragraph) -> bool {
+    p.paragraph_properties
+        .as_deref()
+        .and_then(|pp| pp.paragraph_mark_run_properties.as_deref())
+        .is_some_and(|m| m.deleted.is_some() || m.move_from.is_some())
+}
+
+/// Whether a run puts anything on the page.
+fn run_has_content(r: &Run) -> bool {
+    !r.text.is_empty() || !r.images.is_empty() || r.other_drawings > 0 || r.note_ref.is_some()
 }
 
 fn map_paragraph(
@@ -826,114 +997,42 @@ fn map_paragraph(
             .and_then(|(id, level)| ctx.numbering.resolve(id, level)),
     };
 
-    let mut runs = Vec::new();
-    // Complex-field state: a stack so (rare) nested fields resolve correctly.
-    // A run bearing a `fldChar`/`instrText` is a control run (no display text);
-    // runs in an active HYPERLINK field's result become links.
-    let mut fields: Vec<FieldFrame> = Vec::new();
-    // Ordinal of the source `<w:r>` among the paragraph's DIRECT children — the
-    // key the save-back patcher locates on. EVERY `ParagraphChoice::WRun`
-    // consumes one (control/field-char runs included), so the count tracks the
-    // real XML `<w:r>` child index; `<w:hyperlink>`/`<w:fldSimple>`-wrapped runs
-    // sit on a different path and are marked non-patchable instead.
-    let mut wrun_ord = 0u32;
-    // Ordinals of the WRAPPER children (`<w:hyperlink>` / `<w:fldSimple>`), so a
-    // wrapped run keeps a locatable address of its own.
-    let mut link_ord = 0u32;
-    let mut field_ord = 0u32;
-    // Ordinal of the next MERGEFIELD in this paragraph (both field forms).
-    let mut merge_ord = 0u32;
-    let mut bookmarks = Vec::new();
-    for choice in &p.paragraph_choice {
-        match choice {
-            wml::ParagraphChoice::BookmarkStart(b) => bookmarks.push(b.name.clone()),
-            wml::ParagraphChoice::WRun(r) => {
-                let ord = wrun_ord;
-                wrun_ord += 1;
-                if let Some(kind) = run_field_char(r) {
-                    match kind {
-                        wml::FieldCharValues::Begin => fields.push(FieldFrame::default()),
-                        wml::FieldCharValues::Separate => {
-                            if let Some(f) = fields.last_mut() {
-                                f.result_url = parse_hyperlink_instr(&f.instruction);
-                                f.result_field = field_name(&f.instruction);
-                                f.merge = parse_merge_field(&f.instruction, merge_ord);
-                                if f.merge.is_some() {
-                                    merge_ord += 1;
-                                }
-                                f.separated = true;
-                            }
-                        }
-                        wml::FieldCharValues::End => {
-                            fields.pop();
-                        }
-                    }
-                    continue;
-                }
-                if let Some(instr) = run_instr_text(r) {
-                    if let Some(f) = fields.last_mut() {
-                        f.instruction.push_str(&instr);
-                    }
-                    continue;
-                }
-                let mut run = map_run(r, ctx);
-                run.source = Some(RunSource::DirectRun(ord));
-                if let Some(f) = fields.last() {
-                    if f.separated {
-                        if let Some(url) = &f.result_url {
-                            run.hyperlink = Some(url.clone());
-                        }
-                        run.field = f.result_field.clone();
-                        run.merge_field = f.merge.clone();
-                    }
-                }
-                runs.push(run);
-            }
-            wml::ParagraphChoice::Hyperlink(h) => {
-                let target = ctx.hyperlink_target(h);
-                let mut inner = 0u32;
-                for hc in &h.hyperlink_choice {
-                    if let wml::HyperlinkChoice::WRun(r) = hc {
-                        let mut run = map_run(r, ctx);
-                        run.hyperlink = target.clone();
-                        run.source = Some(RunSource::Hyperlink {
-                            link_ord,
-                            run_ord: inner,
-                        });
-                        inner += 1;
-                        runs.push(run);
-                    }
-                }
-                link_ord += 1;
-            }
-            // `w:fldSimple` — the single-element field form. If it's a
-            // HYPERLINK, its inner display runs become links.
-            wml::ParagraphChoice::SimpleField(fs) => {
-                let url = parse_hyperlink_instr(&fs.instruction);
-                let merge = parse_merge_field(&fs.instruction, merge_ord);
-                if merge.is_some() {
-                    merge_ord += 1;
-                }
-                let mut inner = 0u32;
-                for c in &fs.simple_field_choice {
-                    if let wml::SimpleFieldChoice::WRun(r) = c {
-                        let mut run = map_run(r, ctx);
-                        run.hyperlink = url.clone();
-                        run.field = field_name(&fs.instruction);
-                        run.merge_field = merge.clone();
-                        run.source = Some(RunSource::Field {
-                            field_ord,
-                            run_ord: inner,
-                        });
-                        inner += 1;
-                        runs.push(run);
-                    }
-                }
-                field_ord += 1;
-            }
-            _ => {}
+    let mut walk = ParaWalk {
+        ctx,
+        runs: Vec::new(),
+        fields: Vec::new(),
+        wrun_ord: 0,
+        link_ord: 0,
+        field_ord: 0,
+        merge_ord: 0,
+        bookmarks: Vec::new(),
+        unshown: 0,
+    };
+    walk.items(
+        p.paragraph_choice.iter().map(inline_of_paragraph).collect(),
+        Path::Direct,
+        &Stamp::default(),
+    );
+    let ParaWalk {
+        runs,
+        bookmarks,
+        unshown,
+        ..
+    } = walk;
+    let tracked_ppr = p.paragraph_properties.as_deref().is_some_and(|pp| {
+        let mark = pp.paragraph_mark_run_properties.as_deref();
+        let changes = [
+            pp.paragraph_properties_change.is_some(),
+            mark.is_some_and(|m| m.inserted.is_some() || m.move_to.is_some()),
+            mark.is_some_and(|m| m.deleted.is_some() || m.move_from.is_some()),
+            mark.is_some_and(|m| m.paragraph_mark_run_properties_change.is_some()),
+        ];
+        let n = changes.iter().filter(|c| **c).count() as u32;
+        if n > 0 {
+            ctx.bump(|h| h.tracked_changes += n);
         }
-    }
+        n > 0
+    });
 
     // The paragraph mark's own face (`w:pPr/w:rPr`).
     let mark = p
@@ -946,7 +1045,9 @@ fn map_paragraph(
         .flat_map(|m| &m.paragraph_mark_run_properties_choice2)
     {
         match choice {
-            wml::ParagraphMarkRunPropertiesChoice2::RunFonts(f) => mark_font = f.ascii.clone(),
+            wml::ParagraphMarkRunPropertiesChoice2::RunFonts(f) => {
+                mark_font = theme::latin_font(f, ctx.theme.as_ref())
+            }
             wml::ParagraphMarkRunPropertiesChoice2::FontSize(s) => mark_half_pts = hps(&s.val),
             _ => {}
         }
@@ -962,6 +1063,393 @@ fn map_paragraph(
         source_para_ord: para_ord,
         source_cell,
         bookmarks,
+        held: ParagraphHeld {
+            in_content_control: false,
+            unshown_runs: unshown,
+            tracked_ppr,
+        },
+    }
+}
+
+/// One piece of paragraph content, from any of the run containers ooxmlsdk
+/// gives an enum of its own (`w:p`, `w:hyperlink`, `w:fldSimple`,
+/// `w:sdtContent`, `w:ins`, `w:moveTo`); their variants share names.
+enum Inline<'a> {
+    Run(&'a wml::Run),
+    Hyperlink(&'a wml::Hyperlink),
+    Field(&'a wml::SimpleField),
+    /// A run-level content control (`w:sdt`).
+    ContentControl(&'a wml::SdtRun),
+    /// A tracked insertion or move to here (`w:ins` / `w:moveTo`).
+    Inserted(Vec<Inline<'a>>),
+    /// A tracked deletion or move away (`w:del` / `w:moveFrom`).
+    Deleted,
+    Bookmark(&'a str),
+    Other,
+}
+
+fn inline_of_paragraph(c: &wml::ParagraphChoice) -> Inline<'_> {
+    use wml::ParagraphChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::Hyperlink(h) => Inline::Hyperlink(h),
+        C::SimpleField(f) => Inline::Field(f),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => Inline::Inserted(
+            i.inserted_run_choice
+                .iter()
+                .map(inline_of_inserted)
+                .collect(),
+        ),
+        C::MoveToRun(m) => {
+            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
+        }
+        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        _ => Inline::Other,
+    }
+}
+
+fn inline_of_hyperlink(c: &wml::HyperlinkChoice) -> Inline<'_> {
+    use wml::HyperlinkChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::Hyperlink(h) => Inline::Hyperlink(h),
+        C::SimpleField(f) => Inline::Field(f),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => Inline::Inserted(
+            i.inserted_run_choice
+                .iter()
+                .map(inline_of_inserted)
+                .collect(),
+        ),
+        C::MoveToRun(m) => {
+            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
+        }
+        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        _ => Inline::Other,
+    }
+}
+
+fn inline_of_field(c: &wml::SimpleFieldChoice) -> Inline<'_> {
+    use wml::SimpleFieldChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::Hyperlink(h) => Inline::Hyperlink(h),
+        C::SimpleField(f) => Inline::Field(f),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => Inline::Inserted(
+            i.inserted_run_choice
+                .iter()
+                .map(inline_of_inserted)
+                .collect(),
+        ),
+        C::MoveToRun(m) => {
+            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
+        }
+        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        _ => Inline::Other,
+    }
+}
+
+fn inline_of_content_control(c: &wml::SdtContentRunChoice) -> Inline<'_> {
+    use wml::SdtContentRunChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::Hyperlink(h) => Inline::Hyperlink(h),
+        C::SimpleField(f) => Inline::Field(f),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => Inline::Inserted(
+            i.inserted_run_choice
+                .iter()
+                .map(inline_of_inserted)
+                .collect(),
+        ),
+        C::MoveToRun(m) => {
+            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
+        }
+        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        _ => Inline::Other,
+    }
+}
+
+fn inline_of_inserted(c: &wml::InsertedRunChoice) -> Inline<'_> {
+    use wml::InsertedRunChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => Inline::Inserted(
+            i.inserted_run_choice
+                .iter()
+                .map(inline_of_inserted)
+                .collect(),
+        ),
+        C::MoveToRun(m) => {
+            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
+        }
+        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        _ => Inline::Other,
+    }
+}
+
+fn inline_of_move_to(c: &wml::MoveToRunChoice) -> Inline<'_> {
+    use wml::MoveToRunChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => Inline::Inserted(
+            i.inserted_run_choice
+                .iter()
+                .map(inline_of_inserted)
+                .collect(),
+        ),
+        C::MoveToRun(m) => {
+            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
+        }
+        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        _ => Inline::Other,
+    }
+}
+
+/// Where the runs being walked sit in the XML, which decides the address a
+/// run gets (the save-back patcher's locator, `docx-export/src/splice.rs`).
+#[derive(Clone, Copy)]
+enum Path {
+    /// Direct children of the `<w:p>`: each `<w:r>` takes the next run
+    /// ordinal, each `<w:hyperlink>` / `<w:fldSimple>` the next wrapper
+    /// ordinal.
+    Direct,
+    /// Inside the n-th `<w:hyperlink>` child.
+    Hyperlink(u32),
+    /// Inside the n-th `<w:fldSimple>` child.
+    Field(u32),
+    /// Anywhere else (a tracked change, a content control, a wrapper inside
+    /// a wrapper): every run carries this source, never an ordinal.
+    Locked(Option<RunSource>),
+}
+
+/// What a wrapper stamps on the runs inside it.
+#[derive(Default, Clone)]
+struct Stamp {
+    hyperlink: Option<String>,
+    field: Option<String>,
+    merge: Option<MergeField>,
+}
+
+/// One paragraph's inline walk.
+struct ParaWalk<'c, 'a> {
+    ctx: &'c ImportCtx<'a>,
+    runs: Vec<Run>,
+    // Complex-field state: a stack so (rare) nested fields resolve correctly.
+    // A run bearing a `fldChar`/`instrText` is a control run (no display text);
+    // runs in an active HYPERLINK field's result become links.
+    fields: Vec<FieldFrame>,
+    // Ordinal of the source `<w:r>` among the paragraph's DIRECT children — the
+    // key the save-back patcher locates on. EVERY direct `<w:r>` consumes one
+    // (control/field-char and hidden runs included), so the count tracks the
+    // real XML `<w:r>` child index.
+    wrun_ord: u32,
+    // Ordinals of the WRAPPER children (`<w:hyperlink>` / `<w:fldSimple>`), so a
+    // wrapped run keeps a locatable address of its own.
+    link_ord: u32,
+    field_ord: u32,
+    // Ordinal of the next MERGEFIELD in this paragraph (both field forms).
+    merge_ord: u32,
+    bookmarks: Vec<String>,
+    // Runs left out: tracked deletions and hidden runs.
+    unshown: u32,
+}
+
+impl<'a> ParaWalk<'_, 'a> {
+    // Items arrive collected: a generic iterator would instantiate this
+    // recursive walk once per nesting level, without end.
+    fn items(&mut self, items: Vec<Inline<'a>>, path: Path, stamp: &Stamp) {
+        // The run ordinal inside a hyperlink / fldSimple wrapper: every
+        // `<w:r>` child counts, as in the patcher.
+        let mut inner = 0u32;
+        for item in items {
+            match item {
+                Inline::Bookmark(name) => self.bookmarks.push(name.to_string()),
+                Inline::Run(r) => {
+                    let source = match path {
+                        Path::Direct => {
+                            self.wrun_ord += 1;
+                            Some(RunSource::DirectRun(self.wrun_ord - 1))
+                        }
+                        Path::Hyperlink(link_ord) => {
+                            inner += 1;
+                            Some(RunSource::Hyperlink {
+                                link_ord,
+                                run_ord: inner - 1,
+                            })
+                        }
+                        Path::Field(field_ord) => {
+                            inner += 1;
+                            Some(RunSource::Field {
+                                field_ord,
+                                run_ord: inner - 1,
+                            })
+                        }
+                        Path::Locked(source) => source,
+                    };
+                    self.run(r, source, stamp);
+                }
+                Inline::Hyperlink(h) => {
+                    let inner_path = match path {
+                        Path::Direct => {
+                            self.link_ord += 1;
+                            Path::Hyperlink(self.link_ord - 1)
+                        }
+                        other => nested(other),
+                    };
+                    let stamp = Stamp {
+                        hyperlink: self.ctx.hyperlink_target(h),
+                        ..stamp.clone()
+                    };
+                    self.items(
+                        h.hyperlink_choice.iter().map(inline_of_hyperlink).collect(),
+                        inner_path,
+                        &stamp,
+                    );
+                }
+                // `w:fldSimple` — the single-element field form. If it's a
+                // HYPERLINK, its inner display runs become links.
+                Inline::Field(fs) => {
+                    let inner_path = match path {
+                        Path::Direct => {
+                            self.field_ord += 1;
+                            Path::Field(self.field_ord - 1)
+                        }
+                        other => nested(other),
+                    };
+                    let merge = parse_merge_field(&fs.instruction, self.merge_ord);
+                    if merge.is_some() {
+                        self.merge_ord += 1;
+                    }
+                    let stamp = Stamp {
+                        hyperlink: parse_hyperlink_instr(&fs.instruction)
+                            .or_else(|| stamp.hyperlink.clone()),
+                        field: field_name(&fs.instruction),
+                        merge,
+                    };
+                    self.items(
+                        fs.simple_field_choice.iter().map(inline_of_field).collect(),
+                        inner_path,
+                        &stamp,
+                    );
+                }
+                // A run-level content control: its runs are shown; the
+                // control itself stays in the source.
+                Inline::ContentControl(sdt) => {
+                    self.ctx.bump(|h| h.content_controls += 1);
+                    let inner_path = match path {
+                        Path::Locked(Some(s)) => Path::Locked(Some(s)),
+                        _ => Path::Locked(Some(RunSource::ContentControl)),
+                    };
+                    self.items(
+                        sdt.sdt_content_run
+                            .iter()
+                            .flat_map(|c| &c.sdt_content_run_choice)
+                            .map(inline_of_content_control)
+                            .collect(),
+                        inner_path,
+                        stamp,
+                    );
+                }
+                // A tracked insertion: shown as accepted.
+                Inline::Inserted(children) => {
+                    self.ctx.bump(|h| h.tracked_changes += 1);
+                    let inner_path = match path {
+                        Path::Locked(Some(s)) => Path::Locked(Some(s)),
+                        _ => Path::Locked(Some(RunSource::Tracked)),
+                    };
+                    self.items(children, inner_path, stamp);
+                }
+                // A tracked deletion: not shown, as once accepted. Its bytes
+                // stay in the source.
+                Inline::Deleted => {
+                    self.ctx.bump(|h| h.tracked_changes += 1);
+                    self.unshown += 1;
+                }
+                Inline::Other => {}
+            }
+        }
+    }
+
+    fn run(&mut self, r: &wml::Run, source: Option<RunSource>, stamp: &Stamp) {
+        if let Some(kind) = run_field_char(r) {
+            match kind {
+                wml::FieldCharValues::Begin => self.fields.push(FieldFrame::default()),
+                wml::FieldCharValues::Separate => {
+                    if let Some(f) = self.fields.last_mut() {
+                        f.result_url = parse_hyperlink_instr(&f.instruction);
+                        f.result_field = field_name(&f.instruction);
+                        f.merge = parse_merge_field(&f.instruction, self.merge_ord);
+                        if f.merge.is_some() {
+                            self.merge_ord += 1;
+                        }
+                        f.separated = true;
+                    }
+                }
+                wml::FieldCharValues::End => {
+                    self.fields.pop();
+                }
+            }
+            return;
+        }
+        if let Some(instr) = run_instr_text(r) {
+            if let Some(f) = self.fields.last_mut() {
+                f.instruction.push_str(&instr);
+            }
+            return;
+        }
+        if r.run_properties
+            .as_deref()
+            .is_some_and(|p| p.run_properties_change.is_some())
+        {
+            self.ctx.bump(|h| h.tracked_changes += 1);
+        }
+        let mut run = map_run(r, self.ctx);
+        // Hidden text (`w:vanish`): not shown, as in Word with hidden text
+        // off. The run keeps its ordinal, so the runs around it stay
+        // addressable, and its bytes stay in the source.
+        if self.ctx.hidden(r, run.style_id.as_deref()) {
+            if run_has_content(&run) {
+                self.ctx.bump(|h| h.hidden_runs += 1);
+                self.unshown += 1;
+            }
+            return;
+        }
+        run.source = source;
+        run.hyperlink = stamp.hyperlink.clone();
+        run.field = stamp.field.clone();
+        run.merge_field = stamp.merge.clone();
+        if let Some(f) = self.fields.last() {
+            if f.separated {
+                if let Some(url) = &f.result_url {
+                    run.hyperlink = Some(url.clone());
+                }
+                if f.result_field.is_some() {
+                    run.field = f.result_field.clone();
+                }
+                if f.merge.is_some() {
+                    run.merge_field = f.merge.clone();
+                }
+            }
+        }
+        self.runs.push(run);
+    }
+}
+
+/// The path of a wrapper met on `path` other than as a direct paragraph
+/// child: its runs are not on the patcher's path.
+fn nested(path: Path) -> Path {
+    match path {
+        Path::Locked(s) => Path::Locked(s),
+        _ => Path::Locked(None),
     }
 }
 
@@ -978,16 +1466,47 @@ fn map_table(t: &wml::Table, ctx: &ImportCtx, table_ord: u32) -> docx_core::Tabl
         .unwrap_or_default();
 
     let mut rows = Vec::new();
+    // Ordinals among the DIRECT `<w:tr>` / `<w:tc>` children, as the patcher
+    // counts them; a row or cell inside a content control takes none.
     let mut row_ord = 0u32;
+    let mut content_control_rows = false;
+    let mut table_rows: Vec<(&wml::TableRow, bool)> = Vec::new();
     for tc in &t.table_choice2 {
-        if let wml::TableChoice2::TableRow(tr) = tc {
+        match tc {
+            wml::TableChoice2::TableRow(tr) => table_rows.push((tr, false)),
+            wml::TableChoice2::SdtRow(sdt) => {
+                content_control_rows = true;
+                sdt_rows(sdt, ctx, &mut table_rows);
+            }
+            _ => {}
+        }
+    }
+    for (tr, row_in_control) in table_rows {
+        {
             let mut cell_ord = 0u32;
-            let mut cells = Vec::new();
+            let mut table_cells: Vec<(&wml::TableCell, bool)> = Vec::new();
             for rc in &tr.table_row_choice {
-                if let wml::TableRowChoice::TableCell(c) = rc {
-                    cells.push(map_cell(c, ctx, table_ord, row_ord, cell_ord));
+                match rc {
+                    wml::TableRowChoice::TableCell(c) => table_cells.push((c, row_in_control)),
+                    wml::TableRowChoice::SdtCell(sdt) => {
+                        content_control_rows = true;
+                        sdt_cells(sdt, ctx, &mut table_cells);
+                    }
+                    _ => {}
+                }
+            }
+            let mut cells = Vec::new();
+            for (c, in_control) in table_cells {
+                let path_cell = if in_control { u32::MAX } else { cell_ord };
+                let mut cell = map_cell(c, ctx, table_ord, row_ord, path_cell);
+                if in_control {
+                    for p in &mut cell.paragraphs {
+                        p.held.in_content_control = true;
+                    }
+                } else {
                     cell_ord += 1;
                 }
+                cells.push(cell);
             }
             let is_header = tr.table_row_properties.as_deref().is_some_and(|p| {
                 p.table_row_properties_choice1.iter().any(|c| {
@@ -1008,7 +1527,9 @@ fn map_table(t: &wml::Table, ctx: &ImportCtx, table_ord: u32) -> docx_core::Tabl
                 is_header,
                 height,
             });
-            row_ord += 1;
+            if !row_in_control {
+                row_ord += 1;
+            }
         }
     }
     let cell_margins = t
@@ -1037,6 +1558,44 @@ fn map_table(t: &wml::Table, ctx: &ImportCtx, table_ord: u32) -> docx_core::Tabl
         column_widths,
         rows,
         cell_margins,
+        content_control_rows,
+    }
+}
+
+/// The rows of a row-level content control, nested ones included; each
+/// marked as inside one.
+fn sdt_rows<'a>(sdt: &'a wml::SdtRow, ctx: &ImportCtx, out: &mut Vec<(&'a wml::TableRow, bool)>) {
+    ctx.bump(|h| h.content_controls += 1);
+    for c in sdt
+        .sdt_content_row
+        .iter()
+        .flat_map(|c| &c.sdt_content_row_choice)
+    {
+        match c {
+            wml::SdtContentRowChoice::TableRow(tr) => out.push((tr, true)),
+            wml::SdtContentRowChoice::SdtRow(inner) => sdt_rows(inner, ctx, out),
+            _ => {}
+        }
+    }
+}
+
+/// The cells of a cell-level content control, as [`sdt_rows`].
+fn sdt_cells<'a>(
+    sdt: &'a wml::SdtCell,
+    ctx: &ImportCtx,
+    out: &mut Vec<(&'a wml::TableCell, bool)>,
+) {
+    ctx.bump(|h| h.content_controls += 1);
+    for c in sdt
+        .sdt_content_cell
+        .iter()
+        .flat_map(|c| &c.sdt_content_cell_choice)
+    {
+        match c {
+            wml::SdtContentCellChoice::TableCell(tc) => out.push((tc, true)),
+            wml::SdtContentCellChoice::SdtCell(inner) => sdt_cells(inner, ctx, out),
+            _ => {}
+        }
     }
 }
 
@@ -1066,15 +1625,30 @@ fn map_cell(
     let mut paragraphs = Vec::new();
     let mut para = 0u32;
     for cc in &c.table_cell_choice {
-        if let wml::TableCellChoice::Paragraph(p) = cc {
-            let path = CellPath {
-                table_ord,
-                row,
-                cell,
-                para,
-            };
-            paragraphs.push(map_paragraph(p, ctx, 0, Some(path)));
-            para += 1;
+        match cc {
+            wml::TableCellChoice::Paragraph(p) => {
+                let path = CellPath {
+                    table_ord,
+                    row,
+                    cell,
+                    para,
+                };
+                paragraphs.push(map_paragraph(p, ctx, 0, Some(path)));
+                para += 1;
+            }
+            // A block-level content control in the cell: its paragraphs are
+            // shown, but they are not the cell's `<w:p>` children the
+            // patcher counts.
+            wml::TableCellChoice::SdtBlock(sdt) => {
+                let path = CellPath {
+                    table_ord,
+                    row,
+                    cell,
+                    para,
+                };
+                cell_content_control(sdt, ctx, path, &mut paragraphs);
+            }
+            _ => {}
         }
     }
     let margins = props
@@ -1110,6 +1684,37 @@ fn map_cell(
         paragraphs,
         grid_span,
         v_merge,
+    }
+}
+
+/// The paragraphs of a block-level content control inside a table cell,
+/// nested controls included, each marked as inside one.
+///
+/// They carry the cell's path (the table's ordinal is what the bindings
+/// read from it); being marked, they are never addressed by it.
+fn cell_content_control(
+    sdt: &wml::SdtBlock,
+    ctx: &ImportCtx,
+    path: CellPath,
+    out: &mut Vec<Paragraph>,
+) {
+    ctx.bump(|h| h.content_controls += 1);
+    for c in sdt
+        .sdt_content_block
+        .iter()
+        .flat_map(|c| &c.sdt_content_block_choice)
+    {
+        match c {
+            wml::SdtContentBlockChoice::Paragraph(p) => {
+                let mut para = map_paragraph(p, ctx, 0, Some(path));
+                para.held.in_content_control = true;
+                out.push(para);
+            }
+            wml::SdtContentBlockChoice::SdtBlock(inner) => {
+                cell_content_control(inner, ctx, path, out)
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1263,7 +1868,7 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
     let mut style_id = None;
     if let Some(rpr) = r.run_properties.as_deref() {
         for c in &rpr.run_properties_choice {
-            apply_run_property_choice(c, &mut props, &mut style_id);
+            apply_run_property_choice(c, &mut props, &mut style_id, ctx.theme.as_ref());
         }
     }
     let mut text = String::new();
@@ -1603,21 +2208,24 @@ fn apply_run_property_choice(
     c: &wml::RunPropertiesChoice,
     props: &mut RunProps,
     style_id: &mut Option<String>,
+    theme: Option<&Theme>,
 ) {
     use wml::RunPropertiesChoice as C;
     match c {
         C::RunStyle(s) => *style_id = Some(s.val.clone()),
-        C::RunFonts(f) => props.font = f.ascii.clone().or_else(|| props.font.take()),
+        C::RunFonts(f) => theme::apply_fonts(f, theme, props),
+        C::Shading(s) => props.shading = theme::shading(s, theme),
         C::Bold(b) => props.bold = Some(on(&b.val)),
         C::Italic(i) => props.italic = Some(on(&i.val)),
         C::Caps(v) => props.caps = Some(on(&v.val)),
         C::SmallCaps(v) => props.small_caps = Some(on(&v.val)),
         C::Strike(v) => props.strike = Some(on(&v.val)),
-        C::Color(col) => props.color = color_hex(&col.val),
+        C::Color(col) => theme::apply_color(col, theme, props),
         C::FontSize(sz) => props.size_half_pts = hps(&sz.val),
         C::Underline(u) => props.underline = Some(underline_on(u)),
         C::VerticalTextAlignment(v) => props.vert_align = Some(vert_align(&v.val)),
         C::Position(p) => props.baseline_half_pts = signed_hps(&p.val),
+        C::Spacing(sp) => props.spacing_twips = Some(sp.val),
         _ => {}
     }
 }
@@ -1625,7 +2233,7 @@ fn apply_run_property_choice(
 // ---------------------------------------------------------------------------
 // Styles
 
-fn map_styles(styles: &wml::Styles) -> StyleCatalog {
+fn map_styles(styles: &wml::Styles, theme: Option<&Theme>) -> StyleCatalog {
     let mut out = StyleCatalog::default();
     if let Some(dd) = styles.doc_defaults.as_deref() {
         // docDefaults — the document-wide base run/paragraph properties (Word's
@@ -1633,7 +2241,7 @@ fn map_styles(styles: &wml::Styles) -> StyleCatalog {
         // Defaults into a base style every un-based style inherits from.
         if let Some(rpd) = dd.run_properties_default.as_deref() {
             if let Some(base) = rpd.run_properties_base_style.as_deref() {
-                out.doc_defaults.run = run_props_base(base);
+                out.doc_defaults.run = run_props_base(base, theme);
             }
         }
         if let Some(ppd) = dd.paragraph_properties_default.as_deref() {
@@ -1655,7 +2263,7 @@ fn map_styles(styles: &wml::Styles) -> StyleCatalog {
         }
     }
     for s in &styles.style {
-        if let Some(style) = map_style(s) {
+        if let Some(style) = map_style(s, theme) {
             out.styles.push(style);
         }
     }
@@ -1664,10 +2272,13 @@ fn map_styles(styles: &wml::Styles) -> StyleCatalog {
 
 /// Read the docDefaults run base style (`w:rPrDefault/w:rPr`) — a named-field
 /// shape carrying the subset of run properties Word emits as defaults.
-fn run_props_base(rpr: &wml::RunPropertiesBaseStyle) -> RunProps {
+fn run_props_base(rpr: &wml::RunPropertiesBaseStyle, theme: Option<&Theme>) -> RunProps {
     let mut props = RunProps::default();
     if let Some(f) = &rpr.run_fonts {
-        props.font = f.ascii.clone();
+        theme::apply_fonts(f, theme, &mut props);
+    }
+    if let Some(s) = &rpr.shading {
+        props.shading = theme::shading(s, theme);
     }
     if let Some(b) = &rpr.bold {
         props.bold = Some(on(&b.val));
@@ -1676,7 +2287,7 @@ fn run_props_base(rpr: &wml::RunPropertiesBaseStyle) -> RunProps {
         props.italic = Some(on(&i.val));
     }
     if let Some(c) = &rpr.color {
-        props.color = color_hex(&c.val);
+        theme::apply_color(c, theme, &mut props);
     }
     if let Some(sz) = &rpr.font_size {
         props.size_half_pts = hps(&sz.val);
@@ -1687,7 +2298,7 @@ fn run_props_base(rpr: &wml::RunPropertiesBaseStyle) -> RunProps {
     props
 }
 
-fn map_style(s: &wml::Style) -> Option<Style> {
+fn map_style(s: &wml::Style, theme: Option<&Theme>) -> Option<Style> {
     let style_id = s.style_id.clone()?;
     let kind = match s.r#type {
         Some(wml::StyleValues::Paragraph) => StyleKind::Paragraph,
@@ -1718,7 +2329,7 @@ fn map_style(s: &wml::Style) -> Option<Style> {
     let run = s
         .style_run_properties
         .as_deref()
-        .map(run_props_named)
+        .map(|r| run_props_named(r, theme))
         .unwrap_or_default();
 
     Some(Style {
@@ -1733,10 +2344,13 @@ fn map_style(s: &wml::Style) -> Option<Style> {
 }
 
 /// Read a style's `w:rPr` (the *named-field* form) into [`RunProps`].
-fn run_props_named(rpr: &wml::StyleRunProperties) -> RunProps {
+fn run_props_named(rpr: &wml::StyleRunProperties, theme: Option<&Theme>) -> RunProps {
     let mut props = RunProps::default();
     if let Some(f) = &rpr.run_fonts {
-        props.font = f.ascii.clone();
+        theme::apply_fonts(f, theme, &mut props);
+    }
+    if let Some(s) = &rpr.shading {
+        props.shading = theme::shading(s, theme);
     }
     if let Some(b) = &rpr.bold {
         props.bold = Some(on(&b.val));
@@ -1754,7 +2368,7 @@ fn run_props_named(rpr: &wml::StyleRunProperties) -> RunProps {
         props.strike = Some(on(&v.val));
     }
     if let Some(c) = &rpr.color {
-        props.color = color_hex(&c.val);
+        theme::apply_color(c, theme, &mut props);
     }
     if let Some(sz) = &rpr.font_size {
         props.size_half_pts = hps(&sz.val);
@@ -1767,6 +2381,9 @@ fn run_props_named(rpr: &wml::StyleRunProperties) -> RunProps {
     }
     if let Some(p) = &rpr.position {
         props.baseline_half_pts = signed_hps(&p.val);
+    }
+    if let Some(sp) = &rpr.spacing {
+        props.spacing_twips = Some(sp.val);
     }
     props
 }
@@ -1976,15 +2593,6 @@ fn twips_u(v: &TwipsMeasureValue) -> Option<i32> {
         TwipsMeasureValue::Twips(n) => Some(*n as i32),
         TwipsMeasureValue::UniversalMeasure(_) => None,
     }
-}
-
-/// `w:color/@w:val` normalized to `RRGGBB`, or `None` for `auto`/theme colors.
-fn color_hex(val: &Option<String>) -> Option<String> {
-    let v = val.as_ref()?;
-    if v.eq_ignore_ascii_case("auto") || v.len() != 6 {
-        return None;
-    }
-    Some(v.to_ascii_uppercase())
 }
 
 /// `w:u` is "on" unless it explicitly says `val="none"`. A present `<w:u/>` with

@@ -67,7 +67,8 @@ canary added is under [Releases](#releases).
   by the host as property fields. The `vectorGraphic` edit context raises it. The nine
   feature panels (Appearance, Graphic styles, Symbols, Live paint, Pattern, Repeat, Blend,
   Objects on path, Path options) open with one sentence on what they are for, keep their
-  longer note in a collapsed "About" section, show an action's refusal in the panel, and
+  longer note in a collapsed "About" section (the five recipe panels' notes say what
+  "Update automatically" does for them), show an action's refusal in the panel, and
   ask for a second click before deleting a graphic style or a symbol.
 - **Path commands.** Outline stroke, Offset (with miter, round or bevel joins and a miter
   limit), Simplify, Join, Close, Average endpoints, Reverse path direction;
@@ -92,18 +93,41 @@ canary added is under [Releases](#releases).
   stored in the `.paged` file.
 - **Live paint, pattern, repeat, blend, objects on a path.** Each keeps a stored recipe and
   has a panel plus commands to make, update and release it. The first four insert artwork;
-  objects on a path moves the selected objects and creates none.
+  objects on a path moves the selected objects and creates none. Since WP6.6 a blend takes
+  keys with different anchor or contour counts (the intermediates get a matched structure,
+  the keys keep theirs), two groups (member to member by order; the groups stay groups) and
+  gradient fills (stop for stop, each intermediate its own gradient).
 - **Opacity mask and type on a path.** Make and release a mask from the top selected object;
   attach an existing story to a path and detach it.
 - **Create outlines.** Type ▸ Create outlines turns a text frame's glyphs into compound
   paths, one per fill colour, grouped when there are several, in one undo step.
-- **Image trace.** One command turns a placed raster image into grouped, filled paths. It
+- **Image trace.** One command turns a placed raster image into grouped paths. It
   runs in a host worker where the host offers one, and on the calling thread otherwise.
   The paths land where the image is displayed: the trace follows the image's own placement
-  in its frame, and only the part the frame shows is traced.
-- **SVG.** An importer for `.svg` files and an exporter for the selection. A file is one
-  undo step. A shape of several contours imports as one compound path, its holes wound
-  for its `fill-rule`, and exports as one `<path>` of several subpaths.
+  in its frame, and only the part the frame shows is traced. Since WP6.6: Illustrator's
+  twelve **presets** (Default, High and Low Fidelity Photo, 3 / 6 / 16 Colors, Shades of
+  Gray, Black and White Logo, Sketched Art, Silhouettes, Line Art, Technical Drawing) map onto
+  the kernel's options, and the colour counts snap the raster to that many colours first (a
+  deterministic k-means in `crates/draw-trace`); **centreline** tracing (Line Art, Technical
+  Drawing) thins the ink to its skeleton (Zhang–Suen) and lowers it to OPEN stroked paths at
+  the ink's mean width; **Re-trace** traces again with new options and replaces the previous
+  result in one undo step (the record keeps the options, every region names its image);
+  a trace made **live** is traced again inside the edit that changes its image's link or
+  bytes, over the recipe auto-update's step amend. An Image Trace panel holds the preset, the
+  options, Live, Trace and Re-trace; Draw ▸ Image trace… raises it.
+- **Recolor Artwork and the Color Guide (WP6.5).** Edit ▸ Edit colors ▸ Recolor artwork…
+  raises a panel that reads the selection's colours (fills, strokes, gradient stops and
+  appearance layers, heaviest first, at their display colours) and recolours them by a
+  harmony rule (complementary, analogous, triad, split complementary, tetrad,
+  monochromatic, shades, tints) on an HSB wheel whose handles turn the whole harmony, by
+  reduction to N colours (Lab k-means, deterministic, onto existing colours), or onto the
+  nearest swatches of a colour group. Apply is one batch: new swatches (a spot colour's
+  replacement is a spot), new gradients where stops change, the selection's refs
+  re-pointed; an object's tint is kept, so a tint of a spot stays a tint. The Color Guide
+  panel shows the fill's harmony and its shades / tints, warm / cool and vivid / muted
+  variations; a click fills the selection (Alt-click strokes). The colour math is
+  draw-geometry's `color-harmony.ts`.
+- **SVG.** An importer for `.svg` files and an exporter for the selection.
 - **Simplify with a live preview.** While the Path Options Simplify section is open, the
   simplified selection is drawn dashed over the canvas with its anchor counts, following
   every edit and selection change. A corner angle (0–180°) keeps anchors at least that sharp
@@ -111,7 +135,7 @@ canary added is under [Releases](#releases).
   none it is the engine's `simplifyPath` as before and the preview is the same fit, which can
   keep a slightly different number of anchors (the panel says so). A simplify never adds
   anchors.
-- **Menu.** 92 menu entries on a host that offers the menu door.
+- **Menu.** 94 menu entries on a host that offers the menu door.
 - **The link index.** The ten features that tag elements with this bundle's metadata
   (graphic styles, symbols, live paint, pattern, repeat, blend, objects on a path, opacity
   masks, type on a path, the appearance bake) find them through one shared index per
@@ -204,7 +228,11 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   followed too: a run is one undo step and its reply names it (`document.mutate.amend@2`,
   engine ADR 1004 amendment), so the rebuild joins the script's step; a rebuild that loses the
   race to the script's next write is retried on the script's reply, and a run that called
-  `paged.undo()` is only fingerprinted. The recipe record a rebuild writes is a container
+  `paged.undo()` is only fingerprinted. A recipe's own command that moves the recipe's
+  sources while it rebuilds (Objects on a Path's Update moves the objects it is made from)
+  notes its step (`commands/recipe-steps.ts`): the automatic update takes that recipe's new
+  fingerprint from it and does not place the objects a second time in the same step.
+  The recipe record a rebuild writes is a container
   part, outside the step, as every command-lane recipe write is
   (`commands/recipe-auto-update.ts`).
 - **A recipe parameter write rebuilds the artwork in the same undo step.** The write commits
@@ -281,6 +309,24 @@ panel of these rows. The fields:
 - Path Options: its sections are the args of the path-op and insert-shape typed commands, a
   command form rather than property fields.
 
+## Actions
+
+On a host with `actions@1` (extensions ADR 344, PM-0015) the bundle registers two pure steps
+over an asset (`src/actions.ts`; manifest `capabilities.actions.register`). Neither edits the
+document; Image Trace and Recolor Artwork remain the commands that do.
+
+| Id                         | In → out      | What it does                                                                                                         |
+| -------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `media.paged.draw/trace`   | asset → asset | a raster picture traced to SVG (`image/svg+xml`) at the picture's pixel size; the trace kernel's options by name     |
+| `media.paged.draw/recolor` | asset → asset | an SVG's solid fills and strokes reduced to `count`, moved to a harmony (`rule`, `base`, `rotate`) or mapped (`map`) |
+
+The trace runs the trace wasm in a `host.workers` worker when the host has one. Its decode is
+the platform's (`io/raster-decode.ts`), so it runs where `createImageBitmap` and
+`OffscreenCanvas` exist and refuses with the decoder's sentence elsewhere (Node, the headless
+host); a picture over `maxTracePixels` is traced downsampled. Decoding in the engine instead
+waits for `paged-raster` (PM-0014). The recolour writes draw-geometry's SVG flattening: one
+path per shape, solid paints only. Recolouring a raster is pixel work and is not registered.
+
 ## Limits of what is shipped
 
 - **The WP6.1 tools.** Simplify's preview is exact only with a corner angle; without one
@@ -297,25 +343,28 @@ panel of these rows. The fields:
   Flare, and an Alt+click with Reflect, open their Path Options section; on a host that
   cannot raise a panel they insert or reflect with the last-used values instead.
 - **What updates itself.** Editing a source rebuilds the patterns, repeats, blends,
-  objects on a path and live-paint fills it feeds, in the edit's undo step (above). Symbol
-  instances do not follow a changed definition until Redefine or Reset. A script's edits are
-  followed unless the run called `paged.undo()` / `paged.redo()` or an edit split it (run
-  `updateLinkedRecipes` then). Recipe and library
-  writes made by a COMMAND are not undoable (a make or update records the ids its own batch
-  minted, so the recipe can only be written after it); writes through the object model are
-  (below). Both need a host with `storage.parts@1`.
+  objects on a path and live-paint fills it feeds, in the edit's undo step (above). A symbol's
+  definition is stored artwork, not a page item, so nothing edits it but Redefine, which
+  rebuilds every instance. Two cases stay by design, each because there is no step to join:
+  a script run that called `paged.undo()` / `paged.redo()` or that an edit split carries no
+  step (engine ADR 1004 amendment), so it is only fingerprinted and `updateLinkedRecipes`
+  rebuilds it; and recipe and library writes made by a COMMAND are container parts, which
+  are outside every undo step (extensions ADR 337, consequences) — a make or update records
+  the ids its own batch minted, so the record can only be written after the batch. Writes
+  through the object model are undoable (below). Both need a host with `storage.parts@1`.
 - **Undo steps.** Almost every command is one batch and one undo step, however many items
   it creates or rebuilds (pattern, symbols, live paint, blend, repeat, compound path, brush
-  strokes, SVG import). Two take two: appearance bake and image trace, because their
-  records name the created items by id. A clipped repeat takes two as well.
+  strokes, SVG import, image trace and re-trace, recolour). A clipped repeat takes two.
 - **Appearance.** An unbaked stack shows only its front fill and front stroke. Bake refuses
   a source with more than one contour.
 - **Pattern** produces copies of the artwork, not a fill: at most 400, and no text frames.
-  **Repeat** and **blend** stop at 200 instances or steps; a blend needs two paths with the
-  same contour and anchor counts.
+  **Repeat** and **blend** stop at 200 instances or steps. A blend refuses an open key
+  against a closed one, groups of different sizes, a linear gradient against a radial one,
+  and stops in different places when a midpoint other than 50 % would have to be resampled.
 - **Symbols.** An instance is re-created geometry with flat paint: no text, gradient stops,
   image content or per-instance override. Redefine and reset give its items new ids.
-- **Live paint** has no gap handling and cannot stroke edges. The engine refuses more than
+- **Live paint** has no gap handling and cannot stroke edges (WP6.6 leaves both to the
+  engine's arrangement work, WP2.4). The engine refuses more than
   12 inputs or 256 faces. A fill is inserted above the paths that bound it.
 - **Region tools** work in raw path space: results are exact only when the inputs share one
   item transform. An element moved far enough off its page cannot be measured.
@@ -336,7 +385,9 @@ panel of these rows. The fields:
   redefine read it from the instance. Create Outlines reads it from the text frame, so on an
   engine that reports no origin its glyphs with holes land off by it there.
 - **Tools.** Width (and `widthProfile`) replaces the path with its outline; the profile is not
-  kept as an editable stroke. Eyedropper samples properties, not
+  kept as an editable stroke, because neither the engine's stroke model nor IDML has a
+  variable-width stroke (a stroke is one weight), so the only faithful result on the page and
+  in every export is the outline. Eyedropper samples properties, not
   pixels. Measure's snap and the gradient annotator's stops use raw engine requests outside
   the host doors. Only Curvature snaps among this bundle's own tools.
 - **Opacity mask and type on a path.** Options cannot be edited in place; release or detach
@@ -375,8 +426,10 @@ panel of these rows. The fields:
 - Symbol sets and their tools, nine-slice scaling, per-instance override records (an
   instance's deviations are its items' own properties); merging,
   importing, exporting and organising graphic styles.
-- Trace presets, re-tracing and centreline detection.
-- Resampling two blend paths that do not match; readers for `.ai` and `.eps` files.
+- A variable-width centreline (a traced stroke has the ink's mean width); a Color Guide
+  "save group"; Recolor Artwork's per-row colour editing in the panel (the `map` payload
+  does it).
+- Readers for `.ai` and `.eps` files.
 
 ## Releases
 

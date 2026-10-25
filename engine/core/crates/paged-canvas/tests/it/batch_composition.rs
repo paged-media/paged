@@ -274,6 +274,7 @@ fn handles_group_several_creations_in_one_batch() {
                 bind("b"),
                 Mutation::CreateGroup {
                     member_ids: vec![handle_ref("a"), handle_ref("b")],
+                    clip: false,
                 },
             ],
         })
@@ -751,6 +752,7 @@ fn bind_after_create_group_names_the_group_not_the_previous_insert() {
                 bind("b"),
                 Mutation::CreateGroup {
                     member_ids: vec![handle_ref("a"), handle_ref("b")],
+                    clip: false,
                 },
                 bind("g"),
                 // If `$h:g` resolved to insert "b" (the old behaviour)
@@ -802,6 +804,7 @@ fn bind_after_create_group_works_with_no_earlier_handle() {
                         ElementId::Polygon(ids[0].clone()),
                         ElementId::Polygon(ids[1].clone()),
                     ],
+                    clip: false,
                 },
                 bind("g"),
                 Mutation::DissolveGroup {
@@ -836,6 +839,7 @@ fn a_group_id_minted_at_translation_matches_the_applier() {
                 ElementId::Polygon(ids[0].clone()),
                 ElementId::Polygon(ids[1].clone()),
             ],
+            clip: false,
         })
         .expect("group");
 

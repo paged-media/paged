@@ -40,6 +40,7 @@ $ paged-node describe --no-plugins
     "run <doc> <script.js> [-- args…]",
     "ai <doc> <brief> | --new <size> <brief>",
     "export <doc>",
+    "data <doc>",
     "apply <doc>",
     "merge <template>",
     "generate <template>",

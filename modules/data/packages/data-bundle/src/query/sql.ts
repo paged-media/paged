@@ -1,61 +1,50 @@
-// The query lane's SQL hygiene (wave 6): the guard every user or document
-// query passes before DuckDB runs it, DuckDB error text turned into a
-// diagnostic with a position, and the preview wrapper.
+// The query lane's SQL hygiene (wave 6; the store since ADR 561): the guard
+// every user or document query passes before the store runs it, and the
+// store's error turned into a diagnostic with a position.
 //
-// WHY A GUARD. A document's queries are code (§11): they come back from a
-// saved file and run on refresh. DuckDB-WASM can read a URL from SQL alone
-// (`read_csv('https://…')`, `FROM 'https://….csv'`), which would reach the
-// network without the per-origin consent the remote-source lane asks for, and
-// a statement other than SELECT could drop an imported table. Every source is
-// materialised as a table at import (query/import.ts), so a query never needs
-// a file or URL. The guard therefore admits exactly one SELECT that reads
-// plain tables, plus the table functions that read nothing (`range`,
-// `generate_series`, `unnest`).
+// The guard is a lexer and an allow-list in TypeScript; it asks the engine
+// nothing. (The first guard parsed with DuckDB's `json_serialize_sql`, which
+// lived in an extension DuckDB fetched from the network: under the editor's
+// CSP that trapped the worker. A guard that runs no engine cannot.)
 //
-// HOW. The guard is a conservative lexer and allow-list in plain TypeScript;
-// it asks DuckDB nothing. It used to ask DuckDB's own parser
-// (`json_serialize_sql`), but that function lives in DuckDB's json
-// extension, which the shipped eh build does not contain: DuckDB autoloaded
-// it from extensions.duckdb.org. Under the editor's CSP (connect-src 'self')
-// the fetch was refused and the half-loaded extension trapped the worker
-// ("table index is out of bounds") on every refresh; in Node it quietly
-// fetched the extension from the internet, so the guard itself reached the
-// network. test/duckdb-browser.spec.ts runs the shipped worker under the
-// editor's headers so that cannot come back unseen.
-//
-// The lexer follows DuckDB's (PostgreSQL's) rules for what is code and what
-// is not: '…' strings with '' escapes, "…" identifiers with "" escapes, --
-// line comments and nested /* */ comments. Anything whose lexing differs
-// between dialects is refused outright: E'…' escape strings, U&'…' strings,
-// $-quoting and $ parameters. Then:
-//   · exactly one statement (no `;`), with balanced brackets — the preview
-//     and refresh paths wrap the query in `SELECT * FROM (…)`, and a stray
-//     `)` would let the text escape that wrapper;
+// The lexer follows SQLite's rules for what is code and what is not, where
+// they agree with PostgreSQL's: '…' strings with '' escapes, "…" identifiers
+// with "" escapes, -- line comments and /* */ comments. Anything whose lexing
+// differs between dialects is refused outright: E'…' escape strings, U&'…'
+// strings, $-quoting and $ parameters. (SQLite's `[…]` and `\`…\`` names lex
+// here as punctuation and words, so nothing inside them escapes the checks.)
+// Then:
+//   · exactly one statement (no `;`), with balanced brackets;
 //   · it starts with SELECT, WITH, FROM, VALUES or `(`;
-//   · no statement keyword anywhere (DELETE, ATTACH, COPY, SET, …);
-//   · every table position — after FROM, JOIN, LATERAL, a comma in a FROM
-//     list, a `(` that opens a FROM item — holds a plain table name (or
-//     `main.` name), a subquery, or an allowed table function. A string or
-//     quoted file name there (DuckDB's replacement scan reads it as a file)
-//     or any other table function is refused.
-// The engine side adds `lock_configuration` at boot (LOCKDOWN_SQL in
-// query/duckdb.ts): no statement can change a DuckDB setting afterwards. `enable_external_access
-// = false` was evaluated and rejected: it is global and one-way, and it also
-// refuses DuckDB's own readers over registered in-memory buffers, so every
-// import after the first query would fail (proven in the browser lane).
+//   · no statement keyword anywhere (DELETE, ATTACH, PRAGMA, VACUUM, …);
+//   · every table position — after FROM, JOIN, a comma in a FROM list, a `(`
+//     that opens a FROM item — holds a plain table name (or `main.` name), a
+//     subquery, or an allowed table function. A string there (SQLite reads a
+//     string in a table position as a name) or any other table function is
+//     refused.
+// The store adds its own refusal: user queries run on a connection in
+// `query_only` mode, so a write that got past the guard would still fail.
+// That mode is not enough alone — Turso lets a reader lift it with
+// `PRAGMA query_only = 0` (pinned in data-store's spike) — which is one more
+// reason PRAGMA is a statement word here.
 
 /** A query problem the panel can point at. `line`/`column` are 1-based,
  *  in the query text as the user wrote it. */
 export interface SqlDiagnostic {
-  /** DuckDB's error class (`Parser`, `Binder`, `Catalog`, …) or `Guard`. */
+  /** The store's error class (`Parser`, `Catalog`, `ReadOnly`, `Read`, …)
+   *  or `Guard`. */
   kind: string;
   message: string;
   line?: number;
   column?: number;
 }
 
-/** Table functions that read no file and no URL. */
-const PURE_TABLE_FUNCTIONS = new Set(["range", "generate_series", "unnest"]);
+/** Table functions that read no file and no URL (SQLite's, in Turso). */
+const PURE_TABLE_FUNCTIONS = new Set([
+  "generate_series",
+  "json_each",
+  "json_tree",
+]);
 const PLAIN_TABLE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** Words that start or belong to a statement other than a SELECT. Refused
@@ -98,7 +87,8 @@ const STATEMENT_WORDS = new Set([
   "USE",
   "VACUUM",
 ]);
-/** Words that may open a query. */
+/** Words that may open a query. FROM stays: a FROM-first query is not
+ *  SQLite's, but the guard checks its tables rather than relying on that. */
 const QUERY_STARTS = new Set(["SELECT", "WITH", "FROM", "VALUES"]);
 /** Words that end a FROM list at their nesting level. */
 const FROM_LIST_ENDS = new Set([
@@ -163,7 +153,7 @@ export function positionOf(
   return { line: lines.length, column: lines[lines.length - 1].length + 1 };
 }
 
-/** Split SQL into tokens the way DuckDB's lexer does, refusing every form
+/** Split SQL into tokens the way SQLite's lexer does, refusing every form
  *  whose lexing is not plain (see the header). */
 function lex(text: string): Token[] {
   const out: Token[] = [];
@@ -282,8 +272,9 @@ const notATable = (name: string) =>
   `"${name}" is not an imported source table — a query reads source tables only`;
 
 /** The allow-list walk over the tokens. Throws a GuardError at the first
- *  thing a data query may not do. */
-function walk(tokens: Token[]): void {
+ *  thing a data query may not do. Each table a FROM or JOIN names goes into
+ *  `tables` (a CTE's name among them). */
+function walk(tokens: Token[], tables?: string[]): void {
   if (tokens.length === 0) throw new GuardError("the query is empty");
   const semi = tokens.find((t) => isPunct(t, ";"));
   if (semi)
@@ -367,6 +358,7 @@ function walk(tokens: Token[]): void {
       ) {
         throw new GuardError(notATable(name), t.at);
       }
+      tables?.push(table);
       i = j;
       continue;
     }
@@ -413,8 +405,23 @@ function walk(tokens: Token[]): void {
     throw new GuardError(`unbalanced brackets: a "${top().close}" is missing`);
 }
 
-/** Check one query. Returns null when it may run. Pure: asks DuckDB
- *  nothing, so it is the same in Node, in the browser worker and offline. */
+/** The tables a query's FROM and JOIN items name, each once, in the order
+ *  they are written (the Data panel's pipeline: what a query reads). A
+ *  query the guard refuses names none. A CTE's own name is among them: the
+ *  caller keeps the names of tables it knows. */
+export function tablesRead(sql: string): string[] {
+  const found: string[] = [];
+  try {
+    walk(lex(trimSql(sql)), found);
+  } catch (err) {
+    if (!(err instanceof GuardError)) throw err;
+    return [];
+  }
+  return [...new Set(found)];
+}
+
+/** Check one query. Returns null when it may run. Pure: asks the engine
+ *  nothing, so it is the same in Node, in the browser and offline. */
 export function checkQuery(sql: string): SqlDiagnostic | null {
   const text = trimSql(sql);
   try {
@@ -435,35 +442,23 @@ export async function guardQuery(sql: string): Promise<SqlDiagnostic | null> {
   return checkQuery(sql);
 }
 
-/** The statement a preview runs: the user's query on its own line (so
- *  DuckDB's `LINE n` maps back by one), limited. */
-export function previewSql(sql: string, limit: number): string {
-  return `SELECT * FROM (\n${trimSql(sql)}\n) AS paged_preview LIMIT ${Math.max(0, Math.floor(limit))}`;
-}
-
-/** DuckDB error text → a diagnostic. `lineOffset` is how many lines the
- *  executed statement put in front of the user's query (1 for previewSql). */
-export function diagnoseDuckDBError(
-  err: unknown,
-  lineOffset = 0,
-): SqlDiagnostic {
-  const text = err instanceof Error ? err.message : String(err);
-  const head = /^(?:Error:\s*)?([A-Za-z]+) Error:\s*([\s\S]*)$/.exec(
-    text.trim(),
-  );
-  const kind = head ? head[1] : "Error";
-  const body = head ? head[2] : text;
-  const lines = body.split("\n");
-  const at = lines.findIndex((l) => /^LINE \d+:/.test(l));
-  const message = (at >= 0 ? lines.slice(0, at) : lines).join("\n").trim();
-  if (at < 0) return { kind, message };
-  const m = /^LINE (\d+): /.exec(lines[at])!;
-  const caret = lines[at + 1]?.indexOf("^") ?? -1;
-  const line = Number(m[1]) - lineOffset;
-  return {
-    kind,
-    message,
-    ...(line >= 1 ? { line } : {}),
-    ...(caret >= m[0].length ? { column: caret - m[0].length + 1 } : {}),
+/** A store failure → a diagnostic. The engine's `Error` carries `kind`
+ *  (`Parser`, `Catalog`, `ReadOnly`, `Read`, …) and, when it knows,
+ *  `offset`: a byte offset into `sql`, the text that ran. */
+export function diagnoseStoreError(err: unknown, sql = ""): SqlDiagnostic {
+  const message = err instanceof Error ? err.message : String(err);
+  const fields = (typeof err === "object" && err !== null ? err : {}) as {
+    kind?: unknown;
+    offset?: unknown;
   };
+  const kind = typeof fields.kind === "string" ? fields.kind : "Error";
+  // The message starts with the kind (`Parser: near ":": syntax error`).
+  const text = message.startsWith(`${kind}: `)
+    ? message.slice(kind.length + 2)
+    : message;
+  if (typeof fields.offset !== "number" || sql === "")
+    return { kind, message: text };
+  const bytes = new TextEncoder().encode(sql);
+  const chars = new TextDecoder().decode(bytes.slice(0, fields.offset)).length;
+  return { kind, message: text, ...positionOf(sql, chars) };
 }

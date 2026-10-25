@@ -119,8 +119,10 @@ The two repositories pin each other by git revision, so the steps run in this or
   engine's older spelling is rewritten on every export.
 - **The writer needs the original package.** It patches a source; it cannot produce an IDML
   package from a model alone.
-- **PDF page caps.** The editable path reads at most 12 pages and the fallback at most 20.
-  The importer does not log that pages were left out.
+- **PDF page caps.** The editable path reads at most 12 pages and the fallback at most 20
+  unless `maxPages` (up to 2000) asks for more; the caps keep File ▸ Open of a large PDF from
+  building hundreds of pages in one go. Pages left out are said: the importer logs "read N of
+  M pages" and the typed `importPdf` answers `sourcePageCount` beside `pageCount`.
 - **PDF text.** One text frame per line segment, one paragraph per frame. A run carries its
   text, size and fill colour; font family, bold and italic are never set.
 - **PDF graphics.** Curve segments become straight polygon vertices. An image is placed in

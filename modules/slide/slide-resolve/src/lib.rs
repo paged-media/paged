@@ -743,6 +743,8 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                         }
                         _ => None,
                     },
+                    frame: None,
+                    link: sp.nv.hyperlink.clone(),
                 },
             })
         }
@@ -801,6 +803,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 shadow: shadow(&p.props, p.style.as_ref(), ctx),
                 meta: ItemMeta {
                     shape_id: p.nv.id,
+                    link: p.nv.hyperlink.clone(),
                     ..Default::default()
                 },
             })
@@ -828,6 +831,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 shadow: None,
                 meta: ItemMeta {
                     shape_id: g.nv.id,
+                    link: g.nv.hyperlink.clone(),
                     ..Default::default()
                 },
             })
@@ -870,6 +874,8 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     shadow: None,
                     meta: ItemMeta {
                         shape_id: f.nv.id,
+                        frame: Some("chart".into()),
+                        link: f.nv.hyperlink.clone(),
                         ..Default::default()
                     },
                 })
@@ -904,6 +910,8 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     shadow: None,
                     meta: ItemMeta {
                         shape_id: f.nv.id,
+                        frame: Some("diagram".into()),
+                        link: f.nv.hyperlink.clone(),
                         ..Default::default()
                     },
                 })

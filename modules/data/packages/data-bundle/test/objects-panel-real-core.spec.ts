@@ -17,7 +17,7 @@
  */
 
 // ADR 323 §4 against the REAL stack (real core, the headless host's
-// host.objects, the real data-js engine, real DuckDB): the "Data objects"
+// host.objects, the real data-js engine with its query store): the "Data objects"
 // panel is registered beside the four React panels, its lists publish the
 // session's objects, and a binding's expression edited the way the panel's
 // PropertyField commits it (host.objects.set on the picked binding's
@@ -25,8 +25,8 @@
 // is ONE host.objects batch, ONE undo step. The edit itself is one undo step
 // too (its labels), which the session follows on undo and redo.
 //
-// Gate: skips without canvas-wasm, DuckDB or the built data-js wasm, EXCEPT
-// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_DUCKDB=1.
+// Gate: skips without canvas-wasm or the built data-js wasm, EXCEPT
+// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1.
 
 import { afterEach, describe, expect, it, vi, mock } from "bun:test";
 import { waitFor, importActual } from "@paged-media/test-kit";
@@ -37,11 +37,10 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import {
-  bootRealDuckDB,
   bootRealEngine,
   DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 import { BIND, OBJECTS_PANEL_ID } from "../src/panels/objects-panel";
 import { labelledElements } from "../src/labels";
 import { undoMark, undoSteps } from "./perf/harness";
@@ -50,30 +49,17 @@ import { undoMark, undoSteps } from "./perf/harness";
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const CSV = "sku,weight_mm\nA-1,2\nB-2,4\n";
 const BINDING = "plugin:media.paged.data/binding/weight";
 
-const probe = await bootRealDuckDB();
-const ready =
-  ENGINE_ANCHOR !== null &&
-  probe.handle !== undefined &&
-  existsSync(DATA_JS_WASM);
-const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
+const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
+const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
-  }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => {
-      const b = await bootRealDuckDB();
-      if (!b.handle) throw new Error(b.error);
-      return b.handle;
-    },
   }));
   return import("../src/index");
 }
@@ -95,7 +81,7 @@ async function labelExpr(
 }
 
 describe.skipIf(!ready && !required)(
-  "Data objects panel, real core + engine + DuckDB [data.object-model]",
+  "Data objects panel, real core + engine [data.object-model]",
   () => {
     const hosts: HeadlessHost[] = [];
     afterEach(() => {
@@ -105,7 +91,7 @@ describe.skipIf(!ready && !required)(
     it("a binding's expr edited through host.objects (the panel's PropertyField commit) then the re-apply is ONE undo step [data.object-model] [data.bind.property]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
       const h = await openRealHost();

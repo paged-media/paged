@@ -104,13 +104,13 @@ measured, 200 instances in ~12 ms, one undo removes all of them.
 EXPAND and RELEASE are Illustrator's two verbs and mean different things
 (expand keeps every instance as artwork; release removes them and keeps
 the source) — note this is pattern v1's pair spelled the OTHER way
-round. CLIPPING is real, over B-18's `pasteInto`, and costs the second
-undo step plus four measured consequences that are all asserted: a
-clipped repeat has NO GROUP (`pasteInto` refuses a grouped child), a
-clipped instance is INVISIBLE to `document.tree()` while still answering
-geometry and metadata by id (so the recipe is its only index, and
-clipping DEGRADES OFF without a container writer), `deleteFrame` REFUSES
-a pasted-in child, and deleting the container ORPHANS its children. The
+round. CLIPPING is a CLIP GROUP since engine ADR 1010 (`document.clipGroups@1`):
+the instances and the clip frame, the frame on top, are one `createGroup
+{ clip: true }` in the same batch — one undo step, a group, and every
+instance in the tree. On a host without the flag it falls back to B-18's
+`pasteInto`, which costs a second undo step and the measured consequences
+`repeat.spec.ts` asserts in its paste-into lane: no group, `deleteFrame`
+REFUSES a pasted-in child, and the frame is deleted last. The
 recipe is the FIFTH `.paged` container part here. The on-canvas control
 is REAL but bounded and the code says where: a drag steers ONE parameter
 and the overlay draws a GUIDE, because `setToolPreview` takes ONE
@@ -390,11 +390,16 @@ face contours inserted and named, then the replaced fills deleted, the
 holes re-merged, the faces painted and linked. The two-batch lane is the
 fallback.
 
-IMAGE TRACE's commit STAYS TWO BATCHES for the appearance bake's reason:
-the source's trace record names its regions by element id inside its
-JSON metadata (`imageTrace.regions`), where a handle is never resolved.
-What each batch created comes off the reply: 0 tree reads, was 2 (3 with
-a group to find).
+IMAGE TRACE is ONE batch since ADR 360 (the paragraph that used to say
+two was stale), and so is RE-TRACE (WP6.6): the new regions are inserted,
+the previous result's group dissolved and its regions deleted, then the
+new ones finished and grouped, in that order. The old regions are found
+by their `tracedRegion.of` marker, never by an id in the record. A LIVE
+trace re-runs inside the edit that changes its image's link or bytes
+(`commands/image-trace-live.ts`, over `runInStep`, the recipe auto-
+update's step amend); `replaceImageBytes` leaves the `links` row
+unchanged — measured — so the watch also fingerprints a live source's
+bytes.
 
 **"WHAT DID MY BATCH CREATE" HAS ONE SEAM: `commands/minted.ts`.** A
 batch outcome carries ONE `createdId`, so a flow that inserted several
@@ -499,32 +504,27 @@ in `minted.spec.ts`, `pattern.spec.ts` and `symbols.spec.ts` now assert
 the fixed behaviour (a re-plan under another group is one batch and one
 undo restores it).
 
-**B-18 NESTING IS REAL, and `commands/group.ts`'s old "a 'paste into'
-cannot be expressed end-to-end" note was wrong — it is corrected in
-place.** `pasteInto { containerId, childId }` nests a top-level item
-inside a container Rectangle / Oval / Polygon, where it renders CLIPPED
-by that container's outline; `releaseFrom { childId }` pops it back.
-Repeats' clipping ships on the pair. FOUR consequences, all measured and
-all asserted in `repeat.spec.ts` — read them before building anything
-else on nesting:
+**B-18 NESTING IS REAL, and since engine ADR 1010 so are CLIP GROUPS.**
+`pasteInto { containerId, childId }` nests a top-level item — a group too;
+a grouped item stands for its outermost group — inside a container
+Rectangle / Oval / Polygon, where it renders CLIPPED by that container's
+outline; `releaseFrom { childId }` pops it back. `createGroup { memberIds,
+clip: true }` makes a clip group (the top-most member clips the rest and
+paints nothing), Illustrator's clipping mask. Measured, and asserted in
+`repeat.spec.ts` / `link-index.spec.ts`:
 
-1. a nested child CANNOT be grouped ("B-18: a grouped item cannot be
-   pasted into a frame (ungroup first)"), so clip and group are
-   mutually exclusive;
-2. a nested child is INVISIBLE to `document.tree()` — the container
-   reports NO children — while `getMetadata` / `elementGeometry` /
-   `pathAnchors` all still answer for it BY ID. So nothing that walks
-   the tree can enumerate nested artwork, and anything that nests must
-   keep its own index;
+1. `document.tree()` lists a container's pasted-in children under it, and
+   marks a clip group's row `clip: true` (an engine before ADR 1010 listed
+   no pasted-in content: anything that nested had to keep its own index,
+   and the link index still falls back to a read by id);
+2. a frame holding pasted-in content is a LEAF with children — walk every
+   node's children, and treat every page item but a group as a leaf
+   (`isLeafNode` in `link-index.ts`);
 3. `deleteFrame` REFUSES a nested child ("B-18: the item is pasted into
    a container — release it before removing") — release first;
-4. deleting the CONTAINER on 0.64 did not delete its children, it
-   ORPHANED them (they left the tree and still answered
-   `elementGeometry`); 0.65 removes them with it. Delete the children
-   first, the container last — right on both engines.
-   What is still NOT representable is a clip GROUP — an arbitrary clip path
-   over a set of items. The `GroupSpec` has no clip flag and core's parsed
-   `Group` has no mask member; that half stays in the RFI.
+4. deleting the CONTAINER removes its children with it (0.65+; a pasted-in
+   group too). Delete the children first, the container last — right on
+   every engine.
 
 ## Hard rules
 

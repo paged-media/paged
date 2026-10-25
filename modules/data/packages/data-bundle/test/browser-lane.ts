@@ -1,9 +1,8 @@
-// The REAL-BROWSER DuckDB lane: the shipped eh worker + engine
-// (bin/duckdb-browser-eh.worker.js, bin/duckdb-engine.wasm) booted by the
-// bundle's own bootDuckDB in headless Chromium. The Node lane runs the same
-// engine through DuckDB's Node runtime, which is not the code the editor
-// runs: `json_serialize_sql` passed every Node spec and trapped ("table index
-// is out of bounds") in the browser worker on every refresh. This lane exists
+// The REAL-BROWSER lane: the shipped data-js wasm (bin/data_js_bg.wasm, the
+// query store inside it) booted by the bundle's own bootEngine in headless
+// Chromium. Node is not the realm the editor runs in: the first query guard
+// passed every Node spec and trapped in the browser on every refresh, and the
+// store's clock exists only because wasm32 has no std::time. This lane exists
 // so that class of bug — Node passes, browser traps — goes red here.
 //
 // Needs playwright-core (devDependency) and a Chromium: PAGED_CHROMIUM, or
@@ -77,7 +76,7 @@ export interface BrowserLane {
   page: any;
   /** Console errors and page errors seen so far (worker traps land here). */
   errors: string[];
-  /** Requests to any origin but the lane's (DuckDB extension autoloads). */
+  /** Requests to any origin but the lane's (the module host's included). */
   offOrigin: string[];
   /** Every path the lane's server answered 200, in order (bin/ and lane/). */
   served: string[];
@@ -96,14 +95,10 @@ export async function startBrowserLane(): Promise<{
   lane?: BrowserLane;
   error?: string;
 }> {
-  for (const f of [
-    "duckdb-engine.wasm",
-    "duckdb-browser-eh.worker.js",
-    "duckdb-browser.mjs",
-  ]) {
+  for (const f of ["data_js_bg.wasm", "data_js.js"]) {
     if (!existsSync(join(BIN, f)))
       return {
-        error: `${join(BIN, f)} is missing — run scripts/vendor-duckdb.sh`,
+        error: `${join(BIN, f)} is missing — run scripts/build-wasm.sh`,
       };
   }
   const req = createRequire(join(PKG, "package.json"));
@@ -121,7 +116,7 @@ export async function startBrowserLane(): Promise<{
         "no Chromium — set PAGED_CHROMIUM or `npx playwright-core install chromium-headless-shell`",
     };
 
-  // esbuild from modules/data (a devDependency there), as scripts/bundle-duckdb-api.mjs does.
+  // esbuild from modules/data (a devDependency there).
   const rootReq = createRequire(resolve(PKG, "..", "..", "package.json"));
   const esbuild = rootReq("esbuild");
   const out = mkdtempSync(join(tmpdir(), "paged-data-lane-"));
@@ -157,7 +152,7 @@ export async function startBrowserLane(): Promise<{
       "access-control-allow-origin": "*",
     });
     moduleServed.push(url.pathname);
-    // Quality 4: brotli at the default 11 takes a minute on DuckDB's 34 MB.
+    // Quality 4: brotli at the default 11 takes long on a multi-MB wasm.
     let br = compressed.get(file);
     if (!br) {
       br = brotliCompressSync(readFileSync(file), {
@@ -186,10 +181,8 @@ export async function startBrowserLane(): Promise<{
       "content-type": TYPES[extname(file)] ?? "application/octet-stream",
       // The editor's headers (apps/canvas vite config): cross-origin
       // isolated, and a CSP whose connect-src is the page's own origin. That
-      // CSP is what made the json_serialize_sql guard trap: the guard made
-      // DuckDB autoload its json extension from extensions.duckdb.org, the
-      // CSP refused the fetch, and the half-loaded extension trapped. A lane
-      // without it fetched the extension from the internet and passed.
+      // CSP is what made the first guard trap (it reached the network, the
+      // CSP refused it); a lane without it would have passed.
       "cross-origin-opener-policy": "same-origin",
       "cross-origin-embedder-policy": "credentialless",
       "cross-origin-resource-policy": "same-origin",

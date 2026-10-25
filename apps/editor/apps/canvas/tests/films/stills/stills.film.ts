@@ -670,7 +670,7 @@ test("stills · a catalogue merged from product data", async ({ page }) => {
   await buildTemplate(page, designer);
   await page.waitForTimeout(800);
 
-  // The product list, into DuckDB, through the Data layout's own import.
+  // The product list, into the data engine, through the Data layout's own import.
   await page
     .getByRole("button", { name: "Data layout", exact: true })
     .last()

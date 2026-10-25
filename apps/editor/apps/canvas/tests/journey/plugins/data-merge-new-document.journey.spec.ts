@@ -33,8 +33,8 @@
 //
 // Needs plugin-api/plugin-sdk 0.2.41 (host.documents); on an older contract
 // the checkbox is disabled and the journey skips, saying why.
-// Gate: under REQUIRE_REAL_DUCKDB=1 a DuckDB that does not boot FAILS the
-// journey (data-duckdb-gate.ts); otherwise it skips and says why.
+// Gate: under REQUIRE_REAL_ENGINE=1 a data engine that does not boot FAILS the
+// journey (data-engine-gate.ts); otherwise it skips and says why.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
@@ -44,7 +44,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 
 const HARNESS = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -165,9 +165,9 @@ async function importCsv(page: Page, designer: Designer): Promise<void> {
   } catch {
     const got =
       (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
-    skipWithoutDuckDB(
+    skipWithoutEngine(
       got,
-      `the data-merge journey needs DuckDB-WASM to boot (engine status "${got}")`,
+      `the data-merge journey needs the data engine to boot (engine status "${got}")`,
     );
   }
 }

@@ -17,10 +17,10 @@
  */
 
 // data.plugin.bundle.activate — registration wiring against a minimal
-// hand-rolled fake BundleHost (no editor, no engine, no DuckDB): the bundle
+// hand-rolled fake BundleHost (no editor, no engine): the bundle
 // contributes the two panels + the four commands, the open commands open their
 // panels, and dispose tears the session down cleanly (the honesty smoke test).
-// Engine/DuckDB behavior is NOT exercised here — this is wiring only.
+// Engine behavior is NOT exercised here — this is wiring only.
 
 import { describe, expect, it } from "bun:test";
 
@@ -127,7 +127,7 @@ describe("data_plugin_bundle_activate", () => {
     expect(ctx.matches?.({ metadata: null })).toBe(false);
   });
 
-  it("registers the sources, bindings, dataset and query panels under their declared ids", () => {
+  it("registers the sources, bindings, dataset, query, record templates and pagination panels under their declared ids", () => {
     const fake = fakeHost();
     dataBundle.activate(fake.host);
     expect(fake.panels.map((p) => p.id)).toEqual([
@@ -135,7 +135,11 @@ describe("data_plugin_bundle_activate", () => {
       "media.paged.data.panel.bindings",
       "media.paged.data.panel.dataset",
       "media.paged.data.panel.query",
+      "media.paged.data.panel.templates",
+      "media.paged.data.panel.pagination",
     ]);
+    expect(fake.panels[4].title).toBe("Record templates");
+    expect(fake.panels[5].title).toBe("Record flow pagination");
     expect(fake.panels[3].title).toBe("Data query");
     expect(fake.panels[0].title).toBe("Data sources");
     expect(fake.panels[1].title).toBe("Bindings");

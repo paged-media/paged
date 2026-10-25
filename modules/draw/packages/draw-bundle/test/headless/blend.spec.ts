@@ -1033,7 +1033,10 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
     });
   });
 
-  describe("mismatched structure (F1: 3-anchor polygon vs 2-anchor line)", () => {
+  // WP6.6: a different ANCHOR count is matched now (the line gains an
+  // anchor for the correspondence, `blend-depth.spec.ts` has the rest);
+  // what is still refused is an OPEN key against a CLOSED one.
+  describe("mismatched structure (F1: closed rectangle vs 3-anchor open polygon)", () => {
     let h: HeadlessHost;
 
     beforeAll(async () => {
@@ -1046,8 +1049,8 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
     it("refuses with a diagnostic — no elements inserted", async () => {
       const before = await leafIds(h);
       await h.host.selection.set([
+        { kind: "rectangle", id: "urect" } as ElementId,
         { kind: "polygon", id: "upoly" } as ElementId,
-        { kind: "graphicLine", id: "uline" } as ElementId,
       ]);
       await commandFor(h, BLEND_COMMAND_ID).handler(undefined, undefined);
       expect(await leafIds(h)).toEqual(before);

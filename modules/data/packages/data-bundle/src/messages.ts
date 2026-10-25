@@ -35,6 +35,8 @@ export const COMMANDS = defineMessages("data.commands", {
   bindingsPanel: "Bindings",
   datasetPanel: "Dataset preview",
   queryPanel: "Data query",
+  templatesPanel: "Record templates",
+  paginationPanel: "Record flow pagination",
   importerTitle: "Data source (JSON, Parquet)",
   importData: "Data sources…",
   defineBinding: "Bindings…",
@@ -460,6 +462,87 @@ export const TEMPLATE = defineMessages("data.template", {
   variableIsContent: `The variable "{name}" fills a text or a picture: open that frame as a text or image field.`,
 });
 
+/** The Record templates panel: the library of the cells a record flow
+ *  repeats (record-templates.ts). */
+export const RECORD_TEMPLATES = defineMessages("data.recordTemplates", {
+  intro:
+    "A record template is the cell a record flow repeats for every record: one line per field.",
+  engineIdle:
+    "The data engine starts with the first data source. Import one to make templates.",
+  openSources: "Open Data sources",
+  empty: "No record templates yet.",
+  nameLabel: "Name",
+  namePlaceholder: "Product card",
+  fromSelection: "New from selection",
+  fromSelectionTitle:
+    "Make a template from the selected text frames: each line is one template line, <<field>> reads a field",
+  howTo:
+    "Write the lines in text frames as for Data Merge (Price: <<price>>), select them, then make the template.",
+  needsName: "Give the template a name.",
+  created: `Made "{name}" with {count} line(s).`,
+  unreferenced: "Kept as text (not a field name): {names}",
+  lines: "{count} line(s) · {height} pt per line",
+  usedBy: "used by {flows}",
+  unused: "not used",
+  rename: "Rename",
+  renameSave: "Save",
+  renameCancel: "Cancel",
+  delete: "Delete",
+  confirmDelete: "Confirm delete",
+  deleteInUse:
+    "In use by a record flow: point the flow at another template first.",
+  preview: "Preview",
+  previewOf: `Preview of "{name}"`,
+  previewQuery: "Records from",
+  noQuery: "Save a query in Data query to preview with its records.",
+  record: "Record",
+  previous: "Previous record",
+  next: "Next record",
+  ofTotal: "of {total}",
+  refreshData: "Refresh data",
+});
+
+/** The pagination inspector of a record flow. */
+export const PAGINATION = defineMessages("data.pagination", {
+  intro:
+    "How a record flow breaks into pages: lowering places one frame per page in the start page's margin box.",
+  engineIdle: "The data engine starts with the first data source.",
+  noFlow:
+    "No record flow yet. Define one in Bindings (Add binding ▸ record flow).",
+  openBindings: "Open Bindings",
+  flow: "Record flow",
+  template: "Template",
+  lineHeight: "Line height (pt)",
+  lineHeightShared:
+    "Changes the template for every flow using it ({count}" + ").",
+  groupBy: "Group by",
+  groupByPlaceholder: "field, field",
+  groupByNote:
+    "One section header per group; fields separated by commas, outermost first.",
+  repeatHeader: "Repeat the group header on a new page",
+  continuedMarker: "Mark a repeated header as continued",
+  footer: "Group footer",
+  footerLabel: "Footer text",
+  footerLabelNote: "{count} in the text is the group's record count.",
+  footerField: "Total of field",
+  footerAgg: "As",
+  aggSum: "sum",
+  aggAvg: "average",
+  aggMin: "minimum",
+  aggMax: "maximum",
+  summary: "Result",
+  placed: "{placed} of {total} record(s) on {pages} page(s)",
+  perPage: "Records per page: {counts}",
+  frameHeight: "Frame height {height} pt (the start page's margin box)",
+  continued: "{count} header(s) repeated as continued",
+  overflow: "{count} record(s) did not fit.",
+  tallRecord:
+    "A record is {height} pt tall, more than a page's {frame} pt: it takes a page of its own and runs over.",
+  needsData: "The flow's query has no records yet.",
+  refreshData: "Refresh data",
+  noPage: "There is no page to paginate over.",
+});
+
 /** Catalogues (ADR 560): a template's fields as binding targets, the
  *  template repeated per record or group. */
 export const CATALOGUE = defineMessages("data.catalogue", {
@@ -555,6 +638,20 @@ export const STATUS = defineMessages("data.status", {
   mergeFailed: "Merge failed.",
   recordFlowRecords: `Record flow "{id}": {total} record(s).`,
   ruleUndo: `Rule "{scope}"`,
+});
+
+/** What may be wrong with the placed content (data ADR 564): the data door's
+ *  `issues`, the Problems panel's rows. */
+export const ISSUES = defineMessages("data.issues", {
+  overset: `The text of "{binding}" does not fit its frame: enlarge the frame, shorten the text, or turn on Auto-Size in Text Frame Options.`,
+  oversetRecord: `The text of "{binding}" for record {record} does not fit its frame: enlarge the frame, shorten the text, or turn on Auto-Size in Text Frame Options.`,
+  missingAsset: `The picture of "{binding}" is missing: {reason}.`,
+  noReference: "no reference in the data",
+  lowResolution: `The picture of "{binding}" is {ppi} ppi at its size in the frame, under {min} ppi: use a larger picture or make the frame smaller.`,
+  emptyValue: `"{binding}" shows an empty value: check the field in the data.`,
+  failed: `"{binding}" failed: {reason}`,
+  failedUnknown: `"{binding}" could not be resolved: check its expression and the data.`,
+  unplaced: `{count} of {total} record(s) of "{binding}" were not placed: make the flow's frames larger or the records shorter.`,
 });
 
 defineTranslations("de", de);

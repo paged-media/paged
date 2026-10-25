@@ -82,6 +82,7 @@ import {
   updateRecipe,
   type RecipeRef,
 } from "./recipe-update";
+import { takeRecipesRebuiltIn } from "./recipe-steps";
 import { linkIndex, shareLinkIndex } from "../link-index";
 import { addressOf } from "../object-model/shared";
 
@@ -165,7 +166,7 @@ export function recipeAutoUpdateOf(
 /** A change to handle: a committed change, a recipe written (`baseline`:
  *  fingerprint the recipes not seen yet), or a document opened (`open`:
  *  forget every fingerprint and take them afresh). */
-type Pending = DocumentChangeEvent | "baseline" | "open";
+type Pending = DocumentChangeEvent | "baseline" | "open" | "setting";
 
 const keyOf = (r: RecipeRef): string => `${r.kind}/${r.id}`;
 
@@ -321,6 +322,26 @@ export async function rebuildInStep(
   return { appliedSeq: view.seq(), rebuilt, refused: view.refused() };
 }
 
+/**
+ * Run `work` INSIDE the undo step `appliedSeq` names, the way
+ * {@link rebuildInStep} runs a recipe update: every write `work` makes
+ * through the host it is handed amends that step, and it never moves the
+ * user's selection. For a rebuild that is not a recipe (the live image
+ * trace, `image-trace-live.ts`). Answers what `work` answered, the step's
+ * number afterwards and the engine's `notAmendable` when the step could
+ * no longer be joined.
+ */
+export async function runInStep<T>(
+  host: BundleHost,
+  appliedSeq: number,
+  work: (view: BundleHost) => Promise<T>,
+  own: Set<number> = new Set(),
+): Promise<{ result: T; appliedSeq: number; refused: unknown }> {
+  const view = amendingHost(host, appliedSeq, own);
+  const result = await work(view.host);
+  return { result, appliedSeq: view.seq(), refused: view.refused() };
+}
+
 export function contributeRecipeAutoUpdate(host: BundleHost): RecipeAutoUpdate {
   let rebuilt: readonly string[] = [];
   if (!host.supports(RECIPE_AUTO_UPDATE_FEATURE)) {
@@ -377,11 +398,24 @@ function contributeRunning(
     }
   };
 
-  const handleChange = async (change: Pending): Promise<void> => {
-    // Off: nothing is read. Turned on again, the fingerprints are taken
-    // afresh (the setting's change schedules an `open`).
+  const handleChange = async (
+    change: Pending,
+    /** The recipes their own command already rebuilt in the burst's steps
+     *  (`recipe-steps.ts`): only fingerprinted, never rebuilt again. */
+    rebuiltByCommand: ReadonlySet<string> = new Set(),
+  ): Promise<void> => {
+    // Off: nothing is read, and the prints taken before the switch-off
+    // are KEPT. Turned on again (the setting's change schedules a
+    // `setting`), only the recipes with no kept print are fingerprinted:
+    // re-taking the others would race the next edit — a write sent right
+    // after the click can land before the baseline is read, which then
+    // already holds the edit and nothing rebuilds (measured in the
+    // editor's plugin-surface checkbox spec). So the first edit after the
+    // switch-on compares against the state before the switch-off, and its
+    // rebuild also catches up whatever changed while it was off. A
+    // document opened while off forgets them (they name another document).
     if (!recipeAutoUpdateEnabled(host)) {
-      seen.clear();
+      if (change === "open") seen.clear();
       return;
     }
     // Nothing to do without a recipe: five part reads, no walk.
@@ -393,6 +427,10 @@ function contributeRunning(
     if (change === "open") {
       owed.clear();
       await refingerprint(recipes);
+      return;
+    }
+    if (change === "setting") {
+      await refingerprint(recipes, (key) => !seen.has(key));
       return;
     }
     if (change === "baseline") {
@@ -426,7 +464,8 @@ function contributeRunning(
       const print = await fingerprintOf(host, sources);
       now.set(key, print);
       const was = previous.get(key);
-      if (was !== undefined && was !== print) changed.push(recipe);
+      if (was !== undefined && was !== print && !rebuiltByCommand.has(key))
+        changed.push(recipe);
     }
     seen.clear();
     for (const [key, print] of now) seen.set(key, print);
@@ -475,13 +514,24 @@ function contributeRunning(
       // came with it.
       const changes = queue.filter((c) => !isOwn(c));
       queue = [];
+      // What the burst's own recipe commands already rebuilt (taken for
+      // every step, so a note never outlives the change it names).
+      const rebuiltByCommand = new Set<string>();
+      for (const c of changes)
+        if (typeof c === "object" && typeof c.appliedSeq === "number")
+          for (const key of takeRecipesRebuiltIn(c.appliedSeq))
+            rebuiltByCommand.add(key);
       const edits = changes.filter((c) => typeof c === "object");
       const change =
         edits[edits.length - 1] ??
-        (changes.includes("open") ? "open" : changes[changes.length - 1]);
+        (changes.includes("open")
+          ? "open"
+          : changes.includes("setting")
+            ? "setting"
+            : changes[changes.length - 1]);
       if (change === undefined) continue;
       try {
-        await handleChange(change);
+        await handleChange(change, rebuiltByCommand);
       } catch (e) {
         host.log.debug(`recipes: automatic update skipped (${String(e)})`);
       }
@@ -525,7 +575,7 @@ function contributeRunning(
   // compared against the document as it is (off, nothing was tracked).
   subs.push(
     onRecipeAutoUpdateChange(() => {
-      if (!disposed) schedule("open");
+      if (!disposed) schedule("setting");
     }),
   );
   try {

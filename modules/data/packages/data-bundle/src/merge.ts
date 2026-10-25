@@ -254,6 +254,9 @@ const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
   // Core reads a knocked-out shadow (InDesign's default) on every frame, a
   // fresh one included: v0.71.13 does, v0.71.1 listed no such property.
   frameDropShadowKnockedOut: [true],
+  // Core ADR 1006: every frame with an outline reads its fill rule, and a
+  // fresh one is non-zero (IDML has no other); only even-odd is worth a copy.
+  frameFillRule: ["NonZero"],
   textFrameColumnCount: [1],
   textFrameVerticalJustification: ["TopAlign"],
   textFrameFirstBaseline: ["AscentOffset"],
@@ -635,6 +638,17 @@ async function copiedFrameProperties(
       Number(a.path === "appliedObjectStyle"),
   );
   return out;
+}
+
+/** A story's font, size and leading as the overset measure reads them
+ *  (the whole story's formatting, as a template frame's is read; data ADR
+ *  564 measures any placed text with it). */
+export async function storyFont(
+  host: BundleHost,
+  storyId: string,
+  text: string,
+): Promise<TemplateFrameInfo["font"]> {
+  return fontOf(await copiedProperties(host, storyId, text));
 }
 
 function fontOf(format: CopiedProperty[]): TemplateFrameInfo["font"] {

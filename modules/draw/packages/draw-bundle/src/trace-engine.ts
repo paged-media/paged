@@ -82,8 +82,9 @@ import { instantiateWasmBindgen, singleFlight } from "@paged-media/wasm-boot";
  *  `TraceOptions::default`). */
 export interface TraceOptions {
   /** `"color"` = hierarchical colour clustering (default);
-   *  `"bw"` = one luminance threshold. */
-  mode?: "color" | "bw";
+   *  `"bw"` = one luminance threshold; `"centerline"` = threshold, thin
+   *  and trace the skeleton as OPEN STROKES (line art, WP6.6). */
+  mode?: "color" | "bw" | "centerline";
   /** `"spline"` = curve-fitted cubics (default); `"polygon"` = corners. */
   pathMode?: "spline" | "polygon";
   /** Bits of colour kept when deciding "same colour", 1–8. Default 6. */
@@ -110,6 +111,12 @@ export interface TraceOptions {
   maxRegions?: number;
   /** Stacked regions instead of cut-out ones. Default false. */
   stacked?: boolean;
+  /** Snap the raster to at most this many colours before clustering (a
+   *  deterministic k-means in the kernel). 0 = no target. Default 0. */
+  maxColors?: number;
+  /** Trace in greys (luma first; with `maxColors`, that many levels).
+   *  Default false. */
+  grayscale?: boolean;
   /**
    * DECODER-side pixel budget — **not a kernel knob**; `trace()` strips
    * it before crossing into the wasm, which has never heard of it.
@@ -149,6 +156,8 @@ export const TRACE_DEFAULTS: Required<TraceOptions> = {
   maxIterations: 10,
   maxRegions: 512,
   stacked: false,
+  maxColors: 0,
+  grayscale: false,
   maxTracePixels: DEFAULT_TRACE_PIXELS,
 };
 
@@ -189,6 +198,21 @@ export interface TraceResult {
   truncated: number;
   /** Regions dropped by `filterSpeckle`. */
   speckles: number;
+  /** CENTRELINE strokes, longest first (`mode: "centerline"` only).
+   *  Absent from a kernel that predates them. */
+  strokes?: TraceStroke[];
+  /** The palette the raster was snapped to (`maxColors`). */
+  palette?: [number, number, number][];
+}
+
+/** One traced centreline: an OPEN path (closed for a drawn loop) to
+ *  STROKE at `width` pixels — never filled. */
+export interface TraceStroke {
+  anchors: TraceAnchor[];
+  closed: boolean;
+  width: number;
+  color: [number, number, number];
+  pixels: number;
 }
 
 /** The kernel's hard caps. Read FROM the wasm so the decoder's

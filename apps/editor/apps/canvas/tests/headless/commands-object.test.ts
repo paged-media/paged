@@ -337,7 +337,16 @@ describe("Lock and hide (F-41)", () => {
 });
 
 describe("Clipping masks", () => {
-  test("Make clipping mask nests the content in the topmost path; Release pops it out; each one undo step", async () => {
+  /** The clip group row on page 1, if any (engine ADR 1010). */
+  const clipRow = (dump: ModelDump): Node & { clip?: boolean } => {
+    const spread = (dump.tree as Node[])[0];
+    const page = spread.children![0];
+    return page.children!.find(
+      (n) => (n as { clip?: boolean }).clip === true,
+    ) as Node & { clip?: boolean };
+  };
+
+  test("Make clipping mask groups the selection under the topmost path as a clip group; Release dissolves it; each one undo step", async () => {
     covers(
       "command:paged.object.makeClippingMask",
       "command:paged.object.releaseClippingMask",
@@ -348,10 +357,12 @@ describe("Clipping masks", () => {
     const make = await run(e, "paged.object.makeClippingMask");
     expect(e.problems()).toEqual([]);
     expect(pageOne(make.after)).not.toContain(FRAME);
-    expect(e.state.selection.elementSelection).toEqual([T.path.id]);
+    const row = clipRow(make.after);
+    expect(row.children!.map((n) => elementKey(n.id!))).toEqual([FRAME, PATH]);
+    expect(e.state.selection.elementSelection).toEqual([row.id]);
     await expectOneUndoStep(e, make.before);
 
-    // Make it again and release it.
+    // Make it again and release it, from the clipping path.
     await e.select([T.frame.id, T.path.id]);
     await e.invoke("paged.object.makeClippingMask");
     await e.idle();
@@ -359,7 +370,26 @@ describe("Clipping masks", () => {
     const release = await run(e, "paged.object.releaseClippingMask");
     expect(e.problems()).toEqual([]);
     expect(pageOne(release.after)).toContain(FRAME);
+    expect(clipRow(release.after)).toBeUndefined();
     await expectOneUndoStep(e, release.before);
+  });
+
+  test("a group can be clipped, and Edit contents selects what the mask clips", async () => {
+    covers(
+      "command:paged.object.makeClippingMask",
+      "command:paged.object.editClippingContents",
+    );
+    const e = await open();
+    await e.select([T.group.id, T.path.id]);
+    const make = await run(e, "paged.object.makeClippingMask");
+    expect(e.problems()).toEqual([]);
+    const row = clipRow(make.after);
+    expect(row.children!.map((n) => elementKey(n.id!))).toEqual([GROUP, PATH]);
+    await e.invoke("paged.object.editClippingContents");
+    await e.idle();
+    expect(e.state.selection.elementSelection).toEqual([T.group.id]);
+    expect(dumpDiff(make.after, await e.dump())).toEqual([]);
+    await expectOneUndoStep(e, make.before);
   });
 });
 
@@ -383,6 +413,7 @@ describe("nothing selected, the wrong kind selected, no document, inside a conte
     "paged.object.nudgeDownLarge",
     "paged.object.makeClippingMask",
     "paged.object.releaseClippingMask",
+    "paged.object.editClippingContents",
   ];
 
   test("with nothing selected every verb leaves the model and the Problems panel alone", async () => {
@@ -405,6 +436,7 @@ describe("nothing selected, the wrong kind selected, no document, inside a conte
       "command:paged.object.nudgeDownLarge",
       "command:paged.object.makeClippingMask",
       "command:paged.object.releaseClippingMask",
+      "command:paged.object.editClippingContents",
     );
     const e = await open();
     const before = await e.dump();
@@ -434,7 +466,7 @@ describe("nothing selected, the wrong kind selected, no document, inside a conte
     expect(dumpDiff(before, await e.dump())).toEqual([]);
   });
 
-  test("the wrong kind: Ungroup on frames, Release on a frame that clips nothing, a clip with a group as content", async () => {
+  test("the wrong kind: Ungroup on frames, Release on a frame that clips nothing, a text frame on top", async () => {
     covers(
       "command:paged.object.ungroup",
       "command:paged.object.releaseClippingMask",
@@ -451,15 +483,7 @@ describe("nothing selected, the wrong kind selected, no document, inside a conte
     await e.idle();
     expect(e.problems().map((p) => p.message)).toEqual([
       expect.stringMatching(
-        /^Release clipping mask refused: rectangle uframe holds no content/,
-      ),
-    ]);
-    await e.select([T.group.id, T.path.id]);
-    await e.invoke("paged.object.makeClippingMask");
-    await e.idle();
-    expect(e.problems().map((p) => p.message)).toEqual([
-      expect.stringMatching(
-        /^Make clipping mask refused: group ugroup cannot be clipped/,
+        /^Release clipping mask refused: rectangle uframe clips nothing/,
       ),
     ]);
     expect(dumpDiff(before, await e.dump())).toEqual([]);

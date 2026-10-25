@@ -322,6 +322,7 @@ impl PreflightFinding {
             C::SectionNumberingFallback => "section_numbering_fallback",
             C::FontSubstituted => "font_substituted",
             C::ImageContentUnrenderable => "image_content_unrenderable",
+            C::ImageDrawnFromPreview => "image_drawn_from_preview",
         };
         // `FindingSeverity` has no `Info` rung; build infos ride as
         // warnings (the preflight list groups by warning/error only).

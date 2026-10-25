@@ -27,6 +27,7 @@
 
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { importActual } from "@paged-media/test-kit";
+import { storeDouble } from "../src/__tests__/store-double";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -43,7 +44,7 @@ import { undoMark, undoSteps } from "./perf/harness";
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
+const actualStore = await importActual(() => import("../src/query/store"));
 
 const run = ENGINE_ANCHOR !== null || REQUIRE_REAL_CORE;
 const PLUGIN = "media.paged.data";
@@ -84,14 +85,9 @@ async function sessionOver(h: HeadlessHost, engine: DataEngineLike) {
     ...actualEngine,
     bootEngine: async () => engine,
   }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => ({
-      registerCsv: async () => {},
-      registerFileBuffer: async () => {},
-      query: async () => ({}),
-      close: async () => {},
-    }),
+  mock.module("../src/query/store", () => ({
+    ...actualStore,
+    storeHandle: (e: DataEngineLike) => storeDouble(e),
   }));
   const { createSession } = await import("../src/session");
   return createSession(h.host, 20613);

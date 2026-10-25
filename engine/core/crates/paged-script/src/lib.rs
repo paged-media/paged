@@ -68,6 +68,10 @@ use boa_engine::{
 use paged_canvas::channel::{CollectionName, Mutation};
 pub use paged_canvas::channel::{HostObjectAnswer, HostObjectCall, HostObjectError};
 
+mod actions;
+pub use actions::clear_actions;
+mod data;
+pub use data::{with_data, ScriptData};
 mod host_bridge;
 pub use host_bridge::MAX_HOST_ROUNDS;
 use paged_canvas::CanvasModel;
@@ -1442,6 +1446,12 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             1,
         )
         .build();
+    // Core ADR 1015 — `paged.actions.*`: the action registry.
+    let actions = actions::object(ctx, guarded);
+    paged.set(js_string!("actions"), actions, false, ctx)?;
+    // PM-0015 — `paged.data.*`: the data the embedder attached to this run.
+    let data = data::object(ctx, guarded);
+    paged.set(js_string!("data"), data, false, ctx)?;
     ctx.register_global_property(js_string!("paged"), paged, Attribute::all())?;
 
     let console = ObjectInitializer::new(ctx)
@@ -1863,7 +1873,10 @@ fn paged_create_group(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> J
     if member_ids.len() < 2 {
         return Ok(JsValue::from(false));
     }
-    let mutation = Mutation::CreateGroup { member_ids };
+    let mutation = Mutation::CreateGroup {
+        member_ids,
+        clip: false,
+    };
     Ok(JsValue::from(with_model(|m| {
         m.apply_mutation(&mutation).is_ok()
     })))

@@ -35,3 +35,10 @@ written by the bundle as a mutation right after the open, so every imported deck
 the page and placeholder labels (`slide_native::deck_label`), and the open makes no edit: an
 imported deck opens clean, with nothing to undo (UX audit F-08). The container parts written
 after the open are not edits (they are outside the undo log).
+
+## Amendment (2026-10-24): every slide element names its shape
+
+[ADR 711](711-powerpoint-parity-program.md): every element of a slide's shape carries the
+shape's key (`<slide part>#<cNvPr path>`) in its item metadata, together with its placeholder,
+its preset and its click action (`link`: URL, slide part, show action, tooltip). Export reads
+the key to write the shape back from its own XML.

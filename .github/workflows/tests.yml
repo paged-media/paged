@@ -140,7 +140,7 @@ jobs:
         run: bun run typecheck
 
       # The browser the wasm boot checks drive: the runner's preinstalled
-      # Chrome, as data-vitest's DuckDB browser lane takes it (no download,
+      # Chrome, as data-vitest's browser lane takes it (no download,
       # no apt). PAGED_REQUIRE_BROWSER below makes a missing one a failure.
       - name: browser for the wasm boot checks
         run: |

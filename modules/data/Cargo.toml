@@ -6,16 +6,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "data-core",
-    "data-expr",
-    "data-sources",
-    "data-xlsx",
-    "data-query",
-    "data-bind",
-    "data-lower",
-    "data-barcode",
-    "data-dataset",
-    "data-automation",
+    # The engine-level crates (data-core … data-store) live in
+    # engine/core/crates/paged-data-* since PM-0015; these are the module's
+    # own: the wasm surface, the native CLI, the script surface, the tests.
     "data-js",
     "data-cli",
     "data-script",

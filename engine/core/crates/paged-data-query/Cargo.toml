@@ -1,0 +1,25 @@
+[package]
+name = "paged-data-query"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.data result shaping + deterministic ordering + content hashing (spec §6.1). Maps the query engine's output (the store's RecordSet) into the shapes bindings consume, and stabilises record identity for the sync diff. Depends ONLY on data-core."
+
+[lib]
+# The Rust name it had in modules/data (PM-0014: moved with history; the
+# rename to paged_data_query is a later mechanical pass).
+name = "data_query"
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-data-core = { path = "../paged-data-core" }
+thiserror = "2"
+smallvec = { version = "1", features = ["serde"] }
+[features]
+# Work counters for the perf budgets (src/perf.rs). Off by default: without it
+# every `perf::bump` is an empty inline function.
+perf-counters = []

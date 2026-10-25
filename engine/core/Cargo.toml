@@ -40,6 +40,24 @@ members = [
     "crates/idml-import",
     "crates/idml-export",
     "crates/idml-coverage",
+    # paged.data's engine crates (PM-0015, moved from modules/data with their
+    # history): the binding language, the sync engine, lowering, the store
+    # (Turso) and its readers. modules/data keeps its wasm surface (data-js),
+    # its CLI, its script surface and its conformance suite.
+    "crates/paged-data-core",
+    "crates/paged-data-expr",
+    "crates/paged-data-query",
+    "crates/paged-data-bind",
+    "crates/paged-data-lower",
+    "crates/paged-data-barcode",
+    "crates/paged-data-dataset",
+    "crates/paged-data-sources",
+    "crates/paged-data-store",
+    "crates/paged-data-xlsx",
+    "crates/paged-data-automation",
+    "crates/paged-data-session",
+    # Actions (core ADR 1015): the registry, chains, the cache key, JS actions.
+    "crates/paged-action",
     "spikes/vello-eval",
     "spikes/composer-calibration",
     "spikes/wasm-size",
@@ -93,6 +111,16 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # jpeg, lzw), so the graph keeps one build of the crate.
 tiff = { version = "0.11", default-features = false, features = ["deflate", "fax", "jpeg", "lzw"] }
 base64 = "0.23"
+# paged-raster's optional decoders (ADR 1005, amendment of 2026-10-24).
+# AV1 for AVIF: rav1d (BSD-2-Clause), the Rust port of dav1d, in the build
+# published as `sqzer-rav1d`, upstream main with the safe Rust API and a
+# wasm32-unknown-unknown build (rav1d 1.1 and re_rav1d do not compile for
+# wasm32). No assembly (no nasm), so the default features stay off.
+rav1d = { package = "sqzer-rav1d", version = "0.1", default-features = false, features = ["bitdepth_8", "bitdepth_16"] }
+# The AVIF (HEIF) container (MPL-2.0).
+avif-parse = "2.1"
+# JPEG XL (MIT OR Apache-2.0); without rayon (wasm32 has no threads).
+jxl-oxide = { version = "0.12", default-features = false }
 tsify-next = { version = "0.5", default-features = false, features = ["js"] }
 # ADR 187 — the wire's JSON Schema, derived next to the `Tsify` derives behind
 # each crate's optional `schema` feature. Never on in a wasm build.

@@ -41,6 +41,7 @@ import {
   pluginOverlayLayersContribution,
   guideOverlayContribution,
   pageDecorationsContribution,
+  isolationDimContribution,
   marginGuidesContribution,
   pathEditContribution,
   resizeHandlesContribution,
@@ -51,6 +52,7 @@ import {
   tableCellOverlayContribution,
   threadingPortsContribution,
   threadLinesContribution,
+  dataMarkersContribution,
   loadDocumentFile,
   fetchDefaultFont,
   fetchDefaultFontFaces,
@@ -120,12 +122,7 @@ import {
   notePluginLoaded,
 } from "../journal-sink";
 import { createGuardedLoader } from "../plugin-load-guard";
-import {
-  ALIGN_ARGS,
-  ALIGN_COMMAND,
-  runAlign,
-  type AlignKind,
-} from "../align-plan";
+import { buildTransformCommands } from "../transform-commands";
 import { cameraCentredOn, cameraForPage } from "../plugin-pages";
 import { applyProfile } from "../profiles/apply";
 import { profileFromSearch } from "../profiles/from-url";
@@ -160,10 +157,21 @@ import {
   GlobalLightDialog,
 } from "../panels/global-light-dialog";
 import {
+  buildTransformEachDialogCommands,
+  TRANSFORM_EACH_MENU_ITEMS,
+  TransformEachDialog,
+} from "../panels/transform-each-dialog";
+import {
+  BATCH_MENU_ITEMS,
+  BatchDialog,
+  buildBatchCommands,
+} from "../panels/batch-dialog";
+import {
   OPEN_AS_TEMPLATE_COMMANDS,
   OPEN_AS_TEMPLATE_MENU_ITEMS,
   OpenAsTemplateDialog,
 } from "../panels/template/open-as-template-dialog";
+import { TemplateNotice } from "../panels/template/template-notice";
 import {
   buildCoreCommandEntries,
   CORE_COMMAND_MENU_ITEMS,
@@ -194,16 +202,28 @@ const _schemaRendererCompat: _AssertSchemaRenderer = true;
 void _schemaRendererCompat;
 import { CodeEditor } from "@paged-media/ui";
 import { HostColorPicker } from "../plugin-color-picker";
-import { ObjectPropertyField, ObjectPropertyFrame } from "@paged-media/shell";
+import {
+  ObjectPropertyField,
+  ObjectPropertyFrame,
+  setRegisteredActionsSource,
+  setDataDoorSource,
+  setDataDropHandler,
+} from "@paged-media/shell";
+import { placeDropped } from "../data-drop";
 import {
   cockpitActionsOf,
   createEditorScope,
+  createIdAliases,
+  deprecationWarning,
+  migrateProfileIds,
+  type IdDeprecation,
   memoryStorage,
   setEditorStorage,
   type EditorScope,
   type StorageAdapter,
 } from "@paged-media/shell";
 import { assertCrossOriginIsolated } from "../boot/cross-origin-isolation-check";
+import DEPRECATED_IDS from "../../deprecated-ids.json" with { type: "json" };
 import {
   APP_KEYBINDINGS,
   APP_MENU_ITEMS,
@@ -223,6 +243,7 @@ import {
   OBJECT_KEYBINDINGS,
   OBJECT_MENU_ITEMS,
   releaseClippingMask,
+  editClippingContents,
   selectParentGroup,
   showAllOnSpread,
   ungroupSelection,
@@ -300,6 +321,8 @@ import { PRESETS } from "../profiles/presets";
 // contributions' `z` values inside OverlayHost.
 const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   pageDecorationsContribution,
+  // WP4.6 — the isolation veil outside an entered edit context or group.
+  isolationDimContribution,
   // Template fields (docs/composable-editor.md §7.10): outlines, labels and a
   // picture's Replace button, for an author and a filler only.
   templateFieldsContribution,
@@ -320,6 +343,9 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // B4 — the story's route across the spread (View ▸ Show text
   // threads). Draws nothing and fetches nothing until toggled on.
   threadLinesContribution,
+  // Editor ADR 291 — View ▸ Show data markers: the frames the data is
+  // placed in, in their sync state. Reads nothing until toggled on.
+  dataMarkersContribution,
   // W3.A2 — selected table cell outline.
   tableCellOverlayContribution,
   contentGrabberContribution,
@@ -541,6 +567,43 @@ function PluginBundles() {
       diagnosticsSink: problemsSink,
       pages,
     });
+    // Editor ADRs 291, 292: the Data panel and the bind popover read the
+    // document's data from the same shared backend the bundles meet at.
+    const dataBackend = hostOptions.shared.data;
+    if (dataBackend) {
+      setDataDoorSource(scope, dataBackend);
+      // Editor ADR 291: a field, a table or a record dropped on the document
+      // is placed there; a refusal (no frame under it, a line, a design
+      // without a <<field>>) reaches Problems.
+      setDataDropHandler(scope, (drag, at) => {
+        const paged = pagedRef.current;
+        if (!paged) return;
+        void placeDropped(
+          paged,
+          dataBackend.current()?.service ?? null,
+          drag,
+          at,
+        ).then((r) =>
+          problemsSink.publish(
+            "media.paged.data",
+            "drag-to-place",
+            "error" in r
+              ? [
+                  {
+                    severity: "warning",
+                    message: r.error,
+                    source: "drag-to-place",
+                  },
+                ]
+              : [],
+          ),
+        );
+      });
+    }
+    // Editor ADR 291: the picture column picker lists the actions every
+    // bundle registers into the one shared registry.
+    if (hostOptions.shared.actions)
+      setRegisteredActionsSource(scope, hostOptions.shared.actions);
     const hostOptionsFor = (pluginId: string) =>
       hostOptionsForPlugin(hostOptions.shared, pluginId);
     // One bundle's activation failure must not take the seven after it down.
@@ -704,7 +767,6 @@ const M = defineMessages("app.main", {
   saveAsIdml: "Save As IDML",
   savePaged: "Save (.paged)",
   fileFailed: "{what} failed — {message}",
-  alignObjects: "Align objects",
   askClaude: "Ask Claude",
   defaultFontUnavailable:
     "The default font is unavailable — text in documents with missing " +
@@ -1301,6 +1363,7 @@ function CanvasAppIntegration() {
         fresh(() => nudgeSelection(objectDeps, direction, large))(),
       makeClippingMask: fresh(() => makeClippingMask(objectDeps)),
       releaseClippingMask: fresh(() => releaseClippingMask(objectDeps)),
+      editClippingContents: fresh(() => editClippingContents(objectDeps)),
       lock: fresh(() => lockSelection(objectDeps)),
       unlockAllOnSpread: fresh(() => unlockAllOnSpread(objectDeps)),
       hide: fresh(() => hideSelection(objectDeps)),
@@ -1349,21 +1412,21 @@ function CanvasAppIntegration() {
       },
       newPage: freshInsert((p) => addPage(p, insertReport)),
     });
-    // ADR 323 — Align / Distribute as a TYPED command over
-    // `host.objects` (align-plan.ts): declared args, one batch = one undo.
-    const alignCommands = [
-      {
-        id: ALIGN_COMMAND,
-        title: t(M.alignObjects),
-        category: "Object",
-        args: ALIGN_ARGS,
-        handler: (_paged: unknown, payload?: unknown) =>
-          runAlign(
-            instance.services.objects.registry,
-            payload as { kind: AlignKind; targets: string[] },
-          ),
-      },
-    ];
+    // ADR 323 — Align / Distribute and Transform Each as TYPED commands
+    // (transform-commands.ts): declared args, one batch = one undo.
+    // WP4.4 — Object ▸ Transform ▸ Transform each… opens its dialog over
+    // the selection's addresses.
+    const transformEachDialogCommands = buildTransformEachDialogCommands(
+      (paged) =>
+        ((paged as PagedEditor | null)?.selection.elementSelection ?? []).map(
+          (id) => instance.services.objects.addressOfElement(id),
+        ),
+    );
+    const alignCommands = buildTransformCommands(
+      instance.services.objects.registry,
+      (address) =>
+        instance.services.objects.model.elementIdOf?.(address) ?? null,
+    );
     // ADR 221 — every Claude entry point opens the AI Assistant panel;
     // the palette's "Ask Claude" row also runs the request there.
     setAssistantOpener(
@@ -1405,6 +1468,8 @@ function CanvasAppIntegration() {
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
+      ...transformEachDialogCommands,
+      ...buildBatchCommands(),
       ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
@@ -1418,6 +1483,8 @@ function CanvasAppIntegration() {
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
+      ...TRANSFORM_EACH_MENU_ITEMS,
+      ...BATCH_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
@@ -1609,10 +1676,14 @@ function CanvasAppRoot() {
       // The corpus picker is an Envato IDML-pack browser — DTP
       // furniture with no meaning in a drawing app.
       headerExtras={instance.surfaces.plain ? <CorpusPicker /> : null}
+      // A template opened as a document says so and offers "Edit
+      // template" (ADR 293).
+      notices={<TemplateNotice />}
       initialMode={instance.surfaces.initialMode}
       initialDocumentSizePt={instance.surfaces.initialDocumentSizePt}
       regions={instance.profile.regions}
       canvasFurniture={instance.profile.canvas}
+      compactLayout={instance.profile.compact}
       features={instance.profile.features}
       sessionPolicy={{ role, overrides: [] }}
       onSessionRoleChange={instance.role.set}
@@ -1630,6 +1701,8 @@ function CanvasAppRoot() {
       <SecretPromptDialog controller={instance.services.secrets.controller} />
       <CoreCommandDialog />
       <GlobalLightDialog />
+      <TransformEachDialog />
+      <BatchDialog />
       <OpenAsTemplateDialog />
       {/* The live-demo playground UI and the docs' iframe scripting bridge:
           the page entry's tools (they drive the page's `__canvas`), only in
@@ -1703,13 +1776,21 @@ export interface MountOptions {
 export function createEditorInstance(
   options: MountOptions = {},
 ): EditorInstance {
+  // PM-0013, amendment 2: a host's old ids are read as their replacements, and each is
+  // reported once (the console here; the handle's `idDeprecated` event).
+  const idAliases = createIdAliases(
+    DEPRECATED_IDS.deprecated as readonly IdDeprecation[],
+  );
+  idAliases.subscribe((d) =>
+    console.warn(`[editor profile] ${deprecationWarning(d)}`),
+  );
   const resolved =
     options.profile === undefined
       ? profileFromSearch(options.search ?? "")
       : resolveProfile(
           typeof options.profile === "string"
             ? { extends: options.profile }
-            : options.profile,
+            : migrateProfileIds(options.profile, idAliases),
           PRESETS,
         );
   const profile = resolved.profile;
@@ -1748,6 +1829,7 @@ export function createEditorInstance(
     guardUnload: options.guardUnload === true,
     scope,
     services: createEditorServices(scope),
+    idAliases,
     ...(options.engineWasm ? { engineWasm: options.engineWasm } : {}),
   };
 }

@@ -75,6 +75,11 @@ pub struct CellRunEdit {
     /// `<w:rPr>` and every other child of it stays (see [`RunEdit::base`]).
     #[serde(default)]
     pub base: Option<RunFormat>,
+    /// All the run's text is gone: the `<w:r>` is removed, or — when it
+    /// holds more than text (a drawing, a field character, a note
+    /// reference) — emptied, as a body run is ([`StructuralEdit::DeleteRun`]).
+    #[serde(default)]
+    pub delete: bool,
 }
 
 /// A run's look: its effective DIRECT character properties and the real
@@ -123,7 +128,9 @@ impl CellRunEdit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "op")]
 pub enum StructuralEdit {
-    /// Remove the run's entire `<w:r>` subtree.
+    /// All the run's text is gone: remove its `<w:r>` subtree, or — when
+    /// it holds more than text (a drawing, a field character, a note
+    /// reference) — empty its text and keep the rest.
     DeleteRun { block: usize, run: usize },
     /// Insert a new `<w:r>` immediately AFTER the given run (or at the start of
     /// the paragraph when `run` is `None`).
@@ -154,11 +161,15 @@ pub enum StructuralEdit {
     /// Remove the `row`-th `<w:tr>` of the table at `block`.
     DeleteRow { block: usize, row: u32 },
     /// Insert a new `<w:tr>` immediately AFTER the `after_row`-th row of the
-    /// table at `block`, with one `<w:tc>` per entry of `cells` carrying its text.
+    /// table at `block` (BEFORE it when `before`: a row added above the
+    /// table's first kept row), with one `<w:tc>` per entry of `cells`
+    /// carrying its text.
     InsertRow {
         block: usize,
         after_row: u32,
         cells: Vec<String>,
+        #[serde(default)]
+        before: bool,
     },
     /// Insert a new `<w:p>` immediately AFTER paragraph block `after` that
     /// is a sibling of paragraph block `source`: `source`'s `<w:pPr>` copied
@@ -191,6 +202,20 @@ pub enum StructuralEdit {
         #[serde(default)]
         before: bool,
         text: String,
+        /// The new paragraph's runs as the canvas made them: one `<w:r>`
+        /// per piece, each with the copied `<w:rPr>` and the piece's look
+        /// merged into it ([`RunPiece`], relative to `base`, the look of
+        /// the run whose `<w:rPr>` is copied). Empty: one run carrying
+        /// `text` in that run's look.
+        #[serde(default)]
+        base: Option<RunFormat>,
+        #[serde(default)]
+        pieces: Vec<RunPiece>,
+        /// The new paragraph's own paragraph look when it is not `para`'s
+        /// (its direct properties and real Word style): the copied
+        /// `<w:pPr>` is rewritten to it, keeping what the look does not own.
+        #[serde(default)]
+        new_ppr: Option<(docx_core::ParaProps, Option<String>)>,
     },
     /// Split body run `run` of paragraph `block` into `pieces`, in order:
     /// each piece is a copy of the run's `<w:r>` (its attributes, its

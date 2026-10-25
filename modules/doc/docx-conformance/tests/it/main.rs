@@ -32,3 +32,5 @@ mod sections;
 mod symbols;
 mod tall_rows;
 mod template_fields;
+mod theme_saveback;
+mod w0_losses;

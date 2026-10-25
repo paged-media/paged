@@ -125,6 +125,41 @@ export {
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
+export { CANVAS_POINTER, type CanvasPointer } from "./state/canvas-pointer";
+// Editor ADRs 291, 292 — the document's data (data@1) for the editor's own
+// surfaces; the app points it at the shared backend.
+export {
+  setDataDoorSource,
+  setDataDropHandler,
+  useDataService,
+  useDataRevision,
+  useDataDrop,
+  DATA_FIELD_DRAG_TYPE,
+  DATA_TABLE_DRAG_TYPE,
+  DATA_RECORD_DRAG_TYPE,
+  type DataDoorSource,
+  type DataDrop,
+  type DataDropHandler,
+  type DataFieldDrag,
+  type DataRecordDrag,
+  type DataTableDrag,
+} from "./state/data-door";
+// Editor ADR 291 — the registered actions (actions@1) for the editor's own
+// surfaces (the Data panel's picture column picker).
+export {
+  setRegisteredActionsSource,
+  useRegisteredActions,
+  type RegisteredActionsSource,
+} from "./state/actions-door";
+export {
+  ALIGN_SCOPE,
+  ALIGN_TO,
+  clickKeyObject,
+  effectiveKeyObject,
+  isSameElement,
+  type AlignScopeState,
+  type AlignTo,
+} from "./state/align-scope";
 export type {
   PathEditAnchor,
   PathEditHit,
@@ -335,6 +370,12 @@ export {
   entryApplies,
   isEnabled,
   panelBelongsHere,
+  activeScopeContext,
+  type ControlBarGroupContribution,
+  type ControlBarGroupRegistry,
+  type DocumentContextStore,
+  type StatusItemContribution,
+  type StatusItemRegistry,
 } from "./registries";
 
 // ── W3.2 — edit-context + object-type registries (B-02 / W-03) ──
@@ -472,6 +513,12 @@ export {
   setPendingImportSource,
   takePendingImportSource,
 } from "./state/import-source";
+export {
+  notifyImported,
+  onImported,
+  withImportHooksSuppressed,
+  type ImportedFile,
+} from "./state/import-hooks";
 
 // ── Shell root ─────────────────────────────────────────────────
 export { PagedShell, type PagedShellProps } from "./PagedShell";
@@ -524,6 +571,12 @@ export { useModifierState, type ModifierState } from "./hooks/useModifierState";
 
 // ── Keyboard focus (ADR 234) ───────────────────────────────────
 export * from "./focus";
+export {
+  ContributedControlBarGroups,
+  StatusBar,
+  useActiveScopeContext,
+  useHasControlBarGroups,
+} from "./chrome/ContributedBarItems";
 
 // ── Gestures ───────────────────────────────────────────────────
 export {
@@ -557,6 +610,10 @@ export {
   pluginOverlayLayersContribution,
   renderPreviewShape,
   pageDecorationsContribution,
+  isolationDimContribution,
+  isolationScopeRoot,
+  isolationOutline,
+  isolationVeilPath,
   marginGuidesContribution,
   marginGuides,
   pathEditContribution,
@@ -567,6 +624,10 @@ export {
   selectionChromeContribution,
   threadingPortsContribution,
   threadLinesContribution,
+  dataMarkersContribution,
+  elementOfPlacement,
+  markersOf,
+  type DataMarkerTone,
   tableCellOverlayContribution,
   snapLinesContribution,
   applyAffine,
@@ -949,6 +1010,11 @@ export {
   filterByRegion,
   resolveProfile,
   validateProfile,
+  createIdAliases,
+  deprecationWarning,
+  migrateProfileIds,
+  type IdAliases,
+  type IdDeprecation,
   applyRegionEdit,
   excludedBy,
   globMatches,
@@ -956,6 +1022,7 @@ export {
   matchIndices,
   type BundleSelection,
   type CanvasFurniture,
+  type CompactLayout,
   type EditorProfile,
   type ItemMatcher,
   type ProfileMode,
@@ -980,6 +1047,15 @@ export {
   type ChromeOverride,
   type ChromeRegions,
 } from "./state/chrome-regions";
+export {
+  COMPACT_MAX_WIDTH_PX,
+  TOUCH_TARGET_PX,
+  isCompactWidth,
+  touchTargetStyle,
+  useCompactLayout,
+  useEditorWidth,
+  useTouchSized,
+} from "./state/compact";
 export {
   CHROME_FEATURES,
   FEATURE_KINDS,

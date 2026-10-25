@@ -96,6 +96,7 @@ fn deleting_an_earlier_frame_does_not_reseat_a_group() {
     let g = m
         .apply_mutation(&Mutation::CreateGroup {
             member_ids: vec![u[1].clone(), u[2].clone()],
+            clip: false,
         })
         .expect("group")
         .created_id
@@ -139,6 +140,7 @@ fn deleting_a_member_and_undoing_puts_it_back_in_its_group() {
     let g = m
         .apply_mutation(&Mutation::CreateGroup {
             member_ids: vec![u[0].clone(), u[1].clone()],
+            clip: false,
         })
         .expect("group")
         .created_id
@@ -480,9 +482,12 @@ fn deleting_a_container_takes_its_pasted_in_child_and_undo_renests_it() {
         vec![raw(&child)],
         "undo puts the child back INSIDE the container"
     );
-    assert!(
-        tree(&m, &[&child]).is_empty(),
-        "…not as a free top-level item"
+    // Engine ADR 1010: the tree lists a pasted-in child under its
+    // container, so the one row of the host holds it.
+    assert_eq!(
+        tree(&m, &[&host]),
+        vec![format!("{}[{}]", raw(&host), raw(&child))],
+        "…listed under its container, not as a free top-level item"
     );
     assert!(m.redo().is_some());
     assert!(m.element_properties(&child).is_none());
@@ -503,6 +508,7 @@ fn deleting_a_groups_members_then_dissolving_it_is_refused_and_the_delete_alone_
     let g = m
         .apply_mutation(&Mutation::CreateGroup {
             member_ids: vec![a.clone(), b.clone()],
+            clip: false,
         })
         .expect("group")
         .created_id

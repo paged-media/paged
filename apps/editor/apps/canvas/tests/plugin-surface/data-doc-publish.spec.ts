@@ -81,7 +81,7 @@ import { openPanel } from "../fidelity/canvas-driver";
 import { mutate } from "../e2e/harness/ui";
 import { treeCount } from "../e2e/harness/viewport";
 import { Designer } from "../journey/driver/designer";
-import { skipWithoutDuckDB } from "../journey/plugins/data-duckdb-gate";
+import { skipWithoutEngine } from "../journey/plugins/data-engine-gate";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PDF_FIXTURE = pathResolve(HERE, "../../public/sample.pdf");
@@ -111,6 +111,8 @@ const DATA_PANELS = [
   "media.paged.data.panel.dataset",
   "media.paged.data.panel.query",
   "media.paged.data.panel.objects",
+  "media.paged.data.panel.pagination",
+  "media.paged.data.panel.templates",
 ] as const;
 
 const DATA_COMMANDS = [
@@ -832,8 +834,8 @@ test.describe("plugin surface · paged.data", () => {
       .poll(async () => (await panelState(page)).active, { timeout: 10_000 })
       .toBe("media.paged.data.panel.sources");
 
-    // JSON needs DuckDB-WASM (its json extension); skip — or fail under
-    // REQUIRE_REAL_DUCKDB=1 — when it cannot boot, as every data journey does.
+    // JSON needs the data engine (its json extension); skip — or fail under
+    // REQUIRE_REAL_ENGINE=1 — when it cannot boot, as every data journey does.
     const status = page.locator("[data-status]").last();
     const listed = page.locator('[data-data-source="catalog"]');
     try {
@@ -843,9 +845,9 @@ test.describe("plugin surface · paged.data", () => {
         (await status.getAttribute("data-status").catch(() => null)) ??
         "unknown";
       if (got !== "ready")
-        skipWithoutDuckDB(
+        skipWithoutEngine(
           got,
-          `the JSON import needs DuckDB-WASM (engine status "${got}")`,
+          `the JSON import needs the data engine (engine status "${got}")`,
         );
       throw err;
     }

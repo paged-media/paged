@@ -27,7 +27,7 @@ import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
-import { EMPTY_LAYER_STACK } from "../src/engine";
+import { EMPTY_LAYER_STACK, PLAIN_LAYER_PARITY } from "../src/engine";
 import { LayersSection } from "../src/panels/image-panel";
 import { createImageSession } from "../src/session";
 import {
@@ -179,6 +179,8 @@ describe("the panel's Pixels/Mask toggle", () => {
     clipped: false,
     group: null,
     kind: "pixels" as const,
+    ...PLAIN_LAYER_PARITY,
+    locks: { ...PLAIN_LAYER_PARITY.locks },
   });
 
   /** Every element's props in a React tree, without a DOM (pure

@@ -23,6 +23,11 @@
 // rule applies: helpers earn their place when a real bundle needs
 // them.
 
+export {
+  contentToChar,
+  paragraphTexts,
+  wordAroundCaret,
+} from "./text-selection.js";
 export { defineBundle } from "./define-bundle.js";
 export {
   createHeadlessHost,
@@ -60,7 +65,22 @@ export {
 } from "./strings.js";
 // Test doubles beside the harness: an in-memory storage backing and a
 // silent console, so a bundle's suite hand-rolls neither.
-export { mapBacking, silentConsole } from "./testing.js";
+export {
+  mapBacking,
+  silentConsole,
+  fakeDataService,
+  type FakeDataTable,
+} from "./testing.js";
+// Extensions ADRs 343, 344 — the data door's and the action registry's
+// shared backends (the editor builds one of each and injects it into every
+// bundle host), and the cache key of an action chain.
+export {
+  createDataRegistry,
+  createActionRegistry,
+  actionKey,
+  type DataBackend,
+  type ActionBackend,
+} from "./doors-data-actions.js";
 export { API_VERSION, satisfiesApiVersion } from "./version.js";
 export {
   createBundleHost,
@@ -72,6 +92,9 @@ export {
   type BindingProviderBackend,
   type RegisteredBindingProvider,
   HOST_FEATURES,
+  RESERVED_HOST_KEYS,
+  isReservedHostKey,
+  contextScopeActive,
   ASSET_BUDGETS,
   BLOB_BUDGETS,
   WORKER_BUDGETS,
@@ -92,6 +115,8 @@ export {
   type BlobStore,
   type ClipboardBackend,
   type TextCaretBackend,
+  type TextSelectionBackend,
+  type DocumentContextBackend,
   type WorkerBackend,
   type SpawnedWorker,
   type ModulesBackend,
@@ -240,6 +265,13 @@ export {
   editValue,
   planValueEdit,
 } from "./value-edit.js";
+export {
+  rasterizeElements,
+  regionAround,
+  type PlacedGeometry,
+  type RasterizeOptions,
+  type RasterizedElements,
+} from "./rasterize.js";
 export {
   publishObjectList,
   type ObjectListRow,

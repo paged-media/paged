@@ -93,7 +93,17 @@ export async function bindToData(
   await page.locator('[data-menu-item="bind-to-data"]').click();
   const draft = page.locator("[data-data-bind-property]");
   const dialog = page.locator("[data-bind-to-data]");
-  await expect(draft.or(dialog).first()).toBeVisible();
+  // The bind popover (editor ADR 292) when a bundle serves the document's
+  // data (data@1): it binds through that service, so it counts as routed.
+  const popover = page.locator("[data-bind-popover]");
+  await expect(draft.or(dialog).or(popover).first()).toBeVisible();
+  if (await popover.isVisible()) {
+    await expect(popover).toHaveAttribute("data-bind-path", path);
+    const selector = (await popover.getAttribute("data-bind-selector")) ?? "";
+    await page.keyboard.press("Escape");
+    await expect(popover).toHaveCount(0);
+    return { selector, routed: true };
+  }
   if (await draft.isVisible()) {
     const codes = draft.locator("code");
     await expect(codes.nth(0)).toHaveText(path);

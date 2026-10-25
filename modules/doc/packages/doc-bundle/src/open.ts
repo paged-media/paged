@@ -205,6 +205,7 @@ export async function finishStandalone(
         sections: storyIds,
         fileName: name,
         midPageColumns,
+        tableParagraphs: true,
       },
     });
   } catch (err) {

@@ -37,6 +37,10 @@ What the editor ships and what it does not, read from the code at commit `6d098e
   contexts appear in the same chrome.
 - **Solo mode.** `?solo=<name>` for six profiles: `paged.draw`, `paged.image`,
   `paged.sheet`, `paged.doc`, `paged.web`, `paged.data`.
+- **Phones and tablets.** The `template-fill` and `form` presets work on a phone below 720 px:
+  the field sheet or the form first, 44 px touch targets, one-finger pan, pinch zoom and zoom
+  buttons, and a camera input for a picture field ([ADR 294](adr/294-the-fill-presets-on-phones-and-tablets.md)).
+  The full and focused editors are desktop editors.
 - **Scripting.** A script editor panel runs `paged.*` scripts in the engine's interpreter;
   a REPL panel parses one-line commands (`set`, `insert`, `remove`, `move`, `undo`, `redo`,
   `inspect`) into mutations. An Actions panel records and replays command invocations.
@@ -46,6 +50,9 @@ What the editor ships and what it does not, read from the code at commit `6d098e
   an iframe bridge for running `paged.*` source from an embedding page. Live scripts
   (`*-live.js`) run hands-free with `?autoplay&embed`, checked end to end by
   `tests/live-scripts.spec.ts`.
+- **Templates.** The Template panel makes fields, sets what a filler may do and previews the
+  template as a filler; the form fills every kind of field, text in the styles and with the
+  breaks the author allows and alternates by a picker (ADR 276; engine ADRs 1000–1002, 1017).
 - **Films.** The paged.media films are recorded by a Playwright project (`films`, local only,
   [ADR 224](adr/224-films-are-recorded-by-the-editor.md)); the paged.draw film is the first.
 

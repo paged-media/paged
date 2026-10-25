@@ -23,6 +23,7 @@ import type { DataEngineLike } from "./engine";
 import {
   labelledElements,
   mintOid,
+  placedElements,
   planLabels,
   restoreFromLabels,
   sourcesToRelink,
@@ -765,6 +766,47 @@ export function propertyMethods(ctx: PropertyContext) {
     },
     getPropertyDraft(): PropertyDraft | null {
       return draft;
+    },
+
+    /** The page items each binding is placed in, by address (the data
+     *  door's `placements`): the session's facts and the labels first, then
+     *  a property binding's selector resolved through `host.objects`. */
+    async placements(): Promise<{ binding: string; address: string }[]> {
+      const e = ctx.engineIfUp();
+      if (!e) return [];
+      const payload = (e.payload() ?? {}) as PayloadJson;
+      const facts: HostFacts = {
+        hostOids: ctx.hostOids,
+        hostElements: ctx.hostElements,
+        visibility: ctx.visibilityTargets,
+        image: ctx.imageTargets,
+        barcode: ctx.barcodeTargets,
+        lowered: ctx.loweredInto,
+        storyHosted: await storyHosted(payload),
+      };
+      const placed = placedElements(
+        payload,
+        facts,
+        labelledElements(await tree()),
+      );
+      const out = placed.map((p) => ({
+        binding: p.binding,
+        address: `${p.element.kind}:${p.element.id}`,
+      }));
+      const objects = objectsOf(host);
+      const seen = new Set(placed.map((p) => p.binding));
+      for (const b of payload.bindings ?? []) {
+        if (b.kind !== "property" || seen.has(b.id) || !objects) continue;
+        const sel = (b.target as { selector?: unknown } | null)?.selector;
+        if (typeof sel !== "string") continue;
+        try {
+          for (const a of await objects.query(sel))
+            if (elementOfAddress(a)) out.push({ binding: b.id, address: a });
+        } catch {
+          // A selector the document cannot answer now names nothing placed.
+        }
+      }
+      return out;
     },
 
     async recipe(): Promise<PayloadJson> {

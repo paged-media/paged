@@ -121,12 +121,13 @@ pub use resolve::{
     resolve, AnchorPosition, FieldChange, NumberingMap, ResolutionResult, ResolveOptions,
 };
 pub use snapshot::{
-    encode_snapshot_png, snapshot_page, Snapshot, SnapshotError, SnapshotPage, SnapshotPng,
+    encode_snapshot_png, snapshot_page, Snapshot, SnapshotBackground, SnapshotClip, SnapshotError,
+    SnapshotFormat, SnapshotPage, SnapshotPng, SnapshotRequest, MAX_SNAPSHOT_SIDE_PX,
 };
 #[cfg(feature = "cpu")]
 pub use snapshot::{
     render_snapshot, render_snapshot_at_dpi, render_snapshot_png, render_snapshot_png_at_dpi,
-    render_snapshot_png_hiding,
+    render_snapshot_png_hiding, render_snapshot_request,
 };
 
 // Re-export upstream identifiers + the display-list IR so consumers

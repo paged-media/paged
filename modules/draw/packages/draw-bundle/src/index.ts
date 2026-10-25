@@ -69,7 +69,11 @@ export {
 // Trace and exported for the conformance spec. The user-facing Group /
 // Ungroup COMMANDS are the host's now (`paged.object.*`) — see
 // commands/group.ts.
-export { groupMutationFor, ungroupMutationFor } from "./commands/group";
+export {
+  clipGroupMutationFor,
+  groupMutationFor,
+  ungroupMutationFor,
+} from "./commands/group";
 // Phase 2d — the v1 declarative FILL panel (B-03 consumer) + its
 // binding driver, exported for the conformance spec.
 export {
@@ -305,6 +309,19 @@ export {
   outlineTableOf,
   contributeCreateOutlinesCommands,
 } from "./commands/create-outlines";
+// Object ▸ Rasterize (extensions ADR 338) — the batch, the parameters and
+// what a selection removes, exported for the conformance spec.
+export {
+  RASTERIZE_COMMAND_ID,
+  RASTERIZE_DEFAULTS,
+  applyRasterize,
+  contributeRasterizeCommand,
+  pngDataUri,
+  rasterizeBatchFor,
+  rasterizeParamsFrom,
+  removalOf,
+  type RasterizeParams,
+} from "./commands/rasterize";
 export { rawTextOutlines, type TextOutlinesWire } from "./raw-wire";
 export {
   PATHFINDER_PRESETS,
@@ -476,6 +493,7 @@ export {
   REPEAT_CLIP_HANDLE,
   REPEAT_LIVE_NOTE,
   REPEAT_CLIP_NOTE,
+  CLIP_GROUP_FEATURE,
   repeatParamsFrom,
   repeatPlacementsFor,
   radialCenterOfDraft,
@@ -1167,6 +1185,7 @@ export {
   PATH_OPTIONS_PANEL_NOTE,
   SELECT_SAME_TOLERANCE_NOTE,
   WIDTH_PROFILE_SECTION_NOTE,
+  RASTERIZE_SECTION_NOTE,
 } from "./panels/path-options-panel";
 // Illustrator Phase 3 (§16.2) — BLENDS v1: the three SPACING MODES
 // (Smooth Color derives its count from the colour distance, Specified
@@ -1240,6 +1259,11 @@ export {
   applyExpandBlend,
   applyReleaseBlend,
   contributeBlendCommands,
+  blendKeysOfSelection,
+  blendGroupLeaves,
+  blendRampsOf,
+  flatKeysOf,
+  type BlendGradient,
   type BlendSource,
   type BlendSpacing,
   type BlendOrientation,
@@ -1390,7 +1414,16 @@ export {
   traceBatchFor,
   applyImageTrace,
   applyImageTracePlan,
+  applyRetraceImage,
+  retraceSourceOf,
+  traceGenerationOf,
+  strokeTableFor,
+  tracePresetFrom,
   contributeImageTraceCommand,
+  RETRACE_IMAGE_COMMAND_ID,
+  IMAGE_TRACE_OPTIONS_COMMAND_ID,
+  IMAGE_TRACE_PANEL_ID,
+  type TraceGeneration,
   type ImageTraceRecord,
   type ImagePlacement,
   type LinkRow,
@@ -1399,6 +1432,64 @@ export {
   type TracePlanRegion,
   type TraceRegionBinding,
 } from "./commands/image-trace";
+// WP6.6 — Image Trace PRESETS (Illustrator's names → the kernel's
+// options) and the LIVE re-trace on a link change.
+export {
+  TRACE_PRESET_IDS,
+  TRACE_PRESET_NAMES,
+  isTracePreset,
+  tracePresetOptions,
+  presetMatching,
+  type TracePresetId,
+} from "./commands/trace-presets";
+export {
+  contributeLiveRetrace,
+  liveRetraceOf,
+  linkPrintsOf,
+  changedLinks,
+  type LiveRetrace,
+} from "./commands/image-trace-live";
+export {
+  makeImageTracePanel,
+  IMAGE_TRACE_PANEL_NOTE,
+} from "./panels/image-trace-panel";
+// WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE.
+export {
+  RECOLOR_ARTWORK_COMMAND_ID,
+  RECOLOR_ARTWORK_OPTIONS_COMMAND_ID,
+  APPLY_GUIDE_COLOR_COMMAND_ID,
+  RECOLOR_COMMAND_IDS,
+  RECOLOR_PANEL_ID,
+  COLOR_GUIDE_PANEL_ID,
+  RECOLOR_DEFAULTS,
+  RECOLOR_MODES,
+  readArtworkColors,
+  selectionLeaves,
+  recolorRequestFrom,
+  recolorTargetsFor,
+  recolorBatchFor,
+  recolorLibraryOf,
+  requestHarmony,
+  harmonyBaseOf,
+  applyRecolorArtwork,
+  applyGuideColor,
+  guideBaseOf,
+  contributeRecolorCommands,
+  type ArtworkColor,
+  type ArtworkRead,
+  type PaintSlot,
+  type RecolorTarget,
+  type RecolorMode,
+  type RecolorRequest,
+  type RecolorMint,
+  type RecolorPlan,
+  type RecolorOutcome,
+} from "./commands/recolor";
+export { makeRecolorPanel, RECOLOR_PANEL_NOTE } from "./panels/recolor-panel";
+export {
+  makeColorGuidePanel,
+  COLOR_GUIDE_PANEL_NOTE,
+} from "./panels/color-guide-panel";
 // The pure tree-parentage resolver Appearance bake + Symbols read,
 // exported for the conformance spec. "Select: Parent group" itself is
 // the host's now (`paged.object.selectParentGroup`) — see

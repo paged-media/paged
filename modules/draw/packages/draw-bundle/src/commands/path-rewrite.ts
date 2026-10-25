@@ -91,10 +91,7 @@ export function anchorsToPage(
 }
 
 /** The paint ops a new piece inherits. */
-export function paintOps(
-  id: ElementId,
-  paint: CompoundPaint,
-): MutationInput[] {
+export function paintOps(id: ElementId, paint: CompoundPaint): MutationInput[] {
   const ops: MutationInput[] = [
     {
       op: "setElementProperty",

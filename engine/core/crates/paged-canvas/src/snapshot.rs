@@ -81,8 +81,125 @@ pub struct SnapshotPng {
     pub height_px: u32,
     pub layout_generation: u64,
     pub numbering_generation: u64,
+    /// The PNG. Empty when the request asked for `format: "rgba"`.
     #[tsify(type = "number[]")]
     pub png_bytes: Vec<u8>,
+    /// Extensions ADR 338 — what the bytes are. Absent for a PNG (the v1
+    /// reply), `"rgba"` when `rgba` carries them.
+    #[serde(default, skip_serializing_if = "SnapshotFormat::is_png")]
+    pub format: SnapshotFormat,
+    /// Extensions ADR 338 — `format: "rgba"`: `widthPx × heightPx`
+    /// pixels, 4 bytes each, rows top to bottom, STRAIGHT (not
+    /// premultiplied) sRGB alpha. Absent for a PNG.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[tsify(type = "number[]")]
+    pub rgba: Vec<u8>,
+    /// Extensions ADR 338 — the page region the image covers, in page pt,
+    /// when the request had a `clip`: the clip grown outward to whole
+    /// pixels at the snapshot's resolution, so the image maps onto it
+    /// exactly. Absent for a whole page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<SnapshotClip>,
+}
+
+/// Extensions ADR 338 — the encoding of a snapshot's pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub enum SnapshotFormat {
+    /// A PNG (`pngBytes`), the v1 reply.
+    #[default]
+    Png,
+    /// Raw straight-alpha RGBA8 (`rgba`), for a caller that works on the
+    /// pixels (an image layer, a rasterized vector).
+    Rgba,
+}
+
+impl SnapshotFormat {
+    pub fn is_png(&self) -> bool {
+        *self == SnapshotFormat::Png
+    }
+}
+
+/// Extensions ADR 338 — what lies under a snapshot's content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub enum SnapshotBackground {
+    /// White paper, as the page prints (the v1 snapshot).
+    #[default]
+    Paper,
+    /// Nothing: uncovered pixels are fully transparent.
+    Transparent,
+}
+
+/// Extensions ADR 338 — a rectangle in page pt (`(0, 0)` is the page's
+/// top-left corner; it may reach past the page, onto the pasteboard).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotClip {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl SnapshotClip {
+    /// Finite, with an area.
+    pub fn is_valid(&self) -> bool {
+        [self.x, self.y, self.width, self.height]
+            .iter()
+            .all(|v| v.is_finite())
+            && self.width > 0.0
+            && self.height > 0.0
+    }
+}
+
+/// The largest side, in pixels, a snapshot draws (`SnapshotError::TooLarge`
+/// past it): 16 384 px is 54 in at 300 ppi.
+pub const MAX_SNAPSHOT_SIDE_PX: u32 = 16_384;
+
+/// One `RequestSnapshot`, every option in one place.
+#[derive(Debug, Clone, Copy)]
+pub struct SnapshotRequest<'a> {
+    pub page_id: &'a PageId,
+    pub target_width_px: u32,
+    pub dpi: Option<f32>,
+    pub hide: &'a [crate::element_selection::ElementId],
+    pub only: &'a [crate::element_selection::ElementId],
+    pub clip: Option<SnapshotClip>,
+    pub format: SnapshotFormat,
+    pub background: SnapshotBackground,
+    pub markers: bool,
+    /// Crop the image to the pixels something was drawn on (on a
+    /// transparent ground; a paper ground is never trimmed).
+    pub trim: bool,
+}
+
+impl<'a> SnapshotRequest<'a> {
+    /// A v1 request: a whole page as a PNG on paper.
+    pub fn page(page_id: &'a PageId, target_width_px: u32) -> Self {
+        Self {
+            page_id,
+            target_width_px,
+            dpi: None,
+            hide: &[],
+            only: &[],
+            clip: None,
+            format: SnapshotFormat::Png,
+            background: SnapshotBackground::Paper,
+            markers: false,
+            trim: false,
+        }
+    }
+
+    /// Asks for nothing past v1 (`hideItems`, `dpi`, `markers` are v1):
+    /// the GPU snapshot path draws exactly these.
+    pub fn is_v1(&self) -> bool {
+        self.only.is_empty()
+            && self.clip.is_none()
+            && !self.trim
+            && self.format == SnapshotFormat::Png
+            && self.background == SnapshotBackground::Paper
+    }
 }
 
 #[derive(Debug, Clone, Error, Serialize, Deserialize, Tsify)]
@@ -95,6 +212,17 @@ pub enum SnapshotError {
     PngEncode(String),
     #[error("invalid target width: {0}")]
     InvalidWidth(u32),
+    /// Extensions ADR 338 — a `clip` with a non-finite value or no area.
+    #[error("invalid clip rectangle")]
+    InvalidClip,
+    /// Extensions ADR 338 — the image would be wider or taller than
+    /// [`MAX_SNAPSHOT_SIDE_PX`].
+    #[error("snapshot too large: {width_px} x {height_px} px")]
+    TooLarge { width_px: u32, height_px: u32 },
+    /// Extensions ADR 338 — `trim` found nothing drawn (the items are not
+    /// on this page, or draw nothing).
+    #[error("nothing drawn")]
+    NothingDrawn,
 }
 
 /// Render `page_id` at `target_width_px` wide. Height is derived
@@ -153,7 +281,8 @@ impl std::ops::Deref for SnapshotPage<'_> {
 /// What a `RequestSnapshot` draws and at what dpi — the one resolution
 /// both snapshot backends use. An explicit `dpi` (> 0) wins over
 /// `target_width_px`, which sets the dpi from the page width; `hide`
-/// draws the page without those items (a slideshow build step).
+/// draws the page without those items (a slideshow build step) and a
+/// non-empty `only` (extensions ADR 338) with nothing but those items.
 ///
 /// ADR 205 — `markers` says whose page it is. `false` (the wire's
 /// default) draws the page as the exports do: without the canvas's
@@ -170,15 +299,16 @@ pub fn snapshot_page<'a>(
     target_width_px: u32,
     dpi: Option<f32>,
     hide: &[crate::element_selection::ElementId],
+    only: &[crate::element_selection::ElementId],
     markers: bool,
 ) -> Result<(SnapshotPage<'a>, f32), SnapshotError> {
     let unknown = || SnapshotError::UnknownPage {
         page_id: page_id.clone(),
     };
-    let page = if !hide.is_empty() {
+    let page = if !hide.is_empty() || !only.is_empty() {
         SnapshotPage::Hiding(Box::new(
             model
-                .build_page_hiding(page_id, hide)
+                .build_page_filtered(page_id, hide, only)
                 .map_err(|_| unknown())?,
         ))
     } else if markers || model.live_build_is_export_faithful() {
@@ -212,16 +342,188 @@ pub fn render_snapshot_png_hiding(
     hide: &[crate::element_selection::ElementId],
     markers: bool,
 ) -> Result<SnapshotPng, SnapshotError> {
-    let (page, dpi) = snapshot_page(model, page_id, target_width_px, dpi, hide, markers)?;
-    let img = render_built_page(&page, dpi, paged_compose::Color::WHITE);
-    encode_snapshot_png(Snapshot {
-        page_id: page_id.clone(),
-        width_px: img.width(),
-        height_px: img.height(),
+    render_snapshot_request(
+        model,
+        &SnapshotRequest {
+            dpi,
+            hide,
+            markers,
+            ..SnapshotRequest::page(page_id, target_width_px)
+        },
+    )
+}
+
+/// A `RequestSnapshot` on the CPU rasterizer, every option honoured
+/// (extensions ADR 338):
+///
+/// - `only` draws nothing but those items (see
+///   [`CanvasModel::build_page_filtered`]);
+/// - `clip` draws that page region alone, grown outward to whole pixels
+///   (the reply's `region`); `target_width_px` is then the REGION's width,
+///   unless `dpi` is given;
+/// - `background: Transparent` leaves uncovered pixels transparent;
+/// - `format: Rgba` replies with straight-alpha RGBA8 instead of a PNG
+///   (a PNG of a transparent snapshot is straight alpha too);
+/// - `trim` (on a transparent ground) crops to the drawn pixels: what an
+///   item covers with its stroke and effects, which no geometry read
+///   reports. The reply's `region` is then the trimmed one.
+#[cfg(feature = "cpu")]
+pub fn render_snapshot_request(
+    model: &CanvasModel,
+    req: &SnapshotRequest<'_>,
+) -> Result<SnapshotPng, SnapshotError> {
+    let explicit_dpi = req.dpi.filter(|d| *d > 0.0 && d.is_finite());
+    let dpi = match (explicit_dpi, req.clip) {
+        (_, Some(c)) if !c.is_valid() => return Err(SnapshotError::InvalidClip),
+        (Some(d), _) => Some(d),
+        (None, Some(_)) if req.target_width_px == 0 => return Err(SnapshotError::InvalidWidth(0)),
+        (None, Some(c)) => Some(req.target_width_px as f32 / c.width * 72.0),
+        (None, None) => None,
+    };
+    let (page, dpi) = snapshot_page(
+        model,
+        req.page_id,
+        req.target_width_px,
+        dpi,
+        req.hide,
+        req.only,
+        req.markers,
+    )?;
+    let transparent = req.background == SnapshotBackground::Transparent;
+    let background = if transparent {
+        paged_compose::Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 0.0,
+        }
+    } else {
+        paged_compose::Color::WHITE
+    };
+    let scale = dpi / 72.0;
+    let fits = |w: u32, h: u32| {
+        if w > MAX_SNAPSHOT_SIDE_PX || h > MAX_SNAPSHOT_SIDE_PX {
+            Err(SnapshotError::TooLarge {
+                width_px: w,
+                height_px: h,
+            })
+        } else {
+            Ok(())
+        }
+    };
+    let (img, region) = match req.clip {
+        None => {
+            let px = |pt: f32| ((pt * scale).ceil().max(1.0)) as u32;
+            fits(px(page.width_pt), px(page.height_pt))?;
+            (render_built_page(&page, dpi, background), None)
+        }
+        Some(c) => {
+            let (x0, y0) = ((c.x * scale).floor(), (c.y * scale).floor());
+            let (x1, y1) = (
+                ((c.x + c.width) * scale).ceil(),
+                ((c.y + c.height) * scale).ceil(),
+            );
+            let (w, h) = (((x1 - x0) as u32).max(1), ((y1 - y0) as u32).max(1));
+            fits(w, h)?;
+            let origin = (x0 / scale, y0 / scale);
+            let img =
+                paged_renderer::render_built_page_region(&page, origin, (w, h), dpi, background);
+            let region = SnapshotClip {
+                x: origin.0,
+                y: origin.1,
+                width: w as f32 / scale,
+                height: h as f32 / scale,
+            };
+            (img, Some(region))
+        }
+    };
+    let (img, region) = if req.trim && transparent {
+        let (img, (dx, dy)) = trim_to_drawn(img).ok_or(SnapshotError::NothingDrawn)?;
+        let base = region.unwrap_or(SnapshotClip {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        });
+        let region = SnapshotClip {
+            x: base.x + dx as f32 / scale,
+            y: base.y + dy as f32 / scale,
+            width: img.width() as f32 / scale,
+            height: img.height() as f32 / scale,
+        };
+        (img, Some(region))
+    } else {
+        (img, region)
+    };
+    let (width_px, height_px) = (img.width(), img.height());
+    let mut rgba = img.into_raw();
+    if transparent {
+        unpremultiply(&mut rgba);
+    }
+    let snap = Snapshot {
+        page_id: req.page_id.clone(),
+        width_px,
+        height_px,
         layout_generation: page.layout_generation,
         numbering_generation: page.numbering_generation,
-        rgba: img.into_raw(),
-    })
+        rgba,
+    };
+    let mut reply = match req.format {
+        SnapshotFormat::Png => encode_snapshot_png(snap)?,
+        SnapshotFormat::Rgba => SnapshotPng {
+            page_id: snap.page_id,
+            width_px: snap.width_px,
+            height_px: snap.height_px,
+            layout_generation: snap.layout_generation,
+            numbering_generation: snap.numbering_generation,
+            png_bytes: Vec::new(),
+            format: SnapshotFormat::Rgba,
+            rgba: snap.rgba,
+            region: None,
+        },
+    };
+    reply.region = region;
+    Ok(reply)
+}
+
+/// The smallest part of `img` holding every pixel with alpha, and its
+/// top-left corner in `img`; `None` when no pixel has any.
+#[cfg(feature = "cpu")]
+fn trim_to_drawn(img: image::RgbaImage) -> Option<(image::RgbaImage, (u32, u32))> {
+    let (w, h) = (img.width(), img.height());
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+    for (x, y, p) in img.enumerate_pixels() {
+        if p.0[3] > 0 {
+            x0 = x0.min(x);
+            y0 = y0.min(y);
+            x1 = x1.max(x + 1);
+            y1 = y1.max(y + 1);
+        }
+    }
+    if x0 >= x1 || y0 >= y1 {
+        return None;
+    }
+    if (x0, y0, x1, y1) == (0, 0, w, h) {
+        return Some((img, (0, 0)));
+    }
+    let cropped = image::imageops::crop_imm(&img, x0, y0, x1 - x0, y1 - y0).to_image();
+    Some((cropped, (x0, y0)))
+}
+
+/// Premultiplied RGBA8 (what the rasterizer leaves on a transparent
+/// ground) to straight alpha, in place.
+#[cfg(feature = "cpu")]
+fn unpremultiply(rgba: &mut [u8]) {
+    for px in rgba.as_chunks_mut::<4>().0 {
+        let a = px[3] as u32;
+        if a == 0 {
+            px[..3].fill(0);
+        } else if a < 255 {
+            for c in &mut px[..3] {
+                *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+            }
+        }
+    }
 }
 
 #[cfg(feature = "cpu")]
@@ -303,6 +605,9 @@ pub fn encode_snapshot_png(snap: Snapshot) -> Result<SnapshotPng, SnapshotError>
         layout_generation: snap.layout_generation,
         numbering_generation: snap.numbering_generation,
         png_bytes,
+        format: SnapshotFormat::Png,
+        rgba: Vec::new(),
+        region: None,
     })
 }
 

@@ -19,9 +19,9 @@
 
 // SDK Phase 5 / panel-gallery pass — Spreads panel.
 //
-// Gallery list shape over `documentCollection:spreads`. The page-
-// membership secondary ("4 pages · 4–7") waits on SpreadSummary
-// carrying members (engine gap 7) — today it shows the count.
+// Gallery list shape over `documentCollection:spreads`. The secondary
+// reads the spread's pages and the objects on it (WP2.7: SpreadSummary
+// carries `pageIds` and `members`): "2 pages · 5 objects".
 
 import {
   ListRows,
@@ -37,6 +37,8 @@ const M = defineMessages("app.spreadsPanel", {
   empty: "No spreads.",
   spread: "Spread {number}",
   pages: "{count, plural, one {# page} other {# pages}}",
+  pagesAndObjects:
+    "{count, plural, one {# page} other {# pages}} · {objects, plural, one {# object} other {# objects}}",
 });
 
 export function SpreadsPanel() {
@@ -69,7 +71,13 @@ export function SpreadsPanel() {
               primary: isIdLikeLabel(s.label, s.selfId)
                 ? strings.t(M.spread, { number: i + 1 })
                 : displayName(s.label),
-              secondary: strings.t(M.pages, { count: s.pageCount }),
+              // An older engine sends no members: the page count alone.
+              secondary: s.members
+                ? strings.t(M.pagesAndObjects, {
+                    count: s.pageIds?.length || s.pageCount,
+                    objects: s.members.length,
+                  })
+                : strings.t(M.pages, { count: s.pageCount }),
             }))}
           />
         </div>

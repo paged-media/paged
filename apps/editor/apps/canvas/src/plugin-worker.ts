@@ -19,7 +19,7 @@
 
 // K-3 / S-07 / I-02 — the editor's `WorkerBackend` over the real `Worker`
 // API, backing `host.workers`. Lets a bundle (paged.image's decode pool,
-// paged.data's DuckDB worker) spawn an off-main-thread worker for the
+// a module's background compute) spawn an off-main-thread worker for the
 // bundle's OWN compute.
 //
 // The SDK door (plugin-sdk `host-impl.ts`) owns everything trust-shaped:

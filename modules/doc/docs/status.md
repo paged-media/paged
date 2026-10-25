@@ -1,5 +1,179 @@
 # paged.doc — status
 
+## Wasm size (measured 2026-10-24)
+
+`docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-release` profile,
+then `wasm-opt -Oz`):
+
+|                     | bytes                |
+| ------------------- | -------------------- |
+| raw                 | 6,879,227 (6.56 MiB) |
+| gzip -9             | 1,876,393 (1.79 MiB) |
+| brotli -q 11        | 1,070,924 (1.02 MiB) |
+| manifest `maxBytes` | 8,388,608 (8 MiB)    |
+
+That leaves 1.44 MiB of headroom under the budget. The 8.64 MB in the editor's
+panel audit (2026-10-11) was measured before the `wasm-release` profile existed.
+That profile landed on 2026-10-14 and uses size-first codegen for `ooxmlsdk` and the
+engine model crates. The build also enforces `maxBytes`.
+
+What the wasm is made of: on the 10.2 MB module before wasm-bindgen and wasm-opt,
+`ooxmlsdk` is 6.8 MB. Most of that is the generated readers for WordprocessingML
+(2.1 MB), DrawingML (1.1 MB), charts (0.6 MB), PresentationML (0.5 MB; a Word file never
+contains it, and what links it in has not been traced yet), OMML (0.36 MB) and VML (0.29 MB). The plugin's own
+crates are about 0.3 MB.
+
+ooxmlsdk 0.12 has no per-schema cargo features (only `parts`, `mce`, `validators`
+and `flat-opc`). So dropping schemas the plugin never reads means forking the
+crate. That is the next lever if later waves outgrow the headroom.
+`opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
+fifth slower (see `Cargo.toml`).
+
+## Text after native tables (2026-10-25)
+
+A `.docx` opened standalone or placed lost ALL text after its first table when
+that table followed an empty paragraph (or opened a section): the pour moved its
+`insertText` offset one past every table, but `insertTable` sets a table into the
+story's last paragraph when that is empty, so the offset ran past the story's end
+and every later insert was refused ("offset N past end (length N−1)"). Where the
+offset did fit, the text after a table went INTO the table's paragraph, which
+the engine draws before the table (a table without `table_anchor` stands after
+its paragraph's text, ADR 136), and two Word paragraphs shared one native one.
+
+Every Word block now pours into native paragraphs of its own (`TableLayout`
+`"own"`, `buildStoryBlocks`): a native table stands in a paragraph that holds
+only the table. The text after a table starts with a break (a new paragraph
+after the table's); a table after an empty Word paragraph gets an empty
+paragraph inserted for it first; only a table that opens the story takes the
+fresh story's empty paragraph. A table step moves the `insertText` end by 1
+(0 for that first table). The blank-line carets name the right paragraphs.
+Save-back maps a native table onto its own read-back paragraph
+(`overlay_story_content_in`, `TableParagraphs::Own`), and `nativePlaces` /
+`pouredParagraphCount` count it. The label records `tableParagraphs: true`;
+documents poured before (no flag) keep the old mapping for save-back and
+object-model writes.
+
+Tests: `test/headless/pour-after-table.spec.ts` (real engine): para / table /
+para / blank / table / table / para, and a table that opens the document with a
+blank line after it, opened standalone and placed; the story's paragraphs,
+cells and blank-line styles; save-back of edits after the second table and
+between the tables; zero-edit export keeps `word/document.xml` byte-identical.
+
+Found while testing, not fixed: a blank Word paragraph (no `w:r`) that gets
+text on the canvas exports without it, and no save-back diagnostic says so.
+
+## W1 (plugin): Word theme and save-back completeness (2026-10-24)
+
+Word-parity wave W1, the plugin's part ([ADR 609](adr/609-styles-and-theme.md),
+[ADR 610](adr/610-save-back-across-sessions-and-new-parts.md)):
+
+- **Theme colours and fonts.** `word/theme/theme1.xml` is read with
+  `settings.xml`'s `w:clrSchemeMapping`. `w:color` / `w:shd` theme references
+  (with `w:themeTint` / `w:themeShade`) and `w:rFonts` theme fonts resolve to
+  concrete values on every run, style and the defaults, the reference kept
+  beside them (`RunProps::theme_color`, `font_theme`; East Asian and
+  complex-script faces and run shading are read, not lowered). The lowering
+  mints a "Word theme" colour group: the twelve scheme colours as named
+  swatches (`Accent 1`, `Dark 1`, `Hyperlink`, …) and every tint, shade and
+  text/background reference the document uses (`Accent 1, Lighter 40%`).
+  Tints and shades are swatches of their own: the engine's swatch tint is
+  spot/CMYK only and a shade has no tint. Theme fonts lower as their families.
+- **Theme references are written back.** An untouched run keeps its
+  `w:color` bytes; a written run in a theme swatch that still shows its import
+  colour gets `w:themeColor` (+ tint/shade) again, any other colour plain hex.
+  A theme swatch edited in paged (its display colour moved) writes its runs as
+  the new hex. A family equal to the theme's body or heading face is written
+  with `w:asciiTheme`.
+- **The paragraph style applied on the canvas is saved** (the overlay used to
+  drop it), when the lowering knows it or it is a style made in paged.
+- **`styles.xml` is spliced.** A Word style modified in paged (the properties
+  the import maps) has only the changed elements of its `w:rPr` / `w:pPr`
+  rewritten; a paragraph or character style made in paged is appended with its
+  `w:basedOn` and named by the paragraphs and runs in it. The bundle reads the
+  styles with `document.styleProperties`.
+- **A note reference, drawing or field character inside a run's text** stays
+  in place when the run is edited or split (it was refused).
+- **A paragraph added in a table cell** takes its own paragraph style, not its
+  neighbour's.
+- **Reopen-then-splice.** Export of a saved `.paged` reopened in another
+  session reads the stored original `.docx` part back (`host.parts.read`) and
+  splices as the importing session does; a headless test now covers canvas
+  edits after a reopen (the object-model path was already covered).
+- `numbering.xml` is never written.
+- Tests: `docx-conformance/tests/it/theme_saveback.rs` (builders
+  `theme_docx`, `completeness_docx`; fixture
+  `packages/doc-bundle/test/fixtures/theme-styles.docx`),
+  `packages/doc-bundle/test/headless/theme-saveback.spec.ts`.
+
+## W0: tracked changes, content controls, hidden text (2026-10-24)
+
+The import no longer loses content silently (Word-parity program, wave W0;
+save-back rules in [ADR 602](adr/602-save-back-is-a-byte-splice.md), amendment
+of 2026-10-24):
+
+- **Tracked changes are shown as accepted.** Runs inside `w:ins` and
+  `w:moveTo` show as plain text, runs inside `w:del` and `w:moveFrom` are not
+  shown, a run's `w:rPrChange` and a paragraph's `w:pPrChange` show the new
+  formatting. This also applies inside hyperlinks, simple fields and content
+  controls. A paragraph whose mark is a tracked deletion and that has nothing
+  left is not shown; one that keeps content stays its own paragraph (accepting
+  would join it to the next). Diagnostic (warning): "N tracked change(s) shown
+  as accepted; review them in Word". The markup stays in the `.docx`.
+  Recording, accept and reject are W3.
+- **Content controls keep their content.** Run-level (`w:sdt` in a
+  paragraph), block-level (in the body and in table cells), row-level and
+  cell-level controls show their content as plain paragraphs, runs, rows and
+  cells. A Word table of contents, which is a block control, shows its cached
+  entries. Diagnostic (info): "N content control(s) kept as plain content".
+  Editable controls (checkbox, dropdown, date) are W4.
+- **Hidden text (`w:vanish`) is not shown**, as in Word with hidden text off:
+  the run's own `w:vanish`, or its character style's (through `basedOn`);
+  `w:vanish w:val="0"` on the run shows it again. Diagnostic (info): "N hidden
+  run(s) not shown". The engine has no hidden flag yet (W1). Leaving the run
+  out was chosen over rendering it, because save-back can keep it safely: the
+  run keeps its ordinal, so the runs around it stay addressable, and its
+  bytes are never addressed.
+- **Save-back keeps everything the canvas does not show.** Runs inside a
+  tracked change or a content control, and every paragraph inside a block
+  content control, are locked (`RunSource::Tracked` / `ContentControl`,
+  `ParagraphHeld`). An edit that reaches a locked run is refused for its whole
+  paragraph, so Word's paragraph never holds half of a canvas edit. Deleting a
+  paragraph that holds tracked deletions or hidden text is refused (the user
+  never saw what would go with it), and so is rewriting a `w:pPr` that
+  records a tracked change. Row and column edits are refused on a table with
+  row or cell controls. Every refusal is named in the save-back ledger. Edits
+  beside these constructs land on their own `<w:r>`. A table inside a body-level
+  block control is counted like any body table and stays editable.
+- **The patcher's locator is stricter**, matching what the import counts.
+  Body runs, hyperlinks and `w:pPr` are addressed only as direct children of a
+  `body › p`; cell runs only under a `tc › p`; wrapper runs only as direct
+  children of a wrapper there; tables only at body level (in the body or in a
+  body-level block control). Before this, the runs of a paragraph in a text box
+  or a content control advanced the enclosing body paragraph's run count, so an
+  edit after an inline text box could land inside the text box. Empty `<w:r/>`
+  elements count in cells and wrappers too, as they do in the import. A target
+  the pass never meets is reported instead of being dropped.
+- Tests: `docx-conformance/tests/it/w0_losses.rs` (builders
+  `tracked_changes_docx`, `content_controls_docx`, `hidden_text_docx`) cover
+  import, diagnostics, zero-edit identity (EditSet and story read-back),
+  edits beside and inside each construct, and the refusals.
+
+## Pagination steps 1–3 (doc ADR 617, engine ADR 1016, 2026-10-24)
+
+- Every Word paragraph composes with the engine's Word first-fit composer
+  (`paragraphComposer = "Word First-fit"`), not InDesign's Single-line Composer: no compressed
+  justified line, Word's hyphenation zone, a hyphen as an ordinary break, an over-wide word
+  split on its own line.
+- A picture paragraph's text lines keep Word's pitch (auto leading at Word's pitch over the
+  size); the picture's line grows to the picture as before. Fonts registered after the open
+  re-measure (engine, already in place).
+- Measured headless on two real documents with Word's faces: paragraphs with Word's line count
+  796 → 801 of 813 and 605 → 605 of 624; page starts unchanged at 2 % and 13.1 %
+  (`docs/reference/acceptance-real-docx.md`, round 14). Line breaking is no longer the gap.
+- `first_fit_docx()` and `scripts/word-first-fit-probe.sh` ask Word the breaking and picture
+  questions; Word's answer (`fixtures/first-fit.word.json`) is not committed yet.
+- Found, not fixed: the pour refuses all text after a table on current main (round 14).
+
 ## Object model and merge fields (ADR 605, `om/object-model` branch, plugin-api 0.2.43)
 
 - `MERGEFIELD` parsed in both field forms (name, switches, instruction), carried on runs and
@@ -16,9 +190,9 @@
   `w:hyperlink` (the wrapped cell run was the last non-patchable cell run). The native write
   finds the story's n-th table (`story:<id> > table`) and checks the cell's live text (the
   engine's `cell` `text` read) before it writes. The native paragraph a body paragraph was
-  poured into is now replayed as the engine places tables (`nativePlaces`): the text after a
-  table continues in the table's host paragraph, so a body write after a table no longer
-  refuses as "edited on the canvas". Anchors also take `{ heading: n }`.
+  poured into is now replayed as the engine places tables (`nativePlaces`), so a body write
+  after a table no longer refuses as "edited on the canvas" (since 2026-10-25 each table has
+  a paragraph of its own; see "Text after native tables"). Anchors also take `{ heading: n }`.
 - Canvas edits in table cells are saved back (editor plan G4): the export reads each native
   cell's `text` (`src/save-cells.ts`; the story read-back holds no table) and docx-js patches
   the changed span into the cell paragraph's runs, keeping the runs, their properties and
@@ -51,18 +225,38 @@
   run is merged the same way rather than replacing the run's `<w:rPr>`. Runs the engine joined
   map back onto their Word runs; nothing is merged. Cells are read with the engine's cell
   `paragraphs` (the story read's shape, as JSON text; engine `virtual_set.rs`) next to their
-  `text`. Limits: `tracking` has no Word property here, a colour the canvas made that is not a
-  swatch of the import is not written, a run holding more than text (a drawing, a field
-  character, a note reference) is not split and the split is reported, and a paragraph added
-  in a cell takes its neighbour's look.
+  `text`. Tracking is written as Word's character spacing at the run's size (`w:spacing`,
+  twentieths of a point; the import reads it back as the same tracking, so a document's own
+  spacing now shows on the canvas). A colour the canvas made, which is not a swatch of the
+  import, is written from the colour the host displays for it (`swatchDisplay`, sent with the
+  read-back as `colors`). A run holding more than text keeps what it holds once: a drawing, a
+  field character or a note reference before the run's text goes with the first piece of a
+  split, one after it with the last; one between two texts of the same run (Word writes such
+  children in runs of their own, so only another producer's file has it) cannot be placed in
+  an edited text, and that split is reported. A paragraph added in a cell takes the runs read
+  back: its words' own looks, merged into the copied run's `<w:rPr>`. A run all of whose text
+  was removed is removed, in body paragraphs and cells alike, unless it holds more than text
+  (a drawing, a field character, a note reference): then it is emptied and keeps that, so a
+  note's reference survives its number's deletion (a run in a body hyperlink was left unchanged
+  before). A cell emptied on the canvas whose styled read holds no paragraph follows its text
+  read (it was left as it was).
 - Native tables are found again by signature, not by their ordinal in the story
   (`matchTables` in doc-host-model, `src/tables.ts`): the live tables of the document's
   stories are read (`tableRowCount`, `tableColumnCount`, each cell's `text`) and paired with
   the poured ones of the same shape, most unchanged non-empty cells first, then the same story
   and the nearest ordinal; a table every cell of which was edited pairs by its place between
   its matched neighbours. A placed document whose story gained, lost or reordered tables still
-  saves and writes its cells; only a table that cannot be found (deleted, or reshaped with
-  every cell edited) is reported. The object model's cell writes locate tables the same way.
+  saves and writes its cells. Rows added or removed on the canvas are saved too: the save-back
+  pairs a table of the same columns and another row count by the poured texts it still holds
+  anywhere (rows shift), else by its place, reads it whole, aligns its rows with Word's by
+  text (`overlay_tables`, the differ's own alignment), and writes `InsertRow` (before the first
+  kept row too) and `DeleteRow`, the kept rows' cells as cell edits. What stays reported: a
+  table deleted on the canvas; a table whose columns were added or removed (a row of texts
+  does not say which column is new; the column ops need a uniform grid and the column's
+  identity, which only a canvas column read would give); and rows added or removed in a table
+  with merged cells, since a span crosses the rows the alignment moves. The object model's
+  cell writes locate tables by their poured shape, since they address a cell by its poured
+  row and column.
 - A `.docx` opens standalone headless: the SDK's headless host has the native-open door, so
   `paged-node` opens it as its own document as the editor does, and saves or exports it as
   `.docx` through the exporter.
@@ -160,8 +354,8 @@ col}` and a `setCellSpan` for merged cells — mirroring the proven `sheet`
   `insertText` and no caret (the engine has no paragraph there to name), and
   keeps the default style. Blank lines of one cell that share an offset with
   different Word styles are diagnosed by `docx-lower`.
-- **Honest limitation:** the exact story offset past a table (`TABLE_FOOTPRINT`)
-  is still a conservative constant refined during editor integration.
+- The story offset past a table is exact since 2026-10-25 (see "Text after native
+  tables"); it was a constant (`TABLE_FOOTPRINT`) before.
 
 ## Tier-2 — inline images (with a core door)
 
@@ -327,9 +521,12 @@ ops use.)
 - **Standalone true-open** — degrades to embedded placement + a diagnostic when
   `document.openNative@1` is unwired; the editor and the SDK's headless host
   (`paged-node`) both wire it.
-- **Constructs still past the tier line** — tracked changes, floating
-  (anchored-with-wrap) images and internal `#anchor` links (a renderer door) →
-  surfaced as honest ADR-007 diagnostics on open, not silently dropped.
+- **Constructs still past the tier line** — floating (anchored-with-wrap)
+  images and internal `#anchor` links (a renderer door) → surfaced as honest
+  ADR-007 diagnostics on open, not silently dropped. (Tracked changes were
+  listed here, but until W0 nothing reported them: inserted text vanished
+  without a word. They are now shown as accepted with a diagnostic, see
+  "W0" at the top.)
   (Page/column breaks, `w:pageBreakBefore` and odd/even sections now lower to
   the engine's break-before rule `paragraphStartParagraph`, core protocol 64,
   matched against Word's own page map `docx-conformance/fixtures/

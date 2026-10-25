@@ -14,6 +14,7 @@ mod c1_no_idml;
 mod cell_first_baseline;
 mod chain_widths_pipeline;
 mod cjk_first_baseline;
+mod clip_groups;
 mod column_rules;
 mod composer_pipeline;
 mod conditional_text;

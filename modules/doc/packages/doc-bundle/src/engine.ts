@@ -47,6 +47,7 @@ interface WasmDocEngine {
   save_object_edits(editsJson: string): Uint8Array;
   save_edited_from_content(contentJson: string): Uint8Array;
   last_save_skips(): string;
+  style_tokens(): string;
   skeleton_paged(name: string): Uint8Array;
   skeleton_stories(): string;
   set_mid_page_columns(on: boolean): void;
@@ -153,6 +154,17 @@ export class DocEngine {
    */
   saveEditedFromContent(content: unknown): Uint8Array {
     return this.inner.save_edited_from_content(JSON.stringify(content));
+  }
+
+  /** The tokens of the document's Word styles in paged: the styles
+   *  save-back reads back so a change made to one is written into
+   *  `styles.xml` (doc ADR 610). */
+  styleTokens(): string[] {
+    try {
+      return JSON.parse(this.inner.style_tokens()) as string[];
+    } catch {
+      return [];
+    }
   }
 
   /** The refusal ledger of the last `saveEditedFromContent` — every edit

@@ -9,12 +9,24 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 
 ## Shipped
 
+- **Templates.** A document's policy in labels makes it a template (ADR 1000): fields of every
+  kind, permissions checked for a filler at every door (ADR 1001), fields from XML tags and tags
+  written back (ADR 1002), text fields written in the character styles and with the breaks
+  their author allows, and alternates that show one of several frames (ADR 1017). `paged
+template fields | fill | check` run the same messages headlessly.
 - **Two engine npm packages per release tag** (PM-0008, amendment 3). `@paged-media/paged`
   (`packages/paged`: the files of the private workspace package `canvas-wasm`, with the
   `./introspect` and `./repo` entries, and the `paged` bin, `paged mcp` included) and
   `@paged-media/viewer` (with the `./session` entry), built and published by
   `.github/workflows/release.yml` together with `@paged-media/plugin-sdk` (the contract as
   its `./api`).
+- **Word's first-fit composer** ([ADR 1016](adr/1016-word-first-fit-composer.md)).
+  `paragraphComposer = "Word First-fit"` sets a paragraph one line at a time the way Word
+  does: no compressed justified line, Word's hyphenation zone (0.25 in by default, no hyphen
+  limit), a hyphen in the text as an ordinary break, and a word wider than the measure split
+  on a line of its own. The doc module selects it for every Word paragraph; IDML documents
+  keep their composers. Word's own answer to the probe (`first_fit_docx()`) is not committed
+  yet.
 - **Open and create.** `LoadDocument` opens an `.idml` package or a `.paged` container;
   `NewBlankDocument` and `paged new` make an empty document.
 - **Render.** One display list per page, drawn on the CPU with `vello_cpu` (`paged render`,
@@ -46,6 +58,14 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   origin in its spread and its spread (`PageSummary.page_origin` / `spread_id`); a table reports
   its header and footer bands (`tableHeaderRowCount` / `tableFooterRowCount`, read-only)
   ([ADR 159](adr/159-what-a-committed-change-reports.md), `v0.71.13`, additive on protocol 71).
+- **Page and margin reads.** A spread names its pages and its top-level items, each with the
+  page it sits on by the rule `elementGeometry` applies, the page holding the centre of its
+  transformed box (`SpreadSummary.page_ids` / `members`); a page reports its place in its spread,
+  the side its spine is on by the renderer's binding rule, and its inside and outside margins
+  beside the physical four (`PageSummary.index_in_spread` / `binding_edge` /
+  `margin_inside_pt` / `margin_outside_pt`). Additive serde-default fields, no protocol bump;
+  the editor's Align to page / margins / spread reads them
+  (`paged-canvas/tests/it/spread_membership_reads.rs`).
 - **Interaction.** Hit testing, element and text selection, caret and selection geometry,
   gestures (rotate, scale and shear
   about a given point) and snapping, as message kinds. Snapping is one engine resolver

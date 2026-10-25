@@ -140,13 +140,18 @@ is not written yet.
 | [207](207-an-undecoded-link-is-not-a-missing-link.md) | An undecoded link is not a missing link | Accepted 2026-10-20 |
 | [208](208-a-data-uri-carries-its-picture.md) | A data URI carries its picture; a picture in the text is a listed link | Accepted 2026-10-20 |
 | [209](209-a-picture-is-sampled-in-image-space.md) | A picture is sampled in image space, not where the atlas put it | Accepted 2026-10-21 |
-| [1000](1000-a-template-policy-lives-in-labels.md) | A template policy lives in labels, and operations are checked against it | Accepted 2026-10-22; amended 2026-10-23 (module fields) |
-| [1001](1001-the-session-has-a-role-and-refusals-are-typed.md) | The session has a role; permissions are checked at three doors; refusals are typed | Accepted 2026-10-22 |
+| [1000](1000-a-template-policy-lives-in-labels.md) | A template policy lives in labels, and operations are checked against it | Accepted 2026-10-22; amended 2026-10-23 (module fields), 2026-10-24 (styled values, alternates) |
+| [1001](1001-the-session-has-a-role-and-refusals-are-typed.md) | The session has a role; permissions are checked at three doors; refusals are typed | Accepted 2026-10-22; amended 2026-10-24 (two more value kinds) |
 | [1002](1002-xml-tags-carry-template-fields.md) | XML tags carry template fields, and the XML structure is written | Accepted 2026-10-23 |
 | [1003](1003-a-placed-pdf-shows-the-page-the-document-names.md) | A placed PDF shows the page the document names | Accepted 2026-10-23 |
 | [1004](1004-a-follow-up-write-can-join-the-step-that-provoked-it.md) | A follow-up write can join the undo step that provoked it | Accepted 2026-10-23 |
 | [1005](1005-a-raster-is-read-by-paged-raster.md) | A raster is read by `paged-raster`, and a TIFF through `tiff` | Accepted 2026-10-24 |
 | [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
+| [1010](1010-a-group-can-clip-and-be-pasted-in.md) | A group can clip, and a group can be pasted into a frame | Accepted 2026-10-24 |
+| [1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md) | Bindings live in labels, and the engine reads and applies them | Accepted 2026-10-24 |
+| [1015](1015-paged-action-the-action-registry.md) | `paged-action`: the action registry, chains, the cache key, and actions in JavaScript | Accepted 2026-10-24; amended 2026-10-24 (`paged.actions.*`) |
+| [1016](1016-word-first-fit-composer.md) | Word's first-fit is a composer of its own | Accepted 2026-10-24 |
+| [1017](1017-styled-field-values-and-alternates.md) | A text field takes the styles and breaks its author allows; alternates choose a frame | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

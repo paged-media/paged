@@ -27,7 +27,9 @@ import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
+  applyMakeObjectsOnPath,
   applyMakeRepeat,
+  applyUpdateObjectsOnPath,
   drawBundle,
   readRepeatLibrary,
   recipeAutoUpdateOf,
@@ -136,6 +138,27 @@ describe("paged.draw — the automatic recipe update", () => {
     }
   });
 
+  it("an edit sent right after switching the update back on rebuilds", async () => {
+    await idle();
+    setRecipeAutoUpdate(h.host, false);
+    await idle();
+    const before = await instances();
+    // Off, an edit rebuilds nothing…
+    expect((await moveSourceAnchor(3)).applied).toBe(true);
+    await idle();
+    expect((await instances()).map((i) => i.id)).toEqual(
+      before.map((i) => i.id),
+    );
+    // …switched on, an edit sent at once rebuilds: the prints kept from
+    // before the switch-off are what it is compared against (re-taking
+    // them raced the edit, the editor's checkbox spec).
+    setRecipeAutoUpdate(h.host, true);
+    expect((await moveSourceAnchor(5)).applied).toBe(true);
+    await idle();
+    const after = await instances();
+    expect(after.map((i) => i.id)).not.toContain(before[0]!.id);
+  });
+
   // Engine ADR 1004 amendment: a script run is one step its reply names.
   it("a script's edit of a source rebuilds the repeat in the script's step", async () => {
     await idle();
@@ -210,5 +233,72 @@ describe("paged.draw — the automatic recipe update", () => {
     } finally {
       setRecipeAutoUpdate(h.host, true);
     }
+  });
+
+  // A recipe whose own Update moves its sources: the automatic update
+  // takes the step as the rebuild it is, not as an edit to follow.
+  it("a manual Update of objects on a path is not placed once more by the automatic update", async () => {
+    await idle();
+    const square = (x: number, y: number) =>
+      [
+        [x, y],
+        [x + 60, y],
+        [x + 60, y + 60],
+        [x, y + 60],
+      ].map((p) => ({ anchor: p, left: p, right: p }));
+    const mint = async (x: number, y: number): Promise<ElementId> => {
+      const out = await h.host.document.mutate({
+        op: "insertPath",
+        args: {
+          pageId: F6_RING_PAIR.pageId,
+          anchors: square(x, y),
+          open: false,
+        },
+      } as never);
+      if (!out.applied || !out.createdId) throw new Error("insertPath failed");
+      return out.createdId;
+    };
+    const a = await mint(20, 20);
+    const b = await mint(20, 120);
+    const path = { kind: "polygon", id: F6_RING_PAIR.openId } as ElementId;
+    await h.host.selection.set([a, b, path]);
+    expect(
+      await applyMakeObjectsOnPath(h.host, { alignToPath: false }),
+    ).toHaveLength(2);
+    await idle();
+    const transformOf = async (id: ElementId) =>
+      (await h.host.document.elementGeometry([id]))[0]?.itemTransform;
+    const placedBefore = await transformOf(a);
+
+    // The Update moves the objects (now turned along the path)…
+    const rebuiltBefore = recipeAutoUpdateOf(h.host)!.lastRebuilt();
+    const updated = await applyUpdateObjectsOnPath(h.host, {
+      alignToPath: true,
+    });
+    expect(updated).toHaveLength(2);
+    await idle();
+    const placed = await transformOf(a);
+    expect(placed).not.toEqual(placedBefore);
+    // …and the automatic update rebuilt nothing on top of it.
+    expect(recipeAutoUpdateOf(h.host)!.lastRebuilt()).toBe(rebuiltBefore);
+
+    // An edit of the path is still followed, in its own step.
+    const table = await h.host.document.pathAnchors(path);
+    const [x, y] = table!.anchors[0]!.anchor;
+    const moved = await h.host.document.mutate({
+      op: "pathPointSet",
+      args: {
+        elementId: path,
+        index: 0,
+        role: "anchor",
+        position: [x + 20, y - 10],
+      },
+    });
+    expect(moved.applied).toBe(true);
+    await idle();
+    expect(recipeAutoUpdateOf(h.host)!.lastRebuilt()).toEqual([
+      "plugin:media.paged.draw/objectsOnPath/op-1",
+    ]);
+    expect(await transformOf(a)).not.toEqual(placed);
   });
 });

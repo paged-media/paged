@@ -27,8 +27,8 @@
 //!
 //! ## Two layers, one logic
 //!
-//! - [`core::DataSession`] — plain Rust, native-typed. The full engine lives
-//!   here, so `data-conformance` exercises it WITHOUT a wasm runtime.
+//! - [`core::DataSession`] — plain Rust, native-typed, in the engine crate
+//!   `paged-data-session`. The full engine lives there, so `data-conformance` exercises it WITHOUT a wasm runtime.
 //! - `DataEngine` (below) — `#[cfg(target_arch = "wasm32")]` only, because
 //!   `JsValue`-returning `#[wasm_bindgen]` methods compile only for wasm32. A
 //!   forwarding shim with NO logic of its own.
@@ -40,19 +40,19 @@
 //! `define_placeholder` / `set_param` / `ingest_result` / `resolve_lowered` /
 //! `sync_state` / `pin` / `mark_overridden` / `relink` / `sync_report` /
 //! `source_manifest` / `authorize_report` / `payload` / `metadata` / `free`.
-//! The query engine itself is the vendored DuckDB-WASM (TS side); it converts
-//! its Arrow result to a `RecordSet` JSON which `ingest_result` decodes.
+//! The sources and the queries over them live in the engine too: the store
+//! (`data-store`, ADR 561) is behind the `store_*` methods, and a refresh
+//! delivers a query's rows to the session without them leaving the wasm.
 
-pub mod columns;
-pub mod core;
-pub mod import;
-pub mod review;
+// The session moved into the engine (`paged-data-session`, PM-0015); its
+// modules keep their paths here, so `data_js::core::DataSession` still names it.
+pub use data_session::{columns, core, labels, review};
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use crate::columns::ColumnBuf;
     use crate::core::DataSession;
-    use data_core::{BindingId, QueryId};
+    use data_core::{BindingId, QueryId, TemplateRef};
     use wasm_bindgen::prelude::*;
 
     /// The wasm class the bundle consumes — a thin shim over [`DataSession`].
@@ -96,6 +96,81 @@ mod wasm {
             Ok(())
         }
 
+        /// The template library: `TemplateEntry[]` (`{ template, usedBy }`).
+        pub fn template_library(&self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.template_library())
+        }
+
+        /// Define template `id` from frame text with `<<field>>`s:
+        /// `TemplateDraft` (`{ template, unreferenced }`).
+        pub fn template_from_text(
+            &mut self,
+            id: &str,
+            text: &str,
+            line_height_pt: f64,
+        ) -> Result<JsValue, JsValue> {
+            let draft = self
+                .session
+                .template_from_text(&TemplateRef::from(id), text, line_height_pt)
+                .map_err(map_err)?;
+            to_js(&draft)
+        }
+
+        /// Template `id` filled with record `record` (0-based) of `query`:
+        /// `TemplateLinePreview[]` (`{ text, error? }`).
+        pub fn preview_template(
+            &self,
+            id: &str,
+            query: &str,
+            record: usize,
+        ) -> Result<JsValue, JsValue> {
+            let lines = self
+                .session
+                .preview_template(&TemplateRef::from(id), &QueryId::from(query), record)
+                .map_err(map_err)?;
+            to_js(&lines)
+        }
+
+        /// Rename a template and the record flows using it: the moved ids.
+        pub fn rename_template(&mut self, from: &str, to: &str) -> Result<JsValue, JsValue> {
+            let moved = self
+                .session
+                .rename_template(&TemplateRef::from(from), &TemplateRef::from(to))
+                .map_err(map_err)?;
+            to_js(&moved)
+        }
+
+        /// Remove a template no record flow uses; `false` when there was none.
+        pub fn remove_template(&mut self, id: &str) -> Result<bool, JsValue> {
+            self.session
+                .remove_template(&TemplateRef::from(id))
+                .map_err(map_err)
+        }
+
+        /// A record flow's recipe (`RecordFlowDef`), or null.
+        pub fn record_flow(&self, binding: &str) -> Result<JsValue, JsValue> {
+            match self.session.record_flow(&BindingId::from(binding)) {
+                Some(def) => to_js(&def),
+                None => Ok(JsValue::NULL),
+            }
+        }
+
+        /// Set a record flow's template and options (`FlowOpts`).
+        pub fn set_record_flow(
+            &mut self,
+            binding: &str,
+            template: &str,
+            options: JsValue,
+        ) -> Result<(), JsValue> {
+            self.session
+                .set_record_flow(
+                    &BindingId::from(binding),
+                    &TemplateRef::from(template),
+                    from_js(options)?,
+                )
+                .map_err(map_err)
+        }
+
         /// Define a placeholder anchor.
         pub fn define_placeholder(&mut self, placeholder: JsValue) -> Result<(), JsValue> {
             self.session.define_placeholder(from_js(placeholder)?);
@@ -114,8 +189,8 @@ mod wasm {
             Ok(())
         }
 
-        /// Deliver a query's result (the DuckDB-WASM Arrow result, converted to
-        /// a `RecordSet` by the TS query layer).
+        /// Deliver a query's result materialised by the host (a `RecordSet`);
+        /// the store's own rows arrive through `store_ingest`.
         pub fn ingest_result(&mut self, query: &str, records: JsValue) -> Result<(), JsValue> {
             self.session
                 .ingest_result(QueryId::from(query), from_js(records)?);
@@ -272,7 +347,7 @@ mod wasm {
 
         /// Resolve a record-flow binding and paginate it over a caller-supplied
         /// frame chain (§9.4). `chain` is `FrameCapacity[]`, `opts` is
-        /// `FlowLayoutOpts` (or undefined for defaults).
+        /// `FlowLayoutOpts` (or undefined for the binding's own options).
         pub fn lower_record_flow(
             &mut self,
             binding: &str,
@@ -281,7 +356,9 @@ mod wasm {
         ) -> Result<JsValue, JsValue> {
             let chain: Vec<data_lower::FrameCapacity> = from_js(chain)?;
             let opts: data_lower::FlowLayoutOpts = if opts.is_undefined() || opts.is_null() {
-                data_lower::FlowLayoutOpts::default()
+                self.session
+                    .flow_layout(&BindingId::from(binding))
+                    .unwrap_or_default()
             } else {
                 from_js(opts)?
             };
@@ -338,7 +415,7 @@ mod wasm {
         /// Run a §10 batch over a record-flow binding: resolve, partition by
         /// `mode`, and paginate each unit. Returns `BatchRun[]`
         /// (`{ label, flow }`). `chain` is `FrameCapacity[]`, `opts` is
-        /// `FlowLayoutOpts` (or undefined for defaults).
+        /// `FlowLayoutOpts` (or undefined for the binding's own options).
         pub fn run_record_flow_batch(
             &mut self,
             binding: &str,
@@ -349,7 +426,9 @@ mod wasm {
             let mode = from_js(mode)?;
             let chain: Vec<data_lower::FrameCapacity> = from_js(chain)?;
             let opts: data_lower::FlowLayoutOpts = if opts.is_undefined() || opts.is_null() {
-                data_lower::FlowLayoutOpts::default()
+                self.session
+                    .flow_layout(&BindingId::from(binding))
+                    .unwrap_or_default()
             } else {
                 from_js(opts)?
             };
@@ -387,6 +466,14 @@ mod wasm {
             to_js_json(&plan)
         }
 
+        /// The Data Merge placeholders of a text that name a field
+        /// (`PlaceholderSpan[]`: `{ start, end, field, image }`, byte offsets
+        /// as the host counts them) — what filling a design with one record
+        /// replaces.
+        pub fn placeholder_spans(&self, text: &str) -> Result<JsValue, JsValue> {
+            to_js(&data_lower::merge::placeholder_spans(text))
+        }
+
         /// The distinct words of a merge plan's texts per template frame
         /// (`string[][]`, the space included) — what the writer measures
         /// against the host's fonts before asking [`merge_overset`].
@@ -402,6 +489,28 @@ mod wasm {
             let plan: data_lower::merge::MergePlan = from_js(plan)?;
             let metrics: Vec<data_lower::merge::FrameMetrics> = from_js(metrics)?;
             to_js(&data_lower::merge::merge_overset(&plan, &metrics))
+        }
+
+        /// The distinct words of one text (`string[]`, the space included),
+        /// for the host to measure before [`text_overset`] (data ADR 564).
+        pub fn text_words(&self, text: &str) -> Result<JsValue, JsValue> {
+            to_js(&data_lower::merge::text_words(text))
+        }
+
+        /// Is `text` overset in a frame `width` × `height` (pt)? `metrics` is
+        /// one `FrameMetrics` (`{ leadingPt, advances }`) — DM-7's measured
+        /// rule, for any text the data placed (data ADR 564).
+        pub fn text_overset(
+            &self,
+            text: &str,
+            width: f64,
+            height: f64,
+            metrics: JsValue,
+        ) -> Result<bool, JsValue> {
+            let metrics: data_lower::merge::FrameMetrics = from_js(metrics)?;
+            Ok(data_lower::merge::text_overset(
+                text, width, height, &metrics,
+            ))
         }
 
         /// Plan a §10 batch run over a query's result (`mode` is `BatchMode`):
@@ -694,17 +803,175 @@ mod wasm {
         }
     }
 
-    // ── wave 6: file imports DuckDB-WASM cannot read (data-xlsx) ─────────
+    // ── the store (ADR 561): sources and the queries over them ──────────
     #[wasm_bindgen]
     impl DataEngine {
-        /// Read one worksheet of an `.xlsx` (`sheet` absent = the first) as
-        /// `{sheet, sheets, columns: [{name, type}], rows, errorCells, json}`;
-        /// the bundle hands `json` + `columns` to DuckDB's `read_json`.
-        pub fn xlsx_import(&self, bytes: &[u8], sheet: Option<String>) -> Result<JsValue, JsValue> {
-            let out = crate::import::xlsx_import(bytes, sheet.as_deref())
-                .map_err(|e| JsValue::from_str(&e))?;
+        /// Read a file into the store as the source table `name`, replacing
+        /// it. `format`: `csv`, `tsv`, `json`, `parquet` or `xlsx`; `sheet`
+        /// names an XLSX worksheet (absent: the first). Answers
+        /// `{table, columns: [{name, type}], rows, sheet?, sheets?,
+        /// errorCells, asWritten}`.
+        pub fn store_import(
+            &mut self,
+            name: &str,
+            format: &str,
+            bytes: &[u8],
+            sheet: Option<String>,
+        ) -> Result<JsValue, JsValue> {
+            let format = data_store::Format::parse(format).ok_or_else(|| {
+                store_error(&data_store::StoreError::Read(format!(
+                    "\"{format}\" is not a format the store reads"
+                )))
+            })?;
+            let out = self
+                .session
+                .store_import(name, format, bytes, sheet.as_deref())
+                .map_err(|e| store_error(&e))?;
             to_js(&out)
         }
+
+        /// Drop a source's table (and its as-written twin).
+        pub fn store_drop(&mut self, name: &str) -> Result<(), JsValue> {
+            self.session.store_drop(name).map_err(|e| store_error(&e))
+        }
+
+        /// The store's source tables, by name.
+        pub fn store_tables(&mut self) -> Result<Vec<String>, JsValue> {
+            self.session.store_tables().map_err(|e| store_error(&e))
+        }
+
+        /// Run `sql` in the store and deliver its rows as the result of
+        /// `query` — no rows cross the boundary. Answers the row count.
+        pub fn store_ingest(&mut self, query: &str, sql: &str) -> Result<usize, JsValue> {
+            self.session
+                .store_ingest(QueryId::from(query), sql)
+                .map_err(|e| store_error(&e))
+        }
+
+        /// Run `sql` over the CSV `sources` as written and deliver the rows
+        /// as the result of `query`. Answers the row count, or `undefined`
+        /// when no source is kept as written.
+        pub fn store_ingest_as_written(
+            &mut self,
+            query: &str,
+            sql: &str,
+            sources: Vec<String>,
+        ) -> Result<Option<usize>, JsValue> {
+            self.session
+                .store_ingest_as_written(QueryId::from(query), sql, &sources)
+                .map_err(|e| store_error(&e))
+        }
+
+        /// The columns a query produces: `[{name, type}]`.
+        pub fn store_describe(&mut self, sql: &str) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_describe(sql)
+                .map_err(|e| store_error(&e))?;
+            to_js(&out)
+        }
+
+        /// The first `limit` rows of a query as text and its row count:
+        /// `{columns: [{name, type}], rows: (string | null)[][], count}`.
+        pub fn store_preview(&mut self, sql: &str, limit: usize) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_preview(sql, limit)
+                .map_err(|e| store_error(&e))?;
+            // JSON-compatible: a SQL NULL crosses as `null`, not `undefined`.
+            to_js_json(&out)
+        }
+
+        /// A window of a source table in the provider shape (the data
+        /// door's `records`, extensions ADR 343):
+        /// `{schema: {fields}, columns, rowCount}`. `limit` 0 means all.
+        pub fn store_records(
+            &mut self,
+            table: &str,
+            offset: usize,
+            limit: usize,
+        ) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_records(table, offset, (limit > 0).then_some(limit))
+                .map_err(|e| store_error(&e))?;
+            to_js_json(&out)
+        }
+
+        /// An expression's value at a record of `query` (the bind popover's
+        /// preview): `{display, value, error?}`. Defines nothing.
+        pub fn evaluate_at(
+            &self,
+            query: &str,
+            expr: &str,
+            record: usize,
+        ) -> Result<JsValue, JsValue> {
+            to_js_json(
+                &self
+                    .session
+                    .evaluate_at(&QueryId::from(query), expr, record),
+            )
+        }
+
+        /// Define (or redefine) a transform (data ADR 562):
+        /// `{id, inputs, source, params?}`.
+        pub fn define_transform(&mut self, def: JsValue) -> Result<(), JsValue> {
+            let def: data_session::core::TransformDef = from_js(def)?;
+            self.session.define_transform(def);
+            Ok(())
+        }
+
+        /// Remove a transform and its derived table.
+        pub fn remove_transform(&mut self, id: &str) -> bool {
+            self.session.remove_transform(id)
+        }
+
+        /// The transforms, in run order.
+        pub fn transforms(&self) -> Result<JsValue, JsValue> {
+            to_js_json(&self.session.transforms())
+        }
+
+        /// Run every transform in order (before the queries refresh):
+        /// `[{transform, outcome: {Ok: rows} | {Err: message}}]`.
+        pub fn run_transforms(&mut self) -> Result<JsValue, JsValue> {
+            to_js_json(&self.session.run_transforms())
+        }
+
+        /// A query's rows in the provider shape (the data door's `query`;
+        /// the bundle's guard has checked `sql`).
+        pub fn store_query_records(&mut self, sql: &str) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_query_records(sql)
+                .map_err(|e| store_error(&e))?;
+            to_js_json(&out)
+        }
+
+        /// Apply row edits (`[{op: "set", row, field, value} | {op:
+        /// "insert", values} | {op: "delete", row}]`) to a source table in
+        /// one transaction (the data door's `write`). Returns the row count.
+        pub fn store_edit(&mut self, table: &str, edits: JsValue) -> Result<usize, JsValue> {
+            let edits: Vec<data_store::RowEdit> = from_js(edits)?;
+            self.session
+                .store_edit(table, &edits)
+                .map_err(|e| store_error(&e))
+        }
+    }
+
+    /// A store failure as a JS `Error` whose `message` says what happened and
+    /// whose `kind` (`Parser`, `Catalog`, `ReadOnly`, `Read`, …) and `offset`
+    /// (into the SQL that ran) the query panel points with.
+    fn store_error(e: &data_store::StoreError) -> JsValue {
+        let err = js_sys::Error::new(&e.to_string());
+        let (kind, offset) = match e {
+            data_store::StoreError::Sql(d) => (d.kind.as_str(), d.offset),
+            data_store::StoreError::Read(_) => ("Read", None),
+        };
+        let _ = js_sys::Reflect::set(&err, &"kind".into(), &kind.into());
+        if let Some(at) = offset {
+            let _ = js_sys::Reflect::set(&err, &"offset".into(), &(at as f64).into());
+        }
+        err.into()
     }
 
     impl DataEngine {

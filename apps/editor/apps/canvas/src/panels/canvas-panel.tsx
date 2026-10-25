@@ -37,6 +37,9 @@ import {
   useInstrumentation,
   useOverlaySignals,
   useSelection,
+  useScoped,
+  ALIGN_SCOPE,
+  clickKeyObject,
   useOptionalEditContextStack,
   useOptionalTableSelection,
   useRegistries,
@@ -46,6 +49,8 @@ import {
   type SelectionState,
   type TableCellSelection,
   useEditorKeys,
+  useChromeRegions,
+  useSessionRole,
 } from "@paged-media/shell";
 
 import type {
@@ -95,7 +100,14 @@ export function CanvasPanel(_props: PanelProps) {
   // gesture branch commits and returns before the click branch ever runs.
   const tools = useRegistryView(useRegistries().tools);
   const legacyKeyForTool = tools.get(effectiveTool)?.legacyKey ?? null;
-  const forcePan = effectiveTool === "paged.tool.hand";
+  // A preview canvas (the `form` preset, editor ADR 294) only pans and
+  // zooms: every drag pans and a click selects nothing, as with the Hand.
+  const preview = useChromeRegions().canvas.preview;
+  const forcePan = effectiveTool === "paged.tool.hand" || preview;
+  // A filler or a viewer moves nothing by dragging, so one finger pans the
+  // page and a tap selects (editor ADR 294); a pen or a mouse is unchanged.
+  const role = useSessionRole();
+  const touchPans = role === "filler" || role === "viewer";
   // Direct Selection reaches the leaf: a click on a grouped item selects
   // that item, not its group (F-29), as in InDesign.
   const directSelect = effectiveTool === "paged.tool.directSelect";
@@ -118,6 +130,8 @@ export function CanvasPanel(_props: PanelProps) {
   const tableSelection = useOptionalTableSelection();
   const { fps, gpuActive, layoutCacheStats } = useInstrumentation();
   const { hitSelection, setHitSelection } = useOverlaySignals();
+  // WP4.4 — the Align panel's scope and key object (a click sets the key).
+  const alignScope = useScoped(ALIGN_SCOPE);
 
   // W3.A2 — resolve a table cell selection from a hit's tableContext.
   // The hit carries `{tableId,row,col}` + the owning `storyId` + the
@@ -337,6 +351,15 @@ export function CanvasPanel(_props: PanelProps) {
               target = { kind: "group" as const, id: chain[0] };
             }
           }
+          // WP4.4 — Align to key object: a plain click on one of the
+          // selected objects makes it the key and keeps the selection.
+          if (
+            mode === "replace" &&
+            nextActive === activeGroup &&
+            clickKeyObject(alignScope, elementSelection, target)
+          ) {
+            return Promise.resolve(elementSelection);
+          }
           if (nextActive !== activeGroup) setActiveGroup(nextActive);
           groupChainRef.current = chain;
           setContentSelection(null);
@@ -402,7 +425,9 @@ export function CanvasPanel(_props: PanelProps) {
     [
       activeTool,
       activeGroup,
+      alignScope,
       client,
+      elementSelection,
       resolveTableCell,
       setActiveGroup,
       directSelect,
@@ -552,6 +577,7 @@ export function CanvasPanel(_props: PanelProps) {
         legacyKeyForTool={legacyKeyForTool}
         cursor={toolCursor}
         forcePan={forcePan}
+        touchPans={touchPans}
         zoomClick={zoomClick}
         // Path-edit mode hands the canvas pointer to the session — but
         // only while the legacy select path is the one in charge: a tool

@@ -1638,6 +1638,7 @@
     "frameContentBlendMode",
     "groupIsolateBlending",
     "groupKnockout",
+    "groupClip",
     "frameDropShadowBlendMode",
     "frameDropShadowSpread",
     "frameDropShadowNoise",
@@ -6326,6 +6327,18 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "frame",
+      "path": "groupClip",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true
     },
     {
       "addressKind": "frame",
@@ -19138,6 +19151,18 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "frame",
+        "path": "groupClip",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool"
       },
       {
         "addressKind": "frame",

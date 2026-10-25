@@ -17,7 +17,7 @@
  */
 
 // The paged.data bundle entry. M0 scope (the honest slice): import a CSV into
-// the vendored DuckDB-WASM engine, define a query + binding, resolve through the
+// the engine's query store, define a query + binding, resolve through the
 // Rust engine, and lower to a page frame (variable replacement + single-region
 // dynamic table degraded to tab-text + rules, D-02). Remote/DB sources +
 // network consent, record flow, the data-provider contract are wired; the
@@ -44,6 +44,8 @@ import { makeSourcesPanel } from "./panels/sources-panel";
 import { makeBindingsPanel } from "./panels/bindings-panel";
 import { makeDatasetPanel } from "./panels/dataset-panel";
 import { makeQueryPanel } from "./panels/query-panel";
+import { makeTemplatesPanel } from "./panels/templates-panel";
+import { makePaginationPanel } from "./panels/pagination-panel";
 import { contributeObjectModel } from "./object-model";
 import {
   dataObjectsPanel,
@@ -55,6 +57,8 @@ const SOURCES_PANEL_ID = "media.paged.data.panel.sources";
 const BINDINGS_PANEL_ID = "media.paged.data.panel.bindings";
 const DATASET_PANEL_ID = "media.paged.data.panel.dataset";
 const QUERY_PANEL_ID = "media.paged.data.panel.query";
+const TEMPLATES_PANEL_ID = "media.paged.data.panel.templates";
+const PAGINATION_PANEL_ID = "media.paged.data.panel.pagination";
 const IMPORTER_ID = "media.paged.data.importer.table";
 
 /** The file types File ▸ Import and a drop route to this plugin.
@@ -94,7 +98,7 @@ export function activate(host: BundleHost): BundleHandle {
   // The document's saved session (the `session` container part) comes back
   // in the background; the panels re-render when it lands. Opening a document
   // boots the data engine only when the document carries a session, and never
-  // boots DuckDB or fetches a remote source by itself.
+  // loads its data into the store or fetches a remote source by itself.
   void session.restore();
   // Activation runs once, at app start; documents come and go after it. On
   // every open (`document.onDidOpen`) the session drops the previous
@@ -137,6 +141,37 @@ export function activate(host: BundleHost): BundleHandle {
     component: makeQueryPanel(host, session),
     defaultDock: "right",
   });
+
+  // Record templates and a record flow's pagination (PM-0015 L4; editor ADR
+  // 291 left them to this module).
+  contributePanel(host, {
+    id: TEMPLATES_PANEL_ID,
+    title: t(M.templatesPanel),
+    icon: "ui-component",
+    component: makeTemplatesPanel(host, session),
+    defaultDock: "right",
+  });
+
+  contributePanel(host, {
+    id: PAGINATION_PANEL_ID,
+    title: t(M.paginationPanel),
+    icon: "panel-pages",
+    component: makePaginationPanel(host, session),
+    defaultDock: "right",
+  });
+
+  // Extensions ADR 343 — serve the document's data to every other bundle
+  // (paged.sheet edits a table, an extension binds its objects). One
+  // service per editor: a host with no data backend says so in supports().
+  if (host.supports("data@1")) {
+    const door = session.dataDoor();
+    const handle = host.data.serve(door.service);
+    door.onChange((change) => handle.changed(change));
+  }
+
+  // Data ADR 564: the issues reach Problems where the host has it.
+  if (host.supports("diagnostics.publish@1"))
+    session.publishIssuesToProblems(true);
 
   // File ▸ Import / drop: a JSON or Parquet file becomes a data source (the
   // contested spreadsheet types stay with paged.sheet — IMPORTER_EXTENSIONS).

@@ -46,7 +46,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { buildIdmlFromRasters } from "../idml-fallback";
-import { extractPdf, rasterizePdf } from "../pdfium";
+import { extractPdf, pdfPageCount, rasterizePdf } from "../pdfium";
 import { loadPdfMapper } from "../engine-loader";
 
 import importPdfArgs from "../../schema/import-pdf.args.json";
@@ -59,6 +59,9 @@ const M = defineMessages("publish.pdfImport", {
 });
 
 export const PDF_IMPORTER_ID = "media.paged.pdf.importer.pdf";
+
+/** The pages each path reads when `maxPages` is absent. */
+export const DEFAULT_MAX_PAGES = { editable: 12, image: 20 } as const;
 export const PDF_MIME = "application/pdf";
 
 // ---------------------------------------------------------- importer
@@ -124,6 +127,28 @@ export const PDF_IMPORT_DEFAULTS: Readonly<PdfImportOptions> = Object.freeze({
  *  `invalidValue: …` on out-of-range options and `failed: …` when the
  *  requested path cannot run. */
 export async function openPdf(
+  host: BundleHost,
+  bytes: Uint8Array,
+  options: PdfImportOptions,
+  open: (bytes: Uint8Array) => Promise<void>,
+): Promise<{
+  mode: "editable" | "image";
+  pageCount: number;
+  sourcePageCount: number;
+}> {
+  const read = await readPdf(host, bytes, options, open);
+  // Pages past the cap are left out: said, never silent.
+  const sourcePageCount = (await pdfPageCount(bytes)) ?? read.pageCount;
+  if (sourcePageCount > read.pageCount) {
+    const cap = options.maxPages ?? DEFAULT_MAX_PAGES[read.mode];
+    host.log.warn(
+      `${PDF_IMPORTER_ID}: read ${read.pageCount} of ${sourcePageCount} pages (the ${read.mode} path reads ${cap}; maxPages, up to 2000, reads more)`,
+    );
+  }
+  return { ...read, sourcePageCount };
+}
+
+async function readPdf(
   host: BundleHost,
   bytes: Uint8Array,
   options: PdfImportOptions,

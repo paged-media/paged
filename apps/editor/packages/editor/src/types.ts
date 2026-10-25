@@ -124,7 +124,14 @@ export interface CanvasFurniture {
   readonly titleBar?: boolean;
   readonly rulers?: boolean;
   readonly thumbnails?: boolean;
+  /** The canvas is a preview: it pans and zooms and edits nothing. */
+  readonly preview?: boolean;
 }
+
+/** What a fill shape shows on a narrow screen (below 720 px): the form
+ *  first with the preview folded away, or the canvas with the active
+ *  field in a sheet. */
+export type CompactLayout = "form-first" | "field-sheet";
 
 /**
  * What an editor shows: a preset it extends and what it changes
@@ -132,7 +139,7 @@ export interface CanvasFurniture {
  * `@paged-media/editor/feature-ids.json`.
  */
 export interface EditorProfile {
-  /** The preset this profile starts from (`full`, `template-fill`, …). */
+  /** The preset this profile starts from (`full`, `template-fill`, `form`, …). */
   readonly extends?: string;
   /** Product name: the mode title and the title-bar badge. */
   readonly title?: string;
@@ -156,6 +163,9 @@ export interface EditorProfile {
   readonly features?: Readonly<Record<string, boolean>>;
   /** The session's role. */
   readonly role?: Role;
+  /** The layout below 720 px; `null` keeps the desktop layout. The
+   *  `template-fill` and `form` presets set one. */
+  readonly compact?: CompactLayout | null;
 }
 
 // ── Features (docs/composable-editor.md §6) ─────────────────────────────
@@ -253,10 +263,40 @@ export interface EditorStorage {
   removeItem(key: string): void;
 }
 
+/**
+ * A deprecated id the editor met in the host's profile or feature set: it is
+ * read as `replacement` (null: nothing replaces it, and it is ignored) until
+ * `removeIn`. The list is `feature-ids.json`'s `deprecated`.
+ */
+export interface IdDeprecation {
+  readonly id: FeatureId;
+  readonly replacement: FeatureId | null;
+  /** The release that deprecated the id. */
+  readonly deprecatedIn: string;
+  /** The first release without the alias. */
+  readonly removeIn: string;
+}
+
 export type EditorEvent =
   | { type: "ready" }
   | { type: "change" }
-  | { type: "fieldChange"; fields: readonly TemplateFieldSummary[] };
+  | { type: "fieldChange"; fields: readonly TemplateFieldSummary[] }
+  /** Once per old id, to every listener (also for ids met before it
+   *  subscribed: the config's profile). */
+  | ({ type: "idDeprecated" } & IdDeprecation);
+
+/** Why `createEditor`, `mountEditor` or `connectEditor` refused. */
+export type EditorErrorCode =
+  /** The page (or the frame's host page) is not cross-origin isolated.
+   *  There is no degraded mode: serve the page with COOP and COEP, or embed
+   *  through `@paged-media/editor/iframe`; the message says how. */
+  "notCrossOriginIsolated";
+
+/** An error the editor refuses with; `isEditorError` tells it apart. */
+export interface EditorError extends Error {
+  readonly name: "EditorError";
+  readonly code: EditorErrorCode;
+}
 
 /** A mounted editor, as the host drives it (docs/composable-editor.md §8.2). */
 export interface EditorHandle {
@@ -291,7 +331,8 @@ export interface EditorHandle {
   >;
   /** Change the session's role (the engine's and the UI's). */
   setRole(role: Role): Promise<void>;
-  /** Switch features on and off (ids from `feature-ids.json`). */
+  /** Switch features on and off (ids from `feature-ids.json`; a deprecated
+   *  id is read as its replacement and reported as `idDeprecated`). */
   readonly features: FeatureStore;
   /** Listen; returns the unsubscribe. */
   on(listener: (event: EditorEvent) => void): () => void;

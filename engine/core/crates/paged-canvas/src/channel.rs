@@ -724,6 +724,13 @@ export type WorkerToMain = WorkerToMainKind & {
 //   Rides v76 too (ADR 1004 amendment): `ScriptResult.appliedSeq`, the one
 //   undo step a script run ended in (a run is one step now), so its change
 //   can be amended; the `mutateWithBytesDirect` lane's amending twin.
+// Additive on 76, no bump (governance rule 1) — extensions ADR 338,
+//   `render.snapshot@2`: `RequestSnapshot.only` / `clip` / `format` /
+//   `background` / `trim`, and `SnapshotPng.format` / `rgba` / `region`,
+//   all optional with v1 defaults; `SnapshotError::InvalidClip` /
+//   `TooLarge` / `NothingDrawn`.
+//   An older worker ignores the new fields and answers a whole-page PNG,
+//   which a caller detects by the reply's missing `format` / `region`.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(76);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -787,7 +794,6 @@ pub enum HostObjectCall {
     /// Answer: `CommandInfo[]`. Additive within v71.
     Commands {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[tsify(optional)]
         owner: Option<String>,
     },
 }
@@ -803,7 +809,6 @@ pub struct HostObjectAnswer {
     #[tsify(optional, type = "unknown")]
     pub value: serde_json::Value,
     #[serde(default)]
-    #[tsify(optional)]
     pub error: Option<HostObjectError>,
 }
 
@@ -818,7 +823,6 @@ pub struct HostObjectError {
     pub code: String,
     pub reason: String,
     #[serde(default)]
-    #[tsify(optional)]
     pub index: Option<u32>,
 }
 
@@ -1039,7 +1043,6 @@ pub enum FontScope {
 #[serde(rename_all = "camelCase")]
 pub struct ClearFontRegistryPayload {
     #[serde(default)]
-    #[tsify(optional)]
     pub scope: FontScope,
 }
 
@@ -1111,7 +1114,6 @@ pub enum MainToWorkerKind {
         #[tsify(type = "number[]")]
         bytes: ByteBuf,
         #[serde(default)]
-        #[tsify(optional)]
         scope: FontScope,
     },
     /// Drop every font previously registered via `RegisterFont` in one
@@ -1192,6 +1194,35 @@ pub enum MainToWorkerKind {
         /// thumbnails, which show the canvas, ask for them.
         #[serde(default)]
         markers: bool,
+        /// Extensions ADR 338 (`render.snapshot@2`) — draw nothing but
+        /// these items, in their stacking order, on a page otherwise
+        /// empty: a group draws its members, a container what is pasted
+        /// into it, a `storyRange` every frame of the story's thread.
+        /// Empty draws every item.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        only: Vec<crate::element_selection::ElementId>,
+        /// Extensions ADR 338 — draw this page region (page pt) alone,
+        /// grown outward to whole pixels (`SnapshotPng.region`);
+        /// `target_width_px` then sizes the region. Absent: the page.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        clip: Option<crate::snapshot::SnapshotClip>,
+        /// Extensions ADR 338 — `"png"` (the default) or `"rgba"`: raw
+        /// straight-alpha RGBA8 in `SnapshotPng.rgba`.
+        #[serde(
+            default,
+            skip_serializing_if = "crate::snapshot::SnapshotFormat::is_png"
+        )]
+        format: crate::snapshot::SnapshotFormat,
+        /// Extensions ADR 338 — `"paper"` (white, the default) or
+        /// `"transparent"`.
+        #[serde(default, skip_serializing_if = "is_paper")]
+        background: crate::snapshot::SnapshotBackground,
+        /// Extensions ADR 338 — on a transparent ground, crop the image to
+        /// the pixels something was drawn on (an item's stroke and
+        /// effects included); `SnapshotPng.region` says where it sits.
+        /// Nothing drawn answers `SnapshotError::NothingDrawn`.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        trim: bool,
     },
     /// Replace the worker's current selection. Phase 3 Item 1 — the
     /// worker mirrors the main thread's `ContentSelection` so the
@@ -1633,7 +1664,6 @@ pub enum MainToWorkerKind {
         /// of `ScriptResult`; the host answers with `HostObjectsResult`.
         /// Absent/false: such a call throws `noHost` in the script.
         #[serde(default)]
-        #[tsify(optional)]
         host_objects: bool,
     },
     /// v71 — the host's answers to a suspended script's
@@ -1650,7 +1680,6 @@ pub enum MainToWorkerKind {
         /// record logged while the script waited is a foreign edit and
         /// is left alone. Absent = none.
         #[serde(default)]
-        #[tsify(optional)]
         committed: Vec<u64>,
     },
     /// Concept 3 — open a PDF export session. The worker re-runs the
@@ -1821,6 +1850,10 @@ pub enum LodTier {
     MidRes,
     /// Live Vello tiles at the current zoom.
     Live,
+}
+
+fn is_paper(b: &crate::snapshot::SnapshotBackground) -> bool {
+    *b == crate::snapshot::SnapshotBackground::Paper
 }
 
 /// What to consider when hit-testing. The inspector + editor route
@@ -2000,7 +2033,6 @@ pub enum WorkerToMainKind {
         /// (governance rule 1): omitted when the mutation created no
         /// page, and by an older worker.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        #[tsify(optional)]
         created_pages: Vec<PageId>,
         /// Editor-ops — `true` when the mutation changed the page
         /// LIST itself (insert/delete/resize page); the editor must
@@ -2242,10 +2274,8 @@ pub enum WorkerToMainKind {
         value: Option<paged_mutate::Value>,
         error: Option<String>,
         #[serde(default)]
-        #[tsify(optional)]
         code: Option<String>,
         #[serde(default)]
-        #[tsify(optional)]
         mixed: bool,
     },
     /// v42 (C-5 / I-04) — `RequestPlacedAssetBytes` reply. `encoded` is the
@@ -2474,7 +2504,6 @@ pub enum WorkerToMainKind {
         /// went stale after every script. Additive and optional: absent
         /// when no document is loaded; older hosts ignore it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[tsify(optional)]
         stats: Option<crate::model::DocumentStats>,
         /// v0.71.13 — how many writes the run committed to the document
         /// itself: each one step the engine logged (a `paged.set`, an
@@ -2483,7 +2512,6 @@ pub enum WorkerToMainKind {
         /// not counted: they answered as `MutationApplied` of their own.
         /// Absent with no document, and from older workers.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[tsify(optional)]
         writes: Option<u32>,
         /// v0.71.13 — the pages the run's writes changed, in document order:
         /// the pages the engine laid out afresh for them. A text edit
@@ -2494,7 +2522,6 @@ pub enum WorkerToMainKind {
         /// when the engine cannot say (no document; an older worker):
         /// treat every page as changed.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[tsify(optional)]
         page_ids: Option<Vec<PageId>>,
         /// v76 (engine ADR 1004, amendment 2026-10-23) — the undo step the
         /// run's writes ended in, when they are ONE step a follow-up write
@@ -2504,7 +2531,6 @@ pub enum WorkerToMainKind {
         /// for a read-only run, a run that moved the history or that a
         /// foreign edit split, and from older workers.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[tsify(optional)]
         applied_seq: Option<u64>,
     },
     /// v71 — the `ExecuteScript` (or `HostObjectsResult`) reply when the
@@ -2548,7 +2574,6 @@ pub enum WorkerToMainKind {
         /// and for a resize of several frames (a batch, which reports no
         /// reflow as a mutation either). Older workers omit it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[tsify(optional)]
         reflow: Option<FrameReflowInfo>,
     },
     /// Phase B — `CancelGesture` complete; scene was restored from the
@@ -2705,7 +2730,6 @@ pub struct ElementGeometryItem {
     /// stored `ItemTransform` (what the `frameTransform` property reads
     /// and writes) is `translate(page_origin) ∘ item_transform`. Additive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[tsify(optional)]
     pub page_origin: Option<[f32; 2]>,
     /// Phase F — `true` when this element hosts a placed image
     /// (`Rectangle` with `<Image>` / `<EPSImage>` / `<PDF>` /
@@ -3166,7 +3190,6 @@ pub struct DocumentMeta {
     /// absent from an older one, so a reader can tell "none" from "this
     /// engine has no document labels".
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[tsify(optional)]
     pub plugin_metadata: Option<Vec<PluginMetadataEntry>>,
 }
 
@@ -3363,6 +3386,42 @@ pub struct SpreadSummary {
     /// mirror. Empty for spreads with no guides.
     #[serde(default)]
     pub guides: Vec<GuideSummary>,
+    /// WP2.7 — the spread's pages, by id, in spread order (left to
+    /// right): the `PageSummary.self_id`s whose `spread_id` names this
+    /// spread. Additive; older workers omit it.
+    #[serde(default)]
+    pub page_ids: Vec<String>,
+    /// WP2.7 — the spread's top-level page items (a group stands for its
+    /// members) in paint order, each with the page it sits on by the
+    /// rule `elementGeometry` applies: the page that holds the centre of
+    /// the item's transformed box, `None` on the pasteboard. Additive;
+    /// older workers omit it.
+    #[serde(default)]
+    pub members: Vec<SpreadMemberSummary>,
+}
+
+/// WP2.7 — one top-level page item of a spread and the page it sits on
+/// (`None`: the pasteboard). Carried on [`SpreadSummary::members`].
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SpreadMemberSummary {
+    pub id: crate::element_selection::ElementId,
+    #[serde(default)]
+    pub page_id: Option<String>,
+}
+
+/// WP2.7 — the edge of a page its binding (the spine) runs along, the
+/// renderer's rule: a page whose centre lies left of the spread's
+/// spine (spread x = 0) is a verso, bound on its right; every other
+/// page (a recto, a page alone in its spread, a non-facing page centred
+/// on the spine) is bound on its left.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify, PartialEq, Eq)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum BindingEdgeWire {
+    Left,
+    Right,
 }
 
 /// W3.A0 — one live ruler guide on a spread, carried inline on
@@ -3449,14 +3508,30 @@ pub struct PageSummary {
     /// first page starts at the spread's origin sits at `[width of page 1,
     /// 0]`. Older workers omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[tsify(optional)]
     pub page_origin: Option<[f32; 2]>,
     /// v0.71.13 — the spread the page belongs to: `SpreadSummary.self_id` and
     /// `ElementGeometryItem.spread_id` name the same spread. Older workers
     /// omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[tsify(optional)]
     pub spread_id: Option<String>,
+    /// WP2.7 — the page's position in its spread, 0-based, left to right
+    /// (`SpreadSummary.page_ids[index_in_spread]` is this page). Older
+    /// workers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_in_spread: Option<u32>,
+    /// WP2.7 — the edge the spine runs along ([`BindingEdgeWire`]):
+    /// `right` on a verso, `left` on a recto and on a single page. Older
+    /// workers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding_edge: Option<BindingEdgeWire>,
+    /// WP2.7 — the margins on the spine side (inside) and away from it
+    /// (outside), pt: `margin_left_pt` / `margin_right_pt` (the page's
+    /// physical left and right) resolved through `binding_edge`. Inside
+    /// is the left margin on a recto, the right one on a verso.
+    #[serde(default)]
+    pub margin_inside_pt: f32,
+    #[serde(default)]
+    pub margin_outside_pt: f32,
 }
 
 /// panels.md gaps 9/10/19 — one `<Section>` definition. Backs
@@ -4119,6 +4194,9 @@ pub struct SceneTreeNode {
     /// Human-readable label. For frames falls back to the kind + raw
     /// id; for pages uses the parsed `<Page Name>`.
     pub label: String,
+    /// A group's members, bottom first. Engine ADR 1010: a container
+    /// frame's pasted-in (B-18) children too, so every page item of the
+    /// document is reachable from the tree.
     #[serde(default)]
     pub children: Vec<SceneTreeNode>,
     /// C-65 — the item's plugin metadata (its reserved-namespace
@@ -4131,8 +4209,13 @@ pub struct SceneTreeNode {
     /// metadata here and there is none" from "this engine predates the
     /// field" (an older engine omits it everywhere). Additive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[tsify(optional)]
     pub plugin_metadata: Option<Vec<PluginMetadataEntry>>,
+    /// Engine ADR 1010 — `true` on a CLIP GROUP's row: its last child
+    /// (the top-most member) is the clipping path and paints nothing of
+    /// its own. Absent everywhere else. Additive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub clip: Option<bool>,
 }
 
 /// C-65 — one plugin-metadata Label entry on a scene-tree node.
@@ -4177,7 +4260,6 @@ pub struct PathAnchorsResult {
     pub item_transform: Option<[f32; 6]>,
     /// See [`ElementGeometryItem::page_origin`]. Additive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[tsify(optional)]
     pub page_origin: Option<[f32; 2]>,
 }
 
@@ -4528,9 +4610,18 @@ mod tests {
                 dpi: None,
                 hide_items: Vec::new(),
                 markers: false,
+                only: Vec::new(),
+                clip: None,
+                format: Default::default(),
+                background: Default::default(),
+                trim: false,
             },
         };
         let json = serde_json::to_string(&msg).unwrap();
+        // A v1 request serializes as it did before ADR 338.
+        assert!(!json.contains("\"only\""), "{json}");
+        assert!(!json.contains("\"format\""), "{json}");
+        assert!(!json.contains("\"background\""), "{json}");
         assert!(json.contains("\"kind\":\"requestSnapshot\""), "{json}");
         assert!(json.contains("\"pageId\":"), "{json}");
         assert!(json.contains("\"targetWidthPx\":"), "{json}");

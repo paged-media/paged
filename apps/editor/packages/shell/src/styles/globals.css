@@ -182,6 +182,16 @@
 [fill="var(--status-approved)"] {
   fill: var(--status-approved);
 }
+/* Editor ADR 291 — the data field markers stroke a binding's sync state. */
+[stroke="var(--status-approved)"] {
+  stroke: var(--status-approved);
+}
+[stroke="var(--status-review)"] {
+  stroke: var(--status-review);
+}
+[stroke="var(--status-error)"] {
+  stroke: var(--status-error);
+}
 
 /* ── Panel baseline for NATIVE controls ─────────────────────────────
    Host panels use the kit's components. Plugin panels mostly draw raw
@@ -251,4 +261,18 @@
     [style*="flex-direction: column"]
   ) {
   flex-wrap: wrap;
+}
+
+/* The fill shapes on a phone (editor ADR 294): the field sheet rises into
+   place when it opens. With reduced motion it appears where it ends. */
+@keyframes pg-sheet-rise {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-field-sheet] {
+    animation: pg-sheet-rise var(--dur-base) var(--ease-out);
+  }
 }

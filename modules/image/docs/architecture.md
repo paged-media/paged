@@ -180,6 +180,17 @@ is journaled one byte per texel under the scope `layer id | MASK_SCOPE_BIT`, so 
 step on the same undo list and replays into the mask of the right layer. The fold itself is
 unchanged: a painted mask is an ordinary mask.
 
+A layer's kind is pixels, smart object, fill or adjustment (`layers/kinds.rs`). A fill layer's
+pixels are a render of its source by the `gen.*` kernels (a gradient is the style's generator
+from black to white, then `adjust.gradient_map` with the stops' ramp), kept like a smart
+object's render and redrawn when stale. A typed adjustment lowers onto the adjust chain
+(`Adjustment::to_chain`) or, for Gradient Map, Selective Color and Color Lookup, onto point
+kernels the fold runs on the resident accumulator (`Step::Direct`). The blending options are
+extras of a pixel step (`fold::PixelExtra`): Blend If's coverage (`band.blend_if`, times the
+mask), fill opacity on a special mode (`band.fade_neutral`), knockout through a saved backdrop
+(`Step::Save`, `band.take`). The Layer menu's verbs (`layers/verbs.rs`) are structure steps;
+a merge composites a stack of just its layers (`LayerStack::sub_stack`) through the same fold.
+
 The selection is an 8-bit coverage field at image resolution (`image-gpu/src/coverage.rs`),
 rasterised on the CPU and passed to the kernels as the group-2 mask. A brush stroke keeps a
 base snapshot and a coverage accumulator in the engine (`image-js/src/stroke.rs`).

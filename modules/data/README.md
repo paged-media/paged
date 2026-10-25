@@ -23,11 +23,12 @@ Everything about how the plugin is designed and built is in [`docs/`](./docs/REA
 
 ## What is in the repository
 
-- **Rust engine** (thirteen crates, compiled to one wasm module by `data-js`):
+- **Rust engine** (fifteen crates, compiled to one wasm module by `data-js`):
   the frozen type contract (`data-core`); the binding language, 42 functions
   with registry-driven dispatch (`data-expr`); source descriptors and the
   consent gate (`data-sources`); record-set shaping, ordering and hashing
-  (`data-query`); the resolution and sync engine with record-identity diffing
+  (`data-query`); the query store — Turso inside the engine, CSV/TSV, JSON,
+  Parquet and XLSX read in Rust (`data-store`, `data-xlsx`); the resolution and sync engine with record-identity diffing
   (`data-bind`); lowering to a pure content IR, including record flow and
   pagination (`data-lower`); barcodes (`data-barcode`); data sets and the
   variable library (`data-dataset`); batch plans (`data-automation`), the
@@ -35,7 +36,7 @@ Everything about how the plugin is designed and built is in [`docs/`](./docs/REA
   and the conformance suite with the coverage gate (`data-conformance`).
 - **TypeScript:** `data-host-model` (pure IR → `Mutation[]`) and the published
   bundle `@paged-media/data` (`packages/data-bundle`: manifest, `activate`,
-  three panels, seven commands, the DuckDB-WASM query integration).
+  panels, commands, the handle on the engine's query store).
 
 The engine does much more than the panels reach: nothing is restored on reopen
 yet, record flow never becomes document content, and the panels bind variables,
@@ -54,16 +55,14 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/junit.xml
 
 # wasm artifact (100 MB app wasm budget; lands in packages/data-bundle/bin/)
-bash scripts/vendor-duckdb.sh   # acquire the MIT DuckDB-WASM artifact
 bash scripts/build-wasm.sh
 
 # TS (the bundle); the plugin contract comes from npm at an exact pin
 bun install && bun run typecheck && bun run test
 bun run validate:manifest   # uses the in-repo platform/extensions plugin-cli
 
-# End-to-end harness (needs the built wasm + vendored DuckDB above):
-# real DuckDB-WASM CSV→Arrow→RecordSet → the real data-js wasm engine →
-# resolve → lower, asserting DuckDB↔engine parity.
+# End-to-end harness (needs the built wasm above): CSV → the store →
+# RecordSet → the real data-js wasm engine → resolve → lower.
 bun run --filter @paged-media/data test:e2e
 ```
 

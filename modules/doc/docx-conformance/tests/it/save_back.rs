@@ -729,6 +729,7 @@ fn table_rows_can_be_deleted_and_inserted() {
                 block,
                 after_row: 1,
                 cells: vec!["new left".into(), "new right".into()],
+                before: false,
             },
         ],
         ..Default::default()
@@ -1509,4 +1510,257 @@ fn canvas_formatting_in_runs_is_saved_back__feat__plugin_doc_object_model() {
     assert!(xml.contains(r#"<w:bookmarkStart w:id="0" w:name="first-item"/>"#));
     assert_eq!(xml.matches("MERGEFIELD Name").count(), 2, "{xml}");
     assert!(xml.contains("<w:tc><w:p><w:r><w:t>Line one</w:t></w:r></w:p><w:p><w:r><w:t>Line two</w:t></w:r></w:p></w:tc>"));
+}
+
+/// Tracking and a colour made on the canvas are saved back: a run given
+/// tracking gets Word's character spacing at its size (`w:spacing`, which
+/// imports back to the same tracking), and a run filled with a swatch the
+/// import did not make gets its `w:color` from the colour the host reports
+/// for it. A paragraph added in a table cell keeps the words' own looks.
+#[test]
+#[allow(non_snake_case)] // `…__feat__<id>` links the cockpit feature
+fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__plugin_doc_object_model(
+) {
+    use docx_conformance::cell_paragraphs_docx;
+    use docx_export::{CellContentIn, ParagraphContentIn, RunContentIn, StoryContentIn};
+    use docx_lower::ir::{LoweredBlock, PropValue};
+
+    let doc_xml = |bytes: &[u8]| {
+        let pkg = OpcPackage::read(bytes).unwrap();
+        String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap()
+    };
+    let identity = |base: &docx_lower::ir::LoweredDoc| -> Vec<ParagraphContentIn> {
+        base.story
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    paragraph_style: p.para_style_id.clone(),
+                    runs: p
+                        .runs
+                        .iter()
+                        .map(|r| RunContentIn {
+                            text: r.text.clone(),
+                            character_style: r.char_style_id.clone(),
+                            ..Default::default()
+                        })
+                        .collect(),
+                }),
+                LoweredBlock::Table(_) => None,
+            })
+            .collect()
+    };
+
+    let original = memo_docx();
+    let session = DocSession::load(&original).unwrap();
+    let base = session.lowered();
+    let mut paragraphs = identity(&base);
+    // "Plain body text." tracked +100; " text." filled with a canvas swatch.
+    paragraphs[0].runs[0].tracking = Some(100.0);
+    paragraphs[2].runs[2].fill_color = Some("Color/Canvas green".into());
+    let content = StoryContentIn {
+        self_id: "Story/doc".into(),
+        paragraphs,
+    };
+    let colors = [("Color/Canvas green".to_string(), "#12ab34".to_string())].into();
+    let (saved, skips) = session
+        .save_edited_from_content_cells_and_tables(&content, &[], &[], &colors)
+        .unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    let xml = doc_xml(&saved);
+    // memo's text is Word's default 10 pt: 100/1000 em = 1 pt = 20 twips.
+    assert!(
+        xml.contains(r#"<w:r><w:rPr><w:spacing w:val="20"/></w:rPr><w:t xml:space="preserve">Plain body text.</w:t></w:r>"#),
+        "{xml}"
+    );
+    assert!(
+        xml.contains(r#"<w:r><w:rPr><w:color w:val="12AB34"/></w:rPr><w:t xml:space="preserve"> text.</w:t></w:r>"#),
+        "{xml}"
+    );
+    // The spacing imports back as the same tracking.
+    let re = DocSession::load(&saved).unwrap().lowered();
+    let LoweredBlock::Paragraph(p0) = &re.story.blocks[0] else {
+        panic!("block 0 is a paragraph")
+    };
+    let token = p0.runs[0].char_style_id.clone().expect("a run style");
+    let tracking = re.styles.iter().find(|s| s.id == token).and_then(|s| {
+        s.props.iter().find_map(|p| match (&*p.path, &p.value) {
+            ("characterTracking", PropValue::Length(t)) => Some(*t),
+            _ => None,
+        })
+    });
+    assert_eq!(tracking, Some(100.0));
+    // A swatch the host has no colour for is not written (and nothing else).
+    let mut paragraphs = identity(&base);
+    paragraphs[2].runs[2].fill_color = Some("Color/Unknown".into());
+    let (saved, _) = session
+        .save_edited_from_content(&StoryContentIn {
+            self_id: "Story/doc".into(),
+            paragraphs,
+        })
+        .unwrap();
+    assert_eq!(doc_xml(&saved), doc_xml(&original));
+
+    // A cell: a paragraph added after "Three bold" holds a plain word and a
+    // bold one, read with the cell's styled paragraphs. The copy takes the
+    // bold run's `<w:rPr>`; the plain word loses its `<w:b/>`.
+    let source = cell_paragraphs_docx();
+    let session = DocSession::load(&source).unwrap();
+    let base = session.lowered();
+    let LoweredBlock::Table(t) = &base.story.blocks[1] else {
+        panic!("block 1 is the table")
+    };
+    let read = |p: &docx_lower::ir::LoweredParagraph| ParagraphContentIn {
+        paragraph_style: p.para_style_id.clone(),
+        runs: p
+            .runs
+            .iter()
+            .map(|r| RunContentIn {
+                text: r.text.clone(),
+                character_style: r.char_style_id.clone(),
+                ..Default::default()
+            })
+            .collect(),
+    };
+    let mut paras: Vec<ParagraphContentIn> = t.cells[0].paragraphs.iter().map(read).collect();
+    let bold_style = paras[2].runs[1].character_style.clone();
+    let plain_style = paras[1].runs[0].character_style.clone();
+    paras.push(ParagraphContentIn {
+        paragraph_style: paras[2].paragraph_style.clone(),
+        runs: vec![
+            RunContentIn {
+                text: "Four ".into(),
+                character_style: plain_style,
+                ..Default::default()
+            },
+            RunContentIn {
+                text: "strong".into(),
+                character_style: bold_style,
+                ..Default::default()
+            },
+        ],
+    });
+    let cell = CellContentIn {
+        block: 1,
+        cell: 0,
+        text: "One\nTwo\nThree bold\nFour strong".into(),
+        paragraphs: Some(paras),
+    };
+    let (saved, skips) = session
+        .save_edited_from_content_and_cells(
+            &StoryContentIn {
+                self_id: "s".into(),
+                paragraphs: identity(&base),
+            },
+            &[cell],
+        )
+        .unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    let xml = doc_xml(&saved);
+    let added = r#"<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t xml:space="preserve">Four </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">strong</w:t></w:r></w:p>"#;
+    assert!(xml.contains(added), "{xml}");
+    assert_eq!(xml.replace(added, ""), doc_xml(&source));
+}
+
+/// Rows added or removed on the canvas are saved back: the live rows are
+/// aligned with Word's by their text, a row added above the first gets a new
+/// `<w:tr>` before it, a removed row's `<w:tr>` goes, and a kept row's
+/// edited cell is patched in place (its unmodelled `w:trHeight` stays). A
+/// table whose columns changed is reported and left as it was.
+#[test]
+#[allow(non_snake_case)] // `…__feat__<id>` links the cockpit feature
+fn rows_added_and_removed_on_the_canvas_are_saved_back__feat__plugin_doc_object_model() {
+    use docx_conformance::simple_table_docx;
+    use docx_export::{StoryContentIn, TableContentIn};
+
+    let source = simple_table_docx();
+    let session = DocSession::load(&source).unwrap();
+    let doc_xml = |bytes: &[u8]| {
+        let pkg = OpcPackage::read(bytes).unwrap();
+        String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap()
+    };
+    let story = StoryContentIn {
+        self_id: "s".into(),
+        paragraphs: vec![],
+    };
+    let row = |a: &str, b: &str| vec![a.to_string(), b.to_string()];
+    let save = |rows: Vec<Vec<String>>| {
+        session
+            .save_edited_from_content_cells_and_tables(
+                &story,
+                &[],
+                &[TableContentIn { block: 0, rows }],
+                &Default::default(),
+            )
+            .unwrap()
+    };
+
+    // A row above the first, and the last row's first cell edited.
+    let (saved, skips) = save(vec![
+        row("Head", "er"),
+        row("R0C0", "R0C1"),
+        row("R1C0", "R1C1"),
+        row("R2C0 edited", "R2C1"),
+    ]);
+    assert!(skips.is_empty(), "{skips:?}");
+    let xml = doc_xml(&saved);
+    let src = doc_xml(&source);
+    let added = r#"<w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">Head</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">er</w:t></w:r></w:p></w:tc></w:tr>"#;
+    assert!(
+        xml.contains(&format!(
+            r#"</w:tblGrid>{added}<w:tr><w:trPr><w:trHeight w:val="100"/>"#
+        )),
+        "{xml}"
+    );
+    assert_eq!(
+        xml.replace(added, "").replace(
+            r#"<w:t xml:space="preserve">R2C0 edited</w:t>"#,
+            "<w:t>R2C0</w:t>"
+        ),
+        src
+    );
+
+    // The middle row removed: exactly its `<w:tr>` goes.
+    let (saved, skips) = save(vec![row("R0C0", "R0C1"), row("R2C0", "R2C1")]);
+    assert!(skips.is_empty(), "{skips:?}");
+    let xml = doc_xml(&saved);
+    assert!(!xml.contains("R1C0"), "{xml}");
+    assert!(xml.contains(r#"<w:trHeight w:val="102"/>"#), "{xml}");
+    assert!(!xml.contains(r#"<w:trHeight w:val="101"/>"#), "{xml}");
+
+    // A column added: reported, the table as it was.
+    let (saved, skips) = save(vec![vec!["a".into(), "b".into(), "c".into()]]);
+    assert_eq!(skips.len(), 1, "{skips:?}");
+    assert!(skips[0].contains("columns"), "{skips:?}");
+    assert_eq!(doc_xml(&saved), src);
+}
+
+/// A cell emptied on the canvas can read back with no paragraph at all
+/// (its styled read is `[]`): the text read, one empty paragraph, is
+/// followed and the cell's run removed, not left as it was.
+#[test]
+fn a_cell_emptied_with_no_styled_paragraph_is_saved_back() {
+    use docx_conformance::cell_fields_docx;
+    use docx_export::{CellContentIn, StoryContentIn};
+
+    let source = cell_fields_docx();
+    let session = DocSession::load(&source).unwrap();
+    let (saved, skips) = session
+        .save_edited_from_content_and_cells(
+            &StoryContentIn {
+                self_id: "s".into(),
+                paragraphs: vec![],
+            },
+            &[CellContentIn {
+                block: 1,
+                cell: 3,
+                text: String::new(),
+                paragraphs: Some(vec![]),
+            }],
+        )
+        .unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    let pkg = OpcPackage::read(&saved).unwrap();
+    let xml = String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap();
+    assert!(!xml.contains("1.20"), "{xml}");
 }

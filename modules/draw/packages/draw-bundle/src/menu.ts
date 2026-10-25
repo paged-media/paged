@@ -131,6 +131,10 @@ defineMessages("menu", {
   "Shape kind": "Shape kind",
   "Geometry (Global Edit)": "Geometry (Global Edit)",
   "Image trace…": "Image trace…",
+  "Re-trace image": "Re-trace image",
+  "Edit colors": "Edit colors",
+  "Recolor artwork…": "Recolor artwork…",
+  "Rasterize…": "Rasterize…",
 });
 
 const C = "media.paged.draw.command";
@@ -289,6 +293,12 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Object/Insert star…", "insertStarOptions", "plugin-insert"],
   ["Object/Insert flare…", "insertFlareOptions", "plugin-insert"],
 
+  // ── Rasterize — merges into Object, where Illustrator keeps it: the
+  //    selection becomes one image frame (extensions ADR 338). The "…"
+  //    raises the Path Options panel's Rasterize section (resolution,
+  //    background). ──
+  ["Object/Rasterize…", "rasterizeOptions", "plugin-rasterize"],
+
   // ── Select same — merges into Edit, where selection verbs live. ──
   ["Edit/Select same/Fill", "selectSameFill", "select-same"],
   ["Edit/Select same/Stroke", "selectSameStroke", "select-same"],
@@ -322,10 +332,14 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
     "select-same-geometry",
   ],
 
-  // ── Trace ── (STILL an ellipsis over fixed settings: Image Trace has
-  //    no section in the Path Options panel yet, so this is the one row
-  //    left where "…" asks nothing.)
-  ["Draw/Image trace…", "imageTrace", "trace"],
+  // ── Trace ── the "…" raises the Image Trace panel (presets, options,
+  //    Trace / Re-trace); Re-trace runs with the record's options.
+  ["Draw/Image trace…", "imageTraceOptions", "trace"],
+  ["Draw/Re-trace image", "retraceImage", "trace"],
+
+  // ── Colour — Recolor Artwork merges into Edit ▸ Edit colors, where
+  //    Illustrator keeps it; the "…" raises its panel. ──
+  ["Edit/Edit colors/Recolor artwork…", "recolorArtworkOptions", "edit-colors"],
 ];
 
 /**

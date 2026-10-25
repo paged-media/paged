@@ -1008,7 +1008,7 @@ test.describe("plugin surface · paged.slide", () => {
 
   // ── 7. AUDIT — is any of this REACHABLE? ─────────────────────────
 
-  test("AUDIT — paged.slide's verbs are in the palette and the menu bar, offered where they apply; no tool, no shortcut @feat:editor-shell.plugin-bundles @level:edge", async ({
+  test("AUDIT — paged.slide's verbs are in the palette and the menu bar, offered where they apply; a key each, no tool @feat:editor-shell.plugin-bundles @level:edge", async ({
     page,
   }) => {
     const designer = await bootBlank(page);
@@ -1046,6 +1046,17 @@ test.describe("plugin surface · paged.slide", () => {
             .list()
             .filter((k) => mine(k.command) || panelShow(k.command))
             .map((k) => k.key),
+          // Every other binding (the shell's, the app's, other bundles')
+          // on a chord paged.slide binds.
+          collisions: (() => {
+            const all = r.keybindings.list();
+            const slideKeys = new Set(
+              all.filter((k) => mine(k.command)).map((k) => k.key),
+            );
+            return all
+              .filter((k) => slideKeys.has(k.key) && !mine(k.command))
+              .map((k) => `${k.key}→${k.command}`);
+          })(),
           // Menu entries onto paged.slide that are NOT its panels' show items.
           verbItems: r.menus
             .list()
@@ -1087,9 +1098,30 @@ test.describe("plugin surface · paged.slide", () => {
       blank.pluginToolsTotal,
       "the tool door works — other bundles use it",
     ).toBeGreaterThan(10);
-    expect(blank.keybindings, "paged.slide contributes no keybinding").toEqual(
-      [],
-    );
+    // A key for each slide verb (its Cmd chord and Ctrl twin), on chords
+    // nothing else in the editor binds.
+    await expect
+      .poll(async () => (await reach()).keybindings.sort(), {
+        timeout: 15_000,
+      })
+      .toEqual(
+        [
+          "alt+cmd+n",
+          "alt+ctrl+n",
+          "alt+shift+cmd+n",
+          "alt+shift+ctrl+n",
+          "alt+cmd+backspace",
+          "alt+ctrl+backspace",
+          "cmd+arrowup",
+          "ctrl+arrowup",
+          "cmd+arrowdown",
+          "ctrl+arrowdown",
+        ].sort(),
+      );
+    expect(
+      (await reach()).collisions,
+      "no other binding on a slide chord",
+    ).toEqual([]);
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
     await expect(
       page.locator(

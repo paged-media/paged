@@ -30,8 +30,9 @@
 //!   transforms), and — B-18 — nested inside a Rectangle / Oval /
 //!   Polygon container (InDesign paste-into): those children register
 //!   in `Spread::nested_children` keyed by the host's `Self` id so the
-//!   renderer can clip them by the host path. Formats still not lifted
-//!   (a `<Group>` pasted into a container, id-less hosts) bump the
+//!   renderer can clip them by the host path; a `<Group>` pasted into
+//!   a container lifts the same way (engine ADR 1010). Hosts that cannot
+//!   hold pasted-in content (id-less ones) bump the
 //!   `skipped_nested_frames` counter so higher layers can detect loss.
 //!
 //! GeometricBounds is `y1 x1 y2 x2` in points (IDML convention:
@@ -88,6 +89,12 @@ enum CurrentFrameKind {
 /// items and the transparency block as each fires; finalised into a
 /// `Group` record on the closing `</Group>` tag.
 struct GroupBuilder {
+    /// Engine ADR 1010: `Some(host)` when the group is pasted into the
+    /// container `host` (it registers in `Spread::nested_children`).
+    nested_into: Option<String>,
+    /// The group opened inside a page item, which is parked until the
+    /// group closes.
+    parked_container: bool,
     self_id: Option<String>,
     item_transform: Option<[f32; 6]>,
     members: Vec<FrameRef>,
@@ -145,6 +152,12 @@ struct CurrentFrame {
     /// unregister route if the frame is later dropped for missing
     /// bounds.
     nested_into: Option<String>,
+    /// B-18: this frame opened inside another page item, whose parse
+    /// state was parked on `container_stack` until this one closes.
+    /// (Engine ADR 1010: a `<Group>` pasted into a container parks the
+    /// container too, so the stack is not empty for that group's
+    /// members, which park nothing.)
+    parked_container: bool,
     /// B-18: `group_builders.len()` when this frame opened. A page
     /// item opening inside this frame is only LIFTED as paste-into
     /// content when no `<Group>` opened in between (equal depth) —
@@ -1095,20 +1108,43 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                 // states: its `ItemTransform` places them (left out, every
                 // state landed in spread coordinates as if untransformed).
                 b"Group" | b"Button" | b"MultiStateObject" => {
-                    // B-18 residual: a <Group> pasted into a container
+                    // Engine ADR 1010: a <Group> pasted into a container
                     // (opening while a page item is still current) is
-                    // NOT lifted into `nested_children` — it keeps the
-                    // legacy flatten-to-top-level parse (members
-                    // unclipped, container transform not composed).
-                    // Counted so callers can flag the lossy parse.
-                    if current_frame.is_some() {
-                        out.skipped_nested_frames += 1;
-                    }
+                    // lifted into the container's `nested_children`
+                    // like a pasted-in frame: the container is parked
+                    // until the group closes and its transform composes
+                    // into the members. The group's own transform is
+                    // stored in spread space (composed through the
+                    // container), as a top-level group's is. A host that
+                    // cannot hold pasted-in content (no `Self`, or not a
+                    // Rectangle / Oval / Polygon) keeps the legacy
+                    // flatten and is counted in `skipped_nested_frames`.
+                    // A self-closing `<Group/>` has no close tag to restore
+                    // the container at, and no members: it parks nothing.
+                    let parked = event_is_start && current_frame.is_some();
+                    let nested_into = if parked {
+                        park_open_container(
+                            &mut out,
+                            &mut current_frame,
+                            &mut container_stack,
+                            &mut group_transforms,
+                            group_builders.len(),
+                        )
+                    } else {
+                        None
+                    };
                     let t = attr(&e, b"ItemTransform").and_then(|s| parse_matrix(&s));
+                    let stored = if nested_into.is_some() {
+                        effective_item_transform(&group_transforms, t)
+                    } else {
+                        t
+                    };
                     group_transforms.push(t);
                     group_builders.push(GroupBuilder {
+                        nested_into,
+                        parked_container: parked,
                         self_id: attr(&e, b"Self"),
-                        item_transform: t,
+                        item_transform: stored,
                         members: Vec::new(),
                         transparency: GroupTransparency::default(),
                         // C-18: a group paints no outline of its own, but
@@ -1301,6 +1337,7 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                         in_image_depth: 0,
                         clip: None,
                         in_clipping_path: false,
+                        parked_container: parked,
                     });
                     if !event_is_start {
                         // Self-closing item: no End event will come.
@@ -1401,6 +1438,7 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                         in_image_depth: 0,
                         clip: None,
                         in_clipping_path: false,
+                        parked_container: parked,
                     });
                     if !event_is_start {
                         // Self-closing item: no End event will come.
@@ -1496,6 +1534,7 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                         in_image_depth: 0,
                         clip: None,
                         in_clipping_path: false,
+                        parked_container: parked,
                     });
                     if !event_is_start {
                         // Self-closing item: no End event will come.
@@ -2609,6 +2648,7 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                         in_image_depth: 0,
                         clip: None,
                         in_clipping_path: false,
+                        parked_container: parked,
                     });
                     if !event_is_start {
                         // Self-closing item: no End event will come.
@@ -2711,6 +2751,7 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                         in_image_depth: 0,
                         clip: None,
                         in_clipping_path: false,
+                        parked_container: parked,
                     });
                     if !event_is_start {
                         // Self-closing item: no End event will come.
@@ -2733,6 +2774,7 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                 b"Page" => open_page = None,
                 b"Group" | b"Button" | b"MultiStateObject" if !group_transforms.is_empty() => {
                     group_transforms.pop();
+                    let builder_parked = group_builders.last().is_some_and(|b| b.parked_container);
                     if let Some(builder) = group_builders.pop() {
                         // Every field is named today; the update is there
                         // for the one the model gains next, which then
@@ -2759,11 +2801,20 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                         // `frames_in_order` so the renderer's
                         // cross-shape z-sort sees them once at
                         // their XML position.
-                        if let Some(outer) = group_builders.last_mut() {
+                        if let Some(host) = builder.nested_into.as_deref() {
+                            out.nested_children
+                                .entry(host.to_string())
+                                .or_default()
+                                .push(FrameRef::Group(group_idx));
+                        } else if let Some(outer) = group_builders.last_mut() {
                             outer.members.push(FrameRef::Group(group_idx));
                         } else {
                             out.frames_in_order.push(FrameRef::Group(group_idx));
                         }
+                    }
+                    if builder_parked {
+                        group_transforms.pop();
+                        current_frame = container_stack.pop();
                     }
                 }
                 b"TextFrame" | b"EndnoteTextFrame" | b"Rectangle" | b"Oval" | b"GraphicLine"
@@ -2776,14 +2827,17 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                     // ghost (matches the previous behaviour of
                     // skipping bounds-less shapes).
                     if let Some(cf) = current_frame.take() {
+                        let parked = cf.parked_container;
                         finalize_page_item(&mut out, &mut group_builders, &mut provenance, cf);
                         // B-18: restore the parked container (this
                         // frame was paste-into content). The matching
                         // `group_transforms` entry was pushed when
                         // this child opened.
-                        if let Some(outer) = container_stack.pop() {
-                            group_transforms.pop();
-                            current_frame = Some(outer);
+                        if parked {
+                            if let Some(outer) = container_stack.pop() {
+                                group_transforms.pop();
+                                current_frame = Some(outer);
+                            }
                         }
                     }
                 }
@@ -3923,16 +3977,59 @@ mod tests {
         assert!((c[4] - 101.0).abs() < 1e-4 && (c[5] - 11.0).abs() < 1e-4);
     }
 
-    /// B-18 residual: a `<Group>` pasted INTO a container is not
-    /// lifted — it keeps the legacy flatten-to-top-level parse and
-    /// bumps `skipped_nested_frames` exactly once (its members are
-    /// not double-counted).
+    /// Engine ADR 1010: a `<Group>` pasted INTO a container is lifted
+    /// into the container's `nested_children` (it used to flatten to the
+    /// top level, unclipped, and count as skipped). The container's
+    /// transform composes into the members and into the group's own
+    /// stored frame, which is spread space; nothing is skipped.
     #[test]
-    fn pasted_group_still_flattens_and_counts_once() {
+    #[allow(non_snake_case)]
+    fn pasted_group_lifts_into_its_container__feat__frames_paths_clip_groups() {
         let xml =
             br#"<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
           <Spread Self="s">
-            <Rectangle Self="host" GeometricBounds="0 0 100 100">
+            <Rectangle Self="host" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 10 20">
+              <Group Self="g" ItemTransform="1 0 0 1 3 4">
+                <Oval Self="member" GeometricBounds="0 0 10 10"/>
+                <Rectangle Self="member2" GeometricBounds="0 0 5 5"/>
+              </Group>
+            </Rectangle>
+            <Oval Self="after" GeometricBounds="0 0 1 1"/>
+          </Spread>
+        </idPkg:Spread>"#;
+        let s = parse_spread(xml).unwrap();
+        assert_eq!(s.skipped_nested_frames, 0, "nothing flattens");
+        assert_eq!(s.groups.len(), 1);
+        assert_eq!(
+            s.groups[0].members,
+            vec![FrameRef::Oval(0), FrameRef::Rectangle(1)]
+        );
+        assert_eq!(
+            s.frames_in_order,
+            vec![FrameRef::Rectangle(0), FrameRef::Oval(1)],
+            "the group is not top-level, and the host is restored after it"
+        );
+        assert_eq!(
+            s.nested_children.get("host"),
+            Some(&vec![FrameRef::Group(0)])
+        );
+        // host ∘ group ∘ member, and the group's frame host ∘ group.
+        let m = s.ovals[0].item_transform.expect("composed");
+        assert!((m[4] - 13.0).abs() < 1e-4 && (m[5] - 24.0).abs() < 1e-4);
+        let g = s.groups[0].item_transform.expect("spread-space frame");
+        assert!((g[4] - 13.0).abs() < 1e-4 && (g[5] - 24.0).abs() < 1e-4);
+        assert_eq!(s.ovals[1].item_transform, None, "the sibling is untouched");
+    }
+
+    /// The residual that stays: a group inside a host that cannot hold
+    /// pasted-in content (here an id-less rectangle) still flattens to
+    /// the top level, counted once.
+    #[test]
+    fn group_in_an_idless_host_still_flattens_and_counts_once() {
+        let xml =
+            br#"<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+          <Spread Self="s">
+            <Rectangle GeometricBounds="0 0 100 100">
               <Group ItemTransform="1 0 0 1 3 4">
                 <Oval Self="member" GeometricBounds="0 0 10 10"/>
               </Group>
@@ -3941,7 +4038,6 @@ mod tests {
         </idPkg:Spread>"#;
         let s = parse_spread(xml).unwrap();
         assert_eq!(s.skipped_nested_frames, 1, "the pasted group, counted once");
-        assert_eq!(s.groups.len(), 1);
         assert_eq!(s.groups[0].members, vec![FrameRef::Oval(0)]);
         assert_eq!(
             s.frames_in_order,
@@ -3949,8 +4045,6 @@ mod tests {
             "legacy flatten: the group surfaces top-level"
         );
         assert!(s.nested_children.is_empty());
-        // Legacy transform lane: only the group's own transform
-        // composes (the host's is deliberately not).
         let m = s.ovals[0].item_transform.expect("group transform");
         assert!((m[4] - 3.0).abs() < 1e-4 && (m[5] - 4.0).abs() < 1e-4);
     }

@@ -429,6 +429,7 @@ an author can tell a field that is still tag-driven from one that paged edited.
 | Kind         | Target                                          | Value                        | Written by                                                                                                     |
 | ------------ | ----------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `text`       | a whole text frame's story                      | plain or lightly styled text | the existing text mutations, scoped to the story                                                               |
+| `alternates` | several items (variant frames), by name         | the member shown             | `ElementVisible` on every member, the chosen one shown and the rest hidden, in one step                        |
 | `text-run`   | a placeholder run inside a story                | plain text                   | `Operation::SetFieldValue` on a `PlaceholderField` (`paged-model`, `FieldKind::Placeholder`)                   |
 | `variable`   | a custom text variable, wherever it is inserted | plain text                   | the text-variable operations (`TextVariable`, `CreateTextVariable`, `InsertField`)                             |
 | `image`      | a graphic frame                                 | an image (bytes or URI)      | `Operation::ReplaceImageBytes` / `PlaceImage`, then a fit ([ADR 257](adr/257-indesigns-fits-and-page-keys.md)) |
@@ -441,6 +442,21 @@ the frame's paragraph and character styles; an `image` field takes the picture a
 frame's fit. Changing formatting is a separate permission (`text.style`, `image.crop`) that
 the author grants deliberately. That keeps the design intent intact for most templates,
 where the end user should not pick colours or point sizes.
+
+**Lightly styled text** (decided on 2026-10-24, engine
+[ADR 1017](../../../engine/core/docs/adr/1017-styled-field-values-and-alternates.md)): the author
+lists the character styles a `text` field allows (`constraints.allowedStyles`, for example Bold
+and Italic) and the breaks it takes (`constraints.breaks`: `none`, `line` or `paragraph`). The
+value is then a list of runs, `[{ text, style? } | { break }]`; a run without a style keeps the
+frame's own. The form offers a button per allowed style and Enter only where breaks are allowed,
+and the engine refuses any other style or break, whoever sends it. Such a field grants applying
+its allowed character styles and nothing else of `text.style`.
+
+**Alternates** (decided on 2026-10-24, ADR 1017): an `alternates` field groups variant frames
+under one choice. It lives in the document's policy and names its members by item name; the
+filler picks one, the engine shows it and hides the others in one undo step, and each member is
+granted being shown or hidden and nothing more. In IDML the members stay ordinary page items,
+the others hidden.
 
 A `variable` field fills every place the variable is inserted. A headline that repeats on the
 front and back of a card is one field, not two.
@@ -662,11 +678,16 @@ const editor = await createEditor(document.getElementById("design")!, {
 
 The editor still needs `SharedArrayBuffer`, so the host page needs cross-origin isolation
 (COOP and COEP headers). That is a real requirement for a partner, and it is the main reason
-for the second way.
+for the second way. There is no degraded mode (§12, decided on 2026-10-24): `createEditor` on a
+page that is not isolated refuses with an `EditorError` of code `notCrossOriginIsolated` whose
+message names the iframe path.
 
-**The iframe** is the other way. The editor is served from its own origin. The host embeds it
-and talks to it through a postMessage bridge with the same API, asynchronously. The editor's
-origin sets its own isolation headers, so the host page needs none. The bridge generalises
+**The iframe** is the other way. The editor is served from its own origin (`embed.html`). The
+host embeds it and talks to it through a postMessage bridge with the same API, asynchronously.
+The editor's origin sets its own isolation headers and serves its own files. A frame is isolated
+only when its host page is, so the host page still sends COOP `same-origin` and COEP
+`credentialless`, which asks nothing of its other resources, and the iframe allows
+`cross-origin-isolated` (`connectEditor` sets it). The bridge generalises
 the one that exists for the documentation site
 (`apps/editor/apps/canvas/src/playground/IframeScriptBridge.tsx`, [ADR 212](adr/212-one-automation-surface.md)):
 an origin allow-list, request ids, typed replies. Today it carries one message kind, run a
@@ -706,7 +727,8 @@ interface EditorHandle {
       | "selection"
       | "validity"
       | "warning"
-      | "error",
+      | "error"
+      | "idDeprecated", // an old id met in the profile or features (§12, item 2)
     listener: (e: EditorEvent) => void,
   ): () => void;
 
@@ -921,23 +943,33 @@ Taken on 2026-10-21, with the implementation plan
 - **Engine decision records** get a new number range, so they no longer collide with the
   editor's.
 
-### Open questions
+### Decided on 2026-10-24 (the former open questions)
 
-1. **Cross-origin isolation.** Can the editor run without `SharedArrayBuffer` in a degraded
-   mode for hosts that cannot set COOP and COEP? Or is the iframe the answer for them?
-2. **Stable ids.** Command, panel and tool ids become a public contract once hosts reference
-   them in profiles and feature sets. Which ids are public, and how are they versioned and
-   deprecated?
-3. **Touch and small screens.** The `template-fill` and `form` presets are the first shapes
-   that phones will meet.
-4. **Document-bound roles.** Should a template be able to _require_ a role, so that opening
-   it in the full editor needs an explicit "edit template"?
-5. **Permission granularity in text.** Is `text.edit` per story enough, or does a field need
-   "only this range of the story"? A placeholder run already gives a range; is a second
-   mechanism needed?
-6. **Field values with style.** A text field takes plain text in the first version. Bold and
-   italics within a value, and paragraph breaks, need a rule.
-7. **Choice fields over styles.** Are allowed lists of paragraph styles and swatches enough,
-   or do authors need "alternates": whole variants of a frame?
+1. **Cross-origin isolation.** No degraded in-page mode. A host that cannot send COOP and COEP
+   embeds through the iframe (`connectEditor`); `createEditor` on a page that is not
+   cross-origin isolated refuses with a message that names the iframe path. Built: an
+   `EditorError` with the code `notCrossOriginIsolated`, also from `connectEditor` when the frame
+   is not isolated ([PM-0013](../../../docs/adr/PM-0013-editor-package.md), amendment 2).
+2. **Stable ids.** The package's `feature-ids.json` is the public list of command, panel and
+   tool ids. An id leaves it only after a deprecation window, with an alias that keeps an old
+   profile or feature set working, and the change is in the release notes. Built:
+   `deprecated-ids.json`, aliases in profile resolution and `handle.features`, the `idDeprecated`
+   event, and the guard in `feature-ids.mjs` (PM-0013, amendment 2).
+3. **Touch and small screens.** The `template-fill` and `form` presets are made usable on phones
+   and tablets: touch-sized targets, pinch zoom, a form-first layout below a breakpoint, and
+   image upload from the camera. The full and focused editors stay desktop editors.
+4. **Document-bound roles.** No. Roles stay per session and the host decides them; the full
+   editor shows a template as a template and offers "Edit template" explicitly. Built: the
+   template notice ([ADR 293](adr/293-a-template-opened-as-a-document-says-so.md)).
+5. **Permission granularity in text.** A placeholder run is the range mechanism: a field limited
+   to part of a story is a placeholder run (from XML tags or Make field on a selection). No
+   second mechanism. No code was needed; engine ADR 1017 records it.
+6. **Field values with style.** The author lists the character styles a text field allows (for
+   example Bold and Italic) and whether it takes line and paragraph breaks. The form offers
+   exactly those; the value is written as runs in the allowed styles, and nothing else is
+   accepted. Built: engine ADR 1017, §7.3.
+7. **Choice fields over frames.** Authors can group variant frames (alternates) under one
+   choice field; the filler picks one and the others are hidden. Alternates round-trip as
+   hidden items in IDML. Built: engine ADR 1017, §7.3.
 8. **Licensing for embedders.** It follows the repository's licence terms and is outside the
    scope of this paper.

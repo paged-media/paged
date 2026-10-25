@@ -29,6 +29,7 @@
 
 use docx_core::{RunProps, VertAlign};
 use docx_lower::ir::{LoweredBlock, LoweredDoc, PropValue, StyleProp};
+use docx_lower::twips_of_tracking;
 
 use crate::bindings::{BlockBinding, DocxBindings};
 use crate::edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit};
@@ -66,7 +67,14 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
                     let (props, rstyle) = ep
                         .runs
                         .first()
-                        .map(|r| effective_props(r.char_style_id.as_deref(), edited, bindings))
+                        .map(|r| {
+                            effective_props(
+                                r.char_style_id.as_deref(),
+                                ep.para_style_id.as_deref(),
+                                edited,
+                                bindings,
+                            )
+                        })
                         .unwrap_or_default();
                     structural.push(StructuralEdit::InsertParagraph {
                         block: a,
@@ -95,7 +103,13 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
             let ekeys: Vec<String> = erows.iter().map(|r| row_key(et, r)).collect();
             let mut row_pairs: Vec<(usize, usize)> = Vec::new();
             let mut row_anchor: Option<usize> = None;
-            for step in lcs_align(&bkeys, &ekeys) {
+            let row_steps = lcs_align(&bkeys, &ekeys);
+            // A row added above every kept row goes before the first kept.
+            let first_kept = row_steps.iter().find_map(|s| match s {
+                Align::Match(b, _) => Some(*b),
+                _ => None,
+            });
+            for step in row_steps {
                 match step {
                     Align::Match(bi, ei) => {
                         row_anchor = Some(bi);
@@ -106,7 +120,12 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
                         row: bi as u32,
                     }),
                     Align::Ins(ei) => {
-                        if let Some(a) = row_anchor {
+                        let at = match (row_anchor, first_kept) {
+                            (Some(a), _) => Some((a, false)),
+                            (None, Some(f)) => Some((f, true)),
+                            (None, None) => None,
+                        };
+                        if let Some((a, before)) = at {
                             let cells_text: Vec<String> = erows[ei]
                                 .iter()
                                 .map(|&ci| cell_text(&et.cells[ci]))
@@ -115,6 +134,7 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
                                 block: block_idx,
                                 after_row: a as u32,
                                 cells: cells_text,
+                                before,
                             });
                         }
                     }
@@ -134,7 +154,13 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
                         if bc.paragraphs.len() == ec.paragraphs.len() {
                             (0..bc.paragraphs.len()).map(|k| (k, k)).collect()
                         } else {
-                            align_cell(block_idx, cell_idx, bc, ec, &mut structural)
+                            align_cell(
+                                (block_idx, cell_idx),
+                                (bc, ec),
+                                (base, edited),
+                                bindings,
+                                &mut structural,
+                            )
                         };
                     for (para_idx, epara_idx) in para_pairs {
                         let (bpara, epara) = (&bc.paragraphs[para_idx], &ec.paragraphs[epara_idx]);
@@ -152,7 +178,13 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
                         // The runs, mapped character by character
                         // (`plan_runs`): an edit in place, a run emptied,
                         // or a run split where its text took another look.
-                        let plans = plan_runs(&bpara.runs, &epara.runs, base, edited, bindings);
+                        let plans = plan_runs(
+                            (&bpara.runs, bpara.para_style_id.as_deref()),
+                            (&epara.runs, epara.para_style_id.as_deref()),
+                            base,
+                            edited,
+                            bindings,
+                        );
                         for (run_idx, (plan, look)) in plans.into_iter().enumerate() {
                             let at = |edit: CellRunEdit| CellRunEdit {
                                 block: block_idx,
@@ -163,10 +195,10 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
                             };
                             match plan {
                                 RunPlan::Keep => {}
-                                // A cell run is emptied, not removed, as the
-                                // text patch always did.
+                                // Removed, or emptied where it holds more
+                                // than text, as a body run is.
                                 RunPlan::Delete => cells.push(at(CellRunEdit {
-                                    new_text: Some(String::new()),
+                                    delete: true,
                                     ..Default::default()
                                 })),
                                 RunPlan::Edit { text, format } => cells.push(at(CellRunEdit {
@@ -206,7 +238,13 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
             // of its text took another look (a word made bold, a character
             // style applied to part of it). Runs the engine joined map back
             // onto their Word runs; untouched runs are not addressed at all.
-            let plans = plan_runs(&bp.runs, &ep.runs, base, edited, bindings);
+            let plans = plan_runs(
+                (&bp.runs, bp.para_style_id.as_deref()),
+                (&ep.runs, ep.para_style_id.as_deref()),
+                base,
+                edited,
+                bindings,
+            );
             for (run_idx, (plan, look)) in plans.into_iter().enumerate() {
                 match plan {
                     RunPlan::Keep => {}
@@ -293,7 +331,7 @@ fn effective_para_props(
 
 /// Invert a synthesized paragraph style's `StyleProp`s back to `ParaProps` — the
 /// reverse of `docx-lower`'s `para_props` (points → twips, 20 twips per point).
-fn invert_para_props(props: &[StyleProp]) -> docx_core::ParaProps {
+pub(crate) fn invert_para_props(props: &[StyleProp]) -> docx_core::ParaProps {
     use docx_core::Justification as J;
     let tw = |pt: f32| (pt * 20.0).round() as i32;
     let mut p = docx_core::ParaProps::default();
@@ -348,7 +386,7 @@ fn invert_para_props(props: &[StyleProp]) -> docx_core::ParaProps {
 
 /// A table's cell indices grouped by row, in emission order. A `rowSpan>1` cell
 /// belongs to its RESTART row only (it is emitted once), matching `lower_table`.
-fn rows_of(t: &docx_lower::ir::LoweredTable) -> Vec<Vec<usize>> {
+pub(crate) fn rows_of(t: &docx_lower::ir::LoweredTable) -> Vec<Vec<usize>> {
     let mut rows: Vec<Vec<usize>> = vec![Vec::new(); t.rows as usize];
     for (i, c) in t.cells.iter().enumerate() {
         if let Some(r) = rows.get_mut(c.row as usize) {
@@ -378,10 +416,10 @@ fn para_text(p: &docx_lower::ir::LoweredParagraph) -> String {
 /// paragraph before it (or, at the cell's start, of the one after it).
 /// Answers the matched pairs, whose runs are compared as before.
 fn align_cell(
-    block: usize,
-    cell: usize,
-    bc: &docx_lower::ir::LoweredCell,
-    ec: &docx_lower::ir::LoweredCell,
+    (block, cell): (usize, usize),
+    (bc, ec): (&docx_lower::ir::LoweredCell, &docx_lower::ir::LoweredCell),
+    (base, edited): (&LoweredDoc, &LoweredDoc),
+    bindings: &DocxBindings,
     structural: &mut Vec<StructuralEdit>,
 ) -> Vec<(usize, usize)> {
     let old: Vec<String> = bc.paragraphs.iter().map(para_text).collect();
@@ -410,12 +448,67 @@ fn align_cell(
                     (None, Some(f)) => (f, true),
                     (None, None) => continue, // a cell with no paragraph
                 };
+                // The look of the run whose `<w:rPr>` the copy takes (the
+                // neighbour's last run after it, its first before it), and
+                // the new paragraph's runs relative to it.
+                let neighbour = &bc.paragraphs[para];
+                let source = if before {
+                    neighbour.runs.first()
+                } else {
+                    neighbour.runs.last()
+                };
+                let (look, pieces) = match source {
+                    Some(r) => {
+                        let (props, rstyle) = effective_props(
+                            r.char_style_id.as_deref(),
+                            neighbour.para_style_id.as_deref(),
+                            base,
+                            bindings,
+                        );
+                        let look = RunFormat { props, rstyle };
+                        let added = &ec.paragraphs[e];
+                        let pieces = added
+                            .runs
+                            .iter()
+                            .filter(|r| !r.text.is_empty())
+                            .map(|r| {
+                                let (props, rstyle) = effective_props(
+                                    r.char_style_id.as_deref(),
+                                    added.para_style_id.as_deref(),
+                                    edited,
+                                    bindings,
+                                );
+                                let own = RunFormat { props, rstyle };
+                                RunPiece {
+                                    text: r.text.clone(),
+                                    format: (own != look).then_some(own),
+                                }
+                            })
+                            .collect();
+                        (Some(look), pieces)
+                    }
+                    None => (None, Vec::new()),
+                };
+                // A paragraph style of its own (Enter in a heading gives
+                // the next style): the copy's `<w:pPr>` takes it.
+                let (n_props, n_style) =
+                    effective_para_props(neighbour.para_style_id.as_deref(), base, bindings);
+                let (a_props, a_style) = effective_para_props(
+                    ec.paragraphs[e].para_style_id.as_deref(),
+                    edited,
+                    bindings,
+                );
+                let new_ppr =
+                    (n_props != a_props || n_style != a_style).then_some((a_props, a_style));
                 structural.push(StructuralEdit::CloneCellParagraph {
                     block,
                     cell,
                     para,
                     before,
                     text: new[e].clone(),
+                    base: look,
+                    pieces,
+                    new_ppr,
                 });
             }
         }
@@ -457,7 +550,7 @@ pub(crate) fn align_cell_paragraphs(old: &[String], new: &[String]) -> Vec<Align
 }
 
 /// A row's identity for alignment: its cells' text.
-fn row_key(t: &docx_lower::ir::LoweredTable, row: &[usize]) -> String {
+pub(crate) fn row_key(t: &docx_lower::ir::LoweredTable, row: &[usize]) -> String {
     row.iter()
         .map(|&i| cell_text(&t.cells[i]))
         .collect::<Vec<_>>()
@@ -490,7 +583,7 @@ fn block_key(b: &LoweredBlock) -> String {
 /// changes its key, and the pair would be reported as delete-then-insert —
 /// destroying the very `<w:p>` we want to patch in place. Coalescing keeps an
 /// edit an edit, and leaves a true deletion a deletion.
-fn lcs_align(a: &[String], b: &[String]) -> Vec<Align> {
+pub(crate) fn lcs_align(a: &[String], b: &[String]) -> Vec<Align> {
     let (n, m) = (a.len(), b.len());
     let mut lcs = vec![vec![0usize; m + 1]; n + 1];
     for i in (0..n).rev() {
@@ -616,7 +709,14 @@ fn align_runs(
             ops.push(StructuralEdit::DeleteRun { block, run: i });
             i += 1;
         } else {
-            ops.push(insert_run_op(block, anchor, &ep.runs[j], edited, bindings));
+            ops.push(insert_run_op(
+                block,
+                anchor,
+                &ep.runs[j],
+                ep.para_style_id.as_deref(),
+                edited,
+                bindings,
+            ));
             j += 1;
         }
     }
@@ -625,7 +725,14 @@ fn align_runs(
         i += 1;
     }
     while j < m {
-        ops.push(insert_run_op(block, anchor, &ep.runs[j], edited, bindings));
+        ops.push(insert_run_op(
+            block,
+            anchor,
+            &ep.runs[j],
+            ep.para_style_id.as_deref(),
+            edited,
+            bindings,
+        ));
         j += 1;
     }
     ops
@@ -635,10 +742,11 @@ fn insert_run_op(
     block: usize,
     after: Option<usize>,
     run: &docx_lower::ir::LoweredRun,
+    para: Option<&str>,
     edited: &LoweredDoc,
     bindings: &DocxBindings,
 ) -> StructuralEdit {
-    let (props, rstyle) = effective_props(run.char_style_id.as_deref(), edited, bindings);
+    let (props, rstyle) = effective_props(run.char_style_id.as_deref(), para, edited, bindings);
     StructuralEdit::InsertRun {
         block,
         run: after,
@@ -652,8 +760,50 @@ fn insert_run_op(
 /// plus the real `w:rStyle` id it should carry. A real Word style ⇒ rStyle + no
 /// direct props; a synthesized style ⇒ its inverted props + (its `basedOn`'s real
 /// style, if any); no style ⇒ cleared formatting.
-fn effective_props(
+///
+/// `para` is the run's paragraph style token: with the run's own, it gives
+/// the size the run is set in, which Word's absolute character spacing is
+/// relative to as the engine's tracking.
+pub(crate) fn effective_props(
     token: Option<&str>,
+    para: Option<&str>,
+    doc: &LoweredDoc,
+    bindings: &DocxBindings,
+) -> (RunProps, Option<String>) {
+    let size_pt = token_size(token, doc)
+        .or_else(|| token_size(para, doc))
+        .unwrap_or(WORD_DEFAULT_SIZE_PT);
+    effective_props_at(token, size_pt, doc, bindings)
+}
+
+/// Word's type size where nothing sets one (the lowering's default too).
+const WORD_DEFAULT_SIZE_PT: f32 = 10.0;
+
+/// The size a lowered style token sets, itself or through its `basedOn`
+/// chain (`characterFontSize`).
+fn token_size(token: Option<&str>, doc: &LoweredDoc) -> Option<f32> {
+    let mut next = token;
+    for _ in 0..64 {
+        let style = doc.styles.iter().find(|s| Some(s.id.as_str()) == next)?;
+        let own = style
+            .props
+            .iter()
+            .find_map(|p| match (p.path.as_str(), &p.value) {
+                ("characterFontSize", PropValue::Length(pt)) => Some(*pt),
+                _ => None,
+            });
+        if own.is_some() {
+            return own;
+        }
+        next = style.based_on.as_deref();
+    }
+    None
+}
+
+/// [`effective_props`] for a run set in `size_pt`.
+fn effective_props_at(
+    token: Option<&str>,
+    size_pt: f32,
     doc: &LoweredDoc,
     bindings: &DocxBindings,
 ) -> (RunProps, Option<String>) {
@@ -666,11 +816,12 @@ fn effective_props(
     if let Some(style) = doc.styles.iter().find(|s| s.id == token) {
         if token.starts_with(EDIT_STYLE_PREFIX) {
             // A canvas edit's direct formatting over the run's style.
-            let (mut props, rstyle) = effective_props(style.based_on.as_deref(), doc, bindings);
-            apply_overrides(&mut props, &style.props, doc);
+            let (mut props, rstyle) =
+                effective_props_at(style.based_on.as_deref(), size_pt, doc, bindings);
+            apply_overrides(&mut props, &style.props, size_pt, doc);
             return (props, rstyle);
         }
-        let props = invert_props(&style.props, doc);
+        let props = invert_props(&style.props, size_pt, doc);
         let rstyle = style
             .based_on
             .as_deref()
@@ -689,7 +840,7 @@ pub(crate) const EDIT_STYLE_PREFIX: &str = "CharacterStyle/docx-edit-";
 /// run's effective properties. A toggle the run does not set stays unset
 /// when the override only says "off" (the engine reads a plain run as
 /// `Regular`, not underlined, …), so turning nothing on writes nothing.
-fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], doc: &LoweredDoc) {
+fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], size_pt: f32, doc: &LoweredDoc) {
     fn set(field: &mut Option<bool>, on: bool) {
         if on || field.is_some() {
             *field = Some(on);
@@ -697,7 +848,10 @@ fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], doc: &LoweredDoc) 
     }
     for p in overrides {
         match (p.path.as_str(), &p.value) {
-            ("characterFontFamily", PropValue::Text(f)) => r.font = Some(f.clone()),
+            ("characterFontFamily", PropValue::Text(f)) => {
+                r.font = Some(f.clone());
+                r.font_theme = theme_font_slot(f, doc);
+            }
             ("characterFontStyle", PropValue::Text(s)) => {
                 set(&mut r.bold, s.contains("Bold"));
                 set(&mut r.italic, s.contains("Italic") || s.contains("Oblique"));
@@ -706,8 +860,9 @@ fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], doc: &LoweredDoc) 
                 r.size_half_pts = Some((pt * 2.0).round() as u32);
             }
             ("characterFillColor", PropValue::ColorRef(id)) => {
-                if let Some(hex) = swatch_hex(id, doc) {
+                if let Some((hex, theme)) = swatch_color(id, doc) {
                     r.color = Some(hex);
+                    r.theme_color = theme;
                 }
             }
             ("characterUnderline", PropValue::Bool(u)) => set(&mut r.underline, *u),
@@ -729,6 +884,12 @@ fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], doc: &LoweredDoc) 
                     r.baseline_half_pts = Some(half);
                 }
             }
+            ("characterTracking", PropValue::Length(t)) => {
+                let twips = twips_of_tracking(*t, size_pt);
+                if twips != 0 || r.spacing_twips.is_some() {
+                    r.spacing_twips = Some(twips);
+                }
+            }
             _ => {}
         }
     }
@@ -736,6 +897,9 @@ fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], doc: &LoweredDoc) 
 
 /// What becomes of one baseline run ([`plan_runs`]).
 #[derive(Debug, Clone, PartialEq)]
+// Short-lived (one per run of an edited paragraph): boxing the look would
+// cost an allocation per edit to save stack space nobody keeps.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum RunPlan {
     /// Untouched: not addressed, its bytes stay.
     Keep,
@@ -764,18 +928,21 @@ pub(crate) enum RunPlan {
 /// characters have several looks is split. Runs the engine joined (one
 /// style) map back onto their Word runs this way; nothing is ever merged.
 pub(crate) fn plan_runs(
-    base_runs: &[docx_lower::ir::LoweredRun],
-    edited_runs: &[docx_lower::ir::LoweredRun],
+    (base_runs, base_para): (&[docx_lower::ir::LoweredRun], Option<&str>),
+    (edited_runs, edited_para): (&[docx_lower::ir::LoweredRun], Option<&str>),
     base: &LoweredDoc,
     edited: &LoweredDoc,
     bindings: &DocxBindings,
 ) -> Vec<(RunPlan, RunFormat)> {
-    let look = |r: &docx_lower::ir::LoweredRun, doc: &LoweredDoc| {
-        let (props, rstyle) = effective_props(r.char_style_id.as_deref(), doc, bindings);
+    let look = |r: &docx_lower::ir::LoweredRun, para: Option<&str>, doc: &LoweredDoc| {
+        let (props, rstyle) = effective_props(r.char_style_id.as_deref(), para, doc, bindings);
         RunFormat { props, rstyle }
     };
-    let base_looks: Vec<RunFormat> = base_runs.iter().map(|r| look(r, base)).collect();
-    let edited_looks: Vec<RunFormat> = edited_runs.iter().map(|r| look(r, edited)).collect();
+    let base_looks: Vec<RunFormat> = base_runs.iter().map(|r| look(r, base_para, base)).collect();
+    let edited_looks: Vec<RunFormat> = edited_runs
+        .iter()
+        .map(|r| look(r, edited_para, edited))
+        .collect();
     let old: Vec<(char, usize)> = base_runs
         .iter()
         .enumerate()
@@ -956,11 +1123,14 @@ fn align_chars(a: &[char], b: &[char]) -> Vec<Align> {
 
 /// Invert a synthesized character style's `StyleProp`s back to `RunProps` — the
 /// exact reverse of `docx-lower`'s `run_props`.
-fn invert_props(props: &[StyleProp], doc: &LoweredDoc) -> RunProps {
+pub(crate) fn invert_props(props: &[StyleProp], size_pt: f32, doc: &LoweredDoc) -> RunProps {
     let mut r = RunProps::default();
     for p in props {
         match (p.path.as_str(), &p.value) {
-            ("characterFontFamily", PropValue::Text(f)) => r.font = Some(f.clone()),
+            ("characterFontFamily", PropValue::Text(f)) => {
+                r.font = Some(f.clone());
+                r.font_theme = theme_font_slot(f, doc);
+            }
             ("characterFontStyle", PropValue::Text(s)) => {
                 let (b, i) = match s.as_str() {
                     "Bold Italic" => (true, true),
@@ -974,7 +1144,11 @@ fn invert_props(props: &[StyleProp], doc: &LoweredDoc) -> RunProps {
             ("characterFontSize", PropValue::Length(pt)) => {
                 r.size_half_pts = Some((pt * 2.0).round() as u32);
             }
-            ("characterFillColor", PropValue::ColorRef(id)) => r.color = swatch_hex(id, doc),
+            ("characterFillColor", PropValue::ColorRef(id)) => {
+                let (hex, theme) = swatch_color(id, doc).unzip();
+                r.color = hex;
+                r.theme_color = theme.flatten();
+            }
             ("characterUnderline", PropValue::Bool(u)) => r.underline = Some(*u),
             ("characterStrikethru", PropValue::Bool(s)) => r.strike = Some(*s),
             ("characterPosition", PropValue::Text(pos)) => {
@@ -992,22 +1166,52 @@ fn invert_props(props: &[StyleProp], doc: &LoweredDoc) -> RunProps {
             ("characterBaselineShift", PropValue::Length(pt)) => {
                 r.baseline_half_pts = Some((pt * 2.0).round() as i32);
             }
+            ("characterTracking", PropValue::Length(t)) => {
+                r.spacing_twips = Some(twips_of_tracking(*t, size_pt));
+            }
             _ => {}
         }
     }
     r
 }
 
-/// Resolve a swatch id to its `RRGGBB` hex (the inverse of `swatch_for`).
-fn swatch_hex(id: &str, doc: &LoweredDoc) -> Option<String> {
+/// Resolve a swatch id to its `RRGGBB` hex (the inverse of `swatch_for`)
+/// and, for a theme colour's swatch that still shows the colour it had at
+/// import (doc ADR 609), the theme reference Word wrote: an edited theme
+/// swatch, or any other swatch, writes plain hex.
+pub(crate) fn swatch_color(
+    id: &str,
+    doc: &LoweredDoc,
+) -> Option<(String, Option<docx_core::ThemeColorRef>)> {
     let sw = doc.swatches.iter().find(|s| s.id == id)?;
     if sw.value.len() < 3 {
         return None;
     }
-    Some(format!(
+    let hex = format!(
         "{:02X}{:02X}{:02X}",
-        sw.value[0] as u8, sw.value[1] as u8, sw.value[2] as u8
-    ))
+        sw.value[0].round() as u8,
+        sw.value[1].round() as u8,
+        sw.value[2].round() as u8
+    );
+    let theme = sw
+        .theme
+        .as_ref()
+        .filter(|t| t.rgb.eq_ignore_ascii_case(&hex))
+        .map(|t| t.color.clone());
+    Some((hex, theme))
+}
+
+/// The theme font a family is (doc ADR 609): `minorHAnsi` for the theme's
+/// body face, `majorHAnsi` for its heading face, else none.
+pub(crate) fn theme_font_slot(family: &str, doc: &LoweredDoc) -> Option<String> {
+    let fonts = doc.theme_fonts.as_ref()?;
+    if fonts.minor.as_deref() == Some(family) {
+        Some("minorHAnsi".into())
+    } else if fonts.major.as_deref() == Some(family) {
+        Some("majorHAnsi".into())
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

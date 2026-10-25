@@ -38,14 +38,20 @@ import {
   CockpitPanelHeader,
   CockpitBtn,
   StatusPill,
+  isStopStep,
+  newActionId,
+  parseExtensions,
   planReplay,
+  useRegistries,
   serializeForExport,
   skipReasonLabel,
   toDemoScript,
   useActions,
   verdictLabel,
   verdictTitle,
+  type ImportRule,
   type PagedAction,
+  type PlaybackState,
 } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
@@ -94,6 +100,32 @@ const M = defineMessages("app.actionsPanel", {
     "{count, plural, one {# document mutation} other {# document mutations}} " +
     "applied. A replay is not one undoable unit — undo that many times to " +
     "reverse it.",
+  oneUndo:
+    "{count, plural, one {# document mutation} other {# document mutations}} " +
+    "applied as one undo step — one Undo reverses the replay.",
+  severalUndo:
+    "{count, plural, one {# document mutation} other {# document mutations}} " +
+    "applied in {steps} undo steps: something made its own step in between " +
+    "(an edit during a pause, a canvas gesture or a script).",
+  cancelledReplay: "Cancelled — the steps that ran stay done.",
+  step: "Step",
+  stepTitle: "Play one step at a time",
+  continue: "Continue",
+  cancel: "Cancel",
+  pausedAt: "Paused before step {n}.",
+  stoppedAt: "Stopped: {message}",
+  stopEnd: "Stopped: {message} (the last step)",
+  pauseBefore: "Pause before step {n}",
+  insertStop: "Insert stop",
+  stopMessage: "Message for the stop",
+  stopDefault: "Check the result, then Continue.",
+  stopStep: "Stop",
+  runOnImport: "Run on import",
+  runOnImportNote:
+    "After a file is opened or imported, play this action over it. " +
+    "Extensions (idml, xlsx, png …); empty runs it for every file.",
+  extensions: "Extensions",
+  batch: "Batch…",
   dismiss: "Dismiss",
   contains: "What a recording contains",
   recordsBefore: "Actions record",
@@ -316,13 +348,29 @@ export function ActionsPanel(_: PanelProps) {
               setOpenId((prev) => (prev === action.id ? null : action.id))
             }
             onPlay={() => void actions.play(action.id)}
+            onStep={() => void actions.play(action.id, { stepByStep: true })}
           />
         ))}
       </div>
 
+      {/* ── a replay waiting at a breakpoint, a stop or a step ── */}
+      {actions.playback && (
+        <PlaybackBar
+          playback={actions.playback}
+          stepCount={
+            actions.actions.find((a) => a.id === actions.playback?.actionId)
+              ?.steps.length ?? 0
+          }
+          onContinue={() => void actions.resume()}
+          onStep={() => void actions.stepOnce()}
+          onCancel={actions.cancelPlayback}
+        />
+      )}
+
       {/* ── detail for the expanded action ────────────────────── */}
       {open && (
         <ActionDetail
+          key={open.id}
           action={open}
           onRename={(next) => actions.rename(open.id, next)}
           onRemove={() => {
@@ -330,6 +378,15 @@ export function ActionsPanel(_: PanelProps) {
             setOpenId(null);
           }}
           onToggleStep={(i) => actions.toggleStep(open.id, i)}
+          onTogglePause={(i) => actions.togglePause(open.id, i)}
+          onInsertStop={(i, message) => actions.insertStop(open.id, i, message)}
+          rule={actions.importRules.find((r) => r.actionId === open.id) ?? null}
+          onRule={(rule) =>
+            actions.setImportRules([
+              ...actions.importRules.filter((r) => r.actionId !== open.id),
+              ...(rule ? [rule] : []),
+            ])
+          }
           onDeleteStep={(i) => actions.deleteStep(open.id, i)}
           onIncludeDocumentBound={(v) =>
             actions.setIncludeDocumentBound(open.id, v)
@@ -373,20 +430,31 @@ export function ActionsPanel(_: PanelProps) {
               {skipReasonLabel(s.reason)})
             </div>
           ))}
-          {/* Honest undo statement. A replay is NOT one undoable unit:
-              every command issues its own mutation, so the engine logs
-              one history entry per mutation. The engine's Mutation::Batch
-              (→ LoggedMutation::Composite) plus `bindCreated` could
-              collapse a whole replay into a single undo — but only if
-              commands DECLARED their mutations instead of issuing them,
-              which is a change to the command contract, not to this
-              panel. So we report the count instead of pretending. */}
-          <div style={{ ...MUTED, fontSize: 11, marginTop: 6 }}>
+          {/* The undo statement, from what the replay BECAME (WP4.11):
+              the player groups a replay's writes into one undo step
+              (the client's undo group over the engine's amend, ADR 1004)
+              and says so; when something broke the chain it says how
+              many steps it took; without a group (an old client) it
+              keeps the honest per-mutation count. */}
+          <div
+            data-actions-undo
+            style={{ ...MUTED, fontSize: 11, marginTop: 6 }}
+          >
+            {actions.lastReport.cancelled && (
+              <div>{strings.t(M.cancelledReplay)}</div>
+            )}
             {actions.lastReport.mutations === 0
               ? strings.t(M.noMutations)
-              : strings.t(M.mutations, {
-                  count: actions.lastReport.mutations,
-                })}
+              : actions.lastReport.undoSteps === 1
+                ? strings.t(M.oneUndo, { count: actions.lastReport.mutations })
+                : actions.lastReport.undoSteps > 1
+                  ? strings.t(M.severalUndo, {
+                      count: actions.lastReport.mutations,
+                      steps: actions.lastReport.undoSteps,
+                    })
+                  : strings.t(M.mutations, {
+                      count: actions.lastReport.mutations,
+                    })}
           </div>
           <div style={{ marginTop: 8 }}>
             <CockpitBtn sm onClick={actions.dismissReport}>
@@ -477,6 +545,7 @@ function ActionRow({
   busy,
   onToggle,
   onPlay,
+  onStep,
 }: {
   action: PagedAction;
   expanded: boolean;
@@ -484,6 +553,7 @@ function ActionRow({
   busy: boolean;
   onToggle: () => void;
   onPlay: () => void;
+  onStep: () => void;
 }) {
   const strings = useStrings();
   const plan = planReplay(action);
@@ -529,6 +599,14 @@ function ActionRow({
         >
           {playing ? strings.t(M.playing) : strings.t(M.play)}
         </CockpitBtn>
+        <CockpitBtn
+          sm
+          disabled={busy || plan.run.length === 0}
+          onClick={onStep}
+          testId={`actions-step-${action.id}`}
+        >
+          <span title={strings.t(M.stepTitle)}>{strings.t(M.step)}</span>
+        </CockpitBtn>
       </div>
       {plan.skip.length > 0 && (
         <div style={{ ...MUTED, fontSize: 11, marginTop: 4 }}>
@@ -544,6 +622,10 @@ function ActionDetail({
   onRename,
   onRemove,
   onToggleStep,
+  onTogglePause,
+  onInsertStop,
+  rule,
+  onRule,
   onDeleteStep,
   onIncludeDocumentBound,
   onExport,
@@ -552,12 +634,21 @@ function ActionDetail({
   onRename: (name: string) => void;
   onRemove: () => void;
   onToggleStep: (index: number) => void;
+  onTogglePause: (index: number) => void;
+  onInsertStop: (index: number, message: string) => void;
+  rule: ImportRule | null;
+  onRule: (rule: ImportRule | null) => void;
   onDeleteStep: (index: number) => void;
   onIncludeDocumentBound: (value: boolean) => void;
   onExport: () => void;
 }) {
   const strings = useStrings();
   const [copied, setCopied] = useState(false);
+  const [stopText, setStopText] = useState("");
+  const [extText, setExtText] = useState(() =>
+    (rule?.extensions ?? []).join(", "),
+  );
+  const registries = useRegistries();
   const hasDocBound = action.steps.some((s) => s.verdict === "documentBound");
   return (
     <div data-actions-detail={action.id} style={{ padding: "0 14px 12px" }}>
@@ -593,8 +684,39 @@ function ActionDetail({
               onChange={() => onToggleStep(i)}
               aria-label={strings.t(M.stepEnabled, { n: i + 1 })}
             />
-            <span style={{ fontSize: 11, flex: 1 }} title={step.command}>
-              {i + 1}. {step.title}
+            {/* The breakpoint: playback waits before this step. */}
+            <button
+              type="button"
+              data-actions-pause={i}
+              aria-pressed={step.pause === true}
+              aria-label={strings.t(M.pauseBefore, { n: i + 1 })}
+              title={strings.t(M.pauseBefore, { n: i + 1 })}
+              onClick={() => onTogglePause(i)}
+              style={{
+                width: 14,
+                height: 14,
+                borderRadius: 3,
+                padding: 0,
+                cursor: "pointer",
+                border: "1px solid var(--pg-border)",
+                background: step.pause ? "var(--status-review)" : "transparent",
+                fontSize: 8,
+                lineHeight: 1,
+                color: "var(--pg-fg)",
+              }}
+            >
+              {step.pause ? "❚❚" : ""}
+            </button>
+            <span
+              style={{ fontSize: 11, flex: 1 }}
+              title={step.command}
+              data-actions-stop-step={isStopStep(step) || undefined}
+            >
+              {i + 1}.{" "}
+              {isStopStep(step) ? (
+                <strong>{strings.t(M.stopStep)}: </strong>
+              ) : null}
+              {step.title}
               {step.failed && (
                 <span style={{ color: "var(--status-error)" }}>
                   {strings.t(M.failedWhileRecording)}
@@ -639,6 +761,75 @@ function ActionDetail({
         ))}
       </div>
 
+      {/* Insert a stop (Photoshop's Insert Stop): it ends up after the
+          last step; the step list's order is the replay order. */}
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        <input
+          value={stopText}
+          onChange={(e) => setStopText(e.target.value)}
+          placeholder={strings.t(M.stopDefault)}
+          aria-label={strings.t(M.stopMessage)}
+          data-actions-stop-message
+          style={{ ...inputStyle, marginTop: 0, flex: 1 }}
+        />
+        <CockpitBtn
+          sm
+          testId="actions-insert-stop"
+          onClick={() => {
+            onInsertStop(
+              action.steps.length,
+              stopText.trim() || strings.t(M.stopDefault),
+            );
+            setStopText("");
+          }}
+        >
+          {strings.t(M.insertStop)}
+        </CockpitBtn>
+      </div>
+
+      {/* Run on import — the droplet as a standing rule. */}
+      <div
+        data-actions-import-rule
+        style={{ marginTop: 10, fontSize: 11, color: "var(--pg-muted-fg)" }}
+      >
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            data-actions-run-on-import
+            checked={rule?.enabled === true}
+            onChange={(e) =>
+              onRule(
+                e.target.checked
+                  ? {
+                      id: rule?.id ?? newActionId(),
+                      actionId: action.id,
+                      extensions: parseExtensions(extText),
+                      enabled: true,
+                    }
+                  : null,
+              )
+            }
+          />
+          <span style={{ color: "var(--pg-fg)" }}>
+            {strings.t(M.runOnImport)}
+          </span>
+        </label>
+        <div style={{ marginTop: 4, lineHeight: 1.5 }}>
+          {strings.t(M.runOnImportNote)}
+        </div>
+        <input
+          value={extText}
+          onChange={(e) => setExtText(e.target.value)}
+          onBlur={() => {
+            if (rule) onRule({ ...rule, extensions: parseExtensions(extText) });
+          }}
+          aria-label={strings.t(M.extensions)}
+          placeholder="idml, xlsx, png"
+          data-actions-import-extensions
+          style={{ ...inputStyle, marginTop: 4 }}
+        />
+      </div>
+
       {hasDocBound && (
         <label
           style={{
@@ -675,6 +866,13 @@ function ActionDetail({
         <CockpitBtn sm onClick={onExport}>
           {strings.t(M.export)}
         </CockpitBtn>
+        <CockpitBtn
+          sm
+          testId="actions-batch"
+          onClick={() => void registries.commands.invoke("paged.actions.batch")}
+        >
+          {strings.t(M.batch)}
+        </CockpitBtn>
         <CockpitBtn sm onClick={onRemove} testId="actions-delete">
           {strings.t(M.delete)}
         </CockpitBtn>
@@ -687,6 +885,70 @@ function ActionDetail({
       <div style={{ ...MUTED, fontSize: 11, marginTop: 6, lineHeight: 1.5 }}>
         {strings.t(M.copyNoteBefore)} <code>editor.runCommand(…)</code>{" "}
         {strings.t(M.copyNoteAfter)}
+      </div>
+    </div>
+  );
+}
+
+/** The replay waiting at a breakpoint, a stop or between steps. */
+function PlaybackBar({
+  playback,
+  stepCount,
+  onContinue,
+  onStep,
+  onCancel,
+}: {
+  playback: PlaybackState;
+  stepCount: number;
+  onContinue: () => void;
+  onStep: () => void;
+  onCancel: () => void;
+}) {
+  const strings = useStrings();
+  const waiting = playback.status === "paused" || playback.status === "stopped";
+  return (
+    <div
+      data-actions-playback={playback.status}
+      style={{
+        margin: "0 14px 12px",
+        border: "1px solid var(--status-review)",
+        borderRadius: "var(--radius-md)",
+        padding: 9,
+        fontSize: 12,
+      }}
+    >
+      <div data-actions-playback-message style={{ marginBottom: 6 }}>
+        {playback.status === "stopped"
+          ? playback.pausedAt === null
+            ? strings.t(M.stopEnd, { message: playback.message ?? "" })
+            : strings.t(M.stoppedAt, { message: playback.message ?? "" })
+          : playback.status === "paused" && playback.pausedAt !== null
+            ? strings.t(M.pausedAt, {
+                n: Math.min(playback.pausedAt + 1, stepCount),
+              })
+            : strings.t(M.playing)}
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <CockpitBtn
+          primary
+          sm
+          disabled={!waiting}
+          onClick={onContinue}
+          testId="actions-continue"
+        >
+          {strings.t(M.continue)}
+        </CockpitBtn>
+        <CockpitBtn
+          sm
+          disabled={!waiting || playback.pausedAt === null}
+          onClick={onStep}
+          testId="actions-step-once"
+        >
+          {strings.t(M.step)}
+        </CockpitBtn>
+        <CockpitBtn sm onClick={onCancel} testId="actions-cancel-playback">
+          {strings.t(M.cancel)}
+        </CockpitBtn>
       </div>
     </div>
   );

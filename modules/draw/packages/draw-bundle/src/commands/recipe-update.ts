@@ -19,12 +19,14 @@
 // UPDATE LINKED RECIPES (plan G4) — rebuild the recipes built from a
 // changed source, without the caller having to know which they are.
 //
-// No construct updates itself: editing a pattern's tile, a repeat's
-// source, a blend's key, a live-paint input or the objects on a path
-// leaves the generated artwork as it was until that recipe's own update
-// command runs. In the editor the recipe's panel holds that button; a
-// script or the CLI that just rewrote a path would have to find, by
-// itself, every recipe the path feeds. This command does the finding:
+// Where the host can amend an undo step, editing a pattern's tile, a
+// repeat's source, a blend's key, a live-paint input or the objects on a
+// path rebuilds the generated artwork in the edit's own step
+// (`recipe-auto-update.ts`). Without it, or with the automatic update
+// switched off, the artwork stays as it was until that recipe's own update
+// command runs: the recipe's panel holds that button, and a script or the
+// CLI that just rewrote a path would have to find, by itself, every recipe
+// the path feeds. This command does the finding:
 //
 //   updateLinkedRecipes { all: false }   the recipes whose SOURCES are
 //                                        selected (the twin selects its
@@ -49,8 +51,9 @@
 // THE SAME REBUILD ON ITS OWN. Where the host can amend an undo step
 // (engine ADR 1004), `recipe-auto-update.ts` runs `updateRecipe` for the
 // recipes an edit changed the sources of, inside that edit's step. This
-// command stays for a host without it, for a script's edits (which carry
-// no step to join) and for a rebuild that lost the race to the next edit.
+// command stays for a host without it, for a script run that names no
+// step (it called `paged.undo()`, or an edit split it) and for a rebuild
+// that lost the race to the next edit.
 
 import type {
   BundleHost,

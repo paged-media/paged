@@ -42,6 +42,14 @@ export interface CellContent {
   paragraphs?: unknown[];
 }
 
+/** A table whose rows were added or removed on the canvas, read whole: each
+ *  live row's cell texts. The save-back aligns its rows with Word's by
+ *  text, adds and removes `w:tr`s, and patches the kept rows' cells. */
+export interface TableContent {
+  block: number;
+  rows: string[][];
+}
+
 /** A cell's styled paragraphs (the engine's cell `paragraphs` read, JSON
  *  text), or `undefined` where the engine has no such read: the cell's
  *  text alone is saved then. */
@@ -76,28 +84,43 @@ export async function readTableCells(
   host: BundleHost,
   ir: LoweredDoc,
   storyIds: readonly string[],
-): Promise<{ cells: CellContent[]; skips: string[] }> {
+): Promise<{ cells: CellContent[]; tables: TableContent[]; skips: string[] }> {
   const cells: CellContent[] = [];
+  const tables: TableContent[] = [];
   const skips: string[] = [];
   const blocks = ir.story.blocks;
   const hasTables = blocks.some(
     (b) => b.kind === "table" && (b.flow ?? []).length === 0,
   );
-  if (!hasTables) return { cells, skips };
+  if (!hasTables) return { cells, tables, skips };
   if (!host.supports("objects@1")) {
     skips.push(
       "this host cannot read table cells: canvas edits in tables are not saved",
     );
-    return { cells, skips };
+    return { cells, tables, skips };
   }
-  const { places, missing } = await locateTables(host, ir, storyIds);
+  const { places, missing } = await locateTables(host, ir, storyIds, {
+    rowsMayChange: true,
+  });
   for (const b of missing)
     skips.push(
-      `block ${b}: the table is no longer on the canvas (deleted, or reshaped with every cell edited); it keeps its Word text`,
+      `block ${b}: the table is no longer on the canvas (deleted, or columns added or removed on it); it keeps its Word text`,
     );
   for (const [b, place] of places) {
     const block = blocks[b]!;
     if (block.kind !== "table") continue;
+    if (place.rows !== block.rows) {
+      // Rows added or removed: the whole table, row by row.
+      const rows: string[][] = [];
+      for (let r = 0; r < place.rows; r += 1) {
+        const row: string[] = [];
+        for (let c = 0; c < place.cols; c += 1)
+          row.push(place.cells[`${r},${c}`] ?? "");
+        rows.push(row);
+      }
+      tables.push({ block: b, rows });
+      continue;
+    }
     for (let k = 0; k < block.cells.length; k += 1) {
       const c = block.cells[k]!;
       const text = place.cells[`${c.row},${c.col}`];
@@ -119,5 +142,52 @@ export async function readTableCells(
         );
     }
   }
-  return { cells, skips };
+  return { cells, tables, skips };
+}
+
+/** The swatch ids the runs of `paragraphs` are filled with (`fillColor`). */
+function fillColors(paragraphs: readonly unknown[], into: Set<string>): void {
+  for (const p of paragraphs) {
+    const runs = (p as { runs?: unknown } | null)?.runs;
+    if (!Array.isArray(runs)) continue;
+    for (const r of runs) {
+      const c = (r as { fillColor?: unknown } | null)?.fillColor;
+      if (typeof c === "string" && c.length > 0) into.add(c);
+    }
+  }
+}
+
+/**
+ * The RGB of every swatch the read-back runs are filled with, and of the
+ * `extra` ids (the Word theme's swatches, the styles' colours), by swatch id
+ * (`RRGGBB`), as the host displays it: the save-back writes a run's colour
+ * from it when the swatch is one the canvas made (the import's own are
+ * known to the engine already), and a theme swatch the user edited is
+ * written as its new colour instead of the theme reference (doc ADR 609). Empty on a host without the swatch display
+ * read; a run in such a colour then keeps its Word colour.
+ */
+export async function canvasColors(
+  host: BundleHost,
+  paragraphs: readonly unknown[],
+  cells: readonly CellContent[],
+  extra: readonly string[] = [],
+): Promise<Record<string, string>> {
+  if (!host.supports("document.swatchDisplay@1")) return {};
+  const ids = new Set<string>(extra);
+  fillColors(paragraphs, ids);
+  for (const c of cells) fillColors(c.paragraphs ?? [], ids);
+  if (ids.size === 0) return {};
+  const out: Record<string, string> = {};
+  try {
+    for (const d of await host.document.swatchDisplay([...ids]))
+      out[d.id] = d.rgbHex.replace(/^#/, "").toUpperCase();
+  } catch {
+    return {};
+  }
+  return out;
+}
+
+/** The ids of the lowering's theme-colour swatches (doc ADR 609). */
+export function themeSwatches(ir: LoweredDoc): string[] {
+  return ir.swatches.filter((s) => s.theme).map((s) => s.id);
 }
