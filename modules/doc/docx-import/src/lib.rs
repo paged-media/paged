@@ -660,7 +660,7 @@ fn numbering_part(pkg: &OpcPackage, main_part: &str) -> Option<String> {
 }
 
 /// The main document part name (via `_rels/.rels` `officeDocument`).
-fn main_document_part(pkg: &OpcPackage) -> Option<String> {
+pub fn main_document_part(pkg: &OpcPackage) -> Option<String> {
     let root_rels = pkg.part("_rels/.rels")?;
     let rels = rels::Relationships::parse(root_rels);
     let r = rels.by_type_suffix("/officeDocument")?;

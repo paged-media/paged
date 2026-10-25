@@ -87,7 +87,7 @@ pub struct RunContentIn {
 impl RunContentIn {
     /// The run's direct formatting as engine style properties (the paths
     /// `docx-lower` writes a synthesized character style with).
-    fn overrides(&self) -> Vec<StyleProp> {
+    pub(crate) fn overrides(&self) -> Vec<StyleProp> {
         let mut out = Vec::new();
         let mut push = |path: &str, value: PropValue| {
             out.push(StyleProp {
