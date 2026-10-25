@@ -124,6 +124,9 @@ export interface ReviewSession {
   /** The key fields a query's rows are matched by (null = the engine's
    *  default: the first column unique in both results). */
   setDiffKey(query: string, fields: string[] | null): void;
+  /** The key fields chosen for a query (null = the engine's default). The
+   *  per-record status (editor ADR 291) matches records by the same key. */
+  diffKeyOf(query: string): string[] | null;
   /** Record the current results as what the document was written from. */
   markApplied(): Promise<void>;
   checkExpression(src: string, query?: string): Promise<ExprCheck>;
@@ -337,6 +340,10 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
     setDiffKey(query, fields) {
       if (fields && fields.length > 0) diffKeys.set(query, fields);
       else diffKeys.delete(query);
+    },
+
+    diffKeyOf(query) {
+      return diffKeys.get(query) ?? null;
     },
 
     async markApplied() {

@@ -2945,7 +2945,11 @@ export function createSession(
       self.placeRecord(query, record, elementOfAddress(target)),
     loadSample: () => self.loadSample(),
     recordOf: (id) => recordOf.get(id),
-    placements: () => props.placements(),
+    placements: () => props.placements((id) => recordOf.get(id)),
+    recordStatus: (query) =>
+      props.recordStatus(query, self.diffKeyOf(query), (id) =>
+        recordOf.get(id),
+      ),
     issues: () => publishIssues(),
     assetColumns: () => self.assetColumns(),
     setAssetColumn: (query, field, def) =>
@@ -5230,11 +5234,21 @@ export function createSession(
         template: mode,
         imageBase: options.imageBase,
         mergeId,
+        dataQuery: options.query,
         clear: plan.remove,
         templatePresent,
         pageHandles: labelActive,
       });
-      if (result.ok) mergeTemplates.set(mergeId, template);
+      if (result.ok) {
+        mergeTemplates.set(mergeId, template);
+        // The document is now written from this query's records: the
+        // "before" of its per-record status (editor ADR 291).
+        try {
+          e.mark_query_applied?.(options.query);
+        } catch {
+          // an engine without the lane: no status, nothing else changes
+        }
+      }
       mergeFrames = result.records.flatMap((r) =>
         r.frames.map((f) => ({
           binding: mergeId,
