@@ -137,7 +137,10 @@ function GridRender(props: OverlayProps) {
   const view = visibleBounds(props.camera, viewportSize);
   const inView = (r: OverlayPageRect) =>
     !view ||
-    (r.x <= view.x1 && r.x + r.w >= view.x0 && r.y <= view.y1 && r.y + r.h >= view.y0);
+    (r.x <= view.x1 &&
+      r.x + r.w >= view.x0 &&
+      r.y <= view.y1 &&
+      r.y + r.h >= view.y0);
   const pages = [...props.pageRects.entries()].filter(([, r]) => inView(r));
   const every = prefs.gridEvery;
   const step = gridStep(prefs);
@@ -202,4 +205,3 @@ export const gridOverlayContribution: OverlayContribution = {
   // selection chrome and the snap lines: the grid is the quietest layer.
   z: 60,
 };
-

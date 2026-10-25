@@ -162,7 +162,8 @@ function ViewPreferencesForm() {
               value={prefs.gridSubdivisions}
               onChange={(e) => {
                 const n = Math.round(Number(e.target.value));
-                if (n >= 1 && n <= 100) setViewPreferences({ gridSubdivisions: n });
+                if (n >= 1 && n <= 100)
+                  setViewPreferences({ gridSubdivisions: n });
               }}
               style={inputStyle}
             />
@@ -172,7 +173,9 @@ function ViewPreferencesForm() {
               type="color"
               data-view-pref="gridColor"
               value={prefs.gridColor}
-              onChange={(e) => setViewPreferences({ gridColor: e.target.value })}
+              onChange={(e) =>
+                setViewPreferences({ gridColor: e.target.value })
+              }
               style={{ ...inputStyle, padding: 0, height: 24 }}
             />
           </Row>

@@ -36,7 +36,12 @@ import { expect, test, type Page } from "@playwright/test";
 import { covers } from "@paged-media/test-kit";
 
 import { beginGesture, commitGesture, updateGesture } from "./harness/gesture";
-import { SHELL, blurAll, clickMenuRow, openShell } from "./harness/shell-surface";
+import {
+  SHELL,
+  blurAll,
+  clickMenuRow,
+  openShell,
+} from "./harness/shell-surface";
 import { screenPoint } from "./harness/viewport";
 
 type G = {
@@ -49,9 +54,9 @@ type G = {
         read(): { scale: number; tx: number; ty: number; rotation?: number };
       };
       documentMeta(): Promise<{ dirty: boolean }>;
-      elementGeometry(ids: unknown[]): Promise<
-        Array<{ bounds: [number, number, number, number] }>
-      >;
+      elementGeometry(
+        ids: unknown[],
+      ): Promise<Array<{ bounds: [number, number, number, number] }>>;
       send(m: unknown): Promise<{ kind: string; payload: unknown }>;
     };
   };
@@ -100,7 +105,9 @@ const canvasShot = async (page: Page) => {
       const r = cv.getBoundingClientRect();
       if (!best || r.width * r.height > best.width * best.height) best = r;
     }
-    return best && { x: best.x, y: best.y, width: best.width, height: best.height };
+    return (
+      best && { x: best.x, y: best.y, width: best.width, height: best.height }
+    );
   });
   if (!box) throw new Error("no canvas");
   return page.screenshot({ clip: box });
@@ -125,19 +132,25 @@ test.describe("View menu — view modes, grids, snapping, Rotate View [editor-sh
     await page.keyboard.press("Meta+y");
     await expect.poll(() => viewMode(page)).toBe("outline");
     await expect
-      .poll(async () => (await canvasShot(page)).equals(preview), { timeout: 15_000 })
+      .poll(async () => (await canvasShot(page)).equals(preview), {
+        timeout: 15_000,
+      })
       .toBe(false);
     expect(await viewToggle(page, "outline")).toBe(true);
     // No document change: nothing to undo, the document is clean.
     expect(
       await page.evaluate(() =>
-        (globalThis as unknown as G).__canvas.client.documentMeta().then((m) => m.dirty),
+        (globalThis as unknown as G).__canvas.client
+          .documentMeta()
+          .then((m) => m.dirty),
       ),
     ).toBe(false);
     await page.keyboard.press("Meta+y");
     await expect.poll(() => viewMode(page)).toBe("preview");
     await expect
-      .poll(async () => (await canvasShot(page)).equals(preview), { timeout: 15_000 })
+      .poll(async () => (await canvasShot(page)).equals(preview), {
+        timeout: 15_000,
+      })
       .toBe(true);
   });
 
@@ -198,7 +211,8 @@ test.describe("View menu — view modes, grids, snapping, Rotate View [editor-sh
     const ref = SHELL.frame;
     const before = (
       await page.evaluate(
-        (r) => (globalThis as unknown as G).__canvas.client.elementGeometry([r]),
+        (r) =>
+          (globalThis as unknown as G).__canvas.client.elementGeometry([r]),
         ref,
       )
     )[0]!.bounds;
@@ -207,7 +221,8 @@ test.describe("View menu — view modes, grids, snapping, Rotate View [editor-sh
     await commitGesture(page, h);
     const after = (
       await page.evaluate(
-        (r) => (globalThis as unknown as G).__canvas.client.elementGeometry([r]),
+        (r) =>
+          (globalThis as unknown as G).__canvas.client.elementGeometry([r]),
         ref,
       )
     )[0]!.bounds;
@@ -241,9 +256,12 @@ test.describe("View menu — view modes, grids, snapping, Rotate View [editor-sh
     await openShell(page, { doc: true });
     const rotation = () =>
       page.evaluate(
-        () => (globalThis as unknown as G).__canvas.client.camera.read().rotation ?? 0,
+        () =>
+          (globalThis as unknown as G).__canvas.client.camera.read().rotation ??
+          0,
       );
-    for (let i = 0; i < 3; i++) await clickMenuRow(page, "View/Rotate view/15° clockwise");
+    for (let i = 0; i < 3; i++)
+      await clickMenuRow(page, "View/Rotate view/15° clockwise");
     await expect.poll(rotation).toBeCloseTo(Math.PI / 4, 3);
     await clickMenuRow(page, "View/Rotate view/15° counterclockwise");
     await expect.poll(rotation).toBeCloseTo(Math.PI / 6, 3);
@@ -255,7 +273,9 @@ test.describe("View menu — view modes, grids, snapping, Rotate View [editor-sh
     await expect
       .poll(() =>
         page.evaluate(() =>
-          (globalThis as unknown as G).__paged.selection.elementSelection.map((e) => e.id),
+          (globalThis as unknown as G).__paged.selection.elementSelection.map(
+            (e) => e.id,
+          ),
         ),
       )
       .toContain(SHELL.frame.id);
@@ -267,7 +287,9 @@ test.describe("View menu — view modes, grids, snapping, Rotate View [editor-sh
     await expect.poll(rotation).toBeCloseTo(0, 6);
   });
 
-  test("Guides & grid preferences open from the View menu", async ({ page }) => {
+  test("Guides & grid preferences open from the View menu", async ({
+    page,
+  }) => {
     covers(
       "menu:View/Guides & grid preferences…",
       "command:paged.view.guidesAndGridPreferences",

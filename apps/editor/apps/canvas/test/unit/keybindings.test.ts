@@ -506,4 +506,3 @@ describe("the View menu's chords (editor ADR 287)", () => {
     expect(real("1", "Digit1", { meta: true })).toBe("paged.view.zoom100");
   });
 });
-

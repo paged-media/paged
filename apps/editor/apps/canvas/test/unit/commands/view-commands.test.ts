@@ -140,9 +140,9 @@ describe("View ▸ screen modes, grids and snapping", () => {
         checkable: "function",
       });
     }
-    expect(byCommand.get("paged.view.smartGuides")?.checked?.(paged as never)).toBe(
-      true,
-    );
+    expect(
+      byCommand.get("paged.view.smartGuides")?.checked?.(paged as never),
+    ).toBe(true);
     expect(byCommand.get("paged.view.outline")?.checked?.(paged as never)).toBe(
       false,
     );
@@ -153,7 +153,10 @@ describe("View ▸ screen modes, grids and snapping", () => {
   test("Illustrator's chords, none of them taken by the app", () => {
     const chords = VIEW_KEYBINDINGS.map((k) => [k.key, k.command]);
     expect(chords).toContainEqual(["cmd+y", "paged.view.outline"]);
-    expect(chords).toContainEqual(["alt+shift+cmd+y", "paged.view.overprintPreview"]);
+    expect(chords).toContainEqual([
+      "alt+shift+cmd+y",
+      "paged.view.overprintPreview",
+    ]);
     expect(chords).toContainEqual(["alt+cmd+y", "paged.view.pixelPreview"]);
     expect(chords).toContainEqual(["cmd+'", "paged.view.showGrid"]);
     expect(chords).toContainEqual(["cmd+u", "paged.view.smartGuides"]);

@@ -100,10 +100,7 @@ const EXCLUSIVE: Partial<Record<ViewToggle, ViewToggle>> = {
 
 /** The engine's view mode (wire `ViewMode`) the toggles add up to. */
 export type ViewModeName =
-  | "preview"
-  | "outline"
-  | "overprintPreview"
-  | "pixelPreview";
+  "preview" | "outline" | "overprintPreview" | "pixelPreview";
 
 export function viewModeOf(scope: EditorScope): ViewModeName {
   const state = scope.get(TOGGLES).state;

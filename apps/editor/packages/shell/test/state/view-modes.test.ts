@@ -66,7 +66,9 @@ describe("Guides & Grid preferences", () => {
     expect(heard).toBe(1);
     setViewPreferences({ gridSubdivisions: 0, gridColor: "red" });
     expect(viewPreferences().gridSubdivisions).toBe(4);
-    expect(viewPreferences().gridColor).toBe(DEFAULT_VIEW_PREFERENCES.gridColor);
+    expect(viewPreferences().gridColor).toBe(
+      DEFAULT_VIEW_PREFERENCES.gridColor,
+    );
     off();
     // A reload reads what was stored.
     resetViewPreferences();

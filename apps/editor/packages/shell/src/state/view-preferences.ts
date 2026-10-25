@@ -118,7 +118,11 @@ export function setViewPreferences(patch: Partial<ViewPreferences>): void {
     CHECKS,
   );
   const prev = viewPreferences();
-  if ((Object.keys(next) as (keyof ViewPreferences)[]).every((k) => next[k] === prev[k])) {
+  if (
+    (Object.keys(next) as (keyof ViewPreferences)[]).every(
+      (k) => next[k] === prev[k],
+    )
+  ) {
     return;
   }
   current = next;

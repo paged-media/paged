@@ -33,7 +33,11 @@ import type { SnapSettings } from "@paged-media/client";
 
 import { useCanvasClient } from "./canvas-client-context";
 import { useEditorScope, type EditorScope } from "./editor-scope";
-import { gridStep, useViewPreferences, type ViewPreferences } from "./view-preferences";
+import {
+  gridStep,
+  useViewPreferences,
+  type ViewPreferences,
+} from "./view-preferences";
 import {
   getViewToggle,
   subscribeViewToggles,

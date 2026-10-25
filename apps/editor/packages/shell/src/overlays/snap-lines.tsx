@@ -54,7 +54,10 @@ function Label(props: { at: [number, number]; text: string; inv: number }) {
   );
 }
 
-function at(pr: OverlayPageRect, p: readonly [number, number]): [number, number] {
+function at(
+  pr: OverlayPageRect,
+  p: readonly [number, number],
+): [number, number] {
   return [pr.x + p[0], pr.y + p[1]];
 }
 
@@ -113,7 +116,9 @@ function SnapLineShape(props: {
           x2={b[0]}
           y2={b[1]}
           {...common}
-          strokeDasharray={kind === "angle" ? `${4 * inv} ${3 * inv}` : undefined}
+          strokeDasharray={
+            kind === "angle" ? `${4 * inv} ${3 * inv}` : undefined
+          }
         />
         {ticks}
         {text && <Label at={mid} text={text} inv={inv} />}

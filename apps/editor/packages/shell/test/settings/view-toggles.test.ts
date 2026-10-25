@@ -60,7 +60,6 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   smartGuides: true,
 };
 
-
 describe("view toggles", () => {
   test("defaults: threads off, snap to points on, heading anchors and data markers off", () => {
     covers(

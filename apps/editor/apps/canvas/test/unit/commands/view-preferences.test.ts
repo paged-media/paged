@@ -75,7 +75,9 @@ describe("paged.view.guidesAndGridPreferences", () => {
     await registry.invoke("paged.view.guidesAndGridPreferences");
     const html = render();
     expect(html).toContain('role="dialog"');
-    expect(html).toMatch(/data-view-pref="gridSubdivisions"[^>]*value="4"|value="4"[^>]*data-view-pref="gridSubdivisions"/);
+    expect(html).toMatch(
+      /data-view-pref="gridSubdivisions"[^>]*value="4"|value="4"[^>]*data-view-pref="gridSubdivisions"/,
+    );
     expect(html).toContain('value="#336699"');
     for (const key of [
       "gridEvery",
@@ -90,8 +92,9 @@ describe("paged.view.guidesAndGridPreferences", () => {
     ])
       expect(html).toContain(`data-view-pref="${key}"`);
     expect(
-      VIEW_MENU_ITEMS.find((m) => m.command === "paged.view.guidesAndGridPreferences")
-        ?.path,
+      VIEW_MENU_ITEMS.find(
+        (m) => m.command === "paged.view.guidesAndGridPreferences",
+      )?.path,
     ).toBe("View/Guides & grid preferences…");
   });
 });
