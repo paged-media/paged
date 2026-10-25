@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 562,
+    "command": 564,
     "keybinding": 140,
-    "menu": 388,
-    "panel": 131,
+    "menu": 389,
+    "panel": 132,
     "tool": 81
   },
   "features": [
@@ -2016,6 +2016,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.insertShapes",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.moveSlideDown",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2087,6 +2092,11 @@
     },
     {
       "id": "command:media.paged.slide.importPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.insertShape",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -4841,6 +4851,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Insert/Shapes…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Layout/Add page",
       "kind": "menu",
       "owner": "editor"
@@ -5637,6 +5652,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.placeholder",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.shapes",
       "kind": "panel",
       "owner": "media.paged.slide"
     },

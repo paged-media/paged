@@ -92,6 +92,7 @@ function recordingHost(
   const visited: string[] = [];
   const picks: unknown[] = [];
   const saves: Array<{ suggestedName: string; length: number }> = [];
+  const panels: string[] = [];
   let picked: Array<{ name: string; bytes: Uint8Array; mimeType: string }> = [];
   const host = {
     supports: (f: string) => features.includes(f),
@@ -145,6 +146,9 @@ function recordingHost(
         saves.push({ suggestedName: o.suggestedName, length: o.bytes.length });
         return true;
       },
+      openPanel(id: string) {
+        panels.push(id);
+      },
     },
   } as unknown as BundleHost;
   return {
@@ -164,6 +168,7 @@ function recordingHost(
     visited,
     picks,
     saves,
+    panels,
     pick(files: typeof picked) {
       picked = files;
     },
@@ -399,6 +404,23 @@ describe("paged.slide palette commands", () => {
     const bare = setup({ slides: 2, active: 1 });
     await bare.run(CMD.addComment);
     expect(bare.logs.some((l) => l.includes("addComment"))).toBe(true);
+  });
+
+  it("Insert ▸ Shapes… opens the Shapes panel, offered where a slide is active", async () => {
+    covers("command:media.paged.slide.command.insertShapes");
+    const s = setup({ slides: 3, active: 2 });
+    expect(s.when(CMD.insertShapes)).toBe(true);
+    await s.run(CMD.insertShapes);
+    expect(s.panels).toEqual([SHAPES_PANEL_ID]);
+    // Opening the panel edits nothing.
+    expect(s.mutations).toEqual([]);
+    s.state.active = 0;
+    expect(s.when(CMD.insertShapes)).toBe(false);
+    // Without the panel door the command is not registered at all.
+    const bare = setup({
+      features: ALL.filter((f) => f !== "shell.openPanel@1"),
+    });
+    expect(bare.commands.has(CMD.insertShapes)).toBe(false);
   });
 
   it("binds no keys on a host without the slide store", () => {

@@ -58,6 +58,7 @@ import {
   DUPLICATE_SLIDE_COMMAND,
   EXPORT_PPTX_COMMAND,
   IMPORT_PPTX_COMMAND,
+  INSERT_SHAPE_COMMAND,
   LABEL_KEY,
   NEW_SLIDE_COMMAND,
 } from "../src/object-model";
@@ -208,6 +209,94 @@ describe("media.paged.slide.newSlide (unit)", () => {
       /failed: insertPage was refused/,
     );
     expect(b.fake.undoDepth()).toBe(0);
+    b.dispose();
+  });
+});
+
+/** A deck of two slides whose paste mints the outline `u9p` (and its
+ *  text frame) the way the engine answers pasteElements. */
+function deckThatPastes() {
+  return boot({
+    documentMeta: { pluginMetadata: [DECK_LABEL] } as never,
+    collections: { pages: [page("p1", 1), page("p2", 2)] },
+    reply: (m: MainToWorkerKind) =>
+      m.kind === "mutate" && m.payload.op === "pasteElements"
+        ? ({
+            kind: "mutationApplied",
+            payload: {
+              clientSeq: 0,
+              appliedSeq: 1,
+              pageIds: ["p1", "p2"],
+              cacheStats: {
+                hits: 0,
+                misses: 0,
+                len: 0,
+                capacity: 0,
+                rebuildMs: 0,
+              },
+              minted: [
+                { element: { kind: "polygon", id: "u9p" } },
+                { element: { kind: "textFrame", id: "u9" } },
+              ],
+            },
+          } as unknown as WorkerToMain)
+        : undefined,
+  });
+}
+
+describe("media.paged.slide.insertShape (unit)", () => {
+  type Paste = {
+    op: string;
+    args: { pageId: string; center: number[]; snippet: string };
+  };
+
+  it("pastes the preset as one mutation, centred on the slide unless placed, and answers the outline", async () => {
+    covers("command:media.paged.slide.insertShape");
+    const b = deckThatPastes();
+    const out = (await b.host.objects.invoke(INSERT_SHAPE_COMMAND, {
+      prst: "star5",
+      slide: "plugin:media.paged.slide/slide/p2",
+    })) as { shape: string };
+    expect(out.shape).toMatch(/polygon/);
+    expect(out.shape).toMatch(/u9p/);
+    await b.host.objects.invoke(INSERT_SHAPE_COMMAND, {
+      prst: "roundRect",
+      slide: "plugin:media.paged.slide/slide/p1",
+      x: 100,
+      y: 50,
+      w: 200,
+      h: 80,
+    });
+    const muts = b.fake.mutations() as Paste[];
+    // One engine mutation per insert: one undo step each.
+    expect(muts.map((m) => m.op)).toEqual(["pasteElements", "pasteElements"]);
+    // No position: the slide's centre (its 720 × 405 pt page).
+    expect(muts[0]!.args.pageId).toBe("p2");
+    expect(muts[0]!.args.center).toEqual([360, 202.5]);
+    expect(muts[0]!.args.snippet).toContain("star5");
+    expect(muts[1]!.args.pageId).toBe("p1");
+    expect(muts[1]!.args.center).toEqual([100, 50]);
+    // The snippet's bounds are top, left, bottom, right: 200 wide, 80 high.
+    expect(JSON.parse(muts[1]!.args.snippet).bounds).toEqual([0, 0, 80, 200]);
+    b.dispose();
+  });
+
+  it("refuses an unknown slide or preset, and changes nothing", async () => {
+    covers("command:media.paged.slide.insertShape");
+    const b = deckThatPastes();
+    await expect(
+      b.host.objects.invoke(INSERT_SHAPE_COMMAND, {
+        prst: "star5",
+        slide: "plugin:media.paged.slide/slide/nope",
+      }),
+    ).rejects.toThrow(/unknownAddress: no slide/);
+    await expect(
+      b.host.objects.invoke(INSERT_SHAPE_COMMAND, {
+        prst: "noSuchPreset",
+        slide: "plugin:media.paged.slide/slide/p1",
+      }),
+    ).rejects.toThrow(/failed: the preset noSuchPreset could not be inserted/);
+    expect(b.fake.mutations()).toEqual([]);
     b.dispose();
   });
 });
