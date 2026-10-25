@@ -864,6 +864,10 @@ pub fn psd_write_stack(
             "layered PSD save: composite is mis-sized".into(),
         ));
     }
+    // The styles' Global Light lives in the document's resources.
+    if stack.layers().iter().any(|l| l.ext.style.is_some()) {
+        stack.style_doc().global_light.store(file);
+    }
     let container = file.container;
     let group = |id: u32| stack.groups().iter().find(|g| g.id == id);
     let mut records: Vec<LayerRecord> = Vec::new();
@@ -965,6 +969,8 @@ pub fn psd_write_stack(
         // The parity properties (fill opacity, knockout, locks, label),
         // a fill layer's content and an adjustment's block.
         addl.extend(crate::psd_layer_ext::ext_blocks(&layer.ext, layer.locked));
+        // The layer's style and its blending options.
+        addl.extend(crate::psd_layer_ext::style_blocks(&layer.ext));
         if let Some(f) = layer.fill() {
             // A pattern fill's pixels belong in the document's pattern
             // block, which is not written: it is saved as its render.

@@ -30,6 +30,7 @@ stood, for decisions made earlier; their status says so.
 | [464](464-layers-at-their-own-bounds.md) | Layers live at their own bounds | Accepted 2026-10-05 |
 | [465](465-cpu-twins-for-region-filters.md) | Where no GPU exists, a region filter runs on shipped CPU twins | Accepted 2026-10-23 (an exception to 450; amended 2026-10-23: a mask as data) |
 | [466](466-core-raster-crates-are-shared.md) | The engine's raster crates are shared: the module's Rust may depend on them | Accepted 2026-10-24 (amends the isolation contract and 456) |
+| [471](471-layer-styles.md) | A layer style is a sequence of fold steps around the layer's pixels | Accepted 2026-10-25 (WP5.4) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

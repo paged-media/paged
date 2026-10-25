@@ -702,7 +702,84 @@ const TABLE: &[Row] = &[
           stress: P::Fields(&[("inv_scale_x", V::F(2.0)), ("inv_scale_y", V::F(2.0))]),
           note: "sinc is INTERPOLATING — zero at every non-zero integer — so \
                  unit scale really is a pass-through, unlike mitchell" },
+
+    // ── style (layer styles, WP5.4) ─────────────────────────────────────
+    Row { id: "style.shift",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("dx", V::F(3.5)), ("dy", V::F(-2.0)), ("channel", V::U(3)), ("invert", V::U(1))]),
+          note: "EXCLUDED from identity: returns ONE channel splatted (a coverage), \
+                 never the input colour" },
+    Row { id: "style.blur_h",
+          identity: Identity::Params(P::Fields(&[("sigma", V::F(2.0)), ("radius", V::U(0))])),
+          stress: P::Fields(&[("sigma", V::F(3.0)), ("radius", V::U(9)), ("outside", V::F(0.5))]),
+          note: "radius 0 ⇒ the pass copies its input" },
+    Row { id: "style.blur_v",
+          identity: Identity::Params(P::Fields(&[("sigma", V::F(2.0)), ("radius", V::U(0))])),
+          stress: P::Fields(&[("sigma", V::F(4.5)), ("radius", V::U(5)), ("kind", V::U(1))]),
+          note: "radius 0 ⇒ the pass copies its input; kind 1 is the box" },
+    Row { id: "style.jfa_seed",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("threshold", V::F(0.5))]),
+          note: "EXCLUDED from identity: encodes two seed fields, not a colour" },
+    Row { id: "style.jfa_step",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("step", V::I(4))]),
+          note: "EXCLUDED from identity: a flood step reads neighbour VECTORS; on a \
+                 colour image it computes some field, which is what is asserted \
+                 finite and deterministic" },
+    Row { id: "style.distance",
+          identity: Identity::NotDefined,
+          stress: NO_PARAMS,
+          note: "EXCLUDED from identity: binary (the field, the coverage) → a \
+                 signed distance" },
+    Row { id: "style.ramp",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("lo", V::F(-0.5)), ("hi", V::F(0.5)), ("mode", V::U(1))]),
+          note: "EXCLUDED from identity: a distance → a splatted coverage" },
+    Row { id: "style.contour",
+          identity: Identity::NotDefined,
+          stress: P::Raw(style_contour_cone),
+          note: "EXCLUDED from identity: splats one channel through the curve" },
+    Row { id: "style.colorize",
+          identity: Identity::NotDefined,
+          stress: P::Raw(style_colorize_noisy),
+          note: "EXCLUDED from identity: a coverage → a premultiplied colour" },
+    Row { id: "style.bevel",
+          identity: Identity::NotDefined,
+          stress: P::Raw(style_bevel_light),
+          note: "EXCLUDED from identity: a height → a Lambert shade" },
+    Row { id: "style.split",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("flat", V::F(0.5))]),
+          note: "EXCLUDED from identity: a shade → highlight and shadow" },
+    Row { id: "style.absdiff",
+          identity: Identity::NotDefined,
+          stress: NO_PARAMS,
+          note: "EXCLUDED from identity: binary |a.r − b.r|, splatted" },
 ];
+
+fn style_contour_cone() -> Vec<u8> {
+    let cone: [f32; 256] = std::array::from_fn(|i| 1.0 - (i as f32 / 127.5 - 1.0).abs());
+    image_kernels::families::style::StyleContourParams::new(&cone, 0.1, 0.9, false, 1)
+        .as_bytes()
+        .to_vec()
+}
+
+fn style_colorize_noisy() -> Vec<u8> {
+    let lut: [[f32; 4]; 256] = std::array::from_fn(|i| {
+        let t = i as f32 / 255.0;
+        [t, 0.5, 1.0 - t, 1.0]
+    });
+    image_kernels::families::style::StyleColorizeParams::new(lut, 0, 3, 0.3, 0.2, 7)
+        .as_bytes()
+        .to_vec()
+}
+
+fn style_bevel_light() -> Vec<u8> {
+    image_kernels::families::style::StyleBevelParams::new(4.0, 120.0, 30.0)
+        .as_bytes()
+        .to_vec()
+}
 
 /// Kernels exempt from the HALF-mask property, with the reason. The
 /// all-zero-mask property still applies to them.

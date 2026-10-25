@@ -166,6 +166,7 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps: Vec::new(),
+            styles: self.styles.clone(),
         }
     }
 

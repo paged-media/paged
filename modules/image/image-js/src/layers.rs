@@ -147,7 +147,10 @@ pub mod kinds;
 pub use kinds::*;
 // A fill layer's render (the `gen.*` kernels).
 mod fill_render;
+// Layer styles: the effects' fold steps and their GPU recipes (WP5.4).
+mod styles;
 pub use fill_render::render_fill;
+pub use styles::{style_from_json, style_to_json};
 // The Layer menu's verbs (merges, via copy/cut, comps, align, links).
 mod verbs;
 pub use verbs::{AlignEdge, Axis};
@@ -566,6 +569,7 @@ impl Layer {
             && self.live_mask().is_none()
             && self.ext.fill_opacity >= 1.0
             && self.live_blend_if().is_none()
+            && self.ext.style.as_ref().is_none_or(|s| !s.draws())
             && self.fill().is_none_or(|f| !f.stale)
     }
 
@@ -946,6 +950,18 @@ pub struct LayerStack {
     /// LAYER COMPS, in the panel's order. Document state: in every
     /// snapshot (an edit to a comp is an undo step) and persisted.
     comps: Vec<LayerComp>,
+    /// The document's GLOBAL LIGHT and the patterns its styles draw.
+    /// Document state: in every snapshot and persisted.
+    styles: StyleDoc,
+}
+
+/// What a document's layer styles share: the Global Light every effect
+/// with Use Global Light is lit by, and the PATTERNS a Pattern Overlay, a
+/// pattern Stroke or a bevel's Texture draws (matched by id, else name).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StyleDoc {
+    pub global_light: image_psd::effects::GlobalLight,
+    pub patterns: Vec<Arc<PatternFill>>,
 }
 
 /// Most structure steps kept (the journal bounds the pixel ones).
@@ -962,6 +978,7 @@ struct Snapshot {
     active: usize,
     next_id: u32,
     comps: Vec<LayerComp>,
+    styles: StyleDoc,
 }
 
 /// One undo step.
@@ -1052,6 +1069,7 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps: Vec::new(),
+            styles: StyleDoc::default(),
         })
     }
 
@@ -1080,16 +1098,8 @@ impl LayerStack {
                 "PSD layer import produced no layers".into(),
             ));
         }
-        // A Color Overlay becomes a layer of its own (below), so the stack
-        // holds one layer per plate plus one per overlay.
-        // …and an ARTBOARD's background is a layer at the bottom of its
-        // group.
+        // An ARTBOARD's background is a layer at the bottom of its group.
         let n_layers = import.layers.len()
-            + import
-                .layers
-                .iter()
-                .filter(|p| p.color_overlay.is_some())
-                .count()
             + import
                 .groups
                 .iter()
@@ -1125,15 +1135,7 @@ impl LayerStack {
             })
             .collect();
         let mut layers: Vec<Layer> = Vec::with_capacity(n_layers);
-        // A base's Color Overlay waits until its clipped layers are in.
-        let mut pending_overlay: Option<Layer> = None;
         for (i, plate) in import.layers.iter().enumerate() {
-            if !plate.clipped {
-                if let Some(mut o) = pending_overlay.take() {
-                    o.id = layers.len() as u32 + 1;
-                    layers.push(o);
-                }
-            }
             // ARTBOARD backgrounds of the groups this plate enters, the
             // outermost first: each a solid layer at the artboard's
             // rectangle, at the bottom of its group.
@@ -1193,9 +1195,12 @@ impl LayerStack {
                 plate.name.clone()
             };
             let record = records.and_then(|r| r.get(plate.record));
-            let ext = record
+            let mut ext = record
                 .map(crate::psd_layer_ext::record_ext)
                 .unwrap_or_default();
+            // The layer's STYLE (its effects), drawn by the fold around
+            // its pixels (`layers::styles`).
+            ext.style = plate.style.clone().map(Arc::new);
             // With the record, opacity and fill opacity are kept apart (the
             // plate folds them, which is the same picture outside the
             // special modes the import declines).
@@ -1260,42 +1265,9 @@ impl LayerStack {
                     .then_some(TEXT_BLEND_GAMMA),
                 ext,
             });
-            // COLOR OVERLAY: Photoshop draws it over the layer's content —
-            // and over the layers CLIPPED to it, which it covers (measured:
-            // a normal 100 % overlay hides a clipped multiply layer
-            // completely) — inside the layer's shape, before the clipping
-            // group blends. That is a solid layer clipped to the base,
-            // placed after the base's own clipped layers.
-            if let Some(o) = &plate.color_overlay {
-                // Drawn only inside its base, so it lives at the base's
-                // rectangle.
-                let solid: Vec<u8> = (0..plate_want / 4)
-                    .flat_map(|_| [o.rgb[0], o.rgb[1], o.rgb[2], 255])
-                    .collect();
-                pending_overlay = Some(Layer {
-                    id: 0,
-                    name: format!("{name} · Color Overlay"),
-                    visible: !plate.hidden,
-                    locked: false,
-                    opacity: f32::from(o.opacity) / 255.0,
-                    blend: psd_blend_kernel(&o.blend_key),
-                    rgba: bounded_pixels(plate_rect, solid, width, height)?,
-                    kind: LayerKind::Pixels,
-                    mask: None,
-                    mask_enabled: true,
-                    group: plate.group.map(group_id),
-                    clipped: true,
-                    blend_gamma: None,
-                    ext: LayerExt::default(),
-                });
-            }
-        }
-        if let Some(mut o) = pending_overlay.take() {
-            o.id = layers.len() as u32 + 1;
-            layers.push(o);
         }
         let next_id = (layers.len() + groups.len()) as u32 + 1;
-        let stack = LayerStack {
+        let mut stack = LayerStack {
             groups,
             width,
             height,
@@ -1310,7 +1282,9 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps: Vec::new(),
+            styles: StyleDoc::default(),
         };
+        stack.styles.global_light = import.global_light;
         if let Some(deep) = stack
             .groups
             .iter()
@@ -2687,6 +2661,7 @@ impl LayerStack {
             active: self.active,
             next_id: self.next_id,
             comps: self.comps.clone(),
+            styles: self.styles.clone(),
         }
     }
 
@@ -2698,6 +2673,7 @@ impl LayerStack {
         self.active = s.active;
         self.next_id = s.next_id;
         self.comps = s.comps;
+        self.styles = s.styles;
     }
 
     /// The journal bounds its own entries (and clears itself when one
@@ -5337,7 +5313,7 @@ mod tests {
             smart: false,
             text: false,
             adjustment: None,
-            color_overlay: None,
+            style: None,
             record: usize::MAX,
             name: name.to_string(),
             blend_key: *key,
@@ -5350,6 +5326,7 @@ mod tests {
             groups: Vec::new(),
             depth_reduced: false,
             converted_from_cmyk: false,
+            global_light: Default::default(),
             width: 4,
             height: 4,
             layers: vec![
@@ -5373,6 +5350,7 @@ mod tests {
             groups: Vec::new(),
             depth_reduced: false,
             converted_from_cmyk: false,
+            global_light: Default::default(),
             width: 4,
             height: 4,
             layers: vec![image_psd::LayerPlate {
@@ -5384,7 +5362,7 @@ mod tests {
                 smart: false,
                 text: false,
                 adjustment: None,
-                color_overlay: None,
+                style: None,
                 record: usize::MAX,
                 name: "short".into(),
                 blend_key: *b"norm",

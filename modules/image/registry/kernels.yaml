@@ -2024,3 +2024,160 @@
     - "all-zero deltas are the IDENTITY for every range, so one parity test covers all nine"
   tests:
     rust: ["image-conformance/tests/it/family_adjust.rs"]
+
+- id: style.shift
+  rust_path: families::style::STYLE_SHIFT
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "one channel moved by a sub-pixel offset with bilinear reconstruction (Wolberg, Digital Image Warping, 1990), optionally inverted; the offset of a drop/inner shadow and a satin (Photoshop User Guide, Layer style options: Angle, Distance)"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.blur_h
+  rust_path: families::style::STYLE_BLUR_H
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "horizontal Gaussian pass with a runtime radius up to 1024 and an explicit value beyond the canvas; the Size of shadows, glows, satin and a smooth bevel"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.blur_v
+  rust_path: families::style::STYLE_BLUR_V
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "vertical Gaussian pass, as style.blur_h"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.jfa_seed
+  rust_path: families::style::STYLE_JFA_SEED
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "jump-flood seeding of two fields at once (Rong & Tan, Jump flooding in GPU with applications to Voronoi diagram and distance transform, I3D 2006): outside field seeded by inside texels, inside field by outside texels"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.jfa_step
+  rust_path: families::style::STYLE_JFA_STEP
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "one jump-flood pass at a step size (Rong & Tan 2006); strict-less tie rule in a fixed neighbour order, so the scalar twin is exact"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.distance
+  rust_path: families::style::STYLE_DISTANCE
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "signed distance to the layer's edge from the flooded fields, an anti-aliased edge texel taking 0.5 - coverage: the spread, choke, stroke, precise glow and chisel bevel read it"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.ramp
+  rust_path: families::style::STYLE_RAMP
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "coverage from a signed distance: an anti-aliased band between two offsets (stroke, dilation) or a linear falloff (precise glow, chisel height)"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.contour
+  rust_path: families::style::STYLE_CONTOUR
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "a layer-style CONTOUR: 256-entry curve (the Curves dialog's natural spline, split at corners, built in paged-psd) after a range remap, optionally inverted"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.colorize
+  rust_path: families::style::STYLE_COLORIZE
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "coverage to a premultiplied colour through a 256-entry RGBA lookup (one colour, or a gradient across the falloff or along its parameter) with noise on alpha and jitter on the gradient position from an integer hash (Photoshop User Guide: Noise, Jitter)"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.bevel
+  rust_path: families::style::STYLE_BEVEL
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "Lambert shading of a height field lit from an azimuth and altitude, normals from central differences (textbook); Bevel and Emboss's Angle, Altitude and Depth"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.split
+  rust_path: families::style::STYLE_SPLIT
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "a shade split into highlight (above the flat surface's shade) and shadow (below it): Bevel and Emboss's two lights"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.absdiff
+  rust_path: families::style::STYLE_ABSDIFF
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "absolute difference of two coverages: satin's two shifted copies"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]

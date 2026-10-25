@@ -39,6 +39,7 @@ pub mod minmax;
 pub mod morph;
 pub mod relational;
 pub mod resample;
+pub mod style;
 
 use crate::KernelDef;
 
@@ -62,4 +63,5 @@ pub static ALL_FAMILIES: &[&[&KernelDef]] = &[
     morph::FAMILY,
     relational::FAMILY,
     resample::FAMILY,
+    style::FAMILY,
 ];

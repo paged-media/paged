@@ -124,7 +124,63 @@ pub fn record_ext(rec: &LayerRecord) -> LayerExt {
         },
         color,
         link: None,
+        style: style_of(rec).map(std::sync::Arc::new),
+        style_options: style_options(rec),
     }
+}
+
+/// The record's layer STYLE (`lmfx`, else `lfx2`), when it has one.
+pub fn style_of(rec: &LayerRecord) -> Option<image_psd::effects::LayerStyle> {
+    let payload = block(rec, b"lmfx").or_else(|| block(rec, b"lfx2"))?;
+    image_psd::effects::LayerStyle::parse(payload).ok()
+}
+
+/// Blending Options ▸ Advanced Blending: `infx` (Blend Interior Effects
+/// as Group), `clbl` (Blend Clipped Layers as Group), `tsly`
+/// (Transparency Shapes Layer), `lmgm` / `vmgm` (Layer / Vector Mask
+/// Hides Effects) — each one flag byte [PUB].
+pub fn style_options(rec: &LayerRecord) -> crate::layers::StyleOptions {
+    let flag = |k: &[u8; 4], default: bool| {
+        block(rec, k)
+            .and_then(|b| b.first().copied())
+            .map_or(default, |b| b != 0)
+    };
+    crate::layers::StyleOptions {
+        blend_interior: flag(b"infx", false),
+        blend_clipped: flag(b"clbl", true),
+        transparency_shapes: flag(b"tsly", true),
+        mask_hides_effects: flag(b"lmgm", false),
+        vector_mask_hides_effects: flag(b"vmgm", false),
+    }
+}
+
+/// The blocks a layer's STYLE needs on save: the style (`lfx2`, or `lmfx`
+/// with several instances of an effect, written by `paged-psd`'s
+/// descriptor writer) and the blending options that differ from
+/// Photoshop's defaults.
+pub fn style_blocks(ext: &LayerExt) -> Vec<AdditionalLayerInfo> {
+    let mut out = Vec::new();
+    if let Some(style) = &ext.style {
+        out.push(raw_block(style.block_key(), &style.to_payload()));
+    }
+    let o = ext.style_options;
+    let d = crate::layers::StyleOptions::default();
+    for (key, on, default) in [
+        (*b"infx", o.blend_interior, d.blend_interior),
+        (*b"clbl", o.blend_clipped, d.blend_clipped),
+        (*b"tsly", o.transparency_shapes, d.transparency_shapes),
+        (*b"lmgm", o.mask_hides_effects, d.mask_hides_effects),
+        (
+            *b"vmgm",
+            o.vector_mask_hides_effects,
+            d.vector_mask_hides_effects,
+        ),
+    ] {
+        if on != default {
+            out.push(raw_block(key, &[u8::from(on), 0, 0, 0]));
+        }
+    }
+    out
 }
 
 fn protection(rec: &LayerRecord) -> u32 {
@@ -564,6 +620,7 @@ mod tests {
             color: 5,
             blend_if: Some(Box::new(bi)),
             link: None,
+            ..LayerExt::default()
         };
         let rec = record(ext_blocks(&ext, true), blend_ranges_bytes(Some(&bi)));
         let back = record_ext(&rec);
