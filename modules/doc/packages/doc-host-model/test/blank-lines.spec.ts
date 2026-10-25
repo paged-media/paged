@@ -10,7 +10,7 @@
 //   style space, three bytes in insertText's.
 import { describe, expect, it } from "bun:test";
 
-import { buildStoryBlocks, buildTextPour } from "../src/index.js";
+import { buildStoryBlocks, buildTextPour, endsEmpty } from "../src/index.js";
 import type { LoweredBlock, LoweredParagraph } from "../src/index.js";
 
 type Op = { op: string; args: Record<string, unknown> };
@@ -29,14 +29,21 @@ const table: LoweredBlock = {
   cells: [],
 };
 
-/** Run a story plan the way `pourSteps` does (table footprint 0 / 1). */
+/** Run a story plan the way `pourSteps` does (a table's step moves the
+ *  insertText end by its `textLength`, after the break it may insert). */
 function run(blocks: LoweredBlock[]): Op[][] {
   let style = 0;
   let text = 0;
   return buildStoryBlocks(blocks, "s").map((step) => {
     if (step.kind === "table") {
-      text += 1;
-      return [step.insert as unknown as Op];
+      const ops = [step.insert as unknown as Op];
+      if (step.breakBefore)
+        ops.unshift({
+          op: "insertText",
+          args: { storyId: "s", offset: text, text: "\n", cell: null },
+        });
+      text += step.textLength;
+      return ops;
     }
     const ops = step.mutations(text, style) as unknown as Op[];
     style += step.length;
@@ -95,20 +102,79 @@ describe("blank lines", () => {
       para("ParagraphStyle/y", ""),
       para("ParagraphStyle/b", "cd"),
     ]);
-    expect(steps.map((s) => s[0].op)).toEqual([
-      "insertText",
-      "insertTable",
-      "insertText",
-      "applyStyle",
+    expect(steps.map((s) => s.map((o) => o.op))).toEqual([
+      ["insertText", "applyStyle", "applyStyle"],
+      // x's blank line is empty, so insertTable would take it: a paragraph
+      // is made for the table first, at the story's end ("ab\n" = 3).
+      ["insertText", "insertTable"],
+      ["insertText", "applyStyle", "applyStyle"],
+      ["applyStyle", "applyStyle"],
     ]);
-    // "ab" is paragraph 0, x's blank line 1; the table takes paragraph 2,
-    // and the text after a table continues in the table's own paragraph,
-    // so y's blank line IS paragraph 2. In order: an engine without the
-    // address styles every blank line at the offset, and y then wins.
+    expect(steps[1][0].args).toMatchObject({ offset: 3, text: "\n" });
+    // The text after the table starts a paragraph after the table's: one
+    // break past the table's paragraph (3 + 1), then its own.
+    expect(steps[2][0].args).toMatchObject({ offset: 4, text: "\n\ncd" });
+    // "ab" is paragraph 0, x's blank line 1, the table 2, y's blank line 3
+    // and "cd" 4. In order: an engine without the address styles every
+    // blank line at the offset, and y then wins.
     expect(carets(steps[3])).toEqual([
       [2, "ParagraphStyle/x", 1],
-      [2, "ParagraphStyle/y", 2],
+      [2, "ParagraphStyle/y", 3],
     ]);
+  });
+
+  it("tables back to back, and one that opens the story, each take one paragraph", () => {
+    const steps = buildStoryBlocks(
+      [
+        table,
+        para("ParagraphStyle/a", "ab"),
+        table,
+        table,
+        para("ParagraphStyle/b", "cd"),
+      ],
+      "s",
+    );
+    expect(
+      steps.map((s) =>
+        s.kind === "table"
+          ? ["table", s.breakBefore, s.textLength]
+          : ["text", s.byteLength],
+      ),
+    ).toEqual([
+      ["table", false, 0], // the fresh story's paragraph
+      ["text", 3], // "\nab": a paragraph after the table's
+      ["table", false, 1], // "ab" is not empty: insertTable adds one
+      ["table", false, 1], // nor is a table's paragraph
+      ["text", 3],
+    ]);
+    const ops = run([
+      table,
+      para("ParagraphStyle/a", "ab"),
+      table,
+      table,
+      para("ParagraphStyle/b", "cd"),
+    ]);
+    // "ab" at 1 (past the table's paragraph), "cd" at 1 + 2 + 1 + 1 + 1.
+    expect(ops[1][0].args).toMatchObject({ offset: 0, text: "\nab" });
+    expect(ops[4][0].args).toMatchObject({ offset: 5, text: "\ncd" });
+    expect(paraStyles(ops[1])).toEqual([[0, 2, "ParagraphStyle/a"]]);
+    expect(paraStyles(ops[4])).toEqual([[2, 4, "ParagraphStyle/b"]]);
+  });
+
+  it("endsEmpty: what insertTable would take as the table's paragraph", () => {
+    const of = (b: LoweredBlock) => endsEmpty(b as LoweredParagraph);
+    expect(of(para("ParagraphStyle/a", ""))).toBe(true);
+    expect(of(para("ParagraphStyle/a", "x"))).toBe(false);
+    const withBreakAtEnd = {
+      ...(para("ParagraphStyle/a", "x") as LoweredParagraph),
+      segments: [{ at: 1 }],
+    };
+    expect(endsEmpty(withBreakAtEnd)).toBe(true);
+    const picture = {
+      ...(para("ParagraphStyle/a", "") as LoweredParagraph),
+      images: [{ at: 0, widthPt: 1, heightPt: 1, uri: "x" }],
+    };
+    expect(endsEmpty(picture)).toBe(false);
   });
 
   it("a story with no blank line has no caret step", () => {

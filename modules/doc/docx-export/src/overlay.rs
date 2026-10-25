@@ -220,7 +220,37 @@ fn fold_segments(
 /// story holds no native table, its cells come through [`overlay_cells`]); a
 /// paragraph's runs become the runs read back, a directly formatted run with
 /// an edit style ([`run_token`]), and the differ maps them onto the Word runs.
+///
+/// This is the layout of documents poured before native tables took a
+/// paragraph of their own: the paragraph after a table continued in the
+/// table's paragraph, so a native table has no read-back paragraph. The
+/// bundle's pour now gives each native table its own paragraph
+/// ([`overlay_story_content_in`] with [`TableParagraphs::Own`]).
 pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) -> LoweredDoc {
+    overlay_story_content_in(baseline, content, TableParagraphs::Joined)
+}
+
+/// Where the native tables of a read-back story stand among its paragraphs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TableParagraphs {
+    /// Each native table is a paragraph of its own (holding only the table),
+    /// between the paragraphs of the Word blocks around it: the pour's layout.
+    Own,
+    /// A native table has no paragraph of its own: the paragraph after it
+    /// continued in the table's paragraph (documents poured before the
+    /// tables took their own; the default when the bundle does not say).
+    #[default]
+    Joined,
+}
+
+/// [`overlay_story_content`] for a story whose native tables stand as
+/// `tables` says: with [`TableParagraphs::Own`] each native table consumes
+/// the one read-back paragraph that holds it.
+pub fn overlay_story_content_in(
+    baseline: &LoweredDoc,
+    content: &StoryContentIn,
+    tables: TableParagraphs,
+) -> LoweredDoc {
     let mut edited = baseline.clone();
     // The edit styles are gathered here while the blocks are borrowed.
     let mut styles = std::mem::take(&mut edited.styles);
@@ -229,10 +259,14 @@ pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) ->
         let p = match block {
             LoweredBlock::Paragraph(p) => p,
             LoweredBlock::Table(t) => {
-                // A native table is not in the read-back paragraphs. One
-                // that FLOWED as text is: skip its paragraphs (the Word
-                // table is left as it was).
+                // A table that FLOWED as text is in the read-back
+                // paragraphs: skip them (the Word table is left as it was).
                 ci += t.flow.iter().map(|p| 1 + p.segments.len()).sum::<usize>();
+                // A native table poured into a paragraph of its own: that
+                // paragraph holds no Word text, skip it.
+                if t.flow.is_empty() && tables == TableParagraphs::Own {
+                    ci += 1;
+                }
                 continue;
             }
         };
@@ -771,6 +805,54 @@ mod tests {
     fn edits(base: &LoweredDoc, content: &StoryContentIn) -> crate::EditSet {
         let edited = overlay_story_content(base, content);
         crate::diff(base, &edited, &crate::DocxBindings::default())
+    }
+
+    /// Word: "Before", a table, "After". The read-back story as each layout
+    /// pours it, with "After" edited to "After all".
+    #[test]
+    fn a_native_table_takes_its_own_read_back_paragraph_in_the_own_layout() {
+        use docx_lower::ir::{LoweredCell, LoweredTable};
+        let mut base = para_doc(&["Before"]);
+        base.story.blocks.push(LoweredBlock::Table(LoweredTable {
+            rows: 1,
+            cols: 1,
+            cells: vec![LoweredCell::default()],
+            ..Default::default()
+        }));
+        base.story
+            .blocks
+            .push(LoweredBlock::Paragraph(LoweredParagraph {
+                runs: runs(&["After"]),
+                ..Default::default()
+            }));
+        let story = |texts: &[&str]| StoryContentIn {
+            self_id: "s".into(),
+            paragraphs: texts
+                .iter()
+                .map(|t| ParagraphContentIn {
+                    paragraph_style: None,
+                    runs: vec![plain(t)],
+                })
+                .collect(),
+        };
+        let after = |edited: &LoweredDoc| match &edited.story.blocks[2] {
+            LoweredBlock::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect::<String>(),
+            LoweredBlock::Table(_) => unreachable!(),
+        };
+        // Own: the table's paragraph (empty) stands between the two.
+        let own = overlay_story_content_in(
+            &base,
+            &story(&["Before", "", "After all"]),
+            TableParagraphs::Own,
+        );
+        assert_eq!(after(&own), "After all");
+        // Joined: "After" continued in the table's paragraph.
+        let joined = overlay_story_content(&base, &story(&["Before", "After all"]));
+        assert_eq!(after(&joined), "After all");
+        // The own layout read as joined would put the table's empty
+        // paragraph into "After": the layouts are not interchangeable.
+        let wrong = overlay_story_content(&base, &story(&["Before", "", "After all"]));
+        assert_eq!(after(&wrong), "");
     }
 
     #[test]

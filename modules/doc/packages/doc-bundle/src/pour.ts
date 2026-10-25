@@ -26,22 +26,29 @@ import { t } from "@paged-media/strings";
 
 import { DOC } from "./messages.js";
 
-/** A conservative story-offset advance past a table paragraph. The exact
- *  footprint is refined during editor integration (a table occupies one
- *  paragraph position in the story). */
 /**
- * A table's footprint in the STYLE-range (contiguous character) space is ZERO:
- * `insertTable` pushes a host paragraph carrying the table with NO runs
- * (`Paragraph { table: Some(..), ..Default::default() }` in core's
- * `apply_insert_table`), and the contiguous space counts only `CharacterRun`
- * text. In the `insertText` address space it is 1 — that space counts a synthetic
- * inter-paragraph break, which the host paragraph still has.
+ * A table's paragraph holds only the table (`buildStoryBlocks`, layout
+ * `"own"`): it has NO runs, so its footprint in the STYLE-range (contiguous
+ * character) space is zero. In the `insertText` space, which counts one
+ * synthetic break between paragraphs, the step moves the story's end by its
+ * `textLength`: 1 for the break before the table's paragraph, 0 when the
+ * table takes the fresh story's one empty paragraph. When the paragraph
+ * before the table is an empty Word paragraph the step inserts that break
+ * itself (`breakBefore`), because core's `apply_insert_table` would set the
+ * table into the empty paragraph rather than after it.
  *
  * These are two DIFFERENT address spaces (see docs/status.md, "Offset
  * convention"), so they are tracked separately below.
  */
-const TABLE_FOOTPRINT_STYLE = 0;
-const TABLE_FOOTPRINT_TEXT = 1;
+
+/** The `insertText` of one paragraph break at the story's end (`at`). */
+function breakAt(step: { insert: Mutation }, at: number): Mutation {
+  const storyId = (step.insert as { args: { storyId: string } }).args.storyId;
+  return {
+    op: "insertText",
+    args: { storyId, offset: at, text: "\n", cell: null },
+  } as Mutation;
+}
 
 /** Extract the bare table id string from an `insertTable` outcome's createdId. */
 function tableIdOf(id: ElementId | null): string | null {
@@ -107,6 +114,14 @@ export async function pourSteps(
       styleOffset += step.length;
       textOffset += step.byteLength;
     } else {
+      if (step.breakBefore) {
+        const made = await host.document.mutate(breakAt(step, textOffset));
+        if (!made.applied) {
+          host.log.warn(
+            `paged.doc: the engine refused the paragraph before a table: ${JSON.stringify(made.error)}`,
+          );
+        }
+      }
       const outcome = await host.document.mutate(step.insert);
       const tableId = outcome.applied ? tableIdOf(outcome.createdId) : null;
       if (tableId) {
@@ -125,8 +140,7 @@ export async function pourSteps(
           )}`,
         );
       }
-      styleOffset += TABLE_FOOTPRINT_STYLE;
-      textOffset += TABLE_FOOTPRINT_TEXT;
+      textOffset += step.textLength;
     }
   }
 }
@@ -152,6 +166,7 @@ export function pourBatchOps(
       textOffset += step.byteLength;
     } else {
       const handle = `${tableHandlePrefix}${tables++}`;
+      if (step.breakBefore) ops.push(breakAt(step, textOffset));
       ops.push(step.insert, { op: "bindCreated", args: { handle } });
       const cells = step.cells(`$h:${handle}`);
       // `cells` is one batch: inline its children (a nested batch is one
@@ -159,8 +174,7 @@ export function pourBatchOps(
       if ((cells as { op: string }).op === "batch")
         ops.push(...(cells as { args: { ops: Mutation[] } }).args.ops);
       else ops.push(cells);
-      styleOffset += TABLE_FOOTPRINT_STYLE;
-      textOffset += TABLE_FOOTPRINT_TEXT;
+      textOffset += step.textLength;
     }
   }
   return ops;

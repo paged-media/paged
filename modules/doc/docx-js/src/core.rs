@@ -26,7 +26,7 @@
 
 use docx_core::DocxDocument;
 use docx_export::{
-    apply_edits, build_bindings, diff, overlay_cells, overlay_story_content, CellContentIn,
+    apply_edits, build_bindings, diff, overlay_cells, overlay_story_content_in, CellContentIn,
     CellRunEdit, DocxBindings, EditSet, RunEdit, StoryContentIn, StructuralEdit,
 };
 use docx_import::import_docx_with_package;
@@ -282,8 +282,28 @@ impl DocSession {
         tables: &[docx_export::TableContentIn],
         colors: &std::collections::BTreeMap<String, String>,
     ) -> Result<(Vec<u8>, Vec<String>), String> {
+        self.save_edited_from_read(
+            content,
+            cells,
+            tables,
+            colors,
+            docx_export::TableParagraphs::Joined,
+        )
+    }
+
+    /// [`Self::save_edited_from_content_cells_and_tables`] for a story whose
+    /// native tables stand among its paragraphs as `layout` says
+    /// ([`docx_export::overlay_story_content_in`]).
+    pub fn save_edited_from_read(
+        &self,
+        content: &StoryContentIn,
+        cells: &[CellContentIn],
+        tables: &[docx_export::TableContentIn],
+        colors: &std::collections::BTreeMap<String, String>,
+        layout: docx_export::TableParagraphs,
+    ) -> Result<(Vec<u8>, Vec<String>), String> {
         let baseline = self.lowered();
-        let mut edited = overlay_story_content(&baseline, content);
+        let mut edited = overlay_story_content_in(&baseline, content, layout);
         docx_export::add_canvas_colors(&mut edited, colors);
         let mut skips = docx_export::overlay_tables(&mut edited, tables);
         skips.extend(overlay_cells(&mut edited, cells));

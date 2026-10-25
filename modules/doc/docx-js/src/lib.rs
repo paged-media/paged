@@ -182,15 +182,25 @@ mod wasm {
                 tables: Vec<docx_export::TableContentIn>,
                 #[serde(default)]
                 colors: std::collections::BTreeMap<String, String>,
+                /// Each native table stands in a paragraph of its own (the
+                /// pour's layout); absent on documents poured before.
+                #[serde(default, rename = "tableParagraphs")]
+                table_paragraphs: bool,
             }
             let Cells {
                 cells,
                 tables,
                 colors,
+                table_paragraphs,
             } = serde_json::from_str(content_json)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let layout = if table_paragraphs {
+                docx_export::TableParagraphs::Own
+            } else {
+                docx_export::TableParagraphs::Joined
+            };
             let (bytes, skips) = session
-                .save_edited_from_content_cells_and_tables(&content, &cells, &tables, &colors)
+                .save_edited_from_read(&content, &cells, &tables, &colors, layout)
                 .map_err(|e| JsValue::from_str(&e))?;
             *self.last_skips.borrow_mut() = skips;
             Ok(bytes)

@@ -154,6 +154,7 @@ export async function placeEmbedded(
         sections: [storyId],
         ...(fileName ? { fileName } : {}),
         midPageColumns: true,
+        tableParagraphs: true,
       },
     });
   } catch (err) {
@@ -237,6 +238,7 @@ async function placeInOneBatch(
       blocks: ir.story.blocks.length,
       ...(fileName ? { fileName } : {}),
       midPageColumns: true,
+      tableParagraphs: true,
     },
   };
   const ops: Mutation[] = [
