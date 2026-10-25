@@ -224,7 +224,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 244: ADR 1003 added the page of a placed PDF.
         // 245: ADR 1006 added a frame's fill rule.
         // 246: ADR 1010 added a group's clip flag.
-        246,
+        // 247: ADR 1018 added the gradient fill's start.
+        247,
         "the advertised roster changed; move the count with the decision"
     );
 }
