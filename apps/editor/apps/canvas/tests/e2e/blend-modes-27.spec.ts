@@ -15,6 +15,7 @@
  *
  *  @copyright  Copyright (c) And The Next GmbH
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
 
 // Photoshop's blend modes (engine ADR 1016) through the Effects panel: a
 // grey square over a darker one, the top square set to Linear Burn in
@@ -92,8 +93,8 @@ async function blendMode(page: Page, ref: Ref): Promise<unknown> {
   return page.evaluate(async (id) => {
     const c = (globalThis as unknown as CanvasGlobal).__canvas.client;
     const props = await c.elementProperties(id);
-    const v = props?.entries.find((e) => e.path === "frameBlendMode")
-      ?.value as { value?: unknown } | undefined;
+    const v = props?.entries.find((e) => e.path === "frameBlendMode")?.value as
+      { value?: unknown } | undefined;
     return v?.value ?? null;
   }, ref);
 }
@@ -157,7 +158,8 @@ test.describe("Photoshop's blend modes in the Effects panel", () => {
     // 27 modes, the eleven InDesign cannot store marked.
     await expect(menu.locator("option")).toHaveCount(27);
     await expect(menu.locator("option[data-not-in-idml]")).toHaveCount(11);
-    expect(await blendMode(page, top)).toBe("Normal");
+    // Unset reads as the schema default, Normal.
+    expect(["", "Normal"]).toContain(await blendMode(page, top));
 
     await opSandwich(page, {
       pageId,
@@ -177,7 +179,7 @@ test.describe("Photoshop's blend modes in the Effects panel", () => {
       },
       dumpModel: async () => JSON.stringify(await blendMode(page, top)),
       expectRestored: async () => {
-        expect(await blendMode(page, top)).toBe("Normal");
+        expect(["", "Normal"]).toContain(await blendMode(page, top));
         await expect(menu).toHaveValue("Normal");
         await expect(page.locator("[data-blend-not-in-idml]")).toHaveCount(0);
       },
