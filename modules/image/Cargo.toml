@@ -35,6 +35,9 @@ too_many_arguments = "allow"
 # compile unchanged until a mechanical rename.
 image-core = { path = "../../engine/core/crates/paged-pixel", package = "paged-pixel" }
 image-psd = { path = "../../engine/core/crates/paged-psd", package = "paged-psd" }
+# The CPU resample of the headless and batch actions (ADR 467): a leaf
+# engine crate, under its own name.
+paged-resample = { path = "../../engine/core/crates/paged-resample" }
 thiserror = "2"
 anyhow = "1"
 bytes = "1"

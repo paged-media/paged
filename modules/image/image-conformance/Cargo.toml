@@ -20,6 +20,8 @@ image-gpu = { path = "../image-gpu", features = ["test-support"] }
 image-pipeline = { path = "../image-pipeline" }
 image-codecs = { path = "../image-codecs" }
 image-psd = { workspace = true }
+# The CPU resample, measured against the GPU resample kernels (ADR 467).
+paged-resample = { workspace = true }
 image-graph = { path = "../image-graph" }
 half = { workspace = true }
 pollster = { workspace = true }

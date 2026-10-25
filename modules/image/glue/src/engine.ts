@@ -585,6 +585,9 @@ export function isCmykConversion(t: DisplayTreatment): boolean {
 /** The T1 resample kernels the resize door accepts. */
 export type ResampleFilter = "nearest" | "mitchell" | "lanczos3";
 
+/** The filters of the CPU resize (`resizeCpu`, ADR 467). */
+export type CpuResampleFilter = "lanczos3" | "bilinear";
+
 /** Whole-canvas operations (`layersCanvasOp`). */
 export type CanvasOpKind =
   "rotate-cw" | "rotate-ccw" | "rotate-180" | "flip-h" | "flip-v" | "canvas";
@@ -1209,6 +1212,25 @@ export interface ImageEngine {
     outH: number,
     filter: ResampleFilter,
   ): Promise<DecodedInfo>;
+  /** RESAMPLE on the CPU (ADR 467): the separable, premultiplied resize of
+   *  `paged-resample`. Needs no device and gives the same bytes with or
+   *  without one — the headless and batch actions' backend. Returns a NEW
+   *  engine-held image; the source stays. */
+  resizeCpu(
+    handle: number,
+    outW: number,
+    outH: number,
+    filter: CpuResampleFilter,
+  ): DecodedInfo;
+  /** STRAIGHTEN + CROP on the CPU (ADR 467): turn by `−degrees` about the
+   *  rect's centre and cut the rect (bilinear, premultiplied,
+   *  clamp-to-edge). The rect must lie inside the image. Returns a NEW
+   *  engine-held image; the source stays. */
+  straightenCropCpu(
+    handle: number,
+    rect: CropRect,
+    degrees: number,
+  ): DecodedInfo;
   /** PSD structural session — the mutatable tier's wasm reach ("Paged
    *  never destroys a PSD" was a Rust-test-only property until these).
    *  `psdOpen` retains the PARSED file behind a handle; edits accumulate
@@ -2196,6 +2218,20 @@ export interface ImageWasmModule {
     outH: number,
     filter: string,
   ): Promise<DecodedHandleWasm>;
+  resize_image_cpu(
+    handle: number,
+    outW: number,
+    outH: number,
+    filter: string,
+  ): DecodedHandleWasm;
+  straighten_crop_image_cpu(
+    handle: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    degrees: number,
+  ): DecodedHandleWasm;
   selection_bind(handle: number): void;
   image_channel_stats(handle: number): string;
   image_readout(handle: number): string;
@@ -2885,6 +2921,37 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       wasm.psd_apply_adjusted(psdHandle, width, height, rgba),
     resize: async (handle, outW, outH, filter) => {
       const h = await wasm.resize_image(handle, outW, outH, filter);
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    resizeCpu(handle, outW, outH, filter) {
+      const h = wasm.resize_image_cpu(handle, outW, outH, filter);
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    straightenCropCpu(handle, rect, degrees) {
+      const h = wasm.straighten_crop_image_cpu(
+        handle,
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        degrees,
+      );
       const info = {
         handle: h.handle,
         width: h.width,
