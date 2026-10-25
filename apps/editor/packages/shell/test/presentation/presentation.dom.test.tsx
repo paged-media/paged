@@ -223,7 +223,7 @@ function Furniture() {
   const chrome = useChromeRegions();
   return (
     <output data-testid="chrome">
-      {`${chrome.has("right-dock")}:${chrome.canvas.rulers}`}
+      {`${chrome.has("right")}:${chrome.canvas.rulers}`}
     </output>
   );
 }

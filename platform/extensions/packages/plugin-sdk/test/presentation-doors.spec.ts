@@ -254,7 +254,7 @@ afterEach(() => {
   live = null;
 });
 
-describe("host.render.layers (extensions ADR 346) [plugin-platform.render-layers]", () => {
+describe("host.render.layers (extensions ADR 346) [plugin-platform.render-snapshot-v2]", () => {
   it("draws the background without the layered item and the item alone, at one scale", async () => {
     live = await createHeadlessHost({ console: silent });
     const [pageId] = await live.load(minimalIdml());

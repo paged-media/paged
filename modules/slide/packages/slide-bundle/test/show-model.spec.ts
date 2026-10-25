@@ -85,7 +85,7 @@ const keys = (s: ShowState, ...ks: string[]): ShowState =>
   ks.reduce((acc, k) => press(acc, k), s);
 const at = (s: ShowState) => current(s)?.number ?? "end";
 
-describe("the show's keys (slide ADR 716) [plugin-slide.slide-show]", () => {
+describe("the show's keys (slide ADR 716) [plugin-slide.slideshow]", () => {
   it("advances with N, →, ↓, Space, Enter and Page Down, skipping hidden slides", () => {
     for (const key of [
       "n",
@@ -254,7 +254,7 @@ function fakeTimers() {
   };
 }
 
-describe("the show's controller [plugin-slide.slide-show]", () => {
+describe("the show's controller [plugin-slide.slideshow]", () => {
   it("advances by itself after a slide's time, and not while blanked", () => {
     const timers = fakeTimers();
     const ctl = new ShowController({
@@ -349,7 +349,7 @@ const page = (n: number, state: Slide["state"] = {}): Slide => ({
   state,
 });
 
-describe("the show's slides and timings [plugin-slide.slide-show]", () => {
+describe("the show's slides and timings [plugin-slide.slideshow]", () => {
   it("reads hidden flags, notes, transitions and timings, the deck's own as the fallback", () => {
     const slides = showSlides(
       [
@@ -424,7 +424,7 @@ describe("the show's slides and timings [plugin-slide.slide-show]", () => {
   });
 });
 
-describe("transitions and frames [plugin-slide.slide-show]", () => {
+describe("transitions and frames [plugin-slide.slideshow]", () => {
   it("names a transition as the shader manifest does, with its duration and direction", () => {
     expect(transitionKind("fade")).toBe("p:fade");
     expect(transitionKind("p14:vortex")).toBe("p14:vortex");

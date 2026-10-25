@@ -141,7 +141,7 @@ const deps = (store: SlidesStore) => ({
   readReport: async () => null,
 });
 
-describe("the slide show's commands, keys and menus [plugin-slide.slide-show]", () => {
+describe("the slide show's commands, keys and menus [plugin-slide.slideshow]", () => {
   it("registers the presentation, five commands, their keys and their menu entries", () => {
     covers(
       "keybinding:f5→media.paged.slide.command.slideShowFromBeginning",

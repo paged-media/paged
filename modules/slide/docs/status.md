@@ -1,6 +1,6 @@
 # paged.slide — status
 
-Read from the code on 2026-10-24.
+Read from the code on 2026-10-25.
 
 ## Built
 
@@ -58,6 +58,21 @@ Read from the code on 2026-10-24.
   move (PowerPoint's own; its Cmd+Shift+N and Cmd+D are the browser's new window and the
   editor's Place). A key is offered where its command is and no text caret is active; the
   editor's keybinding test holds the chords free of its own.
+- **Slide show and presenter view** (ADR 716). Slide Show ▸ From Beginning (F5) and From Current
+  Slide (Shift+F5) fill the screen (extensions ADR 345): PowerPoint's keys (next, previous, a
+  number and Enter, black and white screens, Home/End, the slide grid, laser, pen, erase, Esc),
+  hidden slides skipped, automatic advance from the slides' timings, an end screen, loop on
+  request; the editor goes back to the slide the show ended on. Presenter View (Alt+F5) keeps a
+  console in the editor's window (the slide up, the next slide, notes with zoom, timer, clock,
+  slide x of y, grid, black screen) and opens the audience in a window of its own, synced over a
+  BroadcastChannel; without a second window it runs alone. Rehearse Timings writes each slide's
+  time into its transition in one undo step. Frames are the engine's page layers (extensions
+  ADR 346), prefetched, drawn without the editor's substituted-font highlight. Transitions go
+  through the WebGPU transition seam; until the shader library registers, fade-like kinds
+  cross-fade and the rest cut.
+- **Slide Sorter** (View ▸ Slide Sorter, ADR 716): a module view in place of the canvas;
+  select, Shift/Cmd+click, drag to move the selection, hide, set the transition, double-click to
+  open a slide.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container
@@ -167,7 +182,6 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 
 - Editing layouts (master spreads) from the plugin, and layouts no slide uses (they are not
   imported).
-- Thumbnails show the editor's missing-font highlight; the slideshow needs snapshots without it.
 - PPTX export of what the native model cannot say yet, or what export does not write yet:
   effect changes (shadow, opacity on its own), edits inside charts and SmartArt, added, removed or
   merged table rows and columns, cell fills and borders, font styles other than bold and italic,
@@ -176,4 +190,5 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   reported in the export's diagnostics, and the shape is written as the deck had it. A notes
   master for a deck that has none. Transitions, timing, masters and layouts are still copied, not
   regenerated (later waves of ADR 711).
-- Slideshow and presenter view (M5); transitions are decided (ADR 706).
+- Animations in the show (per-item layers, wave 5), the WGSL transition library (ADR 721) wired
+  in, custom shows, ink saved as annotations.

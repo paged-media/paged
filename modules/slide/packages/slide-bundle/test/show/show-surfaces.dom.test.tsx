@@ -130,7 +130,7 @@ const key = (el: HTMLElement, k: string, mods: KeyboardEventInit = {}) =>
 const stage = (el: HTMLElement) =>
   el.querySelector<HTMLElement>("[data-show-stage]")!;
 
-describe("the slide show surface [plugin-slide.slide-show]", () => {
+describe("the slide show surface [plugin-slide.slideshow]", () => {
   it("follows PowerPoint's keys and ends on the slide it showed last", async () => {
     covers("command:media.paged.slide.command.slideShowFromBeginning");
     const ids = await d.pageIds();
@@ -173,7 +173,7 @@ describe("the slide show surface [plugin-slide.slide-show]", () => {
   });
 });
 
-describe("the presenter view [plugin-slide.slide-show]", () => {
+describe("the presenter view [plugin-slide.slideshow]", () => {
   it("drives the audience window over the channel, and takes its keys", async () => {
     covers("command:media.paged.slide.command.presenterView");
     const ids = await d.pageIds();
@@ -233,7 +233,7 @@ describe("the presenter view [plugin-slide.slide-show]", () => {
   });
 });
 
-describe("rehearse timings [plugin-slide.slide-show]", () => {
+describe("rehearse timings [plugin-slide.slideshow]", () => {
   it("records the time on each slide into its transition, one undo step", async () => {
     covers("command:media.paged.slide.command.rehearseTimings");
     const ids = await d.pageIds();

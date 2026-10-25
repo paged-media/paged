@@ -134,6 +134,15 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   transparent ground cropped to what was drawn (`trim`); `host.render.element` and
   plugin-sdk's `rasterizeElements` draw items cropped to them at a resolution
   (`render.snapshot@2`). paged.draw's Object ▸ Rasterize… is the first consumer.
+- **Presentations, module views and page layers ([ADR 345](adr/345-presentations-and-module-views.md),
+  [ADR 346](adr/346-page-layers.md); unreleased, the version moves with the next contract
+  bump).** `contribute.presentation` + `host.shell.present` show a bundle's DOM surface on the
+  editor's screen (browser full screen), in a window of its own, or as a console with an audience
+  window synced over a BroadcastChannel (`shell.present@1`, `shell.present.secondary@1`);
+  `contribute.view` + `host.shell.showView` put a bundle's view in the canvas's place
+  (`shell.views@1`); `host.render.layers` draws a page's background and items as layers at one
+  scale (`render.layers@1`). paged.slide's slide show, presenter view and slide sorter are the
+  first consumers.
 - **Selection.** `host.selection.set` writes the engine's geometry for the applied ids to
   the host's selection mirror, so the selection box follows a selection a bundle makes
   (0.2.54-canary.0).

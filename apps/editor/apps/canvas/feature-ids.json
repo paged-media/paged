@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 528,
-    "keybinding": 122,
-    "menu": 375,
+    "command": 533,
+    "keybinding": 125,
+    "menu": 380,
     "panel": 129,
     "tool": 81
   },
@@ -1931,6 +1931,31 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.presenterView",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.rehearseTimings",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.slideShowFromBeginning",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.slideShowFromCurrent",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.slideSorter",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.duplicateSlide",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2716,6 +2741,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:alt+f5→media.paged.slide.command.presenterView",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:alt+shift+cmd+0→paged.view.zoomFit",
       "kind": "keybinding",
       "owner": "editor"
@@ -3206,6 +3236,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:f5→media.paged.slide.command.slideShowFromBeginning",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:home→paged.view.firstPage",
       "kind": "keybinding",
       "owner": "editor"
@@ -3249,6 +3284,11 @@
       "id": "keybinding:shift+f10→paged.edit.contextMenu",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+f5→media.paged.slide.command.slideShowFromCurrent",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:shift+tab→media.paged.doc.command.word.listLevelUp",
@@ -4991,6 +5031,26 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "menu:Slide Show/From Beginning",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide Show/From Current Slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide Show/Presenter View",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide Show/Rehearse Timings",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Delete slide",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -5099,6 +5159,11 @@
       "id": "menu:View/Show text threads",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Slide Sorter",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:View/Snap to points",
