@@ -1379,6 +1379,197 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 }
 ";
 
+// ── Patch vote: the reconstruction step of content-aware fill ─────
+//
+// PatchMatch inpainting (Barnes, Shechtman, Finkelstein & Goldman,
+// *PatchMatch: A Randomized Correspondence Algorithm for Structural Image
+// Editing*, SIGGRAPH 2009) alternates two steps: a SEARCH that finds, for
+// every target patch overlapping the hole, the best source patch in the
+// sampling area (the nearest-neighbour field, NNF), and a VOTE that
+// rebuilds each hole pixel as the weighted mean of what every overlapping
+// target patch says it should be (Wexler, Shechtman & Irani,
+// *Space-Time Completion of Video*, IEEE TPAMI 2007, §3.2). The search is
+// sequential (propagation runs in scan order) and stays on the CPU; the
+// vote is a pure gather — every output texel reads its (2r+1)² NNF
+// entries and one bilinear source sample per entry — and is this kernel.
+//
+// # Inputs (ABI v1.1, gather lane)
+//
+// `in0` is the SOURCE window (the fill's domain), `in1` the packed NNF
+// over the output box expanded by `radius` on every side, three texels
+// per entry along x:
+//
+// ```text
+// texel 3i+0 = (sx_hi, sx_lo, sy_hi, sy_lo)  source centre = hi·64 + lo
+// texel 3i+1 = (m00, m01, m10, m11)          patch transform (rotation ·
+//                                            scale · mirror), row-major
+// texel 3i+2 = (weight, bias_r, bias_g, bias_b)
+// ```
+//
+// The split centre keeps whole-pixel precision past f16's 2048 integer
+// limit (hi is an exact integer < 128, lo lies in [0, 64) at 1/32 px), so
+// a domain up to 8192 px is addressed without drift. An entry with
+// `weight <= min_weight` does not vote (weight 0 marks "no patch here").
+//
+// Output texel `p` (output-local) reads NNF entries at `p + r + k`,
+// k ∈ [−r, r]²; entry `q` says pixel `p` is source `c_q + M_q·(p − q)`
+// sampled bilinearly (clamped to `in0`) plus the entry's colour bias
+// times `bias_scale`. The mean over voting entries is mixed with the
+// pixel already there (`in0` at `p + origin`) by the selection mask, so
+// a hole mask confines the vote to the hole.
+//
+// The CPU twin is `image-js::patchmatch::vote_packed` (the same decode,
+// the same taps, the same order); the device parity test lives beside it.
+
+/// Patch-vote params. `radius` is the patch half-width; `origin` is the
+/// output box's top-left inside `in0`; `bias_scale` scales each entry's
+/// colour bias (1 = as searched, 0 = ignore it); `min_weight` is the
+/// voting floor.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct PatchVoteParams {
+    pub radius: u32,
+    pub origin_x: i32,
+    pub origin_y: i32,
+    pub bias_scale: f32,
+    pub min_weight: f32,
+    pub _abi_pad: u32,
+}
+
+impl PatchVoteParams {
+    pub fn new(radius: u32, origin_x: i32, origin_y: i32) -> Self {
+        Self {
+            radius,
+            origin_x,
+            origin_y,
+            bias_scale: 1.0,
+            min_weight: 0.0,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const PATCH_VOTE_FIELDS: &[ParamField] = &[
+    ParamField {
+        name: "radius",
+        wgsl_ty: "u32",
+    },
+    ParamField {
+        name: "origin_x",
+        wgsl_ty: "i32",
+    },
+    ParamField {
+        name: "origin_y",
+        wgsl_ty: "i32",
+    },
+    ParamField {
+        name: "bias_scale",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "min_weight",
+        wgsl_ty: "f32",
+    },
+];
+
+/// The PatchMatch VOTE: each output texel is the weighted mean of what
+/// its overlapping NNF entries sample from `in0`, mixed in by the mask.
+/// Bilinear taps ⇒ a small f16 tolerance.
+pub static GEOM_PATCH_VOTE: KernelDef = KernelDef {
+    id: "geom.patch_vote",
+    class: KernelClass::Resample { support: 1.0 },
+    inputs: 2,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<PatchVoteParams>(),
+        fields: PATCH_VOTE_FIELDS,
+    },
+    wgsl: GEOM_PATCH_VOTE_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(8),
+};
+
+const GEOM_PATCH_VOTE_WGSL: &str = "\
+// paged.image kernel `geom.patch_vote` — handwritten under ABI v1.1.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    radius: u32,
+    origin_x: i32,
+    origin_y: i32,
+    bias_scale: f32,
+    min_weight: f32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(0) @binding(1) var in1 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+fn src_tap(p: vec2<i32>, sd: vec2<i32>) -> vec4<f32> {
+    return textureLoad(in0, clamp(p, vec2<i32>(0), sd - vec2<i32>(1)), 0);
+}
+
+fn bilinear(s: vec2<f32>, sd: vec2<i32>) -> vec4<f32> {
+    let f = floor(s);
+    let t = s - f;
+    let i = vec2<i32>(f);
+    let p00 = src_tap(i, sd);
+    let p10 = src_tap(i + vec2<i32>(1, 0), sd);
+    let p01 = src_tap(i + vec2<i32>(0, 1), sd);
+    let p11 = src_tap(i + vec2<i32>(1, 1), sd);
+    return mix(mix(p00, p10, t.x), mix(p01, p11, t.x), t.y);
+}
+
+fn nnf(c: vec2<i32>, k: i32, nd: vec2<i32>) -> vec4<f32> {
+    let q = clamp(vec2<i32>(c.x * 3 + k, c.y), vec2<i32>(0), nd - vec2<i32>(1));
+    return textureLoad(in1, q, 0);
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = vec2<i32>(textureDimensions(outp));
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    if (xy.x >= dims.x || xy.y >= dims.y) { return; }
+    let sdu = textureDimensions(in0);
+    let sd = vec2<i32>(i32(sdu.x), i32(sdu.y));
+    let ndu = textureDimensions(in1);
+    let nd = vec2<i32>(i32(ndu.x), i32(ndu.y));
+    let r = i32(min(params.radius, 16u));
+    let a = src_tap(xy + vec2<i32>(params.origin_x, params.origin_y), sd);
+    var acc = vec4<f32>(0.0);
+    var wsum = 0.0;
+    for (var dy = -r; dy <= r; dy = dy + 1) {
+        for (var dx = -r; dx <= r; dx = dx + 1) {
+            let c = xy + vec2<i32>(dx + r, dy + r);
+            let wb = nnf(c, 2, nd);
+            if (wb.x > params.min_weight) {
+                let t0 = nnf(c, 0, nd);
+                let m = nnf(c, 1, nd);
+                let centre = vec2<f32>(t0.x * 64.0 + t0.y, t0.z * 64.0 + t0.w);
+                let off = vec2<f32>(f32(-dx), f32(-dy));
+                let s = centre + vec2<f32>(m.x * off.x + m.y * off.y, m.z * off.x + m.w * off.y);
+                let v = bilinear(s, sd) + vec4<f32>(wb.yzw * params.bias_scale, 0.0);
+                acc = acc + wb.x * v;
+                wsum = wsum + wb.x;
+            }
+        }
+    }
+    var result = a;
+    if (wsum > 0.0) {
+        result = acc / wsum;
+    }
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
+}
+";
+
 pub static FAMILY: &[&KernelDef] = &[
     &GEOM_MOVE_SELECTION,
     &GEOM_FLIP_H,
@@ -1390,6 +1581,7 @@ pub static FAMILY: &[&KernelDef] = &[
     &GEOM_WARP_BACKWARD,
     &GEOM_MOSAIC,
     &GEOM_OFFSET,
+    &GEOM_PATCH_VOTE,
 ];
 
 #[cfg(test)]

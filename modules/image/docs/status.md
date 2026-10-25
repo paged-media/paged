@@ -59,6 +59,18 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   heal composite — source plus membrane tone correction — lands under the stroke); the patch
   tool (drag the selection onto the source; the selection is replaced by the region at that
   offset and healed to its surroundings); with size, hardness, opacity, flow, spacing, blend mode and pen pressure;
+  Content-Aware Move (move or extend the selection, structure 1–7, colour 0–10, a scale and
+  angle on drop, sample all layers: the hole is filled and the seam re-synthesised); the
+  Content-Aware Fill workspace (Edit ▸ Content-Aware Fill…: an automatic, rectangular or
+  painted sampling area shown on the canvas, colour and rotation adaptation, scale, mirror, a
+  preview, output to the layer, a new layer or a duplicate); the Remove tool (a stroke is filled
+  from its surroundings; an `ml.inpaint` provider is asked first when one is installed — none
+  ships); the Clone Source panel (five sources, each with an offset, width / height, angle and
+  flip; an overlay with opacity, clipped, auto hide and invert; sample current layer, current
+  and below, or all layers, also for the healing and spot healing brushes); healing diffusion
+  1–7; spot healing types content-aware, create texture and proximity match. All of these run
+  on a multi-resolution PatchMatch search ([ADR 469](adr/469-patchmatch-retouching.md)), with
+  the final vote on the GPU (`geom.patch_vote`) or its CPU twin;
   presets from an `.abr` brush library. The type tool paints a shaped run of text into the
   active layer with font bytes the host serves for the document's fonts.
 - **Layers.** Add, duplicate, remove, reorder; visibility, lock, opacity and 26 blend modes;
@@ -261,7 +273,14 @@ the baked image), beside the module's own label on the frame.
   8192 on many others). A crop, resize or straighten keeps every layer and mask, is one undo
   step that keeps the history, and drops the selection. The undo list keeps 200 structure steps; its pixel steps live in a tile
   journal of at most 32 entries and 256 MiB.
-- **Raster type** has no line wrapping. **Content-aware fill** searches a bounded window.
+- **Raster type** has no line wrapping.
+- **Retouching.** The PatchMatch search is CPU and single-threaded; a fill of a few hundred
+  thousand hole pixels takes seconds in wasm, and the workspace previews on a copy reduced to
+  512 px. Photoshop's content-aware results cannot be reproduced numerically, so they have no
+  oracle: quality is measured on synthetic stimuli (colour error and seam excess against a
+  known background). The Content-Aware Move transform is a scale and angle typed on drop, not
+  on-canvas handles. The Clone Source overlay replaces the frame's image while it shows. A
+  multi-layer image needs a GPU for the composite after a retouch, as every layer edit does.
 - **Called only by tests:** Engine B's op-node evaluation and the residency manager's third
   tier (scratch storage), which returns an error.
 - **Oracles.** Photoshop 2026's answers for 80 blend, adjustment and filter cases, seven

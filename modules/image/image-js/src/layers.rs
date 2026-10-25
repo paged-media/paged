@@ -1648,6 +1648,54 @@ impl LayerStack {
         Some(at)
     }
 
+    /// A new layer directly above the active one holding `pixels`
+    /// (canvas-extent straight RGBA8), made active — ONE undo step labelled
+    /// `label`. Content-Aware Fill's "new layer" output.
+    pub fn add_with_pixels(
+        &mut self,
+        label: &str,
+        name: &str,
+        pixels: Arc<[u8]>,
+    ) -> Result<usize, IngestError> {
+        self.check_canvas_pixels(&pixels)?;
+        self.recorded(label, None, |s| {
+            let at = s.add(name);
+            s.layers[at].rgba = crate::pixels::Pixels::from_rgba8(pixels).into();
+            Ok(at)
+        })
+    }
+
+    /// Duplicate `index` and give the copy `pixels`, made active — ONE undo
+    /// step. Content-Aware Fill's "duplicate layer" output.
+    pub fn duplicate_with_pixels(
+        &mut self,
+        label: &str,
+        index: usize,
+        pixels: Arc<[u8]>,
+    ) -> Result<usize, IngestError> {
+        self.check_canvas_pixels(&pixels)?;
+        self.recorded(label, None, |s| {
+            let at = s
+                .duplicate(index)
+                .ok_or_else(|| IngestError::Unsupported(format!("no layer {index}")))?;
+            s.layers[at].rgba = crate::pixels::Pixels::from_rgba8(pixels).into();
+            Ok(at)
+        })
+    }
+
+    fn check_canvas_pixels(&self, pixels: &[u8]) -> Result<(), IngestError> {
+        let want = (self.width as usize) * (self.height as usize) * 4;
+        if pixels.len() != want {
+            return Err(IngestError::Decode(format!(
+                "layer pixels: {} bytes for {}×{} (expected {want})",
+                pixels.len(),
+                self.width,
+                self.height
+            )));
+        }
+        Ok(())
+    }
+
     /// Remove `index`. Refused for the LAST layer — a document with no
     /// pixels at all is not a state this offers by one click.
     /// Remove a layer, as ONE undo step (always recorded: the journal's
@@ -2729,6 +2777,35 @@ impl LayerStack {
                  is a registered WGSL kernel dispatch; no CPU blend path ships)"
                     .into(),
             )
+        })?;
+        self.composite_resident(ctx, &plates).await
+    }
+
+    /// The composite of the active layer and everything BELOW it — the
+    /// clone and healing tools' "Current & Below" sample. Same fold as
+    /// [`Self::composite`], over the plates up to the active one.
+    pub async fn composite_through_active(
+        &self,
+        ctx: Option<&GpuContext>,
+    ) -> Result<Arc<[u8]>, IngestError> {
+        let upto = self.active;
+        let plates: Vec<(usize, Plate)> = self
+            .plates_indexed(None)
+            .into_iter()
+            .filter(|(i, _)| *i <= upto)
+            .collect();
+        match plates.as_slice() {
+            [] => return Ok(self.transparent()),
+            [(i, p)] if self.layers[*i].is_plain() => {
+                return Ok(match p.rect {
+                    Some(_) => self.layers[*i].rgba.raw_arc(),
+                    None => Arc::clone(&p.px),
+                })
+            }
+            _ => {}
+        }
+        let ctx = ctx.ok_or_else(|| {
+            IngestError::Unsupported("compositing layers is GPU-only — call init_gpu first".into())
         })?;
         self.composite_resident(ctx, &plates).await
     }
@@ -3928,6 +4005,36 @@ pub async fn render_smart(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_layer_added_or_duplicated_with_pixels_is_one_undo_step__feat__image_editor_content_aware_move(
+    ) {
+        let px: Arc<[u8]> = Arc::from(vec![9u8; 4 * 4 * 4].into_boxed_slice());
+        let mut s = LayerStack::from_image(4, 4, Arc::from(vec![200u8; 64].into_boxed_slice()))
+            .expect("stack");
+        let at = s
+            .add_with_pixels("Content-Aware Fill", "Fill", Arc::clone(&px))
+            .expect("add");
+        assert_eq!(s.len(), 2);
+        assert_eq!(s.active_index(), at);
+        assert_eq!(&*s.active().rgba.to_rgba8(), &px[..]);
+        assert_eq!(s.undo_label(), Some("Content-Aware Fill"));
+        assert!(s.undo().is_some());
+        assert_eq!(s.len(), 1, "one undo takes the layer and its pixels back");
+        let at = s
+            .duplicate_with_pixels("Content-Aware Fill", 0, Arc::clone(&px))
+            .expect("dup");
+        assert_eq!((s.len(), at), (2, 1));
+        assert_eq!(&*s.layers()[1].rgba.to_rgba8(), &px[..]);
+        assert_eq!(&*s.layers()[0].rgba.to_rgba8(), &[200u8; 64][..]);
+        assert!(s.undo().is_some());
+        assert_eq!(s.len(), 1);
+        assert!(s
+            .add_with_pixels("x", "x", Arc::from(vec![0u8; 3].into_boxed_slice()))
+            .is_err());
+        assert_eq!(s.len(), 1, "a mis-sized buffer changes nothing");
+    }
 
     fn px(w: u32, h: u32, v: u8) -> Arc<[u8]> {
         Arc::from(vec![v; (w * h * 4) as usize].into_boxed_slice())
