@@ -36,8 +36,9 @@ concurrency:
 # private `paged-media/corpus` repo (≈25 MB, not the 4.4 GB envato tier).
 #
 # Sharding: playwright.config pins workers:1 (snapshot determinism), so
-# the surface is split across 4 shards (3 until 2026-10-20, when a loaded
-# runner put shard 1 past the 55-minute global timeout with every test green)
+# the surface is split across 5 shards (3 until 2026-10-20 and 4 until
+# 2026-10-25: each time a loaded runner put shard 1 past the 55-minute
+# global timeout with every test green)
 # via `--shard`, each emitting a `blob` report. A final job merges the
 # blobs into one Playwright JSON and uploads it as the `playwright-results`
 # artifact. The private `paged-media/state` repo PULLS that artifact
@@ -153,7 +154,7 @@ defaults:
     working-directory: apps/editor
 
 env:
-  SHARDS: 4
+  SHARDS: 5
 
 jobs:
   # Static guards that need only the editor repo itself — no plugin
@@ -540,7 +541,7 @@ jobs:
           retention-days: 90
 
   playwright:
-    name: playwright (shard ${{ matrix.shard }}/4)
+    name: playwright (shard ${{ matrix.shard }}/5)
     runs-on: ubuntu-latest
     # 50, not 30: the COLD (uncached) paged-gen fixture-generator build
     # consumed most of a 30-min budget, leaving no room for the sharded
@@ -562,7 +563,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     steps:
       # The whole repository at the workspace root: the editor is
       # apps/editor, core's paged-gen is engine/core, and the doc/slide link
