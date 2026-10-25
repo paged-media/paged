@@ -99,6 +99,10 @@ import {
   type EditTarget,
   type PsdLayerInfo,
   type RasterFormat,
+  type ExportOptions,
+  type ExportNote,
+  EXPORT_FORMATS,
+  exportSpec,
   type ResampleFilter,
   type CanvasOpKind,
   type TrimBy,
@@ -247,6 +251,7 @@ export type ImageDialog =
   | { kind: "imageSize" }
   | { kind: "trim" }
   | { kind: "rotate" }
+  | { kind: "exportAs" }
   | { kind: "blendingOptions"; index: number };
 
 /** The Layers list's search and filter (Photoshop's filter bar): rows
@@ -445,6 +450,18 @@ export interface ImageSessionState {
    *  null when it declares none (Image Size then shows 72). The PNG and
    *  JPEG exporters write it. */
   ppi: number | null;
+  /** What the opened file carries besides its pixels (byte lengths; 0 =
+   *  absent): the Export As dialog's metadata row. Null before an open. */
+  sourceMetadata: {
+    icc: number;
+    exif: number;
+    xmp: number;
+    iptc: number;
+  } | null;
+  /** The CMYK output profile Export As converts through (picked with
+   *  `pickExportProfile`), by name; null = the source's own CMYK profile
+   *  or, without one, the naive formula. */
+  exportProfile: string | null;
   /** The Curves eyedropper waiting for a click on the image, or null. */
   curvesPicker: CurvesPick | null;
   /** The per-channel curves the Curves tools (Auto, the eyedroppers)
@@ -523,6 +540,17 @@ export interface ImageSession {
   rasterExportBytes(
     format: RasterFormat,
   ): Promise<{ bytes: Uint8Array; fileName: string } | null>;
+  /** FILE ▸ EXPORT AS (ADR 468): the adjusted image written as `options`
+   *  say — format, quality, size, colour mode, depth, metadata, profile,
+   *  resolution — and handed to the host's saver when it has one (else
+   *  staged on `saveBack` for the exporters). A 16-bit session at
+   *  identity exports its own 16-bit samples. Null, with the reason as
+   *  the status, when it cannot. */
+  exportAs(options: ExportOptions): Promise<SaveBackResult | null>;
+  /** Pick the CMYK output profile (.icc/.icm) Export As converts to. */
+  pickExportProfile(): Promise<boolean>;
+  /** Forget the picked CMYK profile. */
+  clearExportProfile(): void;
   /** FILL the current selection (the whole image when none) with a
    *  generator, composited through the coverage mask. DESTRUCTIVE: it
    *  swaps the engine-held source like a crop commit (the document and
@@ -649,7 +677,7 @@ export interface ImageSession {
   applyAverage(): Promise<boolean>;
   /** Show one of the Image dialogs (Image Size, Trim, Arbitrary
    *  rotation) on top of the panel. */
-  openDialog(kind: "imageSize" | "trim" | "rotate"): boolean;
+  openDialog(kind: "imageSize" | "trim" | "rotate" | "exportAs"): boolean;
   /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
    *  active one by default): fill opacity, knockout and Blend If. */
   openBlendingOptions(index?: number): boolean;
@@ -1388,6 +1416,22 @@ const S = defineMessages("image.status", {
   jpegSaveBack:
     "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG).",
   pngSaveBack: "PNG save-back — lossless re-encode of the adjusted pixels.",
+  tiffSaveBack:
+    "TIFF save-back — LZW re-encode of the adjusted pixels, metadata kept.",
+  webpSaveBack:
+    "WebP save-back — lossless re-encode of the adjusted pixels, metadata kept.",
+  exported: "Exported {file}, {bytes} bytes.",
+  exportStaged: "{file}, {bytes} bytes — ready for the exporters.",
+  exportNoteWebpLossless: "WebP is written lossless (no lossy encoder).",
+  exportNoteCmykProfile: "Converted to CMYK through the profile.",
+  exportNoteCmykNaive:
+    "Converted to CMYK without a profile (naive formula); no profile embedded.",
+  exportNoteWidened: "8-bit pixels written as 16 bits (no added precision).",
+  exportNoteNarrowed: "This format holds 8 bits; the pixels were narrowed.",
+  exportNoteAlphaDropped: "JPEG has no transparency; it was dropped.",
+  exportNoteGrayUntagged: "Grayscale is written without a profile.",
+  exportProfileSet: "CMYK profile: {name}.",
+  noProfileChosen: "No profile chosen.",
   saveBackReady: "{note} {file}, {bytes} bytes — ready.",
   saveFromPanel:
     "Save it from the panel, or deliver it from the Export Center.",
@@ -1705,6 +1749,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     committedRev: null,
     uncommitted: false,
     saveBack: null,
+    sourceMetadata: null,
+    exportProfile: null,
     brush: { ...DEFAULT_BRUSH_PARAMS, color: [...DEFAULT_BRUSH_PARAMS.color] },
     blendModes: [],
     strokeActive: false,
@@ -1748,6 +1794,11 @@ export function createImageSession(host: BundleHost): ImageSession {
    *  ("jpeg" only when the ORIGINAL bytes were a JPEG — a re-encode
    *  never invents a lossy format). */
   let sourceFormat: RasterFormat | "psd" | null = null;
+  /** The bytes the session opened: Export As and the save-back carry
+   *  their EXIF, XMP and IPTC (and a CMYK source's profile). */
+  let sourceBytes: Uint8Array | null = null;
+  /** The picked CMYK output profile (`state.exportProfile` names it). */
+  let exportProfileBytes: Uint8Array | null = null;
   /** Pixel edits since the last ingest (layer ops, strokes, fills,
    *  filters, crop, resize, undo/redo). The PSD exporter reads it: the
    *  byte-identical re-emit is only correct while it is 0, because the
@@ -2419,6 +2470,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     psdHandle = null;
     state.psd = null;
     sourceFormat = null;
+    sourceBytes = null;
+    state.sourceMetadata = null;
     state.saveBack = null;
     pixelEdits = 0;
     sourceRef = null;
@@ -2458,19 +2511,79 @@ export function createImageSession(host: BundleHost): ImageSession {
     bytes[3] === 0x53;
 
   /** Sniff the ORIGINAL container so the save-back lane re-encodes into
-   *  the format the file already was (never inventing a lossy one).
-   *  Unknown containers fall to PNG — the lossless default. */
+   *  the format the file already was (never inventing a lossy one): JPEG,
+   *  TIFF and WebP go back as themselves. Every other container (GIF,
+   *  BMP, AVIF, HDR, ...) falls to PNG — the lossless default. */
   const sniffFormat = (bytes: Uint8Array): RasterFormat | "psd" => {
     if (isPsd(bytes)) return "psd";
-    if (
-      bytes.length >= 3 &&
-      bytes[0] === 0xff &&
-      bytes[1] === 0xd8 &&
-      bytes[2] === 0xff
-    )
-      return "jpeg";
+    const b = (i: number) => bytes[i] ?? -1;
+    if (b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff) return "jpeg";
+    const tiff =
+      (b(0) === 0x49 && b(1) === 0x49 && b(2) === 42 && b(3) === 0) ||
+      (b(0) === 0x4d && b(1) === 0x4d && b(2) === 0 && b(3) === 42);
+    if (tiff) return "tiff";
+    const riff =
+      b(0) === 0x52 && b(1) === 0x49 && b(2) === 0x46 && b(3) === 0x46;
+    const webp =
+      b(8) === 0x57 && b(9) === 0x45 && b(10) === 0x42 && b(11) === 0x50;
+    if (riff && webp) return "webp";
     return "png";
   };
+
+  const NOTE_TEXT: Record<ExportNote, (typeof S)[keyof typeof S]> = {
+    "webp-lossless": S.exportNoteWebpLossless,
+    "cmyk-profile": S.exportNoteCmykProfile,
+    "cmyk-naive": S.exportNoteCmykNaive,
+    widened: S.exportNoteWidened,
+    narrowed: S.exportNoteNarrowed,
+    "alpha-dropped": S.exportNoteAlphaDropped,
+    "gray-untagged": S.exportNoteGrayUntagged,
+  };
+  /** The engine's notes for the last export, as sentences. */
+  const exportNoteText = (): string =>
+    engine
+      ? engine
+          .exportNotes()
+          .map((n) => t(NOTE_TEXT[n]))
+          .join(" ")
+      : "";
+
+  /** Encode the session's (adjusted) pixels with `options`. At identity
+   *  the engine reads its own image, so a 16-bit session keeps 16 bits. */
+  const encodeExport = async (
+    src: NonNullable<ImageSessionState["source"]>,
+    options: ExportOptions,
+  ): Promise<Uint8Array> => {
+    if (!engine) throw new Error("engine unavailable");
+    const spec = exportSpec(options);
+    const source = sourceBytes ?? new Uint8Array(0);
+    const profile = exportProfileBytes ?? new Uint8Array(0);
+    if (isIdentity(state.params))
+      return engine.exportImageHandle(src.handle, spec, source, profile);
+    const rgba = await engine.adjust(src.handle, state.params);
+    return engine.exportImage(
+      rgba,
+      src.width,
+      src.height,
+      spec,
+      source,
+      profile,
+    );
+  };
+
+  /** The save-back's options: the format at its default quality, the
+   *  source's metadata kept, sRGB embedded, the image's resolution. */
+  const saveBackOptions = (format: RasterFormat): ExportOptions => ({
+    format,
+    quality: 90,
+    ppi: state.ppi,
+    keepMetadata: true,
+    embedProfile: true,
+    mode: "rgb",
+    bits: 8,
+    compression: "lzw",
+    intent: "relativeColorimetric",
+  });
 
   /** Strip the extension off a display name (a link URI or file name) so
    *  the save-back can stamp its own. */
@@ -2880,6 +2993,13 @@ export function createImageSession(host: BundleHost): ImageSession {
       const keptAll = elementId ? keptSelections.get(elementId) : undefined;
       if (elementId) keptSelections.delete(elementId);
       sourceFormat = sniffFormat(bytes);
+      sourceBytes = bytes;
+      try {
+        state.sourceMetadata = engine.imageMetadata(bytes);
+      } catch (err) {
+        host.log.debug("metadata read failed", err);
+        state.sourceMetadata = null;
+      }
       state.saveBack = null;
       // Metadata only: Image Size shows it and the exporters write it.
       try {
@@ -2944,10 +3064,6 @@ export function createImageSession(host: BundleHost): ImageSession {
       setStatus(t(S.frameDeselectedInFramePreviewCleared));
     }
   });
-
-  /** Encoded PNG / JPEG bytes carrying the image's resolution. */
-  const withPpi = (bytes: Uint8Array): Uint8Array =>
-    engine && state.ppi !== null ? engine.stampPpi(bytes, state.ppi) : bytes;
 
   // ── FILTER DIALOG (WP5.2) ───────────────────────────────────────────
   //
@@ -3837,12 +3953,28 @@ export function createImageSession(host: BundleHost): ImageSession {
           setStatus(t(S.psdSaveBackUnavailableTheStructural));
           return null;
         } else {
-          const fmt: RasterFormat = sourceFormat === "jpeg" ? "jpeg" : "png";
+          const fmt: RasterFormat = sourceFormat ?? "png";
+          // The source's EXIF, XMP and IPTC ride along, the pixels are
+          // tagged sRGB, the resolution is written (ADR 468).
           result = {
-            bytes: withPpi(engine.encode(rgba, src.width, src.height, fmt)),
-            fileName: `${stem}${fmt === "jpeg" ? ".jpg" : ".png"}`,
-            mimeType: fmt === "jpeg" ? "image/jpeg" : "image/png",
-            note: fmt === "jpeg" ? t(S.jpegSaveBack) : t(S.pngSaveBack),
+            bytes: engine.exportImage(
+              rgba,
+              src.width,
+              src.height,
+              exportSpec(saveBackOptions(fmt)),
+              sourceBytes ?? new Uint8Array(0),
+              new Uint8Array(0),
+            ),
+            fileName: `${stem}${EXPORT_FORMATS[fmt].extension}`,
+            mimeType: EXPORT_FORMATS[fmt].mimeType,
+            note: t(
+              {
+                jpeg: S.jpegSaveBack,
+                png: S.pngSaveBack,
+                tiff: S.tiffSaveBack,
+                webp: S.webpSaveBack,
+              }[fmt],
+            ),
           };
         }
         state.saveBack = result;
@@ -3887,6 +4019,75 @@ export function createImageSession(host: BundleHost): ImageSession {
         }),
       );
       return accepted;
+    },
+
+    async exportAs(options) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return null;
+      }
+      if (!state.gpu && !isIdentity(state.params)) {
+        setStatus(t(S.webgpuUnavailableTheAdjustedExportNeeds));
+        return null;
+      }
+      state.busy = true;
+      emit();
+      try {
+        const fmt = EXPORT_FORMATS[options.format];
+        const result: SaveBackResult = {
+          bytes: await encodeExport(src, options),
+          fileName: `${baseName(src.name)}${fmt.extension}`,
+          mimeType: fmt.mimeType,
+          note: exportNoteText(),
+        };
+        const size = { file: result.fileName, bytes: result.bytes.length };
+        if (host.supports("shell.saveFile@1")) {
+          const accepted = await host.shell.saveFile({
+            suggestedName: result.fileName,
+            bytes: result.bytes,
+            mimeType: result.mimeType,
+          });
+          setStatus(
+            `${t(accepted ? S.exported : S.saveDeclined, size)} ${result.note}`.trim(),
+          );
+        } else {
+          state.saveBack = result;
+          setStatus(`${t(S.exportStaged, size)} ${result.note}`.trim());
+        }
+        state.dialog = null;
+        return result;
+      } catch (err) {
+        setStatus(t(S.exportFailed, { error: errText(err) }));
+        return null;
+      } finally {
+        state.busy = false;
+        emit();
+      }
+    },
+
+    async pickExportProfile() {
+      if (!host.supports("shell.pickFile@1")) {
+        setStatus(t(S.thisHostWiresNoFilePicker));
+        return false;
+      }
+      const picked = await host.shell.pickFile({ accept: [".icc", ".icm"] });
+      const file = picked[0];
+      if (!file) {
+        setStatus(t(S.noProfileChosen));
+        return false;
+      }
+      exportProfileBytes = file.bytes;
+      state.exportProfile = file.name;
+      setStatus(t(S.exportProfileSet, { name: file.name }));
+      emit();
+      return true;
+    },
+
+    clearExportProfile() {
+      exportProfileBytes = null;
+      state.exportProfile = null;
+      emit();
     },
 
     async psdExportBytes() {
@@ -3937,13 +4138,10 @@ export function createImageSession(host: BundleHost): ImageSession {
         return null;
       }
       try {
-        const rgba = await engine.adjust(src.handle, state.params);
-        const bytes = withPpi(
-          engine.encode(rgba, src.width, src.height, format),
-        );
+        const bytes = await encodeExport(src, saveBackOptions(format));
         return {
           bytes,
-          fileName: `${baseName(src.name)}${format === "jpeg" ? ".jpg" : ".png"}`,
+          fileName: `${baseName(src.name)}${EXPORT_FORMATS[format].extension}`,
         };
       } catch (err) {
         setStatus(t(S.exportFailed, { error: errText(err) }));

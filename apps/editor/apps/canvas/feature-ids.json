@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 528,
+    "command": 529,
     "keybinding": 122,
-    "menu": 375,
+    "menu": 376,
     "panel": 129,
     "tool": 81
   },
@@ -1167,6 +1167,11 @@
     },
     {
       "id": "command:media.paged.image.command.distributeVertical",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.exportAs",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -4052,6 +4057,11 @@
     },
     {
       "id": "menu:Image/File/Apply adjustments to the file",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/File/Export as…",
       "kind": "menu",
       "owner": "media.paged.image"
     },

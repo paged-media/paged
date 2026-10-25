@@ -169,6 +169,7 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.fillPattern",
       "media.paged.image.command.shapeBlur",
       "media.paged.image.command.applyToFile",
+      "media.paged.image.command.exportAs",
       "media.paged.image.command.saveToFile",
       "media.paged.image.command.loadBrushLibrary",
       // The raster↔vector bridge + the luminosity mask.
@@ -220,6 +221,37 @@ describe("imageBundle.activate", () => {
       "media.paged.image.tool.type",
     ]);
     expect(fake.importers.ids()).toEqual(["media.paged.image.importer.raster"]);
+  });
+
+  it("[image.codec.core-codecs] imports every paged-raster format and exports TIFF and WebP", () => {
+    const fake = makeFakeEditor();
+    load(fake);
+    const importer = fake.importers.get("media.paged.image.importer.raster") as
+      { extensions: string[]; mimeTypes: string[] } | undefined;
+    for (const ext of [
+      ".tif",
+      ".tiff",
+      ".webp",
+      ".gif",
+      ".bmp",
+      ".avif",
+      ".jxl",
+      ".dng",
+      ".exr",
+      ".hdr",
+    ])
+      expect(importer?.extensions).toContain(ext);
+    expect(importer?.mimeTypes).toContain("image/tiff");
+    expect(fake.exporters.ids()).toEqual([
+      "media.paged.image.exporter.psd",
+      "media.paged.image.exporter.png",
+      "media.paged.image.exporter.jpeg",
+      "media.paged.image.exporter.tiff",
+      "media.paged.image.exporter.webp",
+    ]);
+    expect(
+      fake.commands.get("media.paged.image.command.exportAs"),
+    ).toBeDefined();
   });
 
   it("the open command routes through host.shell.openPanel", () => {

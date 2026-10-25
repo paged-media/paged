@@ -35,6 +35,9 @@ too_many_arguments = "allow"
 # compile unchanged until a mechanical rename.
 image-core = { path = "../../engine/core/crates/paged-pixel", package = "paged-pixel" }
 image-psd = { path = "../../engine/core/crates/paged-psd", package = "paged-psd" }
+# The codecs (ADR 468): every decoder and encoder of the module is the
+# engine's raster crate; image-codecs adapts it to the frozen traits.
+paged-raster = { path = "../../engine/core/crates/paged-raster" }
 thiserror = "2"
 anyhow = "1"
 bytes = "1"
@@ -62,9 +65,9 @@ getrandom = { version = "0.4", features = ["wasm_js"] }
 proptest = "1"
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 qcms = { version = "0.3", default-features = false, features = ["cmyk", "iccv4-enabled"] }
-# PNG codec (D-4). zune-png is the chosen adapter crate (decode+encode,
-# pure-Rust, no_std-capable); image/png is the bench comparison only and
-# is a dev-dependency of image-conformance, never an adapter dependency.
+# PNG codec bench crates (D-4, re-run 2026-10-25: `png` through
+# paged-raster now beats zune-png on decode and writes files a third the
+# size, so zune-png is a bench comparison and a fixture builder only).
 zune-png = "0.5"
 zune-core = "0.5"
 png = "0.18"

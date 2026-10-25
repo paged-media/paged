@@ -1815,6 +1815,22 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
+  test("Image/File/Export as… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/File/Export as…");
+    await expectGreyedAndInert(bare, "Image/File/Export as…");
+    const out = await clickEntry(
+      live,
+      "Image/File/Export as…",
+      "media.paged.image.command.exportAs",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
   test("Edit/Selection to path — with no image open, raises the Image panel", async () => {
     covers("menu:Edit/Selection to path");
     await expectGreyedAndInert(bare, "Edit/Selection to path");
