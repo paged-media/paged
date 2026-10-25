@@ -2046,10 +2046,10 @@ pub struct CanvasModel {
     /// than the cap lost its first children to eviction outright, so no
     /// undo could remove them.
     applied_log_cap_held: bool,
-    /// Engine ADR 1017 — how many undo steps the log keeps
+    /// Engine ADR 1030 — how many undo steps the log keeps
     /// ([`Self::set_history_depth`]); `MAX_APPLIED_LOG` by default.
     history_depth: usize,
-    /// Engine ADR 1017 — how many steps the depth has evicted since the
+    /// Engine ADR 1030 — how many steps the depth has evicted since the
     /// document opened: while `0`, undoing every step reaches the opened
     /// document.
     evicted_steps: usize,
@@ -2453,14 +2453,14 @@ const AMEND_ORIGINS_CAP: usize = 256;
 pub struct AppliedRecord {
     pub applied_seq: u64,
     pub kind: LoggedMutation,
-    /// Engine ADR 1017 — the step's name. Set by the entry point that
+    /// Engine ADR 1030 — the step's name. Set by the entry point that
     /// logged it (the caller's explicit label, else the default of the
     /// wire mutation or gesture); `None` reads as the default of `kind`
     /// ([`crate::undo_label::for_logged`]).
     pub label: Option<crate::undo_label::UndoLabel>,
 }
 
-/// Engine ADR 1017 — one named step of the undo timeline.
+/// Engine ADR 1030 — one named step of the undo timeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UndoLogEntry {
     /// The step's `applied_seq` — what `UndoTo` / `RedoTo` name.
@@ -2468,7 +2468,7 @@ pub struct UndoLogEntry {
     pub label: crate::undo_label::UndoLabel,
 }
 
-/// Engine ADR 1017 — the named undo timeline ([`CanvasModel::undo_log`]).
+/// Engine ADR 1030 — the named undo timeline ([`CanvasModel::undo_log`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UndoLog {
     /// Oldest first; the last entry is the step an undo reverts.
@@ -2571,7 +2571,7 @@ pub enum LoggedMutation {
         prev: Box<Mutation>,
         next: Box<Mutation>,
     },
-    /// v77 (engine ADR 1017) — a step that REVERSES the steps it holds:
+    /// v77 (engine ADR 1030) — a step that REVERSES the steps it holds:
     /// applying it reverts `inner`, undoing it replays `inner`. A snapshot
     /// restore (`restore_to`) logs the steps it walked back as one of
     /// these, so going back to a snapshot is ONE new undo step instead of a
@@ -2968,7 +2968,7 @@ impl CanvasModel {
     /// cache for them). Rebuild is full + synchronous —
     /// "correctness, not pessimisation" (see plan §Item 5).
     ///
-    /// Engine ADR 1017 — the step it logs is named after `mutation`
+    /// Engine ADR 1030 — the step it logs is named after `mutation`
     /// ([`crate::undo_label::for_mutation`]); [`Self::apply_mutation_labeled`]
     /// names it after the caller instead.
     pub fn apply_mutation(
@@ -2986,7 +2986,7 @@ impl CanvasModel {
         Ok(outcome)
     }
 
-    /// Engine ADR 1017 — [`Self::apply_mutation`], with the undo step named
+    /// Engine ADR 1030 — [`Self::apply_mutation`], with the undo step named
     /// `label` (the caller's words; blank keeps the default).
     pub fn apply_mutation_labeled(
         &mut self,
@@ -3928,7 +3928,7 @@ impl CanvasModel {
                     next: next.clone(),
                 }
             }
-            // ADR 1017 — the step's forward effect is its inner steps'
+            // ADR 1030 — the step's forward effect is its inner steps'
             // reversal; their inverses stay as captured (the state they run
             // against is the one they were captured from).
             LoggedMutation::Reverted(inner) => {
@@ -6125,7 +6125,7 @@ impl CanvasModel {
                 self.revert_logged(&rec.kind);
                 None
             }
-            // ADR 1017 — undoing a restore replays what it reverted.
+            // ADR 1030 — undoing a restore replays what it reverted.
             LoggedMutation::Reverted(inner) => {
                 self.revert_logged(&rec.kind);
                 story_id_of_logged(inner)
@@ -6323,7 +6323,7 @@ impl CanvasModel {
             return;
         }
         let records: Vec<AppliedRecord> = self.applied_log.drain(base - 1..).collect();
-        // Engine ADR 1017 — the amended step keeps its name: the write that
+        // Engine ADR 1030 — the amended step keeps its name: the write that
         // joined it is a consequence of the edit, not a new edit.
         let label = records.first().map(|first| {
             first
@@ -6411,14 +6411,14 @@ impl CanvasModel {
         Ok(outcome)
     }
 
-    /// Engine ADR 1017 — is the step `applied_seq` the top of the undo log?
+    /// Engine ADR 1030 — is the step `applied_seq` the top of the undo log?
     fn top_step_is(&self, applied_seq: u64) -> bool {
         self.applied_log
             .last()
             .is_some_and(|r| r.applied_seq == applied_seq)
     }
 
-    /// Engine ADR 1017 — name the undo step `applied_seq`, when it is the
+    /// Engine ADR 1030 — name the undo step `applied_seq`, when it is the
     /// top of the undo log (the step a write just made). Returns whether it
     /// was named; a write that logged no step names nothing.
     pub fn set_step_label(
@@ -6435,14 +6435,14 @@ impl CanvasModel {
         }
     }
 
-    /// Engine ADR 1017 — the history depth: how many undo steps the log
+    /// Engine ADR 1030 — the history depth: how many undo steps the log
     /// keeps (oldest evicted first). [`MAX_APPLIED_LOG`] unless a host set
     /// less with [`Self::set_history_depth`].
     pub fn history_depth(&self) -> usize {
         self.history_depth
     }
 
-    /// Engine ADR 1017 — keep at most `depth` undo steps (clamped to
+    /// Engine ADR 1030 — keep at most `depth` undo steps (clamped to
     /// `1..=MAX_APPLIED_LOG`); a shallower depth evicts the oldest steps
     /// now. Returns the depth in force.
     pub fn set_history_depth(&mut self, depth: usize) -> usize {
@@ -6451,7 +6451,7 @@ impl CanvasModel {
         self.history_depth
     }
 
-    /// Engine ADR 1017 — the named undo timeline: the newest `limit` undo
+    /// Engine ADR 1030 — the named undo timeline: the newest `limit` undo
     /// steps, OLDEST FIRST (the last one is the step an undo reverts), and
     /// the newest `limit` redo steps in the order redo replays them (the
     /// first is the next redo).
@@ -6474,7 +6474,7 @@ impl CanvasModel {
         }
     }
 
-    /// Engine ADR 1017 — undo every step down to and including
+    /// Engine ADR 1030 — undo every step down to and including
     /// `applied_seq`, in one call. Refused (nothing undone) when that seq is
     /// not on the undo log. Answers each step's outcome, newest first; an
     /// undo that fails mid-way stops there and answers the steps it made.
@@ -6502,7 +6502,7 @@ impl CanvasModel {
         Ok(out)
     }
 
-    /// Engine ADR 1017 — redo every step up to and including
+    /// Engine ADR 1030 — redo every step up to and including
     /// `applied_seq`, in one call. Refused (nothing redone) when that seq
     /// is not on the redo log.
     pub fn redo_to(
@@ -6525,7 +6525,7 @@ impl CanvasModel {
         Ok(out)
     }
 
-    /// Engine ADR 1017 — make the document what it was right after the step
+    /// Engine ADR 1030 — make the document what it was right after the step
     /// `applied_seq` (`0`: before the oldest step on the undo log — the
     /// opened document while nothing was evicted), as ONE new undo step
     /// named `label` (default "Restore"). A step on the undo log is reached
@@ -12913,7 +12913,7 @@ impl CanvasModel {
             .ok_or_else(|| crate::channel::LoadError::Build(format!("no page {page_id}")))
     }
 
-    /// The faces registered for the document's text (engine ADR 1018's
+    /// The faces registered for the document's text (engine ADR 1031's
     /// SVG import lays text out with them).
     pub(crate) fn document_fonts(&self) -> &[FontEntry] {
         &self.font_registry
@@ -14117,7 +14117,25 @@ impl CanvasModel {
             _ => return Ok(()),
         };
         check_requirements(&self.scene, &requirements, &self.session_policy)
-            .map_err(frame_mutation_error)
+            .map_err(frame_mutation_error)?;
+        // Engine ADR 1017: a text field takes only the breaks its author
+        // allows, typed or filled.
+        if let Mutation::InsertText {
+            story_id,
+            text,
+            cell: None,
+            ..
+        } = mutation
+        {
+            paged_mutate::apply::permit::check_breaks(
+                &self.scene,
+                story_id,
+                text,
+                &self.session_policy,
+            )
+            .map_err(frame_mutation_error)?;
+        }
+        Ok(())
     }
 
     /// v67 — (re)build the snap index when the document has been rebuilt

@@ -20,7 +20,8 @@
 // reads it: the frame's label names it, the container parts carry it.
 //
 //   label (x-paged:media.paged.doc on the host frame)  — the truth undo restores
-//     { v: 1, data: { part, lowered?, blocks, sections?, fileName?, midPageColumns? } }
+//     { v: 1, data: { part, lowered?, blocks, sections?, fileName?, midPageColumns?,
+//                     tableParagraphs? } }
 //   part  `part`     — the .docx bytes (the import source, or a content-addressed
 //                      `sources/<sha256>.docx` an object-model write produced)
 //   part  `lowered`  — the docLowered CACHE (`lowered/<sha256>.json`): the
@@ -31,7 +32,7 @@
 // Content-addressed parts are never overwritten, so an undo of the label
 // lands on a state whose parts still exist.
 
-import type { LoweredDoc } from "@paged-media/doc-host-model";
+import type { LoweredDoc, TableLayout } from "@paged-media/doc-host-model";
 import { parseLoweredDoc } from "@paged-media/doc-host-model";
 import type {
   BundleHost,
@@ -58,6 +59,15 @@ export interface DocLabelData {
   fileName?: string;
   /** How the document was lowered (ADR 029); default true. */
   midPageColumns?: boolean;
+  /** Each native table was poured into a paragraph of its own (the pour
+   *  since 2026-10-25, `TableLayout` `"own"`). Absent on documents poured
+   *  before, whose text after a table continued in the table's paragraph. */
+  tableParagraphs?: boolean;
+}
+
+/** How the native tables of a persisted document stand among its paragraphs. */
+export function tableLayoutOf(data: DocLabelData): TableLayout {
+  return data.tableParagraphs ? "own" : "joined";
 }
 
 /** One placed document, as the object model sees it. */

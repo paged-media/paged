@@ -51,6 +51,7 @@ import { PREFLIGHT, findingText } from "../panels/template/messages";
 const M = defineMessages("app.overlaysTemplateFields", {
   replaceLabel: "Replace {label}",
   replace: "Replace…",
+  alternate: "{label}: {member}",
 });
 
 const IMAGE_TYPES = [
@@ -136,13 +137,27 @@ function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
     const points = corners.map(([x, y]) => `${pr.x + x},${pr.y + y}`).join(" ");
     const [lx, ly] = corners[0]!;
     const label = row.field.label ?? row.field.name;
+    // Engine ADR 1017: an alternates field is outlined on the member it
+    // shows, and says which one.
+    const active =
+      row.field.kind === "alternates"
+        ? (row.members?.find((m) => m.visible)?.name ?? null)
+        : null;
+    const caption =
+      active !== null
+        ? strings.t(M.alternate, { label, member: active })
+        : label;
     const problems =
       role === "author"
         ? (findings ?? []).filter((f) => f.item === row.targetId)
         : [];
     const [rx, ry] = corners[1]!;
     out.push(
-      <g key={row.field.name} data-template-field-outline={row.field.name}>
+      <g
+        key={row.field.name}
+        data-template-field-outline={row.field.name}
+        data-template-field-alternate={active ?? undefined}
+      >
         <polygon
           points={points}
           fill="none"
@@ -189,7 +204,7 @@ function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
             fontSize={10.5}
             pointerEvents="none"
           >
-            {label}
+            {caption}
             {row.field.required ? " *" : ""}
           </text>
           {row.field.kind === "image" ? (

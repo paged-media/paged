@@ -18,7 +18,7 @@
  */
 
 // History (paged.history, editor ADR 285): the engine's named undo
-// timeline (engine ADR 1017) listed oldest first with the current step
+// timeline (engine ADR 1030) listed oldest first with the current step
 // marked; a click goes back (one `undoTo`) or forward (one `redoTo`);
 // snapshots restore as ONE new undo step; the depth preference reaches the
 // engine; and an active edit context's own steps replace the list.

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG (engine ADR 1018).
+// File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG (engine ADR 1031).
 //
 // IMPORT. The engine reads the file (`requestSvgImport`, `paged-svg` over
 // usvg) and answers ONE batch of native page items: paths and compound

@@ -18,7 +18,7 @@
  */
 
 // Editor ADR 285 — the History panel. Every step of the document's undo
-// timeline by name (engine ADR 1017), oldest first, the current one marked;
+// timeline by name (engine ADR 1030), oldest first, the current one marked;
 // a click goes back (or forward) to the state right after that step in one
 // engine round trip. While an edit context that keeps its own history is
 // active (the image module's pixel journal), the panel lists THAT history

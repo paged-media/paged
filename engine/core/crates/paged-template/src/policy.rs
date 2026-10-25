@@ -59,6 +59,10 @@ pub enum TemplateFieldKind {
     /// edited image's picture): the field's `module` names the module's
     /// field kind, which reads and writes the value through its own door.
     Module,
+    /// One of several items (alternates): the filler picks one member, the
+    /// others are hidden. The field's `members` name the items (engine ADR
+    /// 1017); the field lives in the document's policy, not on an item.
+    Alternates,
 }
 
 impl TemplateFieldKind {
@@ -76,6 +80,9 @@ impl TemplateFieldKind {
             TemplateFieldKind::Data => PermSet::of([P::Select, P::TextEdit, P::ImageReplace]),
             // A module keeps its content in its own label on the item.
             TemplateFieldKind::Module => PermSet::of([P::Select, P::DocumentMetadata]),
+            // What each member of an alternates field is granted: being
+            // shown or hidden, and nothing else.
+            TemplateFieldKind::Alternates => PermSet::of([P::ItemVisibility]),
         }
     }
 }
@@ -92,6 +99,36 @@ pub enum OverflowRule {
     Shrink,
     /// The value is taken and preflight reports the overset text.
     AllowAndFlag,
+}
+
+/// Which breaks a text field's value may hold (engine ADR 1017). Each
+/// takes the ones before it: a field that takes paragraph breaks takes
+/// line breaks too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub enum TextBreaks {
+    /// One line: no breaks at all.
+    None,
+    /// Forced line breaks (U+2028), inside one paragraph.
+    Line,
+    /// Paragraph breaks as well.
+    Paragraph,
+}
+
+impl TextBreaks {
+    /// The most a text holds: a paragraph break (`\n`, `\r`, U+2029), else
+    /// a line break (U+2028), else none.
+    pub fn of_text(text: &str) -> TextBreaks {
+        if text.contains(['\n', '\r', '\u{2029}']) {
+            TextBreaks::Paragraph
+        } else if text.contains('\u{2028}') {
+            TextBreaks::Line
+        } else {
+            TextBreaks::None
+        }
+    }
 }
 
 /// What a field's value must meet.
@@ -117,6 +154,14 @@ pub struct Constraints {
     /// The fit applied after a picture is replaced (ADR 257's names).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fit: Option<String>,
+    /// The character styles a text field's value may be written in, by
+    /// style id (`CharacterStyle/Bold`) or name (`Bold`) (engine ADR 1017).
+    /// Empty: none, the value takes the frame's own style only.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub allowed_styles: Vec<String>,
+    /// The breaks a text field's value may hold; absent, any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub breaks: Option<TextBreaks>,
 }
 
 /// A module field's own part of its definition. The engine lists the field
@@ -163,6 +208,11 @@ pub struct FieldDef {
     /// A module field's kind and definition (`kind` is `module`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub module: Option<ModuleField>,
+    /// An alternates field's members, by item name (`kind` is
+    /// `alternates`): the filler shows one of them and the others are
+    /// hidden.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<String>,
 }
 
 impl FieldDef {
@@ -222,6 +272,11 @@ pub struct DocumentPolicy {
     /// ADR 1002), or a plugin placeholder's key.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub runs: BTreeMap<String, FieldDef>,
+    /// Fields that choose one of several items (`alternates`), by field
+    /// name (engine ADR 1017). Their members stay ordinary items, hidden
+    /// but the one shown, so an IDML reader sees hidden page items.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub alternates: BTreeMap<String, FieldDef>,
 }
 
 /// A policy label that could not be read. The document still opens; the
@@ -271,5 +326,19 @@ impl ItemPolicy {
     /// The label value that stores this policy.
     pub fn to_label(&self) -> String {
         write_envelope(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TextBreaks;
+
+    #[test]
+    fn breaks_are_ordered_and_read_from_text() {
+        assert_eq!(TextBreaks::of_text("one line"), TextBreaks::None);
+        assert_eq!(TextBreaks::of_text("a\u{2028}b"), TextBreaks::Line);
+        assert_eq!(TextBreaks::of_text("a\u{2028}b\nc"), TextBreaks::Paragraph);
+        assert_eq!(TextBreaks::of_text("a\u{2029}b"), TextBreaks::Paragraph);
+        assert!(TextBreaks::None < TextBreaks::Line && TextBreaks::Line < TextBreaks::Paragraph);
     }
 }

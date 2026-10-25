@@ -824,7 +824,7 @@ export function createObjectRegistry(
         commandPlans.length > 0
           ? await coreCommands!.snapshot(commandPlans.map((c) => c.plan))
           : null;
-      // Engine ADR 1017 — the caller's name for the one undo step.
+      // Engine ADR 1030 — the caller's name for the one undo step.
       const outcome = await core.commit(
         mutations,
         label !== undefined ? { label } : undefined,

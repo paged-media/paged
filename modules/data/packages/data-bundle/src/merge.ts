@@ -640,6 +640,17 @@ async function copiedFrameProperties(
   return out;
 }
 
+/** A story's font, size and leading as the overset measure reads them
+ *  (the whole story's formatting, as a template frame's is read; data ADR
+ *  564 measures any placed text with it). */
+export async function storyFont(
+  host: BundleHost,
+  storyId: string,
+  text: string,
+): Promise<TemplateFrameInfo["font"]> {
+  return fontOf(await copiedProperties(host, storyId, text));
+}
+
 function fontOf(format: CopiedProperty[]): TemplateFrameInfo["font"] {
   const get = (p: string) =>
     (format.find((f) => f.path === p)?.value as { value?: unknown } | undefined)
@@ -679,6 +690,9 @@ export interface MergeWriteOptions {
   /** The id every merged element is labelled with, so a re-merge finds and
    *  replaces them (`relower.ts`). */
   mergeId: string;
+  /** The session query the records come from, named in each label so the
+   *  Data panel can mark and find a record's frames (editor ADR 291). */
+  dataQuery?: string;
   /** Mutations that clear a previous run of this merge (`relower.ts`); they
    *  ride the first batch, so a re-merge is no extra undo step. */
   clear?: Mutation[];
@@ -796,6 +810,7 @@ export function contentMutation(
       const label = makeEnvelope({
         kind: "merge",
         merge: opts.mergeId,
+        ...(opts.dataQuery ? { query: opts.dataQuery } : {}),
         record: rec.record,
         frame: f.template,
         ...(createdPage ? { createdPage } : {}),

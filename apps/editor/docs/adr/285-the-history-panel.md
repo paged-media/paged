@@ -4,7 +4,7 @@
 - **Scope:** `apps/canvas/src/panels/history-panel.tsx`, `history-store.ts` (the `paged.history`
   panel, registered in `built-in-panels.tsx`), `apps/canvas/src/app-commands.ts` (Edit ▸
   History), `packages/client` (`undoLog`, `undoTo`, `redoTo`, `restoreTo`,
-  `setHistoryDepth`). Builds on engine ADR 1017 (named undo steps, protocol 77) and ADR 012
+  `setHistoryDepth`). Builds on engine ADR 1030 (named undo steps, protocol 77) and ADR 012
   (an edit context may own undo).
 
 ## Context

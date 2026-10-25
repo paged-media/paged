@@ -42,13 +42,26 @@ export interface LoweredStyle {
 
 /** A color to mint via `createSwatch`. */
 export interface LoweredSwatch {
-  /** `Color/docx-RRGGBB`. */
+  /** `Color/docx-RRGGBB`, or `Color/docx-theme-…` for a theme colour. */
   id: string;
   name: string;
   /** `"RGB"` this pass. */
   space: string;
   /** Channel values in `space` — `[r, g, b]` on 0–255. */
   value: number[];
+  /** A theme colour's swatch (doc ADR 609): the Word theme colour and the
+   *  colour it had at import. */
+  theme?: {
+    color: { slot: string; tint?: number; shade?: number };
+    rgb: string;
+  };
+}
+
+/** A colour group to mint via `createColorGroup` (the "Word theme" group). */
+export interface LoweredColorGroup {
+  id: string;
+  name: string;
+  members: string[];
 }
 
 export interface LoweredRun {
@@ -289,6 +302,10 @@ export interface LoweredDoc {
   /** ADR 033 — `w:evenAndOddHeaders`: even pages show the `even` pair. */
   evenAndOddHeaders?: boolean;
   diagnostics: Diagnostic[];
+  /** Doc ADR 609 — colour groups to create after the swatches. */
+  colorGroups?: LoweredColorGroup[];
+  /** Doc ADR 609 — the theme's Latin heading and body faces. */
+  themeFonts?: { major?: string; minor?: string };
 }
 
 /** Parse the JSON string `docx-js` produces into a typed [`LoweredDoc`]. */

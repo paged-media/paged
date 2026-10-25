@@ -129,6 +129,13 @@ these rules:
 The zero-edit save stays byte-identical per part. Every refusal is named in the
 ledger and reaches the host's diagnostics as before.
 
+## Amendment 2026-10-24 (W1) — see ADR 610
+
+[ADR 610](610-save-back-across-sessions-and-new-parts.md) makes `styles.xml` a splice
+target, applies the paragraph style read back, keeps atomic run content inside an edited
+run's text in place, and records that save-back works across sessions through the stored
+source part. The "Consequences" above that say otherwise are superseded there.
+
 ## Related
 
 - [ADR 601](601-own-package-container.md), [ADR 600](600-docx-lowered-onto-native-model.md), [ADR 603](603-two-entry-points.md) — the container that carries untouched parts; the lowering that is diffed; where the source bytes come from

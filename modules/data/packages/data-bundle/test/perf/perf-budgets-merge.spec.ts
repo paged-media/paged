@@ -114,6 +114,10 @@ const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
 // the page's spread origin is gone. host calls 17 → 16, reads 11 → 10. (The
 // engine also reports `frameDropShadowKnockedOut` on every frame, a fresh one
 // included; it is a fresh-frame default and not copied: mutation ops stay 403.)
+//
+// W8 with editor ADR 291's per-record status: a merge records its query's
+// result as what the document was written from (`mark_query_applied`), one
+// engine call: wasm calls 4 → 5 (6 → 7 labelled).
 const W8: Measured = onLabelled(
   {
     // 148 → 147, 13 → 12: the same −1 read net as below (template frame read
@@ -124,7 +128,7 @@ const W8: Measured = onLabelled(
     mutationOps: 402,
     undoSteps: 2,
     placeholdersRead: 0,
-    wasmCalls: 4,
+    wasmCalls: 5,
     cellsIn: 0,
     resolves: 0,
     stabilizeCalls: 0,
@@ -138,7 +142,7 @@ const W8: Measured = onLabelled(
     mutates: 1,
     mutationOps: 403,
     undoSteps: 1,
-    wasmCalls: 6,
+    wasmCalls: 7,
   },
 );
 

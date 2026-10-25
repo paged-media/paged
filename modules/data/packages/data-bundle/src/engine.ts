@@ -147,6 +147,16 @@ export interface DataEngineLike {
   merge_words?(plan: unknown, frames: number): unknown;
   /** Wave 5: per record, per frame, is the merged text overset (DM-7)? */
   merge_overset?(plan: unknown, metrics: unknown): unknown;
+  /** Data ADR 564: one text's distinct words, for the host to measure. */
+  text_words?(text: string): unknown;
+  /** Data ADR 564: is a text overset in a frame `width` × `height` (pt) at
+   *  the measured `metrics` (`{ leadingPt, advances }`)? */
+  text_overset?(
+    text: string,
+    width: number,
+    height: number,
+    metrics: unknown,
+  ): boolean;
   /** Editor ADR 291: the Data Merge placeholders of a text that name a field
    *  (`{ start, end, field, image }[]`, byte offsets as the host counts
    *  them). Optional: a wasm built before it lacks it. */
@@ -241,6 +251,13 @@ export interface DataEngineLike {
   mark_rows_applied?(): void;
   /** §8: the row diff per query since `mark_rows_applied` (`QueryRowDiff[]`). */
   row_diff?(opts: unknown): unknown;
+  /** Snapshot ONE query's result as the one the document was written from
+   *  (a Data Merge). */
+  mark_query_applied?(query: string): void;
+  /** Editor ADR 291: one query's per-record status since it was written
+   *  from (`EngineRecordStatus`, or null without a result). `opts` is
+   *  `{ key?, instances? }`. */
+  record_status?(query: string, opts: unknown): unknown;
   /** Check an expression: `{ ok, error?, fields, unknownFields }`. */
   check_expression?(src: string, query?: string | null): unknown;
   /** §9.5: which records a condition fires on, `{ fires, total, error? }`. */

@@ -22,7 +22,9 @@
 // approved green, changed in the data or kept as placed (stale, pinned,
 // overridden, not resolved yet) the review amber, failed the error red. A
 // frame several bindings place into takes the worst of them. Brackets, not
-// a box, so a marker never reads as the selection's outline.
+// a box, so a marker never reads as the selection's outline. A frame the
+// service names in an issue (`issues()`: overset text, a picture missing or
+// too coarse, a failed value) is marked in the error red too.
 //
 // COST. Off by default, and nothing is read while it is off. On, one
 // `placements()` of the service and one batched `elementGeometry`, again
@@ -104,6 +106,18 @@ async function readMarkers(
     if (typeof service.placements !== "function") return [];
     const placed = markersOf(await service.placements());
     if (!current()) return "superseded";
+    // A frame with an issue (text that does not fit, a picture missing or
+    // too coarse) is marked as failed, whatever its sync state.
+    if (typeof service.issues === "function") {
+      for (const i of await service.issues()) {
+        const element =
+          i.severity !== "info" && i.address
+            ? elementOfPlacement(i.address)
+            : null;
+        if (element) placed.set(i.address!, { element, tone: "error" });
+      }
+      if (!current()) return "superseded";
+    }
     if (placed.size === 0) return [];
     const items = await client.elementGeometry(
       [...placed.values()].map((m) => m.element),

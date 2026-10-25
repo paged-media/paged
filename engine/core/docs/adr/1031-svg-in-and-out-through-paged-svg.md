@@ -1,4 +1,4 @@
-# ADR 1018 — SVG in and out through `paged-svg`
+# ADR 1031 — SVG in and out through `paged-svg`
 
 - **Status:** Accepted 2026-10-24.
 - **Scope:** protocol v77. The new crate `crates/paged-svg` (import and export);

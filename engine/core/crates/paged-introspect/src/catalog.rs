@@ -765,7 +765,7 @@ property_paths! {
         FramePdfPage => "framePdfPage" : count().min(1.0).default_num(1.0).idml(idml![attr(PDFAttribute, PageNumber)]),
         // Engine ADR 1006 — the outline's fill rule; IDML has no attribute.
         FrameFillRule => "frameFillRule" : enum_(FILL_RULES).default_text("NonZero"),
-        // Engine ADR 1018 — the gradient fill's start, `[x, y]` in inner coordinates.
+        // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
@@ -1417,7 +1417,7 @@ mod tests {
         //
         // 244 -> 245: ADR 1006 — a frame's fill rule.
         //
-        // 245 -> 247: ADR 1010 — a group is a clip group; ADR 1018 — where a frame's gradient fill starts.
+        // 245 -> 247: ADR 1010 — a group is a clip group; ADR 1031 — where a frame's gradient fill starts.
         assert_eq!(cat.settable_paths.len(), 247, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");

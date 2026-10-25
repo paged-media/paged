@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! A page's display list → an SVG document (engine ADR 1018).
+//! A page's display list → an SVG document (engine ADR 1031).
 //!
 //! The display list is what every module's content draws as, so one
 //! writer serves them all. Paths are written in page coordinates (the

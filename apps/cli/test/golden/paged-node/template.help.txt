@@ -6,7 +6,7 @@ paged-node template fields <doc> | kinds | fill <template> | check <template> <f
 template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields, ingest a document tagged for XML as a template
 
 options:
-  --values <json|file>               the field values: a JSON list of {name, value}, an object of name → text, or a file holding either
+  --values <json|file>               the field values: a JSON list of {name, value}, an object of name → text, styled runs ([{text, style?} | {break}]), an alternate's name or a value, or a file holding either
   -o, --out <file>                   fill, ingest: write the result here
   --names                            ingest: untagged items with a name become fields too
   --placeholders                     ingest: plugin placeholders become fields too

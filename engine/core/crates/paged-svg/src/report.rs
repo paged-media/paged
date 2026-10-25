@@ -43,7 +43,7 @@ pub enum SvgNoteSeverity {
 #[serde(rename_all = "camelCase")]
 pub struct SvgNote {
     /// A stable code (`"filter"`, `"gradient.focal"`, `"text.outlined"`,
-    /// …) a caller can switch on; the codes are listed in engine ADR 1018.
+    /// …) a caller can switch on; the codes are listed in engine ADR 1031.
     pub code: String,
     pub severity: SvgNoteSeverity,
     /// What happened, in a sentence.

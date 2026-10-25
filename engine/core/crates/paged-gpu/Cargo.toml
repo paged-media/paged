@@ -50,7 +50,7 @@ image = { workspace = true, optional = true }
 # through the decoder the renderer's build-time decode uses.
 paged-raster = { path = "../paged-raster", optional = true }
 usvg = { version = "0.48", optional = true, default-features = false, features = ["svgz"] }
-# The one walk over a usvg tree (engine ADR 1018, plan C9), shared with the
+# The one walk over a usvg tree (engine ADR 1031, plan C9), shared with the
 # placed-SVG vector lane and the SVG import. No default features: the walk
 # alone, without the import's mutation crates or usvg's text shaper.
 paged-svg = { path = "../paged-svg", optional = true, default-features = false }

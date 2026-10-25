@@ -734,7 +734,7 @@ Additive at protocol 76 like the fill rule: an older engine makes a plain
 group of `clip: true` and refuses a group child. paged.draw's clipped
 repeat asks it before choosing a clip group over paste-into.
 
-`"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1018,
+`"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
 protocol 77) are SVG in and out through the engine's `paged-svg`.
 `importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the
 engine for the import's ONE batch (`requestSvgImport`, a read) and applies
@@ -2882,7 +2882,7 @@ stands in for. Four doors, shipped together:
   (`setTextSelection`) and reports the document context (`documentContext()`, dropped on load).
 - **Isolate.** The groups and status items are React in the host realm, like panels (§6).
 
-## 27. Named undo steps and the History panel (engine ADR 1017, editor ADR 285 — `document.undoLog@1`)
+## 27. Named undo steps and the History panel (engine ADR 1030, editor ADR 285 — `document.undoLog@1`)
 
 Every step of the document's undo timeline has a name, and a bundle can read the timeline,
 move along it, and name the steps it makes (protocol 77).

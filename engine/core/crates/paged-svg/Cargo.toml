@@ -42,7 +42,7 @@ export = [
 # markers. The `import` feature turns on its `text` feature, which lays
 # text out against the fonts the caller hands in (no system font is read),
 # so an import keeps text as text frames: the 0.9 MB the renderer declined for
-# placed SVGs (engine ADR 1018).
+# placed SVGs (engine ADR 1031).
 usvg = { version = "0.48", default-features = false, features = ["svgz"] }
 # The import's output is the wire's own vocabulary.
 paged-wire = { path = "../paged-wire", optional = true }

@@ -203,6 +203,27 @@
       - "engine:paged-data-session/tests/labels.rs::a_restored_file_source_asks_for_its_file_again__feat__data_bind_labels_native"
     vitest: ["packages/data-bundle/test/labels-conformance.spec.ts"]
 
+- id: data.bind.record-status
+  title: Per-record status — records new, changed, placed and gone since the document was written from a query (editor ADR 291)
+  spec: paged-data-session src/record_status.rs + DataSession::record_status / mark_query_applied
+  status: implemented
+  provenance:
+    [
+      "the applied snapshot of each query (Update document, a field refresh, a Data Merge) diffed against the current result by record identity: the caller's key, else the first column unique in both results, else the whole row (then a change is a removal plus an addition and `changed` is empty)",
+      "placed: a table's records, the first record a single-record binding shows, and the instances the host reads from page-item labels (merged records, record-flow frames, whose paginated blocks name their row); each instance is carried to its row now, and removed counts the placed records that are gone",
+      "bundle: the data door's recordStatus and a placement's record (src/record-status.ts); the editor's Data panel tints rows, marks placed ones and selects a record's page items on a double-click",
+    ]
+  tests:
+    rust:
+      - "engine:paged-data-session/tests/record_status.rs::a_query_never_written_from_is_a_baseline__feat__data_bind_record_status"
+      - "engine:paged-data-session/tests/record_status.rs::added_changed_and_removed_records_are_matched_by_a_unique_column__feat__data_bind_record_status"
+      - "engine:paged-data-session/tests/record_status.rs::a_declared_key_wins_and_the_whole_row_never_reports_a_change__feat__data_bind_record_status"
+      - "engine:paged-data-session/tests/record_status.rs::without_a_unique_column_the_whole_row_is_the_key__feat__data_bind_record_status"
+      - "engine:paged-data-session/tests/record_status.rs::a_record_flow_names_the_row_each_instance_shows__feat__data_bind_record_status"
+    vitest:
+      - "packages/data-bundle/src/__tests__/record-status.test.ts"
+      - "packages/data-bundle/test/record-status-real-core.spec.ts"
+
 - id: data.assets.columns
   title: Asset columns — fetched for a consented origin, kept by content hash, run through an action chain (ADR 563)
   spec: plugin-data packages/data-bundle/src/assets.ts

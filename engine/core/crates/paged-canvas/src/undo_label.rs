@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1017 — the name of an undo step.
+//! Engine ADR 1030 — the name of an undo step.
 //!
 //! Every step on the undo timeline (ADR 110) carries a label the History
 //! panel and the Edit menu show: an explicit one the caller gave

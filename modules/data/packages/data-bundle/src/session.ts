@@ -24,6 +24,14 @@
 // here (CLAUDE.md hard rule) — it orchestrates the Rust engine.
 
 import { createDataDoor, type DataDoor } from "./data-door";
+import {
+  imageIssues,
+  issueDiagnostics,
+  ISSUES_DIAGNOSTICS_KEY,
+  oversetIssues,
+  type ImageNote,
+  type TextTarget,
+} from "./issues";
 import { createAssetPipeline, type AssetColumnDef } from "./assets";
 import {
   placeRecordOn,
@@ -35,6 +43,7 @@ import {
 import type { TransformDefJson } from "./engine";
 import type {
   BundleHost,
+  DataIssue,
   DataProviderHandle,
   DataProviderRegistration,
   ElementId,
@@ -62,7 +71,7 @@ import {
 import { bootEngine, ENGINE_NOT_BUILT, type DataEngineLike } from "./engine";
 import { hostWasm } from "./bin-url";
 import { t as tr } from "@paged-media/strings";
-import { BINDINGS, SOURCES, STATUS } from "./messages";
+import { BINDINGS, ISSUES, SOURCES, STATUS } from "./messages";
 import { reviewMethods, type ReviewSession } from "./review";
 import {
   recordTemplateMethods,
@@ -109,6 +118,8 @@ import { contentPatch, type PayloadJson } from "./labels";
 import {
   mergeRecords as writeMerge,
   readMergeTemplate,
+  measureWords,
+  storyFont,
   type MergeResult,
   type MergeTemplate,
   type TemplatePageRow,
@@ -215,6 +226,10 @@ async function readLiveChain(
     };
   });
 }
+
+/** How long after a placement or an edit the issues are read again for the
+ *  Problems panel (data ADR 564): a burst of edits reads them once. */
+const ISSUES_DELAY_MS = 250;
 
 /** How `subscribeChainReflow` coalesces a burst of reflow events. */
 export interface ReflowOptions {
@@ -557,6 +572,10 @@ export interface DataSourceSession
   getState(): SessionState;
   /** The data door this session serves (`data@1`, extensions ADR 343). */
   dataDoor(): DataDoor;
+  /** Publish the data issues to Problems after each placement and edit
+   *  (data ADR 564): the bundle turns it on where the host has a Problems
+   *  sink (`diagnostics.publish@1`, asked once at activation). */
+  publishIssuesToProblems(on: boolean): void;
   /** Editor ADR 291's drag to place: a field dropped on a page item. Into a
    *  text frame it is a variable at the start of the frame's story, onto a
    *  graphic frame its picture (an image binding). */
@@ -1096,6 +1115,19 @@ export function createSession(
   const tableInto = new Map<string, { frame: ElementId; storyId: string }>();
   const recordOf = new Map<string, number>();
   const barcodeMinted = new Map<string, ElementId[]>();
+  // Data ADR 564 — what the last placements left to check for issues: each
+  // image binding's outcome, each record flow's frames and unplaced records,
+  // the last merge's frames by record, and each frame's story once read.
+  const imageNotes = new Map<string, ImageNote>();
+  const flowNotes = new Map<
+    string,
+    { frames: string[]; storyId?: string; unplaced: number; total: number }
+  >();
+  let mergeFrames: TextTarget[] = [];
+  const storyOfFrame = new Map<string, string>();
+  const variableFrames = new Map<string, string>();
+  let issuesTimer: ReturnType<typeof setTimeout> | null = null;
+  let issuesToProblems = false;
   // The template each merge read last: a consumed template is gone from its
   // page, and a re-merge reuses it.
   const mergeTemplates = new Map<string, MergeTemplate>();
@@ -2226,6 +2258,11 @@ export function createSession(
     imageTargets.clear();
     barcodeTargets.clear();
     placedVariables.clear();
+    imageNotes.clear();
+    flowNotes.clear();
+    mergeFrames = [];
+    storyOfFrame.clear();
+    variableFrames.clear();
     ruleTargets.clear();
     remoteSources.clear();
     importedCsv.clear();
@@ -2551,6 +2588,8 @@ export function createSession(
     }),
     host.document.onDidChange((ev) => {
       docChanges += 1;
+      // An edit can make placed text fit or not (data ADR 564).
+      issuesSoon();
       // Undo/redo can take a placed field away or bring it back; a stale
       // "placed" would make Lower skip placing it again. It can also take
       // the session label back: the session follows it.
@@ -2627,6 +2666,248 @@ export function createSession(
   });
   const objectsUp = () => objectsOf(host) !== null;
 
+  // ── data issues (data ADR 564) ──────────────────────────────────────────
+  /** What may be wrong with the placed content, read now: the engine's own
+   *  answers (sync state, resolved values, the paginator's overflow) and the
+   *  host's geometry (frame chains, frame sizes). */
+  async function computeIssues(): Promise<DataIssue[]> {
+    const e = engine;
+    if (!e) return [];
+    const payload = (e.payload() ?? {}) as {
+      bindings?: { id: string; kind: string }[];
+    };
+    const out: DataIssue[] = [];
+    let placed: readonly { binding: string; address: string }[] = [];
+    try {
+      placed = await props.placements();
+    } catch {
+      placed = [];
+    }
+    const addressOf = new Map<string, string>();
+    for (const p of placed)
+      if (!addressOf.has(p.binding)) addressOf.set(p.binding, p.address);
+    // A variable placed into a frame through the door: its frame, where the
+    // placements do not name one (a text variable's instances).
+    for (const [id, frame] of variableFrames)
+      if (!addressOf.has(id)) addressOf.set(id, `textFrame:${frame}`);
+
+    // Overset: every story a variable is placed in, every frame a table or
+    // a flow was lowered into, every frame of the last merge.
+    const texts: TextTarget[] = [];
+    if (placedVariables.size > 0) {
+      // A placeholder field names its story; a text variable's instances
+      // do not (its field reads under the variable), so the frames the
+      // variable is placed in are read for theirs.
+      for (const f of await readFieldsQuietly())
+        if (placedVariables.has(f.key) && !f.variable)
+          texts.push({ binding: f.key, storyId: f.storyId });
+      for (const [binding, address] of addressOf)
+        if (placedVariables.has(binding) && address.startsWith("textFrame:"))
+          texts.push({
+            binding,
+            frame: address.slice("textFrame:".length),
+          });
+    }
+    for (const [id, el] of loweredInto)
+      if (el.kind === "textFrame" && !flowNotes.has(id))
+        texts.push({ binding: id, frame: String(el.id) });
+    for (const [id, note] of flowNotes) {
+      if (note.storyId) texts.push({ binding: id, storyId: note.storyId });
+      else for (const frame of note.frames) texts.push({ binding: id, frame });
+    }
+    texts.push(...mergeFrames);
+    out.push(
+      ...(await oversetIssues(
+        host,
+        texts,
+        async (frame) => {
+          const known = storyOfFrame.get(frame);
+          if (known) return known;
+          const story = await frameStory(host, frame);
+          if (story) storyOfFrame.set(frame, story);
+          return story;
+        },
+        measuredOverset,
+      )),
+    );
+
+    // Pictures: missing, or too coarse for their frames.
+    out.push(
+      ...(await imageIssues(
+        imageNotes,
+        (id) => {
+          const t = imageTargets.get(id);
+          if (!t) return undefined;
+          const at = addressOf.get(id);
+          const kind = at?.slice(0, at.indexOf(":")) || "rectangle";
+          return {
+            element: { kind, id: t.elementId } as ElementId,
+            fit: t.fit,
+          };
+        },
+        async (elements) => {
+          const sizes = new Map<string, [number, number]>();
+          const geom = (await host.document.elementGeometry(elements)) as {
+            id: ElementId;
+            bounds?: [number, number, number, number];
+          }[];
+          for (const g of geom)
+            if (g.bounds)
+              sizes.set(String(g.id.id), [
+                g.bounds[3] - g.bounds[1],
+                g.bounds[2] - g.bounds[0],
+              ]);
+          return sizes;
+        },
+      )),
+    );
+
+    // Values: a failed binding, an empty placed variable.
+    for (const b of payload.bindings ?? []) {
+      const address = addressOf.get(b.id);
+      const at = address ? { address } : {};
+      if (syncStatus(e, b.id) === "error") {
+        const why = [...diagnostics]
+          .reverse()
+          .find((d) => d.binding === b.id && d.level === "error")?.message;
+        out.push({
+          kind: "error",
+          severity: "error",
+          message: why
+            ? tr(ISSUES.failed, { binding: b.id, reason: why })
+            : tr(ISSUES.failedUnknown, { binding: b.id }),
+          binding: b.id,
+          ...at,
+        });
+        continue;
+      }
+      if (b.kind !== "variable" || !placedVariables.has(b.id)) continue;
+      const lowered = resolvedQuietly(e, b.id);
+      if (
+        lowered?.kind === "variable" &&
+        !lowered.hidden &&
+        (lowered.text ?? "") === ""
+      )
+        out.push({
+          kind: "emptyValue",
+          severity: "info",
+          message: tr(ISSUES.emptyValue, { binding: b.id }),
+          binding: b.id,
+          ...at,
+        });
+    }
+
+    // Flows: records the paginator could not place.
+    for (const [id, note] of flowNotes) {
+      if (note.unplaced <= 0) continue;
+      const first = note.frames[0];
+      out.push({
+        kind: "unplacedRecords",
+        severity: "warning",
+        message: tr(ISSUES.unplaced, {
+          binding: id,
+          count: note.unplaced,
+          total: note.total,
+        }),
+        binding: id,
+        ...(first ? { address: `textFrame:${first}` } : {}),
+      });
+    }
+    return out;
+  }
+
+  /** Whether a one-frame story's text overflows its frame as the engine
+   *  wraps it at the host's advances (the host's own layout reported none:
+   *  a host without fonts never does). False where it cannot be measured. */
+  async function measuredOverset(
+    storyId: string,
+    frameId: string,
+  ): Promise<boolean> {
+    const e = engine;
+    if (!e?.text_words || !e.text_overset) return false;
+    if (!host.supports("document.readStory@1")) return false;
+    const content = await host.document.storyContent(storyId);
+    if (!content) return false;
+    const text = content.paragraphs
+      .map((p) => p.runs.map((r) => r.text).join(""))
+      .join("\n")
+      .replace(/[\r\u2028\u2029]/g, "\n")
+      .replace(/\n+$/, "");
+    if (text === "") return false;
+    const [g] = (await host.document.elementGeometry([
+      { kind: "textFrame", id: frameId } as ElementId,
+    ])) as { bounds?: [number, number, number, number] }[];
+    if (!g?.bounds) return false;
+    const [top, left, bottom, right] = g.bounds;
+    const font = await storyFont(host, storyId, text);
+    const words = e.text_words(text) as string[];
+    const [metrics] = await measureWords(
+      host,
+      { frames: [{ font }] } as never,
+      [words],
+    );
+    return e.text_overset(text, right - left, bottom - top, metrics);
+  }
+
+  /** Our fields (placeholders and text variables), or none when they do not
+   *  read now; reports nothing (an issue read is not a command). */
+  async function readFieldsQuietly(): Promise<PlaceholderField[]> {
+    try {
+      const all =
+        (await host.document.placeholders()) as readonly PlaceholderField[];
+      return [
+        ...all.filter((f) => f.plugin === FIELD_PLUGIN),
+        ...(await readTextVariableFields(rawHost)),
+      ];
+    } catch {
+      return [];
+    }
+  }
+
+  /** A variable's resolved value as the engine lowers it, or null. */
+  function resolvedQuietly(
+    e: DataEngineLike,
+    id: string,
+  ): { kind?: string; text?: string | null; hidden?: boolean } | null {
+    try {
+      return e.resolve_lowered(id) as {
+        kind?: string;
+        text?: string | null;
+        hidden?: boolean;
+      } | null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Read the issues and publish them to the Problems panel (an empty list
+   *  clears what was published). */
+  async function publishIssues(): Promise<DataIssue[]> {
+    const issues = await computeIssues();
+    host.diagnostics.set(ISSUES_DIAGNOSTICS_KEY, issueDiagnostics(issues));
+    return issues;
+  }
+
+  /** Publish the issues soon after a placement or an edit, where a Problems
+   *  panel listens (`diagnostics.publish@1`) and something is placed: off
+   *  the command's own path, one read for a burst of changes. */
+  function issuesSoon(): void {
+    if (!issuesToProblems) return;
+    const anything =
+      placedVariables.size > 0 ||
+      loweredInto.size > 0 ||
+      imageNotes.size > 0 ||
+      flowNotes.size > 0 ||
+      mergeFrames.length > 0;
+    if (!anything && host.diagnostics.get(ISSUES_DIAGNOSTICS_KEY).length === 0)
+      return;
+    if (issuesTimer) clearTimeout(issuesTimer);
+    issuesTimer = setTimeout(() => {
+      issuesTimer = null;
+      void publishIssues().catch(() => {});
+    }, ISSUES_DELAY_MS);
+  }
+
   // Extensions ADR 343 — the data door paged.data serves (`data-door.ts`).
   const door = createDataDoor({
     ensureStore,
@@ -2664,7 +2945,12 @@ export function createSession(
       self.placeRecord(query, record, elementOfAddress(target)),
     loadSample: () => self.loadSample(),
     recordOf: (id) => recordOf.get(id),
-    placements: () => props.placements(),
+    placements: () => props.placements((id) => recordOf.get(id)),
+    recordStatus: (query) =>
+      props.recordStatus(query, self.diffKeyOf(query), (id) =>
+        recordOf.get(id),
+      ),
+    issues: () => publishIssues(),
     assetColumns: () => self.assetColumns(),
     setAssetColumn: (query, field, def) =>
       self.setAssetColumn(query, field, def),
@@ -2715,6 +3001,10 @@ export function createSession(
     if (!def) return undefined;
     return async (uri: string) => {
       const r = await assets.resolve(uri, def);
+      imageNotes.set(
+        bindingId,
+        r.ok ? (r.pixels ? { pixels: r.pixels } : {}) : { missing: r.reason },
+      );
       return r.ok ? { uri: r.uri } : { reason: r.reason };
     };
   }
@@ -2778,6 +3068,9 @@ export function createSession(
   const self: DataSourceSession = {
     ...props,
     dataDoor: () => door,
+    publishIssuesToProblems(on) {
+      issuesToProblems = on;
+    },
     async placeField(query, field, target) {
       const id = `${field.replace(/[^A-Za-z0-9_]/g, "_")}-${Date.now().toString(36)}`;
       if (target.kind === "textFrame") {
@@ -2801,7 +3094,9 @@ export function createSession(
         );
         if (!placed) throw new Error(`the field ${field} could not be placed`);
         placedVariables.add(id);
+        variableFrames.set(id, String(target.id));
         emit();
+        issuesSoon();
         return { binding: id, kind: "variable" };
       }
       if (["rectangle", "oval", "polygon"].includes(String(target.kind))) {
@@ -3840,6 +4135,11 @@ export function createSession(
             loweredInto.set(id, res.frames[0]);
             markDirty();
           }
+          flowNotes.set(id, {
+            frames: res.frames.map((f) => String(f.id)),
+            unplaced: res.total - res.placed,
+            total: res.total,
+          });
           state.status = res.ok ? "ready" : "error";
           state.message = tr(STATUS.recordFlowFrames, {
             id,
@@ -3964,6 +4264,10 @@ export function createSession(
         } else if (lowered?.kind === "image") {
           // D-14: place onto the bound rectangle (caller-supplied target).
           const tgt = imageTargets.get(id);
+          const status = (lowered as { status?: string }).status;
+          imageNotes.delete(id);
+          if (status === "flagged")
+            imageNotes.set(id, { missing: tr(ISSUES.noReference) });
           if (tgt) {
             await commitLoweredImage(
               host,
@@ -3987,6 +4291,7 @@ export function createSession(
         }
         state.status = "ready";
         state.message = tr(STATUS.lowered, { id });
+        issuesSoon();
       } catch (err) {
         state.status = "error";
         state.message = err instanceof Error ? err.message : String(err);
@@ -4024,6 +4329,7 @@ export function createSession(
       if (ctx.refreshFields) await this.refreshFields();
       // The document is now written from these results: the row diff's "before".
       await this.markApplied();
+      issuesSoon();
     },
 
     async recordCount(queryId) {
@@ -4380,6 +4686,7 @@ export function createSession(
 
       const written = await writeFields("refresh", writes);
       await this.markApplied();
+      issuesSoon();
       const kept = [...resolved.values()].filter((r) => r === "kept").length;
       state.status = "ready";
       state.message =
@@ -4407,7 +4714,18 @@ export function createSession(
       // topology is host-read (frameChain), not caller-supplied.
       const e = await ensureEngine();
       const chain = await readLiveChain(host, storyId);
-      return e.lower_record_flow(bindingId, chain, undefined);
+      const flow = e.lower_record_flow(bindingId, chain, undefined) as {
+        placed?: number;
+        total?: number;
+      } | null;
+      if (typeof flow?.total === "number" && typeof flow.placed === "number")
+        flowNotes.set(bindingId, {
+          frames: chain.map((c) => c.frame),
+          storyId,
+          unplaced: flow.total - flow.placed,
+          total: flow.total,
+        });
+      return flow;
     },
 
     subscribeChainReflow(bindingId, storyId, onRepaginate, options) {
@@ -4916,11 +5234,30 @@ export function createSession(
         template: mode,
         imageBase: options.imageBase,
         mergeId,
+        dataQuery: options.query,
         clear: plan.remove,
         templatePresent,
         pageHandles: labelActive,
       });
-      if (result.ok) mergeTemplates.set(mergeId, template);
+      if (result.ok) {
+        mergeTemplates.set(mergeId, template);
+        // The document is now written from this query's records: the
+        // "before" of its per-record status (editor ADR 291).
+        try {
+          e.mark_query_applied?.(options.query);
+        } catch {
+          // an engine without the lane: no status, nothing else changes
+        }
+      }
+      mergeFrames = result.records.flatMap((r) =>
+        r.frames.map((f) => ({
+          binding: mergeId,
+          storyId: f.storyId,
+          frame: String(f.element.id),
+          record: r.record,
+        })),
+      );
+      issuesSoon();
       for (const d of result.diagnostics) {
         report({
           level: result.ok ? "warn" : "error",
@@ -5055,6 +5392,8 @@ export function createSession(
     dispose() {
       if (persistTimer) clearTimeout(persistTimer);
       persistTimer = null;
+      if (issuesTimer) clearTimeout(issuesTimer);
+      issuesTimer = null;
       for (const d of hostSubs.splice(0)) d.dispose();
       poller.stopAll();
       listeners.clear();

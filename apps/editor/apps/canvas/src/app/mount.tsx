@@ -1488,7 +1488,7 @@ function CanvasAppIntegration() {
       system: browserClipboard(),
       deleteSelection: () => deleteSelection(objectDeps),
     });
-    // Engine ADR 1018 — File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG.
+    // Engine ADR 1031 — File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG.
     const svgCommands = buildSvgCommands({
       report: (rows) =>
         problemsSink.publish(

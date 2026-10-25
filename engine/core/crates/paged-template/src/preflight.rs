@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use tsify_next::Tsify;
 
 use crate::policy::{read_envelope, ItemPolicy, TemplateFieldKind, TEMPLATE_KEY};
-use crate::resolve::PolicyIndex;
+use crate::resolve::{alternate_members, PolicyIndex};
 
 /// How much a finding matters: an error makes the template unfit to hand
 /// to a filler; a warning is worth a look.
@@ -49,7 +49,9 @@ pub enum FindingSeverity {
 pub struct TemplateFinding {
     /// `policyUnreadable`, `fieldUnnamed`, `fieldDuplicate`,
     /// `imageNotReplaceable`, `textHasNoStory`, `requiredHidden`,
-    /// `fieldOnParentPage`, `linkMissing`.
+    /// `fieldOnParentPage`, `linkMissing`, `styleUnknown`,
+    /// `stylesOnNonText`, `alternatesTooFew`, `alternateMissing`,
+    /// `alternateNotOne`.
     pub code: String,
     pub severity: FindingSeverity,
     /// The field's name, when the finding is about one.
@@ -251,6 +253,77 @@ pub fn preflight(doc: &Document) -> Vec<TemplateFinding> {
             }
         }
     }
+    // Engine ADR 1017: a text field's allowed styles, and alternates.
+    for (target, field) in index.fields() {
+        let name = field.name.trim();
+        let styles = &field.constraints.allowed_styles;
+        if !styles.is_empty() && field.kind != TemplateFieldKind::Text {
+            out.push(finding(
+                "stylesOnNonText",
+                Warning,
+                Some(name),
+                Some(target),
+                format!(
+                    "“{name}” lists character styles, but only a text field is written in styles."
+                ),
+            ));
+        }
+        for style in styles {
+            if crate::resolve::allowed_character_style(doc, std::slice::from_ref(style), style)
+                .is_none()
+            {
+                out.push(finding(
+                    "styleUnknown",
+                    Error,
+                    Some(name),
+                    Some(target),
+                    format!("“{name}” allows the character style “{style}”, which the document does not define."),
+                ));
+            }
+        }
+        if field.kind != TemplateFieldKind::Alternates {
+            continue;
+        }
+        let members = alternate_members(doc, field);
+        if members.len() < 2 {
+            out.push(finding(
+                "alternatesTooFew",
+                Error,
+                Some(name),
+                None,
+                format!(
+                    "“{name}” offers fewer than two alternates, so there is nothing to choose."
+                ),
+            ));
+        }
+        let mut shown = 0;
+        for (member, id) in &members {
+            match id.as_deref().and_then(|id| facts.get(id).map(|f| (id, f))) {
+                Some((_, f)) => shown += usize::from(f.visible),
+                None => out.push(finding(
+                    "alternateMissing",
+                    Error,
+                    Some(name),
+                    id.as_deref(),
+                    format!(
+                        "“{name}” offers “{member}”, but no item on a document page has that name."
+                    ),
+                )),
+            }
+        }
+        if shown != 1 && members.len() >= 2 {
+            out.push(finding(
+                "alternateNotOne",
+                Warning,
+                Some(name),
+                None,
+                format!(
+                    "“{name}” shows {shown} of its alternates; it shows exactly one once filled."
+                ),
+            ));
+        }
+    }
+
     for (name, targets) in &by_name {
         if targets.len() > 1 {
             out.push(finding(

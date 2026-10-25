@@ -141,7 +141,7 @@
 // → a colour ref resolved against the swatch collection by NAME), and
 // serializes an `<svg>` document.
 //
-// THE ENGINE LANE (engine ADR 1018). On a host with `document.importSvg@1`
+// THE ENGINE LANE (engine ADR 1031). On a host with `document.importSvg@1`
 // / `document.exportSvg@1` both halves delegate to the engine's paged-svg:
 // the import is the engine's one batch (gradients, text, images, <use>,
 // clip paths, masks and CSS included; what it approximates or leaves out is
@@ -705,7 +705,7 @@ export function svgImportOpsFor(
   return ops;
 }
 
-/** The host features of the engine's SVG lane (engine ADR 1018). */
+/** The host features of the engine's SVG lane (engine ADR 1031). */
 export const IMPORT_SVG_FEATURE = "document.importSvg@1";
 export const EXPORT_SVG_FEATURE = "document.exportSvg@1";
 
@@ -1038,7 +1038,7 @@ export async function exportSvg(
     return null;
   }
   if (host.supports(EXPORT_SVG_FEATURE)) {
-    // The engine writes what the selection draws (engine ADR 1018):
+    // The engine writes what the selection draws (engine ADR 1031):
     // gradients, opacity and blend, clips, masks, pictures, text.
     const result = await host.document.exportSvg({ elementIds: selection });
     for (const note of result.report.notes) {

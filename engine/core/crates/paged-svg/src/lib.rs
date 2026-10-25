@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! SVG in and out of the engine (engine ADR 1018).
+//! SVG in and out of the engine (engine ADR 1031).
 //!
 //! **Import** ([`import`]) reads an SVG with `usvg`, which resolves what
 //! the file means before anything here looks at it: `<use>`, `<defs>` and

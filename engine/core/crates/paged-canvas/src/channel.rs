@@ -731,7 +731,7 @@ export type WorkerToMain = WorkerToMainKind & {
 //   `TooLarge` / `NothingDrawn`.
 //   An older worker ignores the new fields and answers a whole-page PNG,
 //   which a caller detects by the reply's missing `format` / `region`.
-// v77 — named undo steps (engine ADR 1017): `LabelStep { appliedSeq, label
+// v77 — named undo steps (engine ADR 1030): `LabelStep { appliedSeq, label
 //   }` → `StepLabeled`; `RequestUndoLog { limit }` → `UndoLog
 //   { undo, redo, undoLen, redoLen, depth }`; `UndoTo { appliedSeq }` /
 //   `RedoTo { appliedSeq }` step the history several steps in one round trip
@@ -741,7 +741,7 @@ export type WorkerToMain = WorkerToMainKind & {
 //   depth }` → `HistoryDepthApplied { depth }`. Additive on the same bump:
 //   `AmendMutation.label`, `CommitGesture.label`. New message kinds an older
 //   worker cannot answer, hence the bump.
-// v77 (rider) — SVG in and out of the engine (engine ADR 1018, `paged-svg`):
+// v77 (rider) — SVG in and out of the engine (engine ADR 1031, `paged-svg`):
 //   `RequestSvgImport { pageId, bytes, options }` → `SvgImportPlanned`
 //   (the one batch to apply, one undo step, and the report of what was
 //   approximated or left out); `ExportSvg { pageId, elementIds, options }`
@@ -901,7 +901,7 @@ pub struct MintedElement {
     pub story_id: Option<String>,
 }
 
-/// v77 (engine ADR 1017) — one named undo step on the wire.
+/// v77 (engine ADR 1030) — one named undo step on the wire.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
@@ -1219,13 +1219,13 @@ pub enum MainToWorkerKind {
     AmendMutation {
         applied_seq: u64,
         mutation: Mutation,
-        /// v77 (engine ADR 1017) — rename the amended step. Absent keeps
+        /// v77 (engine ADR 1030) — rename the amended step. Absent keeps
         /// the name it had.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[tsify(optional)]
         label: Option<String>,
     },
-    /// v77 (engine ADR 1017) — name the undo step `applied_seq` `label`
+    /// v77 (engine ADR 1030) — name the undo step `applied_seq` `label`
     /// (the caller's words, shown by the History panel and the Edit menu,
     /// instead of the engine's default), when it is still the top of the
     /// undo log: the step the caller's write just made (the `appliedSeq` of
@@ -1235,7 +1235,7 @@ pub enum MainToWorkerKind {
     /// default. Reply: `StepLabeled` (`labeled: false` when the step is no
     /// longer the top, or the write logged none).
     LabelStep { applied_seq: u64, label: String },
-    /// v77 (engine ADR 1017) — read the named undo timeline: the newest
+    /// v77 (engine ADR 1030) — read the named undo timeline: the newest
     /// `limit` undo steps (oldest first) and redo steps (next redo first);
     /// absent = all of them. Reply: `UndoLog`.
     RequestUndoLog {
@@ -1243,17 +1243,17 @@ pub enum MainToWorkerKind {
         #[tsify(optional)]
         limit: Option<u32>,
     },
-    /// v77 (engine ADR 1017) — undo every step down to and including the
+    /// v77 (engine ADR 1030) — undo every step down to and including the
     /// step `applied_seq` (an `UndoLog.undo` entry), in one round trip.
     /// Reply: `UndoApplied` (its `undoneSeq` is `applied_seq`, `steps` how
     /// many were undone, `pageIds` every page they touched), or
     /// `MutationFailed` when that step is not on the undo log.
     UndoTo { applied_seq: u64 },
-    /// v77 (engine ADR 1017) — redo every step up to and including the
+    /// v77 (engine ADR 1030) — redo every step up to and including the
     /// step `applied_seq` (an `UndoLog.redo` entry). Reply: `RedoApplied`
     /// or `MutationFailed`, as for `UndoTo`.
     RedoTo { applied_seq: u64 },
-    /// v77 (engine ADR 1017) — make the document what it was right after
+    /// v77 (engine ADR 1030) — make the document what it was right after
     /// the step `applied_seq` (`0`: before the oldest step on the undo
     /// log), as ONE new undo step named `label` (default "Restore"): the
     /// History panel's snapshot restore. The steps it walked over stay
@@ -1266,7 +1266,7 @@ pub enum MainToWorkerKind {
         #[tsify(optional)]
         label: Option<String>,
     },
-    /// v77 (engine ADR 1017) — keep at most `depth` undo steps (clamped to
+    /// v77 (engine ADR 1030) — keep at most `depth` undo steps (clamped to
     /// 1..=10,000, the cap of ADR 110); a shallower depth evicts the oldest
     /// steps now. Held by the worker across document loads. Reply:
     /// `HistoryDepthApplied` with the depth in force.
@@ -1583,7 +1583,7 @@ pub enum MainToWorkerKind {
     ExportElements {
         element_ids: Vec<crate::element_selection::ElementId>,
     },
-    /// v77 (engine ADR 1018) — plan the import of an SVG (or SVGZ) file
+    /// v77 (engine ADR 1031) — plan the import of an SVG (or SVGZ) file
     /// onto `page_id`: `paged-svg` reads it with usvg (`<use>`, `<defs>`,
     /// CSS, units and transforms resolved) and lowers it to ONE batch of
     /// native page items. Pure READ: the reply `SvgImportPlanned` carries
@@ -1597,7 +1597,7 @@ pub enum MainToWorkerKind {
         #[serde(default)]
         options: paged_svg::SvgImportOptions,
     },
-    /// v77 (engine ADR 1018) — write the page `page_id` as an SVG
+    /// v77 (engine ADR 1031) — write the page `page_id` as an SVG
     /// document; with `element_ids`, nothing but those items, the view
     /// box fitted to what they draw. Pure READ. Reply: `SvgExported`, or
     /// `ExportSvgFailed`.
@@ -1950,7 +1950,7 @@ pub enum MainToWorkerKind {
     /// committed mutation lands on the unified undo log.
     CommitGesture {
         handle: crate::gesture::GestureHandle,
-        /// v77 (engine ADR 1017) — the committed step's name. Absent names
+        /// v77 (engine ADR 1030) — the committed step's name. Absent names
         /// it after the gesture ("Move", "Resize", "Rotate", …).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[tsify(optional)]
@@ -2280,7 +2280,7 @@ pub enum WorkerToMainKind {
         applied_seq: u64,
         page_ids: Vec<PageId>,
         cache_stats: LayoutCacheStats,
-        /// v77 (engine ADR 1017) — how many steps an `UndoTo` undid
+        /// v77 (engine ADR 1030) — how many steps an `UndoTo` undid
         /// (`undoneSeq` is the last, `pageIds` the union). Absent for `Undo`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[tsify(optional)]
@@ -2295,7 +2295,7 @@ pub enum WorkerToMainKind {
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
     },
-    /// v77 (engine ADR 1017) — `RequestUndoLog` reply: the named undo
+    /// v77 (engine ADR 1030) — `RequestUndoLog` reply: the named undo
     /// timeline. `undo` is oldest first (its last entry is what an undo
     /// reverts), `redo` next-redo first; `undoLen` / `redoLen` are the
     /// whole logs' lengths (the lists may be cut to the limit), `depth` the
@@ -2310,9 +2310,9 @@ pub enum WorkerToMainKind {
         /// `RestoreTo { appliedSeq: 0 }` reaches the opened document.
         evicted: u32,
     },
-    /// v77 (engine ADR 1017) — `SetHistoryDepth` reply.
+    /// v77 (engine ADR 1030) — `SetHistoryDepth` reply.
     HistoryDepthApplied { depth: u32 },
-    /// v77 (engine ADR 1017) — `LabelStep` reply: whether the step took
+    /// v77 (engine ADR 1030) — `LabelStep` reply: whether the step took
     /// the name.
     StepLabeled { applied_seq: u64, labeled: bool },
     /// Phase 3 Item 7 — redo applied.
@@ -2321,7 +2321,7 @@ pub enum WorkerToMainKind {
         applied_seq: u64,
         page_ids: Vec<PageId>,
         cache_stats: LayoutCacheStats,
-        /// v77 (engine ADR 1017) — how many steps a `RedoTo` redid. Absent
+        /// v77 (engine ADR 1030) — how many steps a `RedoTo` redid. Absent
         /// for `Redo`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[tsify(optional)]

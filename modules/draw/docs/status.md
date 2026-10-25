@@ -404,7 +404,7 @@ path per shape, solid paints only. Recolouring a raster is pixel work and is not
   and may not line up. A rotated or skewed placement, or an oval or polygon frame, is cropped
   to the box around what is visible, so traced paths can extend past a non-rectangular clip.
   It reads only what the browser can decode.
-- **SVG** goes through the engine (`paged-svg`, engine ADR 1018) on a host with
+- **SVG** goes through the engine (`paged-svg`, engine ADR 1031) on a host with
   `document.importSvg@1` / `document.exportSvg@1`. Import reads what usvg resolves —
   `<use>`, `<defs>`, `<symbol>`, CSS stylesheets and classes, units, nested transforms,
   markers — and makes native items: compound paths with their fill rule, swatches, linear

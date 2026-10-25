@@ -1013,7 +1013,7 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultDock: "right",
     defaultGroup: "inspector",
   },
-  // Editor ADR 285 — every undo step by name (engine ADR 1017), click to
+  // Editor ADR 285 — every undo step by name (engine ADR 1030), click to
   // go back to one; snapshots; the active edit context's own steps.
   {
     id: "paged.history",

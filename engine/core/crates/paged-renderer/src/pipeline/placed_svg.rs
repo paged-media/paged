@@ -637,7 +637,7 @@ struct Walk {
 }
 
 /// The vector lane's half of the shared walk (`paged_svg::walk`, engine
-/// ADR 1018). Nodes carry their own absolute transforms here, so the walk
+/// ADR 1031). Nodes carry their own absolute transforms here, so the walk
 /// composes nothing (`Ts = ()`); the first construct the list cannot say
 /// fails the whole art, which the raster lane then draws.
 impl paged_svg::walk::Visitor for Walk {

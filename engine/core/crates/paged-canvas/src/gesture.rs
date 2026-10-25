@@ -973,7 +973,7 @@ impl CanvasModel {
         let mut outcome = self
             .apply_operation(op)
             .map_err(|e| GestureError::Mutate(format!("{e:?}")))?;
-        // Engine ADR 1017 — the step is named after the gesture ("Move",
+        // Engine ADR 1030 — the step is named after the gesture ("Move",
         // "Rotate"), not after the property ops it lowered to.
         self.set_step_label(
             outcome.applied_seq,

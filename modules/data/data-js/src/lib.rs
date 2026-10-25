@@ -491,6 +491,28 @@ mod wasm {
             to_js(&data_lower::merge::merge_overset(&plan, &metrics))
         }
 
+        /// The distinct words of one text (`string[]`, the space included),
+        /// for the host to measure before [`text_overset`] (data ADR 564).
+        pub fn text_words(&self, text: &str) -> Result<JsValue, JsValue> {
+            to_js(&data_lower::merge::text_words(text))
+        }
+
+        /// Is `text` overset in a frame `width` × `height` (pt)? `metrics` is
+        /// one `FrameMetrics` (`{ leadingPt, advances }`) — DM-7's measured
+        /// rule, for any text the data placed (data ADR 564).
+        pub fn text_overset(
+            &self,
+            text: &str,
+            width: f64,
+            height: f64,
+            metrics: JsValue,
+        ) -> Result<bool, JsValue> {
+            let metrics: data_lower::merge::FrameMetrics = from_js(metrics)?;
+            Ok(data_lower::merge::text_overset(
+                text, width, height, &metrics,
+            ))
+        }
+
         /// Plan a §10 batch run over a query's result (`mode` is `BatchMode`):
         /// `{ mode, units: [{ label, recordIndices }], totalRecords }` — which
         /// records feed which output document (per-record / per-group / one
@@ -617,6 +639,27 @@ mod wasm {
         /// written from (the "before" of `row_diff`).
         pub fn mark_rows_applied(&mut self) {
             self.session.mark_rows_applied();
+        }
+
+        /// Record one query's current result as the one the document was
+        /// written from (a Data Merge, a record stepped to).
+        pub fn mark_query_applied(&mut self, query: &str) {
+            self.session.mark_query_applied(&QueryId::from(query));
+        }
+
+        /// Editor ADR 291: one query's per-record status since it was last
+        /// written from (`RecordStatus`, or `null` while it has no result).
+        /// `opts` is `{ key?, instances? }`.
+        pub fn record_status(&self, query: &str, opts: JsValue) -> Result<JsValue, JsValue> {
+            let opts = if opts.is_null() || opts.is_undefined() {
+                Default::default()
+            } else {
+                from_js(opts)?
+            };
+            match self.session.record_status(&QueryId::from(query), &opts) {
+                Some(st) => to_js(&st),
+                None => Ok(JsValue::NULL),
+            }
         }
 
         /// The §8 row diff per query since `mark_rows_applied`

@@ -1407,7 +1407,7 @@ pub(super) fn apply_set_property(
                 },
             )
         }
-        // ---- Engine ADR 1018 — the gradient fill's start ----------
+        // ---- Engine ADR 1031 — the gradient fill's start ----------
         // `[x, y]` in the item's inner coordinates; `[]` clears it.
         (
             NodeId::TextFrame(_) | NodeId::Rectangle(_) | NodeId::Polygon(_) | NodeId::Oval(_),

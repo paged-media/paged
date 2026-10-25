@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Engine ADR 1017 — named undo steps through the contract: `undoLog`,
+// Engine ADR 1030 — named undo steps through the contract: `undoLog`,
 // `undoTo` / `redoTo`, and `label` on `mutate` and `host.objects.set` /
 // `batch`. On the fake editor (the flag and the wire message) and on the
 // real engine through the headless harness.

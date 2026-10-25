@@ -336,7 +336,7 @@ export const HOST_FEATURES: readonly string[] = [
   // STATIC like @1: the same pinned protocol answers both.
   "document.mutate.amend@2",
   "document.undo@1",
-  // Engine ADR 1017 (protocol 77) — the named undo timeline: `undoLog`,
+  // Engine ADR 1030 (protocol 77) — the named undo timeline: `undoLog`,
   // `undoTo` / `redoTo` (several steps, one round trip), and `label` on
   // `mutate` and `host.objects.set/batch`. STATIC: the worker handshake
   // refuses an engine older than the pinned protocol, which answers them.
@@ -466,7 +466,7 @@ export const HOST_FEATURES: readonly string[] = [
   // ignores `clip` (a plain group) and refuses a group child. paged.draw's
   // clipped repeat asks it before choosing a clip group over paste-into.
   "document.clipGroups@1",
-  // Engine ADR 1018 (protocol v77) — SVG in and out through paged-svg.
+  // Engine ADR 1031 (protocol v77) — SVG in and out through paged-svg.
   // STATIC: the flag says this SDK forwards both doors. The worker
   // handshake pins the protocol, and an engine without the messages
   // answers an outcome (`applied: false` / `svg: null` with the reason),
@@ -2721,7 +2721,7 @@ export function createBundleHost(
     };
   };
 
-  /** Engine ADR 1017 — name the step a write just made (`labelStep`).
+  /** Engine ADR 1030 — name the step a write just made (`labelStep`).
    *  Best effort: a step that is no longer the top keeps its default, and
    *  an engine that does not know the message changes nothing. */
   const labelStep = async (
@@ -2758,7 +2758,7 @@ export function createBundleHost(
     ): Promise<MutationOutcome> {
       const gated = gateRawWrite(mutation, "document.mutate");
       if (gated !== null) return gated;
-      // Engine ADR 1017 — a caller's name for the step; blank is none.
+      // Engine ADR 1030 — a caller's name for the step; blank is none.
       const label =
         typeof options?.label === "string" && options.label.trim() !== ""
           ? options.label
@@ -2860,7 +2860,7 @@ export function createBundleHost(
           return { applied: false, error };
         }
       }
-      // Engine ADR 1017 — the step's name, set once the write landed.
+      // Engine ADR 1030 — the step's name, set once the write landed.
       const label =
         typeof options?.label === "string" && options.label.trim() !== ""
           ? options.label
@@ -3295,7 +3295,7 @@ export function createBundleHost(
       bytes: Uint8Array,
       options: SvgImportRequest = {},
     ): Promise<SvgImportResult> {
-      // Engine ADR 1018 (protocol v77). The engine PLANS (a read) and the
+      // Engine ADR 1031 (protocol v77). The engine PLANS (a read) and the
       // plan's one batch goes through `mutate`, so the write gate, the
       // namespace check and the undo step are the ordinary ones.
       const empty = { items: 0, notes: [] };
@@ -3342,7 +3342,7 @@ export function createBundleHost(
       }
     },
     async exportSvg(request: SvgExportRequest = {}): Promise<SvgExportResult> {
-      // Engine ADR 1018 (protocol v77): a pure read.
+      // Engine ADR 1031 (protocol v77): a pure read.
       requireDocRead("document.exportSvg");
       const empty = { items: 0, notes: [] };
       const { pageId: wanted, elementIds, ...options } = request;

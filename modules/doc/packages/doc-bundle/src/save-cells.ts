@@ -158,19 +158,22 @@ function fillColors(paragraphs: readonly unknown[], into: Set<string>): void {
 }
 
 /**
- * The RGB of every swatch the read-back runs are filled with, by swatch id
+ * The RGB of every swatch the read-back runs are filled with, and of the
+ * `extra` ids (the Word theme's swatches, the styles' colours), by swatch id
  * (`RRGGBB`), as the host displays it: the save-back writes a run's colour
  * from it when the swatch is one the canvas made (the import's own are
- * known to the engine already). Empty on a host without the swatch display
+ * known to the engine already), and a theme swatch the user edited is
+ * written as its new colour instead of the theme reference (doc ADR 609). Empty on a host without the swatch display
  * read; a run in such a colour then keeps its Word colour.
  */
 export async function canvasColors(
   host: BundleHost,
   paragraphs: readonly unknown[],
   cells: readonly CellContent[],
+  extra: readonly string[] = [],
 ): Promise<Record<string, string>> {
   if (!host.supports("document.swatchDisplay@1")) return {};
-  const ids = new Set<string>();
+  const ids = new Set<string>(extra);
   fillColors(paragraphs, ids);
   for (const c of cells) fillColors(c.paragraphs ?? [], ids);
   if (ids.size === 0) return {};
@@ -182,4 +185,9 @@ export async function canvasColors(
     return {};
   }
   return out;
+}
+
+/** The ids of the lowering's theme-colour swatches (doc ADR 609). */
+export function themeSwatches(ir: LoweredDoc): string[] {
+  return ir.swatches.filter((s) => s.theme).map((s) => s.id);
 }

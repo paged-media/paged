@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! SVG → native page items, as one wire batch (engine ADR 1018).
+//! SVG → native page items, as one wire batch (engine ADR 1031).
 //!
 //! [`plan_import`] parses the file with `usvg` and walks the resolved
 //! tree into ONE [`Mutation::Batch`]. Every item it creates is named with

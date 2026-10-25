@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! SVG in and out of a document (engine ADR 1018): the model side of
+//! SVG in and out of a document (engine ADR 1031): the model side of
 //! `RequestSvgImport` and `ExportSvg`. The lowering itself is
 //! `paged-svg`'s; this module hands it the page, the document's fonts and
 //! swatches, and a page's display list.
@@ -122,7 +122,7 @@ impl std::fmt::Display for SvgExportError {
 }
 
 impl CanvasModel {
-    /// Engine ADR 1018 — plan the import of `svg` onto `page_id`: one
+    /// Engine ADR 1031 — plan the import of `svg` onto `page_id`: one
     /// batch (apply it with `Mutate`, one undo step) and the report of
     /// what was approximated or left out. Reads only.
     pub fn svg_import_plan(
@@ -165,7 +165,7 @@ impl CanvasModel {
         paged_svg::plan_import(svg, &target, options, &fonts, &Swatches(self.scene()))
     }
 
-    /// Engine ADR 1018 — the page `page_id` as an SVG document; with
+    /// Engine ADR 1031 — the page `page_id` as an SVG document; with
     /// `only`, nothing but those items, the region fitted to what they
     /// draw. Reads only.
     pub fn export_svg(

@@ -18,7 +18,7 @@
  */
 
 // Editor ADR 285 — the History panel's store: the engine's named undo
-// timeline (engine ADR 1017), read again after every change the client
+// timeline (engine ADR 1030), read again after every change the client
 // reports, and this session's snapshots. One store per client, so every
 // mounted History panel of an editor shows the same list and a snapshot
 // survives the panel being closed.
@@ -58,7 +58,7 @@ export interface HistoryState {
 /** How many steps the panel lists (the newest; the engine keeps more). */
 export const HISTORY_LIST_LIMIT = 500;
 
-/** The history depths the preference offers (engine ADR 1017's clamp is
+/** The history depths the preference offers (engine ADR 1030's clamp is
  *  1..=10,000). */
 export const HISTORY_DEPTHS = [50, 100, 500, 1000, 10000] as const;
 

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The one walk over a usvg tree (engine ADR 1018, plan item C9).
+//! The one walk over a usvg tree (engine ADR 1031, plan item C9).
 //!
 //! Three consumers read a parsed SVG: the raster lane draws it
 //! (`paged-gpu`'s `svg.rs`), the vector lane lowers a placed SVG into the

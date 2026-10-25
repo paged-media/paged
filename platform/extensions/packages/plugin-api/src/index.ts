@@ -324,7 +324,7 @@ export type {
   SnapSettings,
 } from "./wire.js";
 
-// Engine ADR 1018 — `host.document.importSvg` / `exportSvg`'s options and
+// Engine ADR 1031 — `host.document.importSvg` / `exportSvg`'s options and
 // their report.
 export type {
   SvgExportOptions,

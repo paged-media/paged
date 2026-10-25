@@ -118,7 +118,7 @@ export const openHost = async (): Promise<HeadlessHost> => {
   return h;
 };
 
-/** `host`, answering no to the engine's SVG doors (engine ADR 1018): an
+/** `host`, answering no to the engine's SVG doors (engine ADR 1031): an
  *  engine before protocol 77, on which paged.draw reads and writes SVG
  *  itself. The specs that pin that fallback lane run through it. */
 export function tsLane<H extends { supports(feature: string): boolean }>(

@@ -25,8 +25,9 @@
 // continued headers — are the engine's, not the host's text flow. The frames
 // are therefore NOT threaded: a thread would let the host re-break the text.
 //
-// Every frame is labelled `{kind: "recordFlow", binding, frame}` (with
-// `createdPage` on the pages it added), so lowering the flow again removes
+// Every frame is labelled `{kind: "recordFlow", binding, frame, records}`
+// (`records`: the rows of the result it shows, for editor ADR 291's record
+// markers; `createdPage` on the pages it added), so lowering the flow again removes
 // the previous frames and pages first, in the same batch (`relower.ts`).
 // Pages first, then content: two undo steps when pages are added (a page
 // minted in a batch cannot be named — Wave 8), one otherwise.
@@ -43,7 +44,7 @@ import type { Bounds } from "./merge";
 
 export type FlowBlock =
   | { block: "groupHeader"; text: string; level: number; continued: boolean }
-  | { block: "record"; cells: string[]; heightPt: number }
+  | { block: "record"; cells: string[]; heightPt: number; record?: number }
   | { block: "groupFooter"; cells: string[]; heightPt: number };
 
 export interface PaginatedFlow {
@@ -60,6 +61,16 @@ export interface PaginatedFlow {
 
 export interface FlowEngine {
   lower_record_flow(binding: string, chain: unknown, opts: unknown): unknown;
+}
+
+/** The rows a paginated frame shows, as its label carries them (none on an
+ *  engine that does not name them). */
+function flowRecords(blocks: readonly FlowBlock[]): { records?: number[] } {
+  const records: number[] = [];
+  for (const b of blocks)
+    if (b.block === "record" && typeof b.record === "number")
+      records.push(b.record);
+  return records.length > 0 ? { records } : {};
 }
 
 /** A paginated frame's text: one paragraph per header, record field line and
@@ -81,6 +92,9 @@ export interface FlowWriteResult {
   pages: PageId[];
   mutateCalls: number;
   overflow: boolean;
+  /** Records the paginator placed, of how many (0 of 0 before it ran). */
+  placed: number;
+  total: number;
   diagnostics: string[];
 }
 
@@ -155,6 +169,8 @@ export async function commitRecordFlow(
       pages: [],
       mutateCalls: 0,
       overflow: false,
+      placed: 0,
+      total: 0,
       diagnostics: ["flow: no start page"],
     };
   const box = marginBox(page);
@@ -169,6 +185,8 @@ export async function commitRecordFlow(
       pages: [],
       mutateCalls: 0,
       overflow: flow.overflow,
+      placed: flow.placed,
+      total: flow.total,
       diagnostics,
     };
 
@@ -191,6 +209,8 @@ export async function commitRecordFlow(
         pages: [],
         mutateCalls,
         overflow: flow.overflow,
+        placed: flow.placed,
+        total: flow.total,
         diagnostics: [...diagnostics, `flow: adding pages was refused`],
       };
     }
@@ -209,6 +229,8 @@ export async function commitRecordFlow(
       pages: out,
       mutateCalls,
       overflow: flow.overflow,
+      placed: flow.placed,
+      total: flow.total,
       diagnostics: [
         ...diagnostics,
         "flow: the added pages are not where expected",
@@ -236,6 +258,7 @@ export async function commitRecordFlow(
           kind: "recordFlow",
           binding,
           frame: i,
+          ...flowRecords(f.blocks),
           ...(i > 0 ? { createdPage: true } : {}),
         }),
       },
@@ -250,6 +273,8 @@ export async function commitRecordFlow(
       pages: out,
       mutateCalls,
       overflow: flow.overflow,
+      placed: flow.placed,
+      total: flow.total,
       diagnostics: [...diagnostics, "flow: the frame batch was refused"],
     };
   }
@@ -262,6 +287,8 @@ export async function commitRecordFlow(
     pages: out,
     mutateCalls,
     overflow: flow.overflow,
+    placed: flow.placed,
+    total: flow.total,
     diagnostics,
   };
 }

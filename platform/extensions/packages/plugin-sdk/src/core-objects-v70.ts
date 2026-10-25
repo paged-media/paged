@@ -1236,7 +1236,7 @@ export function createCoreObjectsV70(
       const label = opts?.label?.trim() ? opts.label : undefined;
       try {
         const reply = await client().mutate(m as never);
-        // Engine ADR 1017 — the commit's one step takes the caller's name
+        // Engine ADR 1030 — the commit's one step takes the caller's name
         // (best effort: `labelStep` names it only while it is the top).
         if (label !== undefined && reply.kind === "mutationApplied")
           await client()

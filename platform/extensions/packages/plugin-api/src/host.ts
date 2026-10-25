@@ -1041,7 +1041,7 @@ export interface MutateOptions {
    */
   amend?: number;
   /**
-   * Engine ADR 1017 — the undo step's name, in the caller's words ("Add
+   * Engine ADR 1030 — the undo step's name, in the caller's words ("Add
    * caption"), shown by the History panel and the Edit menu instead of
    * the engine's default for the mutation ("Insert text frame"). With
    * `amend` it renames the amended step. Blank keeps the default. The host
@@ -1052,7 +1052,7 @@ export interface MutateOptions {
   label?: string;
 }
 
-/** Engine ADR 1017 — one named step of the undo timeline. */
+/** Engine ADR 1030 — one named step of the undo timeline. */
 export interface UndoLogStep {
   /** The step's number — what {@link DocumentSurface.undoTo} /
    *  {@link DocumentSurface.redoTo} take, and the `appliedSeq` of the
@@ -1068,7 +1068,7 @@ export interface UndoLogStep {
   key: string | null;
 }
 
-/** Engine ADR 1017 — the named undo timeline ({@link DocumentSurface.undoLog}). */
+/** Engine ADR 1030 — the named undo timeline ({@link DocumentSurface.undoLog}). */
 export interface UndoLog {
   /** OLDEST first: the last step is what an undo reverts. */
   undo: readonly UndoLogStep[];
@@ -1093,7 +1093,7 @@ export interface MutateWithBytesOptions {
    *  then on. Probe `supports("document.mutate.amend@2")`: an older host
    *  ignores the option and would apply the write as a step of its own. */
   amend?: number;
-  /** Engine ADR 1017 — the undo step's name, as {@link MutateOptions.label}
+  /** Engine ADR 1030 — the undo step's name, as {@link MutateOptions.label}
    *  (without `amend`). Probe `supports("document.undoLog@1")`. */
   label?: string;
 }
@@ -1313,7 +1313,7 @@ export interface SwatchDisplay {
   outOfGamut: boolean;
 }
 
-/** `document.importSvg` options (engine ADR 1018). */
+/** `document.importSvg` options (engine ADR 1031). */
 export interface SvgImportRequest extends SvgImportOptions {
   /** The page to import onto; the active page when absent. */
   pageId?: PageId;
@@ -1333,7 +1333,7 @@ export interface SvgImportResult {
   error?: string;
 }
 
-/** `document.exportSvg`'s request (engine ADR 1018). */
+/** `document.exportSvg`'s request (engine ADR 1031). */
 export interface SvgExportRequest extends SvgExportOptions {
   /** The page; the active page when absent. */
   pageId?: PageId;
@@ -1397,21 +1397,21 @@ export interface DocumentSurface {
   undo(): Promise<void>;
   redo(): Promise<void>;
   /**
-   * Engine ADR 1017 — the named undo timeline: the newest `limit` undo
+   * Engine ADR 1030 — the named undo timeline: the newest `limit` undo
    * steps (oldest first) and redo steps (next redo first); all of them
    * without a limit. A read: `capabilities.document.read`. Probe
    * `supports("document.undoLog@1")`; an older host rejects.
    */
   undoLog(options?: { limit?: number }): Promise<UndoLog>;
   /**
-   * Engine ADR 1017 — undo every step down to and including the step
+   * Engine ADR 1030 — undo every step down to and including the step
    * `appliedSeq` names (an {@link UndoLog.undo} entry), in one engine round
    * trip; the document is then as it was before that step. `false` when
    * that step is not on the undo log (nothing moved). A write door:
    * `capabilities.document.write`. Probe `supports("document.undoLog@1")`.
    */
   undoTo(appliedSeq: number): Promise<boolean>;
-  /** Engine ADR 1017 — redo every step up to and including the step
+  /** Engine ADR 1030 — redo every step up to and including the step
    *  `appliedSeq` names (an {@link UndoLog.redo} entry), in one round
    *  trip. `false` when it is not on the redo log. */
   redoTo(appliedSeq: number): Promise<boolean>;
@@ -1555,7 +1555,7 @@ export interface DocumentSurface {
    *  throws `PluginApiNotImplemented` (a visible seam, never a fake value). */
   storyContent(storyId: string): Promise<StoryContent | null>;
   /**
-   * Engine ADR 1018 (protocol v77) — import an SVG (or SVGZ) file as
+   * Engine ADR 1031 (protocol v77) — import an SVG (or SVGZ) file as
    * native page items, as ONE undo step. The engine reads it with usvg
    * (`<use>`, `<defs>`, `<symbol>`, CSS, units and transforms resolved)
    * and lowers it to paths and compound paths, swatches, gradients,
@@ -1575,7 +1575,7 @@ export interface DocumentSurface {
     options?: SvgImportRequest,
   ): Promise<SvgImportResult>;
   /**
-   * Engine ADR 1018 (protocol v77) — a page, or some of its items, as an
+   * Engine ADR 1031 (protocol v77) — a page, or some of its items, as an
    * SVG document: paths with their fills and strokes, linear and radial
    * gradients, opacity and blend modes, clips and masks, pictures as data
    * URIs, and text as outlines or (`options.text: "text"`) as `<text>`
