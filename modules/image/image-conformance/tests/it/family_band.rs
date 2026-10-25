@@ -26,9 +26,9 @@ use image_conformance::Px;
 use image_kernels::families::band::{
     band_blend_if, band_broadcast_alpha, band_copy, band_extract, band_fade_neutral,
     band_keep_alpha, band_set_alpha, band_take, BandBlendIfParams, BandBroadcastAlphaParams,
-    BandCopyParams, BandExtractParams, BandFadeNeutralParams, BandKeepAlphaParams, BandSetAlphaParams,
-    BandTakeParams, BAND_BLEND_IF, BAND_BROADCAST_ALPHA, BAND_COPY, BAND_EXTRACT, BAND_FADE_NEUTRAL,
-    BAND_KEEP_ALPHA, BAND_SET_ALPHA, BAND_TAKE,
+    BandCopyParams, BandExtractParams, BandFadeNeutralParams, BandKeepAlphaParams,
+    BandSetAlphaParams, BandTakeParams, BAND_BLEND_IF, BAND_BROADCAST_ALPHA, BAND_COPY,
+    BAND_EXTRACT, BAND_FADE_NEUTRAL, BAND_KEEP_ALPHA, BAND_SET_ALPHA, BAND_TAKE,
 };
 
 /// A gradient where the four channels carry visibly distinct values —
