@@ -48,6 +48,7 @@ import type {
   BundleHost,
   Diagnostic,
 } from "@paged-media/plugin-api";
+import { fromElementId } from "@paged-media/plugin-sdk";
 import { t } from "@paged-media/strings";
 
 import { contributeCommentMarkers } from "./comment-markers.js";
@@ -62,7 +63,7 @@ import {
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeMenu } from "./menu.js";
-import { COMMENTS, DECK, NOTES, SLIDES } from "./messages.js";
+import { COMMENTS, DECK, NOTES, SHAPES, SLIDES } from "./messages.js";
 import {
   contributeSlideObjectModel,
   parseLabel,
@@ -80,6 +81,10 @@ import {
 } from "./show/contribute.js";
 import { SHOW } from "./messages.js";
 import { makeSlideSorter } from "./views/slide-sorter.js";
+import { adjustHandlesOverlay, HandlesModel } from "./adjust-handles.js";
+import { LiveFollower } from "./live-presets.js";
+import { makeShapesPanel } from "./panels/shapes-panel.js";
+import { insertShape, SHAPES_PANEL_ID } from "./shapes.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
 export const SLIDES_PANEL_ID = "media.paged.slide.panel.slides";
@@ -186,6 +191,13 @@ export async function reloadEmbeddedFonts(host: BundleHost): Promise<void> {
   ]);
 }
 
+/** Whether the manifest asks for a rendering capability. */
+function renders(host: BundleHost, what: string): boolean {
+  const r = (host.manifest.capabilities as { rendering?: readonly string[] })
+    .rendering;
+  return Array.isArray(r) && r.includes(what);
+}
+
 export function activate(host: BundleHost): BundleHandle {
   const disposers: Array<() => void> = [];
   // The deck's comments, in a container part (needs the parts door).
@@ -261,6 +273,20 @@ export function activate(host: BundleHost): BundleHandle {
     return report;
   }
 
+  // Insert ▸ Shapes and the typed insertShape command (ADR 717).
+  async function insertPreset(args: {
+    prst: string;
+    pageId: string;
+    center: [number, number];
+    w?: number;
+    h?: number;
+  }) {
+    const id = await insertShape(host, await slideEngine(), args);
+    return id
+      ? { address: fromElementId(id) }
+      : { refused: `the preset ${args.prst} could not be inserted` };
+  }
+
   // The slides store is made below (it needs the page doors); the object
   // model's navigation reads it when a command runs.
   let store: SlidesStore | null = null;
@@ -282,6 +308,7 @@ export function activate(host: BundleHost): BundleHandle {
     comments: () => comments,
     step,
     activePage: () => store?.activePage() ?? null,
+    insertShape: insertPreset,
   });
   if (model) disposers.push(() => model.dispose());
 
@@ -438,6 +465,27 @@ export function activate(host: BundleHost): BundleHandle {
   // The user's verbs for the palette and the menu bar (commands.ts,
   // menu.ts): open and export a deck; new, duplicate, delete and move the
   // active slide.
+  // Live presets and connectors (ADR 717): a resized preset is drawn
+  // again, a connector follows the shapes it is glued to, in the edit's
+  // undo step; the selected preset's adjust handles are drawn on the
+  // canvas.
+  // The follow-up write needs the amend door; without it a redraw would be
+  // an undo step of its own, so nothing follows.
+  if (host.supports("document.mutate.amend@1")) {
+    const follower = new LiveFollower(host, slideEngine, () =>
+      store ? store.isDeck() : true,
+    );
+    disposers.push(() => follower.dispose());
+  }
+  if (host.supports("contribute.overlay@1") && renders(host, "overlay")) {
+    const handles = new HandlesModel(host, slideEngine);
+    const overlay = host.contribute.overlay(adjustHandlesOverlay(handles));
+    disposers.push(
+      () => overlay.dispose(),
+      () => handles.dispose(),
+    );
+  }
+
   if (host.supports("contribute.command@1")) {
     const commands = contributeSlideCommands(host, {
       store,
@@ -448,6 +496,7 @@ export function activate(host: BundleHost): BundleHandle {
       ...(comments && host.supports("shell.openPanel@1")
         ? { openComments: () => host.shell.openPanel(COMMENTS_PANEL_ID) }
         : {}),
+      shapesPanel: richPanels ? SHAPES_PANEL_ID : undefined,
     });
     const menu = contributeMenu(host, (id) => commands.ids.has(id));
     disposers.push(
@@ -515,6 +564,17 @@ export function activate(host: BundleHost): BundleHandle {
             '<rect x="7" y="3.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
             '<rect x="7" y="13.5" width="12" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
             '<path d="M4 5v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+        }).dispose,
+        host.contribute.panel({
+          id: SHAPES_PANEL_ID,
+          title: t(SHAPES.title),
+          component: makeShapesPanel(host, store, slideEngine),
+          defaultDock: "right",
+          // A square, a circle and a triangle.
+          iconSvg:
+            '<rect x="3.5" y="3.5" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<circle cx="17" cy="7.5" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<path d="M12 20.5l4.5-7 4.5 7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
         }).dispose,
         host.contribute.panel({
           id: NOTES_PANEL_ID,

@@ -27,12 +27,13 @@ through PowerPoint's scripting dictionary and saves it (ADR 705). Recorded with 
 | `fonts` | text in Lato (regular, bold, italic, bold italic), Gloria Hallelujah and Caveat, embedded by PowerPoint as subsets (its default); PowerPoint adds Caveat's bold face |
 | `fonts-full` | the same text without Caveat, every face embedded whole |
 | `comments` | `placeholders` with review comments (seeded by `comments.seed.py`, re-saved by PowerPoint): slide 1 a positioned comment with a reply, slide 2 a resolved comment anchored to its title, slide 3 a legacy comment PowerPoint converted to a modern one. Recorded without PDF or geometry (the slides are `placeholders`') |
+| `connectors` | two identical slides: a rounded rectangle with its adjust value, a rectangular callout with its tip moved, a can, a flipped right triangle, three boxes and three connectors glued to them (elbow, straight, curved); on slide 2 PowerPoint moved "Box B" (re-routing its connectors) and resized the rounded rectangle to 4 × 1 in (`connectors.post.applescript`) |
 
 Re-record (a Mac with PowerPoint): `bash scripts/ppt-author-fixtures.sh [name ...]`; then, for
 `baselines`, `python3 scripts/ppt-baseline-probe.py baselines.pptx baselines.ppt.pdf > baselines.baselines.json`
 (needs pdfplumber).
 
-PowerPoint's dictionary cannot create a table, set a table style or create SmartArt, so `tables`,
+PowerPoint's dictionary cannot create a table, set a table style, create SmartArt, glue a connector or set adjust values, so `connectors`, `tables`,
 `tablestyles` and `smartart` are seeded: `<name>.seed.py` writes the tables into the blank deck PowerPoint made,
 and PowerPoint opens and re-saves it (`resave.applescript`), so the recorded deck and PDF are
 PowerPoint's. For the table fixtures, also run `python3 scripts/ppt-table-probe.py <name>.pptx <name>.ppt.pdf >

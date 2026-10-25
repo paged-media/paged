@@ -51,6 +51,7 @@ import {
   RESOLVE_COMMENT_COMMAND,
   EXPORT_PPTX_COMMAND,
   IMPORT_PPTX_COMMAND,
+  INSERT_SHAPE_COMMAND,
   NEW_SLIDE_COMMAND,
   SLIDE_SCHEMA,
   PLACEHOLDER_SCHEMA,
@@ -126,6 +127,7 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
         DUPLICATE_SLIDE_COMMAND,
         EXPORT_PPTX_COMMAND,
         IMPORT_PPTX_COMMAND,
+        INSERT_SHAPE_COMMAND,
         NEW_SLIDE_COMMAND,
         // The slide show's twins of its palette commands.
         ...Object.values(SHOW_CMD),

@@ -39,6 +39,7 @@ import type { ObjectValue, PropertySchema } from "@paged-media/plugin-api";
 import manifest from "../manifest.json";
 import slideBundle from "../src/index";
 import { COMMENTS_PANEL_ID, SLIDES_PANEL_ID } from "../src/activate";
+import { SHAPES_PANEL_ID } from "../src/shapes";
 import {
   IMPORT_PPTX_COMMAND,
   DECK_SCHEMA,
@@ -112,6 +113,7 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
         ...slidePanels().map((s) => s.id),
         SLIDES_PANEL_ID,
         COMMENTS_PANEL_ID,
+        SHAPES_PANEL_ID,
       ].sort(),
     );
   });

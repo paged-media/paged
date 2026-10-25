@@ -49,6 +49,7 @@ import {
 } from "../src/commands";
 import { contributeMenu, MENU_ENTRIES } from "../src/menu";
 import { SHOW_CMD, SHOW_MENU } from "../src/show/contribute";
+import { SHAPES_PANEL_ID } from "../src/shapes";
 import {
   DUPLICATE_SLIDE_COMMAND,
   NEW_SLIDE_COMMAND,
@@ -178,6 +179,7 @@ const ALL = [
   "objects@1",
   "shell.pickFile@1",
   "shell.saveFile@1",
+  "shell.openPanel@1",
 ];
 
 function setup(
@@ -210,6 +212,7 @@ function setup(
     objectModel: true,
     ...(opts.scopedKeys ? { scopedKeys: true } : {}),
     ...(opts.openComments ? { openComments: opts.openComments } : {}),
+    shapesPanel: SHAPES_PANEL_ID,
     async openDeck(name) {
       opened.push(name);
       return null;
@@ -243,7 +246,7 @@ describe("paged.slide palette commands", () => {
     // The file verbs in the host's File menu, the slide verbs in Slide.
     expect(s.menus.map((m) => m.path)).toEqual(MENU_ENTRIES.map(([p]) => p));
     for (const [path] of MENU_ENTRIES)
-      expect(["File", "Slide"]).toContain(path.split("/")[0]);
+      expect(["File", "Slide", "Insert"]).toContain(path.split("/")[0]);
     s.menu.dispose();
     s.handle.dispose();
     expect(s.menus).toEqual([]);
@@ -413,6 +416,7 @@ describe("paged.slide palette commands", () => {
       CMD.moveSlideDown,
       CMD.exportPptx,
       CMD.importPptx,
+      CMD.insertShapes,
     ])
       expect(s.when(id), id).toBe(true);
 
@@ -432,6 +436,7 @@ describe("paged.slide palette commands", () => {
       CMD.deleteSlide,
       CMD.moveSlideUp,
       CMD.moveSlideDown,
+      CMD.insertShapes,
     ])
       expect(s.when(id), id).toBe(false);
 
@@ -579,9 +584,10 @@ describe("paged.slide palette commands", () => {
       parts: { read: async () => null },
     } as unknown as BundleHost);
     // Every declared command but the Slide Sorter, which needs the view
-    // door this host does not have.
-    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 1);
-    expect(r.menus.length).toBe(MENU_ENTRIES.length + SHOW_MENU.length - 1);
+    // door this host does not have, and Insert ▸ Shapes…, which opens the
+    // Shapes panel and needs the panel and snapshot doors this host lacks.
+    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 2);
+    expect(r.menus.length).toBe(MENU_ENTRIES.length + SHOW_MENU.length - 2);
     h.dispose();
     expect(r.commands.size).toBe(0);
     expect(r.menus.length).toBe(0);
