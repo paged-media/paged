@@ -149,6 +149,76 @@ pub struct ColorMap {
     pub entries: Vec<(String, String)>,
 }
 
+/// Every effect a `p:transition` can name, by the element's local name: what
+/// [`Transition::kind`] holds. ECMA-376 Part 1 (`p:`), MS-PPTX (`p14:`,
+/// PowerPoint 2010; `p15:prstTrans`, 2013, whose `prst` attribute names the
+/// preset) and `p159:morph` (2019). The slide show's
+/// shader manifest (slide ADR 721) covers each one; its tests check that
+/// against this list.
+pub const TRANSITION_KINDS: &[&str] = &[
+    // ECMA-376 (p:)
+    "blinds",
+    "checker",
+    "circle",
+    "comb",
+    "cover",
+    "cut",
+    "diamond",
+    "dissolve",
+    "fade",
+    "newsflash",
+    "plus",
+    "pull",
+    "push",
+    "random",
+    "randomBar",
+    "split",
+    "strips",
+    "wedge",
+    "wheel",
+    "wipe",
+    "zoom",
+    // [MS-PPTX] PowerPoint 2010 (p14:)
+    "conveyor",
+    "doors",
+    "ferris",
+    "flash",
+    "flip",
+    "flythrough",
+    "gallery",
+    "glitter",
+    "honeycomb",
+    "pan",
+    "prism",
+    "reveal",
+    "ripple",
+    "shred",
+    "switch",
+    "vortex",
+    "warp",
+    "wheelReverse",
+    "window",
+    // [MS-PPTX] PowerPoint 2013 (p15:), PowerPoint 2019 (p159:)
+    "prstTrans",
+    "morph",
+];
+
+/// The presets of `p15:prstTrans` (its `prst` attribute; default `fallOver`).
+pub const PRESET_TRANSITIONS: &[&str] = &[
+    "airplane",
+    "crush",
+    "curtains",
+    "drape",
+    "fallOver",
+    "fracture",
+    "origami",
+    "pageCurlDouble",
+    "pageCurlSingle",
+    "peelOff",
+    "prestige",
+    "wind",
+];
+
 /// A transition (`p:transition`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Transition {

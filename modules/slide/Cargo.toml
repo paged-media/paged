@@ -16,6 +16,7 @@ members = [
     "slide-native",
     "pptx-export",
     "slide-js",
+    "slide-shaders",
 ]
 
 [workspace.package]
@@ -64,6 +65,10 @@ slide-chart = { path = "slide-chart" }
 slide-resolve = { path = "slide-resolve" }
 slide-native = { path = "slide-native" }
 slide-js = { path = "slide-js" }
+# WGSL front end and validator: slide-shaders' tests check every slide
+# transition shader (slide ADR 721), as the browser would compile it. The
+# version modules/image and the engine's wgpu use.
+naga = { version = "30", features = ["wgsl-in"] }
 # Optional test resources (docs/development/testing.md): dev-dependency only.
 paged-test-resources = { path = "../../platform/shared/test-resources" }
 # The engine's model crates, path-depended from the engine workspace at the

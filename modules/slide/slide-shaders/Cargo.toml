@@ -1,0 +1,21 @@
+[package]
+name = "slide-shaders"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: checks for the slide transition WGSL library (packages/slide-bundle/src/show/shaders, ADR 721)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json.workspace = true
+
+[dev-dependencies]
+naga.workspace = true
+pptx-core.workspace = true
+# pptx-core reaches paged-ooxml through dml-chart; naming it here gives it the
+# workspace's deflate backend when this crate is built on its own.
+paged-ooxml.workspace = true
