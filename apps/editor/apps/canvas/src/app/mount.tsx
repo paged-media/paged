@@ -33,6 +33,7 @@ import {
 import { createRoot } from "react-dom/client";
 import {
   PagedShell,
+  scopeOf,
   caretContribution,
   contentGrabberContribution,
   hitMarkerContribution,
@@ -49,6 +50,7 @@ import {
   selectionChromeContribution,
   setCockpitPageNavigator,
   snapLinesContribution,
+  gridOverlayContribution,
   tableCellOverlayContribution,
   threadingPortsContribution,
   threadLinesContribution,
@@ -99,6 +101,7 @@ import "@paged-media/shell/styles/globals.css";
 
 import {
   CanvasClient,
+  rotateCameraAbout,
   type DocumentHandle,
   type ElementId,
 } from "@paged-media/client";
@@ -156,6 +159,15 @@ import {
   GLOBAL_LIGHT_MENU_ITEMS,
   GlobalLightDialog,
 } from "../panels/global-light-dialog";
+import {
+  buildViewCommands,
+  VIEW_KEYBINDINGS,
+  VIEW_MENU_ITEMS,
+} from "../view-commands";
+import {
+  openViewPreferences,
+  ViewPreferencesDialog,
+} from "../panels/view-preferences-dialog";
 import {
   buildTransformEachDialogCommands,
   TRANSFORM_EACH_MENU_ITEMS,
@@ -329,6 +341,8 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // picture's Replace button, for an author and a filler only.
   templateFieldsContribution,
   marginGuidesContribution,
+  // Editor ADR 287 — View ▸ Show grid / Show pixel grid.
+  gridOverlayContribution,
   // W2.8 — the INTERACTIVE guide overlay supersedes the read-only
   // `rulerGuidesContribution` in the editor: it seeds its mirror from
   // the same `DocumentHandle.rulerGuides` AND drives create/move/
@@ -1105,6 +1119,8 @@ function CanvasAppIntegration() {
     const [vw, vh] = viewportSize;
     const pageSizes = handle?.pageSizesPt ?? [];
     const rects = layoutPages(pageSizes);
+    // Editor ADR 287 — the fits keep the view's rotation.
+    const rot = camera.rotation ?? 0;
     const commands = buildAppCommands({
       undo: () => {
         const owner = currentEditContext().activeContribution;
@@ -1233,7 +1249,7 @@ function CanvasAppIntegration() {
       },
       zoomFit: () => {
         if (rects.length === 0) return;
-        animateCamera(fitCamera(vw, vh, documentBounds(rects)));
+        animateCamera(fitCamera(vw, vh, documentBounds(rects), 40, rot));
       },
       // The fit commands and the page keys (F-31, F-16, ADR 257). The
       // current page is the one at the viewport's centre once the camera
@@ -1243,7 +1259,7 @@ function CanvasAppIntegration() {
       fitPage: () => {
         const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
         if (at < 0) return;
-        animateCamera(fitCamera(vw, vh, rects[at]!));
+        animateCamera(fitCamera(vw, vh, rects[at]!, 40, rot));
       },
       fitSpread: async () => {
         const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
@@ -1260,7 +1276,7 @@ function CanvasAppIntegration() {
           /* no spread map: the page is a spread of its own */
         }
         const rect = spreadRect(rects, spreads, at);
-        if (rect) animateCamera(fitCamera(vw, vh, rect));
+        if (rect) animateCamera(fitCamera(vw, vh, rect, 40, rot));
       },
       fitSelection: async () => {
         if (!handle) return;
@@ -1287,19 +1303,25 @@ function CanvasAppIntegration() {
         const w = Math.max(rect.w, 1);
         const h = Math.max(rect.h, 1);
         animateCamera(
-          fitCamera(vw, vh, {
-            x: rect.x - (w - rect.w) / 2,
-            y: rect.y - (h - rect.h) / 2,
-            w,
-            h,
-          }),
+          fitCamera(
+            vw,
+            vh,
+            {
+              x: rect.x - (w - rect.w) / 2,
+              y: rect.y - (h - rect.h) / 2,
+              w,
+              h,
+            },
+            40,
+            rot,
+          ),
         );
       },
       goToPage: (which) => {
         const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
         const target = pageStep(which, at, rects.length);
         if (target === null) return;
-        animateCamera(fitCamera(vw, vh, rects[target]!));
+        animateCamera(fitCamera(vw, vh, rects[target]!, 40, rot));
       },
     });
     // `paged.object.*` — the object verbs (Arrange ×4, Group, Ungroup,
@@ -1475,6 +1497,19 @@ function CanvasAppIntegration() {
           rows.map((r) => ({ ...r, source: "svg" })),
         ),
     });
+    // Editor ADR 287 — View ▸ Outline / Overprint / Pixel Preview, the
+    // grids, snapping and Rotate View.
+    const viewCommands = buildViewCommands({
+      rotateView: (deg) =>
+        animateCamera(
+          rotateCameraAbout(camera, (deg * Math.PI) / 180, vw / 2, vh / 2),
+        ),
+      resetRotation: () =>
+        animateCamera(
+          rotateCameraAbout(camera, -(camera.rotation ?? 0), vw / 2, vh / 2),
+        ),
+      openPreferences: (paged) => openViewPreferences(scopeOf(paged)),
+    });
     const cmdDisposables = [
       ...commands,
       ...aiCommands,
@@ -1487,6 +1522,7 @@ function CanvasAppIntegration() {
       ...GLOBAL_LIGHT_COMMANDS,
       ...transformEachDialogCommands,
       ...buildBatchCommands(),
+      ...viewCommands,
       ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
@@ -1503,6 +1539,7 @@ function CanvasAppIntegration() {
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...TRANSFORM_EACH_MENU_ITEMS,
       ...BATCH_MENU_ITEMS,
+      ...VIEW_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
@@ -1520,6 +1557,7 @@ function CanvasAppIntegration() {
       ...CANVAS_CONTEXT_MENU_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,
+      ...VIEW_KEYBINDINGS,
     ].map((k) => registries.keybindings.register(k));
     return () => {
       for (const d of cmdDisposables) d.dispose();
@@ -1719,6 +1757,7 @@ function CanvasAppRoot() {
       <SecretPromptDialog controller={instance.services.secrets.controller} />
       <CoreCommandDialog />
       <GlobalLightDialog />
+      <ViewPreferencesDialog />
       <TransformEachDialog />
       <BatchDialog />
       <OpenAsTemplateDialog />

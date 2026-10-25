@@ -769,6 +769,77 @@ pub fn offset_closed_path(
     Some((out, vec![0], vec![false]))
 }
 
+/// One outline of [`path_crossings`]: its anchors, subpath starts and
+/// open flags, in one coordinate space.
+pub type OutlineRef<'a> = (&'a [PathAnchor], &'a [usize], &'a [bool]);
+
+/// Where two outlines cross within `radius` of `near` (editor ADR 287:
+/// the point snapper's intersection targets). Each segment of `a` is
+/// intersected exactly (kurbo's `intersect_line`) with the flattened
+/// segments of `b` that come near the point; segments far from it are
+/// skipped, so a query costs what lies around the pointer.
+pub fn path_crossings(
+    a: OutlineRef<'_>,
+    b: OutlineRef<'_>,
+    near: (f32, f32),
+    radius: f32,
+) -> Vec<(f32, f32)> {
+    let q = pt(near);
+    let r = f64::from(radius.max(0.0));
+    let close = |bb: kurbo::Rect| {
+        q.x >= bb.x0 - r && q.x <= bb.x1 + r && q.y >= bb.y0 - r && q.y <= bb.y1 + r
+    };
+    let seg_of = |anchors: &[PathAnchor], s: usize, e: usize| {
+        let (pa, pb) = (&anchors[s], &anchors[e]);
+        if pa.right == pa.anchor && pb.left == pb.anchor {
+            PathSeg::Line(kurbo::Line::new(pt(pa.anchor), pt(pb.anchor)))
+        } else {
+            PathSeg::Cubic(cubic_for(pa, pb))
+        }
+    };
+    use kurbo::Shape as _;
+    let mut lines: Vec<kurbo::Line> = Vec::new();
+    for (s, e) in segment_pairs(b.0, b.1, b.2) {
+        let seg = seg_of(b.0, s, e);
+        if !close(seg.bounding_box()) {
+            continue;
+        }
+        match seg {
+            PathSeg::Line(l) => lines.push(l),
+            other => {
+                let mut path = BezPath::new();
+                path.move_to(other.start());
+                path.push(other.as_path_el());
+                let mut last = other.start();
+                kurbo::flatten(&path, 0.02, |el| match el {
+                    PathEl::MoveTo(p) => last = p,
+                    PathEl::LineTo(p) => {
+                        lines.push(kurbo::Line::new(last, p));
+                        last = p;
+                    }
+                    _ => {}
+                });
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for (s, e) in segment_pairs(a.0, a.1, a.2) {
+        let seg = seg_of(a.0, s, e);
+        if !close(seg.bounding_box()) {
+            continue;
+        }
+        for line in &lines {
+            for hit in seg.intersect_line(*line) {
+                let p = line.eval(hit.line_t);
+                if (p - q).hypot() <= r {
+                    out.push(xy(p));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Nearest on-curve point (B-06): the engine-side answer to the
 /// `closestTOnCubic` math currently triplicated in TS.
 pub fn nearest_point_on_path(

@@ -97,7 +97,8 @@ export function useCameraTween(
     if (
       nearly(start.scale, target.scale) &&
       nearly(start.tx, target.tx) &&
-      nearly(start.ty, target.ty)
+      nearly(start.ty, target.ty) &&
+      nearly(start.rotation ?? 0, target.rotation ?? start.rotation ?? 0)
     ) {
       return;
     }
@@ -115,6 +116,13 @@ export function useCameraTween(
         scale: lerp(start.scale, target.scale, eased),
         tx: lerp(start.tx, target.tx, eased),
         ty: lerp(start.ty, target.ty, eased),
+        // v77 — Rotate View turns with the tween; a target without a
+        // rotation keeps the view's.
+        rotation: lerp(
+          start.rotation ?? 0,
+          target.rotation ?? start.rotation ?? 0,
+          eased,
+        ),
       });
       if (t < 1) {
         rafRef.current = requestAnimationFrame(step);

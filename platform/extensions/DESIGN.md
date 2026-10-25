@@ -431,6 +431,13 @@ every drawing tool needs) and `viewport.camera()/pxToPt(px)` (the
 zoom-constant-tolerance idiom from `pencil/scissors/pen` — [draw B-11]
 showed every tool re-derives it).
 
+Since protocol 77 (editor ADR 287, Rotate View) the camera snapshot — here
+and in `OverlayProps.camera` — carries an optional `rotation` (radians,
+clockwise on screen; absent = 0): the screen shows
+`scale · R(rotation) · doc + (tx, ty)`. Overlays are drawn under that
+transform already and pointer positions reach tools in document space, so
+only a contribution placing screen-space HTML needs to read it.
+
 ### 4.5 `host.overlay`
 
 `setToolPreview(shape | null)` — the polyline/rect/path preview signal

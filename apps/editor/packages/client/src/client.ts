@@ -77,11 +77,13 @@ import {
   type SelectionMode,
   type SelectionRect,
   type SnapLine,
+  type SnapSettings,
   type SnapshotPng,
   type SvgExportOptions,
   type SvgImportOptions,
   type SvgImportPlan,
   type SvgReport,
+  type ViewSettings,
   type TextCellAddr,
   type UndoLogEntryWire,
   type WordBounds,
@@ -767,6 +769,36 @@ export class CanvasClient {
    */
   async mutate(mutation: Mutation): Promise<WorkerToMain> {
     return this.send({ kind: "mutate", payload: mutation });
+  }
+
+  /**
+   * v77 (editor ADR 287) — how the screen draws the document: Preview,
+   * Outline, Overprint Preview or Pixel Preview. Session state the worker
+   * keeps across document loads; no build, export or undo step sees it.
+   * Resolves to the settings now in force.
+   */
+  async setViewSettings(settings: ViewSettings): Promise<ViewSettings> {
+    const reply = await this.send({
+      kind: "setViewSettings",
+      payload: { settings },
+    });
+    if (reply.kind === "viewSettingsApplied") return reply.payload.settings;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * v67 — the session's snapping preferences (tolerance, targets, grid,
+   * and since v77 pixel, spacing, angle and rotate snapping). Every
+   * gesture and `requestSnapPoint` obeys them; they survive document
+   * loads. Resolves to the settings now in force.
+   */
+  async setSnapSettings(settings: SnapSettings): Promise<SnapSettings> {
+    const reply = await this.send({
+      kind: "setSnapSettings",
+      payload: { settings },
+    });
+    if (reply.kind === "snapSettingsApplied") return reply.payload.settings;
+    throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
   /**

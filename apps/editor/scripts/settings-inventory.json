@@ -245,6 +245,86 @@
       "sites": []
     },
     {
+      "id": "view.outline",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Outline view (cmd+y): the engine draws hairline outlines (editor ADR 287)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "outline: false",
+      "sites": []
+    },
+    {
+      "id": "view.overprintPreview",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Overprint Preview: overprinting inks mix as on press instead of knocking out",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "overprintPreview: false",
+      "sites": []
+    },
+    {
+      "id": "view.pixelPreview",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Pixel Preview: the page as a 72 ppi raster, enlarged unsmoothed",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "pixelPreview: false",
+      "sites": []
+    },
+    {
+      "id": "view.showGrid",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Show grid: the document grid overlay",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "showGrid: false",
+      "sites": []
+    },
+    {
+      "id": "view.pixelGrid",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Show pixel grid: one line per point in Pixel Preview at 600 % and above",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "pixelGrid: true",
+      "sites": []
+    },
+    {
+      "id": "view.snapToGrid",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Snap to grid: gestures and the point resolver snap to the grid",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "snapToGrid: false",
+      "sites": []
+    },
+    {
+      "id": "view.snapToPixel",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Snap to pixel: edges and points nothing else holds land on whole points",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "snapToPixel: false",
+      "sites": []
+    },
+    {
+      "id": "view.smartGuides",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Smart guides (cmd+u): alignment, spacing, angle and intersection guides",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "smartGuides: true",
+      "sites": []
+    },
+    {
       "id": "view.screenMode",
       "kind": "view-option",
       "storage": "memory",
@@ -350,6 +430,20 @@
       "source": "apps/editor/apps/canvas/src/playground/IframeScriptBridge.tsx",
       "marker": "params.get(\"embed\") !== \"script\"",
       "sites": []
+    },
+    {
+      "id": "paged.viewPreferences",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.viewPreferences",
+      "default": "{ gridEvery: 72, gridSubdivisions: 8, gridColor: #8fb8ff, gridsInBack: true, smart guides on, tolerancePx: 4 }",
+      "effect": "Guides & grid preferences: the grid's spacing, subdivisions, colour and stacking, the snap tolerance and the smart guides' options (editor ADR 287)",
+      "source": "apps/editor/packages/shell/src/state/view-preferences.ts",
+      "marker": "\"paged.viewPreferences\"",
+      "sites": [
+        ["getItem", "STORAGE_KEY"],
+        ["setItem", "STORAGE_KEY"]
+      ]
     }
   ],
   "excluded": [

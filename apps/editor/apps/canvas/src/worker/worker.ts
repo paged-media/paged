@@ -49,6 +49,7 @@ import {
   OFFSET_SCALE as CAMERA_OFFSET_SCALE,
   OFFSET_TX as CAMERA_OFFSET_TX,
   OFFSET_TY as CAMERA_OFFSET_TY,
+  OFFSET_ROTATION as CAMERA_OFFSET_ROTATION,
 } from "@paged-media/client";
 // `@paged-media/client` has no React; safe to import from the barrel.
 // (Pre-Phase-1 this was a deep-import to bypass the @paged-media/shell
@@ -121,7 +122,13 @@ interface CanvasWorkerInstance {
     height: number,
   ): Promise<boolean>;
   resizeGpu?(width: number, height: number): void;
-  presentFrame?(scale: number, tx: number, ty: number, dpr: number): boolean;
+  presentFrame?(
+    scale: number,
+    tx: number,
+    ty: number,
+    dpr: number,
+    rotation: number,
+  ): boolean;
   gpuReady?(): boolean;
   /** Why the GPU device was lost, once it has been (see `recoverGpu`). */
   gpuLostReason?(): string | undefined;
@@ -248,6 +255,11 @@ function assertSabContract(mod: CanvasWasmModule): string | null {
   }
   if (cam.offsetTy !== CAMERA_OFFSET_TY) {
     drift.push(`camera.offsetTy ${cam.offsetTy} != TS ${CAMERA_OFFSET_TY}`);
+  }
+  if (cam.offsetRotation !== CAMERA_OFFSET_ROTATION) {
+    drift.push(
+      `camera.offsetRotation ${cam.offsetRotation} != TS ${CAMERA_OFFSET_ROTATION}`,
+    );
   }
   if (cam.offsetGenLo !== CAMERA_OFFSET_GEN_LO) {
     drift.push(
@@ -627,6 +639,10 @@ function applyReplyEffects(reply: WorkerToMain): void {
       if (pageIds == null) renderer.markDirty([]);
       else if (pageIds.length > 0) renderer.markDirty(pageIds as never);
     }
+  } else if (reply.kind === "viewSettingsApplied") {
+    // v77 (editor ADR 287) — the screen's view mode changed: every tile
+    // was drawn in the old one (the GPU scene cache is keyed by mode).
+    renderer?.setViewMode(reply.payload.settings.mode ?? "preview");
   } else if (reply.kind === "gestureCommitted") {
     // A moved frame can carry its heading to another page.
     scheduleResolution();
@@ -1078,7 +1094,7 @@ async function attachRenderer(
     renderTilePng: (pageId, widthPx) => worker!.renderTilePng(pageId, widthPx),
     presentFrame:
       gpuActive && worker.presentFrame
-        ? (s, x, y, d) => worker!.presentFrame!(s, x, y, d)
+        ? (s, x, y, d, r) => worker!.presentFrame!(s, x, y, d, r)
         : undefined,
     gpuLost:
       gpuActive && worker.gpuLostReason

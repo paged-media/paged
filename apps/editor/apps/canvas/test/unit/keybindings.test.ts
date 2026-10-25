@@ -44,12 +44,14 @@ import { APP_KEYBINDINGS } from "../../src/app-commands";
 import { INSERT_KEYBINDINGS } from "../../src/insert-commands";
 import { OBJECT_KEYBINDINGS } from "../../src/object-commands";
 import { SELECT_ALL_KEYBINDINGS } from "../../src/select-all";
+import { VIEW_KEYBINDINGS } from "../../src/view-commands";
 
 const TABLES: KeybindingContribution[] = [
   ...APP_KEYBINDINGS,
   ...SELECT_ALL_KEYBINDINGS,
   ...OBJECT_KEYBINDINGS,
   ...INSERT_KEYBINDINGS,
+  ...VIEW_KEYBINDINGS,
 ];
 
 /** A key event from a registered combo. `cmd+shift+]` is reported with
@@ -442,5 +444,65 @@ describe("the tables as a whole", () => {
     expect(fires("pageup")).toBe("paged.view.previousPage");
     expect(fires("pagedown")).toBe("paged.view.nextPage");
     expect(fires("end")).toBe("paged.view.lastPage");
+  });
+});
+
+describe("the View menu's chords (editor ADR 287)", () => {
+  test("each fires its command, the Mac's Option and Shift glyphs included", () => {
+    covers(
+      "keybinding:cmd+y→paged.view.outline",
+      "keybinding:ctrl+y→paged.view.outline",
+      "keybinding:alt+shift+cmd+y→paged.view.overprintPreview",
+      "keybinding:alt+shift+ctrl+y→paged.view.overprintPreview",
+      "keybinding:alt+cmd+y→paged.view.pixelPreview",
+      "keybinding:alt+ctrl+y→paged.view.pixelPreview",
+      "keybinding:cmd+'→paged.view.showGrid",
+      "keybinding:ctrl+'→paged.view.showGrid",
+      "keybinding:shift+cmd+'→paged.view.snapToGrid",
+      "keybinding:shift+ctrl+'→paged.view.snapToGrid",
+      "keybinding:cmd+u→paged.view.smartGuides",
+      "keybinding:ctrl+u→paged.view.smartGuides",
+      "keybinding:shift+cmd+1→paged.view.resetRotation",
+      "keybinding:shift+ctrl+1→paged.view.resetRotation",
+    );
+    for (const k of VIEW_KEYBINDINGS) {
+      expect({ key: k.key, fired: fires(k.key) }).toEqual({
+        key: k.key,
+        fired: k.command,
+      });
+    }
+    // What a Mac reports: Option changes the letter, Shift the digit and
+    // the quote — the physical key still matches.
+    const real = (
+      key: string,
+      code: string,
+      mods: { meta?: boolean; alt?: boolean; shift?: boolean },
+    ) =>
+      resolveBinding(
+        TABLES,
+        {
+          key,
+          code,
+          metaKey: !!mods.meta,
+          ctrlKey: false,
+          altKey: !!mods.alt,
+          shiftKey: !!mods.shift,
+        } as ReturnType<typeof press>,
+        () => AT_ROOT,
+      )?.command ?? null;
+    expect(real("Á", "KeyY", { meta: true, alt: true, shift: true })).toBe(
+      "paged.view.overprintPreview",
+    );
+    expect(real("¥", "KeyY", { meta: true, alt: true })).toBe(
+      "paged.view.pixelPreview",
+    );
+    expect(real("!", "Digit1", { meta: true, shift: true })).toBe(
+      "paged.view.resetRotation",
+    );
+    expect(real('"', "Quote", { meta: true, shift: true })).toBe(
+      "paged.view.snapToGrid",
+    );
+    // Cmd+1 without Shift stays 100 %.
+    expect(real("1", "Digit1", { meta: true })).toBe("paged.view.zoom100");
   });
 });

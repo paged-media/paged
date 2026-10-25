@@ -630,6 +630,9 @@ export {
   type DataMarkerTone,
   tableCellOverlayContribution,
   snapLinesContribution,
+  gridOverlayContribution,
+  gridPath,
+  PIXEL_GRID_MIN_SCALE,
   applyAffine,
   type IdmlAffine,
   type OverlayHostProps,
@@ -965,8 +968,21 @@ export {
   setViewToggle,
   subscribeViewToggles,
   toggleViewToggle,
+  viewModeOf,
+  type ViewModeName,
   type ViewToggle,
 } from "./state/view-toggles";
+export {
+  DEFAULT_VIEW_PREFERENCES,
+  gridStep,
+  resetViewPreferences,
+  setViewPreferences,
+  subscribeViewPreferences,
+  useViewPreferences,
+  viewPreferences,
+  type ViewPreferences,
+} from "./state/view-preferences";
+export { snapSettingsOf, ViewSettingsSync } from "./state/view-settings-sync";
 
 export {
   chromeStorageScope,

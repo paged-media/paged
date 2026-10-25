@@ -39,7 +39,22 @@
 import { scoped, type EditorScope } from "./editor-scope";
 
 export type ViewToggle =
-  "textThreads" | "snapToPoints" | "headingAnchors" | "dataMarkers";
+  | "textThreads"
+  | "snapToPoints"
+  | "headingAnchors"
+  | "dataMarkers"
+  // Editor ADR 287 — the screen modes and the grids / snapping of the
+  // View menu. `outline` / `overprintPreview` / `pixelPreview` resolve to
+  // ONE engine view mode (`viewModeOf`); Overprint Preview and Pixel
+  // Preview exclude each other, as in Illustrator.
+  | "outline"
+  | "overprintPreview"
+  | "pixelPreview"
+  | "showGrid"
+  | "pixelGrid"
+  | "snapToGrid"
+  | "snapToPixel"
+  | "smartGuides";
 
 type Listener = () => void;
 
@@ -61,7 +76,39 @@ const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = {
   // frames a binding places content in and its sync state: InDesign data
   // tools keep such markers behind a View option too, and they never print.
   dataMarkers: false,
+  // Preview is the default screen: overprints knock out, as Illustrator's
+  // and InDesign's screens draw them until Overprint Preview is on.
+  outline: false,
+  overprintPreview: false,
+  pixelPreview: false,
+  // The document grid is hidden and not snapped to by default (both
+  // apps); the pixel grid shows at 600 % and above once Pixel Preview is
+  // on, Illustrator's "Show Pixel Grid" default.
+  showGrid: false,
+  pixelGrid: true,
+  snapToGrid: false,
+  snapToPixel: false,
+  // On by default, as Illustrator's Smart Guides are.
+  smartGuides: true,
 };
+
+/** The pairs that exclude each other: turning one on turns the other off. */
+const EXCLUSIVE: Partial<Record<ViewToggle, ViewToggle>> = {
+  overprintPreview: "pixelPreview",
+  pixelPreview: "overprintPreview",
+};
+
+/** The engine's view mode (wire `ViewMode`) the toggles add up to. */
+export type ViewModeName =
+  "preview" | "outline" | "overprintPreview" | "pixelPreview";
+
+export function viewModeOf(scope: EditorScope): ViewModeName {
+  const state = scope.get(TOGGLES).state;
+  if (state.outline) return "outline";
+  if (state.pixelPreview) return "pixelPreview";
+  if (state.overprintPreview) return "overprintPreview";
+  return "preview";
+}
 
 const TOGGLES = scoped("viewToggles", () => ({
   state: { ...DEFAULTS } as Record<ViewToggle, boolean>,
@@ -84,6 +131,8 @@ export function setViewToggle(
   const { state } = scope.get(TOGGLES);
   if (state[which] === on) return;
   state[which] = on;
+  const other = EXCLUSIVE[which];
+  if (on && other) state[other] = false;
   notify(scope);
 }
 

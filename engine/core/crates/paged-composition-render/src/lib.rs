@@ -78,6 +78,7 @@ pub fn render_page<R: RegionRenderer>(
         dpi,
         background,
         snap_glyph_origins: false,
+        ..RasterOptions::new(0.0, 0.0)
     };
     Some(rasterize(&list, &opts))
 }

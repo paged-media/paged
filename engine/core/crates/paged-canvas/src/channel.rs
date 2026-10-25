@@ -748,6 +748,24 @@ export type WorkerToMain = WorkerToMainKind & {
 //   → `SvgExported { svg, report }` / `ExportSvgFailed { error }`. The
 //   additive PropertyPath `frameGradientFillStart` rides it. New message
 //   kinds an older worker cannot answer, hence the bump.
+// v77 (rider) — view modes and snapping v2 (editor ADR 287):
+//   - `SetViewSettings { settings }` → `ViewSettingsApplied { settings }`:
+//     the screen's mode (Preview, Outline, Overprint Preview, Pixel
+//     Preview). Preview draws overprints as knockouts on both lanes (the
+//     GPU screen always did; the CPU tiles simulated them), Overprint
+//     Preview simulates them. A raster-time rewrite: no build depends on
+//     it.
+//   - `SnapSettings` gains `pixel`, `gridEvery` / `gridSubdivisions`,
+//     `angleGuides` / `customAngle`, `spacing`, `rotate` and
+//     `intersections` (serde-default fields); `SnapSource` gains `pixel`,
+//     `angle`, `intersection` and `spacing`; `SnapLine` gains the optional
+//     `kind`, `from`, `to`, `angle` and `distance`; `SnapPointResult` gains
+//     `angleTarget`; `CameraSabLayout` gains `offsetRotation`.
+//   - Gestures: translate snaps rotated members through their oriented
+//     box, equal spacing and pixels; scale snaps the dragged handle;
+//     rotate snaps to 0/45/90 and the neighbours' angles.
+//   - The camera SAB's spare slot (offset 12) carries the view rotation.
+//   A new message kind an older worker cannot answer, hence the bump.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -1453,6 +1471,11 @@ pub enum MainToWorkerKind {
     SetSnapSettings {
         settings: crate::snap_point::SnapSettings,
     },
+    /// v77 (editor ADR 287) — how the screen draws the document: Preview,
+    /// Outline, Overprint Preview or Pixel Preview. Survives document
+    /// loads; not saved, not undoable, no rebuild; exports, snapshots and
+    /// separations never see it. Reply: `ViewSettingsApplied`.
+    SetViewSettings { settings: crate::view::ViewSettings },
     /// v75 — the session's role and the host's overrides, against which
     /// the document's template policy is applied (editor
     /// `docs/composable-editor.md` §7). Survives document loads; not saved,
@@ -2376,6 +2399,8 @@ pub enum WorkerToMainKind {
     SnapSettingsApplied {
         settings: crate::snap_point::SnapSettings,
     },
+    /// v77 — `SetViewSettings` reply: the settings now in force.
+    ViewSettingsApplied { settings: crate::view::ViewSettings },
     /// v75 — `SetSessionPolicy` reply: the policy now in force.
     SessionPolicyApplied {
         policy: paged_template::SessionPolicy,

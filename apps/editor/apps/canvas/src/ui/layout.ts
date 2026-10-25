@@ -99,16 +99,27 @@ export function fitCamera(
   viewportHeightPx: number,
   rect: PageRect,
   marginPx = 40,
+  rotation = 0,
 ): Camera {
   if (rect.w <= 0 || rect.h <= 0) {
-    return { scale: 1, tx: 0, ty: 0 };
+    return { scale: 1, tx: 0, ty: 0, rotation };
   }
-  const scaleX = (viewportWidthPx - 2 * marginPx) / rect.w;
-  const scaleY = (viewportHeightPx - 2 * marginPx) / rect.h;
+  // v77 (editor ADR 287) — in a turned view the rect's turned box fits.
+  const c = Math.abs(Math.cos(rotation));
+  const s = Math.abs(Math.sin(rotation));
+  const w = rect.w * c + rect.h * s;
+  const h = rect.w * s + rect.h * c;
+  const scaleX = (viewportWidthPx - 2 * marginPx) / w;
+  const scaleY = (viewportHeightPx - 2 * marginPx) / h;
   const scale = Math.max(0.01, Math.min(scaleX, scaleY));
-  const tx = (viewportWidthPx - rect.w * scale) / 2 - rect.x * scale;
-  const ty = (viewportHeightPx - rect.h * scale) / 2 - rect.y * scale;
-  return { scale, tx, ty };
+  // The rect's centre lands on the viewport's.
+  const cx = rect.x + rect.w / 2;
+  const cy = rect.y + rect.h / 2;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const tx = viewportWidthPx / 2 - scale * (cos * cx - sin * cy);
+  const ty = viewportHeightPx / 2 - scale * (sin * cx + cos * cy);
+  return { scale, tx, ty, rotation };
 }
 
 /** Apply a zoom-to-cursor zoom delta. `factor > 1` zooms in. */

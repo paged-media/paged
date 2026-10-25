@@ -52,8 +52,31 @@ pub enum SnapAxis {
     Y,
 }
 
+/// v77 — what a snap line shows. Absent on the wire ⇒ `Alignment`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub enum SnapLineKind {
+    /// An x or y line the moving edge, centre or point is on.
+    Alignment,
+    /// An equal gap: `from` → `to` spans it, `distance` is its width.
+    Spacing,
+    /// An angle guide (`angle`, degrees clockwise from +x on screen)
+    /// from `from` (the point it runs through) to `to`. A rotate
+    /// gesture's guide runs from the pivot.
+    Angle,
+}
+
 /// One active snap line surfaced to the overlay. `position` is in
 /// page-local pt on `page_id`.
+///
+/// v77 — the optional fields carry smart-guide extents and measurement
+/// labels (editor ADR 287). An alignment line with `from` / `to` is drawn
+/// between them (the point it came through and the snapped point) rather
+/// than across the page, and `distance` (pt) is the label the host
+/// formats in its units. All are absent from older engines and are
+/// omitted from the JSON when unset, so a v76 reader sees the shape it
+/// knows.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
@@ -61,6 +84,37 @@ pub struct SnapLine {
     pub axis: SnapAxis,
     pub position: f32,
     pub page_id: PageId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub kind: Option<SnapLineKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub from: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub to: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub angle: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub distance: Option<f32>,
+}
+
+impl SnapLine {
+    /// A full-page alignment line.
+    pub fn new(axis: SnapAxis, position: f32, page_id: PageId) -> Self {
+        Self {
+            axis,
+            position,
+            page_id,
+            kind: None,
+            from: None,
+            to: None,
+            angle: None,
+            distance: None,
+        }
+    }
 }
 
 /// Snap-adjusted delta + the active guides. Returned by
@@ -147,14 +201,9 @@ pub(crate) fn compute_snap_adjustment_with(
             lines: Vec::new(),
         };
     }
-    for snap in &session.snapshots {
-        if !is_pure_translate_or_identity(snap.item_transform) {
-            return SnapAdjustment {
-                delta: raw_delta,
-                lines: Vec::new(),
-            };
-        }
-    }
+    // v77 — a rotated (or sheared) member snaps through its oriented
+    // box: the extremes of its four transformed corners and its centre
+    // (`snapshot_aabb_in_page`), which is where its visible edges are.
     let scale = session.camera_scale.unwrap_or(1.0).max(1e-3);
     let tolerance = env.settings.tolerance_px / scale;
     let (dx, dy) = raw_delta;
@@ -209,8 +258,47 @@ pub(crate) fn compute_snap_adjustment_with(
         }
     }
 
-    let adj_dx = best_x.as_ref().map(|b| b.adjustment).unwrap_or(0.0);
-    let adj_dy = best_y.as_ref().map(|b| b.adjustment).unwrap_or(0.0);
+    // v77 — equal spacing: the selection's box between its neighbours
+    // (or one gap on from a neighbour pair) wins an axis when it is
+    // nearer than the edge snap.
+    let spacing = if env.settings.spacing {
+        spacing_snap(session, raw_delta, pages, siblings, tolerance)
+    } else {
+        SpacingSnap::default()
+    };
+    let take = |edge: Option<&SnapMatch>, gap: Option<&SpacingMatch>| match (edge, gap) {
+        (_, Some(g)) if edge.is_none_or(|e| g.adjustment.abs() + 1e-4 < e.adjustment.abs()) => {
+            (Some(g.adjustment), true)
+        }
+        (Some(e), _) => (Some(e.adjustment), false),
+        (None, None) => (None, false),
+        (None, Some(_)) => unreachable!("covered by the first arm"),
+    };
+    let (snap_dx, spacing_x) = take(best_x.as_ref(), spacing.x.as_ref());
+    let (snap_dy, spacing_y) = take(best_y.as_ref(), spacing.y.as_ref());
+    if spacing_x {
+        best_x = None;
+    }
+    if spacing_y {
+        best_y = None;
+    }
+    // v77 — Snap to Pixel: an axis nothing else took lands its box's
+    // leading edge on a whole point.
+    let pixel = |axis: SnapAxis, raw: f32| -> Option<f32> {
+        if !env.settings.pixel {
+            return None;
+        }
+        let snap = session.snapshots.iter().find(|s| !is_group(s))?;
+        let page = host_page_for_snapshot(snap, pages)?;
+        let aabb = snapshot_aabb_in_page(snap, &page)?;
+        let edge = match axis {
+            SnapAxis::X => aabb.left,
+            SnapAxis::Y => aabb.top,
+        } + raw;
+        Some(edge.round() - edge)
+    };
+    let adj_dx = snap_dx.or_else(|| pixel(SnapAxis::X, dx)).unwrap_or(0.0);
+    let adj_dy = snap_dy.or_else(|| pixel(SnapAxis::Y, dy)).unwrap_or(0.0);
     let mut lines = Vec::new();
 
     // Plan-2 §8.2 — Smart guides. The snap winner is one alignment;
@@ -246,11 +334,7 @@ pub(crate) fn compute_snap_adjustment_with(
                 if (target - cand).abs() <= SMART_GUIDE_EPSILON_PT {
                     push_unique_line(
                         &mut lines,
-                        SnapLine {
-                            axis: SnapAxis::X,
-                            position: target,
-                            page_id: page.page_id.clone(),
-                        },
+                        SnapLine::new(SnapAxis::X, target, page.page_id.clone()),
                     );
                 }
             }
@@ -260,11 +344,7 @@ pub(crate) fn compute_snap_adjustment_with(
                 if (target - cand).abs() <= SMART_GUIDE_EPSILON_PT {
                     push_unique_line(
                         &mut lines,
-                        SnapLine {
-                            axis: SnapAxis::Y,
-                            position: target,
-                            page_id: page.page_id.clone(),
-                        },
+                        SnapLine::new(SnapAxis::Y, target, page.page_id.clone()),
                     );
                 }
             }
@@ -277,11 +357,201 @@ pub(crate) fn compute_snap_adjustment_with(
     // historically relied on by ensuring it comes first in its axis.
     promote_winner(&mut lines, best_x.as_ref(), SnapAxis::X);
     promote_winner(&mut lines, best_y.as_ref(), SnapAxis::Y);
+    if spacing_x {
+        lines.extend(spacing.x.into_iter().flat_map(|m| m.lines));
+    }
+    if spacing_y {
+        lines.extend(spacing.y.into_iter().flat_map(|m| m.lines));
+    }
 
     SnapAdjustment {
         delta: (dx + adj_dx, dy + adj_dy),
         lines,
     }
+}
+
+/// v77 — one axis's equal-spacing snap: the adjustment and the gap
+/// lines to draw (kind `Spacing`, `distance` = the gap).
+#[derive(Debug, Clone)]
+struct SpacingMatch {
+    adjustment: f32,
+    lines: Vec<SnapLine>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct SpacingSnap {
+    x: Option<SpacingMatch>,
+    y: Option<SpacingMatch>,
+}
+
+/// v77 — equal spacing for a translate (Illustrator's "equal spacing"
+/// smart guide). The moving selection's box (the union of its members'
+/// oriented boxes, on the first member's page) is compared with the
+/// siblings in its row (for x: those overlapping it vertically) and
+/// column (for y). Three positions give equal gaps: centred between the
+/// nearest neighbour on each side; one gap on from the nearest neighbour
+/// on one side, repeating the gap between it and the next one out; and
+/// the same on the other side. The nearest within `tolerance` wins.
+fn spacing_snap(
+    session: &GestureSession,
+    raw_delta: (f32, f32),
+    pages: &[PageInfo],
+    siblings: &[FrameRect],
+    tolerance: f32,
+) -> SpacingSnap {
+    let movers: Vec<&crate::gesture::NodeSnapshot> =
+        session.snapshots.iter().filter(|s| !is_group(s)).collect();
+    let Some(first) = movers.first() else {
+        return SpacingSnap::default();
+    };
+    let Some(page) = host_page_for_snapshot(first, pages) else {
+        return SpacingSnap::default();
+    };
+    let owned: Vec<crate::gesture::NodeSnapshot> = movers.iter().map(|s| (*s).clone()).collect();
+    let Some(b) = union_aabb_in_page(&owned, &page) else {
+        return SpacingSnap::default();
+    };
+    let moving_ids: std::collections::HashSet<&crate::element_selection::ElementId> =
+        session.snapshots.iter().map(|s| &s.id).collect();
+    let others: Vec<[f32; 4]> = siblings
+        .iter()
+        .filter(|f| f.page_id == page.page_id && !moving_ids.contains(&f.element_id))
+        .map(|f| f.aabb)
+        .collect();
+    let (dx, dy) = raw_delta;
+    let moved = [b.top + dy, b.left + dx, b.bottom + dy, b.right + dx];
+    SpacingSnap {
+        x: spacing_axis(&page.page_id, moved, &others, tolerance, SnapAxis::X),
+        y: spacing_axis(&page.page_id, moved, &others, tolerance, SnapAxis::Y),
+    }
+}
+
+/// One axis of [`spacing_snap`]. Boxes are `[top, left, bottom, right]`;
+/// the axis picks which pair of sides is "along" (x: left/right) and
+/// which is "across" (x: top/bottom).
+fn spacing_axis(
+    page_id: &PageId,
+    moved: [f32; 4],
+    others: &[[f32; 4]],
+    tolerance: f32,
+    axis: SnapAxis,
+) -> Option<SpacingMatch> {
+    // (lo, hi) along the axis and (lo, hi) across it.
+    let along = |b: &[f32; 4]| match axis {
+        SnapAxis::X => (b[1], b[3]),
+        SnapAxis::Y => (b[0], b[2]),
+    };
+    let across = |b: &[f32; 4]| match axis {
+        SnapAxis::X => (b[0], b[2]),
+        SnapAxis::Y => (b[1], b[3]),
+    };
+    let (m_lo, m_hi) = along(&moved);
+    let (c_lo, c_hi) = across(&moved);
+    let size = m_hi - m_lo;
+    let centre = (m_lo + m_hi) * 0.5;
+    let in_row: Vec<&[f32; 4]> = others
+        .iter()
+        .filter(|o| {
+            let (lo, hi) = across(o);
+            lo < c_hi && hi > c_lo
+        })
+        .collect();
+    // Nearest first on each side, by the facing edge.
+    let mut before: Vec<(f32, f32, f32, f32)> = in_row
+        .iter()
+        .filter_map(|o| {
+            let (lo, hi) = along(o);
+            let (alo, ahi) = across(o);
+            ((lo + hi) * 0.5 < centre && hi <= m_lo + tolerance).then_some((lo, hi, alo, ahi))
+        })
+        .collect();
+    before.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let mut after: Vec<(f32, f32, f32, f32)> = in_row
+        .iter()
+        .filter_map(|o| {
+            let (lo, hi) = along(o);
+            let (alo, ahi) = across(o);
+            ((lo + hi) * 0.5 > centre && lo >= m_hi - tolerance).then_some((lo, hi, alo, ahi))
+        })
+        .collect();
+    after.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+    // A gap line between `from` and `to` along the axis, drawn across the
+    // middle of the two boxes' overlap.
+    let gap_line = |from: f32, to: f32, a: (f32, f32), b: (f32, f32)| {
+        let lo = a.0.max(b.0);
+        let hi = a.1.min(b.1);
+        let mid = if lo <= hi {
+            (lo + hi) * 0.5
+        } else {
+            (a.0 + a.1) * 0.5
+        };
+        let (p0, p1) = match axis {
+            SnapAxis::X => ([from, mid], [to, mid]),
+            SnapAxis::Y => ([mid, from], [mid, to]),
+        };
+        let mut line = SnapLine::new(axis, from, page_id.clone());
+        line.kind = Some(SnapLineKind::Spacing);
+        line.from = Some(p0);
+        line.to = Some(p1);
+        line.distance = Some(to - from);
+        line
+    };
+    let me = (c_lo, c_hi);
+    let mut best: Option<SpacingMatch> = None;
+    let mut offer = |target_lo: f32, lines: Vec<SnapLine>| {
+        let adjustment = target_lo - m_lo;
+        if adjustment.abs() <= tolerance
+            && best
+                .as_ref()
+                .is_none_or(|b| adjustment.abs() < b.adjustment.abs())
+        {
+            best = Some(SpacingMatch { adjustment, lines });
+        }
+    };
+    // Centred between the nearest neighbours.
+    if let (Some(l), Some(r)) = (before.first(), after.first()) {
+        let gap = (r.0 - l.1 - size) * 0.5;
+        if gap > 0.0 {
+            let t = l.1 + gap;
+            offer(
+                t,
+                vec![
+                    gap_line(l.1, t, (l.2, l.3), me),
+                    gap_line(t + size, r.0, me, (r.2, r.3)),
+                ],
+            );
+        }
+    }
+    // One gap on from a neighbour pair, before the selection…
+    if let (Some(l1), Some(l2)) = (before.first(), before.get(1)) {
+        let gap = l1.0 - l2.1;
+        if gap > 0.0 {
+            let t = l1.1 + gap;
+            offer(
+                t,
+                vec![
+                    gap_line(l2.1, l1.0, (l2.2, l2.3), (l1.2, l1.3)),
+                    gap_line(l1.1, t, (l1.2, l1.3), me),
+                ],
+            );
+        }
+    }
+    // …and after it.
+    if let (Some(r1), Some(r2)) = (after.first(), after.get(1)) {
+        let gap = r2.0 - r1.1;
+        if gap > 0.0 {
+            let t = r1.0 - gap - size;
+            offer(
+                t,
+                vec![
+                    gap_line(t + size, r1.0, me, (r1.2, r1.3)),
+                    gap_line(r1.1, r2.0, (r1.2, r1.3), (r2.2, r2.3)),
+                ],
+            );
+        }
+    }
+    best
 }
 
 /// v67 (RFI C-68) — resize snapping: the edge (or the two edges, at a
@@ -337,6 +607,9 @@ pub(crate) fn compute_resize_snap(
     let (dx, dy) = raw_delta;
     let mut best_x: Option<SnapMatch> = None;
     let mut best_y: Option<SnapMatch> = None;
+    // v77 — the first moving edge per axis, for Snap to Pixel.
+    let mut first_x: Option<f32> = None;
+    let mut first_y: Option<f32> = None;
     for snap in &moving {
         let Some(page) = host_page_for_snapshot(snap, pages) else {
             continue;
@@ -358,6 +631,8 @@ pub(crate) fn compute_resize_snap(
         if handle.moves_south() {
             cand_y.push(aabb.bottom + dy);
         }
+        first_x = first_x.or(cand_x.first().copied());
+        first_y = first_y.or(cand_y.first().copied());
         if !cand_x.is_empty() {
             let targets = snap_targets_x(&page, siblings, &session.snapshots, env, &cand_x);
             if let Some((adj, target)) = snap_axis_match(&cand_x, &targets, tolerance) {
@@ -391,24 +666,217 @@ pub(crate) fn compute_resize_snap(
     }
     let mut lines = Vec::new();
     if let Some(m) = &best_x {
-        lines.push(SnapLine {
-            axis: SnapAxis::X,
-            position: m.target,
-            page_id: m.page_id.clone(),
-        });
+        lines.push(SnapLine::new(SnapAxis::X, m.target, m.page_id.clone()));
     }
     if let Some(m) = &best_y {
-        lines.push(SnapLine {
-            axis: SnapAxis::Y,
-            position: m.target,
-            page_id: m.page_id.clone(),
-        });
+        lines.push(SnapLine::new(SnapAxis::Y, m.target, m.page_id.clone()));
     }
+    // v77 — Snap to Pixel: a moving edge nothing else took lands on a
+    // whole point.
+    let pixel = |edge: Option<f32>| {
+        edge.filter(|_| env.settings.pixel)
+            .map_or(0.0, |e| e.round() - e)
+    };
     SnapAdjustment {
         delta: (
-            dx + best_x.map_or(0.0, |b| b.adjustment),
-            dy + best_y.map_or(0.0, |b| b.adjustment),
+            dx + best_x.map_or_else(|| pixel(first_x), |b| b.adjustment),
+            dy + best_y.map_or_else(|| pixel(first_y), |b| b.adjustment),
         ),
+        lines,
+    }
+}
+
+/// v77 (editor ADR 287) — scale snapping: the dragged handle (the
+/// gesture's anchor, moved by the delta) lands on the same page / sibling
+/// / guide / grid / pixel lines a resize edge does. An axis the handle
+/// does not move (it sits level with the pivot on that axis — a side
+/// handle) is left alone. With Shift (proportional scale) only the nearer
+/// axis snaps, so the proportion holds. Works for rotated selections too:
+/// the handle is a point on the page whatever the items' angle.
+pub(crate) fn compute_scale_snap(
+    session: &GestureSession,
+    raw_delta: (f32, f32),
+    pages: &[PageInfo],
+    siblings: &[FrameRect],
+    env: &SnapEnv,
+) -> SnapAdjustment {
+    use crate::gesture::GestureType;
+    let pass = SnapAdjustment {
+        delta: raw_delta,
+        lines: Vec::new(),
+    };
+    if !matches!(session.gesture, GestureType::Scale)
+        || !env.settings.enabled
+        || session.modifiers.disable_snap
+    {
+        return pass;
+    }
+    let (Some(anchor), Some(pivot)) = (session.anchor_spread, session.pivot_spread) else {
+        return pass;
+    };
+    let Some(page) = pages
+        .iter()
+        .find(|p| {
+            anchor.0 >= p.spread_origin.0 - 1.0
+                && anchor.0 <= p.spread_origin.0 + p.width_pt + 1.0
+                && anchor.1 >= p.spread_origin.1 - 1.0
+                && anchor.1 <= p.spread_origin.1 + p.height_pt + 1.0
+        })
+        .cloned()
+    else {
+        return pass;
+    };
+    let scale = session.camera_scale.unwrap_or(1.0).max(1e-3);
+    let tolerance = env.settings.tolerance_px / scale;
+    let (dx, dy) = raw_delta;
+    let hx = anchor.0 + dx - page.spread_origin.0;
+    let hy = anchor.1 + dy - page.spread_origin.1;
+    const LEVEL: f32 = 1e-3;
+    let moves_x = (anchor.0 - pivot.0).abs() > LEVEL;
+    let moves_y = (anchor.1 - pivot.1).abs() > LEVEL;
+    let snap_axis = |axis: SnapAxis, v: f32| -> Option<(f32, f32)> {
+        let cand = [v];
+        let targets = match axis {
+            SnapAxis::X => snap_targets_x(&page, siblings, &session.snapshots, env, &cand),
+            SnapAxis::Y => snap_targets_y(&page, siblings, &session.snapshots, env, &cand),
+        };
+        snap_axis_match(&cand, &targets, tolerance)
+    };
+    let mut mx = moves_x.then(|| snap_axis(SnapAxis::X, hx)).flatten();
+    let mut my = moves_y.then(|| snap_axis(SnapAxis::Y, hy)).flatten();
+    if session.modifiers.shift {
+        match (mx, my) {
+            (Some(a), Some(b)) if a.0.abs() <= b.0.abs() => my = None,
+            (Some(_), Some(_)) => mx = None,
+            _ => {}
+        }
+    }
+    let pixel = |moves: bool, v: f32| {
+        (moves && env.settings.pixel && !session.modifiers.shift).then(|| v.round() - v)
+    };
+    let mut lines = Vec::new();
+    if let Some((_, target)) = mx {
+        lines.push(SnapLine::new(SnapAxis::X, target, page.page_id.clone()));
+    }
+    if let Some((_, target)) = my {
+        lines.push(SnapLine::new(SnapAxis::Y, target, page.page_id.clone()));
+    }
+    let ax = mx
+        .map(|m| m.0)
+        .or_else(|| pixel(moves_x, hx))
+        .unwrap_or(0.0);
+    let ay = my
+        .map(|m| m.0)
+        .or_else(|| pixel(moves_y, hy))
+        .unwrap_or(0.0);
+    SnapAdjustment {
+        delta: (dx + ax, dy + ay),
+        lines,
+    }
+}
+
+/// The angles a rotate gesture snaps to, degrees: the axes and diagonals.
+const ROTATE_ANGLES: [f32; 8] = [0.0, 45.0, 90.0, 135.0, 180.0, -45.0, -90.0, -135.0];
+
+/// Rotate snapping tolerance, in degrees, at least — the pointer's screen
+/// tolerance turned into an angle at its distance from the pivot, so a
+/// far pointer is as easy to catch as a near one.
+const ROTATE_MIN_TOLERANCE_DEG: f32 = 1.0;
+
+fn wrap_deg(a: f32) -> f32 {
+    let w = (a + 180.0).rem_euclid(360.0) - 180.0;
+    if w <= -180.0 {
+        w + 360.0
+    } else {
+        w
+    }
+}
+
+/// v77 (editor ADR 287) — rotate snapping: the first item's angle after
+/// the turn lands on 0/45/90/…° or on the angle of another item on the
+/// page (`sibling_angles`, degrees) when within tolerance. Shift's 15°
+/// steps (applied by the gesture) take precedence: with Shift held this
+/// passes through. The adjusted delta keeps the pointer's distance from
+/// the pivot, so the gesture recomputes exactly the snapped angle. The
+/// guide is an `Angle` line from the pivot at the snapped angle.
+pub(crate) fn compute_rotate_snap(
+    session: &GestureSession,
+    raw_delta: (f32, f32),
+    pages: &[PageInfo],
+    sibling_angles: &[f32],
+    env: &SnapEnv,
+) -> SnapAdjustment {
+    use crate::gesture::GestureType;
+    let pass = SnapAdjustment {
+        delta: raw_delta,
+        lines: Vec::new(),
+    };
+    if !matches!(session.gesture, GestureType::Rotate)
+        || !env.settings.enabled
+        || !env.settings.rotate
+        || session.modifiers.disable_snap
+        || session.modifiers.shift
+    {
+        return pass;
+    }
+    let (Some(anchor), Some(pivot)) = (session.anchor_spread, session.pivot_spread) else {
+        return pass;
+    };
+    let Some(first) = session.snapshots.iter().find(|s| !is_group(s)) else {
+        return pass;
+    };
+    let current = (anchor.0 + raw_delta.0, anchor.1 + raw_delta.1);
+    let r_anchor = (anchor.0 - pivot.0).hypot(anchor.1 - pivot.1);
+    let r_current = (current.0 - pivot.0).hypot(current.1 - pivot.1);
+    if r_anchor < 1e-3 || r_current < 1e-3 {
+        return pass;
+    }
+    let theta = ((current.1 - pivot.1).atan2(current.0 - pivot.0)
+        - (anchor.1 - pivot.1).atan2(anchor.0 - pivot.0))
+    .to_degrees();
+    let m = first
+        .item_transform
+        .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    let start = m[1].atan2(m[0]).to_degrees();
+    let after = wrap_deg(start + theta);
+    let scale = session.camera_scale.unwrap_or(1.0).max(1e-3);
+    let tolerance_pt = env.settings.tolerance_px / scale;
+    let tolerance = (tolerance_pt / r_current)
+        .to_degrees()
+        .max(ROTATE_MIN_TOLERANCE_DEG);
+    let mut best: Option<(f32, f32)> = None; // (correction, target)
+    for &t in ROTATE_ANGLES.iter().chain(sibling_angles) {
+        let d = wrap_deg(t - after);
+        if d.abs() <= tolerance && best.is_none_or(|(bd, _)| d.abs() < bd.abs()) {
+            best = Some((d, t));
+        }
+    }
+    let Some((correction, target)) = best else {
+        return pass;
+    };
+    let snapped = (theta + correction).to_radians();
+    let (sin, cos) = snapped.sin_cos();
+    let (ax, ay) = (anchor.0 - pivot.0, anchor.1 - pivot.1);
+    let k = r_current / r_anchor;
+    let landed = (
+        pivot.0 + k * (cos * ax - sin * ay),
+        pivot.1 + k * (sin * ax + cos * ay),
+    );
+    let mut lines = Vec::new();
+    if let Some(page) = host_page_for_snapshot(first, pages) {
+        let o = page.spread_origin;
+        let from = [pivot.0 - o.0, pivot.1 - o.1];
+        let to = [landed.0 - o.0, landed.1 - o.1];
+        let mut line = SnapLine::new(SnapAxis::X, from[0], page.page_id.clone());
+        line.kind = Some(SnapLineKind::Angle);
+        line.from = Some(from);
+        line.to = Some(to);
+        line.angle = Some(wrap_deg(target));
+        line.distance = Some(r_current);
+        lines.push(line);
+    }
+    SnapAdjustment {
+        delta: (landed.0 - anchor.0, landed.1 - anchor.1),
         lines,
     }
 }
@@ -1138,5 +1606,229 @@ mod tests {
         let adj = compute_snap_adjustment(&sess, (3.0, 3.0), &pages, &[]);
         assert_eq!(adj.delta, (3.0, 3.0));
         assert!(adj.lines.is_empty());
+    }
+
+    // ── v77 (editor ADR 287) — snapping v2 ──────────────────────────
+
+    fn rect_snap(id: &str, b: (f32, f32, f32, f32)) -> NodeSnapshot {
+        snap_for(
+            Bounds {
+                top: b.0,
+                left: b.1,
+                bottom: b.2,
+                right: b.3,
+            },
+            "rect",
+            id,
+        )
+    }
+
+    fn sibling(id: &str, aabb: [f32; 4]) -> FrameRect {
+        FrameRect {
+            element_id: ElementId::Rectangle(id.to_string()),
+            page_id: PageId("p1".to_string()),
+            aabb,
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_rotated_item_snaps_through_its_oriented_box__feat__the_renderer_view_modes() {
+        // A 100 × 100 square turned 45° about its centre (150, 150): its
+        // oriented box reaches x = 150 − 70.71 on the left.
+        let mut s = rect_snap("r", (100.0, 100.0, 200.0, 200.0));
+        let (sin, cos) = std::f32::consts::FRAC_PI_4.sin_cos();
+        let (cx, cy) = (150.0, 150.0);
+        s.item_transform = Some([
+            cos,
+            sin,
+            -sin,
+            cos,
+            cx - cos * cx + sin * cy,
+            cy - sin * cx - cos * cy,
+        ]);
+        let left = 150.0 - 50.0 * std::f32::consts::SQRT_2;
+        let sess = session(vec![s]);
+        let pages = vec![page("p1", 612.0, 792.0)];
+        // Drag so the left corner lands 2 pt right of the page edge.
+        let adj = compute_snap_adjustment(&sess, (-left + 2.0, 0.0), &pages, &[]);
+        assert!((adj.delta.0 - -left).abs() < 1e-2, "{adj:?}");
+        assert!(adj
+            .lines
+            .iter()
+            .any(|l| l.axis == SnapAxis::X && l.position.abs() < 1e-3));
+    }
+
+    #[test]
+    fn equal_spacing_centres_the_item_between_its_neighbours() {
+        // Neighbours at x 0..50 and 250..300, a 100-wide item: equal gaps
+        // put its left edge at 100 (gaps of 50).
+        let s = rect_snap("m", (300.0, 97.0, 340.0, 197.0));
+        let sess = session(vec![s]);
+        let pages = vec![page("p1", 2000.0, 2000.0)];
+        let sibs = [
+            sibling("a", [290.0, 0.0, 350.0, 50.0]),
+            sibling("b", [290.0, 250.0, 350.0, 300.0]),
+        ];
+        let adj = compute_snap_adjustment(&sess, (1.0, 0.0), &pages, &sibs);
+        assert!((adj.delta.0 - 3.0).abs() < 1e-3, "{adj:?}");
+        let gaps: Vec<&SnapLine> = adj
+            .lines
+            .iter()
+            .filter(|l| l.kind == Some(SnapLineKind::Spacing))
+            .collect();
+        assert_eq!(gaps.len(), 2, "{adj:?}");
+        for g in gaps {
+            assert!((g.distance.unwrap() - 50.0).abs() < 1e-3);
+            assert!(g.from.is_some() && g.to.is_some());
+        }
+    }
+
+    #[test]
+    fn equal_spacing_repeats_a_neighbour_pairs_gap() {
+        // a 0..40, b 60..100 (gap 20): the item lands at 120.
+        let s = rect_snap("m", (0.0, 118.0, 40.0, 158.0));
+        let sess = session(vec![s]);
+        let pages = vec![page("p1", 2000.0, 2000.0)];
+        let sibs = [
+            sibling("a", [0.0, 0.0, 40.0, 40.0]),
+            sibling("b", [0.0, 60.0, 40.0, 100.0]),
+        ];
+        let adj = compute_snap_adjustment(&sess, (1.0, 500.0), &pages, &sibs);
+        // dy moves it out of the row: no x spacing.
+        assert!((adj.delta.0 - 1.0).abs() < 1e-3, "{adj:?}");
+        let adj = compute_snap_adjustment(&sess, (1.0, 0.0), &pages, &sibs);
+        assert!((adj.delta.0 - 2.0).abs() < 1e-3, "{adj:?}");
+        assert!(adj
+            .lines
+            .iter()
+            .any(|l| l.kind == Some(SnapLineKind::Spacing)
+                && (l.distance.unwrap() - 20.0).abs() < 1e-3));
+    }
+
+    #[test]
+    fn spacing_off_leaves_the_gap_alone() {
+        let s = rect_snap("m", (300.0, 97.0, 340.0, 197.0));
+        let sess = session(vec![s]);
+        let pages = vec![page("p1", 2000.0, 2000.0)];
+        let sibs = [
+            sibling("a", [290.0, 0.0, 350.0, 50.0]),
+            sibling("b", [290.0, 250.0, 350.0, 300.0]),
+        ];
+        let env = SnapEnv {
+            settings: crate::snap_point::SnapSettings {
+                spacing: false,
+                ..Default::default()
+            },
+            grid: None,
+        };
+        let adj = compute_snap_adjustment_with(&sess, (1.0, 0.0), &pages, &sibs, &env);
+        assert!((adj.delta.0 - 1.0).abs() < 1e-3, "{adj:?}");
+    }
+
+    #[test]
+    fn snap_to_pixel_lands_an_unsnapped_edge_on_a_whole_point() {
+        let s = rect_snap("m", (300.25, 300.25, 340.0, 340.0));
+        let sess = session(vec![s]);
+        let pages = vec![page("p1", 2000.0, 2000.0)];
+        let env = SnapEnv {
+            settings: crate::snap_point::SnapSettings {
+                pixel: true,
+                ..Default::default()
+            },
+            grid: None,
+        };
+        let adj = compute_snap_adjustment_with(&sess, (10.1, 20.3), &pages, &[], &env);
+        assert!((300.25 + adj.delta.0 - 310.0).abs() < 1e-3, "{adj:?}");
+        assert!((300.25 + adj.delta.1 - 321.0).abs() < 1e-3, "{adj:?}");
+        // Off, the move is the pointer's.
+        let adj = compute_snap_adjustment(&sess, (10.1, 20.3), &pages, &[]);
+        assert!((adj.delta.0 - 10.1).abs() < 1e-4);
+    }
+
+    #[test]
+    fn the_host_grid_overrides_the_documents_divisions() {
+        let settings = crate::snap_point::SnapSettings {
+            grid: true,
+            grid_every: Some(72.0),
+            grid_subdivisions: Some(8),
+            ..Default::default()
+        };
+        assert_eq!(
+            settings.effective_grid(Some((12.0, 12.0))),
+            Some((9.0, 9.0))
+        );
+        let plain = crate::snap_point::SnapSettings::default();
+        assert_eq!(plain.effective_grid(Some((12.0, 12.0))), Some((12.0, 12.0)));
+        // A move snaps its edge to the 9 pt grid.
+        let s = rect_snap("m", (300.0, 300.0, 340.0, 340.0));
+        let sess = session(vec![s]);
+        let pages = vec![page("p1", 2000.0, 2000.0)];
+        let env = SnapEnv {
+            settings,
+            grid: settings.effective_grid(None),
+        };
+        let adj = compute_snap_adjustment_with(&sess, (5.0, 0.0), &pages, &[], &env);
+        // 305 → 306 (34 × 9).
+        assert!((300.0 + adj.delta.0 - 306.0).abs() < 1e-3, "{adj:?}");
+    }
+
+    #[test]
+    fn scale_snaps_the_dragged_handle_to_an_edge() {
+        let s = rect_snap("m", (100.0, 100.0, 200.0, 200.0));
+        let mut sess = session(vec![s]);
+        sess.gesture = GestureType::Scale;
+        sess.pivot_spread = Some((100.0, 100.0));
+        sess.anchor_spread = Some((200.0, 200.0));
+        let pages = vec![page("p1", 612.0, 792.0)];
+        let sibs = [sibling("b", [400.0, 298.0, 500.0, 350.0])];
+        let env = SnapEnv::default();
+        // The handle at (200, 200) dragged to (296.5, 250): x snaps to 298.
+        let adj = compute_scale_snap(&sess, (96.5, 50.0), &pages, &sibs, &env);
+        assert!((adj.delta.0 - 98.0).abs() < 1e-3, "{adj:?}");
+        assert!((adj.delta.1 - 50.0).abs() < 1e-3);
+        assert_eq!(adj.lines.len(), 1);
+        // A side handle level with the pivot on y leaves y alone.
+        sess.anchor_spread = Some((200.0, 100.0));
+        let adj = compute_scale_snap(&sess, (96.5, 1.0), &pages, &sibs, &env);
+        assert!((adj.delta.1 - 1.0).abs() < 1e-4, "{adj:?}");
+        // Translate is not scale.
+        sess.gesture = GestureType::Translate;
+        let adj = compute_scale_snap(&sess, (96.5, 50.0), &pages, &sibs, &env);
+        assert_eq!(adj.delta, (96.5, 50.0));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn rotate_snaps_to_the_diagonal_and_a_neighbours_angle__feat__the_renderer_view_modes() {
+        let s = rect_snap("m", (100.0, 100.0, 200.0, 200.0));
+        let mut sess = session(vec![s]);
+        sess.gesture = GestureType::Rotate;
+        sess.pivot_spread = Some((150.0, 150.0));
+        sess.anchor_spread = Some((250.0, 150.0)); // 100 pt right of the pivot
+        let pages = vec![page("p1", 612.0, 792.0)];
+        let env = SnapEnv::default();
+        let at = |deg: f32| {
+            let (s, c) = deg.to_radians().sin_cos();
+            (150.0 + 100.0 * c - 250.0, 150.0 + 100.0 * s - 150.0)
+        };
+        let angle_of = |d: (f32, f32)| (d.1).atan2(100.0 + d.0).to_degrees();
+        // 44° snaps to 45° (tolerance 4 px at 100 pt ≈ 2.3°).
+        let adj = compute_rotate_snap(&sess, at(44.0), &pages, &[], &env);
+        assert!((angle_of(adj.delta) - 45.0).abs() < 1e-2, "{adj:?}");
+        let line = &adj.lines[0];
+        assert_eq!(line.kind, Some(SnapLineKind::Angle));
+        assert_eq!(line.from, Some([150.0, 150.0]));
+        // 30.8° snaps to a neighbour turned 32°.
+        let adj = compute_rotate_snap(&sess, at(30.8), &pages, &[32.0], &env);
+        assert!((angle_of(adj.delta) - 32.0).abs() < 1e-2, "{adj:?}");
+        // Far from every target, the pointer's angle stands.
+        let adj = compute_rotate_snap(&sess, at(20.0), &pages, &[32.0], &env);
+        assert!((angle_of(adj.delta) - 20.0).abs() < 1e-2);
+        assert!(adj.lines.is_empty());
+        // Shift's 15° steps are the gesture's: this passes through.
+        sess.modifiers.shift = true;
+        let adj = compute_rotate_snap(&sess, at(44.0), &pages, &[], &env);
+        assert!((angle_of(adj.delta) - 44.0).abs() < 1e-2);
     }
 }

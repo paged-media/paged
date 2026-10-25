@@ -291,8 +291,11 @@ export interface OverlayPageRect {
 
 export interface OverlayProps {
   paged: unknown;
-  /** Camera snapshot at the current frame. */
-  camera: { scale: number; tx: number; ty: number };
+  /** Camera snapshot at the current frame. `rotation` (radians, clockwise
+   *  on screen; absent = 0) is the view's Rotate View turn: the host draws
+   *  overlays under `scale · R(rotation) · doc + (tx, ty)` already, so only
+   *  an overlay placing screen-space HTML needs it. */
+  camera: { scale: number; tx: number; ty: number; rotation?: number };
   /** Page rectangles in document space, in page-id order. */
   pageRects: ReadonlyMap<PageId, OverlayPageRect>;
 }
@@ -770,7 +773,7 @@ export interface PagedEditor {
     setElementGeometry(items: ElementGeometryItem[]): void;
   };
   camera: {
-    camera: { scale: number; tx: number; ty: number };
+    camera: { scale: number; tx: number; ty: number; rotation?: number };
   };
   /** S-13 font measurement — the editor routes this to the canvas-wasm
    *  `CanvasWorker.measureText` query (async across the worker boundary).

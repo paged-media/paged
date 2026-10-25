@@ -2083,6 +2083,9 @@ pub struct CanvasModel {
     /// v67 (RFI C-68) — the session's snapping preferences, shared by
     /// every gesture and by `RequestSnapPoint`.
     pub(crate) snap_settings: crate::snap_point::SnapSettings,
+    /// v77 (editor ADR 287) — how the screen draws the document. Session
+    /// state; no build reads it, only the screen's rasterization.
+    pub(crate) view_settings: crate::view::ViewSettings,
     /// v75 — the session's role and overrides; the document's template
     /// policy applies through them (engine ADR 1000). Session state.
     pub(crate) session_policy: paged_template::SessionPolicy,
@@ -2810,6 +2813,7 @@ impl CanvasModel {
             pending_edit_spans: HashMap::new(),
             build_generation: 0,
             snap_settings: Default::default(),
+            view_settings: Default::default(),
             session_policy: Default::default(),
             snap_index: None,
             emission_prints: Default::default(),
@@ -14054,6 +14058,17 @@ impl CanvasModel {
     /// not undoable.
     pub fn set_snap_settings(&mut self, settings: crate::snap_point::SnapSettings) {
         self.snap_settings = settings;
+    }
+
+    /// v77 — how the screen draws the document (editor ADR 287).
+    pub fn view_settings(&self) -> crate::view::ViewSettings {
+        self.view_settings
+    }
+
+    /// v77 — replace the view settings. Session state: not saved, not
+    /// undoable, and no rebuild — the build does not depend on them.
+    pub fn set_view_settings(&mut self, settings: crate::view::ViewSettings) {
+        self.view_settings = settings;
     }
 
     /// v75 — the session's role and overrides (engine ADR 1000).
