@@ -345,7 +345,7 @@ describe("the Layer menu's parity commands [image.layers.photoshop-parity]", () 
     const before = imageShape(k.session);
     await k.run(`${C}.rasterizeLayer`);
     expect(k.session.state().status).toMatch(
-      /not a fill layer or smart object/,
+      /not a fill layer, smart object or type layer/,
     );
     expect(imageShape(k.session)).toEqual(before);
     expect(k.docOps()).toEqual([]);
