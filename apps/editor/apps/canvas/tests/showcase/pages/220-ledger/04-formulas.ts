@@ -289,14 +289,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       );
     }
 
-    // The roster runs to the foot of the type area; its rows share what
-    // the caption and the two bands leave, at most 20 pt each, so a grown
-    // registry tightens the rows instead of overrunning the frame.
-    const box: [number, number, number, number] = [48, 272, 480, 637];
-    const rowHeight = Math.min(
-      20,
-      Math.floor((box[3] - box[1] - 24 - 2 * 22) / families.length),
-    );
+    const box: [number, number, number, number] = [48, 288, 480, 620];
     const frameId = await doc.textFrame(pg99, box);
     await assignLayer(ctx, "textFrame", frameId, LAYER.content);
     const storyId = await doc.storyOf(pg99, box);
@@ -323,7 +316,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       // The 25/12 rhythm: 136 ends on the unit-4 seam, 136+74 on the
       // unit-6 seam, and the measure closes at 432.
       columnWidths: [units(4), units(2) + 12, 432 - units(4) - units(2) - 12],
-      rowHeights: families.map(() => rowHeight),
+      rowHeights: families.map(() => 20),
     });
     const tableId = (() => {
       const id = created as { table_id?: unknown } | string | null;
