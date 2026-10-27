@@ -177,12 +177,11 @@ export const HOST_FIND = {
 
 /**
  * Word's find keys, scoped to a Word document like the rest, naming the
- * host's commands: Cmd+F the Navigation pane's search (the Find results
- * panel), Cmd+H Replace, Cmd+G Go To (which inside a Word document takes
- * the key from the host's Group).
+ * host's commands: Cmd+H Replace, Cmd+G Go To (which inside a Word
+ * document takes the key from the host's Group). Cmd+F needs no binding
+ * here: the host's own Cmd+F already runs Find in every document.
  */
 export const WORD_HOST_KEYS: ReadonlyArray<{ key: string; command: string }> = [
-  { key: "cmd+f", command: HOST_FIND.find },
   { key: "cmd+h", command: HOST_FIND.replace },
   { key: "cmd+g", command: HOST_FIND.goTo },
 ];

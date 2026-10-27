@@ -131,7 +131,6 @@ describe.skipIf(!docxPresent)(
         );
       }
       expect(WORD_HOST_KEYS.map((k) => k.command)).toEqual([
-        "paged.edit.find",
         "paged.edit.replace",
         "paged.edit.goTo",
       ]);

@@ -48,14 +48,18 @@
 //! The comparison runs on [`AppliedSnapshot`]s, hashes of each record's key
 //! and content, which is also the form a document saves (the payload's
 //! `applied`): a reopened document compares as the session that wrote it
-//! did. A saved snapshot holds no values, so it cannot be keyed again: read
-//! with another key than its own it matches by the whole row.
+//! did. A document also saves the values of that result
+//! ([`AppliedValues`], the payload's `applied_values`): reopened, the session
+//! holds the result again and keys it as asked, as before the save, and the
+//! row diff shows the values before. A document saved without them (before
+//! they were saved) keeps only the hashes, which cannot be keyed again: read
+//! with another key than its own they match by the whole row.
 
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-use data_core::{Binding, BindingDef, QueryId, RecordSet, Value};
+use data_core::{Binding, BindingDef, QueryId, RecordSet, Schema, Value};
 
 use crate::review::default_key;
 
@@ -187,6 +191,116 @@ impl AppliedSnapshot {
             })
             .collect()
     }
+}
+
+/// A query's result as the document was last written from it, WITH its
+/// values: the "before" of the Sync panel's row diff
+/// ([`crate::review::row_diffs`]) after a reopen (the payload's
+/// `applied_values`). Columnar like [`RecordSet`]: the schema, then per field
+/// one array of cells, each cell in a compact JSON form that reads back to
+/// the same typed value (so a reopened document hashes as the session that
+/// wrote it): `null`, a boolean, a finite number, a string for text, and an
+/// object for the rest: `{"d": days}` a date, `{"ms": millis}` a date-time,
+/// `{"n": "NaN" | "inf" | "-inf" | "-0"}` a number JSON cannot spell,
+/// `{"x": hex}` bytes, `{"e": code}` an error value.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AppliedValues {
+    pub schema: Schema,
+    #[serde(default)]
+    pub columns: Vec<Vec<serde_json::Value>>,
+}
+
+impl AppliedValues {
+    /// The saved form of `rs`.
+    pub fn of(rs: &RecordSet) -> Self {
+        AppliedValues {
+            schema: rs.schema.clone(),
+            columns: rs
+                .columns
+                .iter()
+                .map(|c| c.iter().map(cell_json).collect())
+                .collect(),
+        }
+    }
+
+    /// The result back, or `None` when the saved form is malformed (a
+    /// column of another length, a cell that is no cell): the document then
+    /// keeps only the hash snapshot, as one written before values were.
+    pub fn to_record_set(&self) -> Option<RecordSet> {
+        let columns: Option<Vec<Vec<Value>>> = self
+            .columns
+            .iter()
+            .map(|c| c.iter().map(json_cell).collect())
+            .collect();
+        RecordSet::new(self.schema.clone(), columns?).ok()
+    }
+}
+
+fn cell_json(v: &Value) -> serde_json::Value {
+    use serde_json::{json, Value as J};
+    match v {
+        Value::Null => J::Null,
+        Value::Bool(b) => J::Bool(*b),
+        Value::Number(n) => {
+            if n.is_nan() {
+                json!({ "n": "NaN" })
+            } else if n.is_infinite() {
+                json!({ "n": if *n > 0.0 { "inf" } else { "-inf" } })
+            } else if *n == 0.0 && n.is_sign_negative() {
+                json!({ "n": "-0" })
+            } else {
+                serde_json::Number::from_f64(*n).map_or(J::Null, J::Number)
+            }
+        }
+        Value::Text(t) => J::String(t.to_string()),
+        Value::Date(d) => json!({ "d": d }),
+        Value::DateTime(ms) => json!({ "ms": ms }),
+        Value::Bytes(b) => {
+            let hex: String = b.iter().map(|x| format!("{x:02x}")).collect();
+            json!({ "x": hex })
+        }
+        Value::Error(e) => json!({ "e": e }),
+    }
+}
+
+fn json_cell(j: &serde_json::Value) -> Option<Value> {
+    use serde_json::Value as J;
+    // A number from a JS host may arrive as an integer or a float.
+    let int = |j: &J| j.as_i64().or_else(|| j.as_f64().map(|f| f as i64));
+    Some(match j {
+        J::Null => Value::Null,
+        J::Bool(b) => Value::Bool(*b),
+        J::Number(n) => Value::Number(n.as_f64()?),
+        J::String(s) => Value::text(s.as_str()),
+        J::Object(o) => {
+            if let Some(n) = o.get("n") {
+                Value::Number(match n.as_str()? {
+                    "NaN" => f64::NAN,
+                    "inf" => f64::INFINITY,
+                    "-inf" => f64::NEG_INFINITY,
+                    "-0" => -0.0,
+                    _ => return None,
+                })
+            } else if let Some(d) = o.get("d") {
+                Value::Date(i32::try_from(int(d)?).ok()?)
+            } else if let Some(ms) = o.get("ms") {
+                Value::DateTime(int(ms)?)
+            } else if let Some(x) = o.get("x") {
+                let x = x.as_str()?;
+                if x.len() % 2 != 0 {
+                    return None;
+                }
+                let bytes: Option<Vec<u8>> = (0..x.len())
+                    .step_by(2)
+                    .map(|i| u8::from_str_radix(x.get(i..i + 2)?, 16).ok())
+                    .collect();
+                Value::Bytes(bytes?)
+            } else {
+                Value::Error(serde_json::from_value(o.get("e")?.clone()).ok()?)
+            }
+        }
+        J::Array(_) => return None,
+    })
 }
 
 /// The key a saved snapshot is read with against `current`: the caller's,

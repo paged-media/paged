@@ -37,6 +37,10 @@ export interface TextTarget {
   storyId?: string | null;
   frame?: string;
   record?: number;
+  /** A table paged.data lowered: the host's overflow of its story may be a
+   *  cell's text that does not fit its row (the engine reports a cell's
+   *  overset as its story's), so the message names both. */
+  table?: boolean;
 }
 
 /** The pixel size of a PNG, GIF or JPEG from its header, or null for any
@@ -91,12 +95,14 @@ export function effectivePpi(
 
 /** Overset text: every story `targets` names whose frame chain reports
  *  overflow, once per story, at the frame the text runs out of. `storyOf`
- *  finds a frame's story. A host that lays text out without fonts reports
- *  no overflow, so a story the host calls fitting is also `measure`d over
- *  its frames in chain order (the engine wraps its words at the host's
- *  advances through each frame in turn, the rule Data Merge's overset
- *  uses), and an overset one is named at the chain's last frame. A read
- *  that fails reports nothing. */
+ *  finds a frame's story. The host's report is the composer's and is
+ *  authoritative (it includes text wrap, tables and every size in the
+ *  story). A host that lays text out without fonts reports no overflow,
+ *  so a story the host calls fitting is also `measure`d over its frames in
+ *  chain order (the engine wraps its runs at the host's advances through
+ *  each frame in turn, the rule Data Merge's overset uses), and an overset
+ *  one is named at the chain's last frame, its message saying it is an
+ *  estimate. A read that fails reports nothing. */
 export async function oversetIssues(
   host: BundleHost,
   targets: readonly TextTarget[],
@@ -124,6 +130,7 @@ export async function oversetIssues(
       continue;
     }
     let over = links.find((l) => l.overflow);
+    let estimated = false;
     if (!over && links.length > 0 && measure) {
       try {
         if (
@@ -131,8 +138,10 @@ export async function oversetIssues(
             story,
             links.map((l) => l.frameId),
           )
-        )
+        ) {
           over = links[links.length - 1];
+          estimated = true;
+        }
       } catch {
         // Not measurable now: the host's answer stands.
       }
@@ -141,19 +150,28 @@ export async function oversetIssues(
     out.push({
       kind: "overset",
       severity: "warning",
-      message:
-        t.record === undefined
-          ? tr(ISSUES.overset, { binding: t.binding })
-          : tr(ISSUES.oversetRecord, {
-              binding: t.binding,
-              record: t.record + 1,
-            }),
+      message: oversetMessage(t, estimated),
       binding: t.binding,
       address: `textFrame:${over.frameId}`,
       ...(t.record === undefined ? {} : { record: t.record }),
     });
   }
   return out;
+}
+
+/** The overset message: a table's names its cells too; a measured one
+ *  says it is an estimate, not the composer's word. */
+function oversetMessage(t: TextTarget, estimated: boolean): string {
+  if (t.table && !estimated)
+    return tr(ISSUES.oversetTable, { binding: t.binding });
+  if (t.record === undefined)
+    return tr(estimated ? ISSUES.oversetEstimated : ISSUES.overset, {
+      binding: t.binding,
+    });
+  return tr(estimated ? ISSUES.oversetRecordEstimated : ISSUES.oversetRecord, {
+    binding: t.binding,
+    record: t.record + 1,
+  });
 }
 
 /** What the session knows of an image binding since its last placement. */

@@ -869,6 +869,13 @@ export interface RunContent {
     baselineShift?: number;
     position?: string;
     tracking?: number;
+    /**
+     * The text variable this run is an instance of (`TextVariable/<id>`),
+     * when it is one; the run\'s `text` is the variable\'s current value.
+     * Additive on 76 (governance rule 1): data ADR 564 finds every story a
+     * data field\'s text variable is in, a copy pasted by hand included.
+     */
+    textVariable?: string;
 }
 
 /**

@@ -106,6 +106,7 @@ const TRANSITION_PANEL = "media.paged.slide.panel.transition";
 const PLACEHOLDER_PANEL = "media.paged.slide.panel.placeholder";
 const DECK_PANEL = "media.paged.slide.panel.deck";
 const COMMENTS_PANEL = "media.paged.slide.panel.comments";
+const SHAPES_PANEL = "media.paged.slide.panel.shapes";
 const IMPORTER = "media.paged.slide.importer.pptx";
 const EXPORTER = "media.paged.slide.exporter.pptx";
 const NEW_SLIDE = "media.paged.slide.newSlide";
@@ -118,6 +119,7 @@ const RESOLVE_COMMENT = "media.paged.slide.command.resolveComment";
 const DELETE_COMMENT = "media.paged.slide.command.deleteComment";
 const PREVIOUS_SLIDE = "media.paged.slide.command.previousSlide";
 const NEXT_SLIDE = "media.paged.slide.command.nextSlide";
+const INSERT_SHAPE = "media.paged.slide.insertShape";
 
 /** The palette commands and the menu entry onto each (the bundle's
  *  `src/menu.ts`, restated). */
@@ -132,6 +134,8 @@ const PALETTE = {
   "media.paged.slide.command.previousSlide": "Slide/Previous slide",
   "media.paged.slide.command.nextSlide": "Slide/Next slide",
   "media.paged.slide.command.addComment": "Slide/New comment",
+  // Insert is the host's menu; the entry opens the Shapes panel (ADR 717).
+  "media.paged.slide.command.insertShapes": "Insert/Shapes…",
 } as const;
 
 /** The slide show's commands (slide ADR 716, `src/show/contribute.ts`):
@@ -175,6 +179,7 @@ const DECLARED = {
     PLACEHOLDER_PANEL,
     DECK_PANEL,
     COMMENTS_PANEL,
+    SHAPES_PANEL,
   ],
   importers: [IMPORTER],
   exporters: [EXPORTER],
@@ -193,15 +198,17 @@ const DECLARED = {
     NEXT_SLIDE,
     // The slide show's typed twins carry their palette ids.
     ...Object.keys(SHOW),
+    // Insert ▸ Shapes' typed twin, for scripts and the CLI (ADR 717).
+    INSERT_SHAPE,
   ],
   /** The deck's document context (editor ADR 307): no frame is entered. */
   editContexts: [{ type: "slideDeck", entry: "doubleClick" }],
   commands: [...Object.keys(PALETTE), ...Object.keys(SHOW)],
 } as const;
 
-/** Each panel's title, and what it is: the sorter, the notes and the
- *  comments are React panels; the other four are schema panels of property
- *  rows. */
+/** Each panel's title, and what it is: the sorter, the notes, the
+ *  comments and the shapes are React panels; the other four are schema
+ *  panels of property rows. */
 const PANEL_TITLES: Record<string, string> = {
   [SLIDES_PANEL]: "Slides",
   [NOTES_PANEL]: "Notes",
@@ -210,6 +217,7 @@ const PANEL_TITLES: Record<string, string> = {
   [PLACEHOLDER_PANEL]: "Placeholder",
   [DECK_PANEL]: "Deck",
   [COMMENTS_PANEL]: "Comments",
+  [SHAPES_PANEL]: "Shapes",
 };
 const SCHEMA_PANELS = [
   SLIDE_PANEL,
@@ -526,7 +534,7 @@ test.describe("plugin surface · paged.slide", () => {
 
   // ── 2. PANELS ────────────────────────────────────────────────────
 
-  test("all seven panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
+  test("all eight panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
     page,
   }) => {
     await bootBlank(page);
@@ -542,10 +550,14 @@ test.describe("plugin surface · paged.slide", () => {
     expect(byId[SLIDES_PANEL].defaultDock).toBe("left");
     expect(byId[NOTES_PANEL].defaultDock).toBe("bottom");
     expect(byId[COMMENTS_PANEL].defaultDock).toBe("right");
-    // The three React panels carry their own glyph for the panel rail.
+    expect(byId[SHAPES_PANEL].defaultDock).toBe("right");
+    // The four React panels carry their own glyph for the panel rail.
     expect(byId[SLIDES_PANEL].iconSvg).toBe(true);
     expect(byId[NOTES_PANEL].iconSvg).toBe(true);
     expect(byId[COMMENTS_PANEL].iconSvg).toBe(true);
+    expect(byId[SHAPES_PANEL].iconSvg).toBe(true);
+    // The Shapes panel never joins the rail: Insert ▸ Shapes… opens it.
+    expect(byId[SHAPES_PANEL].rail).toBe(false);
     for (const id of SCHEMA_PANELS)
       expect(byId[id].defaultDock, id).toBe("right");
 
@@ -610,8 +622,13 @@ test.describe("plugin surface · paged.slide", () => {
     await expect(page.locator("[data-comments-panel]")).toBeVisible({
       timeout: 15_000,
     });
+    // The Shapes panel mounts (its gallery is checked in a deck, below).
+    await openPanel(page, SHAPES_PANEL);
+    await expect(page.locator("[data-shapes-panel]")).toBeAttached({
+      timeout: 15_000,
+    });
 
-    // The real menu bar: Plugins ▸ Slide lists all seven, none greyed
+    // The real menu bar: Plugins ▸ Slide lists all eight, none greyed
     // (paged.slide has no edit context, so no context withholds them),
     // and picking one opens it.
     await page.keyboard.press("Escape");
@@ -1148,7 +1165,7 @@ test.describe("plugin surface · paged.slide", () => {
       });
 
     const blank = await reach();
-    // Ten palette commands, titled for a user, in their own drawer.
+    // The palette commands, titled for a user, in their own drawer.
     expect(
       Object.fromEntries(blank.commands.map((x) => [x.id, x.title])),
     ).toEqual({
@@ -1162,6 +1179,7 @@ test.describe("plugin surface · paged.slide", () => {
       "media.paged.slide.command.moveSlideDown": "Move slide down",
       "media.paged.slide.command.importPptx": "Open PowerPoint deck…",
       "media.paged.slide.command.exportPptx": "Export PowerPoint deck…",
+      "media.paged.slide.command.insertShapes": "Insert shape…",
       ...Object.fromEntries(
         Object.entries(SHOW).map(([id, [title]]) => [id, title]),
       ),
@@ -1283,6 +1301,18 @@ test.describe("plugin surface · paged.slide", () => {
       page.locator(row("media.paged.slide.command.newSlide")),
     ).toBeVisible({ timeout: 10_000 });
     await page.keyboard.press("Escape");
+
+    // Insert shape… opens the Shapes panel, its presets by category.
+    await page.evaluate(() =>
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(
+        "media.paged.slide.command.insertShapes",
+      ),
+    );
+    await expect(
+      page.locator('[data-shapes-panel=""] [data-shapes-category]').first(),
+    ).toBeVisible({ timeout: 15_000 });
 
     // The TYPED commands stay out of Edit ▸ Run command…, which lists core
     // commands only; their palette twins above are how a user runs them.
