@@ -12,7 +12,7 @@
       "openNative": true
     },
     "rendering": ["overlay"],
-    "editContext": ["slideDeck"],
+    "editContext": ["slideDeck", "slideChart"],
     "clipboard": "none",
     "keybindings": true,
     "assets": ["fonts"],
@@ -58,6 +58,16 @@
       {
         "type": "slideDeck",
         "entry": "doubleClick"
+      },
+      {
+        "type": "slideChart",
+        "entry": "doubleClick"
+      }
+    ],
+    "objectTypes": [
+      {
+        "type": "slideChart",
+        "bakedFallback": "group"
       }
     ],
     "panels": [
@@ -80,6 +90,12 @@
         "type": "slideImport",
         "role": "derived",
         "format": "json"
+      },
+      {
+        "type": "chartWorkbook",
+        "role": "source",
+        "format": "xlsx",
+        "linkable": false
       }
     ],
     "objectModel": {

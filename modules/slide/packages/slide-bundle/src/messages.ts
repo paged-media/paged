@@ -204,6 +204,14 @@ export const DECK = defineMessages("slide.deck", {
     ") was not loaded: {reason}. Text set in it is drawn in a substitute.",
 });
 
+export const CHARTS = defineMessages("slide.charts", {
+  title: "Chart data",
+  done: "Done",
+  fullScreen: "Full screen",
+  backToSlide: "Back to slide",
+  refused: "The workbook did not take that entry.",
+});
+
 export const TEMPLATE = defineMessages("slide.template", {
   noSlide: "The deck has no slide {slide}.",
   onNoSlide: "The field's item is on no slide of this deck.",

@@ -50,6 +50,8 @@ import type {
 } from "@paged-media/plugin-api";
 import { t } from "@paged-media/strings";
 
+import { ChartEditing, contributeCharts } from "./charts.js";
+import { chartPlans, keepCharts } from "./charts-model.js";
 import { contributeCommentMarkers } from "./comment-markers.js";
 import { CommentsStore, fileFromReport } from "./comments-model.js";
 import { contributeSlideCommands, DECK_CONTEXT } from "./commands.js";
@@ -136,6 +138,7 @@ export async function keepSource(
   bytes: Uint8Array,
   report: ImportReport,
   comments?: CommentsStore | null,
+  workbooks: Uint8Array = new Uint8Array(),
 ): Promise<void> {
   if (!host.supports("storage.parts@1")) return;
   await host.parts.write(SOURCE_PART, bytes);
@@ -155,6 +158,8 @@ export async function keepSource(
   );
   // Each slide's comments, by the page it opened as.
   await comments?.replace(fileFromReport(report.slides));
+  // Each chart's workbook (ADR 715).
+  await keepCharts(host, report.charts, workbooks);
 }
 
 /**
@@ -226,7 +231,7 @@ export function activate(host: BundleHost): BundleHandle {
       return null;
     }
     const engine = await slideEngine();
-    const { paged, report, fonts } = engine.importPptx(
+    const { paged, report, fonts, workbooks } = engine.importPptx(
       bytes,
       documentName(name),
     );
@@ -244,7 +249,7 @@ export function activate(host: BundleHost): BundleHandle {
         report.embeddedFonts,
         fonts,
       );
-      await keepSource(host, bytes, report, comments);
+      await keepSource(host, bytes, report, comments, workbooks);
     } finally {
       importing = false;
     }
@@ -354,7 +359,12 @@ export function activate(host: BundleHost): BundleHandle {
     const plan = await exportPlan(host, prints, comments?.current() ?? null);
     const document = await documentBytes(host);
     const engine = await slideEngine();
-    const out = engine.exportPptx(original, plan, document);
+    const out = engine.exportPptx(
+      original,
+      plan,
+      document,
+      await chartPlans(host),
+    );
     host.diagnostics.set(EXPORT_DIAGNOSTICS, exportDiagnostics(out));
     const meta = await host.document.meta();
     const name =
@@ -552,6 +562,14 @@ export function activate(host: BundleHost): BundleHandle {
         for (const d of panelDisposers.splice(0)) d();
       },
     );
+  }
+
+  // Live charts (ADR 715): a chart frame is entered by double-click; its
+  // workbook opens in the chart data sheet (the context's frame surface)
+  // and the chart is redrawn when the user leaves.
+  if (host.supports("storage.parts@1")) {
+    const editing = new ChartEditing(host);
+    disposers.push(...contributeCharts(host, editing), () => editing.dispose());
   }
 
   // The comment markers on the active slide (the host's overlay layers).
