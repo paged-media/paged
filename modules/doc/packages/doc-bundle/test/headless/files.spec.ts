@@ -262,7 +262,10 @@ describe.skipIf(!docxPresent)(
     }, 60_000);
 
     it("a document not from Word saves as a .docx that reads back to the same paragraphs", async () => {
-      covers("exporter:media.paged.doc.exporter.docx");
+      covers(
+        "exporter:media.paged.doc.exporter.docx",
+        "command:media.paged.doc.command.saveAsDocx",
+      );
       await start();
       const page = (
         await h.host.document.collection<{ selfId: string }>("pages")

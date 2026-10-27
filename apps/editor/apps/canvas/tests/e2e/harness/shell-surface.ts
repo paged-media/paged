@@ -691,6 +691,9 @@ export interface KeyRow {
   key: string;
   command: string;
   guarded: boolean;
+  /** Scoped to an edit context (editor ADR 299): a plugin's binding,
+   *  live only inside its context, even when it names a host command. */
+  scoped: boolean;
 }
 
 export async function liveKeybindings(page: Page): Promise<KeyRow[]> {
@@ -700,7 +703,12 @@ export async function liveKeybindings(page: Page): Promise<KeyRow[]> {
         __canvas: {
           registries: {
             keybindings: {
-              list(): Array<{ key: string; command: string; when?: unknown }>;
+              list(): Array<{
+                key: string;
+                command: string;
+                when?: unknown;
+                scope?: unknown;
+              }>;
             };
           };
         };
@@ -711,6 +719,7 @@ export async function liveKeybindings(page: Page): Promise<KeyRow[]> {
         key: k.key,
         command: k.command,
         guarded: k.when !== undefined,
+        scoped: k.scope !== undefined,
       })),
   );
 }

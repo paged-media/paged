@@ -90,6 +90,12 @@ const HOST_KEYS = [
   "shift+arrowdown→paged.object.nudgeDownLarge",
   "cmd+d→paged.insert.placeImage",
   "ctrl+d→paged.insert.placeImage",
+  // Find & Replace (editor ADR 303).
+  "cmd+f→paged.edit.find",
+  "ctrl+f→paged.edit.find",
+  "cmd+alt+f→paged.edit.replace",
+  "ctrl+h→paged.edit.replace",
+  "cmd+j→paged.edit.goTo",
   "tab→paged.chrome.toggleAll",
   "shift+tab→paged.chrome.togglePanels",
   "cmd+\\→paged.chrome.toggleAll",
@@ -136,6 +142,9 @@ const hostSignatures = async (page: Page) =>
   (await liveKeybindings(page))
     .filter(
       (k) =>
+        // A scoped binding is a plugin's (editor ADR 299), even when it
+        // names a host command (paged.doc's Word keys for Find, ADR 303).
+        !k.scoped &&
         !isPluginCommand(k.command) &&
         !k.command.startsWith("paged.tool.activate."),
     )
