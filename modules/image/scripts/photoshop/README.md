@@ -12,6 +12,7 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/layer-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/cmyk-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-masks.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/warp-text.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -30,6 +31,9 @@ classified `agreement` / `convention` / `defect` / `no-counterpart`) and
 `image-conformance/tests/it/psd_composite_photoshop.rs` (the layered PSDs) and
 `image-conformance/tests/it/psd_cmyk_photoshop.rs` (the CMYK PSDs, each with
 Photoshop's own sRGB conversions under three intent/BPC settings).
+`image-conformance/tests/it/warp_text_photoshop.rs` (Warp Text: each style's
+PSD warp opens as the style that made it; paged-warp's meshes held to
+Photoshop's warped bounds as a recorded convention) and
 `image-conformance/tests/it/psd_vector_masks_photoshop.rs` (vector masks: the
 merged composite, and the render Photoshop caches in each masked layer's
 channel −2).

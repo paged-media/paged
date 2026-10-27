@@ -45,6 +45,8 @@ image-cms = { path = "../image-cms" }
 # `geom.warp_mesh`'s parity and behavioural rows build their meshes with
 # the envelope module the bundle uses (WP5.10).
 paged-warp = { workspace = true }
+# The Photoshop warp-text record (warp_text_photoshop.rs) is JSON.
+serde_json = "1"
 criterion = { workspace = true }
 # D-4 bench (png_d4): zune-png is the chosen adapter; image/png is the
 # loser kept here ONLY as the bench comparison baseline (dev-dep, never

@@ -174,17 +174,16 @@ fn warp_text_bends_the_render_on_the_gpu__feat__image_layers_type() {
     };
     let bent = pollster::block_on(r.warped(Some(ctx), &warp, W, H)).expect("warp");
     let a = |px: &[u8], x: u32, y: u32| px[((y * W + x) * 4 + 3) as usize];
-    // Flat: the block's corner is solid, nothing below it. Bent upward:
-    // the middle keeps its place and the ends curl down below the block.
+    // Flat: the block's corner is solid, nothing above it. Bent upward:
+    // the ends keep their place and the middle rises above the block.
     assert_eq!(a(&flat, 6, 5), 255);
-    assert_eq!(a(&flat, 9, 13), 0);
-    assert!(a(&bent, 16, 7) > 128, "the middle stays");
-    assert!(a(&bent, 6, 5) < 128, "the left end left its corner");
+    assert_eq!(a(&flat, 16, 3), 0);
     assert!(
-        a(&bent, 9, 13) > 128,
-        "and curled down: {}",
-        a(&bent, 9, 13)
+        a(&bent, 16, 3) > 128,
+        "the middle rose: {}",
+        a(&bent, 16, 3)
     );
+    assert!(a(&bent, 16, 5) > 128, "and is still inked at the old top");
     // No warp: the plain placement.
     let none = pollster::block_on(r.warped(Some(ctx), &TypeWarp::default(), W, H)).unwrap();
     assert_eq!(none, flat);

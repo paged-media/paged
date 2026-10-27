@@ -72,4 +72,5 @@ mod registry_drift;
 mod residency_load;
 mod selection_mask;
 mod selection_pipeline;
+mod warp_text_photoshop;
 mod zz_layerdump;

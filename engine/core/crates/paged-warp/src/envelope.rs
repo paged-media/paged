@@ -376,21 +376,40 @@ fn distortion(warp: &Warp, r: Rect) -> Option<crate::Homography> {
 /// and half-height `h`, at `bend` ∈ [−1, 1]. The PRIMARY axis is x.
 fn style_offset(style: WarpStyle, bend: f64, s: f64, t: f64, w: f64, h: f64) -> (f64, f64) {
     let b = bend.clamp(-1.0, 1.0);
+    // A style whose negative bend is its own mirror image top to bottom
+    // is written for a positive bend and mirrored.
+    if b < 0.0 && mirrors(style) {
+        let (x, y) = style_offset(style, -b, s, -t, w, h);
+        return (x, -y);
+    }
     let v = (t + 1.0) / 2.0;
     let straight = (s * w, t * h);
+    let bell = 1.0 - s * s;
+    // The length a bend is measured against: the box's longer half-side,
+    // in either orientation.
+    let a = w.max(h);
+    // The amplitudes are fractions of the LONGER HALF-SIDE: Photoshop bends a
+    // line of type by an amount that follows its length, not its height
+    // (recorded: image-conformance/tests/it/warp_text_photoshop.rs).
     match style {
         WarpStyle::None => straight,
-        WarpStyle::Arc => arc(b, s, t, w, h),
-        WarpStyle::ArcLower => lerp(straight, arc(b, s, t, w, h), v),
-        WarpStyle::ArcUpper => lerp(arc(b, s, t, w, h), straight, v),
-        // The whole block bows; its columns stay upright.
-        WarpStyle::Arch => (s * w, t * h - b * h * (1.0 - s * s)),
-        // Top up and bottom down in the middle (or in, for a negative bend).
-        WarpStyle::Bulge => (s * w, t * h * (1.0 + b * (1.0 - s * s))),
-        WarpStyle::ShellLower => (s * w, t * h + b * h * (1.0 - s * s) * v),
-        WarpStyle::ShellUpper => (s * w, t * h - b * h * (1.0 - s * s) * (1.0 - v)),
+        WarpStyle::Arc => arc(b, s, t, w, h, true),
+        // The lower arc bends the bottom edge down at its ends.
+        WarpStyle::ArcLower => lerp(straight, arc(b, s, t, w, h, false), v),
+        WarpStyle::ArcUpper => lerp(arc(b, s, t, w, h, true), straight, v),
+        // The block bows up, the top edge far more than the bottom; the
+        // columns stay upright.
+        WarpStyle::Arch => (s * w, t * h - b * a * (0.83 * (1.0 - v) + 0.12 * v) * bell),
+        // Top up and bottom down in the middle (in, for a negative bend).
+        WarpStyle::Bulge => (s * w, t * h * (1.0 + b * 3.5 * bell)),
+        // The bottom edge sags into a shell and the block widens with it.
+        WarpStyle::ShellLower => (s * w * (1.0 + b * 0.3 * v), t * h + b * a * 0.35 * bell * v),
+        WarpStyle::ShellUpper => (
+            s * w * (1.0 + b * 0.53 * (1.0 - v)),
+            t * h - b * a * 0.5 * bell * (1.0 - v),
+        ),
         // One period of a sine across the width, every row alike.
-        WarpStyle::Flag => (s * w, t * h - b * h * 0.5 * (PI * s).sin()),
+        WarpStyle::Flag => (s * w, t * h - b * a * 0.3 * (PI * s).sin()),
         // The flag with a phase that slides from top to bottom.
         WarpStyle::Wave => (s * w, t * h - b * h * 0.5 * (PI * s + t * PI / 4.0).sin()),
         // A body that swells, then a tail that narrows.
@@ -398,36 +417,40 @@ fn style_offset(style: WarpStyle, bend: f64, s: f64, t: f64, w: f64, h: f64) -> 
             let u = (s + 1.0) / 2.0;
             (s * w, t * h * (1.0 + b * 0.5 * (2.0 * PI * u).sin()))
         }
-        // The far end rises, the near end sinks.
-        WarpStyle::Rise => (s * w, t * h - b * h * (FRAC_PI_2 * s).sin()),
+        // One end stays, the other falls (rises, for a negative bend).
+        WarpStyle::Rise => (
+            s * w,
+            t * h + b * a * 0.92 * ((FRAC_PI_2 * s).sin() + 1.0) / 2.0,
+        ),
         WarpStyle::FishEye => {
             let r2 = (s * s + t * t) / 2.0;
-            let k = 1.0 + b * 0.5 * (1.0 - r2);
+            let k = 1.0 + b * 0.12 * (1.0 - r2);
             (s * w * k, t * h * k)
         }
-        WarpStyle::Inflate => (
-            s * w * (1.0 + b * 0.3 * (1.0 - t * t)),
-            t * h * (1.0 + b * 0.3 * (1.0 - s * s)),
-        ),
-        WarpStyle::Squeeze => (
-            s * w * (1.0 + b * 0.3 * (1.0 - t * t)),
-            t * h * (1.0 - b * 0.5 * (1.0 - s * s)),
-        ),
-        // A rotation that is strongest at the centre and none at the corners.
+        WarpStyle::Inflate => (s * w * (1.0 + b * 0.4), t * h * (1.0 + b * 0.6 * bell)),
+        WarpStyle::Squeeze => (s * w * (1.0 - b * 0.33), t * h * (1.0 + b * 0.6 * bell)),
+        // A rotation strongest at the centre and none at the corners, in
+        // the unit square (so the text stays inside its box).
         WarpStyle::Twist => {
             let rho = ((s * s + t * t) / 2.0).sqrt().min(1.0);
-            let a = b * FRAC_PI_2 * (1.0 - rho);
-            let (sn, cs) = a.sin_cos();
-            let (x, y) = (s * w, t * h);
-            (cs * x - sn * y, sn * x + cs * y)
+            let turn = b * FRAC_PI_2 * (1.0 - rho);
+            let (sn, cs) = turn.sin_cos();
+            ((cs * s - sn * t) * w, (sn * s + cs * t) * h)
         }
     }
 }
 
+/// The styles whose negative bend mirrors the positive one top to bottom.
+fn mirrors(style: WarpStyle) -> bool {
+    matches!(style, WarpStyle::Arch)
+}
+
 /// The ARC: the box laid along a circle whose centre line keeps its length
-/// (the half-width `w`) and spans `bend · 90°` on each side; a positive
-/// bend humps upward, a negative one sags.
-fn arc(b: f64, s: f64, t: f64, w: f64, h: f64) -> (f64, f64) {
+/// (the half-width `w`) and spans `bend · 90°` on each side (with
+/// `anchored`, its ends'
+/// outer corners kept where they were: a positive bend humps the middle
+/// upward, a negative one sags it.
+fn arc(b: f64, s: f64, t: f64, w: f64, h: f64, anchored: bool) -> (f64, f64) {
     let phi = b.abs() * FRAC_PI_2;
     if phi < 1e-9 {
         return (s * w, t * h);
@@ -437,7 +460,13 @@ fn arc(b: f64, s: f64, t: f64, w: f64, h: f64) -> (f64, f64) {
     let radius = w / phi;
     let a = s * phi;
     let r = radius - tt * h;
-    let (x, y) = (r * a.sin(), radius - r * a.cos());
+    // The bottom corners' drop, taken back so they stay.
+    let drop = if anchored {
+        radius - (radius - h) * phi.cos() - h
+    } else {
+        0.0
+    };
+    let (x, y) = (r * a.sin(), radius - r * a.cos() - drop);
     if b < 0.0 {
         (x, -y)
     } else {
@@ -581,9 +610,8 @@ mod tests {
         let (_, mid_top) = eval(&up, 0.5, 0.0);
         let (_, corner_top) = eval(&up, 0.0, 0.0);
         assert!(mid_top < corner_top, "the middle of the top edge is higher");
-        // The centre line keeps the middle's height (the patch matches
-        // the arc exactly at its nodes, and within a pixel between them).
-        assert!((eval(&up, 0.5, 0.5).1 - (R.y + R.h / 2.0)).abs() < 1.0);
+        // The bottom corners stay where they were.
+        assert!((eval(&up, 0.0, 1.0).1 - (R.y + R.h)).abs() < 1e-9);
         let down = mesh(&warp(WarpStyle::Arc, -0.5), R);
         assert!(eval(&down, 0.5, 1.0).1 > eval(&down, 0.0, 1.0).1);
         // A bend grows the box it needs.

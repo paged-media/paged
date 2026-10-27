@@ -673,6 +673,7 @@ dependencies = [
  "png",
  "pollster",
  "proptest",
+ "serde_json",
  "zune-core",
  "zune-png",
 ]
