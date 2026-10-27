@@ -198,7 +198,10 @@ export function makeWorkbookPanel(
     const { t } = useStrings();
     const fileRef = useRef<HTMLInputElement | null>(null);
 
-    const st = live.state();
+    // A copy: the session mutates its state object in place, so a memo keyed
+    // on that one object would never see a field change (a second import's
+    // file name stayed the first one's); the view is new after each change.
+    const st = { ...live.state() };
     const { armed, confirm } = useConfirm();
 
     const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
