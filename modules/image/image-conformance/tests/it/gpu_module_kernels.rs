@@ -654,6 +654,12 @@ const TABLE: &[Row] = &[
           identity: Identity::Params(P::Fields(&[("dx", V::F(0.0)), ("dy", V::F(0.0)), ("edge", V::U(0))])),
           stress: P::Fields(&[("dx", V::F(5.5)), ("dy", V::F(-3.25)), ("edge", V::U(0))]),
           note: "dx = dy = 0 is the documented identity under every edge policy" },
+    Row { id: "geom.patch_vote",
+          identity: Identity::Params(P::Fields(&[("radius", V::U(2)), ("min_weight", V::F(1.0e30))])),
+          stress: P::Fields(&[("radius", V::U(2)), ("bias_scale", V::F(1.0)), ("min_weight", V::F(0.0))]),
+          note: "a voting floor above every weight means no entry votes, so \
+                 every texel keeps the pixel already there (in0 at p, origin 0) \
+                 whatever the field holds" },
     Row { id: "geom.move_selection",
           identity: Identity::Params(P::Fields(&[("dx", V::F(0.0)), ("dy", V::F(0.0)), ("vacate", V::U(0))])),
           stress: P::Fields(&[("dx", V::F(6.0)), ("dy", V::F(-4.0)), ("vacate", V::U(0))]),

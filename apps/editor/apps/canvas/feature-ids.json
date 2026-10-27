@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 610,
+    "command": 612,
     "keybinding": 154,
-    "menu": 431,
-    "panel": 135,
-    "tool": 100
+    "menu": 433,
+    "panel": 136,
+    "tool": 103
   },
   "features": [
     {
@@ -1311,6 +1311,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.contentAwareFillWorkspace",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.convertLayerToSmart",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1752,6 +1757,11 @@
     },
     {
       "id": "command:media.paged.image.command.openBrushSettings",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.openCloneSource",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -4371,6 +4381,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Edit/Content-aware fill…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Edit/Copy",
       "kind": "menu",
       "owner": "editor"
@@ -4692,6 +4707,11 @@
     },
     {
       "id": "menu:Image/Brush/Lock transparent pixels",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Clone source",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6131,6 +6151,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "panel:media.paged.image.panel.cloneSource",
+      "kind": "panel",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "panel:media.paged.image.panel.properties",
       "kind": "panel",
       "owner": "media.paged.image"
@@ -6896,6 +6921,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.cafSampling",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.clone",
       "kind": "tool",
       "owner": "media.paged.image"
@@ -6907,6 +6937,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.colorSampler",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.contentAwareMove",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -7012,6 +7047,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.refineEdge",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.remove",
       "kind": "tool",
       "owner": "media.paged.image"
     },

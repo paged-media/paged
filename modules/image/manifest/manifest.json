@@ -36,7 +36,8 @@
       "media.paged.image.panel.adjustments",
       "media.paged.image.panel.properties",
       "media.paged.image.panel.brushSettings",
-      "media.paged.image.panel.brushPresets"
+      "media.paged.image.panel.brushPresets",
+      "media.paged.image.panel.cloneSource"
     ],
     "commands": [
       "media.paged.image.command.openImage",
@@ -168,7 +169,9 @@
       "media.paged.image.command.focusArea",
       "media.paged.image.command.saveSelection",
       "media.paged.image.command.loadSelection",
-      "media.paged.image.command.makeWorkPath"
+      "media.paged.image.command.makeWorkPath",
+      "media.paged.image.command.contentAwareFillWorkspace",
+      "media.paged.image.command.openCloneSource"
     ],
     "tools": [
       "media.paged.image.tool.crop",
@@ -205,7 +208,10 @@
       "media.paged.image.tool.backgroundEraser",
       "media.paged.image.tool.magicEraser",
       "media.paged.image.tool.magneticLasso",
-      "media.paged.image.tool.refineEdge"
+      "media.paged.image.tool.refineEdge",
+      "media.paged.image.tool.contentAwareMove",
+      "media.paged.image.tool.remove",
+      "media.paged.image.tool.cafSampling"
     ],
     "importers": ["media.paged.image.importer.raster"],
     "exporters": [
@@ -1246,6 +1252,22 @@
         {
           "id": "media.paged.image.command.contentAwareFill",
           "title": "Content-aware fill",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.contentAwareFillWorkspace",
+          "title": "Content-aware fill… (workspace)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.openCloneSource",
+          "title": "Clone source panel",
           "args": {
             "kind": "struct",
             "fields": {}
