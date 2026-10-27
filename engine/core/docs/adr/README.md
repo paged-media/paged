@@ -154,6 +154,8 @@ is not written yet.
 | [1017](1017-styled-field-values-and-alternates.md) | A text field takes the styles and breaks its author allows; alternates choose a frame | Accepted 2026-10-24 |
 | [1018](1018-word-paragraph-character-and-list-model.md) | Word's paragraph, character and list model: highlight, hidden text, underline kinds, double strike, direct shading and borders, list levels, based-on, Next Style | Accepted 2026-10-24 |
 | [1021](1021-find-and-replace.md) | Find and replace: the caret space, Word's specials and wildcards on `regress`, Replace All as one undo step | Accepted 2026-10-24 |
+| [1030](1030-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
+| [1031](1031-svg-in-and-out-through-paged-svg.md) | SVG in and out through `paged-svg` | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

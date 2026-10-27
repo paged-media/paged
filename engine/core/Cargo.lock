@@ -1557,6 +1557,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontdb"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2660c5e9157bf76d2db1294e4a9feba604ef610819a3b591088d0d8392a3290f"
+dependencies = [
+ "log",
+ "slotmap",
+ "tinyvec",
+]
+
+[[package]]
 name = "foreign-types"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1861,6 +1872,18 @@ dependencies = [
  "crunchy",
  "num-traits",
  "zerocopy 0.8.63",
+]
+
+[[package]]
+name = "harfrust"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
+dependencies = [
+ "bitflags",
+ "bytemuck",
+ "read-fonts 0.41.0",
+ "smallvec",
 ]
 
 [[package]]
@@ -3321,12 +3344,14 @@ dependencies = [
  "paged-composition",
  "paged-export-pdf",
  "paged-gen",
+ "paged-gpu",
  "paged-introspect",
  "paged-model",
  "paged-mutate",
  "paged-renderer",
  "paged-scene",
  "paged-store",
+ "paged-svg",
  "paged-template",
  "paged-test-resources",
  "paged-text",
@@ -3669,6 +3694,7 @@ dependencies = [
  "paged-compose",
  "paged-fidelity",
  "paged-raster",
+ "paged-svg",
  "paged-test-resources",
  "pollster",
  "serde_json",
@@ -3830,6 +3856,7 @@ dependencies = [
  "paged-raster",
  "paged-scene",
  "paged-store",
+ "paged-svg",
  "paged-test-resources",
  "paged-text",
  "paged-wire",
@@ -3958,6 +3985,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-svg"
+version = "0.0.0"
+dependencies = [
+ "base64",
+ "flate2",
+ "image",
+ "paged-compose",
+ "paged-mutate",
+ "paged-wire",
+ "serde",
+ "serde_json",
+ "tsify-next",
+ "usvg",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "paged-template"
 version = "0.0.0"
 dependencies = [
@@ -3982,7 +4026,7 @@ version = "0.0.0"
 dependencies = [
  "blake3",
  "bytes",
- "harfrust",
+ "harfrust 0.14.0",
  "hypher",
  "paged-scene",
  "paragraph-breaker",
@@ -5199,7 +5243,7 @@ dependencies = [
 name = "spike-wasm-size"
 version = "0.0.0"
 dependencies = [
- "harfrust",
+ "harfrust 0.14.0",
  "paged-sdk",
  "ttf-parser",
  "wasm-bindgen",
@@ -5898,10 +5942,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
 
 [[package]]
+name = "unicode-script"
+version = "0.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "383ad40bb927465ec0ce7720e033cb4ca06912855fc35db31b5755d0de75b1ee"
+
+[[package]]
 name = "unicode-segmentation"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
+
+[[package]]
+name = "unicode-vo"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1d386ff53b415b7fe27b50bb44679e2cc4660272694b7b6f3326d8480823a94"
 
 [[package]]
 name = "unicode-width"
@@ -5937,8 +5993,11 @@ version = "0.48.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "977d0a4abdef933f424a99fe09f95576e089b90aebc6f016a3bc813762493e91"
 dependencies = [
+ "base64",
  "data-url",
  "flate2",
+ "fontdb",
+ "harfrust 0.12.0",
  "imagesize",
  "kurbo 0.13.1",
  "log",
@@ -5946,9 +6005,14 @@ dependencies = [
  "roxmltree",
  "simplecss",
  "siphasher",
+ "skrifa 0.44.0",
  "strict-num",
  "svgtypes",
  "tiny-skia-path",
+ "unicode-bidi",
+ "unicode-script",
+ "unicode-vo",
+ "xmlwriter",
 ]
 
 [[package]]
@@ -6594,6 +6658,12 @@ name = "xml-rs"
 version = "0.8.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
+
+[[package]]
+name = "xmlwriter"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xmp-writer"

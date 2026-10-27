@@ -105,8 +105,15 @@ impl PathRasterizer for CpuRasterizer {
 ///
 /// The buffer is premultiplied — over an opaque background, as every
 /// caller in this workspace uses, that is the same as straight alpha.
+///
+/// `options.view` and `options.pixel_preview` (editor ADR 287) are
+/// honoured here, through the same rewrite the Vello lane runs.
 pub fn rasterize(list: &DisplayList, options: &RasterOptions) -> RgbaImage {
-    rasterize_inner(list, options, false).0
+    let (w, h) = options.pixel_size();
+    let raw = crate::view::draw_with_view(list, options, |list, options| {
+        rasterize_inner(list, options, false).0.into_raw()
+    });
+    RgbaImage::from_raw(w, h, raw).unwrap_or_else(|| RgbaImage::new(w, h))
 }
 
 /// Rasterise AND hand back the ink separation the render produced.

@@ -116,7 +116,11 @@ export interface CoreObjects {
   /** Evaluate core selector steps (no plugin steps). */
   query(steps: readonly SelectorStep[]): Promise<string[]>;
   /** Commit mutations as ONE engine mutation (a `batch` when > 1). */
-  commit(mutations: readonly MutationInput[]): Promise<MutationOutcome>;
+  /** `opts.label` names the undo step (engine ADR 1030). */
+  commit(
+    mutations: readonly MutationInput[],
+    opts?: { label?: string },
+  ): Promise<MutationOutcome>;
   /** Pre-71 only: remember a table's story (a `cell:` address carries
    *  none; the old wire's `TableCell` id needs it). A no-op at 71. */
   noteTableStory?(tableId: string, storyId: string): void;
@@ -208,7 +212,7 @@ export function createCoreObjects(
     labelsOf: (a) => v70.labelsOf(a),
     planLabel: (a, key, value, caller) => v70.planLabel(a, key, value, caller),
     query: async (steps) => (await on()).query(steps),
-    commit: (mutations) => v70.commit(mutations),
+    commit: (mutations, opts) => v70.commit(mutations, opts),
     noteTableStory: (tableId, storyId) => v70.noteTableStory!(tableId, storyId),
     onDidChange: (listener) => v70.onDidChange(listener),
     invalidate: () => v70.invalidate(),

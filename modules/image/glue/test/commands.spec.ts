@@ -683,15 +683,18 @@ describe("GPU-only verbs decline in Node, honestly", () => {
     await declinesForGpu(`${C}.fillNoise`, /generators are GPU-only/);
   });
 
-  it("contentAwareFill needs a selection, then is GPU-only", async () => {
+  it("contentAwareFill needs a selection, then something to fill FROM (a CPU search, no GPU needed)", async () => {
     covers("command:media.paged.image.command.contentAwareFill");
     await refusesWithoutImage(`${C}.contentAwareFill`);
     const k = await ingested();
     await k.run(`${C}.contentAwareFill`);
     expect(k.session.state().status).toMatch(/Select the area to fill first/);
     k.dispose();
-    await declinesForGpu(`${C}.contentAwareFill`, /GPU-only/, (k2) =>
-      k2.run(`${C}.selectAll`),
+    // Everything selected leaves nothing to sample.
+    await declinesForGpu(
+      `${C}.contentAwareFill`,
+      /nothing to fill|needs a selection/,
+      (k2) => k2.run(`${C}.selectAll`),
     );
   });
 

@@ -148,6 +148,95 @@ pub async fn execute_windowed_once_async(
         .await
 }
 
+/// One input of a GATHER dispatch: rgba16float texels at their OWN size.
+pub struct SizedInput<'a> {
+    pub f16_bytes: &'a [u8],
+    pub w: u32,
+    pub h: u32,
+}
+
+/// Execute a `module: true` kernel whose inputs each have their own size
+/// (none need match the output) — the GATHER lane. The binding interface
+/// is the frozen ABI's (`in0`, `in1` at group 0 per arity); only the
+/// texture sizes are free, which `execute_tile_once` cannot express (it
+/// sizes every input at the output) and `execute_windowed_once` refuses
+/// for arity 2. `geom.patch_vote` rides it: `in0` is the source window,
+/// `in1` the packed nearest-neighbour field, and the output the hole's
+/// box. Additive — no existing lane changes.
+#[allow(clippy::too_many_arguments)]
+pub fn execute_gather_once(
+    ctx: &GpuContext,
+    def: &'static KernelDef,
+    inputs: &[SizedInput<'_>],
+    params: &[u8],
+    mask: Option<&[u8]>,
+    out_w: u32,
+    out_h: u32,
+) -> Result<Vec<u8>, GpuError> {
+    let (pipeline, _held, views) = prepare_gather(ctx, def, inputs, params)?;
+    run_common(ctx, &pipeline, &views, def, params, mask, out_w, out_h)
+}
+
+/// [`execute_gather_once`]'s ASYNC twin — the identical recorded dispatch
+/// with an awaited readback map (the wasm32/WebGPU realm).
+#[allow(clippy::too_many_arguments)]
+pub async fn execute_gather_once_async(
+    ctx: &GpuContext,
+    def: &'static KernelDef,
+    inputs: &[SizedInput<'_>],
+    params: &[u8],
+    mask: Option<&[u8]>,
+    out_w: u32,
+    out_h: u32,
+) -> Result<Vec<u8>, GpuError> {
+    let (pipeline, _held, views) = prepare_gather(ctx, def, inputs, params)?;
+    record_common(ctx, &pipeline, &views, def, params, mask, out_w, out_h)?
+        .finish_async(ctx)
+        .await
+}
+
+/// Validate arity, param block and every input's texel count, then upload.
+fn prepare_gather(
+    ctx: &GpuContext,
+    def: &'static KernelDef,
+    inputs: &[SizedInput<'_>],
+    params: &[u8],
+) -> Result<TileInputs, GpuError> {
+    if inputs.len() != def.inputs as usize {
+        return Err(GpuError::Kernel {
+            kernel: def.id,
+            detail: format!("expected {} inputs, got {}", def.inputs, inputs.len()),
+        });
+    }
+    if params.len() != def.params.size {
+        return Err(GpuError::Kernel {
+            kernel: def.id,
+            detail: format!(
+                "param block {} bytes, layout says {}",
+                params.len(),
+                def.params.size
+            ),
+        });
+    }
+    for (i, t) in inputs.iter().enumerate() {
+        check_texels(
+            def.id,
+            &format!("input {i}"),
+            t.f16_bytes,
+            t.w,
+            t.h,
+            crate::TexFormat::Rgba16Float,
+        )?;
+    }
+    let pipeline = ctx.pipeline(def);
+    let held: Vec<Resident> = inputs
+        .iter()
+        .map(|t| ctx.upload(t.w, t.h, crate::TexFormat::Rgba16Float, t.f16_bytes))
+        .collect();
+    let views: Vec<wgpu::TextureView> = held.iter().map(|r| r.view().clone()).collect();
+    Ok((pipeline, held, views))
+}
+
 /// Execute `def` over one `w`×`h` tile. `inputs.len()` must equal
 /// `def.inputs`; `params` must be the param block's bytes
 /// (`Params::as_bytes()`); `mask` is r16float texel bytes or `None`

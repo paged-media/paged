@@ -104,6 +104,9 @@ paged-raster = { path = "../paged-raster" }
 # fonts from the renderer's resolver; most IDML-embedded SVGs are pure
 # vector graphics like icons and logos.
 usvg = { version = "0.48", default-features = false, features = ["svgz"] }
+# The one walk over a usvg tree (engine ADR 1031, plan C9), the raster
+# lane's too. No default features: the walk alone.
+paged-svg = { path = "../paged-svg", default-features = false }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

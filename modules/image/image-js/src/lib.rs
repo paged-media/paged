@@ -46,8 +46,10 @@
 
 pub mod brushes;
 pub mod channels;
+pub mod clone_source;
 pub mod cmyk;
 // Engine work counters (thread-local, always on) — budgets count these.
+pub mod content_aware;
 pub mod counters;
 pub mod display;
 pub mod fill;
@@ -59,6 +61,7 @@ pub mod layers;
 pub mod magnetic;
 pub mod masking;
 pub mod mip;
+pub mod patchmatch;
 pub mod paths;
 pub mod pixels;
 pub mod psd_layer_ext;
@@ -3070,13 +3073,11 @@ mod wasm {
     }
 
     /// CONTENT-AWARE FILL: synthesise the selection from the rest of the
-    /// image (exemplar-based inpainting).
+    /// image (multi-resolution PatchMatch, `crate::patchmatch`).
     ///
-    /// Unlike every other fill here it is CPU: it is a search, not a
-    /// dispatch, and there is no kernel that could express "find the
-    /// patch elsewhere in this image that best continues this one". The
-    /// GPU-only rule (spec §6) is about the KERNEL path, and this adds
-    /// none — it produces pixels that land through the same journaled
+    /// The SEARCH is CPU — it is sequential, not a dispatch — and the final
+    /// VOTE is the registered `geom.patch_vote` kernel when a device exists
+    /// (its CPU twin otherwise). The pixels land through the same journaled
     /// layer write as any other fill.
     ///
     /// Requires a SELECTION: with nothing selected there is no hole, and
@@ -3085,21 +3086,10 @@ mod wasm {
     /// nothing would read as a broken button.
     #[wasm_bindgen]
     pub async fn fill_content_aware(handle: u32) -> Result<DecodedHandle, JsValue> {
-        let (img, _ctx, sel, layered) = fill_prelude(handle)?;
-        let coverage = sel.ok_or_else(|| {
-            JsValue::from_str(
-                "content-aware fill needs a selection — it synthesises the \
-                 selected region from the rest of the image",
-            )
-        })?;
-        let out = crate::inpaint::fill(&img.rgba.to_rgba8(), img.width, img.height, &coverage, 128)
-            .ok_or_else(|| {
-                JsValue::from_str(
-                    "nothing to fill, or nothing to fill FROM (an empty \
-                     selection, or one covering the whole image)",
-                )
-            })?;
-        land_fill(img.width, img.height, out, layered).await
+        // WP5.8: the multi-resolution PatchMatch over the whole image
+        // (`retouch_doors::fill_whole`) — no search window, and no GPU
+        // needed for a one-layer document.
+        retouch_doors::fill_whole(handle).await
     }
 
     /// PATCH: replace the SELECTION with the region `(dx, dy)` image px
@@ -4216,6 +4206,14 @@ mod wasm {
 
     thread_local! {
         static LAYERS: RefCell<Option<LayerDoc>> = const { RefCell::new(None) };
+    }
+
+    /// WP5.8 — the retouching doors (content-aware fill / move, remove,
+    /// the clone source's sampling and overlay).
+    /// (`include!`d: an inline module's `#[path]` resolves under a
+    /// directory that does not exist.)
+    mod retouch_doors {
+        include!("retouch_doors.rs");
     }
 
     /// Replace an engine-held image's pixels in place (same handle, same

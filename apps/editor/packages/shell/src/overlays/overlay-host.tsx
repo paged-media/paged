@@ -20,7 +20,7 @@
 import { isEnabled } from "../registries/types";
 import { useMemo, type CSSProperties } from "react";
 
-import type { Camera } from "@paged-media/client";
+import { cameraMatrix, type Camera } from "@paged-media/client";
 import type { PageId } from "@paged-media/client";
 
 import type { OverlayPageRect, OverlayProps } from "../registries/overlay";
@@ -77,8 +77,9 @@ export function OverlayHost(props: OverlayHostProps) {
     return map;
   }, [props.pageIds, props.pageRects]);
 
-  const k = props.camera.scale;
-  const transform = `matrix(${k}, 0, 0, ${k}, ${props.camera.tx}, ${props.camera.ty})`;
+  // v77 (editor ADR 287) — the camera's rotation (Rotate View) turns the
+  // overlays with the canvas.
+  const transform = `matrix(${cameraMatrix(props.camera).join(", ")})`;
   const overlayProps: OverlayProps = { paged, camera: props.camera, pageRects };
 
   return (

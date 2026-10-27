@@ -19,10 +19,10 @@
 
 // PLUGIN MENUS — paged.image (modules/image/glue/src/menu.ts).
 //
-// A hundred and fifteen entries: a hundred and thirteen under the Image menu (folded into
-// Plugins ▸ Image; shown as a context menu inside a raster frame) and two
+// A hundred and seventeen entries: a hundred and fourteen under the Image menu (folded into
+// Plugins ▸ Image; shown as a context menu inside a raster frame) and three
 // under the host's Edit menu (Edit ▸ Selection to path, Edit ▸ Path to
-// selection).
+// selection, Edit ▸ Content-aware fill…).
 //
 // THE STATE IS A DOCUMENT WITH NO IMAGE OPEN, deliberately: paged.image's
 // kernels are WebGPU-only and this lane's Chromium has no adapter, so an
@@ -1950,5 +1950,38 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
     expect(out.shell).toEqual([]);
     expect(out.after).toBe(out.before);
+  });
+
+  // WP5.8 — Edit ▸ Content-Aware Fill… and Image ▸ Clone source.
+  test("Edit/Content-aware fill… — with no image open, raises the Image panel", async () => {
+    covers("menu:Edit/Content-aware fill…");
+    await expectGreyedAndInert(bare, "Edit/Content-aware fill…");
+    const out = await clickEntry(
+      live,
+      "Edit/Content-aware fill…",
+      "media.paged.image.command.contentAwareFillWorkspace",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Clone source — raises the Clone Source panel", async () => {
+    covers("menu:Image/Clone source");
+    await expectGreyedAndInert(bare, "Image/Clone source");
+    const out = await clickEntry(
+      live,
+      "Image/Clone source",
+      "media.paged.image.command.openCloneSource",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.cloneSource" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
   });
 });

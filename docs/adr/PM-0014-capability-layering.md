@@ -90,6 +90,11 @@ starts.
 | image 466 | The isolation contract amended: the engine's raster crates are shared |
 | draw 361 | Visual live constructs move to the engine; recipes remain for generators |
 
+**Block reserved for this plan (added 2026-10-25).** Other work takes the engine numbers after the
+last one in use, so the plan's own engine records come from a reserved block: **1030–1059**.
+Assigned so far: 1030 the named undo timeline, 1031 SVG through `paged-svg`, 1032 one colour API,
+1033 PostScript/EPS through `paged-ps`, 1034 the 27 blend modes defined once.
+
 ## Consequences
 
 - A feature made engine-native appears in every module's output and export at once; the

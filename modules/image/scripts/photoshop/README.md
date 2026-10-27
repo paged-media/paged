@@ -97,3 +97,19 @@ every case `Agreement` or a stated `Convention`, image ADR 470).
   takes the tolerance as an argument.
 - **ExtendScript** is ES3 and the text crosses an Apple event: plain
   ASCII only (the runner checks), no `JSON`, no `let`.
+
+## Not probed: retouching (WP5.8)
+
+Checked against Photoshop 27.10 on 2026-10-24, and recorded here instead of as fixtures:
+
+- **Clone Stamp and Healing Brush cannot be driven by a script.** `PathItem.strokePath` with
+  `ToolType.CLONESTAMP` or `ToolType.HEALINGBRUSH` refuses with "the area to copy was not
+  defined (Alt-click to set the source)", and no ActionManager event sets the source
+  (`setd` on `cloneSource`, `cloneSourceToolOptions` and `setCloneSource` are all "not
+  available"). The source is set only by an interactive Alt-click, so the offset, transform
+  and membrane-tone behaviour has no Photoshop oracle; paged's conventions are pinned by the
+  Rust tests in `image-js/src/clone_source.rs`, `heal.rs` and `stroke.rs`.
+- **Content-Aware Fill, Move, Remove and Spot Healing** are not reproducible numerically from
+  run to run or version to version, so no ledger case could hold them. Their quality is
+  measured on synthetic stimuli with a known ground truth instead (mean colour error and seam
+  excess, `image-js/src/patchmatch.rs` tests; ADR 469).

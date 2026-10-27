@@ -60,6 +60,7 @@ export interface RendererWasm {
     tx: number,
     ty: number,
     dpr: number,
+    rotation: number,
   ) => boolean;
   /**
    * GPU mode: whether the device has been lost. Read on idle ticks — a
@@ -133,6 +134,11 @@ export class WorkerRenderer {
   private dpr = 1;
   /** Page layout in document space. Recomputed when the document changes. */
   private pages: PageGeometry[] = [];
+
+  /** v77 (editor ADR 287) — the engine's view mode, from the
+   *  `viewSettingsApplied` reply. Pixel Preview draws the CPU tiles at
+   *  72 ppi (one pixel per point) and enlarges them unsmoothed. */
+  private viewMode: string = "preview";
 
   private lastCameraGeneration = -1n;
   /** Set when something changed and the next tick must redraw even if camera is steady. */
@@ -213,6 +219,26 @@ export class WorkerRenderer {
   }
 
   /**
+   * v77 — the view mode changed (`viewSettingsApplied`): every tile was
+   * drawn in the old mode, so all go, and both paths redraw (the GPU
+   * scene cache is keyed by the mode on the wasm side).
+   */
+  setViewMode(mode: string): void {
+    if (mode === this.viewMode) return;
+    this.viewMode = mode;
+    this.markDirty([]);
+  }
+
+  /** The tile width for `page`: the fixed snapshot width, or the page's
+   *  own width in points in Pixel Preview (72 ppi). */
+  private tileWidthFor(page: PageGeometry): number {
+    if (this.viewMode === "pixelPreview") {
+      return Math.max(1, Math.round(page.rect.w));
+    }
+    return this.snapshotWidthPx;
+  }
+
+  /**
    * Mark the next tick as dirty so it redraws even if the camera
    * generation hasn't changed. Called by worker.ts after the wasm
    * reports `mutationApplied` / `undoApplied` / `redoApplied`. On the
@@ -228,13 +254,12 @@ export class WorkerRenderer {
       this.tiles.clear();
       return;
     }
-    for (const pageId of pageIds) {
-      const key = tileKey({ pageId, widthPx: this.snapshotWidthPx });
-      const cached = this.tiles.get(key);
-      if (cached) {
-        cached.bitmap.close();
-        this.tiles.delete(key);
-      }
+    // Every width of the page goes (Pixel Preview's 72 ppi tile too).
+    const prefixes = pageIds.map((pageId) => `${pageId}:`);
+    for (const [key, cached] of [...this.tiles]) {
+      if (!prefixes.some((p) => key.startsWith(p))) continue;
+      cached.bitmap.close();
+      this.tiles.delete(key);
     }
   }
 
@@ -283,6 +308,7 @@ export class WorkerRenderer {
         camera.tx,
         camera.ty,
         this.dpr,
+        camera.rotation ?? 0,
       );
       if (!presented) {
         // Nothing reached the screen: draw again next tick, and let the
@@ -320,7 +346,13 @@ export class WorkerRenderer {
     // pixels. setTransform = a, b, c, d, e, f corresponds to
     // matrix(scale*dpr, 0, 0, scale*dpr, tx*dpr, ty*dpr).
     const k = camera.scale * this.dpr;
-    ctx.setTransform(k, 0, 0, k, camera.tx * this.dpr, camera.ty * this.dpr);
+    // v77 — Rotate View turns the document about its origin.
+    const r = camera.rotation ?? 0;
+    const c = Math.cos(r) * k;
+    const sn = Math.sin(r) * k;
+    ctx.setTransform(c, sn, -sn, c, camera.tx * this.dpr, camera.ty * this.dpr);
+    // Pixel Preview's 72 ppi tiles are enlarged as blocks.
+    ctx.imageSmoothingEnabled = this.viewMode !== "pixelPreview";
 
     // Per-page draws. Visibility-cull by viewport bounds in doc
     // space so we don't issue drawImage for off-screen pages —
@@ -348,7 +380,7 @@ export class WorkerRenderer {
     // Bind a tile to this page. Sub-phase A only has one tile size
     // (snapshot). Sub-phase B introduces mid-res; this method is
     // where the tier decision lives.
-    const tile = this.bestTileFor(page.pageId);
+    const tile = this.bestTileFor(page);
     if (tile) {
       ctx.drawImage(tile.bitmap, r.x, r.y, r.w, r.h);
     }
@@ -359,13 +391,14 @@ export class WorkerRenderer {
     ctx.strokeRect(r.x, r.y, r.w, r.h);
   }
 
-  private bestTileFor(pageId: PageId): CachedTile | undefined {
-    const key = tileKey({ pageId, widthPx: this.snapshotWidthPx });
+  private bestTileFor(page: PageGeometry): CachedTile | undefined {
+    const widthPx = this.tileWidthFor(page);
+    const key = tileKey({ pageId: page.pageId, widthPx });
     const cached = this.tiles.get(key);
     if (cached) return cached;
     // Miss → request asynchronously; current frame draws nothing
     // for the page body (the chrome border still shows location).
-    void this.loadTile(pageId, this.snapshotWidthPx);
+    void this.loadTile(page.pageId, widthPx);
     return undefined;
   }
 
@@ -408,11 +441,24 @@ export class WorkerRenderer {
     if (k <= 0) {
       return { x: 0, y: 0, w: 0, h: 0 };
     }
-    const x = (-camera.tx * this.dpr) / k;
-    const y = (-camera.ty * this.dpr) / k;
-    const w = this.canvas.width / k;
-    const h = this.canvas.height / k;
-    return { x, y, w, h };
+    // The device viewport's corners mapped back to document space; a
+    // rotated view (v77) shows their bounding box.
+    const r = camera.rotation ?? 0;
+    const c = Math.cos(r);
+    const sn = Math.sin(r);
+    const toDoc = (px: number, py: number): [number, number] => {
+      const u = (px - camera.tx * this.dpr) / k;
+      const v = (py - camera.ty * this.dpr) / k;
+      return [c * u + sn * v, -sn * u + c * v];
+    };
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const pts = [toDoc(0, 0), toDoc(w, 0), toDoc(w, h), toDoc(0, h)];
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
   }
 }
 

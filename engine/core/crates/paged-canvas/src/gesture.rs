@@ -812,7 +812,7 @@ impl CanvasModel {
         let index = self.snap_index.as_ref().expect("just ensured");
         let env = crate::snap::SnapEnv {
             settings: self.snap_settings,
-            grid: index.grid,
+            grid: self.snap_settings.effective_grid(index.grid),
         };
         let adjustment = match session_clone.gesture {
             GestureType::Translate => {
@@ -831,6 +831,22 @@ impl CanvasModel {
             }
             GestureType::PathEdit { address } => {
                 path_edit_snap(index, &env, &session_clone, delta, &pages, address)
+            }
+            // v77 (editor ADR 287) — scale snaps the dragged handle like a
+            // resize edge; rotate snaps to the axes, the diagonals and the
+            // other items' angles.
+            GestureType::Scale => {
+                let siblings = crate::snap_point::frame_rects(index);
+                crate::snap::compute_scale_snap(&session_clone, delta, &pages, &siblings, &env)
+            }
+            GestureType::Rotate => {
+                let moving: Vec<crate::element_selection::ElementId> = session_clone
+                    .snapshots
+                    .iter()
+                    .map(|s| s.id.clone())
+                    .collect();
+                let angles = crate::snap_point::element_angles(index, &moving);
+                crate::snap::compute_rotate_snap(&session_clone, delta, &pages, &angles, &env)
             }
             _ => crate::snap::SnapAdjustment {
                 delta,
@@ -957,6 +973,12 @@ impl CanvasModel {
         let mut outcome = self
             .apply_operation(op)
             .map_err(|e| GestureError::Mutate(format!("{e:?}")))?;
+        // Engine ADR 1030 — the step is named after the gesture ("Move",
+        // "Rotate"), not after the property ops it lowered to.
+        self.set_step_label(
+            outcome.applied_seq,
+            crate::undo_label::for_gesture(&session.gesture, session.modifiers.alt),
+        );
         outcome.reflow = resized_frame.and_then(|frame_id| {
             self.frame_content_box(&frame_id)
                 .map(|content_box| crate::channel::FrameReflowInfo {
