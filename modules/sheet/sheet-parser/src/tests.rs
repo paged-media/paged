@@ -1026,6 +1026,31 @@ fn a_range_after_a_bare_word_keeps_its_space__feat__sheet_parser_dialect() {
     }
 }
 
+/// `word:Sheet!A1` is a sheet span (`Sheet1:Sheet2!A1`), so the range of a
+/// name with a sheet-qualified reference keeps a space before its `:` even
+/// where the name is no column: `Dtaa\r:Data!2:2` printed as
+/// `Dtaa:Data!2:2`, which reads back as an unknown sheet span (found by the
+/// parse_formula fuzz target; the input is
+/// `fuzz/regressions/parse_formula-name-range-prints-as-sheet-span.txt`).
+#[test]
+fn a_range_of_a_name_and_a_sheet_reference_keeps_its_space__feat__sheet_parser_dialect() {
+    let fuzz =
+        include_str!("../../fuzz/regressions/parse_formula-name-range-prints-as-sheet-span.txt");
+    let f = p(fuzz);
+    let printed = pr(&f);
+    assert_eq!(pr(&p(&printed)), printed, "{printed}");
+    for (input, canonical) in [
+        ("Dtaa :Data!A1", "Dtaa :Data!A1"),
+        ("Dtaa:\rData!2:2", "Dtaa :Data!2:2"),
+        ("Brutto :'Sheet 2'!B2", "Brutto :'Sheet 2'!B2"),
+        // A sheet span itself prints as it was.
+        ("SUM(Sheet1:Data!A1)", "SUM(Sheet1:Data!A1)"),
+    ] {
+        assert_eq!(roundtrip(input), canonical, "{input}");
+        assert_eq!(p(canonical).root, p(input).root, "{input}");
+    }
+}
+
 #[test]
 fn whole_bands_rewrite_on_structural_edits__feat__sheet_parser_dialect() {
     let ins_rows = Edit::InsertRows {
