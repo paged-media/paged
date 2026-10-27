@@ -72,3 +72,13 @@ module no longer embeds an interpreter of its own.
 
 The same bridge carries `paged.data.*`, the data an embedder attaches to one run (core
 [ADR 1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md), amendment of 2026-10-24).
+
+## Amendment (2026-10-25): image actions without a device
+
+The line "Image and draw actions over `paged-raster` and `paged-kernels` build on this
+registry" holds for image with a different crate: the image module's resize, fit and
+straightened crop run on `paged-resample`, a leaf engine crate with a CPU resample that is a
+supported backend for headless and batch work (image
+[ADR 467](../../../../modules/image/docs/adr/467-cpu-resample-for-headless-actions.md)). They
+register on the bundle half of the registry (`actions@1`), so their keys are the SDK's; the
+result is the same in every realm, with or without a GPU device. Draw actions are still to come.

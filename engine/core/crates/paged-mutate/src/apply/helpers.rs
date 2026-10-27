@@ -118,6 +118,21 @@ pub(super) fn find_gradient_field_mut<'a>(
     }
 }
 
+/// Engine ADR 1031 — the `gradient_fill_start` of whichever kind hosts
+/// `node`.
+pub(super) fn find_gradient_start_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut Option<[f32; 2]>> {
+    match node {
+        NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.gradient_fill_start),
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.gradient_fill_start),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.gradient_fill_start),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.gradient_fill_start),
+        _ => None,
+    }
+}
+
 pub(super) fn find_rectangle_mut<'a>(
     doc: &'a mut Document,
     self_id: &str,

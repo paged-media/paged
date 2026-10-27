@@ -31,6 +31,12 @@ const WASM_DTS = fileURLToPath(
   new URL("../../manifest/wasm/image_js.d.ts", import.meta.url),
 );
 const ENGINE_TS = fileURLToPath(new URL("../src/engine.ts", import.meta.url));
+const MASKING_TS = fileURLToPath(
+  new URL("../src/masking-engine.ts", import.meta.url),
+);
+const RETOUCH_TS = fileURLToPath(
+  new URL("../src/retouch-engine.ts", import.meta.url),
+);
 
 /**
  * wasm-bindgen's `--target web` glue also exports its init machinery,
@@ -63,14 +69,27 @@ const UNMODELLED_ON_PURPOSE = new Map([
   ],
 ]);
 
-function declaredInTs(): string[] {
-  const src = readFileSync(ENGINE_TS, "utf8");
-  const block = /export interface ImageWasmModule \{(.*?)\n\}/s.exec(src);
-  if (!block)
-    throw new Error("ImageWasmModule interface not found in engine.ts");
+function declaredIn(file: string, name: string): string[] {
+  const src = readFileSync(file, "utf8");
+  const block = new RegExp(
+    `export interface ${name}(?: extends [A-Za-z<>, ]+)? \\{(.*?)\\n\\}`,
+    "s",
+  ).exec(src);
+  if (!block) throw new Error(`${name} interface not found in ${file}`);
   return [...block[1].matchAll(/^ {2}([a-z_][A-Za-z0-9_]*)\(/gm)].map(
     (m) => m[1],
   );
+}
+
+/** The TS model of the module: `ImageWasmModule` and the doors it
+ *  extends — selection and masking (`MaskingWasm`, ADR 470) and
+ *  retouching (`RetouchWasm`, WP5.8). */
+function declaredInTs(): string[] {
+  return [
+    ...declaredIn(ENGINE_TS, "ImageWasmModule"),
+    ...declaredIn(MASKING_TS, "MaskingWasm"),
+    ...declaredIn(RETOUCH_TS, "RetouchWasm"),
+  ];
 }
 
 function exportedByWasm(): string[] {

@@ -177,6 +177,106 @@ pub fn correction_field(
     Some(c)
 }
 
+/// The healing correction with Photoshop's DIFFUSION (1–7): how far the
+/// boundary mismatch spreads into the patch before the patch keeps its own
+/// tone (beyond the mean offset).
+///
+/// 7 is the membrane above — the correction is harmonic across the whole
+/// patch. Below that the non-constant part of the mismatch is SCREENED: the
+/// Jacobi stencil solves `(∇² − λ)c' = 0` with `λ = 1/L²`, `L = 2^d` px, so
+/// the correction decays from the edge toward the mean offset over about
+/// `L` pixels (Bhat, Curless, Cohen & Zitnick, *Fourier Analysis of the 2D
+/// Screened Poisson Equation for Gradient Domain Problems*, ECCV 2008).
+/// Low values keep the sampled detail (grain, fine texture) intact inside
+/// the patch and adapt only at its rim; high values smooth the tone through
+/// it. A uniform mismatch is the mean offset at every diffusion.
+pub fn correction_field_diffused(
+    dest: &[u8],
+    source: &[u8],
+    inside: &[u8],
+    width: usize,
+    height: usize,
+    diffusion: u8,
+) -> Option<Vec<f32>> {
+    if diffusion >= 7 {
+        return correction_field(dest, source, inside, width, height);
+    }
+    let n = width * height;
+    if n == 0 || dest.len() < n * 4 || source.len() < n * 4 || inside.len() < n {
+        return None;
+    }
+    let reach = f32::from(1u16 << diffusion.clamp(1, 6));
+    let lambda = 1.0 / (reach * reach);
+    let mut bound = vec![false; n];
+    let mut c = vec![0f32; n * 3];
+    let mut sum = [0f64; 3];
+    let mut count = 0u64;
+    for i in 0..n {
+        if inside[i] != 0 || source[i * 4 + 3] == 0 {
+            continue;
+        }
+        bound[i] = true;
+        for ch in 0..3 {
+            let d = (f32::from(dest[i * 4 + ch]) - f32::from(source[i * 4 + ch])) / 255.0;
+            c[i * 3 + ch] = d;
+            sum[ch] += f64::from(d);
+        }
+        count += 1;
+    }
+    if count == 0 {
+        return None;
+    }
+    let mean = [
+        (sum[0] / count as f64) as f32,
+        (sum[1] / count as f64) as f32,
+        (sum[2] / count as f64) as f32,
+    ];
+    // Work on c' = c − mean: fixed on the boundary, zero inside to start.
+    for i in 0..n {
+        for ch in 0..3 {
+            c[i * 3 + ch] = if bound[i] {
+                c[i * 3 + ch] - mean[ch]
+            } else {
+                0.0
+            };
+        }
+    }
+    let mut next = c.clone();
+    for _ in 0..SWEEPS {
+        for y in 0..height {
+            for x in 0..width {
+                let i = y * width + x;
+                if inside[i] == 0 {
+                    continue;
+                }
+                for ch in 0..3 {
+                    let at = |xx: usize, yy: usize| c[(yy * width + xx) * 3 + ch];
+                    let left = if x > 0 { at(x - 1, y) } else { at(x, y) };
+                    let right = if x + 1 < width {
+                        at(x + 1, y)
+                    } else {
+                        at(x, y)
+                    };
+                    let up = if y > 0 { at(x, y - 1) } else { at(x, y) };
+                    let down = if y + 1 < height {
+                        at(x, y + 1)
+                    } else {
+                        at(x, y)
+                    };
+                    next[i * 3 + ch] = (left + right + up + down) / (4.0 + lambda);
+                }
+            }
+        }
+        std::mem::swap(&mut c, &mut next);
+    }
+    for i in 0..n {
+        for ch in 0..3 {
+            c[i * 3 + ch] += mean[ch];
+        }
+    }
+    Some(c)
+}
+
 /// Pack a correction field as a STRAIGHT rgba16float window, ready to be
 /// uploaded as `math.add`'s second input. Alpha is zero throughout.
 pub fn field_to_f16(field: &[f32], texels: usize) -> Vec<u8> {
@@ -342,6 +442,46 @@ mod tests {
             "got {}",
             c[(5 * w + 5) * 3]
         );
+    }
+
+    /// DIFFUSION: a uniform mismatch is the mean offset at every setting,
+    /// and on a ramp the low settings keep the interior nearer the mean
+    /// (the patch keeps its own detail) while 7 is the full membrane.
+    #[test]
+    #[allow(non_snake_case)]
+    fn diffusion_screens_the_correction_toward_the_mean__feat__image_editor_healing_brush() {
+        let (w, h) = (24, 24);
+        let dest = grey(w, h, |_, _| 200);
+        let src = grey(w, h, |_, _| 120);
+        let inside = centre_region(w, h, 4);
+        let want = (200.0 - 120.0) / 255.0;
+        for d in 1..=7u8 {
+            let c = correction_field_diffused(&dest, &src, &inside, w, h, d).expect("solved");
+            assert!(
+                (c[(12 * w + 12) * 3] - want).abs() < 1e-3,
+                "uniform at diffusion {d}"
+            );
+        }
+        let dest = grey(w, h, |x, _| (x * 10) as u8);
+        let src = grey(w, h, |_, _| 0);
+        let full = correction_field_diffused(&dest, &src, &inside, w, h, 7).unwrap();
+        let low = correction_field_diffused(&dest, &src, &inside, w, h, 1).unwrap();
+        // Near the left edge of the patch the full membrane follows the
+        // ramp's low end; the screened one sits nearer the mean.
+        let mean = {
+            let mut s = 0f32;
+            let mut n = 0f32;
+            for (i, &m) in inside.iter().enumerate() {
+                if m == 0 {
+                    s += f32::from(dest[i * 4]) / 255.0;
+                    n += 1.0;
+                }
+            }
+            s / n
+        };
+        let i = 12 * w + 8;
+        assert!((low[i * 3] - mean).abs() < (full[i * 3] - mean).abs());
+        assert_eq!(full, correction_field(&dest, &src, &inside, w, h).unwrap());
     }
 
     /// Alpha is never touched, and the packing is the shape `math.add`

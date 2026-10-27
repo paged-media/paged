@@ -3,6 +3,8 @@
 //! Each file in this directory is a module; nextest still runs every test in
 //! its own process. A new test file goes here and gets a `mod` line below.
 
+mod brush_engine;
+mod brush_photoshop;
 mod encode_opt;
 mod ingest;
 mod ingest_16bit;

@@ -114,6 +114,30 @@ pub enum StrokeTool {
     /// window + membrane tone correction — lands under the coverage. No
     /// Alt-click; nothing is deposited until the stroke is resolved.
     SpotHeal,
+    /// SMUDGE: each dab deposits the paint the brush carries and picks
+    /// up what it lands on, so colour is dragged along the stroke.
+    /// Strength = how much it carries; finger painting starts it loaded
+    /// with the foreground. Sequential by nature (`stroke::engine`).
+    Smudge,
+    /// MIXER BRUSH: a smudge with a paint reservoir — wet (how much of
+    /// the canvas it picks up), load (how full of the foreground it is),
+    /// mix (canvas vs reservoir in what it lays down), flow.
+    Mixer,
+    /// HISTORY BRUSH: paints a HISTORY STATE of the layer back — a clone
+    /// at offset zero from another time instead of another place.
+    History,
+    /// ART HISTORY BRUSH: stylised strokes in the history state's
+    /// colours (style, area, tolerance, fidelity).
+    ArtHistory,
+    /// BACKGROUND ERASER: erases only the colour it samples under the
+    /// tip (continuous / once / the background swatch), within a
+    /// tolerance, contiguous or not, optionally protecting the
+    /// foreground colour.
+    BackgroundEraser,
+    /// COLOR REPLACEMENT: paints the foreground through hue /
+    /// saturation / colour / luminosity, only over the colour it samples
+    /// (the background eraser's sampling and limits).
+    ColorReplace,
 }
 
 impl StrokeTool {
@@ -131,6 +155,12 @@ impl StrokeTool {
             "blur" => StrokeTool::Blur,
             "sharpen" => StrokeTool::Sharpen,
             "spot-heal" => StrokeTool::SpotHeal,
+            "smudge" => StrokeTool::Smudge,
+            "mixer" => StrokeTool::Mixer,
+            "history" => StrokeTool::History,
+            "art-history" => StrokeTool::ArtHistory,
+            "background-eraser" => StrokeTool::BackgroundEraser,
+            "color-replace" => StrokeTool::ColorReplace,
             _ => return None,
         })
     }
@@ -148,7 +178,34 @@ impl StrokeTool {
             StrokeTool::Blur => "blur",
             StrokeTool::Sharpen => "sharpen",
             StrokeTool::SpotHeal => "spot-heal",
+            StrokeTool::Smudge => "smudge",
+            StrokeTool::Mixer => "mixer",
+            StrokeTool::History => "history",
+            StrokeTool::ArtHistory => "art-history",
+            StrokeTool::BackgroundEraser => "background-eraser",
+            StrokeTool::ColorReplace => "color-replace",
         }
+    }
+
+    /// Is this a WET tool — one whose every dab reads the result of the
+    /// dab before (smudge, mixer)? Those composite dab by dab instead of
+    /// accumulating coverage (`stroke::engine`).
+    pub fn wet(self) -> bool {
+        matches!(self, StrokeTool::Smudge | StrokeTool::Mixer)
+    }
+
+    /// Does it paint FROM another state of the layer (a history source)?
+    pub fn reads_history(self) -> bool {
+        matches!(self, StrokeTool::History | StrokeTool::ArtHistory)
+    }
+
+    /// Does its coverage pass a COLOUR GATE (sampling + limits +
+    /// tolerance) before it lands?
+    pub fn gated(self) -> bool {
+        matches!(
+            self,
+            StrokeTool::BackgroundEraser | StrokeTool::ColorReplace
+        )
     }
 
     /// Is this a FILTER STROKE — one that deposits no paint and instead
@@ -384,6 +441,18 @@ impl StrokeParams {
             StrokeTool::Dodge | StrokeTool::Burn | StrokeTool::Sponge => None,
             StrokeTool::Blur | StrokeTool::Sharpen => None,
             StrokeTool::SpotHeal => None,
+            StrokeTool::BackgroundEraser => Some(PaintMode::Erase),
+            // The colour replacement tool paints the foreground through
+            // the hue / saturation / colour / luminosity kernel the
+            // caller chose as its blend.
+            StrokeTool::ColorReplace => Some(PaintMode::Paint {
+                blend: self.blend,
+                color: self.color,
+            }),
+            // Their paint layer is a window (a history state, the
+            // carried paint) or a colour field — built in `composite`.
+            StrokeTool::Smudge | StrokeTool::Mixer => None,
+            StrokeTool::History | StrokeTool::ArtHistory => None,
         }
     }
 }
@@ -549,7 +618,43 @@ pub struct StrokeSession {
     clone_offset: Option<(f32, f32)>,
     /// The dodge / burn / sponge options.
     tone: ToneOptions,
+    /// Brush Settings — every dynamics pane and the paint tools'
+    /// options — frozen with the stroke (`set_dynamics`).
+    dynamics: image_gpu::dynamics::BrushDynamics,
+    /// The planner and its walk, built at the first sample of a stroke
+    /// that needs them (`stroke::engine`). `None` on the plain path.
+    brush: Option<engine::BrushRun>,
+    /// The sampled (bitmap) tip, or `None` for the computed tip.
+    tip_bitmap: Option<Arc<image_gpu::SampledTip>>,
+    /// The dual brush's bitmap tip, if it has one.
+    dual_bitmap: Option<Arc<image_gpu::SampledTip>>,
+    /// The texture pattern's straight RGBA8 pixels (`w`, `h`, bytes);
+    /// baked into a field with the Texture pane's settings at the first
+    /// sample.
+    texture_source: Option<(u32, u32, Arc<[u8]>)>,
+    texture: Option<Arc<image_gpu::brush::TextureField>>,
+    /// Canvas-extent straight RGBA8 a tool reads INSTEAD of the base: the
+    /// history state (history / art history brushes), or the composite
+    /// of every layer (smudge / mixer "sample all layers").
+    alt_source: Option<Arc<[u8]>>,
+    /// The smudge / mixer brush's carried paint.
+    wet: Option<engine::WetState>,
+    /// The colour the background eraser / colour replacement sampled
+    /// "once", at the first dab.
+    gate_sample: Option<[u8; 4]>,
+    /// WP5.8 — what the sampling tools read (`crate::clone_source`): the
+    /// sample composite, the source transform, the healing diffusion and
+    /// the spot type.
+    sampling: crate::clone_source::Sampling,
+    /// A resolved content-aware / create-texture spot heal: the canvas with
+    /// the stroke area synthesised, read as the source at offset zero.
+    synth: Option<Arc<[u8]>>,
 }
+
+/// The brush engine on top of the session: planned dabs, the colour
+/// gates, the wet tools, the art history brush.
+mod engine;
+pub use engine::tip_from_pixels;
 
 impl StrokeSession {
     /// Open a stroke on `image`. `selection` is the session's coverage
@@ -614,6 +719,17 @@ impl StrokeSession {
             clone_source: None,
             clone_offset: None,
             tone: ToneOptions::default(),
+            dynamics: image_gpu::dynamics::BrushDynamics::default(),
+            brush: None,
+            tip_bitmap: None,
+            dual_bitmap: None,
+            texture_source: None,
+            texture: None,
+            alt_source: None,
+            wet: None,
+            gate_sample: None,
+            sampling: crate::clone_source::Sampling::default(),
+            synth: None,
         })
     }
 
@@ -643,6 +759,25 @@ impl StrokeSession {
 
     pub fn clone_source(&self) -> Option<CloneSource> {
         self.clone_source
+    }
+
+    /// Set what the sampling tools read (WP5.8). Call before the first
+    /// sample, like the anchor.
+    pub fn set_sampling(&mut self, sampling: crate::clone_source::Sampling) {
+        self.sampling = sampling;
+    }
+
+    pub fn sampling(&self) -> &crate::clone_source::Sampling {
+        &self.sampling
+    }
+
+    /// Fix the clone offset (`source − destination`) BEFORE the first
+    /// sample — an Aligned clone continuing the previous stroke's offset, or
+    /// an offset typed in the Clone Source panel.
+    pub fn set_clone_offset(&mut self, dx: f32, dy: f32) {
+        if dx.is_finite() && dy.is_finite() {
+            self.clone_offset = Some((dx, dy));
+        }
     }
 
     /// Set the dodge / burn / sponge options. Call before the first
@@ -742,6 +877,10 @@ impl StrokeSession {
                 self.clone_offset = Some((src.x - sample.x, src.y - sample.y));
             }
         }
+        if self.uses_engine() {
+            let pen = image_gpu::dynamics::PenSample::at(sample.x, sample.y, sample.pressure);
+            return self.extend_engine(ctx, pen).await;
+        }
         let dabs = self.plan(sample);
         for d in &dabs {
             let tip = self.params.tip_at(d.pressure);
@@ -778,6 +917,7 @@ impl StrokeSession {
         // a window of the image and cannot exist before the region does.
         let sampled = match self.params.solid_paint_mode() {
             Some(_) => None,
+            None if self.params.tool.reads_history() => None,
             None => {
                 let Some((dx, dy)) = self.clone_offset else {
                     // No anchor set: a clone with nowhere to read from
@@ -801,18 +941,39 @@ impl StrokeSession {
                 Some((rgba8_to_f16(&src_window), correction))
             }
         };
-        let mode = match (&self.params.solid_paint_mode(), &sampled) {
-            (Some(m), _) => *m,
-            (None, Some((src_f16, correction))) => PaintMode::Sample {
+        // A multi-coloured stroke (colour dynamics, the art history
+        // brush) paints its COLOUR FIELD as the paint layer; the history
+        // brush paints the history state's window.
+        let field = self.engine_paint_window(region);
+        let locked_erase = self.locked_erase_paint();
+        let mode = match (
+            &field,
+            &locked_erase,
+            &self.params.solid_paint_mode(),
+            &sampled,
+        ) {
+            (Some(win), _, _, _) => PaintMode::Sample {
+                blend: self.params.blend,
+                source_f16: win,
+                correction_f16: None,
+            },
+            (None, Some(m), _, _) => *m,
+            (None, None, Some(m), _) => *m,
+            (None, None, None, Some((src_f16, correction))) => PaintMode::Sample {
                 blend: self.params.blend,
                 source_f16: src_f16,
                 correction_f16: correction.as_deref(),
             },
-            (None, None) => return Ok(()),
+            (None, None, None, None) => return Ok(()),
         };
-        let out_f16 = composite_stroke_window(ctx, &mode, &base_f16, &mask, w, h)
+        let mut out_f16 = composite_stroke_window(ctx, &mode, &base_f16, &mask, w, h)
             .await
             .map_err(|e| IngestError::Pipeline(e.to_string()))?;
+        if self.dynamics.lock_alpha {
+            out_f16 = image_gpu::keep_alpha_window(ctx, &out_f16, &base_f16, w, h)
+                .await
+                .map_err(|e| IngestError::Pipeline(e.to_string()))?;
+        }
         let out = f16_to_rgba8(&out_f16);
         self.splice(region, &out);
         Ok(())
@@ -861,9 +1022,14 @@ impl StrokeSession {
             }
             (None, _) => return Ok(()),
         };
-        let out_f16 = composite_stroke_window(ctx, &mode, &base_f16, &mask, region.w, region.h)
+        let mut out_f16 = composite_stroke_window(ctx, &mode, &base_f16, &mask, region.w, region.h)
             .await
             .map_err(|e| IngestError::Pipeline(e.to_string()))?;
+        if self.dynamics.lock_alpha {
+            out_f16 = image_gpu::keep_alpha_window(ctx, &out_f16, &base_f16, region.w, region.h)
+                .await
+                .map_err(|e| IngestError::Pipeline(e.to_string()))?;
+        }
         let out = f16_to_rgba8(&out_f16);
         self.splice(region, &out);
         Ok(())
@@ -913,7 +1079,13 @@ impl StrokeSession {
         .intersect(Region::new(0, 0, self.width, self.height))?;
         let (bw, bh) = (big.w as usize, big.h as usize);
 
-        let dest = self.window_rgba8(big);
+        // The DESTINATION the tone is matched to: the sample composite when
+        // one is set (healing onto an empty layer above the photo), else
+        // the layer itself.
+        let dest = match &self.sampling.pixels {
+            Some(px) => window_of(px, self.width, big),
+            None => self.window_rgba8(big),
+        };
         let src = self.source_window_rgba8(big, dx, dy);
         let inside: Vec<u8> = (0..bw * bh)
             .map(|i| {
@@ -935,7 +1107,14 @@ impl StrokeSession {
                 }
             })
             .collect();
-        let field = crate::heal::correction_field(&dest, &src, &inside, bw, bh)?;
+        let field = crate::heal::correction_field_diffused(
+            &dest,
+            &src,
+            &inside,
+            bw,
+            bh,
+            self.sampling.diffusion.unwrap_or(7),
+        )?;
 
         // Crop back to the region the composite is actually writing.
         let mut out = Vec::with_capacity((region.w as usize) * (region.h as usize) * 3);
@@ -961,24 +1140,26 @@ impl StrokeSession {
     /// like a rendering bug; transparency composites to "nothing was
     /// copied here", which is the truth.
     fn source_window_rgba8(&self, region: Region, dx: f32, dy: f32) -> Vec<u8> {
-        let (dx, dy) = (dx.round() as i64, dy.round() as i64);
-        let mut out = vec![0u8; (region.w as usize) * (region.h as usize) * 4];
-        for y in 0..region.h {
-            let sy = region.y as i64 + y as i64 + dy;
-            if sy < 0 || sy >= self.height as i64 {
-                continue;
-            }
-            for x in 0..region.w {
-                let sx = region.x as i64 + x as i64 + dx;
-                if sx < 0 || sx >= self.width as i64 {
-                    continue;
-                }
-                let si = ((sy as usize) * self.width as usize + sx as usize) * 4;
-                let di = ((y as usize) * region.w as usize + x as usize) * 4;
-                out[di..di + 4].copy_from_slice(&self.base[si..si + 4]);
-            }
+        // A resolved spot heal reads its synthesis in place; otherwise the
+        // sample composite (or the base) through the clone transform. The
+        // identity transform is the integer shifted copy, bit for bit.
+        if let Some(synth) = &self.synth {
+            return window_of(synth, self.width, region);
         }
-        out
+        let src: &[u8] = self.sampling.pixels.as_deref().unwrap_or(&self.base);
+        let (anchor, t) = match self.clone_source {
+            Some(c) => ((c.x, c.y), self.sampling.transform),
+            None => ((0.0, 0.0), crate::clone_source::CloneTransform::default()),
+        };
+        crate::clone_source::source_window(
+            src,
+            self.width,
+            self.height,
+            region,
+            anchor,
+            (dx, dy),
+            &t,
+        )
     }
 
     /// Copy `region` out of the BASE pixels as tightly packed RGBA8.
@@ -1060,7 +1241,10 @@ impl StrokeSession {
         .intersect(Region::new(0, 0, self.width, self.height)) else {
             return Ok(false);
         };
-        let crop = self.window_rgba8(win);
+        let crop = match &self.sampling.pixels {
+            Some(px) => window_of(px, self.width, win),
+            None => self.window_rgba8(win),
+        };
         let hole: Vec<u8> = (0..win.h)
             .flat_map(|y| (0..win.w).map(move |x| (x, y)))
             .map(|(x, y)| {
@@ -1077,6 +1261,32 @@ impl StrokeSession {
                 }
             })
             .collect();
+        // CONTENT-AWARE and CREATE TEXTURE synthesise the stroke area and
+        // heal from the synthesis in place; PROXIMITY MATCH copies the one
+        // nearby offset the exemplar search names.
+        if let Some(filled) =
+            crate::content_aware::spot_source(&crop, win.w, win.h, &hole, self.sampling.spot)
+        {
+            let mut canvas = self
+                .sampling
+                .pixels
+                .as_deref()
+                .unwrap_or(&self.base)
+                .to_vec();
+            for y in 0..win.h as usize {
+                let d = ((win.y as usize + y) * self.width as usize + win.x as usize) * 4;
+                let s = y * win.w as usize * 4;
+                canvas[d..d + win.w as usize * 4]
+                    .copy_from_slice(&filled[s..s + win.w as usize * 4]);
+            }
+            self.synth = Some(Arc::from(canvas.into_boxed_slice()));
+            self.clone_offset = Some((0.0, 0.0));
+            self.composite(ctx, bounds).await?;
+            return Ok(true);
+        }
+        if self.sampling.spot != crate::clone_source::SpotType::ProximityMatch {
+            return Ok(false);
+        }
         let Some((dx, dy)) = crate::inpaint::spot_source_offset(&crop, win.w, win.h, &hole) else {
             return Ok(false);
         };
@@ -1103,6 +1313,17 @@ impl StrokeSession {
     pub fn is_empty(&self) -> bool {
         self.accumulator.is_empty()
     }
+}
+
+/// `region` of a canvas-extent straight RGBA8 buffer, tightly packed.
+fn window_of(px: &[u8], width: u32, region: Region) -> Vec<u8> {
+    let mut out = Vec::with_capacity((region.w as usize) * (region.h as usize) * 4);
+    for y in 0..region.h {
+        let row = (region.y as u32 + y) as usize;
+        let start = (row * width as usize + region.x as usize) * 4;
+        out.extend_from_slice(&px[start..start + (region.w as usize) * 4]);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -2342,6 +2563,109 @@ mod tests {
             let i = ((y * w + x) * 4) as usize;
             assert_eq!(out[i..i + 4], base[i..i + 4], "({x},{y}) untouched");
         }
+    }
+
+    // ── WP5.8: spot types, sample modes, clone transforms ────────────
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn every_spot_type_removes_the_blemish__feat__image_editor_spot_heal() {
+        let Some(ctx) = device() else { return };
+        use crate::clone_source::{Sampling, SpotType};
+        let (w, h) = (96u32, 64u32);
+        let image = blemished(w, h, 48.0, 32.0);
+        for spot in [
+            SpotType::ContentAware,
+            SpotType::CreateTexture,
+            SpotType::ProximityMatch,
+        ] {
+            let mut p = params(StrokeTool::SpotHeal);
+            p.size = 12.0;
+            p.hardness = 0.8;
+            let mut s = StrokeSession::begin(1, &image, p, None).expect("begin");
+            s.set_sampling(Sampling {
+                spot,
+                ..Sampling::default()
+            });
+            pollster::block_on(s.extend(ctx, StrokeSample::new(48.0, 32.0, 1.0))).expect("extend");
+            assert!(
+                pollster::block_on(s.resolve_spot_heal(ctx)).expect("resolve"),
+                "{spot:?}"
+            );
+            let out = s.commit();
+            let v = out[((32 * w + 48) * 4) as usize] as i32;
+            assert!((v - 148).abs() < 24, "{spot:?}: healed centre {v}");
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_clone_reads_the_sample_composite_not_the_layer__feat__image_editor_clone_stamp() {
+        let Some(ctx) = device() else { return };
+        use crate::clone_source::Sampling;
+        // The layer is transparent (a new layer above the photo); the
+        // composite below it is light. Sampling "all layers" paints the
+        // composite's pixels into the empty layer.
+        let empty = DecodedImage::from_rgba8(32, 16, vec![0u8; 32 * 16 * 4]).expect("img");
+        let composite: Arc<[u8]> = (0..32 * 16).flat_map(|_| [210u8, 210, 210, 255]).collect();
+        let mut p = params(StrokeTool::Clone);
+        p.size = 6.0;
+        let mut s = StrokeSession::begin(1, &empty, p, None).expect("begin");
+        s.set_clone_source(CloneSource {
+            x: 24.0,
+            y: 8.0,
+            aligned: true,
+        });
+        s.set_sampling(Sampling {
+            pixels: Some(composite),
+            ..Sampling::default()
+        });
+        pollster::block_on(s.extend(ctx, StrokeSample::new(8.0, 8.0, 1.0))).expect("extend");
+        let i = ((8 * 32 + 8) * 4) as usize;
+        assert!(
+            s.pixels()[i] > 150 && s.pixels()[i + 3] > 150,
+            "composite cloned into the layer"
+        );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_typed_offset_and_a_flip_steer_the_copy__feat__image_editor_clone_stamp() {
+        let Some(ctx) = device() else { return };
+        use crate::clone_source::{CloneTransform, Sampling};
+        // A horizontal ramp: x * 6.
+        let mut rgba = Vec::new();
+        for _y in 0..16u32 {
+            for x in 0..40u32 {
+                let v = (x * 6) as u8;
+                rgba.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        let image = DecodedImage::from_rgba8(40, 16, rgba).expect("img");
+        let mut p = params(StrokeTool::Clone);
+        p.size = 7.0;
+        p.hardness = 1.0;
+        let mut s = StrokeSession::begin(1, &image, p, None).expect("begin");
+        s.set_clone_source(CloneSource {
+            x: 30.0,
+            y: 8.0,
+            aligned: true,
+        });
+        s.set_sampling(Sampling {
+            transform: CloneTransform::new(-1.0, 1.0, 0.0),
+            ..Sampling::default()
+        });
+        // Destination anchor = source − offset = (10, 8).
+        s.set_clone_offset(20.0, 0.0);
+        pollster::block_on(s.extend(ctx, StrokeSample::new(11.0, 8.0, 1.0))).expect("extend");
+        // One right of the destination anchor reads one LEFT of the source.
+        let v = s.pixels()[((8 * 40 + 11) * 4) as usize] as i32;
+        assert!((v - 29 * 6).abs() <= 2, "flipped read {v}, want {}", 29 * 6);
+        assert_eq!(
+            s.resolved_offset(),
+            Some((20.0, 0.0)),
+            "the typed offset is kept"
+        );
     }
 
     #[test]

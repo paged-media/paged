@@ -105,15 +105,26 @@ export async function screenPoint(
         globalThis as unknown as {
           __canvas: {
             client: {
-              camera: { read: () => { scale: number; tx: number; ty: number } };
+              camera: {
+                read: () => {
+                  scale: number;
+                  tx: number;
+                  ty: number;
+                  rotation?: number;
+                };
+              };
             };
           };
         }
       ).__canvas;
       const cam = c.client.camera.read();
+      // A rotated view (editor ADR 287) turns about the document origin.
+      const r = cam.rotation ?? 0;
+      const cos = Math.cos(r);
+      const sin = Math.sin(r);
       return {
-        x: wrap.left + ptX * cam.scale + cam.tx,
-        y: wrap.top + ptY * cam.scale + cam.ty,
+        x: wrap.left + cam.scale * (cos * ptX - sin * ptY) + cam.tx,
+        y: wrap.top + cam.scale * (sin * ptX + cos * ptY) + cam.ty,
         scale: cam.scale,
       };
     },

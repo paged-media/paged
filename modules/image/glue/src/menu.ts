@@ -154,6 +154,25 @@ defineMessages("menu", {
   Unlink: "Unlink",
   "Layer comps": "Layer comps",
   "New layer comp": "New layer comp",
+  Brush: "Brush",
+  "Brush settings": "Brush settings",
+  "Brush presets": "Brush presets",
+  "Define brush preset…": "Define brush preset…",
+  "Import brush presets…": "Import brush presets…",
+  "Export brush presets (.abr)…": "Export brush presets (.abr)…",
+  "Export brush presets (.json)…": "Export brush presets (.json)…",
+  "Lock transparent pixels": "Lock transparent pixels",
+  "Color range…": "Color range…",
+  "Select and mask…": "Select and mask…",
+  "Quick mask": "Quick mask",
+  Grow: "Grow",
+  Similar: "Similar",
+  "Focus area…": "Focus area…",
+  "Save selection": "Save selection",
+  "Load selection…": "Load selection…",
+  "Make work path": "Make work path",
+  "Content-aware fill…": "Content-aware fill…",
+  "Clone source": "Clone source",
 });
 
 const C = "media.paged.image.command";
@@ -305,6 +324,15 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Image/Selection/Invert", "invertSelection", "sel"],
   ["Image/Selection/Feather…", "featherSelection", "sel-edit"],
   ["Image/Selection/From luminosity channel", "channelToSelection", "sel-conv"],
+  ["Image/Selection/Color range…", "colorRange", "sel-select"],
+  ["Image/Selection/Focus area…", "focusArea", "sel-select"],
+  ["Image/Selection/Select and mask…", "selectAndMask", "sel-refine"],
+  ["Image/Selection/Quick mask", "quickMask", "sel-refine"],
+  ["Image/Selection/Grow", "grow", "sel-grow"],
+  ["Image/Selection/Similar", "similar", "sel-grow"],
+  ["Image/Selection/Save selection", "saveSelection", "sel-channel"],
+  ["Image/Selection/Load selection…", "loadSelection", "sel-channel"],
+  ["Image/Selection/Make work path", "makeWorkPath", "sel-channel"],
 
   ["Image/Fill/Gradient…", "fillSelection", "fill"],
   ["Image/Fill/Noise…", "fillNoise", "fill"],
@@ -410,6 +438,25 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Image/Apply crop", "commitCrop", "crop"],
   ["Image/Set type", "setType", "type"],
   ["Image/Load brush library (.abr)…", "loadBrushLibrary", "brush"],
+  ["Image/Brush/Brush settings", "openBrushSettings", "brush-panels"],
+  ["Image/Brush/Brush presets", "openBrushPresets", "brush-panels"],
+  ["Image/Brush/Define brush preset…", "defineBrushPreset", "brush-presets"],
+  ["Image/Brush/Import brush presets…", "importBrushPresets", "brush-presets"],
+  [
+    "Image/Brush/Export brush presets (.abr)…",
+    "exportBrushPresetsAbr",
+    "brush-presets",
+  ],
+  [
+    "Image/Brush/Export brush presets (.json)…",
+    "exportBrushPresetsJson",
+    "brush-presets",
+  ],
+  [
+    "Image/Brush/Lock transparent pixels",
+    "toggleLockTransparent",
+    "brush-lock",
+  ],
 
   ["Image/Commit edits to the document", "commitImage", "commit"],
 
@@ -421,6 +468,11 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // than buried three levels into a plugin menu.
   ["Edit/Selection to path", "selectionToPath", "img-sel-conv"],
   ["Edit/Path to selection", "pathToSelection", "img-sel-conv"],
+
+  // WP5.8 — Photoshop's Edit ▸ Content-Aware Fill… (the workspace) and
+  // the Clone Source panel.
+  ["Edit/Content-aware fill…", "contentAwareFillWorkspace", "img-fill"],
+  ["Image/Clone source", "openCloneSource", "retouch"],
 ];
 
 /** Register every entry; one Disposable drops them all. */

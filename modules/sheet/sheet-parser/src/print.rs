@@ -177,11 +177,19 @@ impl Printer<'_> {
                 out.push_str(name);
             }
             Expr::Call(callee, args) => {
-                // The callee is an atom-shaped LAMBDA call or a local name;
-                // anything else is parenthesized so `(...)(args)` re-parses.
+                // Every callee the parser builds is atom-shaped and is read
+                // back by its postfix `(args)`: a LAMBDA call, a local, a
+                // name, a call, or an unknown function (`NOSUCH(1)(2)` keeps
+                // its spelling, and the parser applies the suffix to it). A
+                // parenthesized callee does not re-parse, so these must
+                // print bare; anything else (built by hand) is parenthesized.
                 let atomic = matches!(
                     **callee,
-                    Expr::Func(_, _) | Expr::Local(_) | Expr::Call(_, _) | Expr::Name(_)
+                    Expr::Func(_, _)
+                        | Expr::Local(_)
+                        | Expr::Call(_, _)
+                        | Expr::Name(_)
+                        | Expr::UnknownFunc(_, _)
                 );
                 if !atomic {
                     out.push('(');

@@ -45,6 +45,7 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { createElement, useEffect, useState } from "react";
 
 import { drawBundle } from "../../src";
+import { applyMakeRepeat } from "../../src/commands/repeat";
 import {
   DRAW_PROPERTIES_PANEL_ID,
   listBinding,
@@ -52,6 +53,7 @@ import {
 } from "../../src/panels/properties-panel";
 import { F6_RING_PAIR } from "../fixtures/corpus";
 import { openHost } from "../headless/host";
+import { slowRecipeWrites } from "./harness";
 
 const INNER = { kind: "polygon", id: "uinner" } as const;
 
@@ -239,6 +241,37 @@ describe("the Draw settings panel (media.paged.draw.panel.properties), mounted",
     // A click on a list item is what picks it.
     fireEvent.click(list.querySelector("li")!);
     expect(h.host.bindings.get(pickBinding("symbol"))).toBe(address);
+    view.unmount();
+  });
+
+  // WAS A RACE (the editor journey "Properties shows Draw settings inline"
+  // failed on it intermittently). A command saves its recipe AFTER its
+  // batch, through a part write `objects.onDidChange` never reports. The
+  // lists re-read once per coalesced burst, ~50 ms after the batch's
+  // change; in the editor every door is a worker round trip, so that read
+  // could beat the recipe write, and nothing re-read afterwards: the
+  // Repeat list stayed empty with the repeat in the document. Here the
+  // write is held past the coalescing window on purpose; the write's
+  // announcement must bring the list up to date.
+  it("the Repeat list shows a repeat whose recipe write lands AFTER the list re-read for its batch", async () => {
+    covers("panel:media.paged.draw.panel.properties");
+    const view = mount();
+    await h.host.selection.set([INNER]);
+    await settle();
+    await act(async () => {
+      const made = await applyMakeRepeat(
+        slowRecipeWrites(h.host, 150),
+        "radial",
+      );
+      if (made.length === 0) throw new Error("the repeat was not built");
+    });
+    await settle();
+    const list = view.container.querySelector(
+      `[data-list="${listBinding("repeat")}"]`,
+    )!;
+    expect(
+      [...list.querySelectorAll("li")].map((li) => li.textContent),
+    ).toEqual(["Radial repeat 1"]);
     view.unmount();
   });
 });

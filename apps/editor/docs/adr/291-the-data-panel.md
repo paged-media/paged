@@ -135,8 +135,63 @@ Query), place (drag a field header onto a frame, or right-click any property).
   - The door's `query` reads a query by its name as a table (the query rides along as a CTE),
     which the grid of a query's tab needs.
 
-  Not built: the canvas markers do not show a record number, and a record stepped to in the
-  record preview is not tracked as placed (the first record is).
+  A record stepped to in the record preview is tracked as placed since 2026-10-25 (see
+  below).
+- Amended 2026-10-25: **the per-record status survives reopening**, and **the canvas markers
+  show the record**.
+  - The snapshot is saved with the session: the engine payload (paged.data's `session` part)
+    gains `applied`, per query the result the document was last written from, in a compact
+    form (`AppliedSnapshot`): the key fields used (the first column present and unique in
+    the result, else none, the whole row) and, per record in result order, a 64-bit FNV-1a
+    hash of its key and one of its content (every cell, typed), as 32 hex digits (16 with the
+    whole row as the key). No values are stored: about 35 bytes a record, whatever the row's
+    width, so 10 000 records add about 350 KB to the part. The status compares these: a record
+    whose key hash the snapshot lacks is new, one whose content hash differs changed; placed
+    records and instances are carried by key hash as before. A saved snapshot cannot be keyed
+    again, so asked with another key than its own (or when its key no longer identifies the
+    records now) it matches by the whole row. Within a session the full result is still held
+    and keyed as asked. A payload without `applied` loads with no snapshot (the additive
+    rule); the document label's recipe never carries it (it is state, and grows with the
+    data), so the labels path (`restore_from_labels`) is unchanged. Undo that reloads a session
+    version brings that version's snapshot. The snapshot is taken before the write that applies
+    the data (Lower, a field refresh, a merge), so the label that write carries names the
+    version holding it: a reopened document names the version it was saved with.
+  - Amended 2026-10-25 (later): **the row diff survives reopening**, and **a record stepped to
+    is placed**. The payload also saves the VALUES of each applied result, `applied_values`
+    (`AppliedValues`: the schema, then per field an array of cells in a compact JSON form
+    that reads back to the same typed value, so a reopened document hashes as the session
+    that wrote it: `null`, a boolean, a finite number, a string for text, `{"d"}` a date,
+    `{"ms"}` a date-time, `{"n"}` a number JSON cannot spell, `{"x"}` bytes, `{"e"}` an error).
+    Loaded, they are the session's in-memory "before" again: the Sync panel's row diff shows
+    the old and new value of a changed cell after a reopen, and the status is keyed as asked.
+    The document already carries the imported data these came from, so saving them is no new
+    exposure. Size: all applied rows are stored (not only the rows that differ at save time:
+    that would need the current result at every save, and a save before a refresh would
+    store nothing); paged.data takes them out of the recipe into the session part's
+    `appliedValues`, inline up to 64 KiB of JSON, else as their own content-addressed part
+    `data/<hash>.applied.json` (as large imported data is), so a session rewrite and every
+    labelled session version name an unchanged snapshot by hash instead of carrying it. A
+    missing part is reported and leaves the hashes. A payload without values (saved before)
+    keeps the hash-only snapshot: its row diff says it has no "before", as before. Neither
+    rides in the label's recipe.
+    A record stepped to in the record preview is the record the bindings it wrote show: a
+    variable, image or barcode binding the stepper wrote at record N is recorded at N
+    (`targets.stepped`, beside a dropped record's `targets.record`; stepping back to the
+    binding's own record drops it), so `recordStatus(query).placed` and
+    `placements()[].record` name it, and a field refresh and a reopen keep the binding at
+    it. Lower writes the document from the data at each binding's own record (the first, or
+    its dropped record; a barcode is now encoded at a dropped record, too) and drops the
+    stepped records, as the preview has always been undone by Lower. The record is set
+    before the step's write and that session version written first, so the label the write
+    carries names it (an undo of a step brings back the record before); the preview budget
+    (W3) carries that session write per step. Not tracked: property and visibility bindings
+    the stepper applies through the object model; and, as for a dropped record, the
+    stepper's index is taken as the record's row, which differs only for a query that does
+    not define its row order.
+  - The field markers label a frame's top-left bracket with the record its placements name
+    (`DataPlacement.record`, counted from 1 as the grid and Data Merge count: `#3`, `#2 #5`
+    for a frame showing several), in the bracket's tone, a constant size on screen. Only a
+    placement that names a record is labelled. Overlay chrome: it never prints or exports.
 - Amended 2026-10-24: record templates and their library, and the pagination inspector, are
   built, as paged.data's own panels (PM-0015 L4: they are the module's workflows, not the
   host's). **Record templates** lists the document's templates with the record flows using

@@ -171,6 +171,12 @@ describe.skipIf(!RUN_BUDGETS)(
     // the command): -1 parts.write.
     // Transforms (data ADR 562): +1 wasm call, run_transforms before the
     // queries refresh (none defined here, so it computes nothing).
+    // Labelled (editor ADR 291): the applied snapshot is marked BEFORE the
+    // write and its session version written first, so the label the write
+    // carries names it (it named the version before the snapshot, and a
+    // reopen moved off it): +2 parts.write (the session part and the
+    // version), +1 supports, +1 payload +1 sync_report — work a save did
+    // after the command before, not new work.
     const W1_LOWER: Measured = onLabelled(
       {
         hostCalls: 7,
@@ -190,7 +196,7 @@ describe.skipIf(!RUN_BUDGETS)(
         fingerprints: 0,
         storeQueries: 1,
       },
-      { mutationOps: 1507 },
+      { mutationOps: 1507, hostCalls: 10, wasmCalls: 7 },
     );
     it("W1 imports a 500-row CSV and lowers it as one table [data.perf.gates]", async () => {
       h = await openDataHost();
@@ -282,6 +288,9 @@ describe.skipIf(!RUN_BUDGETS)(
     // field read also lists the document's text variables (`objects.query`),
     // which carry variables placed from 71 on (ADR 559); these 100 placeholder
     // fields are a document made before, refreshed through them as before.
+    // Labelled (editor ADR 291): the applied snapshot's session version is
+    // written before the write that carries its label: +2 parts.write, +1
+    // supports, +1 payload +1 sync_report (a save's work, moved forward).
     const W2: Measured = onTextVariables(
       onLabelled(
         {
@@ -299,9 +308,9 @@ describe.skipIf(!RUN_BUDGETS)(
           fingerprints: 0,
           storeQueries: 0,
         },
-        { mutationOps: 101 },
+        { mutationOps: 101, hostCalls: 6, wasmCalls: 4 },
       ),
-      { hostCalls: 4 },
+      { hostCalls: LABELLED ? 7 : 4 },
     );
     it("W2 refreshes 100 fields in one story [data.perf.gates]", async () => {
       h = await openDataHost();
@@ -399,6 +408,15 @@ describe.skipIf(!RUN_BUDGETS)(
     // read is placeholders() (0 fields) + objects.query + one objects.get of
     // its contents: hostCalls 21 → 23, placeholdersRead 1 → 0; each step is
     // still one write (a `Set` on the contents), one undo step.
+    // RAISED (editor ADR 291, a record stepped to is placed): each step
+    // records the record the field now shows (`targets.stepped`) and, with
+    // labels, writes that session version before the step's write, so the
+    // label the step carries names it (an undo of a step takes the session
+    // back to the record before; a reopen finds it). Per step that is one
+    // session write: +1 payload +1 sync_report (wasmCalls 20 → 60 over the
+    // 20 steps), the two part writes and the label op the write carries
+    // (mutationOps 21 → 40; hostCalls 23 → 102). Step 20 wraps to record 0,
+    // the default, which drops the record again.
     const W3: Measured = onTextVariables(
       onLabelled(
         {
@@ -425,9 +443,9 @@ describe.skipIf(!RUN_BUDGETS)(
           fingerprints: 0,
           storeQueries: 0,
         },
-        { mutationOps: 21 },
+        { mutationOps: 40, wasmCalls: 60 },
       ),
-      { hostCalls: 23, placeholdersRead: 0 },
+      { hostCalls: 102, placeholdersRead: 0 },
     );
     it("W3 steps the preview through 20 records [data.perf.gates]", async () => {
       h = await openDataHost();
@@ -575,6 +593,9 @@ describe.skipIf(!RUN_BUDGETS)(
     // mutationOps (41 → 61), still ONE mutate and ONE undo step; +1 hostCalls,
     // the text-variable query that tells a new definition from an existing one.
     // Transforms (data ADR 562): +1 wasm call, run_transforms in the refresh.
+    // Labelled (editor ADR 291): the applied snapshot's session version is
+    // written before the batch that carries its label: +2 parts.write, +1
+    // supports, +1 payload +1 sync_report (a save's work, moved forward).
     const W5: Measured = onTextVariables(
       onLabelled(
         {
@@ -592,9 +613,9 @@ describe.skipIf(!RUN_BUDGETS)(
           fingerprints: 0,
           storeQueries: 1,
         },
-        { mutationOps: 41 },
+        { mutationOps: 41, hostCalls: 10, wasmCalls: 24 },
       ),
-      { hostCalls: 8, mutationOps: 61 },
+      { hostCalls: LABELLED ? 11 : 8, mutationOps: 61 },
     );
     it("W5 lowers 20 variable bindings at once [data.perf.gates]", async () => {
       h = await openDataHost();

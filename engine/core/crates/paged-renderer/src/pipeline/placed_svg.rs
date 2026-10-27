@@ -112,8 +112,15 @@ enum ArtPaint {
 /// cannot express (see the module docs).
 pub(crate) fn prepare(bytes: &[u8]) -> Option<SvgArt> {
     let tree = usvg::Tree::from_data(bytes, &usvg::Options::default()).ok()?;
-    let mut walk = Walk { ops: Vec::new() };
-    walk.children(tree.root())?;
+    let mut walk = Walk {
+        ops: Vec::new(),
+        failed: false,
+        open: Vec::new(),
+    };
+    paged_svg::walk::walk_tree(&tree, (), &mut walk);
+    if walk.failed {
+        return None;
+    }
     Some(SvgArt {
         width: tree.size().width().ceil().max(1.0),
         height: tree.size().height().ceil().max(1.0),
@@ -623,31 +630,73 @@ fn blend(mode: usvg::BlendMode) -> BlendMode {
 
 struct Walk {
     ops: Vec<Op>,
+    /// The tree uses something the list cannot say.
+    failed: bool,
+    /// Per entered group: the clips it pushed and whether it composites.
+    open: Vec<(usize, bool)>,
+}
+
+/// The vector lane's half of the shared walk (`paged_svg::walk`, engine
+/// ADR 1031). Nodes carry their own absolute transforms here, so the walk
+/// composes nothing (`Ts = ()`); the first construct the list cannot say
+/// fails the whole art, which the raster lane then draws.
+impl paged_svg::walk::Visitor for Walk {
+    type Ts = ();
+
+    fn compose(&self, _: (), _: usvg::Transform) {}
+
+    fn enter_group(&mut self, g: &usvg::Group, _: ()) -> paged_svg::walk::Enter {
+        if self.failed {
+            return paged_svg::walk::Enter::Skip;
+        }
+        match self.begin_group(g) {
+            Some(frame) => {
+                self.open.push(frame);
+                paged_svg::walk::Enter::Children
+            }
+            None => {
+                self.failed = true;
+                paged_svg::walk::Enter::Skip
+            }
+        }
+    }
+
+    fn leave_group(&mut self, _: &usvg::Group, _: ()) {
+        let Some((clips, composite)) = self.open.pop() else {
+            return;
+        };
+        if composite {
+            self.ops.push(Op::EndGroup);
+        }
+        for _ in 0..clips {
+            self.ops.push(Op::PopClip);
+        }
+    }
+
+    fn path(&mut self, p: &usvg::Path, _: ()) {
+        if !self.failed && self.path(p).is_none() {
+            self.failed = true;
+        }
+    }
+
+    // A nested SVG would need its own canvas; a raster inside an SVG is
+    // not drawn on the raster lane either.
+    fn nested_svg(&mut self, _: &usvg::Image, _: ()) -> paged_svg::walk::Enter {
+        self.failed = true;
+        paged_svg::walk::Enter::Skip
+    }
+
+    // usvg is built without fonts (ADR 189): it keeps no text to draw, as
+    // on the raster lane.
+    fn text(&mut self, _: &usvg::Text, _: ()) -> paged_svg::walk::Enter {
+        paged_svg::walk::Enter::Skip
+    }
 }
 
 impl Walk {
-    /// `None` as soon as the tree uses something the list cannot say.
-    fn children(&mut self, group: &usvg::Group) -> Option<()> {
-        for node in group.children() {
-            match node {
-                usvg::Node::Group(g) => self.group(g)?,
-                usvg::Node::Path(p) => self.path(p)?,
-                usvg::Node::Image(image) => {
-                    // A nested SVG would need its own canvas; a raster
-                    // inside an SVG is not drawn on the raster lane either.
-                    if image.is_visible() && matches!(image.kind(), usvg::ImageKind::SVG(_)) {
-                        return None;
-                    }
-                }
-                // usvg is built without fonts (ADR 189): it keeps no text
-                // to draw, as on the raster lane.
-                usvg::Node::Text(_) => {}
-            }
-        }
-        Some(())
-    }
-
-    fn group(&mut self, g: &usvg::Group) -> Option<()> {
+    /// Open `g`: its clips pushed and its composite begun. `None` for what
+    /// the list cannot say (a filter, a mask, an unsayable clip).
+    fn begin_group(&mut self, g: &usvg::Group) -> Option<(usize, bool)> {
         if !g.filters().is_empty() || g.mask().is_some() {
             return None;
         }
@@ -665,14 +714,7 @@ impl Walk {
                 opacity: g.opacity().get(),
             });
         }
-        self.children(g)?;
-        if composite {
-            self.ops.push(Op::EndGroup);
-        }
-        for _ in 0..clips {
-            self.ops.push(Op::PopClip);
-        }
-        Some(())
+        Some((clips, composite))
     }
 
     /// Push `clip` (and the clip paths it is clipped by), `base` mapping
@@ -851,32 +893,26 @@ fn stroke(s: &usvg::Stroke) -> Option<Stroke> {
     Some(out)
 }
 
-/// A clip path's shapes, each in canvas space and carrying its fill rule.
-/// `None` for what the list cannot clip by: a nested clip path on one of
-/// its children.
+/// A clip path's shapes, each in canvas space and carrying its fill rule
+/// (the shared walk's, `paged_svg::walk::clip_nodes`). `None` for what the
+/// list cannot clip by: a nested clip path on one of its children.
 fn clip_shapes(group: &usvg::Group, ts: Transform, out: &mut Vec<PathData>) -> Option<()> {
-    for node in group.children() {
+    let mut nested = false;
+    let compose = |t: Transform, local: usvg::Transform| t.compose(&transform(local));
+    paged_svg::walk::clip_nodes(group, ts, &compose, &mut |node| {
         match node {
-            usvg::Node::Path(p) => {
-                let Some(fill) = p.fill().filter(|_| p.is_visible()) else {
-                    continue;
-                };
-                let path = path_data(p.data(), &ts);
-                out.push(match fill.rule() {
+            paged_svg::walk::ClipNode::Shape { path, ts, rule } => {
+                let path = path_data(path.data(), &ts);
+                out.push(match rule {
                     usvg::FillRule::EvenOdd => path.with_fill_rule(FillRule::EvenOdd),
                     usvg::FillRule::NonZero => path,
                 });
             }
-            usvg::Node::Group(g) => {
-                if g.clip_path().is_some() {
-                    return None;
-                }
-                clip_shapes(g, ts.compose(&transform(g.transform())), out)?;
-            }
-            usvg::Node::Text(_) | usvg::Node::Image(_) => {}
+            paged_svg::walk::ClipNode::ClippedGroup { .. } => nested = true,
         }
-    }
-    Some(())
+        paged_svg::walk::Enter::Skip
+    });
+    (!nested).then_some(())
 }
 
 // ── Even-odd as non-zero ─────────────────────────────────────────────

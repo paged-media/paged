@@ -35,8 +35,19 @@
 // import REJECTS — bootEngine surfaces that honestly so the panel can
 // say "engine wasm not built".
 
+import {
+  maskingEngine,
+  type MaskingEngine,
+  type MaskingWasm,
+} from "./masking-engine";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
+
+import {
+  wrapRetouch,
+  type RetouchEngine,
+  type RetouchWasm,
+} from "./retouch-engine";
 
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
@@ -585,6 +596,9 @@ export function isCmykConversion(t: DisplayTreatment): boolean {
 /** The T1 resample kernels the resize door accepts. */
 export type ResampleFilter = "nearest" | "mitchell" | "lanczos3";
 
+/** The filters of the CPU resize (`resizeCpu`, ADR 467). */
+export type CpuResampleFilter = "lanczos3" | "bilinear";
+
 /** Whole-canvas operations (`layersCanvasOp`). */
 export type CanvasOpKind =
   "rotate-cw" | "rotate-ccw" | "rotate-180" | "flip-h" | "flip-v" | "canvas";
@@ -647,7 +661,18 @@ export type StrokeTool =
   /** SPOT HEALING BRUSH: paint over a blemish; on release the engine
    *  finds a source itself (an exemplar search around the stroke) and
    *  heals from it. No Alt-click, and nothing lands until release. */
-  | "spot-heal";
+  | "spot-heal"
+  /** The brush engine's tools (`stroke::engine`): smudge and the mixer
+   *  brush drag paint along (wet, dab by dab); the history and art
+   *  history brushes paint an earlier state of the layer; the background
+   *  eraser erases, and colour replacement recolours, only the colour
+   *  they sample under the tip. */
+  | "smudge"
+  | "mixer"
+  | "history"
+  | "art-history"
+  | "background-eraser"
+  | "color-replace";
 
 export const STROKE_TOOLS: StrokeTool[] = [
   "brush",
@@ -661,6 +686,12 @@ export const STROKE_TOOLS: StrokeTool[] = [
   "blur",
   "sharpen",
   "spot-heal",
+  "smudge",
+  "mixer",
+  "history",
+  "art-history",
+  "background-eraser",
+  "color-replace",
 ];
 
 /** The filter strokes that take tone options (`brush_stroke_set_tone`). */
@@ -746,6 +777,36 @@ export const DEFAULT_BRUSH_PARAMS: BrushParams = {
   color: [0, 0, 0, 1],
   pressureTarget: "both",
 };
+
+/** A tip bitmap as the engine takes it: coverage, 255 = paint. */
+export interface TipBitmapBytes {
+  width: number;
+  height: number;
+  alpha: Uint8Array;
+}
+
+/** A pen sample with everything Pointer Events report (and the barrel
+ *  rotation and wheel a host may add). */
+export interface PenSample {
+  x: number;
+  y: number;
+  pressure: number;
+  tiltX: number;
+  tiltY: number;
+  rotation: number;
+  wheel: number;
+}
+
+/** The magic eraser's options (Photoshop's options bar). */
+export interface MagicEraseOptions {
+  /** 0..255, per channel. */
+  tolerance: number;
+  antialias: boolean;
+  contiguous: boolean;
+  sampleAll: boolean;
+  /** 0..1. */
+  opacity: number;
+}
 
 /** The in-flight stroke's readout (`brush_stroke_stats`): the dab count
  *  and the stroke's bounding box in image px. Null when no stroke is in
@@ -1111,7 +1172,8 @@ export interface FilterMask {
   feather?: number;
 }
 
-export interface ImageEngine {
+/** WP5.8 — the retouching doors live in `retouch-engine.ts`. */
+export interface ImageEngine extends MaskingEngine, RetouchEngine<DecodedInfo> {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -1209,6 +1271,25 @@ export interface ImageEngine {
     outH: number,
     filter: ResampleFilter,
   ): Promise<DecodedInfo>;
+  /** RESAMPLE on the CPU (ADR 467): the separable, premultiplied resize of
+   *  `paged-resample`. Needs no device and gives the same bytes with or
+   *  without one — the headless and batch actions' backend. Returns a NEW
+   *  engine-held image; the source stays. */
+  resizeCpu(
+    handle: number,
+    outW: number,
+    outH: number,
+    filter: CpuResampleFilter,
+  ): DecodedInfo;
+  /** STRAIGHTEN + CROP on the CPU (ADR 467): turn by `−degrees` about the
+   *  rect's centre and cut the rect (bilinear, premultiplied,
+   *  clamp-to-edge). The rect must lie inside the image. Returns a NEW
+   *  engine-held image; the source stays. */
+  straightenCropCpu(
+    handle: number,
+    rect: CropRect,
+    degrees: number,
+  ): DecodedInfo;
   /** PSD structural session — the mutatable tier's wasm reach ("Paged
    *  never destroys a PSD" was a Rust-test-only property until these).
    *  `psdOpen` retains the PARSED file behind a handle; edits accumulate
@@ -1225,6 +1306,19 @@ export interface ImageEngine {
    *  the reader's own message on bytes that are not an `.abr` (which is
    *  a different answer from a library that contains no presets). */
   abrPresets(bytes: Uint8Array): BrushLibraryInfo;
+  /** One sampled tip of an `.abr` by its `sampleIndex` (raw
+   *  `[w, h, alpha…]`, decoded by `abr-preset.ts` `decodeTipBitmap`). */
+  abrTip(bytes: Uint8Array, sampleIndex: number): Uint8Array;
+  /** WRITE an `.abr` (v6.2): each preset's values in `abrExportKeys`
+   *  order plus its sampled tip, or null for a round tip. */
+  abrExportKeys(): string[];
+  abrExport(
+    presets: ReadonlyArray<{
+      name: string;
+      values: Float32Array;
+      bitmap: TipBitmapBytes | null;
+    }>,
+  ): Uint8Array;
   /** PSD SAVE-BACK: write the ADJUSTED full-resolution RGBA8 into the
    *  retained parse (the merged composite is always rewritten) and
    *  answer the HONEST description of what happened to the layer
@@ -1441,6 +1535,37 @@ export interface ImageEngine {
    *  `brushBegin` and the first extend). THROWS for any other tool. */
   brushSetTone(tone: ToneOptions): void;
   brushExtend(x: number, y: number, pressure: number): Promise<Uint8Array>;
+  /** BRUSH ENGINE doors (`brush-dynamics.ts`). The settings keys, in the
+   *  order `brushSetDynamics` reads them — packed BY NAME. */
+  brushDynamicsKeys(): string[];
+  /** The texture / dual-brush combine modes, in ordinal order (the TS
+   *  `COMBINE_MODES` must equal it). */
+  brushCombineModes(): string[];
+  /** Freeze Brush Settings into the in-flight stroke (between begin and
+   *  the first extend). */
+  brushSetDynamics(values: Float32Array): void;
+  /** The sampled tip (`null` = the computed tip). */
+  brushSetTipBitmap(tip: TipBitmapBytes | null): void;
+  /** The dual brush's sampled tip. */
+  brushSetDualBitmap(tip: TipBitmapBytes | null): void;
+  /** An engine-held image (the defined pattern) as the brush texture. */
+  brushSetTextureImage(handle: number): void;
+  /** The history state the History / Art History stroke paints from. */
+  brushSetHistorySource(kind: "open" | "previous"): void;
+  /** Extend with a pen's full state (tilt in degrees, barrel rotation in
+   *  degrees, the wheel 0..1). */
+  brushExtendPen(sample: PenSample): Promise<Uint8Array>;
+  /** MAGIC ERASER at an image-px point: one undo step on the active
+   *  layer. */
+  magicErase(
+    handle: number,
+    x: number,
+    y: number,
+    o: MagicEraseOptions,
+  ): Promise<DecodedInfo>;
+  /** DEFINE BRUSH PRESET: the selection's pixels (the whole image without
+   *  one) as a tip bitmap. Throws when nothing would paint. */
+  brushTipFromSelection(handle: number): TipBitmapBytes;
   /** CLOSE the stroke. With a layer stack bound the painted pixels go
    *  into the ACTIVE LAYER (journaled — undoable), the stack is
    *  re-composited, and the returned handle is the SAME one you started
@@ -2002,7 +2127,7 @@ interface DecodedHandleWasm {
 
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
-export interface ImageWasmModule {
+export interface ImageWasmModule extends MaskingWasm, RetouchWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -2196,6 +2321,20 @@ export interface ImageWasmModule {
     outH: number,
     filter: string,
   ): Promise<DecodedHandleWasm>;
+  resize_image_cpu(
+    handle: number,
+    outW: number,
+    outH: number,
+    filter: string,
+  ): DecodedHandleWasm;
+  straighten_crop_image_cpu(
+    handle: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    degrees: number,
+  ): DecodedHandleWasm;
   selection_bind(handle: number): void;
   image_channel_stats(handle: number): string;
   image_readout(handle: number): string;
@@ -2251,6 +2390,44 @@ export interface ImageWasmModule {
     pressure: number,
   ): Promise<Uint8Array>;
   brush_stroke_set_source(x: number, y: number, aligned: boolean): void;
+  brush_dynamics_keys(): string;
+  brush_combine_modes(): string;
+  brush_stroke_set_dynamics(values: Float32Array): void;
+  brush_stroke_set_tip_bitmap(w: number, h: number, alpha: Uint8Array): void;
+  brush_stroke_set_dual_bitmap(w: number, h: number, alpha: Uint8Array): void;
+  brush_stroke_set_texture_image(handle: number): void;
+  brush_stroke_set_history_source(kind: string): void;
+  brush_stroke_extend_pen(
+    x: number,
+    y: number,
+    pressure: number,
+    tilt_x: number,
+    tilt_y: number,
+    rotation: number,
+    wheel: number,
+  ): Promise<Uint8Array>;
+  magic_erase(
+    handle: number,
+    x: number,
+    y: number,
+    tolerance: number,
+    antialias: boolean,
+    contiguous: boolean,
+    sample_all: boolean,
+    opacity: number,
+  ): Promise<DecodedHandleWasm>;
+  brush_tip_from_selection(handle: number): Uint8Array;
+  abr_tip(bytes: Uint8Array, sample_index: number): Uint8Array;
+  abr_export_keys(): string;
+  abr_export_begin(): void;
+  abr_export_add(
+    name: string,
+    values: Float32Array,
+    w: number,
+    h: number,
+    alpha: Uint8Array,
+  ): void;
+  abr_export_finish(): Uint8Array;
   brush_stroke_set_tone(
     range: string,
     exposure: number,
@@ -2705,6 +2882,8 @@ export interface ImageWasmModule {
  *  mapping is unit-testable over a fake wasm object (no real wasm). */
 export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
   return {
+    ...maskingEngine(wasm),
+    ...wrapRetouch(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,
@@ -2885,6 +3064,37 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       wasm.psd_apply_adjusted(psdHandle, width, height, rgba),
     resize: async (handle, outW, outH, filter) => {
       const h = await wasm.resize_image(handle, outW, outH, filter);
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    resizeCpu(handle, outW, outH, filter) {
+      const h = wasm.resize_image_cpu(handle, outW, outH, filter);
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    straightenCropCpu(handle, rect, degrees) {
+      const h = wasm.straighten_crop_image_cpu(
+        handle,
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        degrees,
+      );
       const info = {
         handle: h.handle,
         width: h.width,
@@ -3090,6 +3300,85 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     brushSetTone: (t) =>
       wasm.brush_stroke_set_tone(t.range, t.exposure, t.saturate),
     brushExtend: (x, y, pressure) => wasm.brush_stroke_extend(x, y, pressure),
+    brushDynamicsKeys: () =>
+      wasm
+        .brush_dynamics_keys()
+        .split("\n")
+        .filter((k) => k.length > 0),
+    brushCombineModes: () =>
+      wasm
+        .brush_combine_modes()
+        .split("\n")
+        .filter((k) => k.length > 0),
+    brushSetDynamics: (values) => wasm.brush_stroke_set_dynamics(values),
+    brushSetTipBitmap: (tip) =>
+      tip
+        ? wasm.brush_stroke_set_tip_bitmap(tip.width, tip.height, tip.alpha)
+        : wasm.brush_stroke_set_tip_bitmap(0, 0, new Uint8Array(0)),
+    brushSetDualBitmap: (tip) =>
+      tip
+        ? wasm.brush_stroke_set_dual_bitmap(tip.width, tip.height, tip.alpha)
+        : wasm.brush_stroke_set_dual_bitmap(0, 0, new Uint8Array(0)),
+    brushSetTextureImage: (handle) =>
+      wasm.brush_stroke_set_texture_image(handle),
+    brushSetHistorySource: (kind) => wasm.brush_stroke_set_history_source(kind),
+    brushExtendPen: (p) =>
+      wasm.brush_stroke_extend_pen(
+        p.x,
+        p.y,
+        p.pressure,
+        p.tiltX,
+        p.tiltY,
+        p.rotation,
+        p.wheel,
+      ),
+    async magicErase(handle, x, y, o) {
+      const h = await wasm.magic_erase(
+        handle,
+        x,
+        y,
+        Math.max(0, Math.min(255, Math.round(o.tolerance))),
+        o.antialias,
+        o.contiguous,
+        o.sampleAll,
+        Math.max(0, Math.min(1, o.opacity)),
+      );
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    abrTip: (bytes, sampleIndex) => wasm.abr_tip(bytes, sampleIndex),
+    abrExportKeys: () =>
+      wasm
+        .abr_export_keys()
+        .split("\n")
+        .filter((k) => k.length > 0),
+    abrExport(presets) {
+      wasm.abr_export_begin();
+      for (const p of presets) {
+        wasm.abr_export_add(
+          p.name,
+          p.values,
+          p.bitmap?.width ?? 0,
+          p.bitmap?.height ?? 0,
+          p.bitmap?.alpha ?? new Uint8Array(0),
+        );
+      }
+      return wasm.abr_export_finish();
+    },
+    brushTipFromSelection(handle) {
+      const b = wasm.brush_tip_from_selection(handle);
+      const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+      const width = v.getUint32(0, true);
+      const height = v.getUint32(4, true);
+      return { width, height, alpha: b.slice(8, 8 + width * height) };
+    },
     async brushCommit() {
       const h = await wasm.brush_stroke_commit();
       const info = {

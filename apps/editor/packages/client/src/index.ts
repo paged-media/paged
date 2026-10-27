@@ -36,6 +36,7 @@ export {
   type HostObjectsRound,
   type JournalDrain,
   type SnapshotBackendInfo,
+  type UndoLog,
 } from "./client";
 
 // Wire-format types — re-exports of the tsify-generated types from
@@ -49,12 +50,16 @@ export {
   OFFSET_SCALE,
   OFFSET_TX,
   OFFSET_TY,
+  OFFSET_ROTATION,
   OFFSET_GEN_LO,
   OFFSET_GEN_HI,
   IDENTITY_CAMERA,
   supportsSharedArrayBuffer,
   docToViewport,
   viewportToDoc,
+  cameraMatrix,
+  rotateCameraAbout,
+  normaliseRotation,
   type Camera,
 } from "./sab/camera";
 export {
@@ -67,6 +72,19 @@ export {
   supportsGestureSab,
   type GestureUpdateRecord,
 } from "./sab/gesture";
+export {
+  DataBridgeHost,
+  DATA_BRIDGE_CAPACITY,
+  DATA_BRIDGE_HEADER_BYTES,
+  DATA_CALL_TIMEOUT_MS,
+  allocateDataBridge,
+  createDataBridgeCaller,
+  isDataBridgeMessage,
+  type DataBridgeMessage,
+  type DataCallAnswerer,
+  type DataCallMessage,
+  type DataMoreMessage,
+} from "./sab/data-bridge";
 
 // The journal (ADR 025) — the local flight recorder. Lives here because
 // `packages/client` is the only package BOTH the render worker and the React

@@ -49,6 +49,7 @@ import {
   OFFSET_SCALE as CAMERA_OFFSET_SCALE,
   OFFSET_TX as CAMERA_OFFSET_TX,
   OFFSET_TY as CAMERA_OFFSET_TY,
+  OFFSET_ROTATION as CAMERA_OFFSET_ROTATION,
 } from "@paged-media/client";
 // `@paged-media/client` has no React; safe to import from the barrel.
 // (Pre-Phase-1 this was a deep-import to bypass the @paged-media/shell
@@ -62,6 +63,7 @@ import {
   GESTURE_MODIFIER_DISABLE_SNAP,
   GESTURE_SAB_OFFSETS,
 } from "@paged-media/client";
+import { createDataBridgeCaller } from "@paged-media/client";
 import { WorkerRenderer, type RendererWasm } from "./render";
 // Decision-B package boundary: the engine wasm now ships in the
 // published `@paged-media/canvas-wasm` package. The wasm-bindgen
@@ -121,7 +123,13 @@ interface CanvasWorkerInstance {
     height: number,
   ): Promise<boolean>;
   resizeGpu?(width: number, height: number): void;
-  presentFrame?(scale: number, tx: number, ty: number, dpr: number): boolean;
+  presentFrame?(
+    scale: number,
+    tx: number,
+    ty: number,
+    dpr: number,
+    rotation: number,
+  ): boolean;
   gpuReady?(): boolean;
   /** Why the GPU device was lost, once it has been (see `recoverGpu`). */
   gpuLostReason?(): string | undefined;
@@ -193,6 +201,13 @@ interface CanvasWorkerInstance {
     mutationJson: string,
     bytes: Uint8Array,
   ): string;
+  /** Engine ADR 1014, amendment 2 — the data door of script runs:
+   *  `bridge(method, argsJson)` answers an `{ ok }` / `{ error }` JSON
+   *  envelope synchronously; `undefined` removes it. Optional so an older
+   *  wasm still satisfies the interface (`paged.data.*` then refuses). */
+  setScriptDataBridge?(
+    bridge?: (method: string, argsJson: string) => string,
+  ): void;
 }
 
 interface CanvasWasmModule {
@@ -248,6 +263,11 @@ function assertSabContract(mod: CanvasWasmModule): string | null {
   }
   if (cam.offsetTy !== CAMERA_OFFSET_TY) {
     drift.push(`camera.offsetTy ${cam.offsetTy} != TS ${CAMERA_OFFSET_TY}`);
+  }
+  if (cam.offsetRotation !== CAMERA_OFFSET_ROTATION) {
+    drift.push(
+      `camera.offsetRotation ${cam.offsetRotation} != TS ${CAMERA_OFFSET_ROTATION}`,
+    );
   }
   if (cam.offsetGenLo !== CAMERA_OFFSET_GEN_LO) {
     drift.push(
@@ -405,6 +425,10 @@ type IncomingMessage =
   | { kind: "channel"; msg: MainToWorker }
   | { kind: "cameraSab"; buffer: SharedArrayBuffer | ArrayBuffer }
   | { kind: "gestureSab"; buffer: SharedArrayBuffer | ArrayBuffer }
+  // Engine ADR 1014, amendment 2 — the shared buffer a script's
+  // `paged.data.*` blocks on while the main thread's data service answers
+  // (`@paged-media/client`'s `sab/data-bridge`); none removes the door.
+  | { kind: "dataBridge"; buffer?: SharedArrayBuffer }
   | {
       kind: "attachCanvas";
       canvas: OffscreenCanvas;
@@ -627,6 +651,10 @@ function applyReplyEffects(reply: WorkerToMain): void {
       if (pageIds == null) renderer.markDirty([]);
       else if (pageIds.length > 0) renderer.markDirty(pageIds as never);
     }
+  } else if (reply.kind === "viewSettingsApplied") {
+    // v77 (editor ADR 287) — the screen's view mode changed: every tile
+    // was drawn in the old one (the GPU scene cache is keyed by mode).
+    renderer?.setViewMode(reply.payload.settings.mode ?? "preview");
   } else if (reply.kind === "gestureCommitted") {
     // A moved frame can carry its heading to another page.
     scheduleResolution();
@@ -801,6 +829,20 @@ async function dispatch(data: IncomingMessage): Promise<void> {
   if (data.kind === "gestureSab") {
     gestureBuffer = new GestureBuffer(data.buffer);
     startGestureDrain();
+    return;
+  }
+  if (data.kind === "dataBridge") {
+    await initPromise;
+    const buffer = data.buffer;
+    worker?.setScriptDataBridge?.(
+      buffer
+        ? createDataBridgeCaller(buffer, (message) =>
+            (self as unknown as DedicatedWorkerGlobalScope).postMessage(
+              message,
+            ),
+          )
+        : undefined,
+    );
     return;
   }
   if (data.kind === "setSnapshotBackend") {
@@ -1078,7 +1120,7 @@ async function attachRenderer(
     renderTilePng: (pageId, widthPx) => worker!.renderTilePng(pageId, widthPx),
     presentFrame:
       gpuActive && worker.presentFrame
-        ? (s, x, y, d) => worker!.presentFrame!(s, x, y, d)
+        ? (s, x, y, d, r) => worker!.presentFrame!(s, x, y, d, r)
         : undefined,
     gpuLost:
       gpuActive && worker.gpuLostReason

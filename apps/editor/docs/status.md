@@ -41,8 +41,8 @@ What the editor ships and what it does not, read from the code at commit `6d098e
   the field sheet or the form first, 44 px touch targets, one-finger pan, pinch zoom and zoom
   buttons, and a camera input for a picture field ([ADR 294](adr/294-the-fill-presets-on-phones-and-tablets.md)).
   The full and focused editors are desktop editors.
-- **Scripting.** A script editor panel runs `paged.*` scripts in the engine's interpreter;
-  a REPL panel parses one-line commands (`set`, `insert`, `remove`, `move`, `undo`, `redo`,
+- **Scripting.** A script editor panel runs `paged.*` scripts in the engine's interpreter,
+  `paged.data.*` included (it reads the document's data service); a REPL panel parses one-line commands (`set`, `insert`, `remove`, `move`, `undo`, `redo`,
   `inspect`) into mutations. An Actions panel records and replays command invocations.
 - **Diagnostics.** A Problems panel (plugin diagnostics, failed saves, missing default
   font) and a Journal panel over a local event log that can be exported as a file.

@@ -62,6 +62,7 @@ defineMessages("commandCategory", {
   Transparency: "Transparency",
   Blend: "Blend",
   "Live Paint": "Live Paint",
+  Perspective: "Perspective",
   Image: "Image",
 });
 

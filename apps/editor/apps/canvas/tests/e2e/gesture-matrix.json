@@ -598,6 +598,82 @@
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.draw.tool.warp",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.twirl",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.pucker",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.bloat",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.scallop",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.crystallize",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.wrinkle",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.puppetWarp",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.perspectiveGrid",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.perspectiveSelect",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.smudge",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/brush-engine.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.mixerBrush",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/brush-engine.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.colorReplacement",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/brush-engine.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.historyBrush",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/brush-engine.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.artHistoryBrush",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/brush-engine.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.backgroundEraser",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/brush-engine.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.magicEraser",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/brush-engine.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.magneticLasso",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/masking-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.refineEdge",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/masking-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.image.tool.crop",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },
@@ -700,6 +776,18 @@
     {
       "tool": "media.paged.image.tool.colorSampler",
       "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.contentAwareMove",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/retouch-wp58.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.remove",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/retouch-wp58.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.cafSampling",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/retouch-wp58.spec.ts); matrix rows are the follow-up"
     }
   ]
 }

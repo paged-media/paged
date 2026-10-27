@@ -60,6 +60,7 @@
 
 import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
+import { covers } from "@paged-media/test-kit";
 
 import { Designer } from "../journey/driver/designer";
 
@@ -138,6 +139,17 @@ const SELECTION_TOOLS = [
 ] as const;
 
 const ACTIVATE = "paged.tool.activate.";
+
+/** WP5.7's tools (they join existing flyouts; history brush is a slot). */
+const BRUSH_ENGINE_TOOLS = [
+  "media.paged.image.tool.smudge",
+  "media.paged.image.tool.mixerBrush",
+  "media.paged.image.tool.colorReplacement",
+  "media.paged.image.tool.historyBrush",
+  "media.paged.image.tool.artHistoryBrush",
+  "media.paged.image.tool.backgroundEraser",
+  "media.paged.image.tool.magicEraser",
+] as const;
 const PLACE = "paged.insert.placeImage";
 
 // ── host-side probes (everything reads the LIVE registries) ─────────
@@ -346,6 +358,56 @@ test.describe("plugin surface · paged.image", () => {
         `${tool.id} is a flyout member, not a slot of its own`,
       ).toHaveCount(0);
     }
+  });
+
+  test("the brush engine's seven tools are live flyout members that activate, and its two panels open @feat:image.editor.brush-engine @feat:editor-shell.plugin-bundles @level:gesture", async ({
+    page,
+  }) => {
+    covers(
+      "tool:media.paged.image.tool.smudge",
+      "tool:media.paged.image.tool.mixerBrush",
+      "tool:media.paged.image.tool.colorReplacement",
+      "tool:media.paged.image.tool.historyBrush",
+      "tool:media.paged.image.tool.artHistoryBrush",
+      "tool:media.paged.image.tool.backgroundEraser",
+      "tool:media.paged.image.tool.magicEraser",
+      "panel:media.paged.image.panel.brushSettings",
+      "panel:media.paged.image.panel.brushPresets",
+    );
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+    const registered = await page.evaluate(() =>
+      (globalThis as unknown as RegistryGlobal).__canvas.registries.tools
+        .list()
+        .map((t) => ({ id: t.id, shortcut: t.shortcut, status: t.status })),
+    );
+    for (const id of BRUSH_ENGINE_TOOLS) {
+      const row = registered.find((t) => t.id === id);
+      expect(row, `${id} is registered`).toBeTruthy();
+      expect(row?.status ?? "ready").toBe("ready");
+      // The shortcut registers are full: they join flyouts without keys.
+      expect(row?.shortcut ?? null, `${id} takes no shortcut`).toBeNull();
+    }
+    for (const id of BRUSH_ENGINE_TOOLS) {
+      await designer.runCommand(ACTIVATE + id);
+      await expect(
+        page.locator(`[data-tool="${id}"][data-active="true"]`),
+        `${id} is the live tool after activation`,
+      ).toHaveCount(1, { timeout: 10_000 });
+    }
+    await designer.runCommand("media.paged.image.command.openBrushSettings");
+    await expect(
+      page.locator('[data-brush-field="tip.angle"]').first(),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
+    await designer.runCommand("media.paged.image.command.openBrushPresets");
+    await expect(
+      page.locator("[data-brush-preset-define]").first(),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test("the healing brush's `j` collides with the shell's fill/stroke key, and the shell wins @feat:editor-shell.plugin-bundles @level:edge", async ({

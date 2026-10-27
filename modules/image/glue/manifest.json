@@ -34,7 +34,10 @@
   "contributes": {
     "panels": [
       "media.paged.image.panel.adjustments",
-      "media.paged.image.panel.properties"
+      "media.paged.image.panel.properties",
+      "media.paged.image.panel.brushSettings",
+      "media.paged.image.panel.brushPresets",
+      "media.paged.image.panel.cloneSource"
     ],
     "commands": [
       "media.paged.image.command.openImage",
@@ -150,7 +153,25 @@
       "media.paged.image.command.newAdjustmentPosterize",
       "media.paged.image.command.newAdjustmentThreshold",
       "media.paged.image.command.newAdjustmentGradientMap",
-      "media.paged.image.command.newAdjustmentSelectiveColor"
+      "media.paged.image.command.newAdjustmentSelectiveColor",
+      "media.paged.image.command.openBrushSettings",
+      "media.paged.image.command.openBrushPresets",
+      "media.paged.image.command.defineBrushPreset",
+      "media.paged.image.command.importBrushPresets",
+      "media.paged.image.command.exportBrushPresetsAbr",
+      "media.paged.image.command.exportBrushPresetsJson",
+      "media.paged.image.command.toggleLockTransparent",
+      "media.paged.image.command.colorRange",
+      "media.paged.image.command.selectAndMask",
+      "media.paged.image.command.quickMask",
+      "media.paged.image.command.grow",
+      "media.paged.image.command.similar",
+      "media.paged.image.command.focusArea",
+      "media.paged.image.command.saveSelection",
+      "media.paged.image.command.loadSelection",
+      "media.paged.image.command.makeWorkPath",
+      "media.paged.image.command.contentAwareFillWorkspace",
+      "media.paged.image.command.openCloneSource"
     ],
     "tools": [
       "media.paged.image.tool.crop",
@@ -178,7 +199,19 @@
       "media.paged.image.tool.sharpen",
       "media.paged.image.tool.spotHeal",
       "media.paged.image.tool.patch",
-      "media.paged.image.tool.type"
+      "media.paged.image.tool.type",
+      "media.paged.image.tool.smudge",
+      "media.paged.image.tool.mixerBrush",
+      "media.paged.image.tool.colorReplacement",
+      "media.paged.image.tool.historyBrush",
+      "media.paged.image.tool.artHistoryBrush",
+      "media.paged.image.tool.backgroundEraser",
+      "media.paged.image.tool.magicEraser",
+      "media.paged.image.tool.magneticLasso",
+      "media.paged.image.tool.refineEdge",
+      "media.paged.image.tool.contentAwareMove",
+      "media.paged.image.tool.remove",
+      "media.paged.image.tool.cafSampling"
     ],
     "importers": ["media.paged.image.importer.raster"],
     "exporters": [
@@ -1129,6 +1162,62 @@
           }
         },
         {
+          "id": "media.paged.image.command.openBrushSettings",
+          "title": "Brush settings",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.openBrushPresets",
+          "title": "Brush presets",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.defineBrushPreset",
+          "title": "Define brush preset…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.importBrushPresets",
+          "title": "Import brush presets…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.exportBrushPresetsAbr",
+          "title": "Export brush presets (.abr)…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.exportBrushPresetsJson",
+          "title": "Export brush presets (.json)…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleLockTransparent",
+          "title": "Lock transparent pixels",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.selectionToPath",
           "title": "Selection to path (image)",
           "args": {
@@ -1169,6 +1258,22 @@
           }
         },
         {
+          "id": "media.paged.image.command.contentAwareFillWorkspace",
+          "title": "Content-aware fill… (workspace)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.openCloneSource",
+          "title": "Clone source panel",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.selectAll",
           "title": "Select all (image)",
           "args": {
@@ -1195,6 +1300,78 @@
         {
           "id": "media.paged.image.command.featherSelection",
           "title": "Feather selection (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.colorRange",
+          "title": "Color range… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.selectAndMask",
+          "title": "Select and mask… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.quickMask",
+          "title": "Quick mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.grow",
+          "title": "Grow selection (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.similar",
+          "title": "Similar (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.focusArea",
+          "title": "Focus area… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.saveSelection",
+          "title": "Save selection as channel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.loadSelection",
+          "title": "Load selection… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.makeWorkPath",
+          "title": "Make work path from selection (image)",
           "args": {
             "kind": "struct",
             "fields": {}

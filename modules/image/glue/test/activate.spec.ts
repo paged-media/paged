@@ -54,6 +54,10 @@ describe("imageBundle.activate", () => {
     load(fake);
     expect(fake.panels.ids()).toEqual([
       PANEL_ID,
+      // WP5.8 — the Clone Source panel.
+      "media.paged.image.panel.cloneSource",
+      "media.paged.image.panel.brushSettings",
+      "media.paged.image.panel.brushPresets",
       "media.paged.image.panel.properties",
     ]);
     expect(fake.commands.ids()).toEqual([
@@ -171,16 +175,37 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.applyToFile",
       "media.paged.image.command.saveToFile",
       "media.paged.image.command.loadBrushLibrary",
+      // The brush engine's panels and preset verbs (WP5.7).
+      "media.paged.image.command.openBrushSettings",
+      "media.paged.image.command.openBrushPresets",
+      "media.paged.image.command.defineBrushPreset",
+      "media.paged.image.command.importBrushPresets",
+      "media.paged.image.command.exportBrushPresetsAbr",
+      "media.paged.image.command.exportBrushPresetsJson",
+      "media.paged.image.command.toggleLockTransparent",
       // The raster↔vector bridge + the luminosity mask.
       "media.paged.image.command.selectionToPath",
       "media.paged.image.command.pathToSelection",
       "media.paged.image.command.channelToSelection",
       "media.paged.image.command.setType",
       "media.paged.image.command.contentAwareFill",
+      // WP5.8 — Edit ▸ Content-Aware Fill… and the Clone Source panel.
+      "media.paged.image.command.contentAwareFillWorkspace",
+      "media.paged.image.command.openCloneSource",
       "media.paged.image.command.selectAll",
       "media.paged.image.command.deselect",
       "media.paged.image.command.invertSelection",
       "media.paged.image.command.featherSelection",
+      // Selection and masking (WP5.5, ADR 470).
+      "media.paged.image.command.colorRange",
+      "media.paged.image.command.selectAndMask",
+      "media.paged.image.command.quickMask",
+      "media.paged.image.command.grow",
+      "media.paged.image.command.similar",
+      "media.paged.image.command.focusArea",
+      "media.paged.image.command.saveSelection",
+      "media.paged.image.command.loadSelection",
+      "media.paged.image.command.makeWorkPath",
     ]);
     expect(fake.tools.ids()).toEqual([
       "media.paged.image.tool.crop",
@@ -215,9 +240,25 @@ describe("imageBundle.activate", () => {
       "media.paged.image.tool.sponge",
       "media.paged.image.tool.blur",
       "media.paged.image.tool.sharpen",
+      // The brush engine's tools (WP5.7).
+      "media.paged.image.tool.smudge",
+      "media.paged.image.tool.mixerBrush",
+      "media.paged.image.tool.colorReplacement",
+      "media.paged.image.tool.historyBrush",
+      "media.paged.image.tool.artHistoryBrush",
+      "media.paged.image.tool.backgroundEraser",
+      "media.paged.image.tool.magicEraser",
       "media.paged.image.tool.spotHeal",
       "media.paged.image.tool.patch",
+      // WP5.8 — Content-Aware Move, Remove, the CAF sampling brush.
+      "media.paged.image.tool.contentAwareMove",
+      "media.paged.image.tool.remove",
+      "media.paged.image.tool.cafSampling",
       "media.paged.image.tool.type",
+      // The Magnetic Lasso (lasso slot) and the Refine Edge brush (quick
+      // selection slot), WP5.5.
+      "media.paged.image.tool.magneticLasso",
+      "media.paged.image.tool.refineEdge",
     ]);
     expect(fake.importers.ids()).toEqual(["media.paged.image.importer.raster"]);
   });

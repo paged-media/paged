@@ -12,6 +12,8 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/layer-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/cmyk-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-masks.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/brush-strokes.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/selection.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -33,6 +35,18 @@ Photoshop's own sRGB conversions under three intent/BPC settings).
 `image-conformance/tests/it/psd_vector_masks_photoshop.rs` (vector masks: the
 merged composite, and the render Photoshop caches in each masked layer's
 channel −2).
+`image-js/tests/it/brush_photoshop.rs` (brush strokes: Stroke Path with the
+Brush tool -- dab placement, spacing, the round tip's profile, elliptical and
+sampled tips under angle and flips -> `fixtures/photoshop/brush-strokes.ledger.json`;
+regenerate with `PAGED_PHOTOSHOP_LEDGER=write cargo nextest run -p image-js brush_photoshop`).
+The brush probe reads and RESTORES the user's paintbrush options, foreground
+colour and current tool, and deletes the one temporary brush preset it
+defines, by name. A partial tool-options descriptor resets the unnamed
+gates, so the probe names every gate on every call.
+`image-conformance/tests/it/oracle_photoshop_selection.rs` (Select ▸ Color
+Range and Grow / Similar: each selection is rendered as white through the
+selection over black, so the grey is the coverage; its ledger is in the test,
+every case `Agreement` or a stated `Convention`, image ADR 470).
 
 ## Traps, and what each step does about them
 
@@ -77,5 +91,25 @@ channel −2).
   field in the saved bytes (BINARY file I/O), has Photoshop OPEN the
   patched file and SAVE it again — so the recorded PSD and its composite
   are still Photoshop's own.
+- **Grow and Similar** answer "the command is not available" through the
+  ActionManager with a tolerance key; `selection.jsx` calls the DOM
+  (`selection.grow(tolerance, antiAlias)`, `selection.similar(...)`), which
+  takes the tolerance as an argument.
 - **ExtendScript** is ES3 and the text crosses an Apple event: plain
   ASCII only (the runner checks), no `JSON`, no `let`.
+
+## Not probed: retouching (WP5.8)
+
+Checked against Photoshop 27.10 on 2026-10-24, and recorded here instead of as fixtures:
+
+- **Clone Stamp and Healing Brush cannot be driven by a script.** `PathItem.strokePath` with
+  `ToolType.CLONESTAMP` or `ToolType.HEALINGBRUSH` refuses with "the area to copy was not
+  defined (Alt-click to set the source)", and no ActionManager event sets the source
+  (`setd` on `cloneSource`, `cloneSourceToolOptions` and `setCloneSource` are all "not
+  available"). The source is set only by an interactive Alt-click, so the offset, transform
+  and membrane-tone behaviour has no Photoshop oracle; paged's conventions are pinned by the
+  Rust tests in `image-js/src/clone_source.rs`, `heal.rs` and `stroke.rs`.
+- **Content-Aware Fill, Move, Remove and Spot Healing** are not reproducible numerically from
+  run to run or version to version, so no ledger case could hold them. Their quality is
+  measured on synthetic stimuli with a known ground truth instead (mean colour error and seam
+  excess, `image-js/src/patchmatch.rs` tests; ADR 469).

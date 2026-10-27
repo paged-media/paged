@@ -8022,6 +8022,11 @@
           "const": "documentShowHiddenText"
         },
         {
+          "description": "`GradientFillStart`: where a frame's gradient fill starts, in the\nitem's own (inner) coordinates — a linear axis begins there, a\nradial gradient is centred there with `FrameGradientFillLength` as\nits radius. `Value::Lengths` `[x, y]`; `[]` clears it to InDesign's\ndefault (the inner box's bottom-left corner). On a TextFrame,\nRectangle, Oval or Polygon. The IDML adapter reads and writes it.\nPaint-only (`frame_style`).",
+          "type": "string",
+          "const": "frameGradientFillStart"
+        },
+        {
           "description": "Word's \"show field codes\" (Alt+F9), on `NodeId::Document`:\n`Value::Bool`, default false. Every Word field sets its code in\nbraces instead of its result (engine ADR 1022). A whole-document\nreflow.",
           "type": "string",
           "const": "documentShowFieldCodes"

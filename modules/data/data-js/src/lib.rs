@@ -513,6 +513,46 @@ mod wasm {
             ))
         }
 
+        /// Is `text` overset in a threaded story whose frames are `boxes`
+        /// (`[width, height][]` pt, in chain order)? The text wraps through
+        /// each frame in turn at that frame's width (data ADR 564).
+        pub fn text_overset_chain(
+            &self,
+            text: &str,
+            boxes: JsValue,
+            metrics: JsValue,
+        ) -> Result<bool, JsValue> {
+            let boxes: Vec<(f64, f64)> = from_js(boxes)?;
+            let metrics: data_lower::merge::FrameMetrics = from_js(metrics)?;
+            Ok(data_lower::merge::text_overset_chain(
+                text, &boxes, &metrics,
+            ))
+        }
+
+        /// The distinct pieces of a story's runs per face (`string[][]`),
+        /// for the host to measure each in its face before
+        /// [`text_overset_runs`]. `runs` is `{ text, face }[]` (data ADR 564).
+        pub fn text_run_words(&self, runs: JsValue) -> Result<JsValue, JsValue> {
+            let runs: Vec<data_lower::merge::MeasuredRun> = from_js(runs)?;
+            to_js(&data_lower::merge::text_run_words(&runs))
+        }
+
+        /// Is a story of several faces overset in its frames `boxes`
+        /// (`[width, height][]` pt, in chain order)? `runs` is
+        /// `{ text, face }[]`, `faces` one `FrameMetrics` per face; each run
+        /// is wrapped at its own face's advances and leading (data ADR 564).
+        pub fn text_overset_runs(
+            &self,
+            runs: JsValue,
+            boxes: JsValue,
+            faces: JsValue,
+        ) -> Result<bool, JsValue> {
+            let runs: Vec<data_lower::merge::MeasuredRun> = from_js(runs)?;
+            let boxes: Vec<(f64, f64)> = from_js(boxes)?;
+            let faces: Vec<data_lower::merge::FrameMetrics> = from_js(faces)?;
+            Ok(data_lower::merge::text_overset_runs(&runs, &boxes, &faces))
+        }
+
         /// Plan a §10 batch run over a query's result (`mode` is `BatchMode`):
         /// `{ mode, units: [{ label, recordIndices }], totalRecords }` — which
         /// records feed which output document (per-record / per-group / one

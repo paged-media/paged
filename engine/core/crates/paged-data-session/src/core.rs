@@ -49,6 +49,7 @@ use data_lower::{
 use data_query::{content_hash, stabilize};
 
 use crate::columns::{ColumnBuf, ColumnIngest, IngestOutcome};
+use crate::record_status::{AppliedSnapshot, AppliedValues};
 use data_sources::{
     authorize, build_manifest, enrich_schema, DatasetMetadata, GovernedCatalog,
     GrantedCapabilities, SourceManifest,
@@ -285,6 +286,23 @@ pub struct DocumentPayload {
     /// derived table in the store. Omitted when empty (the additive rule).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub transforms: Vec<TransformDef>,
+    /// Per query, the result the document was last written from, as the
+    /// per-record status reads it (editor ADR 291): the key used and, per
+    /// record, a hash of its key and of its content, never the values
+    /// ([`crate::record_status::AppliedSnapshot`]). Omitted when empty (the
+    /// additive rule: a payload written before it loads with no snapshot).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub applied: BTreeMap<String, AppliedSnapshot>,
+    /// Per query, the VALUES of the result the document was last written
+    /// from ([`crate::record_status::AppliedValues`]): the "before" of the
+    /// Sync panel's row diff after a reopen, and what lets a reopened status
+    /// be keyed again. The document already carries the imported data, so
+    /// these are no new exposure; a host keeps them out of the session part
+    /// when large (paged.data stores them as a part of their own). Omitted
+    /// when empty: a payload without them keeps only the `applied` hashes,
+    /// and the row diff after its reopen has no "before".
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub applied_values: BTreeMap<String, AppliedValues>,
 }
 
 /// A transform (data ADR 562): `source` is a function expression
@@ -449,8 +467,14 @@ pub struct DataSession {
     /// Per-binding locale overrides (saved in the payload).
     binding_locales: BTreeMap<String, Locale>,
     /// Each query's result as of the last time the document was written from
-    /// it (`mark_rows_applied`): the "before" of the row diff.
+    /// it (`mark_rows_applied`, or the values a loaded payload brought): the
+    /// "before" of the row diff.
     applied_rows: HashMap<QueryId, RecordSet>,
+    /// The same, in the hash form the payload saves (made when a result is
+    /// marked applied, or brought by a loaded payload). `record_status` reads
+    /// it only for a query `applied_rows` lacks: after the reopen of a
+    /// payload saved without values.
+    applied_saved: BTreeMap<String, AppliedSnapshot>,
     /// The store the imported sources live in (ADR 561), made on first use.
     store: Option<data_store::Store>,
     /// Transforms (data ADR 562), in run order.
@@ -475,6 +499,7 @@ impl DataSession {
             variables: VariableSet::new("binding1"),
             binding_locales: BTreeMap::new(),
             applied_rows: HashMap::new(),
+            applied_saved: BTreeMap::new(),
             store: None,
             transforms: Vec::new(),
         }
@@ -1435,6 +1460,8 @@ impl DataSession {
         for q in &self.queries {
             if let Some(r) = self.engine.result(&q.id) {
                 self.applied_rows.insert(q.id.clone(), r.clone());
+                self.applied_saved
+                    .insert(q.id.to_string(), AppliedSnapshot::saved(r));
             }
         }
     }
@@ -1446,6 +1473,8 @@ impl DataSession {
     pub fn mark_query_applied(&mut self, query: &QueryId) {
         if let Some(r) = self.engine.result(query) {
             self.applied_rows.insert(query.clone(), r.clone());
+            self.applied_saved
+                .insert(query.to_string(), AppliedSnapshot::saved(r));
         }
     }
 
@@ -1460,10 +1489,16 @@ impl DataSession {
         opts: &crate::record_status::RecordStatusOptions,
     ) -> Option<crate::record_status::RecordStatus> {
         let current = self.engine.result(query)?;
+        let applied = crate::record_status::applied_for(
+            self.applied_rows.get(query),
+            self.applied_saved.get(query.as_str()),
+            current,
+            opts.key.as_deref(),
+        );
         Some(crate::record_status::record_status(
             query,
             self.engine.order_is_defined(query),
-            self.applied_rows.get(query),
+            applied.as_ref(),
             current,
             &self.bindings,
             opts,
@@ -1807,7 +1842,23 @@ impl DataSession {
             variables: self.variables.clone(),
             locales: self.binding_locales.clone(),
             transforms: self.transforms.clone(),
+            applied: self.applied_payload(),
+            applied_values: self
+                .applied_rows
+                .iter()
+                .filter(|(id, _)| self.queries.iter().any(|q| &q.id == *id))
+                .map(|(id, rs)| (id.to_string(), AppliedValues::of(rs)))
+                .collect(),
         }
+    }
+
+    /// The applied snapshots the payload saves: those of the recipe's queries.
+    fn applied_payload(&self) -> BTreeMap<String, AppliedSnapshot> {
+        self.applied_saved
+            .iter()
+            .filter(|(id, _)| self.queries.iter().any(|q| q.id.as_str() == id.as_str()))
+            .map(|(id, s)| (id.clone(), s.clone()))
+            .collect()
     }
 
     /// Reconstruct a session from a saved payload (recipe round-trip).
@@ -1834,6 +1885,14 @@ impl DataSession {
             s.set_binding_locale(&BindingId::from(id.as_str()), Some(l));
         }
         s.transforms = payload.transforms;
+        s.applied_saved = payload.applied;
+        // The saved values come back as the in-memory "before" (a malformed
+        // entry is dropped: its hashes still compare).
+        for (id, values) in payload.applied_values {
+            if let Some(rs) = values.to_record_set() {
+                s.applied_rows.insert(QueryId::from(id.as_str()), rs);
+            }
+        }
         s
     }
 

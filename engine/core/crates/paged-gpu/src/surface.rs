@@ -224,8 +224,136 @@ pub struct SurfacePresenter {
     target_texture: wgpu::Texture,
     target_view: wgpu::TextureView,
     blitter: wgpu::util::TextureBlitter,
+    /// Pixel Preview's nearest-neighbour enlarger and its low-resolution
+    /// target (editor ADR 287), made on first use.
+    pixel_blit: Option<PixelBlit>,
     width: u32,
     height: u32,
+}
+
+/// Pixel Preview's second pass: a full-surface triangle whose fragment
+/// shader reads the 72 ppi texture texel by texel (`textureLoad`, no
+/// filtering) through the plan's surface → texel affine.
+struct PixelBlit {
+    pipeline: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+    params: wgpu::Buffer,
+    /// The low-resolution Vello target and its size.
+    target: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
+}
+
+const PIXEL_BLIT_WGSL: &str = r#"
+struct Params {
+    m0: vec4<f32>,
+    m1: vec4<f32>,
+    bg: vec4<f32>,
+}
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> p: Params;
+
+@vertex
+fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
+    let uv = vec2<f32>(f32((vi << 1u) & 2u), f32(vi & 2u));
+    return vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let x = p.m0.x * pos.x + p.m0.z * pos.y + p.m1.x;
+    let y = p.m0.y * pos.x + p.m0.w * pos.y + p.m1.y;
+    let dims = vec2<i32>(textureDimensions(src));
+    let t = vec2<i32>(i32(floor(x)), i32(floor(y)));
+    if (t.x < 0 || t.y < 0 || t.x >= dims.x || t.y >= dims.y) {
+        return p.bg;
+    }
+    return textureLoad(src, t, 0);
+}
+"#;
+
+impl PixelBlit {
+    fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("paged-gpu pixel preview blit"),
+            source: wgpu::ShaderSource::Wgsl(PIXEL_BLIT_WGSL.into()),
+        });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("paged-gpu pixel preview bg0"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("paged-gpu pixel preview layout"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("paged-gpu pixel preview pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let params = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("paged-gpu pixel preview params"),
+            size: 48,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        Self {
+            pipeline,
+            layout,
+            params,
+            target: None,
+        }
+    }
+
+    /// The low-resolution target, (re)made when the plan's size changes.
+    fn target(&mut self, device: &wgpu::Device, w: u32, h: u32) -> &wgpu::TextureView {
+        let stale = !matches!(&self.target, Some((_, _, tw, th)) if *tw == w && *th == h);
+        if stale {
+            let (t, v) = create_target(w, h, device);
+            self.target = Some((t, v, w, h));
+        }
+        &self.target.as_ref().expect("just made").1
+    }
 }
 
 impl SurfacePresenter {
@@ -317,6 +445,7 @@ impl SurfacePresenter {
             target_texture,
             target_view,
             blitter,
+            pixel_blit: None,
             width,
             height,
         };
@@ -454,6 +583,190 @@ impl SurfacePresenter {
         let content = build_scene_with_transform(list, kurbo::Affine::IDENTITY);
         scene.append(&content, None);
         scene
+    }
+
+    /// [`Self::build_page_scene`] of `list` rewritten for `view` (editor
+    /// ADR 287). `px_per_pt` is the device scale the scene will be
+    /// presented at — Outline's hairline is one device pixel there — so a
+    /// cache of these scenes is keyed by the view and, for Outline, by
+    /// [`crate::view::outline_scale_bucket`].
+    pub fn build_page_scene_view(
+        list: &DisplayList,
+        width_pt: f32,
+        height_pt: f32,
+        view: crate::RasterView,
+        px_per_pt: f32,
+    ) -> Scene {
+        let viewed = crate::view::apply_view(list, view, px_per_pt);
+        Self::build_page_scene(&viewed, width_pt, height_pt)
+    }
+
+    /// A page drawn from a finished raster — Overprint Preview's screen
+    /// (editor ADR 287): the Vello lane draws overprints as knockouts, so
+    /// a page that overprints is rasterised on the CPU, which simulates
+    /// them, and shown as this image. `rgba` is `width_px × height_px`
+    /// RGBA8 covering the whole page; the 1 pt border matches
+    /// [`Self::build_page_scene`].
+    pub fn build_raster_page_scene(
+        rgba: Vec<u8>,
+        width_px: u32,
+        height_px: u32,
+        width_pt: f32,
+        height_pt: f32,
+    ) -> Scene {
+        use std::sync::Arc;
+        use vello::peniko;
+        let mut scene = Scene::new();
+        let page = kurbo::Rect::new(0.0, 0.0, width_pt as f64, height_pt as f64);
+        scene.fill(
+            peniko::Fill::NonZero,
+            kurbo::Affine::IDENTITY,
+            peniko::Color::from_rgba8(255, 255, 255, 255),
+            None,
+            &page,
+        );
+        if width_px > 0 && height_px > 0 && rgba.len() == (width_px * height_px * 4) as usize {
+            let brush = peniko::ImageBrush::new(peniko::ImageData {
+                data: peniko::Blob::new(Arc::new(rgba.into_boxed_slice())),
+                format: peniko::ImageFormat::Rgba8,
+                alpha_type: peniko::ImageAlphaType::AlphaPremultiplied,
+                width: width_px,
+                height: height_px,
+            });
+            scene.draw_image(
+                &brush,
+                kurbo::Affine::scale_non_uniform(
+                    width_pt as f64 / width_px as f64,
+                    height_pt as f64 / height_px as f64,
+                ),
+            );
+        }
+        scene.stroke(
+            &kurbo::Stroke::new(1.0),
+            kurbo::Affine::IDENTITY,
+            peniko::Color::from_rgba8(180, 180, 180, 255),
+            None,
+            &page,
+        );
+        scene
+    }
+
+    /// Pixel Preview (editor ADR 287): compose the page scenes at one
+    /// texel per point into a low-resolution target and enlarge it onto
+    /// the surface with nearest-neighbour sampling. `pages` carry each
+    /// page's placement in DOCUMENT space (pt); `camera` maps document
+    /// space to surface pixels, view rotation included. Returns `false`
+    /// without drawing when the zoom is below one device pixel per point
+    /// (there is nothing to enlarge); the caller presents normally then.
+    pub fn present_scenes_pixel(
+        &mut self,
+        pages: &[(&Scene, [f32; 6])],
+        camera: [f32; 6],
+        background: Color,
+    ) -> Result<bool, SurfaceError> {
+        let Some(plan) = crate::view::pixel_preview_plan(camera, self.width, self.height) else {
+            return Ok(false);
+        };
+        let frame = self.acquire()?;
+        let affine = |t: [f32; 6]| {
+            kurbo::Affine::new([
+                t[0] as f64,
+                t[1] as f64,
+                t[2] as f64,
+                t[3] as f64,
+                t[4] as f64,
+                t[5] as f64,
+            ])
+        };
+        let to_texel = affine(plan.doc_to_texel);
+        let mut combined = Scene::new();
+        for (scene, placement) in pages {
+            combined.append(scene, Some(to_texel * affine(*placement)));
+        }
+        let blit = self
+            .pixel_blit
+            .get_or_insert_with(|| PixelBlit::new(&self.device, self.surface_format));
+        let low_view = blit.target(&self.device, plan.width, plan.height).clone();
+        crate::vello_rs::render_scene(
+            &mut self.renderer,
+            &self.device,
+            &self.queue,
+            &combined,
+            &low_view,
+            &RenderParams {
+                base_color: linear_to_peniko(background),
+                width: plan.width,
+                height: plan.height,
+                antialiasing_method: AaConfig::Area,
+            },
+        )
+        .map_err(|e| SurfaceError::Render(format!("{e:?}")))?;
+        // The background in the surface's 8-bit encoding (Vello writes
+        // sRGB-encoded bytes into its Rgba8Unorm target).
+        let bg = linear_to_peniko(background).to_rgba8();
+        let m = plan.surface_to_texel;
+        let params: [f32; 12] = [
+            m[0],
+            m[1],
+            m[2],
+            m[3],
+            m[4],
+            m[5],
+            0.0,
+            0.0,
+            bg.r as f32 / 255.0,
+            bg.g as f32 / 255.0,
+            bg.b as f32 / 255.0,
+            1.0,
+        ];
+        self.queue
+            .write_buffer(&blit.params, 0, bytemuck::cast_slice(&params));
+        let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("paged-gpu pixel preview bind"),
+            layout: &blit.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&low_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: blit.params.as_entire_binding(),
+                },
+            ],
+        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("paged-gpu pixel preview"),
+            });
+        let surface_view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("paged-gpu pixel preview pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &surface_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&blit.pipeline);
+            pass.set_bind_group(0, &bind, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        self.queue.submit([encoder.finish()]);
+        self.queue.present(frame);
+        Ok(true)
     }
 
     /// A page as a snapshot draws it on the GPU, scaled to `dpi`: the

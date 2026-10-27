@@ -127,7 +127,8 @@ canary added is under [Releases](#releases).
   panel shows the fill's harmony and its shades / tints, warm / cool and vivid / muted
   variations; a click fills the selection (Alt-click strokes). The colour math is
   draw-geometry's `color-harmony.ts`.
-- **SVG.** An importer for `.svg` files and an exporter for the selection.
+- **SVG.** An importer for `.svg` files and an exporter for the selection, through the
+  engine's `paged-svg` where the host has it.
 - **Simplify with a live preview.** While the Path Options Simplify section is open, the
   simplified selection is drawn dashed over the canvas with its anchor counts, following
   every edit and selection change. A corner angle (0–180°) keeps anchors at least that sharp
@@ -183,7 +184,24 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   or next to a library write, are full-envelope `setPluginMetadata` mutations the registry
   checks. Every draw object answers `hostOf`, so `page:#1 > plugin:media.paged.draw/path` and
   `doc > plugin:media.paged.draw/repeat` select.
-- **Typed commands.** 117 of the 127 commands have a typed twin with the same id; ten
+- **WP6.7 distortion tools (keyless).** The **Liquify** flyout — Warp, Twirl, Pucker, Bloat,
+  Scallop, Crystallize and Wrinkle, each with Illustrator's options (brush width, height,
+  angle, intensity, use pressure; detail, simplify; twirl rate; complexity and which control
+  points the brush affects; Wrinkle's horizontal / vertical): a press, every drag sample and,
+  while the button rests, a dwell timer step the kernel; the release writes the re-fitted
+  paths (the selection's, or every path on the page with nothing selected) in one undo step.
+  **Puppet Warp** in the Free Transform flyout (and Object ▸ Puppet warp): the selection is
+  meshed with three automatic pins; click adds a pin, dragging one bends the artwork live
+  (as-rigid-as-possible), the ring round the selected pin turns about it, Alt+click or Delete
+  removes one; mesh density and the mesh display are options. **Perspective Grid** and
+  **Perspective Selection**: a per-page one-, two- or three-point grid (View ▸ Perspective grid:
+  show / hide / lock / unlock / the three presets), its handles (origin, horizon, vanishing
+  points, extents, cell) and the plane widget (keys 1–4); dragging artwork onto the active
+  plane attaches it, attached artwork moves along its plane, and with the tool's option a drag
+  on nothing draws a rectangle or an ellipse on the plane (Object ▸ Perspective ▸ Attach to
+  active plane / Release with perspective). Each artwork change is one undo step; grid edits
+  are a view setting and do not undo.
+- **Typed commands.** 139 of the 149 commands have a typed twin with the same id; ten
   Path Options "…" commands, which only raise a panel, are the untyped remainder. The
   Knife, Scissors and Shape Builder, tools before, are commands too, their gesture given as
   data: `knife { page, cut }`, `scissorsAt { point, tolerance }` and
@@ -329,6 +347,14 @@ path per shape, solid paints only. Recolouring a raster is pixel work and is not
 
 ## Limits of what is shipped
 
+- **The WP6.7 tools.** The liquify kernels are not Illustrator's (its tools are not
+  scriptable, so there is no oracle): the falloff is a smooth bump, Scallop / Crystallize /
+  Wrinkle derive their detail from a seeded hash, and the twirl sign is counter-clockwise on
+  screen. Puppet Warp's pins snap to mesh vertices, the mesh is capped (320 vertices at normal
+  density) and pins do not survive a change of selection. The perspective grid stores no
+  per-object plane in IDML (the link is this plugin's metadata), grid edits are off the undo
+  stack, artwork attached to a plane does not follow a later grid edit, and `bringInPerspective`
+  -style attach by position has no Illustrator oracle (only drawing on a plane is recorded).
 - **The WP6.1 tools.** Simplify's preview is exact only with a corner angle; without one
   the engine simplifies and no engine door answers its result before writing. Join welds
   through the engine's `joinPaths`, which joins the two paths' own coordinates, so paths
@@ -403,16 +429,28 @@ path per shape, solid paints only. Recolouring a raster is pixel work and is not
   and may not line up. A rotated or skewed placement, or an oval or polygon frame, is cropped
   to the box around what is visible, so traced paths can extend past a non-rectangular clip.
   It reads only what the browser can decode.
-- **SVG** carries paths, basic shapes, group transforms and solid colours. Gradients, text,
-  images, `<use>` and `<defs>`, clip paths, masks and stylesheets are not read. Export
-  writes solid colours only. `fill-rule="evenodd"` is written as the element's native
-  fill rule (`frameFillRule`, engine ADR 1006), the contours kept as authored, so contours
-  that cross each other or themselves (a star drawn as one path) import exactly; export
-  writes the element's rule back as `fill-rule`. On an engine without the fill rule
-  (`document.fillRule@1` not supported) an even-odd shape is re-wound by nesting depth
-  instead, and crossing contours there paint their non-zero region. A shape stays one
-  path per contour when a contour after the first is open, or when the engine reports no
-  page origin.
+- **SVG** goes through the engine (`paged-svg`, engine ADR 1031) on a host with
+  `document.importSvg@1` / `document.exportSvg@1`. Import reads what usvg resolves —
+  `<use>`, `<defs>`, `<symbol>`, CSS stylesheets and classes, units, nested transforms,
+  markers — and makes native items: compound paths with their fill rule, swatches, linear
+  and radial gradients (stop opacity as a gradient feather), groups with opacity and
+  blend, clip paths (each clipped item pasted into its own frame of the clip shape),
+  one-shape masks as opacity masks, embedded pictures, and text frames when the font is a
+  document font (outlines otherwise). It is one undo step. What it approximates or leaves
+  out is logged by name from the engine's report: filters, patterns, external images,
+  text with no font, a focal or skewed radial gradient, a reflecting or repeating gradient,
+  a stroke gradient's start, a dash offset, a mask of several shapes. The shape lands where
+  the SVG draws it, each top-level shape its own element, and an unstroked shape has no
+  stroke. Export writes what the selection draws: fills and strokes, gradients, opacity and
+  blend, clips and masks, pictures as data URIs, and text as outlines (a conic gradient is
+  its mean colour; effects other than a drop shadow and a gradient feather are reported).
+- **On a host without those doors** (an engine before protocol 77) the module's own reader
+  runs, as before: paths, basic shapes, group transforms and solid colours only; gradients,
+  text, images, `<use>`, clip paths, masks and stylesheets are not read, an unstroked shape
+  gets a 1 pt black stroke, export writes solid colours only. `fill-rule="evenodd"` is the
+  element's native fill rule where the engine has it (`document.fillRule@1`), re-wound by
+  nesting depth otherwise; a shape stays one path per contour when a contour after the
+  first is open, or when the engine reports no page origin.
 
 ## Not built
 

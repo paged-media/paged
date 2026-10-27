@@ -177,6 +177,19 @@ fn lut3d_channel_swap() -> Vec<u8> {
     bytemuck::bytes_of(&AdjustLut3dParams::from_fn(|r, g, b| [b, g, r])).to_vec()
 }
 
+/// A sampled Color Range (a mid orange, fuzziness 80) — every
+/// stimulus texel lands somewhere on the falloff or outside it.
+fn color_range_stress() -> Vec<u8> {
+    image_kernels::families::select::ColorRangeParams::sampled_box(
+        [60.0, 30.0, 40.0],
+        [70.0, 40.0, 60.0],
+        80.0,
+        false,
+    )
+    .as_bytes()
+    .to_vec()
+}
+
 fn gradient_map_teal_orange() -> Vec<u8> {
     bytemuck::bytes_of(&AdjustGradientMapParams::two_stop(
         [0.0, 0.35, 0.4],
@@ -641,6 +654,12 @@ const TABLE: &[Row] = &[
           identity: Identity::Params(P::Fields(&[("dx", V::F(0.0)), ("dy", V::F(0.0)), ("edge", V::U(0))])),
           stress: P::Fields(&[("dx", V::F(5.5)), ("dy", V::F(-3.25)), ("edge", V::U(0))]),
           note: "dx = dy = 0 is the documented identity under every edge policy" },
+    Row { id: "geom.patch_vote",
+          identity: Identity::Params(P::Fields(&[("radius", V::U(2)), ("min_weight", V::F(1.0e30))])),
+          stress: P::Fields(&[("radius", V::U(2)), ("bias_scale", V::F(1.0)), ("min_weight", V::F(0.0))]),
+          note: "a voting floor above every weight means no entry votes, so \
+                 every texel keeps the pixel already there (in0 at p, origin 0) \
+                 whatever the field holds" },
     Row { id: "geom.move_selection",
           identity: Identity::Params(P::Fields(&[("dx", V::F(0.0)), ("dy", V::F(0.0)), ("vacate", V::U(0))])),
           stress: P::Fields(&[("dx", V::F(6.0)), ("dy", V::F(-4.0)), ("vacate", V::U(0))]),
@@ -683,6 +702,15 @@ const TABLE: &[Row] = &[
           identity: Identity::Params(P::Fields(&[("radius", V::U(0))])),
           stress: P::Fields(&[("radius", V::U(2))]),
           note: "radius 0 ⇒ the median of one sample is the sample" },
+
+    // ── select (kernels whose output is a selection, ADR 470) ───────────
+    Row { id: "select.color_range",
+          identity: Identity::NotDefined,
+          stress: P::Raw(color_range_stress),
+          note: "EXCLUDED from identity: the output is a COVERAGE field, not \
+                 the image, so no parameter returns the input. Its GPU twin \
+                 parity and the Photoshop agreement are \
+                 oracle_photoshop_selection.rs" },
 
     // ── resample (separable rational scale) ─────────────────────────────
     Row { id: "resample.nearest",

@@ -7,6 +7,11 @@
 // are gone, which are placed, and each placement's record follows its
 // record to its row now.
 //
+// After a save and a reopen in a fresh host the status reads as before, and
+// the Sync panel's row diff still has the values the document was written
+// from (the applied values ride with the session). A record stepped to in
+// the record preview is placed: the status and the placement name it.
+//
 // Gate: skips without canvas-wasm or the built data-js wasm, EXCEPT under
 // REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1.
 
@@ -18,7 +23,12 @@ import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { BINDING_KEY, makeEnvelope } from "../../data-host-model/src";
-import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
+import {
+  dataFields,
+  ENGINE_ANCHOR,
+  openRealHost,
+  REQUIRE_REAL_CORE,
+} from "./real-core";
 import {
   bootRealEngine,
   DATA_JS_WASM,
@@ -39,6 +49,19 @@ const READER: PluginManifest = {
   apiVersion: "^0.2",
   capabilities: { data: { read: true, write: true, bind: true } },
 };
+
+async function exportPaged(host: BundleHost): Promise<Uint8Array> {
+  const reply = (await host.editor.client.send({
+    kind: "exportPaged",
+    payload: {},
+  } as never)) as {
+    kind: string;
+    payload: { bytes?: number[]; error?: string };
+  };
+  if (reply.kind !== "pagedExported")
+    throw new Error(`exportPaged: ${reply.kind} ${reply.payload.error ?? ""}`);
+  return Uint8Array.from(reply.payload.bytes!);
+}
 
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
@@ -176,6 +199,200 @@ describe.skipIf(!ready && !required)(
       await expect(data.recordStatus("nope")).rejects.toThrow(
         /no query "nope"/,
       );
+    });
+
+    it("the status survives a save and a reopen: a row changed after it reads as changed", async () => {
+      expect(
+        ready,
+        "real core and the data-js wasm must both be available",
+      ).toBe(true);
+      const mod = await loadBundleModule();
+      const withReader = async (bytes?: Uint8Array) => {
+        const h = await openRealHost();
+        if (bytes) await h.load(bytes);
+        hosts.push(h);
+        let dataHost!: BundleHost;
+        h.loadBundle({
+          ...mod.dataBundle,
+          activate: (bh: BundleHost) => {
+            dataHost = bh;
+            return mod.dataBundle.activate(bh);
+          },
+        } as typeof mod.dataBundle);
+        let reader!: BundleHost;
+        h.loadBundle({
+          manifest: READER,
+          activate(bh: BundleHost) {
+            reader = bh;
+            return { dispose() {} };
+          },
+        } as never);
+        const s = mod.sessionFor(dataHost)!;
+        await s.whenRestored();
+        return { h, dataHost, s, data: reader.data };
+      };
+
+      // Session 1: place the first record, write the document, save.
+      const one = await withReader();
+      await one.s.registerCsvSource("products", CSV);
+      one.s.addQuery("q", "SELECT * FROM products", "recordStream");
+      await one.s.refreshData();
+      await one.data.bind({
+        target: "rectangle:urect",
+        path: "frameOpacity",
+        query: "q",
+        expr: "50",
+      });
+      await one.data.refresh();
+      expect(await one.data.recordStatus("q")).toEqual({
+        query: "q",
+        added: [],
+        changed: [],
+        removed: 0,
+        placed: [0],
+      });
+      await one.h.willSave.fire();
+      const part = JSON.parse(
+        new TextDecoder().decode(
+          (await one.dataHost.parts.read("session.json"))!,
+        ),
+      ) as {
+        engine: {
+          applied?: Record<string, { key?: string[]; rows: string[] }>;
+          applied_values?: unknown;
+        };
+        appliedValues?: Record<string, { values?: unknown; ref?: unknown }>;
+      };
+      // The snapshot rides in the session part: the key and, per record, a
+      // hash of its key and of its content, never the values.
+      expect(part.engine.applied?.q?.key).toEqual(["sku"]);
+      expect(part.engine.applied?.q?.rows).toHaveLength(3);
+      expect(JSON.stringify(part.engine.applied)).not.toContain("Hammer");
+      // The values ride beside the recipe, not in it; small, they are inline.
+      expect(part.engine.applied_values).toBeUndefined();
+      expect(JSON.stringify(part.appliedValues?.q?.values)).toContain("Hammer");
+      const saved = await exportPaged(one.h.host);
+
+      // Session 2: a fresh host opens the saved bytes.
+      const two = await withReader(saved);
+      await two.s.refreshData();
+      expect(await two.data.recordStatus("q")).toEqual({
+        query: "q",
+        added: [],
+        changed: [],
+        removed: 0,
+        placed: [0],
+      });
+      // A row changes in the data: it reads as changed, not as a baseline.
+      await two.data.write("products", [
+        { op: "set", row: 1, field: "price", value: 13 },
+      ]);
+      await two.s.refreshData();
+      expect(await two.data.recordStatus("q")).toEqual({
+        query: "q",
+        added: [],
+        changed: [1],
+        removed: 0,
+        placed: [0],
+      });
+      // The row diff has the value before the reopen and the one now.
+      const [diff] = await two.s.rowDiff();
+      expect(diff!.baseline).toBe(false);
+      expect(diff!.key).toEqual(["sku"]);
+      expect(diff!.updated).toEqual([
+        {
+          index: 1,
+          key: "B-2",
+          changes: [{ column: "price", before: "12", after: "13" }],
+        },
+      ]);
+    });
+
+    it("a record stepped to in the record preview is placed, across a reopen", async () => {
+      expect(
+        ready,
+        "real core and the data-js wasm must both be available",
+      ).toBe(true);
+      const mod = await loadBundleModule();
+      const open = async (bytes?: Uint8Array) => {
+        const h = await openRealHost();
+        if (bytes) await h.load(bytes);
+        hosts.push(h);
+        let dataHost!: BundleHost;
+        h.loadBundle({
+          ...mod.dataBundle,
+          activate: (bh: BundleHost) => {
+            dataHost = bh;
+            return mod.dataBundle.activate(bh);
+          },
+        } as typeof mod.dataBundle);
+        let reader!: BundleHost;
+        h.loadBundle({
+          manifest: READER,
+          activate(bh: BundleHost) {
+            reader = bh;
+            return { dispose() {} };
+          },
+        } as never);
+        const s = mod.sessionFor(dataHost)!;
+        await s.whenRestored();
+        return { h, dataHost, s, data: reader.data };
+      };
+      const one = await open();
+      await one.s.registerCsvSource("products", CSV);
+      one.s.addQuery("q", "SELECT * FROM products", "recordStream");
+      await one.s.refreshData();
+      const fr = (await one.dataHost.document.mutate({
+        op: "batch",
+        args: {
+          ops: [
+            {
+              op: "insertTextFrame",
+              args: { pageId: "usp", bounds: [100, 100, 300, 400] },
+            },
+            { op: "bindCreated", args: { handle: "f" } },
+          ],
+        },
+      } as never)) as { minted?: { element: { id: string } }[] };
+      const frame = fr.minted![0]!.element.id;
+      const placed = await one.data.place(`textFrame:${frame}`, "q", "sku");
+      await one.data.refresh();
+      const sku = async (dataHost: BundleHost) =>
+        (await dataFields(dataHost as never)).find(
+          (f) => f.key === placed.binding,
+        )?.value;
+      expect(await sku(one.dataHost)).toBe("A-1");
+      expect((await one.data.recordStatus("q")).placed).toEqual([0]);
+
+      // Record 2 of the stepper (index 1): the field shows B-2, and B-2 is
+      // the placed record.
+      await one.s.previewRecord(placed.binding, 1);
+      expect(await sku(one.dataHost)).toBe("B-2");
+      expect((await one.data.recordStatus("q")).placed).toEqual([1]);
+      const ofBinding = async (data: typeof one.data) =>
+        (await data.placements())
+          .filter((p) => p.binding === placed.binding)
+          .map((p) => p.record);
+      expect(await ofBinding(one.data)).toEqual([1]);
+      // A field refresh keeps the record the document shows.
+      await one.s.refreshFields();
+      expect(await sku(one.dataHost)).toBe("B-2");
+
+      // Saved and reopened, the field still shows record 1. (The placement
+      // of a field placed as a text variable is not found after a reopen:
+      // the story it sits in is not saved, so only the status is read.)
+      await one.h.willSave.fire();
+      const two = await open(await exportPaged(one.h.host));
+      await two.s.refreshData();
+      expect((await two.data.recordStatus("q")).placed).toEqual([1]);
+      await two.s.refreshFields();
+      expect(await sku(two.dataHost)).toBe("B-2");
+
+      // Lower writes the document from the data at the binding's own
+      // record: the first again.
+      await two.s.lowerAll();
+      expect(await sku(two.dataHost)).toBe("A-1");
+      expect((await two.data.recordStatus("q")).placed).toEqual([0]);
     });
   },
 );

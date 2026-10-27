@@ -77,6 +77,7 @@ import {
 import type { AspectPreset } from "../crop-machine";
 import { COLOR_NAMES, gradientKindLabel, toneRangeLabel } from "../words";
 
+import { MaskingSections } from "./sections/masking-section";
 import { CanvasSection, type CanvasSize } from "./sections/canvas-section";
 import { HueSatSection } from "./sections/hue-sat-section";
 import { ToneSection } from "./sections/tone-section";
@@ -93,6 +94,11 @@ import {
 } from "./sections/distort-section";
 import { Section } from "./sections/disclosure";
 import { FilterDialog } from "./sections/filter-dialog";
+import {
+  ContentAwareFillWorkspace,
+  RetouchOptionsSection,
+} from "./sections/retouch-sections";
+import { DEFAULT_CAF } from "../retouch";
 import {
   ImageSizeDialog,
   RotateDialog,
@@ -877,11 +883,10 @@ const RETOUCH = defineMessages("image.retouch", {
   cafNote:
     "Fills the selection with texture copied from elsewhere in the image.",
   cafAbout:
-    "It works patch by patch from the edge inward, so it keeps grain and " +
-    "continues edges rather than blurring across them, and decides " +
-    "large-scale structure at half resolution before matching texture at " +
-    "full. Its search is limited to a window around the hole: a match on " +
-    "the far side of a large image will not be found.",
+    "It fills by PatchMatch from coarse to fine, so it keeps grain and " +
+    "continues edges rather than blurring across them; the search reaches " +
+    "the whole image. Edit ▸ Content-Aware Fill… sets the sampling area, " +
+    "the adaptation and the output.",
 });
 
 /** The RETOUCH section: the clone source, and the honest limit of the
@@ -1045,9 +1050,9 @@ const CHANNELS = defineMessages("image.channels", {
     "a mid-grey channel selects at 50%. Luma is the Rec.709 luminance, the " +
     "usual luminosity mask.",
   noView:
-    "Viewing one channel on its own is not offered: the frame shows the " +
-    "composited image, and faking a channel view would mean writing a " +
-    "greyscale image into the document.",
+    "To view one channel on its own, use the eye beside it in the channel " +
+    "list below: the frame then shows that channel as grey, without " +
+    "changing the document.",
 });
 
 /** The CHANNELS list — per-channel statistics and the one operation a
@@ -2494,6 +2499,21 @@ export function makeImagePanel(session: ImageSession) {
             onCancel={() => void session.cancelFilterDialog()}
           />
         )}
+        {s.dialog?.kind === "contentAwareFill" && s.retouch.caf && (
+          <ContentAwareFillWorkspace
+            caf={s.retouch.caf}
+            busy={s.busy}
+            onChange={(patch) => void session.setContentAwareFill(patch)}
+            onReset={() =>
+              void session.setContentAwareFill({
+                ...DEFAULT_CAF,
+                fill: { ...DEFAULT_CAF.fill },
+              })
+            }
+            onOk={() => void session.commitContentAwareFill()}
+            onCancel={() => void session.cancelContentAwareFill()}
+          />
+        )}
         {s.dialog?.kind === "imageSize" && s.source && (
           <ImageSizeDialog
             key={`${s.source.width}x${s.source.height}`}
@@ -3532,6 +3552,17 @@ export function makeImagePanel(session: ImageSession) {
             void session.fillSelection({ kind: "contentAware" })
           }
         />
+        <RetouchOptionsSection
+          move={s.retouch.move}
+          pending={s.retouch.pendingMove}
+          heal={s.retouch.heal}
+          busy={s.busy}
+          onMove={(patch) => session.setMoveOptions(patch)}
+          onTransform={(patch) => session.setMoveTransform(patch)}
+          onCommit={() => void session.commitContentAwareMove()}
+          onCancel={() => session.cancelContentAwareMove()}
+          onHeal={(patch) => session.setHealOptions(patch)}
+        />
 
         {/* PATHS — the raster↔vector bridge (the vector side itself is
             host-owned and stays there). */}
@@ -3555,6 +3586,10 @@ export function makeImagePanel(session: ImageSession) {
           disabled={disabled}
           onLoadSelection={(c) => session.selectionFromChannel(c)}
         />
+
+        {/* SELECTION AND MASKING — Color Range, Select and Mask, Quick
+            Mask, alpha / spot channels and paths (WP5.5, ADR 470). */}
+        <MaskingSections session={session} disabled={disabled} />
 
         {/* BRUSH PRESETS — the `.abr` reader, finally reachable. Until
             this section existed the parser was dead-code-eliminated from

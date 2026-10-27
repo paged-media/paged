@@ -598,6 +598,283 @@ pub fn text_overset(text: &str, width: f64, height: f64, metrics: &FrameMetrics)
         && count_lines(text, width, &metrics.advances) as f64 * metrics.leading_pt > height + 0.5
 }
 
+/// Is `text` overset in a THREADED story whose frames are `boxes`
+/// (`(width, height)` pt each, in chain order) at `metrics`? The text is
+/// wrapped through the frames in turn: each frame holds the lines whose
+/// leading fits its height (half a point of slack, as [`text_overset`]),
+/// wrapped at that frame's width; what is left after the last frame is the
+/// overset (data ADR 564). A one-frame chain answers what [`text_overset`]
+/// answers. An empty text, or a leading of zero, never is; an empty chain
+/// always is (the text has nowhere to go).
+pub fn text_overset_chain(text: &str, boxes: &[(f64, f64)], metrics: &FrameMetrics) -> bool {
+    if text.is_empty() || metrics.leading_pt <= 0.0 {
+        return false;
+    }
+    let mut chain = Chain {
+        boxes,
+        leading: metrics.leading_pt,
+        frame: 0,
+        left: boxes
+            .first()
+            .map_or(0, |b| lines_in(b.1, metrics.leading_pt)),
+    };
+    let adv = |w: &str| metrics.advances.get(w).copied().unwrap_or(0.0);
+    let space = adv(" ");
+    for line in text.split('\n') {
+        // The width of the line being filled and what it holds so far.
+        let mut used: Option<(f64, f64)> = None;
+        for w in line.split(' ').filter(|w| !w.is_empty()) {
+            let a = adv(w);
+            if let Some((width, u)) = used {
+                if u + space + a <= width + 1e-6 {
+                    used = Some((width, u + space + a));
+                    continue;
+                }
+            }
+            // A new line (or, for a word wider than the column, the lines
+            // its width needs, each at the width of the frame it lands in).
+            let mut rest = a;
+            loop {
+                let Some(width) = chain.next_line() else {
+                    return true;
+                };
+                if width <= 0.0 || rest <= width {
+                    let wrapped = rest < a;
+                    let carry = if wrapped && (rest - width).abs() < 1e-9 {
+                        0.0
+                    } else {
+                        rest
+                    };
+                    used = Some((width, carry));
+                    break;
+                }
+                rest -= width;
+            }
+        }
+        if used.is_none() && chain.next_line().is_none() {
+            return true;
+        }
+    }
+    false
+}
+
+/// How many lines of `leading` a frame `height` tall holds ([`text_overset`]'s
+/// half-point slack).
+fn lines_in(height: f64, leading: f64) -> usize {
+    ((height + 0.5) / leading + 1e-9).floor().max(0.0) as usize
+}
+
+/// The frames of a threaded story as the wrap walks them: the frame being
+/// filled and the lines left in it.
+struct Chain<'a> {
+    boxes: &'a [(f64, f64)],
+    leading: f64,
+    frame: usize,
+    left: usize,
+}
+
+impl Chain<'_> {
+    /// Take the next line: the width of the frame it lands in, or `None`
+    /// when no frame of the chain has a line left.
+    fn next_line(&mut self) -> Option<f64> {
+        while self.left == 0 {
+            self.frame += 1;
+            let b = self.boxes.get(self.frame)?;
+            self.left = lines_in(b.1, self.leading);
+        }
+        self.left -= 1;
+        Some(self.boxes[self.frame].0)
+    }
+}
+
+/// One run of a story as the run-aware measure reads it: its text and the
+/// face it is set in, an index into the faces [`text_overset_runs`] is
+/// given (the host's advances and leading for that run, data ADR 564).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeasuredRun {
+    pub text: String,
+    #[serde(default)]
+    pub face: usize,
+}
+
+/// The distinct pieces of a story's runs, per face, as
+/// [`text_overset_runs`] measures them: a run of characters between spaces
+/// and line breaks within one run (a word set in two faces is two pieces,
+/// each measured in its own face), and the space of every face that has
+/// text. Indexed by face, up to the highest face a run names.
+pub fn text_run_words(runs: &[MeasuredRun]) -> Vec<Vec<String>> {
+    let faces = runs.iter().map(|r| r.face + 1).max().unwrap_or(0);
+    let mut sets = vec![BTreeSet::new(); faces];
+    for r in runs.iter().filter(|r| !r.text.is_empty()) {
+        let set = &mut sets[r.face];
+        set.insert(" ".to_string());
+        for w in r.text.split(['\n', ' ']).filter(|w| !w.is_empty()) {
+            set.insert(w.to_string());
+        }
+    }
+    sets.into_iter().map(|s| s.into_iter().collect()).collect()
+}
+
+/// A word of a story as the run-aware wrap places it: its width, the
+/// largest leading of the faces it is set in, and the width of the space
+/// before it (none for a paragraph's first word).
+#[derive(Debug, Clone, Copy)]
+struct Word {
+    width: f64,
+    leading: f64,
+    gap: f64,
+}
+
+/// A story's paragraphs as words, each with the leading its line takes when
+/// it holds no word (the face of the break that ends it).
+fn run_paragraphs(runs: &[MeasuredRun], faces: &[FrameMetrics]) -> Vec<(Vec<Word>, f64)> {
+    let leading = |f: usize| faces.get(f).map_or(0.0, |m| m.leading_pt);
+    let adv = |f: usize, w: &str| {
+        faces
+            .get(f)
+            .and_then(|m| m.advances.get(w).copied())
+            .unwrap_or(0.0)
+    };
+    let mut paras = Vec::new();
+    let mut words: Vec<Word> = Vec::new();
+    // The word being read (its width and leading so far) and its piece in
+    // the current run; the space before it.
+    let mut word: Option<(f64, f64)> = None;
+    let mut piece = String::new();
+    let mut gap: Option<f64> = None;
+    let mut last_face = runs.first().map_or(0, |r| r.face);
+    let end_word = |words: &mut Vec<Word>, (width, leading): (f64, f64), gap: Option<f64>| {
+        let gap = if words.is_empty() {
+            0.0
+        } else {
+            gap.unwrap_or(0.0)
+        };
+        words.push(Word {
+            width,
+            leading,
+            gap,
+        });
+    };
+    for r in runs {
+        for c in r.text.chars() {
+            last_face = r.face;
+            if c == '\n' || c == ' ' {
+                if let Some((w, l)) = word.take() {
+                    end_word(&mut words, (w + adv(r.face, &piece), l), gap);
+                    piece.clear();
+                    gap = None;
+                }
+                if c == '\n' {
+                    paras.push((std::mem::take(&mut words), leading(r.face)));
+                } else if gap.is_none() {
+                    gap = Some(adv(r.face, " "));
+                }
+            } else {
+                let (w, l) = word.unwrap_or((0.0, 0.0));
+                word = Some((w, l.max(leading(r.face))));
+                piece.push(c);
+            }
+        }
+        // A word that goes on into the next run: this run's piece is
+        // measured in this run's face.
+        if let Some((w, _)) = word.as_mut() {
+            *w += adv(r.face, &piece);
+        }
+        piece.clear();
+    }
+    if let Some(w) = word.take() {
+        end_word(&mut words, w, gap);
+    }
+    paras.push((words, leading(last_face)));
+    paras
+}
+
+/// Is a story overset in its frames `boxes` (`(width, height)` pt each, in
+/// chain order) when each of its runs is set in its own face (`faces`: the
+/// host's advances and leading for each)? [`text_overset_chain`] for a
+/// story of several sizes: the words are wrapped greedily at each frame's
+/// width, a word set in two faces is as wide as its pieces, and a line is
+/// as tall as the largest leading on it (an empty line, its break's); a
+/// frame holds the lines whose leadings add up to its height (half a point
+/// of slack). What is left after the last frame is the overset (data ADR
+/// 564). For runs all in one face it answers what [`text_overset_chain`]
+/// answers. An empty story never is; a non-empty one in an empty chain
+/// always is.
+pub fn text_overset_runs(
+    runs: &[MeasuredRun],
+    boxes: &[(f64, f64)],
+    faces: &[FrameMetrics],
+) -> bool {
+    if runs.iter().all(|r| r.text.is_empty()) {
+        return false;
+    }
+    let mut frame = 0;
+    let mut y = 0.0;
+    // Place one line, built by `build` at the width of the frame it lands
+    // in (it answers the line's leading); false when no frame has room.
+    let mut place = |build: &mut dyn FnMut(f64) -> f64| -> bool {
+        loop {
+            let Some(&(width, height)) = boxes.get(frame) else {
+                return false;
+            };
+            let lead = build(width);
+            if y + lead <= height + 0.5 + 1e-9 {
+                y += lead;
+                return true;
+            }
+            frame += 1;
+            y = 0.0;
+        }
+    };
+    for (words, empty) in run_paragraphs(runs, faces) {
+        if words.is_empty() {
+            if !place(&mut |_| empty) {
+                return true;
+            }
+            continue;
+        }
+        // The next word to place, and what is left of it when a word wider
+        // than its column is split over lines.
+        let mut i = 0;
+        let mut rest: Option<f64> = None;
+        while i < words.len() {
+            let mut next = (i, rest);
+            let fits = place(&mut |width| {
+                let first = rest.unwrap_or(words[i].width);
+                let mut lead = words[i].leading;
+                if width > 0.0 && first > width {
+                    next = (i, Some(first - width));
+                    return lead;
+                }
+                // The last piece of a split word that fills its line
+                // exactly leaves the line open (`count_lines`' remainder).
+                let mut used = if rest.is_some() && (first - width).abs() < 1e-9 {
+                    0.0
+                } else {
+                    first
+                };
+                let mut j = i + 1;
+                while let Some(w) = words.get(j) {
+                    if used + w.gap + w.width > width + 1e-6 {
+                        break;
+                    }
+                    used += w.gap + w.width;
+                    lead = lead.max(w.leading);
+                    j += 1;
+                }
+                next = (j, None);
+                lead
+            });
+            if !fits {
+                return true;
+            }
+            (i, rest) = next;
+        }
+    }
+    false
+}
+
 /// The measured font of one template frame: its leading and the advance of
 /// every word [`merge_words`] listed for it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -717,6 +994,177 @@ mod tests {
         assert!(!text_overset("a a a a", 25.0, 24.0, &m));
         assert!(text_overset("a a a a", 25.0, 20.0, &m));
         assert!(!text_overset("", 25.0, 0.0, &m));
+    }
+
+    #[test]
+    #[allow(non_snake_case)] // the `__feat__<id>` suffix links the test to its cockpit feature
+    fn data_lower_text_overset_chain_wraps_through_the_frames__feat__data_issues() {
+        let m = FrameMetrics {
+            leading_pt: 12.0,
+            advances: [("a", 10.0), (" ", 5.0), ("long", 45.0)]
+                .into_iter()
+                .map(|(w, a)| (w.to_string(), a))
+                .collect(),
+        };
+        // Eight words, two a line at 25 pt: four lines. Two frames of two
+        // lines each hold them; a line less and the last frame overflows.
+        let text = "a a a a a a a a";
+        assert!(!text_overset_chain(text, &[(25.0, 24.0), (25.0, 24.0)], &m));
+        assert!(text_overset_chain(text, &[(25.0, 24.0), (25.0, 12.0)], &m));
+        // Each frame wraps at its own width: a wide second frame takes four
+        // words a line (a + 3 × (5 + 10) = 55 pt), so the six left after the
+        // first frame's line take two lines there, not three.
+        assert!(!text_overset_chain(text, &[(25.0, 12.0), (55.0, 24.0)], &m));
+        assert!(text_overset_chain(text, &[(25.0, 12.0), (25.0, 24.0)], &m));
+        // A frame too short for one line holds none: the text goes on.
+        assert!(!text_overset_chain(
+            text,
+            &[(25.0, 5.0), (25.0, 24.0), (25.0, 24.0)],
+            &m
+        ));
+        // A word wider than its column takes the lines its width needs,
+        // across frames too.
+        assert!(!text_overset_chain(
+            "long",
+            &[(20.0, 24.0), (20.0, 12.0)],
+            &m
+        ));
+        assert!(text_overset_chain("long", &[(20.0, 24.0)], &m));
+        // Empty lines are lines; an empty chain holds nothing.
+        assert!(text_overset_chain("a\n\na", &[(25.0, 24.0)], &m));
+        assert!(text_overset_chain("a", &[], &m));
+        assert!(!text_overset_chain("", &[], &m));
+        // One frame: exactly the one-frame rule.
+        for t in [
+            "a a a a",
+            "a a a a a",
+            "long a long",
+            "a\n\n\na",
+            "a  a",
+            "long",
+        ] {
+            for (w, h) in [
+                (25.0, 24.0),
+                (25.0, 20.0),
+                (20.0, 36.0),
+                (0.0, 12.0),
+                (60.0, 0.4),
+            ] {
+                assert_eq!(
+                    text_overset_chain(t, &[(w, h)], &m),
+                    text_overset(t, w, h, &m),
+                    "{t:?} in {w} × {h}"
+                );
+            }
+        }
+    }
+
+    fn run(text: &str, face: usize) -> MeasuredRun {
+        MeasuredRun {
+            text: text.into(),
+            face,
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)] // the `__feat__<id>` suffix links the test to its cockpit feature
+    fn data_lower_text_overset_runs_sets_each_run_in_its_face__feat__data_issues() {
+        // Face 0: 12 pt leading, 10 pt a letter; face 1 (a large size): 40
+        // pt leading, 30 pt a letter.
+        let face = |leading: f64, per: f64| FrameMetrics {
+            leading_pt: leading,
+            advances: ["a", "b", "aa", "ab", " "]
+                .into_iter()
+                .map(|w| (w.to_string(), w.chars().count() as f64 * per))
+                .collect(),
+        };
+        let faces = [face(12.0, 10.0), face(40.0, 30.0)];
+        assert_eq!(
+            text_run_words(&[run("a b\nab", 0), run("aa", 1)]),
+            vec![vec![" ", "a", "ab", "b"], vec![" ", "aa"]]
+        );
+        assert!(text_run_words(&[]).is_empty());
+        // Small text fits two lines in 24 pt; a large run in it makes its
+        // line 40 pt tall.
+        let small = [run("a a a a", 0)];
+        assert!(!text_overset_runs(&small, &[(30.0, 24.0)], &faces));
+        let mixed = [run("a a ", 0), run("a", 1), run(" a", 0)];
+        assert!(text_overset_runs(&mixed, &[(100.0, 24.0)], &faces));
+        assert!(!text_overset_runs(&mixed, &[(100.0, 40.0)], &faces));
+        // At 55 pt the first line holds 10 + 10 + 10 pt (the large word,
+        // 40 pt more with its space, does not fit): a 12 pt line, then a
+        // 40 pt one.
+        assert!(text_overset_runs(&mixed, &[(55.0, 40.0)], &faces));
+        assert!(!text_overset_runs(&mixed, &[(55.0, 52.0)], &faces));
+        // A word set in two faces is as wide as its pieces: "a" + "aa" =
+        // 10 + 60 = 70 pt does not fit 65 pt and is split over two lines.
+        let joined = [run("a", 0), run("aa", 1)];
+        assert!(!text_overset_runs(&joined, &[(75.0, 40.0)], &faces));
+        assert!(text_overset_runs(&joined, &[(65.0, 40.0)], &faces));
+        // Through a chain: the large line goes to the frame tall enough.
+        assert!(!text_overset_runs(
+            &mixed,
+            &[(100.0, 12.0), (100.0, 40.0)],
+            &faces
+        ));
+        // An empty paragraph takes its break's leading.
+        let breaks = [run("a\n", 0), run("\n", 1), run("a", 0)];
+        assert!(!text_overset_runs(&breaks, &[(100.0, 64.0)], &faces));
+        assert!(text_overset_runs(&breaks, &[(100.0, 60.0)], &faces));
+        // Empty: never; no frame: always.
+        assert!(!text_overset_runs(&[run("", 0)], &[], &faces));
+        assert!(text_overset_runs(&small, &[], &faces));
+        // In one face, exactly the chain rule.
+        let m = FrameMetrics {
+            leading_pt: 12.0,
+            advances: [("a", 10.0), (" ", 5.0), ("long", 45.0)]
+                .into_iter()
+                .map(|(w, a)| (w.to_string(), a))
+                .collect(),
+        };
+        let one = [m.clone()];
+        for t in [
+            "a a a a",
+            "a a a a a a a a",
+            "long a long",
+            "a\n\n\na",
+            "a  a",
+            " a a",
+            "long",
+            "a\n",
+        ] {
+            for boxes in [
+                &[(25.0, 24.0)][..],
+                &[(25.0, 20.0)],
+                &[(20.0, 36.0)],
+                &[(0.0, 12.0)],
+                &[(60.0, 0.4)],
+                &[(25.0, 12.0), (55.0, 24.0)],
+                &[(25.0, 5.0), (25.0, 24.0), (25.0, 24.0)],
+                &[(20.0, 24.0), (20.0, 12.0)],
+                &[(90.0, 12.0)],
+            ] {
+                // Split at every space so a run boundary falls inside the
+                // story without changing it.
+                let mut runs = Vec::new();
+                for (k, part) in t.split(' ').enumerate() {
+                    if k > 0 {
+                        runs.push(run(" ", 0));
+                    }
+                    runs.push(run(part, 0));
+                }
+                assert_eq!(
+                    text_overset_runs(&runs, boxes, &one),
+                    text_overset_chain(t, boxes, &m),
+                    "{t:?} in {boxes:?}"
+                );
+                assert_eq!(
+                    text_overset_runs(&[run(t, 0)], boxes, &one),
+                    text_overset_chain(t, boxes, &m),
+                    "{t:?} in {boxes:?}"
+                );
+            }
+        }
     }
 
     #[test]

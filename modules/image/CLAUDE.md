@@ -80,6 +80,9 @@ Rules for every code change in this repo:
   for the region filter, used only where no GPU device exists; each is
   held to its kernel's tolerance (`image-conformance/tests/it/cpu_twins.rs`).
   A covered kernel's WGSL change changes its twin too.
+  A SECOND (ADR 469): `geom.patch_vote`'s twin (`image-js` `patchmatch::vote_packed`)
+  ships as the vote of the content-aware retouching verbs where no device exists; the
+  PatchMatch search itself is CPU input preparation.
 - **PRESERVATION INVARIANT (§10.4).** "Paged never destroys a PSD."
   Every unmodeled block is retained as opaque bytes attached to its
   owner node and re-emitted verbatim; zero-edit round-trip is

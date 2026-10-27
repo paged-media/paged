@@ -108,6 +108,9 @@ pub struct WorkerCore {
     /// v67 — the session's snapping preferences. Kept here as well as on
     /// the model so they survive `LoadDocument` / `NewBlankDocument`.
     pub snap_settings: paged_canvas::snap_point::SnapSettings,
+    /// v77 — the screen's view settings (editor ADR 287); they survive
+    /// document loads like the snap settings.
+    pub view_settings: paged_canvas::view::ViewSettings,
     /// v75 — the session's role and overrides; like the snap settings it
     /// survives document loads (engine ADR 1000).
     pub session_policy: paged_template::SessionPolicy,
@@ -121,6 +124,15 @@ pub struct WorkerCore {
     pub script_sessions: std::collections::BTreeMap<u32, paged_script::ScriptSession>,
     /// Monotone id source for script sessions.
     pub next_script_session: u32,
+    /// v77 (engine ADR 1030) — the history depth a host set
+    /// (`SetHistoryDepth`); like the snap settings it survives loads.
+    pub history_depth: Option<usize>,
+    /// The embedder's data door (core ADR 1014, amendment 2): when set,
+    /// every message is dispatched inside `paged_script::with_data`, so a
+    /// script's `paged.data.*` — in its first run and in every resumption
+    /// after a host-objects round — reads through it. `None` leaves the
+    /// interpreter's own refusal ("no data is attached").
+    pub script_data: Option<Box<dyn paged_script::ScriptData>>,
 }
 
 impl Default for WorkerCore {
@@ -274,10 +286,18 @@ impl WorkerCore {
             export_sessions: std::collections::HashMap::new(),
             next_export_session: 1,
             snap_settings: Default::default(),
+            view_settings: Default::default(),
             session_policy: Default::default(),
             script_sessions: std::collections::BTreeMap::new(),
             next_script_session: 1,
+            history_depth: None,
+            script_data: None,
         }
+    }
+
+    /// Install (or, with `None`, remove) the data door script runs read.
+    pub fn set_script_data(&mut self, data: Option<Box<dyn paged_script::ScriptData>>) {
+        self.script_data = data;
     }
 
     /// Parse one main-thread message and dispatch it. Returns the JSON
@@ -316,7 +336,16 @@ impl WorkerCore {
                 );
             }
         };
-        let (reply, effect) = self.dispatch(msg, clock);
+        let (reply, effect) = match self.script_data.take() {
+            // Taken out for the call so the door and the core are borrowed
+            // apart, and put back after it.
+            Some(mut data) => {
+                let out = paged_script::with_data(data.as_mut(), || self.dispatch(msg, clock));
+                self.script_data = Some(data);
+                out
+            }
+            None => self.dispatch(msg, clock),
+        };
         (serde_json::to_string(&reply).unwrap_or_default(), effect)
     }
 
@@ -364,7 +393,11 @@ impl WorkerCore {
                 match CanvasModel::load(doc_id, bytes.as_slice(), opts) {
                     Ok(mut model) => {
                         model.set_snap_settings(self.snap_settings);
+                        model.set_view_settings(self.view_settings);
                         model.set_session_policy(self.session_policy.clone());
+                        if let Some(depth) = self.history_depth {
+                            model.set_history_depth(depth);
+                        }
                         let handle = model.handle();
                         self.model = Some(model);
                         self.script_sessions.clear();
@@ -398,7 +431,11 @@ impl WorkerCore {
                 match CanvasModel::new_blank(doc_id, width_pt, height_pt, opts) {
                     Ok(mut model) => {
                         model.set_snap_settings(self.snap_settings);
+                        model.set_view_settings(self.view_settings);
                         model.set_session_policy(self.session_policy.clone());
+                        if let Some(depth) = self.history_depth {
+                            model.set_history_depth(depth);
+                        }
                         let handle = model.handle();
                         self.model = Some(model);
                         self.script_sessions.clear();
@@ -474,13 +511,101 @@ impl WorkerCore {
                     Err(error) => WorkerToMainKind::MutationFailed { error },
                 }
             }
-            // Engine ADR 1004 — the mutation joins the undo step
-            // `applied_seq` names: checked first (nothing applies when it
-            // may not), applied through the `Mutate` arm (same reply, same
-            // repaint), then folded into that step.
+            // v77 (engine ADR 1030) — name the step a write just made.
+            MainToWorkerKind::LabelStep { applied_seq, label } => {
+                let Some(model) = self.model.as_mut() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                let labeled = paged_canvas::undo_label::UndoLabel::explicit(&label)
+                    .is_some_and(|l| model.set_step_label(applied_seq, l));
+                WorkerToMainKind::StepLabeled {
+                    applied_seq,
+                    labeled,
+                }
+            }
+            MainToWorkerKind::RequestUndoLog { limit } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                let log = model.undo_log(limit.map_or(usize::MAX, |l| l as usize));
+                WorkerToMainKind::UndoLog {
+                    undo: log.undo.into_iter().map(Into::into).collect(),
+                    redo: log.redo.into_iter().map(Into::into).collect(),
+                    undo_len: log.undo_len as u32,
+                    redo_len: log.redo_len as u32,
+                    depth: log.depth as u32,
+                    evicted: log.evicted.min(u32::MAX as usize) as u32,
+                }
+            }
+            MainToWorkerKind::SetHistoryDepth { depth } => {
+                let depth = (depth as usize).clamp(1, paged_canvas::MAX_APPLIED_LOG);
+                self.history_depth = Some(depth);
+                if let Some(model) = self.model.as_mut() {
+                    model.set_history_depth(depth);
+                }
+                WorkerToMainKind::HistoryDepthApplied {
+                    depth: depth as u32,
+                }
+            }
+            MainToWorkerKind::UndoTo { applied_seq } => {
+                let (kind, e) = self.history_jump(applied_seq, false, clock);
+                effect = e;
+                kind
+            }
+            MainToWorkerKind::RestoreTo { applied_seq, label } => {
+                let Some(model) = self.model.as_mut() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                let t0 = clock();
+                let pages_before = page_table(model);
+                match model.restore_to(applied_seq, label.as_deref()) {
+                    Ok(outcomes) => {
+                        effect = CacheEffect::ClearAll;
+                        let mut page_ids: Vec<PageId> = Vec::new();
+                        for o in &outcomes {
+                            for p in &o.page_ids {
+                                if !page_ids.contains(p) {
+                                    page_ids.push(p.clone());
+                                }
+                            }
+                        }
+                        let mut stats: LayoutCacheStats = model.layout_cache_stats().into();
+                        stats.rebuild_ms = (clock() - t0) as f32;
+                        stats = stats.with_rebuild_stats(&model.last_rebuild_stats());
+                        let pages_after = page_table(model);
+                        let page_structure_changed = pages_before != pages_after;
+                        WorkerToMainKind::MutationApplied {
+                            client_seq: msg.seq,
+                            applied_seq: model.applied_log_back().map_or(0, |r| r.applied_seq),
+                            page_ids,
+                            cache_stats: stats,
+                            created_id: None,
+                            minted: Vec::new(),
+                            created_pages: Vec::new(),
+                            page_structure_changed,
+                            page_sizes_pt: page_structure_changed
+                                .then(|| pages_after.into_iter().map(|p| p.1).collect()),
+                            reflow: None,
+                        }
+                    }
+                    Err(error) => WorkerToMainKind::MutationFailed { error },
+                }
+            }
+            MainToWorkerKind::RedoTo { applied_seq } => {
+                let (kind, e) = self.history_jump(applied_seq, true, clock);
+                effect = e;
+                kind
+            }
             MainToWorkerKind::AmendMutation {
                 applied_seq,
                 mutation,
+                label,
             } => {
                 let Some(model) = self.model.as_ref() else {
                     reply!(WorkerToMainKind::MutationFailed {
@@ -502,6 +627,12 @@ impl WorkerCore {
                 if let WorkerToMainKind::MutationApplied { applied_seq, .. } = &reply.kind {
                     if let Some(model) = self.model.as_mut() {
                         model.fold_amend(base, *applied_seq);
+                        if let Some(label) = label
+                            .as_deref()
+                            .and_then(paged_canvas::undo_label::UndoLabel::explicit)
+                        {
+                            model.set_step_label(*applied_seq, label);
+                        }
                     }
                 }
                 return (reply, effect);
@@ -712,6 +843,36 @@ impl WorkerCore {
                     },
                 }
             }
+            // Engine ADR 1031 — SVG in and out; both read only.
+            MainToWorkerKind::RequestSvgImport {
+                page_id,
+                bytes,
+                options,
+            } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                WorkerToMainKind::SvgImportPlanned(
+                    model.svg_import_plan(&page_id, &bytes.0, &options),
+                )
+            }
+            MainToWorkerKind::ExportSvg {
+                page_id,
+                element_ids,
+                options,
+            } => match self.model.as_ref() {
+                None => WorkerToMainKind::ExportSvgFailed {
+                    error: "no document".into(),
+                },
+                Some(model) => match model.export_svg(&page_id, &element_ids, &options) {
+                    Ok((svg, report)) => WorkerToMainKind::SvgExported { svg, report },
+                    Err(e) => WorkerToMainKind::ExportSvgFailed {
+                        error: e.to_string(),
+                    },
+                },
+            },
             MainToWorkerKind::RequestStyleProperties {
                 collection,
                 style_id,
@@ -755,6 +916,7 @@ impl WorkerCore {
                             applied_seq: outcome.applied_seq,
                             page_ids: outcome.page_ids,
                             cache_stats: stats,
+                            steps: None,
                             page_structure_changed,
                             page_sizes_pt: page_structure_changed
                                 .then(|| pages_after.into_iter().map(|p| p.1).collect()),
@@ -891,6 +1053,7 @@ impl WorkerCore {
                         x_target: None,
                         y_target: None,
                         segment_target: None,
+                        angle_target: None,
                         lines: Vec::new(),
                         tolerance_pt: 0.0,
                     },
@@ -974,6 +1137,13 @@ impl WorkerCore {
                     m.set_snap_settings(settings);
                 }
                 WorkerToMainKind::SnapSettingsApplied { settings }
+            }
+            MainToWorkerKind::SetViewSettings { settings } => {
+                self.view_settings = settings;
+                if let Some(m) = self.model.as_mut() {
+                    m.set_view_settings(settings);
+                }
+                WorkerToMainKind::ViewSettingsApplied { settings }
             }
             MainToWorkerKind::RequestNearestPathPoint { id, point } => {
                 let result = self
@@ -1702,7 +1872,7 @@ impl WorkerCore {
                     Err(e) => WorkerToMainKind::GestureFailed { error: e.into() },
                 }
             }
-            MainToWorkerKind::CommitGesture { handle } => {
+            MainToWorkerKind::CommitGesture { handle, label } => {
                 if self.model.is_none() {
                     reply!(WorkerToMainKind::GestureFailed {
                         error: paged_canvas::channel::GestureFailure::NoDocument,
@@ -1712,6 +1882,14 @@ impl WorkerCore {
                 let model = self.model.as_mut().expect("checked above");
                 match model.commit_gesture(handle) {
                     Ok(outcome) => {
+                        // v77 (engine ADR 1030) — a caller's name wins over
+                        // the gesture's.
+                        if let Some(label) = label
+                            .as_deref()
+                            .and_then(paged_canvas::undo_label::UndoLabel::explicit)
+                        {
+                            model.set_step_label(outcome.applied_seq, label);
+                        }
                         effect = CacheEffect::ClearAll;
                         let mut stats: LayoutCacheStats = model.layout_cache_stats().into();
                         stats.rebuild_ms = (clock() - t0) as f32;
@@ -1776,6 +1954,7 @@ impl WorkerCore {
                             applied_seq: outcome.applied_seq,
                             page_ids: outcome.page_ids,
                             cache_stats: stats,
+                            steps: None,
                             page_structure_changed,
                             page_sizes_pt: page_structure_changed
                                 .then(|| pages_after.into_iter().map(|p| p.1).collect()),
@@ -1797,6 +1976,98 @@ impl WorkerCore {
             },
             effect,
         )
+    }
+
+    /// v77 (engine ADR 1030) — `UndoTo` / `RedoTo`: several steps in one
+    /// round trip, answered as one `UndoApplied` / `RedoApplied` over the
+    /// union of the pages they touched.
+    fn history_jump(
+        &mut self,
+        applied_seq: u64,
+        redo: bool,
+        clock: &Clock<'_>,
+    ) -> (WorkerToMainKind, CacheEffect) {
+        let Some(model) = self.model.as_mut() else {
+            return (
+                WorkerToMainKind::MutationFailed {
+                    error: WorkerError::NoDocument,
+                },
+                CacheEffect::None,
+            );
+        };
+        let t0 = clock();
+        let pages_before = page_table(model);
+        let stepped = if redo {
+            model.redo_to(applied_seq)
+        } else {
+            model.undo_to(applied_seq)
+        };
+        match stepped {
+            Ok(outcomes) if !outcomes.is_empty() => {
+                // Several steps may touch several stories: repaint
+                // everything rather than one story's pages.
+                let effect = if outcomes.len() == 1 {
+                    cache_effect_for_story(model, outcomes[0].affected_story_id.as_deref())
+                } else {
+                    CacheEffect::ClearAll
+                };
+                let mut page_ids: Vec<PageId> = Vec::new();
+                for o in &outcomes {
+                    for p in &o.page_ids {
+                        if !page_ids.contains(p) {
+                            page_ids.push(p.clone());
+                        }
+                    }
+                }
+                let last = outcomes.last().expect("not empty");
+                let mut stats: LayoutCacheStats = model.layout_cache_stats().into();
+                stats.rebuild_ms = (clock() - t0) as f32;
+                stats = stats.with_rebuild_stats(&model.last_rebuild_stats());
+                let pages_after = page_table(model);
+                let page_structure_changed = pages_before != pages_after;
+                let page_sizes_pt =
+                    page_structure_changed.then(|| pages_after.into_iter().map(|p| p.1).collect());
+                let steps = Some(outcomes.len() as u32);
+                let kind = if redo {
+                    WorkerToMainKind::RedoApplied {
+                        redone_seq: last.undone_seq,
+                        applied_seq: last.applied_seq,
+                        page_ids,
+                        cache_stats: stats,
+                        steps,
+                        page_structure_changed,
+                        page_sizes_pt,
+                    }
+                } else {
+                    WorkerToMainKind::UndoApplied {
+                        undone_seq: last.undone_seq,
+                        applied_seq: last.applied_seq,
+                        page_ids,
+                        cache_stats: stats,
+                        steps,
+                        page_structure_changed,
+                        page_sizes_pt,
+                    }
+                };
+                (kind, effect)
+            }
+            Ok(_) => (
+                WorkerToMainKind::MutationFailed {
+                    error: WorkerError::NotImplemented {
+                        what: format!(
+                            "{}: no step could be {}",
+                            if redo { "redoTo" } else { "undoTo" },
+                            if redo { "redone" } else { "undone" }
+                        ),
+                    },
+                },
+                CacheEffect::None,
+            ),
+            Err(error) => (
+                WorkerToMainKind::MutationFailed { error },
+                CacheEffect::None,
+            ),
+        }
     }
 
     // ---- v66 binary doors -------------------------------------------
@@ -2084,6 +2355,7 @@ impl WorkerCore {
             Some(applied_seq) => MainToWorkerKind::AmendMutation {
                 applied_seq,
                 mutation: m,
+                label: None,
             },
             None => MainToWorkerKind::Mutate(m),
         };

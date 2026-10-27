@@ -91,12 +91,15 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [282](282-enter-enters-owned-content.md) | Enter enters the content a plugin owns | Accepted 2026-10-23 |
 | [283](283-a-frame-surface-goes-full-screen.md) | A frame surface goes full screen through a chrome override | Accepted 2026-10-23 |
 | [284](284-the-breadcrumb-stays-under-the-title-bar.md) | The edit-context breadcrumb stays under the title bar; full screen carries its own | Accepted 2026-10-24 |
+| [285](285-the-history-panel.md) | The History panel lists every step by name, and a snapshot restore is one step | Accepted 2026-10-24 |
+| [287](287-view-modes.md) | View modes, grids and smart guides: Outline, Overprint and Pixel Preview, the grids, snapping v2, Rotate View | Accepted 2026-10-24 |
 | [291](291-the-data-panel.md) | The Data panel: the document's data as a grid, over the data door | Accepted 2026-10-24 |
 | [292](292-the-bind-popover.md) | The bind popover: field, rules, map or expression on any property field | Accepted 2026-10-24 |
 | [293](293-a-template-opened-as-a-document-says-so.md) | A template opened as a document says so, and offers "Edit template" | Accepted 2026-10-24 |
 | [294](294-the-fill-presets-on-phones-and-tablets.md) | The fill presets on phones and tablets | Accepted 2026-10-24 |
 | [298](298-control-bar-groups-per-edit-context.md) | Control-bar groups and status items follow the edit context | Accepted 2026-10-24 |
 | [299](299-scoped-keybindings-over-text-input.md) | Keybindings scoped to an edit context win over the text input | Accepted 2026-10-24 |
+| [303](303-find-and-replace.md) | Find & Replace | Accepted 2026-10-25 |
 | [304](304-a-module-presentation-fills-the-screen.md) | A module's presentation fills the screen | Accepted 2026-10-25 |
 | [305](305-the-audience-gets-a-window-of-its-own.md) | The audience gets a window of its own | Accepted 2026-10-25 |
 | [306](306-module-views-replace-the-canvas.md) | Module views replace the canvas | Accepted 2026-10-25 |

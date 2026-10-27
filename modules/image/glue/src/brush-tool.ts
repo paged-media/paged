@@ -64,6 +64,15 @@ import {
  *  the size affordance, the crosshair marks the dab centre). */
 export const PAINT_CURSOR: CursorSpec = { kind: "css", token: "crosshair" };
 
+/** How often a held pointer re-sends its sample (build-up, catch-up). */
+export const HOLD_TICK_MS = 50;
+
+/** Smoothing's 100% string length, in screen px. */
+export const SMOOTHING_SCREEN_PX = 128;
+
+/** The tools the Clone Source overlay shows under (WP5.8). */
+const OVERLAY_TOOLS: ReadonlySet<StrokeTool> = new Set(["clone", "heal"]);
+
 /** One gesture factory for all three paint tools; `tool` picks the wire
  *  name the engine freezes into the stroke. */
 export function makeBrushGesture(
@@ -88,9 +97,50 @@ export function makeBrushGesture(
 
   /** Abandon the stroke in flight: the engine-held pixels were never
    *  mutated, so nothing is lost but the preview. */
+  /** BUILD-UP / CATCH-UP: while the pointer is held still the machine
+   *  re-queues its last sample on a tick, which the engine reads as time
+   *  passing (an airbrush keeps depositing; a smoothed brush catches up
+   *  with the pointer). Runs only when one of the two is on. */
+  let ticker: ReturnType<typeof setInterval> | null = null;
+  let movedSinceTick = false;
+  const stopTicker = () => {
+    if (ticker !== null) clearInterval(ticker);
+    ticker = null;
+  };
+  const startTicker = () => {
+    stopTicker();
+    const d = session.state().dynamics as
+      ReturnType<ImageSession["state"]>["dynamics"] | undefined;
+    if (!d) return;
+    const holds = d.buildUp || (d.smoothing.amount > 0 && d.smoothing.catchUp);
+    if (!holds) return;
+    ticker = setInterval(() => {
+      const machine = session.brushMachine();
+      if (!machine?.state().drawing) return stopTicker();
+      if (movedSinceTick) {
+        movedSinceTick = false;
+        return;
+      }
+      if (machine.hold()) void pump();
+    }, HOLD_TICK_MS);
+  };
+
+  /** The pulled string's length in IMAGE px: Smoothing's amount × 128
+   *  SCREEN px when zoom-compensated (so it feels the same at every
+   *  zoom), × 128 image px otherwise. */
+  const smoothingRadiusPx = (): number => {
+    const sm = session.state().dynamics?.smoothing;
+    if (!sm || sm.amount <= 0) return 0;
+    const screen = sm.amount * SMOOTHING_SCREEN_PX;
+    if (!sm.zoomCompensation || !fit) return screen;
+    const pt = host.viewport.pxToPt(screen);
+    return fit.scale > 0 ? pt / fit.scale : screen;
+  };
+
   const abandon = () => {
     stroke++;
     opened = false;
+    stopTicker();
     session.brushCancel();
     session.brushMachine()?.cancel();
   };
@@ -159,6 +209,7 @@ export function makeBrushGesture(
     onDeactivate(_reason: DeactivateReason) {
       // A tool switch mid-drag abandons the stroke.
       abandon();
+      if (OVERLAY_TOOLS.has(tool)) void session.cloneOverlayAt(null, 0);
       host.overlay.setToolPreview(null);
       fit = null;
     },
@@ -186,12 +237,31 @@ export function makeBrushGesture(
         session.sampleColor(point, 3);
         return;
       }
-      if (!machine.down(point, e.pressure, e.pointerType as BrushPointerType))
+      if (
+        !machine.down(point, e.pressure, e.pointerType as BrushPointerType, {
+          tiltX: e.tiltX,
+          tiltY: e.tiltY,
+        })
+      )
         return;
+      // Auto-hide: the overlay steps aside while the stroke paints.
+      if (
+        OVERLAY_TOOLS.has(tool) &&
+        session.state().retouch.cloneSource.overlay.autoHide
+      )
+        void session.cloneOverlayAt(null, 0);
       renderTip(point);
       const mine = ++stroke;
+      startTicker();
       void (async () => {
-        if (!(await session.brushBegin(tool))) {
+        // The string length crosses only when smoothing is on, so a
+        // plain stroke's begin is the one it always was.
+        const radius = smoothingRadiusPx();
+        const began =
+          radius > 0
+            ? await session.brushBegin(tool, { smoothingRadiusPx: radius })
+            : await session.brushBegin(tool);
+        if (!began) {
           if (mine === stroke) machine.cancel();
           return;
         }
@@ -213,8 +283,17 @@ export function makeBrushGesture(
       }
       const point = pageToImage(fit, e.pagePoint);
       if (machine?.state().drawing) {
-        machine.move(point, e.pressure, e.pointerType as BrushPointerType);
+        if (
+          machine.move(point, e.pressure, e.pointerType as BrushPointerType, {
+            tiltX: e.tiltX,
+            tiltY: e.tiltY,
+          })
+        )
+          movedSinceTick = true;
         void pump();
+      } else if (OVERLAY_TOOLS.has(tool)) {
+        // WP5.8 — the Clone Source overlay follows the hovering brush.
+        void session.cloneOverlayAt(point, session.state().brush.size / 2);
       }
       renderTip(point);
     },
@@ -222,6 +301,7 @@ export function makeBrushGesture(
     onPointerUp(_e: CanvasPointerEvent) {
       const machine = session.brushMachine();
       if (!machine || !machine.state().drawing) return;
+      stopTicker();
       machine.up();
       void pump();
     },

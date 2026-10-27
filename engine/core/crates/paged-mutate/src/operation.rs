@@ -1638,6 +1638,15 @@ pub enum PropertyPath {
     /// Word's "show hidden text", on `NodeId::Document`: `Value::Bool`,
     /// default false. A whole-document reflow.
     DocumentShowHiddenText,
+    // ---- engine ADR 1031 — the gradient's start ---------------------
+    /// `GradientFillStart`: where a frame's gradient fill starts, in the
+    /// item's own (inner) coordinates — a linear axis begins there, a
+    /// radial gradient is centred there with `FrameGradientFillLength` as
+    /// its radius. `Value::Lengths` `[x, y]`; `[]` clears it to InDesign's
+    /// default (the inner box's bottom-left corner). On a TextFrame,
+    /// Rectangle, Oval or Polygon. The IDML adapter reads and writes it.
+    /// Paint-only (`frame_style`).
+    FrameGradientFillStart,
     /// Word's "show field codes" (Alt+F9), on `NodeId::Document`:
     /// `Value::Bool`, default false. Every Word field sets its code in
     /// braces instead of its result (engine ADR 1022). A whole-document
@@ -2033,6 +2042,7 @@ impl PropertyPath {
             PropertyPath::ParagraphBorderColor => "paragraph.borderColor",
             PropertyPath::ParagraphBorderWeight => "paragraph.borderWeight",
             PropertyPath::DocumentShowHiddenText => "document.showHiddenText",
+            PropertyPath::FrameGradientFillStart => "frame.gradientFillStart",
             PropertyPath::DocumentShowFieldCodes => "document.showFieldCodes",
         }
     }

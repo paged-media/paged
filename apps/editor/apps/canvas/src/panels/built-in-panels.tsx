@@ -96,6 +96,7 @@ import { StrokePanel } from "./stroke-panel";
 import { InspectorPanel } from "./inspector-panel";
 import { LayersPanel } from "./layers-panel";
 import { NavigatorPanel } from "./navigator-panel";
+import { FIND_RESULTS_PANEL, FindResultsPanel } from "../find/find-ui";
 import { OutlinePanel } from "./outline-panel";
 import { ActionsPanel } from "./actions-panel";
 import { ReplPanel } from "./repl-panel";
@@ -104,6 +105,7 @@ import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
 import { JournalPanel } from "./journal-panel";
 import { DataPanel } from "./data-panel";
+import { HistoryPanel } from "./history-panel";
 import { LibraryPanel } from "./library-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
@@ -198,6 +200,7 @@ const M = defineMessages("app.builtInPanels", {
   layers: "Layers",
   info: "Info",
   navigator: "Navigator",
+  findResults: "Find results",
   attributes: "Attributes",
   properties: "Properties",
   aiAssistant: "AI Assistant",
@@ -209,6 +212,7 @@ const M = defineMessages("app.builtInPanels", {
   problems: "Problems",
   journal: "Journal",
   data: "Data",
+  history: "History",
   library: "Library",
   table: "Table",
   tabs: "Tabs",
@@ -255,6 +259,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.pages);
     },
     component: NavigatorPanel,
+    defaultDock: "left",
+    defaultGroup: "structure",
+  },
+  {
+    // ADR 303 — the Navigation pane's Results tab: search the document's
+    // text, every hit with its context; a click goes to the hit.
+    id: FIND_RESULTS_PANEL,
+    get title() {
+      return t(M.findResults);
+    },
+    component: FindResultsPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
@@ -1010,6 +1025,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: LayersPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
+  },
+  // Editor ADR 285 — every undo step by name (engine ADR 1030), click to
+  // go back to one; snapshots; the active edit context's own steps.
+  {
+    id: "paged.history",
+    get title() {
+      return t(M.history);
+    },
+    component: HistoryPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+    icon: "ui-history",
   },
   {
     // SDK Phase 5 (v1 sweep) — read-only document info. Expert

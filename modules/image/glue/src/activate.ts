@@ -53,6 +53,7 @@ import manifest from "../manifest.json";
 import { createImageSession } from "./session";
 import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
+import { contributeMasking } from "./masking-contrib";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { adjustmentKindLabel } from "./panels/sections/layer-parity";
@@ -66,8 +67,27 @@ import {
   makeEyedropperGesture,
 } from "./sampler-tools";
 import { makePatchGesture } from "./patch-tool";
+import {
+  makeCafSamplingGesture,
+  makeContentAwareMoveGesture,
+  makeRemoveGesture,
+} from "./retouch-tools";
+import { makeCloneSourcePanel } from "./panels/sections/retouch-sections";
+import {
+  bindRetouchToolSettings,
+  retouchToolOptionFields,
+} from "./retouch-options";
 import { makeSelectionGesture } from "./selection-tool";
 import { makeBrushGesture, PAINT_CURSOR } from "./brush-tool";
+import { makeMagicEraserGesture } from "./magic-eraser-tool";
+import {
+  BRUSH_SETTINGS_PANEL_ID,
+  makeBrushSettingsPanel,
+} from "./panels/brush-settings-panel";
+import {
+  BRUSH_PRESETS_PANEL_ID,
+  makeBrushPresetsPanel,
+} from "./panels/brush-presets-panel";
 import { makeTypeGesture } from "./type-tool";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
@@ -148,6 +168,16 @@ const CMD = defineMessages("image.command", {
   linkLayers: "Link the active layer with the layer below",
   unlinkLayer: "Unlink the active layer",
   newLayerComp: "New layer comp",
+  brushSettings: "Brush settings",
+  brushPresets: "Brush presets",
+  defineBrushPreset: "Define brush preset…",
+  importBrushPresets: "Import brush presets…",
+  exportBrushPresetsAbr: "Export brush presets (.abr)…",
+  exportBrushPresetsJson: "Export brush presets (.json)…",
+  lockTransparentPixels: "Lock transparent pixels",
+  contentAwareFillWorkspace: "Content-aware fill… (workspace)",
+  openCloneSource: "Clone source panel",
+  cloneSource: "Clone Source",
 });
 
 const TOOL = defineMessages("image.tool", {
@@ -177,6 +207,16 @@ const TOOL = defineMessages("image.tool", {
   sponge: "Sponge",
   blurBrush: "Blur (brush)",
   sharpenBrush: "Sharpen (brush)",
+  smudge: "Smudge",
+  mixerBrush: "Mixer brush",
+  historyBrush: "History brush",
+  artHistoryBrush: "Art history brush",
+  backgroundEraser: "Background eraser",
+  magicEraser: "Magic eraser",
+  colorReplacement: "Color replacement",
+  contentAwareMove: "Content-aware move",
+  remove: "Remove",
+  samplingBrush: "Sampling brush (content-aware fill)",
 });
 
 const IO = defineMessages("image.io", {
@@ -209,6 +249,10 @@ const BLUR_TOOL_ID = "media.paged.image.tool.blur";
 const SHARPEN_TOOL_ID = "media.paged.image.tool.sharpen";
 const SPOT_HEAL_TOOL_ID = "media.paged.image.tool.spotHeal";
 const PATCH_TOOL_ID = "media.paged.image.tool.patch";
+const CA_MOVE_TOOL_ID = "media.paged.image.tool.contentAwareMove";
+const REMOVE_TOOL_ID = "media.paged.image.tool.remove";
+const CAF_SAMPLING_TOOL_ID = "media.paged.image.tool.cafSampling";
+const CLONE_SOURCE_PANEL_ID = "media.paged.image.panel.cloneSource";
 const MARQUEE_RECT_TOOL_ID = "media.paged.image.tool.marqueeRect";
 const MARQUEE_ELLIPSE_TOOL_ID = "media.paged.image.tool.marqueeEllipse";
 const LASSO_TOOL_ID = "media.paged.image.tool.lasso";
@@ -221,6 +265,13 @@ const ERASER_TOOL_ID = "media.paged.image.tool.eraser";
 const CLONE_TOOL_ID = "media.paged.image.tool.clone";
 const HEAL_TOOL_ID = "media.paged.image.tool.heal";
 const TYPE_TOOL_ID = "media.paged.image.tool.type";
+const SMUDGE_TOOL_ID = "media.paged.image.tool.smudge";
+const MIXER_TOOL_ID = "media.paged.image.tool.mixerBrush";
+const HISTORY_TOOL_ID = "media.paged.image.tool.historyBrush";
+const ART_HISTORY_TOOL_ID = "media.paged.image.tool.artHistoryBrush";
+const BG_ERASER_TOOL_ID = "media.paged.image.tool.backgroundEraser";
+const MAGIC_ERASER_TOOL_ID = "media.paged.image.tool.magicEraser";
+const COLOR_REPLACE_TOOL_ID = "media.paged.image.tool.colorReplacement";
 
 export function activate(host: BundleHost): BundleHandle {
   const session = createImageSession(host);
@@ -247,6 +298,14 @@ export function activate(host: BundleHost): BundleHandle {
     title: t(CMD.image),
     icon: "panel-canvas",
     component: makeImagePanel(session),
+    defaultDock: "right",
+  });
+  // WP5.8 — the Clone Source panel (five sources, transform, overlay).
+  contributePanel(host, {
+    id: CLONE_SOURCE_PANEL_ID,
+    title: t(CMD.cloneSource),
+    icon: "panel-canvas",
+    component: makeCloneSourcePanel(session),
     defaultDock: "right",
   });
 
@@ -325,12 +384,34 @@ export function activate(host: BundleHost): BundleHandle {
         gradient: GRADIENT_TOOL_ID,
         eyedropper: EYEDROPPER_TOOL_ID,
         colorSampler: COLOR_SAMPLER_TOOL_ID,
+        paintTools: {
+          smudge: SMUDGE_TOOL_ID,
+          mixer: MIXER_TOOL_ID,
+          history: HISTORY_TOOL_ID,
+          artHistory: ART_HISTORY_TOOL_ID,
+          backgroundEraser: BG_ERASER_TOOL_ID,
+          magicEraser: MAGIC_ERASER_TOOL_ID,
+          colorReplace: COLOR_REPLACE_TOOL_ID,
+        },
       })
     : null;
-  const optionsFor = (toolId: string) =>
-    toolFields?.[toolId]
-      ? { options: { toolId, fields: toolFields[toolId] } }
-      : {};
+  // WP5.8 — the retouching tools' options (retouch-options.ts).
+  const retouchFields = host.supports("tools.settings@1")
+    ? retouchToolOptionFields({
+        clone: CLONE_TOOL_ID,
+        heal: HEAL_TOOL_ID,
+        spotHeal: SPOT_HEAL_TOOL_ID,
+        move: CA_MOVE_TOOL_ID,
+        remove: REMOVE_TOOL_ID,
+      })
+    : null;
+  const optionsFor = (toolId: string) => {
+    const fields = [
+      ...(toolFields?.[toolId] ?? []),
+      ...(retouchFields?.[toolId] ?? []),
+    ];
+    return fields.length ? { options: { toolId, fields } } : {};
+  };
 
   contributeTool(host, {
     id: CROP_TOOL_ID,
@@ -589,6 +670,7 @@ export function activate(host: BundleHost): BundleHandle {
   // (INV-REG-1 keeps tool shortcuts globally unique).
   contributeTool(host, {
     id: CLONE_TOOL_ID,
+    ...optionsFor(CLONE_TOOL_ID),
     title: t(TOOL.cloneStamp),
     icon: "tool-clone",
     group: CLONE_TOOL_ID,
@@ -599,6 +681,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   contributeTool(host, {
     id: HEAL_TOOL_ID,
+    ...optionsFor(HEAL_TOOL_ID),
     title: t(TOOL.healingBrush),
     icon: "tool-heal",
     group: HEAL_TOOL_ID,
@@ -634,11 +717,90 @@ export function activate(host: BundleHost): BundleHandle {
     });
   }
 
+  // ── THE BRUSH ENGINE's tools (WP5.7) ──
+  //
+  // They join existing flyouts WITHOUT shortcuts (the single-letter and
+  // shift registers are full — INV-REG-1): smudge beside blur/sharpen,
+  // the mixer brush and colour replacement beside the brush, the two
+  // history brushes in a slot of their own, the background and magic
+  // erasers beside the eraser. All but the magic eraser are strokes of
+  // the same gesture; Brush Settings shapes every one of them.
+  contributeTool(host, {
+    id: SMUDGE_TOOL_ID,
+    ...optionsFor(SMUDGE_TOOL_ID),
+    title: t(TOOL.smudge),
+    icon: "tool-clone",
+    group: CLONE_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "smudge"),
+  });
+  contributeTool(host, {
+    id: MIXER_TOOL_ID,
+    ...optionsFor(MIXER_TOOL_ID),
+    title: t(TOOL.mixerBrush),
+    icon: "tool-paintbrush",
+    group: BRUSH_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "mixer"),
+  });
+  contributeTool(host, {
+    id: COLOR_REPLACE_TOOL_ID,
+    ...optionsFor(COLOR_REPLACE_TOOL_ID),
+    title: t(TOOL.colorReplacement),
+    icon: "tool-paintbrush",
+    group: BRUSH_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "color-replace"),
+  });
+  contributeTool(host, {
+    id: HISTORY_TOOL_ID,
+    ...optionsFor(HISTORY_TOOL_ID),
+    title: t(TOOL.historyBrush),
+    icon: "tool-paintbrush",
+    group: HISTORY_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "history"),
+  });
+  contributeTool(host, {
+    id: ART_HISTORY_TOOL_ID,
+    ...optionsFor(ART_HISTORY_TOOL_ID),
+    title: t(TOOL.artHistoryBrush),
+    icon: "tool-paintbrush",
+    group: HISTORY_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "art-history"),
+  });
+  contributeTool(host, {
+    id: BG_ERASER_TOOL_ID,
+    ...optionsFor(BG_ERASER_TOOL_ID),
+    title: t(TOOL.backgroundEraser),
+    icon: "tool-erase",
+    group: ERASER_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "background-eraser"),
+  });
+  contributeTool(host, {
+    id: MAGIC_ERASER_TOOL_ID,
+    ...optionsFor(MAGIC_ERASER_TOOL_ID),
+    title: t(TOOL.magicEraser),
+    icon: "tool-erase",
+    group: ERASER_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeMagicEraserGesture(host, session),
+  });
+
   // SPOT HEALING BRUSH — shares the healing brush's slot; no anchor, no
   // shortcut. The heal lands on release (the engine searches for the
   // source then).
   contributeTool(host, {
     id: SPOT_HEAL_TOOL_ID,
+    ...optionsFor(SPOT_HEAL_TOOL_ID),
     title: t(TOOL.spotHealingBrush),
     icon: "tool-heal",
     group: HEAL_TOOL_ID,
@@ -656,6 +818,44 @@ export function activate(host: BundleHost): BundleHandle {
     group: HEAL_TOOL_ID,
     section: "drawType",
     gesture: () => makePatchGesture(host, session),
+  });
+
+  // ── WP5.8 retouching tools — all in the healing slot, no shortcuts
+  // (the register is full; Photoshop keeps them in this flyout too) ──
+  //
+  // CONTENT-AWARE MOVE: drag the selection where the object should go;
+  // the hole it leaves is filled and the moved pixels blend in.
+  contributeTool(host, {
+    id: CA_MOVE_TOOL_ID,
+    ...optionsFor(CA_MOVE_TOOL_ID),
+    title: t(TOOL.contentAwareMove),
+    icon: "tool-heal",
+    group: HEAL_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeContentAwareMoveGesture(host, session),
+  });
+  // REMOVE: paint over an object; it is filled from its surroundings on
+  // release (an `ml.inpaint` provider answers first when installed).
+  contributeTool(host, {
+    id: REMOVE_TOOL_ID,
+    ...optionsFor(REMOVE_TOOL_ID),
+    title: t(TOOL.remove),
+    icon: "tool-heal",
+    group: HEAL_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeRemoveGesture(host, session),
+  });
+  // SAMPLING BRUSH: paints the Content-Aware Fill workspace's sampling
+  // area (Alt erases); outside the workspace a click opens it.
+  contributeTool(host, {
+    id: CAF_SAMPLING_TOOL_ID,
+    title: t(TOOL.samplingBrush),
+    icon: "tool-heal",
+    group: HEAL_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeCafSamplingGesture(host, session),
   });
 
   // GENERATE — the `gen.*` family's editor reach. Fills the CURRENT
@@ -1061,6 +1261,82 @@ export function activate(host: BundleHost): BundleHandle {
     },
   });
 
+  // BRUSH ENGINE (WP5.7): the two panels and their verbs.
+  contributePanel(host, {
+    id: BRUSH_SETTINGS_PANEL_ID,
+    title: t(CMD.brushSettings),
+    icon: "tool-paintbrush",
+    component: makeBrushSettingsPanel(session),
+    defaultDock: "right",
+  });
+  contributePanel(host, {
+    id: BRUSH_PRESETS_PANEL_ID,
+    title: t(CMD.brushPresets),
+    icon: "tool-paintbrush",
+    component: makeBrushPresetsPanel(session),
+    defaultDock: "right",
+  });
+  command({
+    id: "media.paged.image.command.openBrushSettings",
+    title: t(CMD.brushSettings),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(BRUSH_SETTINGS_PANEL_ID);
+    },
+  });
+  command({
+    id: "media.paged.image.command.openBrushPresets",
+    title: t(CMD.brushPresets),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(BRUSH_PRESETS_PANEL_ID);
+    },
+  });
+  command({
+    id: "media.paged.image.command.defineBrushPreset",
+    title: t(CMD.defineBrushPreset),
+    category: "Image",
+    handler: async () => {
+      host.shell.openPanel(BRUSH_PRESETS_PANEL_ID);
+      await session.defineBrushPreset();
+    },
+  });
+  command({
+    id: "media.paged.image.command.importBrushPresets",
+    title: t(CMD.importBrushPresets),
+    category: "Image",
+    handler: async () => {
+      host.shell.openPanel(BRUSH_PRESETS_PANEL_ID);
+      await session.importBrushPresets();
+    },
+  });
+  command({
+    id: "media.paged.image.command.exportBrushPresetsAbr",
+    title: t(CMD.exportBrushPresetsAbr),
+    category: "Image",
+    handler: async () => {
+      await session.exportBrushPresets("abr");
+    },
+  });
+  command({
+    id: "media.paged.image.command.exportBrushPresetsJson",
+    title: t(CMD.exportBrushPresetsJson),
+    category: "Image",
+    handler: async () => {
+      await session.exportBrushPresets("json");
+    },
+  });
+  command({
+    id: "media.paged.image.command.toggleLockTransparent",
+    title: t(CMD.lockTransparentPixels),
+    category: "Image",
+    handler: () => {
+      session.setBrushDynamics({
+        lockAlpha: !session.state().dynamics.lockAlpha,
+      });
+    },
+  });
+
   // RASTER ↔ VECTOR — the conversion pair the "Paths / shapes" catalog
   // row priced as missing. The vector side stays host-owned; these are
   // only the bridge.
@@ -1155,6 +1431,24 @@ export function activate(host: BundleHost): BundleHandle {
       void session.fillSelection({ kind: "contentAware" });
     },
   });
+  // Edit ▸ Content-Aware Fill… — the workspace (WP5.8).
+  command({
+    id: "media.paged.image.command.contentAwareFillWorkspace",
+    title: t(CMD.contentAwareFillWorkspace),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      void session.openContentAwareFill();
+    },
+  });
+  command({
+    id: "media.paged.image.command.openCloneSource",
+    title: t(CMD.openCloneSource),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(CLONE_SOURCE_PANEL_ID);
+    },
+  });
 
   // Selection commands (the panel buttons + command-palette reach).
   command({
@@ -1190,6 +1484,10 @@ export function activate(host: BundleHost): BundleHandle {
       session.featherSelection();
     },
   });
+  // Selection and masking (WP5.5, ADR 470): Color Range, Select and
+  // Mask, Quick Mask, Grow / Similar, Focus Area, channels and paths,
+  // the Magnetic Lasso and the Refine Edge brush.
+  const maskingSub = contributeMasking(host, session, command, PANEL_ID);
 
   // K-2 — the raster importer: opening/dropping a PSD/PNG/JPEG routes
   // its bytes HERE (decode into the session, raise the panel; it does
@@ -1275,6 +1573,20 @@ export function activate(host: BundleHost): BundleHandle {
     [GRADIENT_TOOL_ID]: "gradient",
     [EYEDROPPER_TOOL_ID]: "eyedropper",
     [COLOR_SAMPLER_TOOL_ID]: "eyedropper",
+    [SMUDGE_TOOL_ID]: { paint: "smudge" },
+    [MIXER_TOOL_ID]: { paint: "mixer" },
+    [HISTORY_TOOL_ID]: { paint: "history" },
+    [ART_HISTORY_TOOL_ID]: { paint: "artHistory" },
+    [BG_ERASER_TOOL_ID]: { paint: "backgroundEraser" },
+    [MAGIC_ERASER_TOOL_ID]: { paint: "magicEraser" },
+    [COLOR_REPLACE_TOOL_ID]: { paint: "colorReplace" },
+  });
+  const retouchSettingsSub = bindRetouchToolSettings(host, session, {
+    [CLONE_TOOL_ID]: "clone",
+    [HEAL_TOOL_ID]: "heal",
+    [SPOT_HEAL_TOOL_ID]: "spotHeal",
+    [CA_MOVE_TOOL_ID]: "move",
+    [REMOVE_TOOL_ID]: "remove",
   });
   const willSave = host.supports("document.onWillSave@1")
     ? host.document.onWillSave(async () => {
@@ -1287,6 +1599,23 @@ export function activate(host: BundleHost): BundleHandle {
       // The Edit menu reads "Undo <step>".
       undoLabel: () => session.state().history?.undoLabel ?? null,
       redoLabel: () => session.state().history?.redoLabel ?? null,
+      // Editor ADR 285 — the host's History panel lists the image's own
+      // journal while the context is active (pixel steps, which the
+      // document's timeline does not see), and a click walks it.
+      historySteps: () => {
+        const h = session.state().history;
+        if (!h) return null;
+        return {
+          undo: h.undoSteps,
+          redo: h.redoSteps,
+          step: (delta: number) =>
+            delta < 0 ? session.undoSteps(-delta) : session.redoSteps(delta),
+        };
+      },
+      onDidChangeHistory: (listener: () => void) => {
+        const sub = session.onDidChange(listener);
+        return () => sub.dispose();
+      },
       type: "rasterImage",
       entry: "doubleClick",
       // Claimed by OUR OWN METADATA, never by kind. The candidate is a
@@ -1333,6 +1662,16 @@ export function activate(host: BundleHost): BundleHandle {
         SHARPEN_TOOL_ID,
         SPOT_HEAL_TOOL_ID,
         PATCH_TOOL_ID,
+        SMUDGE_TOOL_ID,
+        MIXER_TOOL_ID,
+        COLOR_REPLACE_TOOL_ID,
+        HISTORY_TOOL_ID,
+        ART_HISTORY_TOOL_ID,
+        BG_ERASER_TOOL_ID,
+        MAGIC_ERASER_TOOL_ID,
+        CA_MOVE_TOOL_ID,
+        REMOVE_TOOL_ID,
+        CAF_SAMPLING_TOOL_ID,
       ],
       // The context's OWN panel. Deliberately NOT the host panels it
       // serves (Layers, Character) — naming those here would put host
@@ -1481,7 +1820,9 @@ export function activate(host: BundleHost): BundleHandle {
       providerInvalidate?.dispose();
       willSave?.dispose();
       toolSettingsSub?.dispose();
+      retouchSettingsSub?.dispose();
       menuSub.dispose();
+      maskingSub.dispose();
       providerInvalidate = null;
       for (const h of providerHandles.splice(0)) h.dispose();
       session.dispose();
@@ -1489,4 +1830,4 @@ export function activate(host: BundleHost): BundleHandle {
   };
 }
 
-export { manifest, PANEL_ID };
+export { manifest, PANEL_ID, CLONE_SOURCE_PANEL_ID };

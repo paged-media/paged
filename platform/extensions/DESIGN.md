@@ -431,6 +431,13 @@ every drawing tool needs) and `viewport.camera()/pxToPt(px)` (the
 zoom-constant-tolerance idiom from `pencil/scissors/pen` — [draw B-11]
 showed every tool re-derives it).
 
+Since protocol 77 (editor ADR 287, Rotate View) the camera snapshot — here
+and in `OverlayProps.camera` — carries an optional `rotation` (radians,
+clockwise on screen; absent = 0): the screen shows
+`scale · R(rotation) · doc + (tx, ty)`. Overlays are drawn under that
+transform already and pointer positions reach tools in document space, so
+only a contribution placing screen-space HTML needs to read it.
+
 ### 4.5 `host.overlay`
 
 `setToolPreview(shape | null)` — the polyline/rect/path preview signal
@@ -726,6 +733,18 @@ pasted-in children under it, a clip group's row marked `clip: true`.
 Additive at protocol 76 like the fill rule: an older engine makes a plain
 group of `clip: true` and refuses a group child. paged.draw's clipped
 repeat asks it before choosing a clip group over paste-into.
+
+`"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
+protocol 77) are SVG in and out through the engine's `paged-svg`.
+`importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the
+engine for the import's ONE batch (`requestSvgImport`, a read) and applies
+it through `document.mutate`, so the write gate, the namespace check and
+the single undo step are the ordinary ones; the answer carries the
+engine's report of what was approximated or left out. `exportSvg({ pageId?,
+elementIds?, text?, minify?, region? })` is a read. Both answer an outcome
+on an engine before 77, never a throw. paged.draw's SVG importer and
+exporter delegate to them and keep their own TypeScript reader as the
+fallback for a host without the flags.
 
 ### 4.9 `host.editor` — the marked escape hatch
 
@@ -2844,8 +2863,16 @@ stands in for. Four doors, shipped together:
   words), or with `extent: "paragraphs"` the touched paragraphs whole (line spacing as
   `characterLeading`). The SDK converts the selection's content offsets (UTF-8 bytes, one
   synthetic `\n` per paragraph) to the character offsets a story range counts; passing one as
-  the other formats the wrong text from the second paragraph on. Find and replace is NOT in C4:
-  the engine's `FindReplace` op is not on main; it joins as an additive member when it lands.
+  the other formats the wrong text from the second paragraph on.
+- **C4 amendment 1: find and replace** (ADR 348 amendment 1, engine ADR 1021).
+  `find(spec)` → `{ hits, error? }` over `RequestFindText` (hits in caret AND character
+  offsets, context, paragraph; Word's `^p` `^t` `^l` `^m` `^?` `^#` `^$` `^^`; literal, Word
+  wildcards or ECMAScript regex; match case, whole word, paragraph / character style filter);
+  `replace(spec)` → `{ applied, replaced, error? }`, one `findReplace` = one undo step for
+  Replace All, nothing sent when nothing matches; `characterRange()` the selection in story
+  characters (for `setListLevel` / `restartNumbering`). The dialog and results panel are the
+  host's (editor ADR 303); a bundle's scoped keys name `paged.edit.find` / `.replace` /
+  `.goTo`. `shell.openPanel(id, { target })` points a panel at an ADR 131 address first.
 - **The document context, `host.shell.setDocumentContext(type | null)`.** A Word document
   opened as the whole document has no frame to enter, yet is Word content on every page. A
   bundle declares that the open document is one of its registered context types; the scoped
@@ -2857,10 +2884,11 @@ stands in for. Four doors, shipped together:
   keybindings still need `capabilities.keybindings`. No new manifest field.
 - **Probes.** Static doors: `contribute.controlBarGroup@1`, `contribute.statusItem@1`,
   `contribute.keybinding.scope@1`. Host backing: `controlBar.groups@1`, `statusBar.items@1`,
-  `text.selection@1`, `text.format@1`, `shell.documentContext@1`.
+  `text.selection@1`, `text.format@1`, `shell.documentContext@1`; `text.find@1` (static).
 - **Harness.** `createHeadlessHost` records groups and status items
   (`controlBarGroupsContributed()`, `statusItemsContributed()`), plays the caret
-  (`setTextSelection`) and reports the document context (`documentContext()`, dropped on load).
+  (`setTextSelection`) and reports the document context (`documentContext()`, dropped on load);
+  `shell` passes a shell backend through (to record `openPanel` and its target).
 - **Isolate.** The groups and status items are React in the host realm, like panels (§6).
 
 ## 27. Presentations, module views and page layers (ADRs 345, 346 — `shell.present@1`, `shell.views@1`, `render.layers@1`)
@@ -2891,3 +2919,41 @@ place of the canvas (a slide sorter), and a page as composable layers.
   harness wires a presenter and a view registry that keep state and draw nothing.
 - **Isolate.** A presentation's DOM surface becomes a transferred `OffscreenCanvas` and a
   plain-data input stream; the channel is already message-passing.
+
+## 28. Named undo steps and the History panel (engine ADR 1030, editor ADR 285 — `document.undoLog@1`)
+
+Every step of the document's undo timeline has a name, and a bundle can read the timeline,
+move along it, and name the steps it makes (protocol 77).
+
+- **Naming a step.** `document.mutate(m, { label })`, `mutateWithBytes(m, bytes, { label })`
+  and `host.objects.set(…, { label })` / `host.objects.batch(ops, { label })` name the one undo
+  step the write makes, in the caller's words ("Add caption"). The host sends the write as it
+  always did and names its step right after (the engine's `labelStep`), so a write that loses
+  a race to another keeps the default name. With `{ amend, label }` the amended step is
+  renamed; without `label` it keeps its name. A blank label keeps the engine's default, which
+  is derived from the op ("Insert text frame", "Change fill", "Move", "Multiple changes"; a
+  gesture by its kind).
+- **Reading the timeline.** `document.undoLog({ limit })` answers `UndoLog`: `undo` (oldest
+  first, the last is what an undo reverts) and `redo` (next redo first), each
+  `UndoLogStep { appliedSeq, label, key }`, plus `undoLen`, `redoLen` and the engine's
+  `depth`. `key` is the derivation key of a default (`moveFrame`, `set:frame.fillColor`,
+  `gesture:rotate`), `null` for a caller's label: a host translates the keys it knows. A read
+  (`capabilities.document.read`).
+- **Moving along it.** `document.undoTo(appliedSeq)` / `redoTo(appliedSeq)` move down to /
+  up to and including that step in one engine round trip; `false` when the step is not on
+  that log (nothing moved). Write doors (`capabilities.document.write`), like `undo` /
+  `redo`.
+- **An edit context's own history.** `EditContextContribution.historySteps?()` returns the
+  context's own list (`EditContextHistory { undo, redo, step(delta) }`, oldest first, next
+  redo first) while it is active, and `onDidChangeHistory?(listener)` (returns the
+  unsubscribe) says when it changed. The host's History panel lists it instead of the
+  document's timeline; a click calls `step(-n)` to undo `n` steps or `step(n)` to redo.
+  `supports("editContext.historySteps@1")` is true when the host's panel reads it (the
+  `editContextHistorySteps` host option).
+- **Probes.** `document.undoLog@1` (static: the worker handshake refuses an engine older than
+  the pinned protocol), `editContext.historySteps@1` (dynamic).
+- **Not in this door.** Snapshot restore (`restoreTo`, one new undo step) and the history
+  depth are the editor's (editor ADR 285); a bundle that needs them asks.
+- **Additivity.** Three `DocumentSurface` members, `label` on `MutateOptions` and `MutateWithBytesOptions`, the
+  `UndoLog` / `UndoLogStep` / `EditContextHistory` types, two optional edit-context members,
+  one host option and two flags. An older host ignores `label` and lacks the three doors.

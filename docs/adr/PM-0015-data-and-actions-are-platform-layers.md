@@ -168,3 +168,14 @@ interpreter gains `paged.data.*` and `paged.actions.*`.
 - **Headless image actions** need either a GPU-capable host or the CPU twins of the kernels
   promoted to a supported backend. That is decided with `paged-kernels` (core 1013).
 - **The `plugin-sdk` version** gains a minor step for each of the two doors.
+
+## Amendment (2026-10-25): headless image actions
+
+The open point on headless image actions is settled by image
+[ADR 467](../../modules/image/docs/adr/467-cpu-resample-for-headless-actions.md), ahead of
+`paged-kernels`: a CPU resample (the leaf engine crate `paged-resample`) is a supported backend
+for the headless and batch actions, and the GPU kernels stay the editor's interactive path. The
+image module's `resize`, `fit` and straightened `crop` run on it in every realm, so an action's
+result does not depend on whether the realm has a device; the two backends agree within one
+8-bit level on opaque pixels. The adjustment chain already ran without a device on its CPU
+twins (image ADR 465). Neither needs a GPU-capable host.

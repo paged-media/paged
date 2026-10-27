@@ -106,6 +106,9 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
   pixel types (`PixelFormat`, tiles, regions). Both moved from paged.image (PM-0014,
   image ADR 466), which still names them `image-psd` / `image-core` through `package`
   aliases; they stay leaf crates (a core-ci `cargo tree` guard).
+- `crates/paged-resample/` — the CPU resample of RGBA8 rasters (separable Lanczos-3 /
+  bilinear, premultiplied; a bilinear rotate-and-crop): the supported backend of paged.image's
+  headless and batch actions (image ADR 467). A leaf crate, under the same guard.
 - `crates/paged-fidelity/` — ΔE2000 + SSIM diff library + `paged-diff` CLI.
   Reference is positional arg #1, candidate #2.
 - `crates/paged-mutate/`, `paged-introspect/`, `paged-canvas/`,

@@ -62,6 +62,7 @@ import type {
   Mutation,
   MutationOutcome,
   PageId,
+  StoryContent,
 } from "@paged-media/plugin-api";
 
 import {
@@ -649,6 +650,120 @@ export async function storyFont(
   text: string,
 ): Promise<TemplateFrameInfo["font"]> {
   return fontOf(await copiedProperties(host, storyId, text));
+}
+
+/** A story's runs as the run-aware overset measure reads them (data ADR
+ *  564): each run's text with the face it is set in (an index into
+ *  `fonts`), its paragraphs ended by `\n`, the trailing breaks dropped. A
+ *  run's face is the font, style and size it sets directly, the story's
+ *  (`storyFont`) where it sets none; its leading is the story's where the
+ *  story sets one, else auto (120 %) of the run's size. */
+export async function storyFaces(
+  host: BundleHost,
+  storyId: string,
+  text: string,
+  content: StoryContent,
+): Promise<{
+  runs: { text: string; face: number }[];
+  fonts: TemplateFrameInfo["font"][];
+}> {
+  const format = await copiedProperties(host, storyId, text);
+  const base = fontOf(format);
+  const fixedLeading = format.some(
+    (f) =>
+      f.path === "characterLeading" &&
+      typeof (f.value as { value?: unknown }).value === "number",
+  );
+  // A run's size and face set by its character style, else its paragraph's
+  // style (not on the run itself), as the object model reads the style.
+  const styleFace = new Map<
+    string,
+    { sizePt?: number; family?: string; style?: string }
+  >();
+  const faceOfStyle = async (
+    family: "character" | "paragraph",
+    name: string | null | undefined,
+  ) => {
+    if (!name) return {};
+    // A run names its style by the style's id (`CharacterStyle/<id>`), which
+    // is the rest of the style's address.
+    const key = `${family}/${name}`;
+    const known = styleFace.get(key);
+    if (known) return known;
+    const read: { sizePt?: number; family?: string; style?: string } = {};
+    const objects = (
+      host as {
+        objects?: {
+          get(a: string, p: string): Promise<unknown>;
+        };
+      }
+    ).objects;
+    if (objects) {
+      const get = async (path: string) => {
+        try {
+          return (
+            (await objects.get(`style:${key}`, path)) as {
+              value?: unknown;
+            }
+          )?.value;
+        } catch {
+          return undefined;
+        }
+      };
+      const size = await get("characterFontSize");
+      if (typeof size === "number" && size > 0) read.sizePt = size;
+      const fam = await get("characterFontFamily");
+      if (typeof fam === "string" && fam !== "") read.family = fam;
+      const sty = await get("characterFontStyle");
+      if (typeof sty === "string" && sty !== "") read.style = sty;
+    }
+    styleFace.set(key, read);
+    return read;
+  };
+  const fonts: TemplateFrameInfo["font"][] = [];
+  const faceOf = new Map<string, number>();
+  const runs: { text: string; face: number }[] = [];
+  const last = content.paragraphs.length - 1;
+  for (const [i, p] of content.paragraphs.entries()) {
+    let face = runs.length > 0 ? runs[runs.length - 1]!.face : 0;
+    const para = await faceOfStyle("paragraph", p.paragraphStyle);
+    for (const r of p.runs) {
+      const char = await faceOfStyle("character", r.characterStyle);
+      const sizePt =
+        typeof r.pointSize === "number" && r.pointSize > 0
+          ? r.pointSize
+          : (char.sizePt ?? para.sizePt ?? base.sizePt);
+      const font = {
+        family: r.font ?? char.family ?? para.family ?? base.family,
+        style: r.fontStyle ?? char.style ?? para.style ?? base.style,
+        sizePt,
+        leadingPt: fixedLeading ? base.leadingPt : sizePt * AUTO_LEADING,
+      };
+      const key = JSON.stringify(font);
+      let at = faceOf.get(key);
+      if (at === undefined) {
+        at = fonts.length;
+        fonts.push(font);
+        faceOf.set(key, at);
+      }
+      face = at;
+      const t = r.text.replace(/[\r\u2028\u2029]/g, "\n");
+      if (t !== "") runs.push({ text: t, face });
+    }
+    if (i < last) runs.push({ text: "\n", face });
+  }
+  if (fonts.length === 0) fonts.push(base);
+  // The trailing breaks hold no line the story needs.
+  while (runs.length > 0) {
+    const r = runs[runs.length - 1]!;
+    const kept = r.text.replace(/\n+$/, "");
+    if (kept !== "") {
+      r.text = kept;
+      break;
+    }
+    runs.pop();
+  }
+  return { runs, fonts };
 }
 
 function fontOf(format: CopiedProperty[]): TemplateFrameInfo["font"] {

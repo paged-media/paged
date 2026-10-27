@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/editor",
-  "version": "0.76.0-dev",
+  "version": "0.77.0-dev",
   "description": "The paged editor, embeddable: createEditor(element, config) mounts the full editor or one of its presets (template filling, a viewer, a solo tool) into a host page and returns a handle to drive it; ./iframe drives an editor in a frame. The engine comes from @paged-media/paged.",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "repository": {

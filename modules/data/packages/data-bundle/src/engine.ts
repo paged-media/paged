@@ -157,6 +157,26 @@ export interface DataEngineLike {
     height: number,
     metrics: unknown,
   ): boolean;
+  /** Data ADR 564: is a threaded story's text overset in its frames
+   *  (`[width, height][]` pt, in chain order), wrapped through each in
+   *  turn? Optional: a wasm built before it lacks it. */
+  text_overset_chain?(
+    text: string,
+    boxes: readonly (readonly [number, number])[],
+    metrics: unknown,
+  ): boolean;
+  /** Data ADR 564: the distinct pieces of a story's runs per face
+   *  (`string[][]`), `runs` being `{ text, face }[]`. Optional: a wasm built
+   *  before it lacks it. */
+  text_run_words?(runs: readonly { text: string; face: number }[]): unknown;
+  /** Data ADR 564: is a story of several faces overset in its frames
+   *  (`[width, height][]` pt, in chain order), each run wrapped at its own
+   *  face's metrics (`faces`, one `{ leadingPt, advances }` each)? */
+  text_overset_runs?(
+    runs: readonly { text: string; face: number }[],
+    boxes: readonly (readonly [number, number])[],
+    faces: unknown,
+  ): boolean;
   /** Editor ADR 291: the Data Merge placeholders of a text that name a field
    *  (`{ start, end, field, image }[]`, byte offsets as the host counts
    *  them). Optional: a wasm built before it lacks it. */

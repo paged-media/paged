@@ -33,6 +33,7 @@ import {
 import { createRoot } from "react-dom/client";
 import {
   PagedShell,
+  scopeOf,
   caretContribution,
   contentGrabberContribution,
   hitMarkerContribution,
@@ -49,6 +50,7 @@ import {
   selectionChromeContribution,
   setCockpitPageNavigator,
   snapLinesContribution,
+  gridOverlayContribution,
   tableCellOverlayContribution,
   threadingPortsContribution,
   threadLinesContribution,
@@ -99,6 +101,7 @@ import "@paged-media/shell/styles/globals.css";
 
 import {
   CanvasClient,
+  rotateCameraAbout,
   type DocumentHandle,
   type ElementId,
 } from "@paged-media/client";
@@ -122,6 +125,7 @@ import {
   notePluginLoaded,
 } from "../journal-sink";
 import { createGuardedLoader } from "../plugin-load-guard";
+import { answerScriptData } from "../script-data";
 import { buildTransformCommands } from "../transform-commands";
 import { cameraCentredOn, cameraForPage } from "../plugin-pages";
 import { applyProfile } from "../profiles/apply";
@@ -152,10 +156,29 @@ import { ConsentDialog } from "../ConsentDialog";
 import { SecretPromptDialog } from "../SecretPromptDialog";
 import { CoreCommandDialog } from "../core-command-dialog";
 import {
+  FIND_COMMANDS,
+  FIND_KEYBINDINGS,
+  FIND_MENU_ITEMS,
+} from "../find/find-commands";
+import { FindReplaceDialog, GoToDialog } from "../find/find-ui";
+import {
+  STYLE_OPTIONS_PANEL,
+  targetStyleOptions,
+} from "../panels/style-options-panel";
+import {
   GLOBAL_LIGHT_COMMANDS,
   GLOBAL_LIGHT_MENU_ITEMS,
   GlobalLightDialog,
 } from "../panels/global-light-dialog";
+import {
+  buildViewCommands,
+  VIEW_KEYBINDINGS,
+  VIEW_MENU_ITEMS,
+} from "../view-commands";
+import {
+  openViewPreferences,
+  ViewPreferencesDialog,
+} from "../panels/view-preferences-dialog";
 import {
   buildTransformEachDialogCommands,
   TRANSFORM_EACH_MENU_ITEMS,
@@ -262,6 +285,7 @@ import {
   CLIPBOARD_KEYBINDINGS,
   CLIPBOARD_MENU_ITEMS,
 } from "../clipboard-commands";
+import { buildSvgCommands, SVG_MENU_ITEMS } from "../svg-commands";
 import {
   addPage,
   buildInsertCommands,
@@ -284,6 +308,7 @@ import { appCatalogRegistry } from "../panels/catalog-registry";
 import { CanvasPanel } from "../panels/canvas-panel";
 import { problemsOf, type ProblemsStore } from "../panels/problems-store";
 import { BUILT_IN_PANELS } from "../panels/built-in-panels";
+import { applyHistoryDepthPreference } from "../panels/history-panel";
 import { PlaygroundController } from "../playground/PlaygroundController";
 import { debugFlag } from "../debug-flags";
 import { IframeScriptBridge } from "../playground/IframeScriptBridge";
@@ -327,6 +352,8 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // picture's Replace button, for an author and a filler only.
   templateFieldsContribution,
   marginGuidesContribution,
+  // Editor ADR 287 — View ▸ Show grid / Show pixel grid.
+  gridOverlayContribution,
   // W2.8 — the INTERACTIVE guide overlay supersedes the read-only
   // `rulerGuidesContribution` in the editor: it seeds its mirror from
   // the same `DocumentHandle.rulerGuides` AND drives create/move/
@@ -533,6 +560,9 @@ function PluginBundles() {
     const hostOptions = createEditorHostOptions({
       getEditor: () => pagedRef.current,
       panels: cockpitActionsOf(scope),
+      panelTarget: (panelId, target) => {
+        if (panelId === STYLE_OPTIONS_PANEL) targetStyleOptions(scope, target);
+      },
       enterEditContext: (type, elementId) =>
         enterContextRef.current(type, elementId),
       exitEditContext: async (type, opts) => {
@@ -570,7 +600,14 @@ function PluginBundles() {
     // Editor ADRs 291, 292: the Data panel and the bind popover read the
     // document's data from the same shared backend the bundles meet at.
     const dataBackend = hostOptions.shared.data;
+    // Engine ADR 1014, amendment 2: a script's `paged.data.*` reads the same
+    // backend, through the worker's blocking bridge. The client is the
+    // shell's, stable for its lifetime.
+    const scriptClient = pagedRef.current?.client ?? null;
     if (dataBackend) {
+      scriptClient?.setScriptData((method, args) =>
+        answerScriptData(dataBackend.current()?.service ?? null, method, args),
+      );
       setDataDoorSource(scope, dataBackend);
       // Editor ADR 291: a field, a table or a record dropped on the document
       // is placed there; a refusal (no frame under it, a line, a design
@@ -658,6 +695,7 @@ function PluginBundles() {
       release();
       detachDocuments();
       detachIdentity();
+      if (dataBackend) scriptClient?.setScriptData(null);
     };
     // Mount-once by design; the ref keeps the handle live. The services
     // are the instance's, fixed for the editor's lifetime.
@@ -860,6 +898,11 @@ function CanvasAppIntegration() {
   useEffect(() => {
     return setJournalDrainer(() => client.drainJournal());
   }, [client]);
+  // Editor ADR 285 — the history-depth preference reaches the worker once;
+  // it keeps the depth across document loads.
+  useEffect(() => {
+    applyHistoryDepthPreference(instance.scope, client);
+  }, [instance.scope, client]);
   // ADR 025 — the opt-in `documentShape` export section. The engine's
   // `DocumentStats` is already pure counts, so this carries structure and no
   // content. A PROVIDER, not a snapshot: the dialog must show the document
@@ -1098,6 +1141,8 @@ function CanvasAppIntegration() {
     const [vw, vh] = viewportSize;
     const pageSizes = handle?.pageSizesPt ?? [];
     const rects = layoutPages(pageSizes);
+    // Editor ADR 287 — the fits keep the view's rotation.
+    const rot = camera.rotation ?? 0;
     const commands = buildAppCommands({
       undo: () => {
         const owner = currentEditContext().activeContribution;
@@ -1226,7 +1271,7 @@ function CanvasAppIntegration() {
       },
       zoomFit: () => {
         if (rects.length === 0) return;
-        animateCamera(fitCamera(vw, vh, documentBounds(rects)));
+        animateCamera(fitCamera(vw, vh, documentBounds(rects), 40, rot));
       },
       // The fit commands and the page keys (F-31, F-16, ADR 257). The
       // current page is the one at the viewport's centre once the camera
@@ -1236,7 +1281,7 @@ function CanvasAppIntegration() {
       fitPage: () => {
         const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
         if (at < 0) return;
-        animateCamera(fitCamera(vw, vh, rects[at]!));
+        animateCamera(fitCamera(vw, vh, rects[at]!, 40, rot));
       },
       fitSpread: async () => {
         const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
@@ -1253,7 +1298,7 @@ function CanvasAppIntegration() {
           /* no spread map: the page is a spread of its own */
         }
         const rect = spreadRect(rects, spreads, at);
-        if (rect) animateCamera(fitCamera(vw, vh, rect));
+        if (rect) animateCamera(fitCamera(vw, vh, rect, 40, rot));
       },
       fitSelection: async () => {
         if (!handle) return;
@@ -1280,19 +1325,25 @@ function CanvasAppIntegration() {
         const w = Math.max(rect.w, 1);
         const h = Math.max(rect.h, 1);
         animateCamera(
-          fitCamera(vw, vh, {
-            x: rect.x - (w - rect.w) / 2,
-            y: rect.y - (h - rect.h) / 2,
-            w,
-            h,
-          }),
+          fitCamera(
+            vw,
+            vh,
+            {
+              x: rect.x - (w - rect.w) / 2,
+              y: rect.y - (h - rect.h) / 2,
+              w,
+              h,
+            },
+            40,
+            rot,
+          ),
         );
       },
       goToPage: (which) => {
         const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
         const target = pageStep(which, at, rects.length);
         if (target === null) return;
-        animateCamera(fitCamera(vw, vh, rects[target]!));
+        animateCamera(fitCamera(vw, vh, rects[target]!, 40, rot));
       },
     });
     // `paged.object.*` — the object verbs (Arrange ×4, Group, Ungroup,
@@ -1459,10 +1510,33 @@ function CanvasAppIntegration() {
       system: browserClipboard(),
       deleteSelection: () => deleteSelection(objectDeps),
     });
+    // Engine ADR 1031 — File ▸ Import ▸ SVG… and File ▸ Export ▸ SVG.
+    const svgCommands = buildSvgCommands({
+      report: (rows) =>
+        problemsSink.publish(
+          "paged.svg",
+          "svg",
+          rows.map((r) => ({ ...r, source: "svg" })),
+        ),
+    });
+    // Editor ADR 287 — View ▸ Outline / Overprint / Pixel Preview, the
+    // grids, snapping and Rotate View.
+    const viewCommands = buildViewCommands({
+      rotateView: (deg) =>
+        animateCamera(
+          rotateCameraAbout(camera, (deg * Math.PI) / 180, vw / 2, vh / 2),
+        ),
+      resetRotation: () =>
+        animateCamera(
+          rotateCameraAbout(camera, -(camera.rotation ?? 0), vw / 2, vh / 2),
+        ),
+      openPreferences: (paged) => openViewPreferences(scopeOf(paged)),
+    });
     const cmdDisposables = [
       ...commands,
       ...aiCommands,
       ...clipboardCommands,
+      ...svgCommands,
       CANVAS_CONTEXT_MENU_COMMAND,
       ...objectCommands,
       ...insertCommands,
@@ -1470,21 +1544,27 @@ function CanvasAppIntegration() {
       ...GLOBAL_LIGHT_COMMANDS,
       ...transformEachDialogCommands,
       ...buildBatchCommands(),
+      ...viewCommands,
       ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
+      // ADR 303 — Find & Replace, Go to page.
+      ...FIND_COMMANDS,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
       ...buildCoreCommandEntries(),
     ].map((c) => registries.commands.register(c));
     const menuDisposables = [
       ...APP_MENU_ITEMS,
       SELECT_ALL_MENU_ITEM,
+      ...FIND_MENU_ITEMS,
       ...CLIPBOARD_MENU_ITEMS,
+      ...SVG_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...TRANSFORM_EACH_MENU_ITEMS,
       ...BATCH_MENU_ITEMS,
+      ...VIEW_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
@@ -1498,10 +1578,12 @@ function CanvasAppIntegration() {
     const keyDisposables = [
       ...APP_KEYBINDINGS,
       ...SELECT_ALL_KEYBINDINGS,
+      ...FIND_KEYBINDINGS,
       ...CLIPBOARD_KEYBINDINGS,
       ...CANVAS_CONTEXT_MENU_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,
+      ...VIEW_KEYBINDINGS,
     ].map((k) => registries.keybindings.register(k));
     return () => {
       for (const d of cmdDisposables) d.dispose();
@@ -1701,9 +1783,12 @@ function CanvasAppRoot() {
       <SecretPromptDialog controller={instance.services.secrets.controller} />
       <CoreCommandDialog />
       <GlobalLightDialog />
+      <ViewPreferencesDialog />
       <TransformEachDialog />
       <BatchDialog />
       <OpenAsTemplateDialog />
+      <FindReplaceDialog />
+      <GoToDialog />
       {/* The live-demo playground UI and the docs' iframe scripting bridge:
           the page entry's tools (they drive the page's `__canvas`), only in
           the dev and `demo` builds, only when the URL asks (they render

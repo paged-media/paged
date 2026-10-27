@@ -31,6 +31,17 @@
 //                 absent = manual.
 //   · `remote`  — remote source descriptors (url, format, params, credential
 //                 REF). They restore INERT: nothing is fetched on open (§11).
+//   · `appliedValues` — per query, the values of the result the document was
+//                 last written from (the engine payload's `applied_values`,
+//                 editor ADR 291): the Sync panel's row diff "before" after
+//                 a reopen. Taken OUT of `engine` and stored like imported
+//                 data: inline up to INLINE_DATA_MAX_BYTES of JSON, else its
+//                 own content-addressed part `data/<hash>.applied.json`, so a
+//                 session rewrite (and every labelled session version) names
+//                 an unchanged snapshot by hash instead of carrying it again.
+//                 The document already holds the imported data these values
+//                 came from: no new exposure. Absent in a part written before
+//                 it: the engine then has the `applied` hashes only.
 //
 // Undo: `host.parts` writes are not undoable, and the session is not document
 // content, so defining a binding is not an undo step either. What IS undoable
@@ -129,6 +140,9 @@ export interface PersistedTargets {
   /** Editor ADR 291: the record a binding placed by a dropped record shows
    *  (0-based). Absent when there is none. */
   record?: Record<string, number>;
+  /** Editor ADR 291: the record the record preview stepped a binding to
+   *  (0-based), until the next Lower. Absent when there is none. */
+  stepped?: Record<string, number>;
 }
 
 export interface PersistedSession {
@@ -150,6 +164,10 @@ export interface PersistedSession {
   /** Data ADR 563: the asset columns, by `<query>.<field>`. Absent when
    *  there are none. */
   assets?: Record<string, AssetColumnDef>;
+  /** Editor ADR 291: per query, the applied result's values (the engine
+   *  payload's `applied_values`), inline or as a part. Absent when there are
+   *  none. */
+  appliedValues?: Record<string, PersistedValues>;
   /** ADR 560: the template fields bound to the data, and the catalogues
    *  made (by template page). Absent when there are none. */
   catalogue?: {
@@ -157,6 +175,10 @@ export interface PersistedSession {
     runs: Record<string, CatalogueDef>;
   };
 }
+
+/** One query's applied values: inline, or a pointer to their own part. */
+export type PersistedValues =
+  { values: unknown } | { ref: { hash: string; bytes: number } };
 
 export function emptyTargets(): PersistedTargets {
   return { image: {}, barcode: {}, visibility: {}, rule: {}, lowered: {} };
@@ -253,6 +275,102 @@ export async function loadData(
   return bytes ? decoder.decode(bytes) : null;
 }
 
+/** The part a query's stored applied values are written to. */
+export function appliedValuesPartPath(hash: string): string {
+  return `${DATA_PART_DIR}${hash}.applied.json`;
+}
+
+/** The part a stored applied-values entry points at, or null when inline. */
+export function valuesPartOf(v: PersistedValues): string | null {
+  return "ref" in v ? appliedValuesPartPath(v.ref.hash) : null;
+}
+
+/** What the last store of each query's values made, so an unchanged
+ *  snapshot is not hashed again on every session write. */
+export type ValuesCache = Map<string, { json: string; entry: PersistedValues }>;
+
+/** Take the applied values out of an engine payload: the payload without
+ *  them (what the session part's `engine` holds), and each query's values
+ *  stored inline when small, else as a content-addressed part written once. */
+export async function storeAppliedValues(
+  payload: unknown,
+  writePart: (path: string, bytes: Uint8Array) => Promise<void>,
+  known: Set<string>,
+  cache: ValuesCache,
+): Promise<{ engine: unknown; values: Record<string, PersistedValues> }> {
+  const values: Record<string, PersistedValues> = {};
+  if (!payload || typeof payload !== "object" || !("applied_values" in payload))
+    return { engine: payload, values };
+  const { applied_values: all, ...engine } = payload as {
+    applied_values?: Record<string, unknown>;
+  };
+  for (const [query, v] of Object.entries(all ?? {})) {
+    const json = JSON.stringify(v);
+    const kept = cache.get(query);
+    if (kept && kept.json === json) {
+      const part = valuesPartOf(kept.entry);
+      if (!part || known.has(part)) {
+        values[query] = kept.entry;
+        continue;
+      }
+    }
+    const bytes = encoder.encode(json);
+    let entry: PersistedValues;
+    if (bytes.length <= INLINE_DATA_MAX_BYTES) entry = { values: v };
+    else {
+      const hash = await contentHash(bytes);
+      const path = appliedValuesPartPath(hash);
+      if (!known.has(path)) {
+        await writePart(path, bytes);
+        known.add(path);
+      }
+      entry = { ref: { hash, bytes: bytes.length } };
+    }
+    cache.set(query, { json, entry });
+    values[query] = entry;
+  }
+  return { engine, values };
+}
+
+/** Put a session part's applied values back into its engine payload (the
+ *  shape `load_payload` reads). A query whose part is missing keeps only
+ *  its hashes; it is named in `missing`. */
+export async function loadAppliedValues(
+  engine: unknown,
+  stored: Record<string, PersistedValues> | undefined,
+  readPart: (path: string) => Promise<Uint8Array | null>,
+): Promise<{ engine: unknown; missing: string[]; parts: string[] }> {
+  const missing: string[] = [];
+  const parts: string[] = [];
+  if (!stored || !engine || typeof engine !== "object")
+    return { engine, missing, parts };
+  const values: Record<string, unknown> = {};
+  for (const [query, v] of Object.entries(stored)) {
+    if (!v || typeof v !== "object") continue;
+    if ("values" in v) {
+      values[query] = v.values;
+      continue;
+    }
+    if (!("ref" in v) || typeof v.ref?.hash !== "string") continue;
+    const path = appliedValuesPartPath(v.ref.hash);
+    const bytes = await readPart(path).catch(() => null);
+    let parsed: unknown = null;
+    try {
+      parsed = bytes ? JSON.parse(decoder.decode(bytes)) : null;
+    } catch {
+      parsed = null;
+    }
+    if (parsed === null) missing.push(query);
+    else {
+      values[query] = parsed;
+      parts.push(path);
+    }
+  }
+  return Object.keys(values).length > 0
+    ? { engine: { ...engine, applied_values: values }, missing, parts }
+    : { engine, missing, parts };
+}
+
 export function encodeSession(s: PersistedSession): Uint8Array {
   return encoder.encode(JSON.stringify(s));
 }
@@ -302,6 +420,9 @@ export function decodeSession(
         }
       : {}),
     ...(typeof p.dataSet === "string" ? { dataSet: p.dataSet } : {}),
+    ...(p.appliedValues && typeof p.appliedValues === "object"
+      ? { appliedValues: p.appliedValues }
+      : {}),
     ...(p.assets && typeof p.assets === "object"
       ? { assets: p.assets as Record<string, AssetColumnDef> }
       : {}),
