@@ -3485,7 +3485,58 @@ export function createWorkbookSession(
     }
     // A link, an unlink or a resize of a chain frame changes the window.
     scheduleChainRead();
+    // A band the host inserted, a style or a reflow may leave a window
+    // frame's table taller than its box: the windows check their fit.
+    scheduleWindowFit();
   });
+
+  let windowFitTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Check every window frame's fit, after the document settles. */
+  function scheduleWindowFit(): void {
+    if (![...loweredTables.values()].some((i) => i.sizing === "window")) return;
+    if (windowFitTimer !== null) clearTimeout(windowFitTimer);
+    windowFitTimer = setTimeout(() => {
+      windowFitTimer = null;
+      void (async () => {
+        for (const [frameId, info] of [...loweredTables]) {
+          if (info.content) await fitWindow(frameId, info, info.content);
+        }
+      })();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  /** A window frame whose laid-out table oversets its story gives up one
+   *  row of its box and refreshes again, until the engine's layout fits it:
+   *  the window counts the workbook's row heights, and the engine may lay
+   *  rows out taller (other faces) or add a band the host inserted above or
+   *  below them. Bounded by the box: a window keeps at least one row. */
+  async function fitWindow(
+    frameId: string,
+    info: LoweredTableInfo,
+    shown: LoweredContent,
+  ): Promise<void> {
+    if (info.sizing !== "window" || !info.boxPt) return;
+    let overset = false;
+    try {
+      overset = (await host.document.frameChain(info.storyId)).some(
+        (l) => l.overflow,
+      );
+    } catch {
+      return;
+    }
+    if (!overset) return;
+    const rows = shown.rows;
+    if (rows.length <= 1) return;
+    const step = rows[rows.length - 1]!.heightPt;
+    const trim = (info.windowTrimPt ?? 0) + step;
+    const capacity =
+      (info.chain?.boxes ?? [info.boxPt]).reduce((a, b) => a + b.heightPt, 0) -
+      rows[0]!.heightPt;
+    if (step <= 0 || trim >= capacity) return;
+    loweredTables.set(frameId, { ...info, windowTrimPt: trim });
+    viewMoved.add(frameId);
+    scheduleRefresh();
+  }
 
   /** Give window frame `frameId` a new box; refresh when it changed. */
   function rewindow(
@@ -3504,8 +3555,9 @@ export function createWorkbookSession(
       return;
     }
     // The first resize of a placed frame starts from its fitted box, which
-    // the window measured from its range did not use: still a new box.
-    loweredTables.set(frameId, { ...info, boxPt });
+    // the window measured from its range did not use: still a new box. A
+    // new box fits afresh (`fitWindow`).
+    loweredTables.set(frameId, { ...info, boxPt, windowTrimPt: undefined });
     if (lastFrameId === frameId && lastGridWindow && !surfaceArea) {
       lastGridWindow = {
         ...lastGridWindow,
@@ -4363,6 +4415,8 @@ export function createWorkbookSession(
   function forgetPlacements(): void {
     if (refreshTimer !== null) clearTimeout(refreshTimer);
     refreshTimer = null;
+    if (windowFitTimer !== null) clearTimeout(windowFitTimer);
+    windowFitTimer = null;
     lastLoweredTable = null;
     loweredTables.clear();
     placedCharts = [];
@@ -7579,6 +7633,7 @@ export function createWorkbookSession(
       historySub.dispose();
       foreignChangeSub.dispose();
       if (chainTimer !== null) clearTimeout(chainTimer);
+      if (windowFitTimer !== null) clearTimeout(windowFitTimer);
       if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);
       willSaveSub?.dispose();
       // What the placed tables show, kept for a later session (taken before

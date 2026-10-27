@@ -828,6 +828,11 @@ export interface LoweredTableInfo {
    *  them all, as one table the engine flows from frame to frame (frozen
    *  rows repeat as header rows). Absent for a single frame. */
   chain?: { frames: string[]; boxes: { widthPt: number; heightPt: number }[] };
+  /** What the window gives up of its box (pt) because the laid-out table
+   *  did not fit it: rows the engine lays out taller than the workbook's
+   *  heights, a header or footer band the host added. Grown one row at a
+   *  time while the frame's story oversets; a new box starts it again. */
+  windowTrimPt?: number;
   /** The first sheet row each frame of the chain shows (head first), from
    *  the last window lowered — where a continuation frame's grid starts. */
   chainStarts?: number[];
@@ -1101,7 +1106,14 @@ export function placementWindow(
   engine: SheetEngine,
   info: Pick<
     LoweredTableInfo,
-    "sheet" | "range" | "view" | "print" | "sizing" | "boxPt" | "chain"
+    | "sheet"
+    | "range"
+    | "view"
+    | "print"
+    | "sizing"
+    | "boxPt"
+    | "chain"
+    | "windowTrimPt"
   >,
 ): {
   content: LoweredContent;
@@ -1117,15 +1129,14 @@ export function placementWindow(
     engine.getTracksPage
   ) {
     const tl = cellOfA1(info.view.topLeft);
+    const trim = info.windowTrimPt ?? 0;
+    const boxes = info.chain.boxes.map((b, i, all) =>
+      i === all.length - 1 && trim > 0
+        ? { ...b, heightPt: Math.max(1, b.heightPt - trim) }
+        : b,
+    );
     if (tl)
-      return chainWindow(
-        engine,
-        info.sheet,
-        tl,
-        info.boxPt,
-        info.chain.boxes,
-        info.print,
-      );
+      return chainWindow(engine, info.sheet, tl, info.boxPt, boxes, info.print);
   }
   if (
     info.sizing === "window" &&
@@ -1139,7 +1150,7 @@ export function placementWindow(
         topRow: tl.row,
         leftCol: tl.col,
         widthPt: info.boxPt.widthPt,
-        heightPt: info.boxPt.heightPt,
+        heightPt: Math.max(1, info.boxPt.heightPt - (info.windowTrimPt ?? 0)),
         printHeadings: info.print?.headings ?? false,
         printGridlines: info.print?.gridlines ?? false,
       });

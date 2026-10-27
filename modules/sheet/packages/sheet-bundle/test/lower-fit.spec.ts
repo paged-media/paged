@@ -202,5 +202,63 @@ describe.skipIf(!ENGINE_BUILT)(
         true,
       );
     });
+
+    it("a window frame threaded into a chain gives up rows until its table fits, a host header band included [sheet.lower.page]", async () => {
+      const session = createWorkbookSession(host);
+      s = session;
+      await session.import(
+        await authorWorkbook(60, 3, (r, c) => String(r * 10 + c)),
+        "day-book.xlsx",
+      );
+      session.setRange("A1:C24");
+      const frame = await session.lowerSelection();
+      expect(frame).not.toBeNull();
+      await settle();
+      const m = (op: string, args: unknown) =>
+        host.document.mutate({ op, args } as never);
+      const [g] = await host.document.elementGeometry([
+        { kind: "textFrame", id: frame! },
+      ]);
+      // A frame too short for the range, threaded into a second frame: the
+      // window fills the chain with the sheet's rows.
+      expect(
+        (
+          await m("resizeFrame", {
+            frameId: frame,
+            bounds: [152, 60, 420, 268],
+          })
+        ).applied,
+      ).toBe(true);
+      const b = (await m("batch", {
+        ops: [
+          {
+            op: "insertTextFrame",
+            args: { pageId: g.pageId, bounds: [152, 300, 560, 508] },
+          },
+          { op: "bindCreated", args: { handle: "b" } },
+        ],
+      })) as { minted?: { element: { id: string } }[] };
+      const second = b.minted![0]!.element.id;
+      expect((await m("linkFrames", { from: frame, to: second })).applied).toBe(
+        true,
+      );
+      await settle();
+      const { storyId } = await placed(frame!);
+      const [table] = await host.objects.query(`story:${storyId} > table`);
+      const tableId = table!.slice("table:".length);
+      // The host adds a 24 pt header band, repeated in every frame: the
+      // window's rows no longer fit until it gives some up.
+      await m("insertHeaderRow", { storyId, tableId });
+      await m("setRowHeight", { storyId, tableId, row: 0, height: 24 });
+      let overset = true;
+      for (let i = 0; i < 20 && overset; i++) {
+        await settle();
+        await new Promise((r) => setTimeout(r, 300));
+        overset = (await host.document.frameChain(storyId)).some(
+          (l) => l.overflow,
+        );
+      }
+      expect(overset, "the chain's last frame is overset").toBe(false);
+    });
   },
 );
