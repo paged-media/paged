@@ -116,6 +116,18 @@ const canvasShot = async (page: Page) => {
 /** Let the worker draw the frame the last change asked for. */
 const settle = (page: Page) => page.waitForTimeout(600);
 
+/** The canvas once two shots in a row agree: the document has drawn. */
+const stableShot = async (page: Page) => {
+  let last = await canvasShot(page);
+  for (let i = 0; i < 40; i++) {
+    await settle(page);
+    const next = await canvasShot(page);
+    if (next.equals(last)) return next;
+    last = next;
+  }
+  throw new Error("the canvas never settled");
+};
+
 test.describe("View menu — view modes, grids, snapping, Rotate View [editor-shell.view-menu] [the-renderer.view-modes]", () => {
   test("⌘Y draws the outline and changes no document; ⌘Y again restores it", async ({
     page,
@@ -126,9 +138,8 @@ test.describe("View menu — view modes, grids, snapping, Rotate View [editor-sh
       "menu:View/Outline view",
     );
     await openShell(page, { doc: true });
-    await settle(page);
-    const preview = await canvasShot(page);
     await blurAll(page);
+    const preview = await stableShot(page);
     await page.keyboard.press("Meta+y");
     await expect.poll(() => viewMode(page)).toBe("outline");
     await expect

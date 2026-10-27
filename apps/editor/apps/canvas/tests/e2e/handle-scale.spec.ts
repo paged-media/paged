@@ -47,6 +47,7 @@ interface CanvasGlobal {
         m: unknown,
       ) => Promise<{ kind: string; payload?: { createdId?: Ref | null } }>;
       camera: { read: () => { scale: number } };
+      setSnapSettings: (s: { enabled: boolean }) => Promise<unknown>;
     };
     handle: { pageIds: string[] };
   };
@@ -104,10 +105,24 @@ async function unionBox(page: Page, ids: Ref[]): Promise<Box> {
 
 /** Two rectangles, [100,100]–[200,180] and [240,100]–[340,180]: one box
  *  from (100, 100) to (340, 180). */
+/**
+ * These specs measure the scale a handle drag makes; a snap would move the
+ * dragged edge onto the page edge or another item's (the View menu and
+ * the gesture specs own snapping). Session state: it outlives the load.
+ */
+async function noSnap(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    (globalThis as unknown as CanvasGlobal).__canvas.client.setSnapSettings({
+      enabled: false,
+    }),
+  );
+}
+
 async function twoRectangles(page: Page): Promise<Ref[]> {
   const designer = new Designer(page);
   await designer.open();
   await designer.newDocument();
+  await noSnap(page);
   const a = await designer.drawRectangle({
     x0: 100,
     y0: 100,
@@ -480,6 +495,7 @@ test.describe("a handle drag on a rotated item", () => {
       const designer = new Designer(page);
       await designer.open();
       await designer.newDocument();
+      await noSnap(page);
       // 160 × 60 at 30° (InDesign probe case 1b's frame).
       const r = await frame(page, [0, 0, 60, 160], rot(30, 200, 400));
       const [raw] = await geometry(page, [r]);
