@@ -9,6 +9,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "aho-corasick"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -28,12 +37,27 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bit-set"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
+dependencies = [
+ "bit-vec 0.8.0",
+]
+
+[[package]]
+name = "bit-set"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
 dependencies = [
- "bit-vec",
+ "bit-vec 0.9.1",
 ]
+
+[[package]]
+name = "bit-vec"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
 name = "bit-vec"
@@ -185,6 +209,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
+name = "fancy-regex"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72cf461f865c862bb7dc573f643dd6a2b6842f7c30b07882b56bd148cc2761b8"
+dependencies = [
+ "bit-set 0.8.0",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -213,6 +248,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "835ae9d781464a79026cde387f9cbc650c9a4909d7cf7e658b127e3c35d2f35d"
 dependencies = [
  "bytemuck",
+]
+
+[[package]]
+name = "futures-core"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
+
+[[package]]
+name = "futures-task"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd"
+
+[[package]]
+name = "futures-util"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc"
+dependencies = [
+ "futures-core",
+ "futures-task",
+ "pin-project-lite",
+ "slab",
 ]
 
 [[package]]
@@ -251,6 +310,17 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "js-sys"
+version = "0.3.106"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7883d941dae510fb2d978fc3fe018c71c9e2892fd38854de3e8b92c2e5ad9cc5"
+dependencies = [
+ "cfg-if",
+ "futures-util",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "libc"
@@ -293,7 +363,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a616d2fb8c89516ac2723a581f69d6c18576046bed761bd6b305e5618e6ae130"
 dependencies = [
  "arrayvec",
- "bit-set",
+ "bit-set 0.10.0",
  "bitflags",
  "cfg-if",
  "cfg_aliases",
@@ -425,6 +495,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "plotters"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aeb6f403d7a4911efb1e33402027fc44f29b5bf6def3effcc22d7bb75f2b747"
+dependencies = [
+ "num-traits",
+ "plotters-backend",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "plotters-backend"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df42e13c12958a16b3f7f4386b9ab1f3e7933914ecea48da7139435263a4172a"
+
+[[package]]
 name = "pptx-core"
 version = "0.0.0"
 dependencies = [
@@ -449,6 +537,7 @@ dependencies = [
  "serde_json",
  "slide-native",
  "slide-resolve",
+ "slide-sheet",
 ]
 
 [[package]]
@@ -516,6 +605,23 @@ dependencies = [
  "once_cell",
  "yoke",
 ]
+
+[[package]]
+name = "regex-automata"
+version = "0.4.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rustc-hash"
@@ -598,6 +704,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "sheet-calc"
+version = "0.0.0"
+dependencies = [
+ "rustc-hash 2.1.3",
+ "sheet-core",
+ "sheet-fn",
+ "sheet-format",
+ "sheet-parser",
+ "smallvec",
+]
+
+[[package]]
+name = "sheet-chart"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "plotters",
+ "plotters-backend",
+ "serde",
+ "sheet-core",
+ "sheet-fn",
+ "sheet-format",
+]
+
+[[package]]
 name = "sheet-core"
 version = "0.0.0"
 dependencies = [
@@ -606,6 +737,21 @@ dependencies = [
  "serde_norway",
  "smallvec",
  "thiserror",
+]
+
+[[package]]
+name = "sheet-fn"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "fancy-regex",
+ "paged-fmt",
+ "regex-automata",
+ "regex-syntax",
+ "serde",
+ "serde_norway",
+ "sheet-core",
+ "sheet-format",
 ]
 
 [[package]]
@@ -618,6 +764,43 @@ dependencies = [
  "ryu",
  "sheet-core",
  "thiserror",
+]
+
+[[package]]
+name = "sheet-lower"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "sheet-core",
+ "sheet-format",
+]
+
+[[package]]
+name = "sheet-parser"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "sheet-core",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "sheet-xlsx"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "dml-chart",
+ "flate2",
+ "paged-ooxml",
+ "quick-xml",
+ "sheet-chart",
+ "sheet-core",
+ "sheet-format",
+ "sheet-lower",
+ "sheet-parser",
+ "thiserror",
+ "zip",
 ]
 
 [[package]]
@@ -641,6 +824,12 @@ dependencies = [
  "bytemuck",
  "read-fonts",
 ]
+
+[[package]]
+name = "slab"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slide-chart"
@@ -671,8 +860,10 @@ dependencies = [
  "pptx-import",
  "serde",
  "serde_json",
+ "slide-chart",
  "slide-native",
  "slide-resolve",
+ "slide-sheet",
  "wasm-bindgen",
 ]
 
@@ -715,6 +906,27 @@ dependencies = [
  "paged-ooxml",
  "pptx-core",
  "serde_json",
+]
+
+[[package]]
+name = "slide-sheet"
+version = "0.0.0"
+dependencies = [
+ "dml-chart",
+ "paged-ooxml",
+ "paged-test-resources",
+ "pptx-core",
+ "pptx-import",
+ "serde",
+ "serde_json",
+ "sheet-calc",
+ "sheet-chart",
+ "sheet-core",
+ "sheet-format",
+ "sheet-parser",
+ "sheet-xlsx",
+ "slide-chart",
+ "slide-resolve",
 ]
 
 [[package]]
@@ -886,6 +1098,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23f0c9c52aa7cd7d77769a4cfe2a9adb1b331f489a41d912ce14513d5ab995c6"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "web-sys"
+version = "0.3.106"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88261b9deccee56594c11a3460c462c41f58d148598fe70ad77070126a68aba4"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]

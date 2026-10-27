@@ -29,7 +29,8 @@ dependsOn:
   - id: "dml-chart"
     scope: "production"
   # slide-chart labels through sheet-format (and sheet-core, whose build
-  # reads sheet's function registry), which read platform/shared/fmt (ADR 710).
+  # reads sheet's function registry), which read platform/shared/fmt (ADR 710);
+  # slide-sheet's live charts through sheet's workbook engine (ADR 715).
   - id: "sheet"
     scope: "production"
   - id: "fmt"
@@ -38,7 +39,9 @@ dependsOn:
 # Path dependencies into the engine (docx-skeleton / slide-native build on
 # paged-model, paged-scene, paged-store; ADR 606 / ADR 708) and into
 # platform/shared/ooxml (paged-ooxml, doc ADR 607), and into modules/sheet's
-# sheet-format and sheet-core and platform/shared/fmt (slide-chart, ADR 710):
+# sheet-format and sheet-core and platform/shared/fmt (slide-chart, ADR 710)
+# and its workbook engine (sheet-xlsx, sheet-calc, sheet-chart and what they
+# build on; slide-sheet, ADR 715):
 # their crates are inputs here too, so `moon ci` re-runs this project when
 # one it builds changes.
 # (Project file groups replace the workspace ones, so the defaults are
@@ -60,6 +63,12 @@ fileGroups:
     - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"
+    - "/modules/sheet/sheet-fn/**/*"
+    - "/modules/sheet/sheet-parser/**/*"
+    - "/modules/sheet/sheet-calc/**/*"
+    - "/modules/sheet/sheet-chart/**/*"
+    - "/modules/sheet/sheet-lower/**/*"
+    - "/modules/sheet/sheet-xlsx/**/*"
     - "/modules/sheet/registry/functions/*.yaml"
     - "/platform/shared/fmt/src/**/*.rs"
     - "/platform/shared/fmt/Cargo.toml"
@@ -78,6 +87,12 @@ fileGroups:
     - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"
+    - "/modules/sheet/sheet-fn/**/*"
+    - "/modules/sheet/sheet-parser/**/*"
+    - "/modules/sheet/sheet-calc/**/*"
+    - "/modules/sheet/sheet-chart/**/*"
+    - "/modules/sheet/sheet-lower/**/*"
+    - "/modules/sheet/sheet-xlsx/**/*"
     - "/modules/sheet/registry/functions/*.yaml"
     - "/platform/shared/fmt/src/**/*.rs"
     - "/platform/shared/fmt/Cargo.toml"

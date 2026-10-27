@@ -12,6 +12,7 @@ members = [
     "pptx-fonts",
     "slide-geom",
     "slide-chart",
+    "slide-sheet",
     "slide-resolve",
     "slide-native",
     "pptx-export",
@@ -62,6 +63,7 @@ pptx-import = { path = "pptx-import" }
 pptx-fonts = { path = "pptx-fonts" }
 slide-geom = { path = "slide-geom" }
 slide-chart = { path = "slide-chart" }
+slide-sheet = { path = "slide-sheet" }
 slide-resolve = { path = "slide-resolve" }
 slide-native = { path = "slide-native" }
 slide-js = { path = "slide-js" }

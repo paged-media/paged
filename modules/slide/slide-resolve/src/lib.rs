@@ -180,7 +180,14 @@ struct Ctx<'a> {
     next_id: &'a std::cell::Cell<u32>,
     diagnostics: &'a std::cell::RefCell<Vec<String>>,
     part: &'a str,
+    draw: &'a ChartDrawer<'a>,
 }
+
+/// Draws a chart frame: the chart part, the frame's width and height (pt)
+/// → the chart's primitives in the frame's points, or `None` for
+/// `slide-chart`'s layout of the deck's chart model (ADR 715: a live chart
+/// the deck's layout does not draw is drawn by paged.sheet).
+pub type ChartDrawer<'a> = dyn Fn(&str, f64, f64) -> Option<Vec<slide_chart::Prim>> + 'a;
 
 impl Ctx<'_> {
     fn id(&self) -> String {
@@ -744,6 +751,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                         _ => None,
                     },
                     frame: None,
+                    chart: None,
                     link: sp.nv.hyperlink.clone(),
                 },
             })
@@ -862,7 +870,11 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 };
                 let x = f.xfrm.clone()?;
                 let (t, w, h) = space.place(&x);
-                let children = chart::items(c, t, w, h, ctx);
+                let prims = part
+                    .as_deref()
+                    .and_then(|p| (ctx.draw)(p, w, h))
+                    .unwrap_or_else(|| slide_chart::layout(c, w, h));
+                let children = chart::items(prims, t, w, h, ctx);
                 Some(Item {
                     id: ctx.id(),
                     name: f.nv.name.clone(),
@@ -875,6 +887,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     meta: ItemMeta {
                         shape_id: f.nv.id,
                         frame: Some("chart".into()),
+                        chart: part.clone(),
                         link: f.nv.hyperlink.clone(),
                         ..Default::default()
                     },
@@ -982,6 +995,11 @@ fn overlay(base: &ColorMap, over: Option<&ColorMap>) -> ColorMap {
 
 /// Resolve a deck.
 pub fn resolve(deck: &Presentation) -> Deck {
+    resolve_with(deck, &|_, _, _| None)
+}
+
+/// [`resolve`] with a drawer for chart frames (see [`ChartDrawer`]).
+pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
     let (w, h) = (
         deck.slide_size.0 as f64 / EMU_PER_PT,
         deck.slide_size.1 as f64 / EMU_PER_PT,
@@ -1024,6 +1042,7 @@ pub fn resolve(deck: &Presentation) -> Deck {
             next_id: &next_id,
             diagnostics: &diagnostics,
             part: &master.part,
+            draw,
         };
         let lctx = Ctx {
             layout: Some(layout),
@@ -1092,6 +1111,7 @@ pub fn resolve(deck: &Presentation) -> Deck {
             next_id: &next_id,
             diagnostics: &diagnostics,
             part: &s.part,
+            draw,
         };
         let mut items = Vec::new();
         if let Some(b) = &s.background {

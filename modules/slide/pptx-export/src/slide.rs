@@ -116,6 +116,9 @@ pub struct Shared<'a> {
     pub source_part: BTreeMap<String, String>,
     /// Image parts already written, by content hash, and the next number.
     pub media: RefCell<(BTreeMap<u64, String>, u32)>,
+    /// The chart parts whose data the document changed (ADR 715): their
+    /// frames are redrawn, and the chart part is written from the workbook.
+    pub live_charts: std::collections::BTreeSet<String>,
 }
 
 /// One slide to write.
@@ -815,7 +818,14 @@ impl<'a> Writer<'a, '_> {
                 }
                 sig(&cb, self.job.base_doc) == sig(&cc, self.sh.cur)
             });
-        if !inner_same {
+        // A live chart redrawn from its edited workbook (ADR 715): its
+        // drawing is the chart part's, written beside the slide.
+        let redrawn = c
+            .label
+            .chart
+            .as_ref()
+            .is_some_and(|p| self.sh.live_charts.contains(p));
+        if !inner_same && !redrawn {
             return Err(format!(
                 "edits inside the {} are not exported",
                 c.label.frame.as_deref().unwrap_or("frame")

@@ -77,6 +77,8 @@ pub struct Label {
     pub preset: Option<(String, Vec<(String, String)>)>,
     pub link: Option<Link>,
     pub frame: Option<String>,
+    /// The chart part a chart frame draws (ADR 715).
+    pub chart: Option<String>,
 }
 
 fn s(v: &Value, k: &str) -> Option<String> {
@@ -123,6 +125,7 @@ pub fn parse_label(json: &str) -> Label {
             tooltip: s(l, "tooltip"),
         }),
         frame: s(&d, "frame"),
+        chart: s(&d, "chart"),
     }
 }
 

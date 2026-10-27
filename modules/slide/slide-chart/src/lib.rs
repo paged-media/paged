@@ -484,7 +484,18 @@ fn cartesian(
                                 }
                                 l
                             })
-                            .or(line);
+                            .or(line)
+                            // No line of its own: Office's default chart
+                            // style strokes it in its automatic colour,
+                            // 2.25 pt, round caps.
+                            .or_else(|| {
+                                Some(Line {
+                                    width: Some(28_575),
+                                    fill: Some(Fill::Solid(auto_color(s.index as usize))),
+                                    cap: Some("rnd".into()),
+                                    ..Line::default()
+                                })
+                            });
                         out.push(Prim::Path {
                             points: pts.clone(),
                             smooth: s.smooth,

@@ -232,6 +232,10 @@ pub struct ItemMeta {
     /// its members are a drawing of it, not shapes of the slide.
     #[serde(default)]
     pub frame: Option<String>,
+    /// The chart part a chart frame draws (ADR 715: its live workbook is
+    /// found by it).
+    #[serde(default)]
+    pub chart: Option<String>,
     /// The shape's click action (`a:hlinkClick` on `p:cNvPr`).
     #[serde(default)]
     pub link: Option<pptx_core::Hyperlink>,
