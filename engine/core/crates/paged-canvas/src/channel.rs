@@ -3551,6 +3551,13 @@ pub struct PageSummary {
     pub margin_inside_pt: f32,
     #[serde(default)]
     pub margin_outside_pt: f32,
+    /// Engine ADR 1022 — the master the page shows (`Page@AppliedMaster`), as
+    /// the build applied it: a generated page's, and a Word section's
+    /// first / odd / even choice. Where a header or footer on the page is
+    /// edited: in that master's frames. `None`: no master. Older workers
+    /// omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applied_master: Option<String>,
 }
 
 /// panels.md gaps 9/10/19 — one `<Section>` definition. Backs
@@ -4127,6 +4134,24 @@ pub struct StoryGrowRule {
     pub max_pages: Option<u32>,
     /// Generated frames copy the chain's last frame's text-frame options.
     pub copy_frame_options: bool,
+    /// Engine ADR 1022 — the chain's pages' master (the odd pages' when
+    /// `evenMaster` is set); absent when the rule names none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master: Option<String>,
+    /// Engine ADR 1022 — the first page's master.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_master: Option<String>,
+    /// Engine ADR 1022 — the even pages' master.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub even_master: Option<String>,
+    /// Engine ADR 1022 — where the chain's first page must fall; absent for
+    /// any page (`newPage`).
+    #[serde(default, skip_serializing_if = "is_new_page_start")]
+    pub section_start: paged_wire::SectionStartSpec,
+}
+
+fn is_new_page_start(s: &paged_wire::SectionStartSpec) -> bool {
+    *s == paged_wire::SectionStartSpec::NewPage
 }
 
 /// DOC-03 (v54) — a story's full CONTENT: its paragraphs, each with its runs'
@@ -4803,6 +4828,10 @@ mod tests {
                 grow: true,
                 max_pages: Some(12),
                 copy_frame_options: Some(true),
+                master: Some("ud1".into()),
+                first_master: Some("uf1".into()),
+                even_master: Some("ue1".into()),
+                section_start: Some(paged_wire::SectionStartSpec::OddPage),
             },
             Mutation::ActivateConditionSet {
                 set: "ConditionSet/Print".into(),
@@ -4844,6 +4873,97 @@ mod tests {
                 other => panic!("unexpected: {other:?}"),
             }
         }
+    }
+
+    /// Engine ADR 1022 — the Word document-structure mutations survive the
+    /// mutate envelope, field for field.
+    #[test]
+    fn word_structure_mutations_round_trip_through_the_mutate_envelope() {
+        let muts = vec![
+            Mutation::UpdateFields {
+                story_id: Some("u1".into()),
+                offset: Some(3),
+                now: Some("2026-10-25T09:30:00".into()),
+            },
+            Mutation::InsertTextAnchor {
+                story_id: "u1".into(),
+                offset: 4,
+                content_offset: Some(5),
+                name: "Here".into(),
+            },
+            Mutation::DeleteTextAnchor {
+                anchor_id: "HyperlinkTextDestination/u9".into(),
+            },
+            Mutation::InsertCrossReference {
+                story_id: "u1".into(),
+                offset: 0,
+                content_offset: None,
+                target: paged_wire::CrossReferenceTarget {
+                    bookmark: None,
+                    story_id: Some("u2".into()),
+                    paragraph: Some(3),
+                },
+                refer_to: paged_wire::CrossReferenceKind::AboveBelow,
+                hyperlink: Some(false),
+            },
+            Mutation::InsertTableOfContents {
+                story_id: "u1".into(),
+                offset: 0,
+                content_offset: Some(0),
+                levels: vec![paged_wire::TocLevelSpec {
+                    style: "ParagraphStyle/Heading 1".into(),
+                    level: 1,
+                }],
+                title: Some("Contents".into()),
+                toc_style_name: None,
+                page_numbers: Some(true),
+                leader: Some(".".into()),
+                tab_position: Some(450.0),
+            },
+            Mutation::InsertIndexMarker {
+                story_id: "u1".into(),
+                offset: 7,
+                content_offset: None,
+                topic: vec!["Fruit".into(), "Pears".into()],
+                sort_order: None,
+            },
+            Mutation::InsertField {
+                story_id: "u1".into(),
+                offset: 0,
+                field: paged_mutate::operation::FieldKind::Word {
+                    code: r"PAGEREF _Ref1 \h".into(),
+                    result: Some("4".into()),
+                },
+                content_offset: None,
+            },
+        ];
+        for m in muts {
+            let env = MainToWorker {
+                seq: 1,
+                protocol: PROTOCOL_VERSION,
+                kind: MainToWorkerKind::Mutate(m.clone()),
+            };
+            let json = serde_json::to_string(&env).unwrap();
+            let back: MainToWorker = serde_json::from_str(&json).unwrap();
+            match back.kind {
+                MainToWorkerKind::Mutate(m2) => assert_eq!(
+                    serde_json::to_string(&m2).unwrap(),
+                    serde_json::to_string(&m).unwrap(),
+                    "{json}"
+                ),
+                other => panic!("unexpected: {other:?}"),
+            }
+        }
+        // The camelCase spelling a host writes.
+        let json = r#"{"op":"insertCrossReference","args":{"storyId":"u1","offset":0,"target":{"bookmark":"Here"},"referTo":"pageNumber"}}"#;
+        let m: Mutation = serde_json::from_str(json).expect("reads");
+        assert!(matches!(
+            m,
+            Mutation::InsertCrossReference {
+                refer_to: paged_wire::CrossReferenceKind::PageNumber,
+                ..
+            }
+        ));
     }
 
     /// W1.2 — `MoveFrame` survives the mutate envelope with its fields

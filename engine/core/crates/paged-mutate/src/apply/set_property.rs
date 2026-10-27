@@ -2387,6 +2387,18 @@ pub(super) fn apply_set_property(
             // Every story with hidden text reflows: the whole document.
             (Value::Bool(prev), InvalidationHint::default())
         }
+        // ---- engine ADR 1022 — show field codes ---------------------
+        (NodeId::Document(_), PropertyPath::DocumentShowFieldCodes) => {
+            let Value::Bool(show) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Bool".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.show_field_codes;
+            let prev = std::mem::replace(slot, show.then_some(true)).unwrap_or(false);
+            (Value::Bool(prev), InvalidationHint::default())
+        }
         // ---- R-11 — the document's global light ---------------------
         (
             NodeId::Document(_),

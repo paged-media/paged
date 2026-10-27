@@ -4248,6 +4248,310 @@
           ]
         },
         {
+          "description": "Engine ADR 1022 — Word's F9: recompute the Word fields' results\n(every story's, or story `storyId`'s, or only the field starting at\nstory char `offset` of that story) over the current layout. `DATE`\nand `TIME` take `now` (`2026-10-25T14:05:09`; the engine reads no\nclock) and keep their result without it. Undoable in one step.\nRefused when nothing changes.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "updateFields"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "offset": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
+                "now": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              }
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1022 — Word's Insert ▸ Bookmark: a text destination named\n`name` at story char `offset` (or the caret offset `contentOffset`).\nThe model mints its id and reports it in the reply. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "insertTextAnchor"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "contentOffset": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "storyId",
+                "offset",
+                "name"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1022 — delete text destination `anchorId` (a bookmark).\nFields that name it show \"Error! Reference source not found.\" at\ntheir next update, as Word's do. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "deleteTextAnchor"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "anchorId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "anchorId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1022 — Word's Insert Cross-reference at story char\n`offset` (or the caret offset `contentOffset`): a `REF` (the target's\ntext), `PAGEREF` (its page) or `PAGEREF \\p` (above / below) field\nwith its result computed now. A paragraph target gets a hidden\n`_Ref` bookmark first. Undoable in one step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "insertCrossReference"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "contentOffset": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
+                "target": {
+                  "$ref": "#/$defs/CrossReferenceTarget"
+                },
+                "referTo": {
+                  "$ref": "#/$defs/CrossReferenceKind",
+                  "default": "text"
+                },
+                "hyperlink": {
+                  "description": "Word's \"Insert as hyperlink\" (`\\h`), on by default.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "storyId",
+                "offset",
+                "target"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1022 — Word's Insert Table of Contents at story char\n`offset` (or the caret offset `contentOffset`): the TOC style\n`tocStyleName` (default \"Table of Contents\") is made from `levels`\nwhen the document lacks it, the entry styles `TOC 1`… (a right tab\nwith `leader`, default \".\", at `tabPosition` pt or the frame's\nwidth) when missing, and the entries are written in paragraphs of\ntheir own before the caret's paragraph (after it when the caret is\ninside), with page numbers over the layout the insertion makes.\n`updateTableOfContents` on the story rewrites them. Undoable in one\nstep.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "insertTableOfContents"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "contentOffset": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
+                "levels": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/TocLevelSpec"
+                  }
+                },
+                "title": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "tocStyleName": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "pageNumbers": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "leader": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "tabPosition": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "format": "float",
+                  "default": null
+                }
+              },
+              "required": [
+                "storyId",
+                "offset",
+                "levels"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1022 — Word's Mark Entry (`XE`) / InDesign's New Page\nReference: an index marker for the topic path `topic` (level 1\nfirst, up to four) in the paragraph holding story char `offset` (or\nthe caret offset `contentOffset`). Missing topics are created.\n`generateIndex` lists it. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "insertIndexMarker"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "contentOffset": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
+                "topic": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sortOrder": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "storyId",
+                "offset",
+                "topic"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local\n`bounds` `(top, left, bottom, right)`; the model resolves the\nhost spread and mints the self id (mirrors `InsertFrame`).",
           "type": "object",
           "properties": {
@@ -4450,6 +4754,42 @@
                   "type": [
                     "boolean",
                     "null"
+                  ],
+                  "default": null
+                },
+                "master": {
+                  "description": "Engine ADR 1022 — the master every page of the chain takes\n(Word's section header and footer; the odd pages' when\n`evenMaster` is set). Absent: generated pages copy the page\nbefore (ADR 026).",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "firstMaster": {
+                  "description": "Engine ADR 1022 — the chain's first page's master (Word's\n\"different first page\").",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "evenMaster": {
+                  "description": "Engine ADR 1022 — the master of pages with an even number (Word's\n\"different odd & even\").",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "sectionStart": {
+                  "description": "Engine ADR 1022 — an odd- or even-page section start, which gets\na blank page in front when it lands on the wrong number.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SectionStartSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
                   ],
                   "default": null
                 }
@@ -5723,6 +6063,34 @@
           },
           "required": [
             "textVariable"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "Engine ADR 1022 — a Word field: its own run, tagged with the field\nread out of `code` (Word's instruction, `PAGEREF _Ref1 \\h`), whose\ntext is `result`. Without a result the canvas computes one before\nit inserts (a bare model shows the code in braces). // rides v76.",
+          "type": "object",
+          "properties": {
+            "word": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "code"
+              ]
+            }
+          },
+          "required": [
+            "word"
           ],
           "additionalProperties": false
         }
@@ -7652,6 +8020,11 @@
           "description": "Word's \"show hidden text\", on `NodeId::Document`: `Value::Bool`,\ndefault false. A whole-document reflow.",
           "type": "string",
           "const": "documentShowHiddenText"
+        },
+        {
+          "description": "Word's \"show field codes\" (Alt+F9), on `NodeId::Document`:\n`Value::Bool`, default false. Every Word field sets its code in\nbraces instead of its result (engine ADR 1022). A whole-document\nreflow.",
+          "type": "string",
+          "const": "documentShowFieldCodes"
         }
       ]
     },
@@ -9270,12 +9643,99 @@
         }
       ]
     },
+    "CrossReferenceTarget": {
+      "description": "Engine ADR 1022 — what a cross-reference points at: a bookmark (a text\ndestination, by its name or `Self`), or a paragraph of a story (a\nheading), which gets a hidden `_Ref` bookmark of its own as Word gives it.",
+      "type": "object",
+      "properties": {
+        "bookmark": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "storyId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "paragraph": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        }
+      }
+    },
+    "CrossReferenceKind": {
+      "description": "Engine ADR 1022 — what a cross-reference says (Word's \"Insert reference\nto\").",
+      "oneOf": [
+        {
+          "description": "The target's text (`REF`).",
+          "type": "string",
+          "const": "text"
+        },
+        {
+          "description": "The target's page number (`PAGEREF`).",
+          "type": "string",
+          "const": "pageNumber"
+        },
+        {
+          "description": "\"above\" / \"below\", or \"on page N\" from another page (`PAGEREF \\p`).",
+          "type": "string",
+          "const": "aboveBelow"
+        }
+      ]
+    },
+    "TocLevelSpec": {
+      "description": "Engine ADR 1022 — one level of a table of contents: paragraphs in\n`style` (a `ParagraphStyle/…` id) become entries at `level` (1 = top).",
+      "type": "object",
+      "properties": {
+        "style": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "style",
+        "level"
+      ]
+    },
     "GuideOrientationSpec": {
       "description": "W0.5 — wire mirror of `paged_model::GuideOrientation`\n(which is `Deserialize` but lives in the parse crate; kept here so\nthe operation wire type doesn't depend on the parser's\nserialization shape).",
       "type": "string",
       "enum": [
         "vertical",
         "horizontal"
+      ]
+    },
+    "SectionStartSpec": {
+      "description": "Engine ADR 1022 — where a growing chain's first page must fall (Word's\nsection break type).",
+      "oneOf": [
+        {
+          "description": "Any page (Word's \"next page\").",
+          "type": "string",
+          "const": "newPage"
+        },
+        {
+          "description": "An odd-numbered page: a blank page goes in front otherwise.",
+          "type": "string",
+          "const": "oddPage"
+        },
+        {
+          "description": "An even-numbered page: a blank page goes in front otherwise.",
+          "type": "string",
+          "const": "evenPage"
+        }
       ]
     }
   }

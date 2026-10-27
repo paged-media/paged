@@ -1072,6 +1072,65 @@ pub struct FindHit {
     pub groups: Vec<Option<String>>,
 }
 
+/// Engine ADR 1022 — where a growing chain's first page must fall (Word's
+/// section break type).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum SectionStartSpec {
+    /// Any page (Word's "next page").
+    #[default]
+    NewPage,
+    /// An odd-numbered page: a blank page goes in front otherwise.
+    OddPage,
+    /// An even-numbered page: a blank page goes in front otherwise.
+    EvenPage,
+}
+
+/// Engine ADR 1022 — what a cross-reference points at: a bookmark (a text
+/// destination, by its name or `Self`), or a paragraph of a story (a
+/// heading), which gets a hidden `_Ref` bookmark of its own as Word gives it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CrossReferenceTarget {
+    #[serde(default)]
+    pub bookmark: Option<String>,
+    #[serde(default)]
+    pub story_id: Option<String>,
+    #[serde(default)]
+    pub paragraph: Option<u32>,
+}
+
+/// Engine ADR 1022 — what a cross-reference says (Word's "Insert reference
+/// to").
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum CrossReferenceKind {
+    /// The target's text (`REF`).
+    #[default]
+    Text,
+    /// The target's page number (`PAGEREF`).
+    PageNumber,
+    /// "above" / "below", or "on page N" from another page (`PAGEREF \p`).
+    AboveBelow,
+}
+
+/// Engine ADR 1022 — one level of a table of contents: paragraphs in
+/// `style` (a `ParagraphStyle/…` id) become entries at `level` (1 = top).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct TocLevelSpec {
+    pub style: String,
+    pub level: u32,
+}
+
 /// A content-space mutation. Phase 1 carries the *envelope* only —
 /// the worker rejects each variant with `WorkerError::NotImplemented`.
 /// Phase 3 lights these up incrementally.
@@ -2342,6 +2401,95 @@ pub enum Mutation {
         #[serde(default)]
         character_style: Option<String>,
     },
+    // rides v76 (added before first consumer sync) — engine ADR 1022.
+    /// Engine ADR 1022 — Word's F9: recompute the Word fields' results
+    /// (every story's, or story `storyId`'s, or only the field starting at
+    /// story char `offset` of that story) over the current layout. `DATE`
+    /// and `TIME` take `now` (`2026-10-25T14:05:09`; the engine reads no
+    /// clock) and keep their result without it. Undoable in one step.
+    /// Refused when nothing changes.
+    UpdateFields {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        offset: Option<u32>,
+        #[serde(default)]
+        now: Option<String>,
+    },
+    /// Engine ADR 1022 — Word's Insert ▸ Bookmark: a text destination named
+    /// `name` at story char `offset` (or the caret offset `contentOffset`).
+    /// The model mints its id and reports it in the reply. Undoable.
+    InsertTextAnchor {
+        story_id: String,
+        offset: u32,
+        #[serde(default)]
+        content_offset: Option<u32>,
+        name: String,
+    },
+    /// Engine ADR 1022 — delete text destination `anchorId` (a bookmark).
+    /// Fields that name it show "Error! Reference source not found." at
+    /// their next update, as Word's do. Undoable.
+    DeleteTextAnchor {
+        anchor_id: String,
+    },
+    /// Engine ADR 1022 — Word's Insert Cross-reference at story char
+    /// `offset` (or the caret offset `contentOffset`): a `REF` (the target's
+    /// text), `PAGEREF` (its page) or `PAGEREF \p` (above / below) field
+    /// with its result computed now. A paragraph target gets a hidden
+    /// `_Ref` bookmark first. Undoable in one step.
+    InsertCrossReference {
+        story_id: String,
+        offset: u32,
+        #[serde(default)]
+        content_offset: Option<u32>,
+        target: CrossReferenceTarget,
+        #[serde(default)]
+        refer_to: CrossReferenceKind,
+        /// Word's "Insert as hyperlink" (`\h`), on by default.
+        #[serde(default)]
+        hyperlink: Option<bool>,
+    },
+    /// Engine ADR 1022 — Word's Insert Table of Contents at story char
+    /// `offset` (or the caret offset `contentOffset`): the TOC style
+    /// `tocStyleName` (default "Table of Contents") is made from `levels`
+    /// when the document lacks it, the entry styles `TOC 1`… (a right tab
+    /// with `leader`, default ".", at `tabPosition` pt or the frame's
+    /// width) when missing, and the entries are written in paragraphs of
+    /// their own before the caret's paragraph (after it when the caret is
+    /// inside), with page numbers over the layout the insertion makes.
+    /// `updateTableOfContents` on the story rewrites them. Undoable in one
+    /// step.
+    InsertTableOfContents {
+        story_id: String,
+        offset: u32,
+        #[serde(default)]
+        content_offset: Option<u32>,
+        levels: Vec<TocLevelSpec>,
+        #[serde(default)]
+        title: Option<String>,
+        #[serde(default)]
+        toc_style_name: Option<String>,
+        #[serde(default)]
+        page_numbers: Option<bool>,
+        #[serde(default)]
+        leader: Option<String>,
+        #[serde(default)]
+        tab_position: Option<f32>,
+    },
+    /// Engine ADR 1022 — Word's Mark Entry (`XE`) / InDesign's New Page
+    /// Reference: an index marker for the topic path `topic` (level 1
+    /// first, up to four) in the paragraph holding story char `offset` (or
+    /// the caret offset `contentOffset`). Missing topics are created.
+    /// `generateIndex` lists it. Undoable.
+    InsertIndexMarker {
+        story_id: String,
+        offset: u32,
+        #[serde(default)]
+        content_offset: Option<u32>,
+        topic: Vec<String>,
+        #[serde(default)]
+        sort_order: Option<String>,
+    },
     // ── W0.5 wire-expansion ─────────────────────────────────────────
     /// W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local
     /// `bounds` `(top, left, bottom, right)`; the model resolves the
@@ -2387,6 +2535,24 @@ pub enum Mutation {
         max_pages: Option<u32>,
         #[serde(default)]
         copy_frame_options: Option<bool>,
+        /// Engine ADR 1022 — the master every page of the chain takes
+        /// (Word's section header and footer; the odd pages' when
+        /// `evenMaster` is set). Absent: generated pages copy the page
+        /// before (ADR 026).
+        #[serde(default)]
+        master: Option<String>,
+        /// Engine ADR 1022 — the chain's first page's master (Word's
+        /// "different first page").
+        #[serde(default)]
+        first_master: Option<String>,
+        /// Engine ADR 1022 — the master of pages with an even number (Word's
+        /// "different odd & even").
+        #[serde(default)]
+        even_master: Option<String>,
+        /// Engine ADR 1022 — an odd- or even-page section start, which gets
+        /// a blank page in front when it lands on the wrong number.
+        #[serde(default)]
+        section_start: Option<SectionStartSpec>,
     },
     /// v71 — define a CUSTOM text variable (`<TextVariable
     /// VariableType="CustomTextType">`). Its `Self` is
@@ -2827,6 +2993,12 @@ mutation_vocabulary! {
     SetListLevel,
     RestartNumbering,
     FindReplace,
+    UpdateFields,
+    InsertTextAnchor,
+    DeleteTextAnchor,
+    InsertCrossReference,
+    InsertTableOfContents,
+    InsertIndexMarker,
     InsertOval,
     InsertGuide,
     MoveGuide,

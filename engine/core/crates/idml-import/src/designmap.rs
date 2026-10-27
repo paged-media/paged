@@ -668,6 +668,8 @@ fn read_preference(e: &quick_xml::events::BytesStart, out: &mut DesignMap) {
         out.document_preference = DocumentPreference {
             // Not an IDML attribute (engine ADR 1018).
             show_hidden_text: None,
+            // Nor is Word's show-field-codes view (engine ADR 1022).
+            show_field_codes: None,
             bleed_top: f(b"DocumentBleedTopOffset"),
             bleed_bottom: f(b"DocumentBleedBottomOffset"),
             bleed_inside_or_left: f(b"DocumentBleedInsideOrLeftOffset"),

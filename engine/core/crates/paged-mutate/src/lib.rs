@@ -1770,6 +1770,10 @@ mod tests {
                 rule: Some(paged_model::FlowGrowRule {
                     max_pages: Some(9),
                     copy_frame_options: true,
+                    master: Some("ud1".to_string()),
+                    first_master: Some("uf1".to_string()),
+                    even_master: Some("ue1".to_string()),
+                    section_start: paged_model::SectionStart::OddPage,
                 }),
             },
             Operation::ActivateConditionSet {

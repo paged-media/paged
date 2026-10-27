@@ -33,6 +33,8 @@
 pub mod fitting;
 pub mod image_bytes;
 pub mod winding;
+pub mod word_field;
+pub use word_field::{WordField, WordFieldKind};
 
 use std::collections::BTreeMap;
 
@@ -4441,6 +4443,12 @@ pub struct DocumentPreference {
     /// IDML attribute: the `.paged` model part carries it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_hidden_text: Option<bool>,
+    /// Word's "show field codes" (Alt+F9; engine ADR 1022): when true, every
+    /// Word field ([`CharacterRun::field`]) is set as its code in braces
+    /// (`{ PAGEREF _Ref1 \h }`) instead of its result. A view flag of the
+    /// document, carried by the `.paged` model part; not an IDML attribute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_field_codes: Option<bool>,
 }
 
 /// `<GridPreference>` — the document's baseline-grid + document-grid
@@ -7297,6 +7305,14 @@ pub struct Paragraph {
     /// The renderer's index pass collects these across all
     /// paragraphs and emits an alphabetized index story.
     pub index_markers: Vec<IndexMarker>,
+    /// Engine ADR 1022 — the TOC style (`TOCStyle/<id>`) whose table of
+    /// contents this paragraph belongs to, when a table of contents stands
+    /// INSIDE a story's text, as Word puts one (`insertTableOfContents`).
+    /// The run of consecutive paragraphs naming one style is that table;
+    /// `updateTableOfContents` rewrites it in place. `None` elsewhere (an
+    /// InDesign table of contents is a story of its own).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toc: Option<String>,
 }
 impl Paragraph {
     /// Keep the anchors of [`Self::anchored_frame_offsets`], the
@@ -8516,8 +8532,23 @@ pub struct CharacterRun {
     /// `None` for ordinary text runs. The parser never sets this today;
     /// placeholders enter via the mutate API (`InsertField`).
     pub placeholder: Option<PlaceholderField>,
+    /// Engine ADR 1022 — the Word field this run IS (`DATE`, `NUMPAGES`,
+    /// `PAGEREF`, …): the run's `text` is the field's current result, the
+    /// way a variable run carries its `ResultText`. Page-dependent kinds
+    /// re-resolve at emit ([`WordField::is_live`]); the others change only
+    /// when the fields are updated (Word's F9). `None` for ordinary text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<WordField>,
     pub text: String,
 }
+impl CharacterRun {
+    /// Whether the run's text depends on the layout at emit: a text
+    /// variable, or a live Word field (engine ADR 1022).
+    pub fn reads_layout(&self) -> bool {
+        self.text_variable.is_some() || self.field.as_ref().is_some_and(WordField::is_live)
+    }
+}
+
 /// v43 (D-01) — a plugin-owned tagged placeholder: a named,
 /// edit-surviving anchor inside a story's run list. `(plugin, key)` is
 /// the identity the owning plugin re-finds it by; `value` is the
@@ -9408,6 +9439,80 @@ pub struct FlowGrowRule {
     /// section (thoughts ADR 029; measured against Word's PDF export).
     #[serde(default)]
     pub copy_frame_options: bool,
+    /// Engine ADR 1022 — the master every page of the chain takes (Word's
+    /// section header and footer, "odd" when [`Self::even_master`] is set).
+    /// `None`: a generated page copies the master of the page it follows,
+    /// and authored pages keep theirs (ADR 026). Spelled as
+    /// [`Page::applied_master`] spells it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master: Option<String>,
+    /// Engine ADR 1022 — the master the chain's FIRST page takes (Word's
+    /// "different first page", `w:titlePg`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_master: Option<String>,
+    /// Engine ADR 1022 — the master pages with an EVEN page number take
+    /// (Word's "different odd & even", `w:evenAndOddHeaders`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub even_master: Option<String>,
+    /// Engine ADR 1022 — where the chain's first page must fall (Word's
+    /// section break type): an odd- or even-page start that lands on the
+    /// wrong number gets a blank page in front of it.
+    #[serde(default, skip_serializing_if = "SectionStart::is_new_page")]
+    pub section_start: SectionStart,
+}
+
+/// Engine ADR 1022 — where a growing chain's first page must fall, as Word's
+/// section break types say (`w:sectPr/w:type`). Parity is the page NUMBER's
+/// (the section numbering's), as Word decides it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SectionStart {
+    /// Any page (Word's "next page").
+    #[default]
+    NewPage,
+    /// An odd-numbered page; a blank page is inserted before it otherwise.
+    OddPage,
+    /// An even-numbered page; a blank page is inserted before it otherwise.
+    EvenPage,
+}
+
+impl SectionStart {
+    pub fn is_new_page(&self) -> bool {
+        *self == SectionStart::NewPage
+    }
+
+    /// Whether a first page numbered `number` stands where this start wants it.
+    pub fn accepts(self, number: u32) -> bool {
+        match self {
+            SectionStart::NewPage => true,
+            SectionStart::OddPage => number % 2 == 1,
+            SectionStart::EvenPage => number.is_multiple_of(2),
+        }
+    }
+}
+
+impl FlowGrowRule {
+    /// Whether the rule picks the masters of its chain's pages.
+    pub fn names_masters(&self) -> bool {
+        self.master.is_some() || self.first_master.is_some() || self.even_master.is_some()
+    }
+
+    /// The master a page of the chain takes: the first page's when it is the
+    /// chain's first and the rule has one, else the even master on an
+    /// even-numbered page, else the rule's master. `None`: keep the page's.
+    pub fn master_for(&self, first_of_chain: bool, number: u32) -> Option<&str> {
+        if first_of_chain {
+            if let Some(m) = self.first_master.as_deref() {
+                return Some(m);
+            }
+        }
+        if number.is_multiple_of(2) {
+            if let Some(m) = self.even_master.as_deref() {
+                return Some(m);
+            }
+        }
+        self.master.as_deref()
+    }
 }
 
 // ---------------------------------------------------------------------------
