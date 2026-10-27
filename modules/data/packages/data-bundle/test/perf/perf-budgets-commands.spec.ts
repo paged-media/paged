@@ -408,6 +408,15 @@ describe.skipIf(!RUN_BUDGETS)(
     // read is placeholders() (0 fields) + objects.query + one objects.get of
     // its contents: hostCalls 21 → 23, placeholdersRead 1 → 0; each step is
     // still one write (a `Set` on the contents), one undo step.
+    // RAISED (editor ADR 291, a record stepped to is placed): each step
+    // records the record the field now shows (`targets.stepped`) and, with
+    // labels, writes that session version before the step's write, so the
+    // label the step carries names it (an undo of a step takes the session
+    // back to the record before; a reopen finds it). Per step that is one
+    // session write: +1 payload +1 sync_report (wasmCalls 20 → 60 over the
+    // 20 steps), the two part writes and the label op the write carries
+    // (mutationOps 21 → 40; hostCalls 23 → 102). Step 20 wraps to record 0,
+    // the default, which drops the record again.
     const W3: Measured = onTextVariables(
       onLabelled(
         {
@@ -434,9 +443,9 @@ describe.skipIf(!RUN_BUDGETS)(
           fingerprints: 0,
           storeQueries: 0,
         },
-        { mutationOps: 21 },
+        { mutationOps: 40, wasmCalls: 60 },
       ),
-      { hostCalls: 23, placeholdersRead: 0 },
+      { hostCalls: 102, placeholdersRead: 0 },
     );
     it("W3 steps the preview through 20 records [data.perf.gates]", async () => {
       h = await openDataHost();
