@@ -11623,6 +11623,8 @@ impl CanvasModel {
         // S4 — the first-class overset continuation (where the flow overran),
         // keyed by story id.
         let overset_at = self.built.diagnostics.overset_continuations();
+        // Data ADR 564 — the table cells whose text does not fit their row.
+        let overset_cells = self.built.diagnostics.overset_cells();
         self.scene
             .stories
             .iter()
@@ -11644,6 +11646,19 @@ impl CanvasModel {
                             paragraph: c.paragraph_idx,
                             line: c.line_idx,
                         }),
+                    overset_cells: overset_cells
+                        .get(&s.self_id)
+                        .map(|cells| {
+                            cells
+                                .iter()
+                                .map(|c| crate::channel::OversetCellAt {
+                                    table: c.table_id.clone(),
+                                    row: c.row,
+                                    column: c.column,
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                     grow_rule: s
                         .story
                         .grow

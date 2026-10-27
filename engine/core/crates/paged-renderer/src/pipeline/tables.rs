@@ -760,6 +760,8 @@ fn emit_table(
     }
     // Whether any cell held more text than its row has room for.
     let mut cell_overset = false;
+    // The addressable cells that overset, for the diagnostics that name them.
+    let mut overset_cells: Vec<(String, u32, u32)> = Vec::new();
     for prow_i in 0..physical_rows.len() {
         let prow = physical_rows[prow_i];
         let r = prow.template_idx;
@@ -1132,6 +1134,12 @@ fn emit_table(
             let (used_h, overset) = block.fitted(inner_h);
             if overset {
                 cell_overset = true;
+                if let Some(a) = &cell_addr_base {
+                    let at = (a.table_id.clone(), a.row, a.col);
+                    if !overset_cells.contains(&at) {
+                        overset_cells.push(at);
+                    }
+                }
             }
             let fitting_items = block.fitting_items(inner_h);
             let cell_vjust = cell
@@ -1242,15 +1250,28 @@ fn emit_table(
       // draws the lines that fit and none of the rest, as InDesign does;
       // say so rather than drop them silently.
     if cell_overset {
-        let mut d = crate::diagnostics::Diagnostic::new(
-            crate::diagnostics::DiagnosticCode::OversetTextDropped,
-            "table cell text overflows its row; the lines that do not fit are not drawn (overset cell)",
-        )
-        .with_page(target_page);
-        if !em.current_story_id.is_empty() {
-            d = d.with_story(em.current_story_id.clone());
+        let make = || {
+            let mut d = crate::diagnostics::Diagnostic::new(
+                crate::diagnostics::DiagnosticCode::OversetTextDropped,
+                "table cell text overflows its row; the lines that do not fit are not drawn (overset cell)",
+            )
+            .with_page(target_page);
+            if !em.current_story_id.is_empty() {
+                d = d.with_story(em.current_story_id.clone());
+            }
+            d
+        };
+        // One per addressable cell, naming it; an unaddressable table (no
+        // `Self`, or nested) keeps the one story-level report.
+        if overset_cells.is_empty() {
+            let d = make();
+            em.diagnostics.push(d);
+        } else {
+            for (table_id, row, column) in overset_cells {
+                let d = make().with_cell(table_id, row, column);
+                em.diagnostics.push(d);
+            }
         }
-        em.diagnostics.push(d);
     }
 
     // Resolve effective outer-border attributes. Direct `<Table>`
