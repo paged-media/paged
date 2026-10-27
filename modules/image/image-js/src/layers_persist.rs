@@ -844,6 +844,36 @@ mod tests {
         assert!(back.layers[3].rgba.is_16bit(), "16-bit stays 16-bit");
     }
 
+    /// A Develop adjustment layer (WP5.2) persists as a typed layer: its
+    /// 61 settings come back exactly.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_develop_layer_round_trips__feat__image_editor_filters() {
+        use crate::layers::Adjustment;
+        let mut s = LayerStack::from_image(4, 3, px(4, 3, 10)).expect("stack");
+        let mut v = image_kernels::families::develop::DevelopSettings::identity().0;
+        v[0] = 25.0;
+        v[9] = 40.0;
+        v[37] = 210.0;
+        v[55] = 60.0;
+        s.add_adjustment_layer(
+            "Develop",
+            Adjustment::from_wire("develop", &v, &[], "").expect("develop"),
+            None,
+        );
+        let (m, bufs) = s.export();
+        let back = LayerStack::import(&m, &bufs).expect("import");
+        let got = back
+            .layers
+            .last()
+            .and_then(|l| l.adjustment())
+            .expect("an adjustment");
+        assert_eq!(got.kind_name(), "develop");
+        assert_eq!(got.values(), v.to_vec());
+        let (m2, _) = back.export();
+        assert_eq!(m, m2, "byte-identical after a round trip");
+    }
+
     /// A GROUP's mask (version 2) comes back with its switch; a version-1
     /// manifest — no group mask fields — still opens, its groups unmasked.
     #[test]

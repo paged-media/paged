@@ -31,6 +31,9 @@ const WASM_DTS = fileURLToPath(
   new URL("../../manifest/wasm/image_js.d.ts", import.meta.url),
 );
 const ENGINE_TS = fileURLToPath(new URL("../src/engine.ts", import.meta.url));
+const FILTERS_TS = fileURLToPath(
+  new URL("../src/engine-filters.ts", import.meta.url),
+);
 
 /**
  * wasm-bindgen's `--target web` glue also exports its init machinery,
@@ -63,14 +66,26 @@ const UNMODELLED_ON_PURPOSE = new Map([
   ],
 ]);
 
-function declaredInTs(): string[] {
-  const src = readFileSync(ENGINE_TS, "utf8");
-  const block = /export interface ImageWasmModule \{(.*?)\n\}/s.exec(src);
-  if (!block)
-    throw new Error("ImageWasmModule interface not found in engine.ts");
-  return [...block[1].matchAll(/^ {2}([a-z_][A-Za-z0-9_]*)\(/gm)].map(
-    (m) => m[1],
+/** The members of `export interface <name> … {` in `path`. */
+function members(path: string, name: string): string[] {
+  const src = readFileSync(path, "utf8");
+  const block = new RegExp(
+    `export interface ${name}(?: extends [A-Za-z, ]+)? \\{(.*?)\\n\\}`,
+    "s",
+  ).exec(src);
+  if (!block) throw new Error(`${name} interface not found in ${path}`);
+  return [...block[1]!.matchAll(/^ {2}([a-z_][A-Za-z0-9_]*)\(/gm)].map(
+    (m) => m[1]!,
   );
+}
+
+/** `ImageWasmModule` (engine.ts) and the filter doors it extends
+ *  (`FilterWasm`, engine-filters.ts). */
+function declaredInTs(): string[] {
+  return [
+    ...members(ENGINE_TS, "ImageWasmModule"),
+    ...members(FILTERS_TS, "FilterWasm"),
+  ];
 }
 
 function exportedByWasm(): string[] {

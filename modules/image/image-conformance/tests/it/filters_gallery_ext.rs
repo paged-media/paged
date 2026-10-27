@@ -259,7 +259,7 @@ fn strokes_smear_along_their_angle_only__feat__image_editor_filters() {
         "smeared: {}",
         across[k].0[0]
     );
-    assert!(STROKES_MAX_LENGTH == 24.0);
+    assert_eq!(STROKES_MAX_LENGTH, 24.0);
 }
 
 #[test]

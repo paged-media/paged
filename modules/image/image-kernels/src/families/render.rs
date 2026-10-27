@@ -721,6 +721,10 @@ pub static RENDER_LIGHTING: KernelDef = KernelDef {
                 wgsl_ty: "u32",
             },
             ParamField {
+                name: "_pad0",
+                wgsl_ty: "u32",
+            },
+            ParamField {
                 name: "lx",
                 wgsl_ty: "f32",
             },

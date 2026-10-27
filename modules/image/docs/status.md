@@ -37,7 +37,7 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   noise, high pass, maximum and minimum (radius ≤ 32, square or round), offset, smart
   sharpen, emboss, find edges, glowing edges, mosaic, ten gallery effects, gradient map
   and selective colour; average (no dialog) fills the selection with its average colour.
-  WP5.2 adds ([ADR 468](adr/468-filter-families-and-galleries.md)): **Distort** (displace
+  WP5.2 adds ([ADR 473](adr/473-filter-families-and-galleries.md)): **Distort** (displace
   with a map from the composite or a file, polar coordinates both ways, ripple, shear on a
   five-point curve, zigzag), **Render** (clouds, difference clouds, fibers in the
   foreground/background colours, lens flare in four lens types, lighting effects with one

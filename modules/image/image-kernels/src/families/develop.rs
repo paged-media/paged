@@ -127,7 +127,11 @@ impl DevelopSettings {
         let mut s = [0.0f32; DEVELOP_LEN];
         for (i, v) in values.iter().enumerate() {
             let (lo, hi) = Self::range(i);
-            s[i] = if v.is_finite() { v.clamp(lo, hi) } else { d.0[i] };
+            s[i] = if v.is_finite() {
+                v.clamp(lo, hi)
+            } else {
+                d.0[i]
+            };
         }
         Some(Self(s))
     }
@@ -138,7 +142,9 @@ impl DevelopSettings {
         let zero = |r: std::ops::RangeInclusive<usize>| r.into_iter().all(|i| s[i] == 0.0);
         zero(0..=7)
             && zero(11..=36)
-            && [38, 39, 41, 42, 44, 45, 47, 48].iter().all(|&i| s[i] == 0.0)
+            && [38, 39, 41, 42, 44, 45, 47, 48]
+                .iter()
+                .all(|&i| s[i] == 0.0)
             && zero(51..=54)
     }
 
@@ -174,7 +180,11 @@ impl DevelopSettings {
         w[0] = 1.0;
         for i in 0..24 {
             let t = taps[i / 2];
-            let (x, y) = if i % 2 == 0 { (t[0], t[1]) } else { (t[2], t[3]) };
+            let (x, y) = if i % 2 == 0 {
+                (t[0], t[1])
+            } else {
+                (t[2], t[3])
+            };
             let d2 = (x * x + y * y) as f32;
             w[i + 1] = (-d2 / (2.0 * r * r)).exp();
         }
@@ -294,7 +304,7 @@ pub static DEVELOP_TONE: KernelDef = KernelDef {
     wgsl: DEVELOP_TONE_WGSL,
     module: true,
     mip_exact: true,
-    gpu_tolerance: Tolerance::ChannelEpsF16(16),
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
 };
 
 const DEVELOP_TONE_WGSL: &str = concat!(
@@ -524,7 +534,7 @@ pub static DEVELOP_DETAIL: KernelDef = KernelDef {
     wgsl: DEVELOP_DETAIL_WGSL,
     module: true,
     mip_exact: false,
-    gpu_tolerance: Tolerance::ChannelEpsF16(16),
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
 };
 
 const DEVELOP_DETAIL_WGSL: &str = concat!(

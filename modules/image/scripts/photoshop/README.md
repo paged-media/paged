@@ -33,13 +33,13 @@ The WP5.2 families (`filters-distort`, `filters-render`, `filters-stylize`,
 `filters-pixelate`, `adjustments-ext`) and the ActionManager events they
 send (the DOM has no method for most of them; ScriptListener-style keys):
 
-| probe             | cases (DOM method or AM event and keys)                                                                                                                                                       |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `filters-distort` | Polar Coordinates both ways, Ripple, ZigZag (3 styles), Shear, Displace (DOM `apply*`); the Displace map is the stimulus saved as an 8-bit PSD (a 16-bit map is refused as "cancelled") |
-| `filters-render`  | Clouds `Clds`, Difference Clouds `DfrC` (`RndS` seed), Fibers `Fbrs` (`Vrnc`, `Strg`, `RndS`), Lens Flare (DOM); colours black/white, restored after                                     |
-| `filters-stylize` | Solarize `Slrz`, Trace Contour `TrcC` (`Lvl `, `Edg ` `CntE`/`Lwr `·`Upr `), Wind `Wnd ` (`WndM`, `Drct`), Tiles `Tls ` (`TlNm`, `TlOf`, `FlCl`), Extrude `Extr` (`ExtT`, `ExtS`, `ExtD`, `ExtR`, `ExtF`, `ExtM`) |
-| `filters-pixelate`| Facet `Fct `, Crystallize `Crst` / Pointillize `Pntl` (`ClSz`), Mezzotint `Mztn` (`MztT`), Color Halftone `ClrH` (`Rds `, `Ang1`–`Ang4`)                                              |
-| `adjustments-ext` | Desaturate, Equalize (DOM), Shadows/Highlights `adaptCorrect` (`sdwM`/`hglM` `adaptCorrectTones` `Amnt`/`Wdth`/`Rds `, `BlcC`, `WhtC`, `Cntr`, `ClrC`), Replace Color `RplC` (`Fzns`, `Mnm `/`Mxm ` Lab, `H   `, `Strt`, `Lght`), Match Color `matchColor` (self, `neutralizeColor`) |
+| probe              | cases (DOM method or AM event and keys)                                                                                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `filters-distort`  | Polar Coordinates both ways, Ripple, ZigZag (3 styles), Shear, Displace (DOM `apply*`); the Displace map is the stimulus saved as an 8-bit PSD (a 16-bit map is refused as "cancelled")                                                                                              |
+| `filters-render`   | Clouds `Clds`, Difference Clouds `DfrC` (`RndS` seed), Fibers `Fbrs` (`Vrnc`, `Strg`, `RndS`), Lens Flare (DOM); colours black/white, restored after                                                                                                                                 |
+| `filters-stylize`  | Solarize `Slrz`, Trace Contour `TrcC` (`Lvl `, `Edg ` `CntE`/`Lwr `·`Upr `), Wind `Wnd ` (`WndM`, `Drct`), Tiles `Tls ` (`TlNm`, `TlOf`, `FlCl`), Extrude `Extr` (`ExtT`, `ExtS`, `ExtD`, `ExtR`, `ExtF`, `ExtM`)                                                                    |
+| `filters-pixelate` | Facet `Fct `, Crystallize `Crst` / Pointillize `Pntl` (`ClSz`), Mezzotint `Mztn` (`MztT`), Color Halftone `ClrH` (`Rds `, `Ang1`–`Ang4`)                                                                                                                                             |
+| `adjustments-ext`  | Desaturate, Equalize (DOM), Shadows/Highlights `adaptCorrect` (`sdwM`/`hglM` `adaptCorrectTones` `Amnt`/`Wdth`/`Rds `, `BlcC`, `WhtC`, `Cntr`, `ClrC`), Replace Color `RplC` (`Fzns`, `Mnm `/`Mxm ` Lab, `H   `, `Strt`, `Lght`), Match Color `matchColor` (self, `neutralizeColor`) |
 
 - **8-bit-only filters.** Wind, Tiles and Extrude refuse a 16-bit document;
   the case converts its duplicate to 8 bits, applies, converts back and

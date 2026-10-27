@@ -260,7 +260,8 @@ impl DistortPolarParams {
 /// Polar Coordinates. RECTANGULAR → POLAR bends the image round the
 /// canvas centre: the top edge collapses to the centre, the bottom edge
 /// becomes the rim of the ellipse fitted to the canvas, and x runs
-/// clockwise from 12 o'clock (so the left and right edges meet there and
+/// counter-clockwise from 12 o'clock (Photoshop's direction, per the
+/// recorded probe) (so the left and right edges meet there and
 /// x wraps). POLAR → RECTANGULAR is the exact inverse map. Outside the
 /// ellipse the rectangular image's bottom row repeats.
 pub static DISTORT_POLAR: KernelDef = KernelDef {
@@ -315,9 +316,9 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
         let r = sqrt(u * u + v * v);
         var th = atan2(u, -v);
         if (th < 0.0) { th = th + TAU; }
-        s = vec2<f32>(th / TAU * w, r * h);
+        s = vec2<f32>((1.0 - th / TAU) * w, r * h);
     } else {
-        let th = px / w * TAU;
+        let th = (1.0 - px / w) * TAU;
         let r = py / h;
         s = vec2<f32>(hw + r * sin(th) * hw, hh - r * cos(th) * hh);
     }
@@ -582,7 +583,8 @@ impl DistortZigzagParams {
 /// fading to nothing at its rim. AROUND CENTRE twists each ring back and
 /// forth (an angular displacement), OUT FROM CENTRE pushes rings in and
 /// out (radial), POND RIPPLES does both at once. Outside the circle the
-/// image is untouched. IDENTITY: amount 0.
+/// image is untouched. IDENTITY: amount 0 (guarded, so an adapter's
+/// inexact `cos(0)` cannot shift a texel).
 pub static DISTORT_ZIGZAG: KernelDef = KernelDef {
     id: "distort.zigzag",
     class: KernelClass::Point,
@@ -638,7 +640,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let dv = p - c;
     let r = sqrt(dv.x * dv.x + dv.y * dv.y);
     var s = p;
-    if (r > 0.0 && r < big_r) {
+    if (params.amount != 0.0 && r > 0.0 && r < big_r) {
         let t = r / big_r;
         let fall = 1.0 - t;
         let wave = sin(TAU * params.ridges * t) * fall * params.amount * 0.01;

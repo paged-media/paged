@@ -419,6 +419,13 @@ fn filter_case(id: &str) -> Ours {
 // (`params.eight_bit`). Random filters are compared by statistics
 // (`params.compare = "stats"`, see `stat_dist`).
 
+/// Cases the REPLAY compares by statistics although Photoshop's recording
+/// is deterministic: a halftone screen's phase and cell origin are a
+/// convention (where the lattice starts), so pixel-by-pixel distance
+/// measures the lattice offset, not the screen. Their regional tone is
+/// what has to agree.
+const STATS_BY_REPLAY: &[&str] = &["filters-pixelate/color-halftone-8"];
+
 /// The 8-bit RGBA view of an image (what the CPU readouts take).
 fn rgba8(img: &Img) -> Vec<u8> {
     img.px
@@ -846,7 +853,8 @@ fn measure_all() -> Vec<Measured> {
                 .get("params")
                 .and_then(|p| p.get("compare"))
                 .and_then(Json::as_str)
-                == Some("stats");
+                == Some("stats")
+                || STATS_BY_REPLAY.contains(&format!("{probe}/{id}").as_str());
             let dist = engine(id).map(|ours| {
                 assert_eq!(ours.len(), theirs.w * theirs.h, "{probe}/{id}: extent");
                 if stats {

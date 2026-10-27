@@ -1,4 +1,4 @@
-# ADR 468 — Filter families as kernels and recipes; the galleries are workspaces over one chain
+# ADR 473 — Filter families as kernels and recipes; the galleries are workspaces over one chain
 
 - **Status:** Accepted 2026-10-25. Builds on [ADR 450](450-gpu-only-kernels.md) (GPU-only
   kernels) and [ADR 451](451-kernel-definition.md) (one kernel definition); the Develop layer kind

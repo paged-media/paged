@@ -31,7 +31,7 @@ stood, for decisions made earlier; their status says so.
 | [465](465-cpu-twins-for-region-filters.md) | Where no GPU exists, a region filter runs on shipped CPU twins | Accepted 2026-10-23 (an exception to 450; amended 2026-10-23: a mask as data) |
 | [466](466-core-raster-crates-are-shared.md) | The engine's raster crates are shared: the module's Rust may depend on them | Accepted 2026-10-24 (amends the isolation contract and 456) |
 | [467](467-cpu-resample-for-headless-actions.md) | The CPU resample is a supported backend for headless and batch actions | Accepted 2026-10-25 (an exception to 450) |
-| [468](468-filter-families-and-galleries.md) | Filter families as kernels and recipes; the galleries are workspaces over one chain | Accepted 2026-10-25 |
+| [473](473-filter-families-and-galleries.md) | Filter families as kernels and recipes; the galleries are workspaces over one chain | Accepted 2026-10-25 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

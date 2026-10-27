@@ -2049,7 +2049,7 @@
   oracle: photoshop
   status: implemented
   provenance:
-    - "the rectangular/polar coordinate change on the ellipse fitted to the canvas, top edge to the centre, angle clockwise from 12 o'clock with x wrapping; both directions are exact inverse maps; bilinear reconstruction; no reference reading"
+    - "the rectangular/polar coordinate change on the ellipse fitted to the canvas, top edge to the centre, angle counter-clockwise from 12 o'clock (the direction the recorded Photoshop probe shows) with x wrapping; both directions are exact inverse maps; bilinear reconstruction; no reference reading"
   tests:
     rust: ["image-conformance/tests/it/filters_distort.rs"]
 - id: distort.ripple
@@ -2149,7 +2149,7 @@
   class: point
   mip_exact: true
   gpu_tolerance: { kind: channel_eps_f16, value: 2 }
-  oracle: none
+  oracle: photoshop
   status: implemented
   provenance:
     - "Photoshop user guide, Filter > Stylize > Solarize: blends a negative and a positive image; straight channels above one half are inverted, alpha kept; no reference reading"
@@ -2163,7 +2163,7 @@
   class: point
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 2 }
-  oracle: none
+  oracle: photoshop
   status: implemented
   provenance:
     - "Photoshop user guide, Trace Contour (level, upper/lower edge): per channel, a pixel on the chosen side of the level beside a 4-neighbour across it is a contour pixel (0), all else 1 — iso-level edge detection, textbook; no reference reading"
@@ -2177,7 +2177,7 @@
   class: point
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 4 }
-  oracle: none
+  oracle: photoshop
   status: implemented
   provenance:
     - "Photoshop user guide, Wind (wind/blast/stagger, from the right/left): a directional smear in which lighter upwind samples pull a pixel with a linearly (blast: quadratically) decaying weight over a hashed per-row length; PCG hash (Jarzynski & Olano, JCGT 2020); no reference reading"
@@ -2191,7 +2191,7 @@
   class: point
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 2 }
-  oracle: none
+  oracle: photoshop
   status: implemented
   provenance:
     - "Photoshop user guide, Tiles (number of tiles, maximum offset, fill empty area with background/foreground/inverse/unaltered): square tiles shifted by hashed offsets, overlaps by hashed priority; no reference reading"
@@ -2205,7 +2205,7 @@
   class: point
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 4 }
-  oracle: none
+  oracle: photoshop
   status: implemented
   provenance:
     - "Photoshop user guide, Extrude (blocks/pyramids, size, random or level-based depth, solid front faces, mask incomplete blocks): blocks as squares swept along a parallel projection away from the canvas centre (the projection of a box), pyramids as four orientation-shaded faces; no reference reading"
@@ -2219,7 +2219,7 @@
   class: point
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 2 }
-  oracle: none
+  oracle: photoshop
   status: implemented
   provenance:
     - "Voronoi cells over a jittered grid (Worley, SIGGRAPH 1996), each filled with the image's colour at its site; Photoshop user guide, Crystallize (cell size); no reference reading"
@@ -2233,7 +2233,7 @@
   class: point
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 4 }
-  oracle: none
+  oracle: photoshop
   status: implemented
   provenance:
     - "jittered-grid sites (Worley, SIGGRAPH 1996) drawn as antialiased dots of hashed radius on the background colour; Photoshop user guide, Pointillize (cell size, background colour); no reference reading"
@@ -2247,7 +2247,7 @@
   class: point
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 2 }
-  oracle: none
+  oracle: photoshop
   status: implemented
   provenance:
     - "random-threshold dithering per channel (Ulichney, Digital Halftoning, 1987) with dot, line and stroke screens; Photoshop user guide, Mezzotint's ten types; no reference reading"
@@ -2261,10 +2261,10 @@
   class: point
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 8 }
-  oracle: none
+  oracle: photoshop
   status: implemented
   provenance:
-    - "rotated per-channel dot screens with area-proportional dots from print practice; Photoshop user guide, Color Halftone (max radius 4-127 px, screen angles 108/162/90/45 by default); no reference reading"
+    - "rotated per-channel dot screens with area-proportional INK dots (dark on white, dot area following 1 − v, the polarity the Photoshop probe records) from print practice; Photoshop user guide, Color Halftone (max radius 4-127 px, screen angles 108/162/90/45 by default); no reference reading"
     - "identity: amount 0"
   tests:
     rust: ["image-conformance/tests/it/filters_pixelate.rs"]
@@ -2398,7 +2398,7 @@
   state_row: image.kernel.family-t2
   class: point
   mip_exact: false
-  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
   oracle: photoshop
   status: implemented
   provenance:
@@ -2412,7 +2412,7 @@
   state_row: image.kernel.family-t2
   class: point
   mip_exact: false
-  gpu_tolerance: { kind: channel_eps_f16, value: 12 }
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
   oracle: photoshop
   status: implemented
   provenance:
@@ -2426,7 +2426,7 @@
   state_row: image.kernel.family-t2
   class: point
   mip_exact: true
-  gpu_tolerance: { kind: channel_eps_f16, value: 16 }
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
   oracle: photoshop
   status: implemented
   provenance:
@@ -2440,7 +2440,7 @@
   state_row: image.kernel.family-t2
   class: point
   mip_exact: true
-  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
   oracle: photoshop
   status: implemented
   provenance:
@@ -2454,7 +2454,7 @@
   state_row: image.kernel.family-t2
   class: point
   mip_exact: true
-  gpu_tolerance: { kind: channel_eps_f16, value: 16 }
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
   oracle: photoshop
   status: implemented
   provenance:
@@ -2468,7 +2468,7 @@
   state_row: image.kernel.family-t2
   class: point
   mip_exact: false
-  gpu_tolerance: { kind: channel_eps_f16, value: 16 }
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
   oracle: photoshop
   status: implemented
   provenance:

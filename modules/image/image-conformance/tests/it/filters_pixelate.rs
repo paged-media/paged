@@ -302,7 +302,7 @@ fn channel_cov(
             );
             let pc = (cs * uc.0 - sn * uc.1 - o.0, sn * uc.0 + cs * uc.1 - o.1);
             let v = sample_straight(im, pc)[ch];
-            let rad = r_max * (2.0 * v).sqrt();
+            let rad = r_max * (2.0 * (1.0 - v)).sqrt();
             let dv = (u.0 - uc.0, u.1 - uc.1);
             let dist = (dv.0 * dv.0 + dv.1 * dv.1).sqrt();
             best = best.max((rad - dist + 0.5).clamp(0.0, 1.0));
@@ -323,12 +323,12 @@ fn color_halftone_ref(
     let a = im.tap(x as i32, y as i32);
     let r_max = p.max_radius.clamp(4.0, 127.0);
     let gp = (x as f32 + 0.5 + p.ox as f32, y as f32 + 0.5 + p.oy as f32);
-    let cov = [
+    let ink = [
         channel_cov(im, p, gp, p.angle1, 0, r_max),
         channel_cov(im, p, gp, p.angle2, 1, r_max),
         channel_cov(im, p, gp, p.angle3, 2, r_max),
     ];
-    finish(a, assoc(cov, a[3]), p.amount)
+    finish(a, assoc(ink.map(|k| 1.0 - k), a[3]), p.amount)
 }
 
 #[test]
@@ -355,15 +355,20 @@ fn pixelate_color_halftone_parity__feat__image_editor_filters() {
 }
 
 #[test]
-fn pixelate_color_halftone_dot_area_follows_the_value__feat__image_editor_filters() {
-    // A constant field: the screen's ink coverage tracks the channel value
-    // (≈ π·2v/4 of each cell below closure), and a full channel closes it.
-    let t = RefTile::from_fn(96, 96, |_, _| Px([0.2, 0.4, 1.0, 1.0]));
+fn pixelate_color_halftone_ink_follows_the_value__feat__image_editor_filters() {
+    // A constant field: each channel is an ink screen — dark dots on
+    // white whose area tracks the INK 1 − v (≈ π·2(1 − v)/4 of a cell
+    // below closure), so the regional mean follows the input as
+    // Photoshop's does, and a full channel leaves white.
+    let t = RefTile::from_fn(96, 96, |_, _| Px([0.6, 0.8, 1.0, 1.0]));
     let p = PixelateColorHalftoneParams::new(0, 0, 6.0, [0.0, 45.0, 90.0, 0.0], 1.0);
     let out = run_twin(&t, &p, color_halftone_ref);
     let mean = |c: usize| out.iter().map(|p| p[c]).sum::<f32>() / out.len() as f32;
     let (r, g, b) = (mean(0), mean(1), mean(2));
     assert!(r < g && g < b, "{r} {g} {b}");
-    assert!((r - std::f32::consts::PI * 0.4 / 4.0).abs() < 0.08, "r {r}");
-    assert!(b > 0.99, "a full channel closes the screen: {b}");
+    let want_g = 1.0 - std::f32::consts::PI * 2.0 * 0.2 / 4.0;
+    assert!((g - want_g).abs() < 0.08, "g {g}, want about {want_g}");
+    assert!(b > 0.99, "a full channel lays no ink: {b}");
+    // Dots are dark on white: the minimum of the red screen is ink-black.
+    assert!(out.iter().map(|p| p[0]).fold(1.0f32, f32::min) < 0.01);
 }

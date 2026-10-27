@@ -532,12 +532,15 @@ impl PixelateColorHalftoneParams {
 }
 params_impl!(PixelateColorHalftoneParams);
 
-/// Color Halftone: each channel through a dot screen of its own angle.
-/// The screen's cells are `2·max_radius` wide; a cell's dot takes the
-/// channel's value at the cell centre (bilinear) and a radius of
-/// `max_radius · √(2v)`, so a full channel closes the screen and an empty
-/// one leaves no dot. A pixel's channel is the dot coverage there (the
-/// 3×3 neighbouring cells, the largest), antialiased over one pixel.
+/// Color Halftone: each channel through a dot screen of its own angle,
+/// as an INK separation — dark dots on white, the dot growing as the
+/// channel darkens (the polarity the Photoshop probe records: regional
+/// means follow the input). The screen's cells are `2·max_radius` wide;
+/// a cell's dot takes the channel's ink `1 − v` at the cell centre
+/// (bilinear) and a radius of `max_radius · √(2(1 − v))`, so a black
+/// channel closes the screen and a full one leaves white. A pixel's
+/// channel is `1 −` the dot coverage there (the 3×3 neighbouring cells,
+/// the largest), antialiased over one pixel.
 ///
 /// IDENTITY: `amount = 0.0`.
 pub static PIXELATE_COLOR_HALFTONE: KernelDef = KernelDef {
@@ -626,7 +629,7 @@ fn channel_cov(gp: vec2<f32>, deg: f32, ch: i32, r_max: f32) -> f32 {
             var v = s.r;
             if (ch == 1) { v = s.g; }
             if (ch == 2) { v = s.b; }
-            let rad = r_max * sqrt(2.0 * v);
+            let rad = r_max * sqrt(2.0 * (1.0 - v));
             let dv = u - uc;
             let dist = sqrt(dv.x * dv.x + dv.y * dv.y);
             best = max(best, clamp(rad - dist + 0.5, 0.0, 1.0));
@@ -643,11 +646,11 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let a = tap(xy);
     let r_max = clamp(params.max_radius, 4.0, 127.0);
     let gp = vec2<f32>(xy) + vec2<f32>(0.5) + vec2<f32>(f32(params.ox), f32(params.oy));
-    let cov = vec3<f32>(
+    let ink = vec3<f32>(
         channel_cov(gp, params.angle1, 0, r_max),
         channel_cov(gp, params.angle2, 1, r_max),
         channel_cov(gp, params.angle3, 2, r_max));
-    let styled = vec4<f32>(cov * a.a, a.a);
+    let styled = vec4<f32>((vec3<f32>(1.0) - ink) * a.a, a.a);
     let result = mix(a, styled, vec4<f32>(clamp(params.amount, 0.0, 1.0)));
     let m = textureLoad(mask, xy, 0).r;
     textureStore(outp, xy, mix(a, result, vec4<f32>(m)));

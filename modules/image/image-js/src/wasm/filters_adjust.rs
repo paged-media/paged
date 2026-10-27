@@ -162,7 +162,9 @@ pub fn color_stats(handle: u32, use_selection: bool) -> Result<Vec<f32>, JsValue
     };
     crate::adjust_readouts::color_stats(&rgba, w, h, sel.as_deref())
         .map(|s| s.to_vec())
-        .ok_or_else(|| err("match color: nothing to measure (an empty selection or a transparent image)"))
+        .ok_or_else(|| {
+            err("match color: nothing to measure (an empty selection or a transparent image)")
+        })
 }
 
 /// ADJUSTMENTS ▸ Match Color. `source` = the source's [`color_stats`];
@@ -210,7 +212,9 @@ pub async fn apply_replace_color(
     within(W, "saturation", saturation, -100.0, 100.0)?;
     within(W, "lightness", lightness, -100.0, 100.0)?;
     if hue == 0.0 && saturation == 0.0 && lightness == 0.0 {
-        return Err(err("replace color: nothing to replace — hue, saturation and lightness are 0"));
+        return Err(err(
+            "replace color: nothing to replace — hue, saturation and lightness are 0",
+        ));
     }
     let p = ReplaceColorParams::new(c, fuzziness, hue, saturation / 100.0, lightness / 100.0);
     apply_point_kernel(handle, &ADJUST_REPLACE_COLOR, p.as_bytes()).await
@@ -223,7 +227,10 @@ pub async fn apply_replace_color(
 /// area" when the selection mask is then not applied — the session's
 /// selection still masks the result, as for every filter).
 #[wasm_bindgen]
-pub async fn apply_equalize(handle: u32, selection_histogram: bool) -> Result<DecodedHandle, JsValue> {
+pub async fn apply_equalize(
+    handle: u32,
+    selection_histogram: bool,
+) -> Result<DecodedHandle, JsValue> {
     use image_kernels::families::adjust::{AdjustLut1dParams, ADJUST_LUT1D};
     let (w, h, rgba) = read_pixels(handle)?;
     let sel = if selection_histogram {
@@ -231,17 +238,28 @@ pub async fn apply_equalize(handle: u32, selection_histogram: bool) -> Result<De
     } else {
         None
     };
-    let lut = crate::adjust_readouts::equalize_lut(&rgba, w, h, sel.as_deref()).ok_or_else(|| {
-        err("equalize: nothing to redistribute (one flat level, or nothing selected)")
-    })?;
-    apply_point_kernel(handle, &ADJUST_LUT1D, AdjustLut1dParams::new(&lut).as_bytes()).await
+    let lut =
+        crate::adjust_readouts::equalize_lut(&rgba, w, h, sel.as_deref()).ok_or_else(|| {
+            err("equalize: nothing to redistribute (one flat level, or nothing selected)")
+        })?;
+    apply_point_kernel(
+        handle,
+        &ADJUST_LUT1D,
+        AdjustLut1dParams::new(&lut).as_bytes(),
+    )
+    .await
 }
 
 /// ADJUSTMENTS ▸ Desaturate: every pixel to its HSL lightness.
 #[wasm_bindgen]
 pub async fn apply_desaturate(handle: u32) -> Result<DecodedHandle, JsValue> {
     use image_kernels::families::adjust_ext::DesaturateParams;
-    apply_point_kernel(handle, &ADJUST_DESATURATE, DesaturateParams::new().as_bytes()).await
+    apply_point_kernel(
+        handle,
+        &ADJUST_DESATURATE,
+        DesaturateParams::new().as_bytes(),
+    )
+    .await
 }
 
 /// FILTER ▸ Develop… (one-shot): the 61 Develop settings
@@ -259,7 +277,9 @@ pub async fn apply_develop(handle: u32, s: &[f32]) -> Result<DecodedHandle, JsVa
     let settings = DevelopSettings(v);
     let ops = settings.ops();
     if ops.is_empty() {
-        return Err(err("develop: every setting is at its default — nothing to develop"));
+        return Err(err(
+            "develop: every setting is at its default — nothing to develop",
+        ));
     }
     let src = super::filters_chain::filter_source(handle)?;
     let mut cur = src.handle;

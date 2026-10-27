@@ -69,7 +69,14 @@ pub struct GalleryStrokesParams {
 }
 
 impl GalleryStrokesParams {
-    pub fn new(seed: u32, angle_deg: f32, length_px: f32, mode: u32, darkness: f32, amount: f32) -> Self {
+    pub fn new(
+        seed: u32,
+        angle_deg: f32,
+        length_px: f32,
+        mode: u32,
+        darkness: f32,
+        amount: f32,
+    ) -> Self {
         Self {
             ox: 0,
             oy: 0,
@@ -104,14 +111,38 @@ pub static GALLERY_STROKES: KernelDef = KernelDef {
     params: ParamsLayout {
         size: ::core::mem::size_of::<GalleryStrokesParams>(),
         fields: &[
-            ParamField { name: "ox", wgsl_ty: "i32" },
-            ParamField { name: "oy", wgsl_ty: "i32" },
-            ParamField { name: "seed", wgsl_ty: "u32" },
-            ParamField { name: "angle_deg", wgsl_ty: "f32" },
-            ParamField { name: "length_px", wgsl_ty: "f32" },
-            ParamField { name: "mode", wgsl_ty: "u32" },
-            ParamField { name: "darkness", wgsl_ty: "f32" },
-            ParamField { name: "amount", wgsl_ty: "f32" },
+            ParamField {
+                name: "ox",
+                wgsl_ty: "i32",
+            },
+            ParamField {
+                name: "oy",
+                wgsl_ty: "i32",
+            },
+            ParamField {
+                name: "seed",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "angle_deg",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "length_px",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "mode",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "darkness",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "amount",
+                wgsl_ty: "f32",
+            },
         ],
     },
     wgsl: GALLERY_STROKES_WGSL,
@@ -266,9 +297,18 @@ pub static GALLERY_CHROME: KernelDef = KernelDef {
     params: ParamsLayout {
         size: ::core::mem::size_of::<GalleryChromeParams>(),
         fields: &[
-            ParamField { name: "detail", wgsl_ty: "f32" },
-            ParamField { name: "smoothness", wgsl_ty: "f32" },
-            ParamField { name: "amount", wgsl_ty: "f32" },
+            ParamField {
+                name: "detail",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "smoothness",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "amount",
+                wgsl_ty: "f32",
+            },
         ],
     },
     wgsl: GALLERY_CHROME_WGSL,
@@ -392,10 +432,22 @@ pub static GALLERY_PLASTIC_WRAP: KernelDef = KernelDef {
     params: ParamsLayout {
         size: ::core::mem::size_of::<GalleryPlasticWrapParams>(),
         fields: &[
-            ParamField { name: "strength", wgsl_ty: "f32" },
-            ParamField { name: "detail", wgsl_ty: "f32" },
-            ParamField { name: "smoothness", wgsl_ty: "f32" },
-            ParamField { name: "amount", wgsl_ty: "f32" },
+            ParamField {
+                name: "strength",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "detail",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "smoothness",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "amount",
+                wgsl_ty: "f32",
+            },
         ],
     },
     wgsl: GALLERY_PLASTIC_WRAP_WGSL,

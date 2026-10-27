@@ -65,7 +65,10 @@ pub fn disc_taps(radius: f32) -> [[i32; 4]; 12] {
     for i in 0..DISC_TAPS {
         let rho = ((i as f32 + 0.5) / DISC_TAPS as f32).sqrt() * r;
         let th = i as f32 * 2.399_963_2;
-        let (x, y) = ((rho * th.cos()).round() as i32, (rho * th.sin()).round() as i32);
+        let (x, y) = (
+            (rho * th.cos()).round() as i32,
+            (rho * th.sin()).round() as i32,
+        );
         out[i / 2][(i % 2) * 2] = x;
         out[i / 2][(i % 2) * 2 + 1] = y;
     }
@@ -333,7 +336,7 @@ pub static ADJUST_SHADOWS_HIGHLIGHTS: KernelDef = KernelDef {
     wgsl: ADJUST_SHADOWS_HIGHLIGHTS_WGSL,
     module: true,
     mip_exact: false,
-    gpu_tolerance: Tolerance::ChannelEpsF16(8),
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
 };
 
 const ADJUST_SHADOWS_HIGHLIGHTS_WGSL: &str = concat!(
@@ -502,7 +505,7 @@ pub static ADJUST_HDR_TONING: KernelDef = KernelDef {
     wgsl: ADJUST_HDR_TONING_WGSL,
     module: true,
     mip_exact: false,
-    gpu_tolerance: Tolerance::ChannelEpsF16(12),
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
 };
 
 const ADJUST_HDR_TONING_WGSL: &str = concat!(
@@ -664,7 +667,7 @@ pub static ADJUST_MATCH_COLOR: KernelDef = KernelDef {
     wgsl: ADJUST_MATCH_COLOR_WGSL,
     module: true,
     mip_exact: true,
-    gpu_tolerance: Tolerance::ChannelEpsF16(16),
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
 };
 
 const ADJUST_MATCH_COLOR_WGSL: &str = concat!(
@@ -793,13 +796,7 @@ pub struct ReplaceColorParams {
 }
 
 impl ReplaceColorParams {
-    pub fn new(
-        color: [f32; 3],
-        fuzziness: f32,
-        hue: f32,
-        saturation: f32,
-        lightness: f32,
-    ) -> Self {
+    pub fn new(color: [f32; 3], fuzziness: f32, hue: f32, saturation: f32, lightness: f32) -> Self {
         Self {
             r: color[0],
             g: color[1],
@@ -857,7 +854,7 @@ pub static ADJUST_REPLACE_COLOR: KernelDef = KernelDef {
     wgsl: ADJUST_REPLACE_COLOR_WGSL,
     module: true,
     mip_exact: true,
-    gpu_tolerance: Tolerance::ChannelEpsF16(8),
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
 };
 
 const ADJUST_REPLACE_COLOR_WGSL: &str = concat!(

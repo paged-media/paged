@@ -41,7 +41,8 @@ use image_kernels::KernelDef;
 pub(crate) mod twin {
     use image_conformance::Px;
 
-    pub const TAU: f32 = 6.283_185_3;
+    // WGSL's 6.2831853 rounds to this f32.
+    pub const TAU: f32 = std::f32::consts::TAU;
     pub const GOLDEN_TURN: f32 = 0.381_966_01;
 
     pub fn tap(win: &[Px], w: u32, h: u32, x: i32, y: i32) -> Px {
@@ -91,7 +92,7 @@ pub(crate) mod twin {
     }
 
     pub fn disc(win: &[Px], w: u32, h: u32, px: f32, py: f32, r: f32, bokeh: f32) -> Px {
-        let n = ((3.0 * r).ceil() as i32).clamp(8, 192);
+        let n = ((3.0 * r - 0.001).ceil() as i32).clamp(8, 192);
         let mut acc = Px([0.0; 4]);
         let mut wsum = 0.0f32;
         for k in 0..n {
@@ -135,14 +136,11 @@ fn require<P: bytemuck::Pod>(
     p: &P,
 ) {
     let win = stimulus(W, H);
-    match parity_windowed(def, reference, &win, W, H, p) {
-        Some(r) => {
-            eprintln!("{}: measured max f16 ULP {}", def.id, r.max_ulp);
-            assert_within(r, def);
-        }
-        // `test_device` already reported `unavailable: GPU adapter` (or
-        // failed under PAGED_REQUIRE_GPU=1).
-        None => {}
+    // `None`: `test_device` already reported `unavailable: GPU adapter`
+    // (or failed under PAGED_REQUIRE_GPU=1).
+    if let Some(r) = parity_windowed(def, reference, &win, W, H, p) {
+        eprintln!("{}: measured max f16 ULP {}", def.id, r.max_ulp);
+        assert_within(r, def);
     }
 }
 

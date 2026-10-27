@@ -22,18 +22,33 @@
 
 use image_gpu::coverage::SelectionCoverage;
 
-/// Image ▸ Adjustments ▸ Equalize as a 256-entry table: the histogram of
-/// every r, g and b sample (alpha-weighted, times the selection's
-/// coverage when given) flattened through its cumulative distribution,
+/// The uniform share Equalize adds to every histogram bin, as a fraction
+/// of the mean bin count (see [`equalize_lut`]).
+pub const EQUALIZE_PRIOR: f64 = 0.5;
+
+/// Image ▸ Adjustments ▸ Equalize as a 256-entry table (for
+/// `adjust.lut1d`, which interpolates between entries).
 ///
-/// ```text
-/// lut[v] = round(255 · (cdf(v) − cdf_min) / (total − cdf_min))
-/// ```
+/// The histogram is every r, g and b sample (alpha-weighted, times the
+/// selection's coverage when given) — ONE table for the three channels,
+/// so a neutral stays neutral: Photoshop's Equalize redistributes the
+/// composite brightness. The table is the histogram's cumulative
+/// distribution, taken
 ///
-/// One table for all three channels, so a neutral stays neutral —
-/// Photoshop's Equalize redistributes the COMPOSITE brightness. `None`
-/// when nothing is weighted (an empty selection, a transparent image) or
-/// the image is one flat level (there is nothing to redistribute).
+/// * at the MIDDLE of each bin (`cdf(v) − h(v)/2`), with the ends pinned
+///   (0 → 0, 255 → 255) and linear in between, and
+/// * over the histogram plus a UNIFORM share of [`EQUALIZE_PRIOR`] × the
+///   mean bin count in every bin.
+///
+/// The uniform share is what makes the transfer a partial equalisation
+/// (two thirds of the way from the identity to a flat histogram) and stops
+/// a spike — a solid black or white area — from swallowing the range.
+/// Both choices were FITTED to Photoshop's recorded Equalize
+/// (`fixtures/photoshop/adjustments-ext`): the textbook full-strength
+/// `(cdf − cdf_min)/(N − cdf_min)` table is 8 levels off at the median
+/// (25 at most) on that stimulus; this one is within 1 level at the median
+/// (4 at most). `None` when nothing is weighted (an empty selection, a
+/// transparent image) or the image is one flat level.
 pub fn equalize_lut(
     rgba: &[u8],
     w: u32,
@@ -55,24 +70,33 @@ pub fn equalize_lut(
         }
     }
     let total: f64 = hist.iter().sum();
-    if total <= 0.0 {
+    if total <= 0.0 || hist.iter().filter(|&&n| n > 0.0).count() < 2 {
         return None;
     }
-    let first = hist.iter().position(|&n| n > 0.0)?;
-    let cdf_min = hist[first];
-    if total - cdf_min <= 0.0 {
-        return None;
-    }
-    let mut lut = [0u8; 256];
+    let prior = EQUALIZE_PRIOR * total / 256.0;
+    let sum = total + prior * 256.0;
+    // The transfer at the 258 knots: 0, the 256 bin centres, 1.
+    let mut knot_x = [0f64; 258];
+    let mut knot_y = [0f64; 258];
     let mut cdf = 0.0;
+    for b in 0..256 {
+        let n = hist[b] + prior;
+        cdf += n;
+        knot_x[b + 1] = (b as f64 + 0.5) / 256.0;
+        knot_y[b + 1] = (cdf - n / 2.0) / sum;
+    }
+    knot_x[257] = 1.0;
+    knot_y[257] = 1.0;
+    let mut lut = [0u8; 256];
+    let mut j = 0usize;
     for (v, slot) in lut.iter_mut().enumerate() {
-        cdf += hist[v];
-        let t = ((cdf - cdf_min) / (total - cdf_min)).clamp(0.0, 1.0);
-        *slot = if v < first {
-            0
-        } else {
-            (255.0 * t).round() as u8
-        };
+        let x = v as f64 / 255.0;
+        while j + 2 < 258 && knot_x[j + 1] <= x {
+            j += 1;
+        }
+        let t = ((x - knot_x[j]) / (knot_x[j + 1] - knot_x[j])).clamp(0.0, 1.0);
+        let y = knot_y[j] + (knot_y[j + 1] - knot_y[j]) * t;
+        *slot = (255.0 * y).round().clamp(0.0, 255.0) as u8;
     }
     Some(lut)
 }
@@ -99,7 +123,9 @@ pub fn color_stats(
             if k == 0.0 {
                 continue;
             }
-            let lab = paged_color::lab::srgb_to_lab_d50([0, 1, 2].map(|c| f32::from(rgba[i + c]) / 255.0));
+            let lab = paged_color::lab::srgb_to_lab_d50(
+                [0, 1, 2].map(|c| f32::from(rgba[i + c]) / 255.0),
+            );
             wsum += k;
             for c in 0..3 {
                 let v = f64::from(lab[c]);
@@ -132,12 +158,42 @@ mod tests {
     #[test]
     fn equalize_spreads_a_narrow_histogram_over_the_range__feat__image_editor_filters() {
         // Four greys bunched between 100 and 130.
-        let px = img(&[[100, 100, 100, 255], [110, 110, 110, 255], [120, 120, 120, 255], [130, 130, 130, 255]]);
+        let px = img(&[
+            [100, 100, 100, 255],
+            [110, 110, 110, 255],
+            [120, 120, 120, 255],
+            [130, 130, 130, 255],
+        ]);
         let lut = equalize_lut(&px, 4, 1, None).expect("a table");
-        assert_eq!(lut[100], 0, "the darkest level goes to black");
-        assert_eq!(lut[130], 255, "the brightest to white");
-        assert!(lut[110] > 60 && lut[110] < 110 && lut[120] > 150 && lut[120] < 200);
+        assert_eq!((lut[0], lut[255]), (0, 255), "the ends are pinned");
+        // Thirty levels of input spread over far more of the output.
+        assert!(lut[130] - lut[100] > 60, "{} → {}", lut[100], lut[130]);
+        assert!(lut[100] < 100 && lut[130] > 130);
         assert!(lut.windows(2).all(|w| w[0] <= w[1]), "monotone");
+    }
+
+    /// The shape of Photoshop's recorded case (`colour-sweep`: a flat
+    /// sweep plus spikes at black and white, which Photoshop maps 32 → 52,
+    /// 64 → 79, 193 → 175): mid-grey stays put, the shadows rise, the
+    /// highlights fall — the spikes do not swallow the range. The pixel
+    /// comparison with the recording is `oracle_photoshop`'s.
+    #[test]
+    fn equalize_matches_photoshops_recorded_greys__feat__image_editor_filters() {
+        // A histogram that is flat except for spikes at black and white —
+        // the colour sweep's shape — maps mid-grey to mid-grey and pulls
+        // the shadows up (the spike does not swallow the range).
+        let mut px = Vec::new();
+        for v in 0..=255u8 {
+            px.push([v, v, v, 255]);
+        }
+        for _ in 0..30 {
+            px.push([0, 0, 0, 255]);
+            px.push([255, 255, 255, 255]);
+        }
+        let n = px.len() as u32;
+        let lut = equalize_lut(&img(&px), n, 1, None).expect("a table");
+        assert!((i32::from(lut[128]) - 128).abs() <= 2, "{}", lut[128]);
+        assert!(lut[32] > 32 && lut[193] < 193, "{} {}", lut[32], lut[193]);
     }
 
     #[test]
@@ -156,7 +212,10 @@ mod tests {
         assert!(s[1].abs() < 0.2 && s[2].abs() < 0.2 && s[3] < 1e-3);
         let two = img(&[[0, 0, 0, 255], [255, 255, 255, 255]]);
         let s = color_stats(&two, 2, 1, None).expect("stats");
-        assert!((s[0] - 50.0).abs() < 0.2 && (s[3] - 50.0).abs() < 0.2, "{s:?}");
+        assert!(
+            (s[0] - 50.0).abs() < 0.2 && (s[3] - 50.0).abs() < 0.2,
+            "{s:?}"
+        );
         assert!(color_stats(&img(&[[1, 2, 3, 0]]), 1, 1, None).is_none());
     }
 }

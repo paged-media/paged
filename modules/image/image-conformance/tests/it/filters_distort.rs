@@ -49,7 +49,9 @@ pub(crate) fn gpu(def: &'static KernelDef, inputs: &[&RefTile], params: &[u8]) -
     let tin: Vec<TileInput<'_>> = bytes.iter().map(|b| TileInput { f16_bytes: b }).collect();
     let out = image_gpu::execute_tile_once(ctx, def, &tin, params, None, w, h).expect("dispatch");
     Some(
-        out.chunks_exact(8)
+        out.as_chunks::<8>()
+            .0
+            .iter()
             .map(|c| {
                 let mut p = [0f32; 4];
                 for (k, v) in p.iter_mut().enumerate() {
@@ -263,9 +265,9 @@ fn polar_ref(win: &[Px], to_polar: bool, x: u32, y: u32) -> Px {
         if th < 0.0 {
             th += TAU;
         }
-        (th / TAU * w, r * h)
+        ((1.0 - th / TAU) * w, r * h)
     } else {
-        let th = px / w * TAU;
+        let th = (1.0 - px / w) * TAU;
         let r = py / h;
         (hw + r * th.sin() * hw, hh - r * th.cos() * hh)
     };
@@ -427,7 +429,7 @@ fn zigzag_ref(win: &[Px], p: &DistortZigzagParams, x: u32, y: u32) -> Px {
     let dv = (pp.0 - c.0, pp.1 - c.1);
     let r = (dv.0 * dv.0 + dv.1 * dv.1).sqrt();
     let mut s = pp;
-    if r > 0.0 && r < big_r {
+    if p.amount != 0.0 && r > 0.0 && r < big_r {
         let t = r / big_r;
         let fall = 1.0 - t;
         let wave = (TAU * p.ridges * t).sin() * fall * p.amount * 0.01;

@@ -61,7 +61,11 @@ use crate::{KernelClass, KernelDef, ParamField, ParamsLayout, Tolerance};
 pub const BLUR_MAX_PX: f32 = 128.0;
 /// Pins of a Field blur, points of a Path blur.
 pub const BLUR_MAX_POINTS: usize = 8;
-/// The disc's tap budget: `clamp(ceil(3·r), 8, DISC_MAX_TAPS)`.
+/// The disc's tap budget: `clamp(ceil(3·r − 0.001), 8, DISC_MAX_TAPS)`.
+/// The small bias keeps the count stable where `3·r` is a whole number:
+/// a Field blur's radius is `Σw·b / Σw`, which lands an ulp either side of
+/// the pin's value, and an unbiased `ceil` then flips between two tap
+/// counts — two different images for the same setting.
 pub const DISC_MAX_TAPS: u32 = 192;
 
 // ── shared WGSL ─────────────────────────────────────────────────────
@@ -99,7 +103,6 @@ macro_rules! pod_params {
         }
     };
 }
-
 
 // ──────────────────────────────── field ─────────────────────────────
 
@@ -144,9 +147,9 @@ impl BlurFieldParams {
         let mut p: Self = ::bytemuck::Zeroable::zeroed();
         p.count = pins.len().min(BLUR_MAX_POINTS) as u32;
         p.light_bokeh = light_bokeh;
-        let slots: &mut [f32] = &mut ::bytemuck::cast_slice_mut::<Self, f32>(
-            ::core::slice::from_mut(&mut p),
-        )[2..2 + 3 * BLUR_MAX_POINTS];
+        let slots: &mut [f32] =
+            &mut ::bytemuck::cast_slice_mut::<Self, f32>(::core::slice::from_mut(&mut p))
+                [2..2 + 3 * BLUR_MAX_POINTS];
         for (i, (x, y, b)) in pins.iter().take(BLUR_MAX_POINTS).enumerate() {
             slots[3 * i] = *x;
             slots[3 * i + 1] = *y;
@@ -174,32 +177,110 @@ pub static BLUR_FIELD: KernelDef = KernelDef {
     params: ParamsLayout {
         size: ::core::mem::size_of::<BlurFieldParams>(),
         fields: &[
-        ParamField { name: "count", wgsl_ty: "u32" },
-        ParamField { name: "light_bokeh", wgsl_ty: "f32" },
-        ParamField { name: "p0x", wgsl_ty: "f32" },
-        ParamField { name: "p0y", wgsl_ty: "f32" },
-        ParamField { name: "p0b", wgsl_ty: "f32" },
-        ParamField { name: "p1x", wgsl_ty: "f32" },
-        ParamField { name: "p1y", wgsl_ty: "f32" },
-        ParamField { name: "p1b", wgsl_ty: "f32" },
-        ParamField { name: "p2x", wgsl_ty: "f32" },
-        ParamField { name: "p2y", wgsl_ty: "f32" },
-        ParamField { name: "p2b", wgsl_ty: "f32" },
-        ParamField { name: "p3x", wgsl_ty: "f32" },
-        ParamField { name: "p3y", wgsl_ty: "f32" },
-        ParamField { name: "p3b", wgsl_ty: "f32" },
-        ParamField { name: "p4x", wgsl_ty: "f32" },
-        ParamField { name: "p4y", wgsl_ty: "f32" },
-        ParamField { name: "p4b", wgsl_ty: "f32" },
-        ParamField { name: "p5x", wgsl_ty: "f32" },
-        ParamField { name: "p5y", wgsl_ty: "f32" },
-        ParamField { name: "p5b", wgsl_ty: "f32" },
-        ParamField { name: "p6x", wgsl_ty: "f32" },
-        ParamField { name: "p6y", wgsl_ty: "f32" },
-        ParamField { name: "p6b", wgsl_ty: "f32" },
-        ParamField { name: "p7x", wgsl_ty: "f32" },
-        ParamField { name: "p7y", wgsl_ty: "f32" },
-        ParamField { name: "p7b", wgsl_ty: "f32" },
+            ParamField {
+                name: "count",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "light_bokeh",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p0x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p0y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p0b",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p1x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p1y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p1b",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p2x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p2y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p2b",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p3x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p3y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p3b",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p4x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p4y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p4b",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p5x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p5y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p5b",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p6x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p6y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p6b",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p7x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p7y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "p7b",
+                wgsl_ty: "f32",
+            },
         ],
     },
     wgsl: BLUR_FIELD_WGSL,
@@ -276,7 +357,7 @@ fn bokeh_w(s: vec4<f32>, bokeh: f32) -> f32 {
 
 // The Vogel disc of radius r about p.
 fn disc(p: vec2<f32>, r: f32, bokeh: f32) -> vec4<f32> {
-    let n = clamp(i32(ceil(3.0 * r)), 8, DISC_MAX);
+    let n = clamp(i32(ceil(3.0 * r - 0.001)), 8, DISC_MAX);
     var acc = vec4<f32>(0.0);
     var wsum = 0.0;
     for (var k : i32 = 0; k < DISC_MAX; k = k + 1) {
@@ -397,14 +478,38 @@ pub static BLUR_IRIS: KernelDef = KernelDef {
     params: ParamsLayout {
         size: ::core::mem::size_of::<BlurIrisParams>(),
         fields: &[
-            ParamField { name: "cx", wgsl_ty: "f32" },
-            ParamField { name: "cy", wgsl_ty: "f32" },
-            ParamField { name: "rx", wgsl_ty: "f32" },
-            ParamField { name: "ry", wgsl_ty: "f32" },
-            ParamField { name: "rotation_deg", wgsl_ty: "f32" },
-            ParamField { name: "blur_px", wgsl_ty: "f32" },
-            ParamField { name: "feather", wgsl_ty: "f32" },
-            ParamField { name: "light_bokeh", wgsl_ty: "f32" },
+            ParamField {
+                name: "cx",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "cy",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "rx",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "ry",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "rotation_deg",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "blur_px",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "feather",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "light_bokeh",
+                wgsl_ty: "f32",
+            },
         ],
     },
     wgsl: BLUR_IRIS_WGSL,
@@ -465,7 +570,7 @@ fn bokeh_w(s: vec4<f32>, bokeh: f32) -> f32 {
 
 // The Vogel disc of radius r about p.
 fn disc(p: vec2<f32>, r: f32, bokeh: f32) -> vec4<f32> {
-    let n = clamp(i32(ceil(3.0 * r)), 8, DISC_MAX);
+    let n = clamp(i32(ceil(3.0 * r - 0.001)), 8, DISC_MAX);
     var acc = vec4<f32>(0.0);
     var wsum = 0.0;
     for (var k : i32 = 0; k < DISC_MAX; k = k + 1) {
@@ -579,14 +684,38 @@ pub static BLUR_TILT_SHIFT: KernelDef = KernelDef {
     params: ParamsLayout {
         size: ::core::mem::size_of::<BlurTiltShiftParams>(),
         fields: &[
-            ParamField { name: "cx", wgsl_ty: "f32" },
-            ParamField { name: "cy", wgsl_ty: "f32" },
-            ParamField { name: "angle_deg", wgsl_ty: "f32" },
-            ParamField { name: "sharp_px", wgsl_ty: "f32" },
-            ParamField { name: "feather_px", wgsl_ty: "f32" },
-            ParamField { name: "blur_px", wgsl_ty: "f32" },
-            ParamField { name: "symmetric", wgsl_ty: "u32" },
-            ParamField { name: "light_bokeh", wgsl_ty: "f32" },
+            ParamField {
+                name: "cx",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "cy",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "angle_deg",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "sharp_px",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "feather_px",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "blur_px",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "symmetric",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "light_bokeh",
+                wgsl_ty: "f32",
+            },
         ],
     },
     wgsl: BLUR_TILT_SHIFT_WGSL,
@@ -647,7 +776,7 @@ fn bokeh_w(s: vec4<f32>, bokeh: f32) -> f32 {
 
 // The Vogel disc of radius r about p.
 fn disc(p: vec2<f32>, r: f32, bokeh: f32) -> vec4<f32> {
-    let n = clamp(i32(ceil(3.0 * r)), 8, DISC_MAX);
+    let n = clamp(i32(ceil(3.0 * r - 0.001)), 8, DISC_MAX);
     var acc = vec4<f32>(0.0);
     var wsum = 0.0;
     for (var k : i32 = 0; k < DISC_MAX; k = k + 1) {
@@ -739,9 +868,9 @@ impl BlurPathParams {
         p.speed_px = speed_px;
         p.taper = taper;
         p.centered = u32::from(centered);
-        let slots: &mut [f32] = &mut ::bytemuck::cast_slice_mut::<Self, f32>(
-            ::core::slice::from_mut(&mut p),
-        )[4..4 + 2 * BLUR_MAX_POINTS];
+        let slots: &mut [f32] =
+            &mut ::bytemuck::cast_slice_mut::<Self, f32>(::core::slice::from_mut(&mut p))
+                [4..4 + 2 * BLUR_MAX_POINTS];
         for (i, (x, y)) in points.iter().take(BLUR_MAX_POINTS).enumerate() {
             slots[2 * i] = *x;
             slots[2 * i + 1] = *y;
@@ -770,26 +899,86 @@ pub static BLUR_PATH: KernelDef = KernelDef {
     params: ParamsLayout {
         size: ::core::mem::size_of::<BlurPathParams>(),
         fields: &[
-        ParamField { name: "count", wgsl_ty: "u32" },
-        ParamField { name: "speed_px", wgsl_ty: "f32" },
-        ParamField { name: "taper", wgsl_ty: "f32" },
-        ParamField { name: "centered", wgsl_ty: "u32" },
-        ParamField { name: "q0x", wgsl_ty: "f32" },
-        ParamField { name: "q0y", wgsl_ty: "f32" },
-        ParamField { name: "q1x", wgsl_ty: "f32" },
-        ParamField { name: "q1y", wgsl_ty: "f32" },
-        ParamField { name: "q2x", wgsl_ty: "f32" },
-        ParamField { name: "q2y", wgsl_ty: "f32" },
-        ParamField { name: "q3x", wgsl_ty: "f32" },
-        ParamField { name: "q3y", wgsl_ty: "f32" },
-        ParamField { name: "q4x", wgsl_ty: "f32" },
-        ParamField { name: "q4y", wgsl_ty: "f32" },
-        ParamField { name: "q5x", wgsl_ty: "f32" },
-        ParamField { name: "q5y", wgsl_ty: "f32" },
-        ParamField { name: "q6x", wgsl_ty: "f32" },
-        ParamField { name: "q6y", wgsl_ty: "f32" },
-        ParamField { name: "q7x", wgsl_ty: "f32" },
-        ParamField { name: "q7y", wgsl_ty: "f32" },
+            ParamField {
+                name: "count",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "speed_px",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "taper",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "centered",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "q0x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q0y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q1x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q1y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q2x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q2y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q3x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q3y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q4x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q4y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q5x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q5y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q6x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q6y",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q7x",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "q7y",
+                wgsl_ty: "f32",
+            },
         ],
     },
     wgsl: BLUR_PATH_WGSL,
@@ -862,7 +1051,7 @@ fn bokeh_w(s: vec4<f32>, bokeh: f32) -> f32 {
 
 // The Vogel disc of radius r about p.
 fn disc(p: vec2<f32>, r: f32, bokeh: f32) -> vec4<f32> {
-    let n = clamp(i32(ceil(3.0 * r)), 8, DISC_MAX);
+    let n = clamp(i32(ceil(3.0 * r - 0.001)), 8, DISC_MAX);
     var acc = vec4<f32>(0.0);
     var wsum = 0.0;
     for (var k : i32 = 0; k < DISC_MAX; k = k + 1) {
@@ -999,13 +1188,34 @@ pub static BLUR_SPIN: KernelDef = KernelDef {
     params: ParamsLayout {
         size: ::core::mem::size_of::<BlurSpinParams>(),
         fields: &[
-            ParamField { name: "cx", wgsl_ty: "f32" },
-            ParamField { name: "cy", wgsl_ty: "f32" },
-            ParamField { name: "rx", wgsl_ty: "f32" },
-            ParamField { name: "ry", wgsl_ty: "f32" },
-            ParamField { name: "rotation_deg", wgsl_ty: "f32" },
-            ParamField { name: "angle_deg", wgsl_ty: "f32" },
-            ParamField { name: "feather", wgsl_ty: "f32" },
+            ParamField {
+                name: "cx",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "cy",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "rx",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "ry",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "rotation_deg",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "angle_deg",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "feather",
+                wgsl_ty: "f32",
+            },
         ],
     },
     wgsl: BLUR_SPIN_WGSL,
@@ -1062,7 +1272,7 @@ fn bokeh_w(s: vec4<f32>, bokeh: f32) -> f32 {
 
 // The Vogel disc of radius r about p.
 fn disc(p: vec2<f32>, r: f32, bokeh: f32) -> vec4<f32> {
-    let n = clamp(i32(ceil(3.0 * r)), 8, DISC_MAX);
+    let n = clamp(i32(ceil(3.0 * r - 0.001)), 8, DISC_MAX);
     var acc = vec4<f32>(0.0);
     var wsum = 0.0;
     for (var k : i32 = 0; k < DISC_MAX; k = k + 1) {
@@ -1128,4 +1338,10 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 );
 
 /// Every kernel of this family (the conformance gate joins it to the registry).
-pub static FAMILY: &[&KernelDef] = &[&BLUR_FIELD, &BLUR_IRIS, &BLUR_TILT_SHIFT, &BLUR_PATH, &BLUR_SPIN];
+pub static FAMILY: &[&KernelDef] = &[
+    &BLUR_FIELD,
+    &BLUR_IRIS,
+    &BLUR_TILT_SHIFT,
+    &BLUR_PATH,
+    &BLUR_SPIN,
+];
