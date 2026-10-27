@@ -645,6 +645,9 @@ export const STATUS = defineMessages("data.status", {
 export const ISSUES = defineMessages("data.issues", {
   overset: `The text of "{binding}" does not fit its frame: enlarge the frame, shorten the text, or turn on Auto-Size in Text Frame Options.`,
   oversetRecord: `The text of "{binding}" for record {record} does not fit its frame: enlarge the frame, shorten the text, or turn on Auto-Size in Text Frame Options.`,
+  oversetEstimated: `The text of "{binding}" does not fit its frame, as measured (an estimate: the host's layout could not tell): enlarge the frame, shorten the text, or turn on Auto-Size in Text Frame Options.`,
+  oversetRecordEstimated: `The text of "{binding}" for record {record} does not fit its frame, as measured (an estimate: the host's layout could not tell): enlarge the frame, shorten the text, or turn on Auto-Size in Text Frame Options.`,
+  oversetTable: `The table of "{binding}" does not fit its frame, or the text of one of its cells does not fit its row: enlarge the frame, shorten the text, or let the rows grow in Cell Options.`,
   missingAsset: `The picture of "{binding}" is missing: {reason}.`,
   noReference: "no reference in the data",
   lowResolution: `The picture of "{binding}" is {ppi} ppi at its size in the frame, under {min} ppi: use a larger picture or make the frame smaller.`,

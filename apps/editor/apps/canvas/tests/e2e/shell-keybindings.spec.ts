@@ -62,6 +62,11 @@ const HOST_KEYS = [
   "ctrl+shift+s→paged.file.saveAsIdml",
   "cmd+a→paged.edit.selectAll",
   "ctrl+a→paged.edit.selectAll",
+  "cmd+f→paged.edit.find",
+  "ctrl+f→paged.edit.find",
+  "cmd+alt+f→paged.edit.replace",
+  "ctrl+h→paged.edit.replace",
+  "cmd+j→paged.edit.goTo",
   "cmd+shift+]→paged.object.bringToFront",
   "ctrl+shift+]→paged.object.bringToFront",
   "cmd+shift+}→paged.object.bringToFront",
@@ -136,6 +141,9 @@ const hostSignatures = async (page: Page) =>
   (await liveKeybindings(page))
     .filter(
       (k) =>
+        // A bundle's binding scoped to its own context is the bundle's,
+        // even when it names a host command (Word's Cmd+H and Cmd+G).
+        !k.scoped &&
         !isPluginCommand(k.command) &&
         !k.command.startsWith("paged.tool.activate."),
     )
@@ -232,6 +240,11 @@ test.describe("host keybindings", () => {
       "keybinding:ctrl+shift+s→paged.file.saveAsIdml",
       "keybinding:cmd+a→paged.edit.selectAll",
       "keybinding:ctrl+a→paged.edit.selectAll",
+      "keybinding:cmd+f→paged.edit.find",
+      "keybinding:ctrl+f→paged.edit.find",
+      "keybinding:cmd+alt+f→paged.edit.replace",
+      "keybinding:ctrl+h→paged.edit.replace",
+      "keybinding:cmd+j→paged.edit.goTo",
       "keybinding:cmd+shift+]→paged.object.bringToFront",
       "keybinding:ctrl+shift+]→paged.object.bringToFront",
       "keybinding:cmd+shift+}→paged.object.bringToFront",

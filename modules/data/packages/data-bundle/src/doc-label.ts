@@ -49,16 +49,18 @@ export function labelEnvelope(
 /** The document label's room for the recipe (ADR 559 point 4): the engine
  *  caps a label value at 64 KiB. A recipe over it drops its captured data
  *  sets first, then rides without a recipe (the part still has it). The
- *  per-record status snapshot (`applied`, editor ADR 291) never rides: it
- *  is state, not recipe, and it grows with the record count. */
+ *  per-record status snapshot (`applied` and its values, `applied_values`,
+ *  editor ADR 291) never rides: it is state, not recipe, and it grows with
+ *  the record count. */
 export const RECIPE_BUDGET = 56 * 1024;
 
 /** The recipe the document label carries, fitted to the budget, or null. */
 export function fitRecipe(payload: unknown): unknown | null {
   if (!payload || typeof payload !== "object") return null;
-  if ("applied" in payload) {
+  if ("applied" in payload || "applied_values" in payload) {
     const recipe: Record<string, unknown> = { ...payload };
     delete recipe.applied;
+    delete recipe.applied_values;
     return fitRecipe(recipe);
   }
   if (asciiJson(payload).length <= RECIPE_BUDGET) return payload;

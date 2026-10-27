@@ -731,6 +731,8 @@ export type WorkerToMain = WorkerToMainKind & {
 //   `TooLarge` / `NothingDrawn`.
 //   An older worker ignores the new fields and answers a whole-page PNG,
 //   which a caller detects by the reply's missing `format` / `region`.
+// Additive on 76, no bump (governance rule 1) — data ADR 564:
+//   `RunContent.textVariable`, the text variable a run is an instance of.
 // Rides v76 (unreleased; added before first consumer sync, governance rule
 //   4) — engine ADRs 1018 and 1021: the mutations setStyleBasedOn,
 //   setListLevel, restartNumbering and findReplace (Operations
@@ -4187,6 +4189,12 @@ pub struct RunContent {
     pub position: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tracking: Option<f32>,
+    /// The text variable this run is an instance of (`TextVariable/<id>`),
+    /// when it is one; the run's `text` is the variable's current value.
+    /// Additive on 76 (governance rule 1): data ADR 564 finds every story a
+    /// data field's text variable is in, a copy pasted by hand included.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_variable: Option<String>,
 }
 
 /// Inspector P1 — one node in the scene tree. Children are nested
