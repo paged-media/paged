@@ -25,7 +25,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import { cleanup, fireEvent, render } from "@testing-library/react";
-import * as React from "react";
 
 import type { FrameSurfaceProps } from "@paged-media/plugin-api";
 
