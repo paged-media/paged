@@ -54,10 +54,10 @@ describe("imageBundle.activate", () => {
     load(fake);
     expect(fake.panels.ids()).toEqual([
       PANEL_ID,
-      "media.paged.image.panel.brushSettings",
-      "media.paged.image.panel.brushPresets",
       // WP5.8 — the Clone Source panel.
       "media.paged.image.panel.cloneSource",
+      "media.paged.image.panel.brushSettings",
+      "media.paged.image.panel.brushPresets",
       "media.paged.image.panel.properties",
     ]);
     expect(fake.commands.ids()).toEqual([

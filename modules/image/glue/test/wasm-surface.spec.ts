@@ -81,11 +81,13 @@ function declaredIn(file: string, name: string): string[] {
   );
 }
 
-/** The TS model of the module: `ImageWasmModule` and the retouching
- *  doors it extends (`RetouchWasm`, WP5.8). */
+/** The TS model of the module: `ImageWasmModule` and the doors it
+ *  extends — selection and masking (`MaskingWasm`, ADR 470) and
+ *  retouching (`RetouchWasm`, WP5.8). */
 function declaredInTs(): string[] {
   return [
     ...declaredIn(ENGINE_TS, "ImageWasmModule"),
+    ...declaredIn(MASKING_TS, "MaskingWasm"),
     ...declaredIn(RETOUCH_TS, "RetouchWasm"),
   ];
 }

@@ -1173,9 +1173,7 @@ export interface FilterMask {
 }
 
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`. */
-export interface ImageEngine
-  extends MaskingEngine,
-    RetouchEngine<DecodedInfo> {
+export interface ImageEngine extends MaskingEngine, RetouchEngine<DecodedInfo> {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
