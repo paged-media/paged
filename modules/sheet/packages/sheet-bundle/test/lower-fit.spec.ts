@@ -117,14 +117,34 @@ describe.skipIf(!ENGINE_BUILT)(
       right: number,
       height: number,
     ) {
+      // The frame auto-sizes to its table; the measured height is pinned
+      // with auto-sizing off, as the frame the fit predicted.
       const r = await host.document.mutate({
-        op: "setElementProperty",
+        op: "batch",
         args: {
-          elementId: { kind: "textFrame", id: frame },
-          path: "frameBounds",
-          value: { type: "bounds", value: [top, left, top + height, right] },
+          ops: [
+            {
+              op: "setElementProperty",
+              args: {
+                elementId: { kind: "textFrame", id: frame },
+                path: "textFrameAutoSizing",
+                value: { type: "text", value: "Off" },
+              },
+            },
+            {
+              op: "setElementProperty",
+              args: {
+                elementId: { kind: "textFrame", id: frame },
+                path: "frameBounds",
+                value: {
+                  type: "bounds",
+                  value: [top, left, top + height, right],
+                },
+              },
+            },
+          ],
         },
-      });
+      } as never);
       expect(r.applied).toBe(true);
       const { overset } = await placed(frame);
       await host.document.undo();
@@ -146,6 +166,16 @@ describe.skipIf(!ENGINE_BUILT)(
       const { bounds, overset } = await placed(frame!);
       // Every row shows: nothing is overset (the film's "1 overset story").
       expect(overset, "the placed table is overset").toBe(false);
+      // The frame grows with its table, whatever faces the host lays the
+      // cells out in.
+      expect(
+        (
+          (await host.objects.get(
+            `textFrame:${frame}` as never,
+            "textFrameAutoSizing",
+          )) as { value?: unknown }
+        ).value,
+      ).toBe("HeightOnly");
       // ...and the frame is sized TO the rows, not merely large: one point
       // shorter and the last row no longer fits.
       const [top, left, bottom, right] = bounds;

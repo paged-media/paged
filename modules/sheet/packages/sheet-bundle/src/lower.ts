@@ -1334,6 +1334,23 @@ async function newStoryId(
   return fresh.length === 1 ? fresh[0] : null;
 }
 
+/** A placed table's frame grows with its table (Text Frame Options ▸ Auto-
+ *  Size, height only): the fitted height is measured with the host's font
+ *  metrics, and a host that lays the cells out in other faces (a browser
+ *  with real fonts, a document whose styles the cells take) needs rows taller
+ *  than measured. The engine's layout is the word on that, so the frame
+ *  takes its table's height, and keeps it when the workbook's data grows. */
+function tableFrameAutoSizeOp(frameId: string): Mutation {
+  return {
+    op: "setElementProperty",
+    args: {
+      elementId: { kind: "textFrame", id: frameId },
+      path: "textFrameAutoSizing",
+      value: { type: "text", value: "HeightOnly" },
+    },
+  } as Mutation;
+}
+
 export async function lowerSelectionToFrame(
   host: BundleHost,
   engine: SheetEngine,
@@ -1409,6 +1426,7 @@ export async function lowerSelectionToFrame(
       ops: [
         { op: "insertTextFrame", args: { pageId, bounds: placement.bounds } },
         { op: "bindCreated", args: { handle: FRAME_HANDLE } },
+        tableFrameAutoSizeOp(`$h:${FRAME_HANDLE}`),
         {
           op: "setPluginMetadata",
           args: {
@@ -1697,6 +1715,7 @@ async function oneCallOps(
     ops: [
       { op: "insertTextFrame", args: { pageId, bounds: placement.bounds } },
       { op: "bindCreated", args: { handle: frameHandle } },
+      tableFrameAutoSizeOp(`$h:${frameHandle}`),
       {
         op: "setPluginMetadata",
         args: {
