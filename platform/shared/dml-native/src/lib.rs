@@ -61,8 +61,8 @@ use paged_model::{
     GradientStopRef, InnerShadowParams, OuterGlowParams,
 };
 pub use paged_ooxml::drawingml::resolved::{
-    radial_reach, Blur, Effects, FillOverlay, Glow, ImageEffect, Paint, PatternPaint, Picture, PresetShadow,
-    Reflection, Rgb, Shadow, Stop, Stroke,
+    radial_reach, Blur, Effects, FillOverlay, Glow, ImageEffect, Paint, PatternPaint, Picture,
+    PresetShadow, Reflection, Rgb, Shadow, Stop, Stroke,
 };
 
 /// The None swatch: no paint.

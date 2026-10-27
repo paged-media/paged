@@ -2181,12 +2181,14 @@ fn css_length_emu(v: &str) -> Option<i64> {
         .unwrap_or(v.len());
     let (num, unit) = v.split_at(split);
     let n: f64 = num.parse().ok()?;
+    use paged_ooxml::units::{EMU_PER_CM, EMU_PER_INCH, EMU_PER_PT};
     let per = match unit.trim() {
-        "pt" => 12700.0,
-        "in" => 914400.0,
-        "cm" => 360000.0,
-        "mm" => 36000.0,
-        "px" | "" => 9525.0,
+        "pt" => EMU_PER_PT,
+        "in" => EMU_PER_INCH as f64,
+        "cm" => EMU_PER_CM as f64,
+        "mm" => EMU_PER_CM as f64 / 10.0,
+        // A CSS pixel is 1/96 inch.
+        "px" | "" => EMU_PER_INCH as f64 / 96.0,
         _ => return None,
     };
     Some((n * per).round() as i64)

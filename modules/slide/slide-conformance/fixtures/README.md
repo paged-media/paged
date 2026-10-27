@@ -26,6 +26,7 @@ through PowerPoint's scripting dictionary and saves it (ADR 705). Recorded with 
 | `motion` | fade, push, wipe and cut transitions with durations; appear / fade builds on click, with previous and after previous |
 | `fonts` | text in Lato (regular, bold, italic, bold italic), Gloria Hallelujah and Caveat, embedded by PowerPoint as subsets (its default); PowerPoint adds Caveat's bold face |
 | `fonts-full` | the same text without Caveat, every face embedded whole |
+| `effects` | one rectangle per DrawingML paint or effect the shared mapper lowers (ADR 722): outer, inner and preset shadow, glow, soft edge, reflection; an alpha-stop and a radial gradient, a pattern, preset and custom dashes (seeded by `effects.seed.py`, re-saved by PowerPoint) |
 | `comments` | `placeholders` with review comments (seeded by `comments.seed.py`, re-saved by PowerPoint): slide 1 a positioned comment with a reply, slide 2 a resolved comment anchored to its title, slide 3 a legacy comment PowerPoint converted to a modern one. Recorded without PDF or geometry (the slides are `placeholders`') |
 
 Re-record (a Mac with PowerPoint): `bash scripts/ppt-author-fixtures.sh [name ...]`; then, for

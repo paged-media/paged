@@ -25,8 +25,8 @@
 //! colour map, PowerPoint's default map entries, the theme, and `phClr`.
 //! The PowerPoint oracle is the judge of each rule.
 
-use paged_ooxml::drawingml::{self, SchemeColors};
 pub use paged_ooxml::drawingml::Rgba;
+use paged_ooxml::drawingml::{self, SchemeColors};
 use pptx_core::{Color, ColorMap, Theme};
 
 /// What a colour resolves against.

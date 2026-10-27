@@ -36,15 +36,16 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use dml_native::{
+    compound_type, placement, Mapper, Picture, Placement, StrokeFields, Transparency, NONE_SWATCH,
+};
 use paged_model::{
     ArrowheadType, AutoSizingReferencePoint, AutoSizingType, Bounds, CellStyleDef, CharacterRun,
     CharacterStyleDef, ColorEntry, ColorModel, ColorSpace, DesignMap, DocumentPreference,
-    DropShadowSetting, FirstBaselineOffset, FrameEffects, FrameRef, GradientEntry,
-    GradientFeatherParams, GradientFeatherStop, GradientKind, GradientStopRef, Graphic, Group,
-    Justification, ObjectStyleDef, Page, Paragraph, ParagraphStyleDef, PathAnchor, Polygon,
-    Rectangle, Spread, SpreadRef, Story, StoryRef, StyleSheet, SwatchEntry, Table as NativeTable,
-    TableCell, TableColumn, TableRow, TableStyleDef, TextFrame as NativeFrame,
-    VerticalJustification, XmlTag, AUTO_PAGE_NUMBER_MARKER,
+    FirstBaselineOffset, FrameRef, Graphic, Group, Justification, ObjectStyleDef, Page, Paragraph,
+    ParagraphStyleDef, PathAnchor, Polygon, Rectangle, Spread, SpreadRef, Story, StoryRef,
+    StyleSheet, SwatchEntry, Table as NativeTable, TableCell, TableColumn, TableRow, TableStyleDef,
+    TextFrame as NativeFrame, VerticalJustification, XmlTag, AUTO_PAGE_NUMBER_MARKER,
 };
 use paged_scene::{Document, ParsedMasterSpread, ParsedSpread, ParsedStory};
 use slide_geom::SubPath;
@@ -69,28 +70,6 @@ pub struct Built {
     pub stories: BTreeMap<String, String>,
     pub elements: BTreeMap<String, (&'static str, String)>,
     pub diagnostics: Vec<String>,
-}
-
-/// Gradient feather: type, angle and (location %, alpha) stops.
-type Feather = (&'static str, Option<f64>, Vec<(f64, f64)>);
-
-/// A gradient feather for a gradient whose stops differ in alpha: type,
-/// angle and (location %, alpha) stops. The engine's gradient swatches
-/// carry no alpha, so the fade rides on the item instead.
-fn feather_of(p: &Paint) -> Option<Feather> {
-    if p.uniform_alpha().is_some() {
-        return None;
-    }
-    let (kind, angle, stops) = match p {
-        Paint::Linear { stops, angle } => ("Linear", Some(-angle), stops),
-        Paint::Radial { stops, .. } => ("Radial", None, stops),
-        _ => return None,
-    };
-    Some((
-        kind,
-        angle,
-        stops.iter().map(|s| (s.pos, s.alpha)).collect(),
-    ))
 }
 
 /// Where PowerPoint puts a text frame's first baseline, in pt below the top
@@ -142,66 +121,13 @@ fn table_border_offset(t: &Table) -> (f64, f64) {
     (left, top)
 }
 
-/// The engine stroke style for a compound line: PowerPoint's `dbl` is two
-/// equal lines a third of the width apart, InDesign's Thick - Thick; its
-/// thick-thin pairs are InDesign's striped pairs. Triple lines are not
-/// modelled and draw single.
-fn compound_type(s: &Stroke) -> Option<&'static str> {
-    match s.compound.as_deref()? {
-        "dbl" => Some("StrokeStyle/$ID/ThickThick"),
-        "thickThin" => Some("StrokeStyle/$ID/ThickThin"),
-        "thinThick" => Some("StrokeStyle/$ID/ThinThick"),
-        _ => None,
-    }
-}
-
-/// A fill gradient's placement on a `w` × `h` item: a linear one's angle
-/// and span, a radial one's centre and reach.
-#[derive(Default)]
-struct GradientPlacement {
-    angle: Option<f32>,
-    length: Option<f32>,
-    start: Option<[f32; 2]>,
-}
-
-fn gradient_placement(p: &Paint, w: f64, h: f64) -> GradientPlacement {
-    match p {
-        // DrawingML angles run clockwise on a y-down page; the engine's
-        // gradient angle runs counter-clockwise.
-        Paint::Linear { angle, .. } => gradient_span(-angle, w, h),
-        Paint::Radial { center, .. } => GradientPlacement {
-            angle: None,
-            length: Some(n(slide_resolve::model::radial_reach(*center, w, h))),
-            start: Some([n(center.0 * w), n(center.1 * h)]),
-        },
-        _ => GradientPlacement::default(),
-    }
-}
-
-/// A linear gradient's angle and span: PowerPoint runs it across the box
-/// projected on its direction (w·|cos| + h·|sin|), the engine across the
-/// diagonal unless told the length.
-fn gradient_span(angle: f64, w: f64, h: f64) -> GradientPlacement {
-    let (sn, cs) = angle.to_radians().sin_cos();
-    GradientPlacement {
-        angle: Some(n(angle)),
-        length: Some(n(w * cs.abs() + h * sn.abs())),
-        start: None,
-    }
-}
-
 /// The width a `wrap="none"` text frame is widened to.
 const UNWRAPPED_WIDTH_PT: f64 = 4000.0;
 
 /// A length or coordinate as the model keeps it: to the thousandth of a
 /// point, the precision a deck has always opened with.
 fn n(v: f64) -> f32 {
-    let r = (v * 1000.0).round() / 1000.0;
-    if r == 0.0 {
-        0.0
-    } else {
-        r as f32
-    }
+    dml_native::pt(v)
 }
 
 fn matrix(m: &[f64; 6]) -> [f32; 6] {
@@ -430,7 +356,6 @@ const NORMAL_PARA_STYLE: &str = "ParagraphStyle/$ID/NormalParagraphStyle";
 const NO_OBJECT_STYLE: &str = "ObjectStyle/$ID/[None]";
 const NO_CELL_STYLE: &str = "CellStyle/$ID/[None]";
 const NO_TABLE_STYLE: &str = "TableStyle/$ID/[No table style]";
-const NONE_SWATCH: &str = "Swatch/None";
 /// The interchange DOM version the model records. The engine reads it
 /// only to report it; it is kept so a deck reads as it did.
 const DOM_VERSION: &str = "20.0";
@@ -440,9 +365,6 @@ const DOM_VERSION: &str = "20.0";
 fn swatch(id: String) -> Option<String> {
     (id != NONE_SWATCH).then_some(id)
 }
-
-/// A gradient swatch: id, kind, (location %, colour id) stops.
-type GradientSwatch = (String, &'static str, Vec<(f64, String)>);
 
 /// The paths of one outline as the model keeps them: the anchors, where
 /// each contour after the first starts, which contours are open.
@@ -564,26 +486,6 @@ fn rect_path(l: f64, t: f64, r: f64, b: f64) -> Vec<SubPath> {
     }]
 }
 
-/// A stroke as the model's item fields hold it.
-#[derive(Default)]
-struct StrokeFields {
-    color: Option<String>,
-    weight: Option<f32>,
-    kind: Option<String>,
-    cap: Option<String>,
-    join: Option<String>,
-    head: Option<ArrowheadType>,
-    tail: Option<ArrowheadType>,
-}
-
-/// The transparency of an item: opacity, drop shadow, gradient feather.
-#[derive(Default)]
-struct Transparency {
-    opacity: Option<f32>,
-    shadow: Option<DropShadowSetting>,
-    effects: Option<FrameEffects>,
-}
-
 /// The items of one spread, as the model's spread holds them, and the
 /// groups being filled.
 struct SpreadBuilder {
@@ -628,9 +530,9 @@ impl SpreadBuilder {
 
 struct Builder<'a> {
     images: &'a dyn Fn(&str) -> Option<Vec<u8>>,
-    colors: BTreeMap<Rgb, String>,
-    theme_names: BTreeMap<Rgb, String>,
-    gradients: Vec<GradientSwatch>,
+    /// The shared DrawingML mapper (slide ADR 722): swatches, strokes,
+    /// effects, and what the engine cannot hold.
+    dml: Mapper,
     stories: Vec<ParsedStory>,
     story_of: BTreeMap<String, String>,
     para_styles: BTreeSet<String>,
@@ -663,147 +565,20 @@ impl Builder<'_> {
     }
 
     fn color(&mut self, rgb: Rgb) -> String {
-        if let Some(id) = self.colors.get(&rgb) {
-            return id.clone();
-        }
-        let id = match self.theme_names.get(&rgb) {
-            Some(name) => format!("Color/{name}"),
-            None => format!("Color/R{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]),
-        };
-        self.colors.insert(rgb, id.clone());
-        id
+        self.dml.color(rgb)
     }
 
     /// The swatch a paint fills with.
     fn paint(&mut self, p: &Paint) -> String {
-        match p {
-            Paint::None | Paint::Image { .. } => NONE_SWATCH.into(),
-            Paint::Solid { rgb, .. } => self.color(*rgb),
-            Paint::Linear { stops, .. } => self.gradient("Linear", stops),
-            Paint::Radial { stops, .. } => self.gradient("Radial", stops),
-        }
+        self.dml.paint(p)
     }
 
-    fn gradient(&mut self, kind: &'static str, stops: &[Stop]) -> String {
-        let refs: Vec<(f64, String)> = stops.iter().map(|s| (s.pos, self.color(s.rgb))).collect();
-        if let Some((id, _, _)) = self
-            .gradients
-            .iter()
-            .find(|(_, k, s)| *k == kind && *s == refs)
-        {
-            return id.clone();
-        }
-        let id = format!("Gradient/g{}", self.gradients.len() + 1);
-        self.gradients.push((id.clone(), kind, refs));
-        id
-    }
-
-    fn transparency(
-        &mut self,
-        opacity: f64,
-        shadow: Option<&Shadow>,
-        feather: Option<&Paint>,
-    ) -> Transparency {
-        let feather = feather.and_then(feather_of);
-        let mut t = Transparency::default();
-        if opacity >= 0.999 && shadow.is_none() && feather.is_none() {
-            return t;
-        }
-        if opacity < 0.999 {
-            t.opacity = Some(n(opacity * 100.0));
-        }
-        if let Some(s) = shadow {
-            t.shadow = Some(DropShadowSetting {
-                mode: "Drop".into(),
-                x_offset: n(s.dx),
-                y_offset: n(s.dy),
-                size: n(s.blur / 2.0),
-                opacity_pct: n(s.alpha * 100.0),
-                effect_color: Some(self.color(s.rgb)),
-                blend_mode: None,
-                spread_pct: None,
-                noise_pct: None,
-                knocked_out: None,
-                honor_other_effects: None,
-                use_global_light: None,
-            });
-        }
-        if let Some((kind, angle, stops)) = feather {
-            t.effects = Some(FrameEffects {
-                gradient_feather: Some(GradientFeatherParams {
-                    gradient_type: Some(kind.into()),
-                    start_point: None,
-                    end_point: None,
-                    angle_deg: angle.map(n),
-                    stops: stops
-                        .into_iter()
-                        .map(|(pos, alpha)| GradientFeatherStop {
-                            stop_color: None,
-                            location_pct: n(pos),
-                            alpha_pct: n(alpha * 100.0),
-                            midpoint_pct: 50.0,
-                        })
-                        .collect(),
-                    hilite_angle: None,
-                    hilite_length: None,
-                }),
-                ..FrameEffects::default()
-            });
-        }
-        t
+    fn transparency(&mut self, opacity: f64, fx: &Effects, fade: Option<&Paint>) -> Transparency {
+        self.dml.transparency(opacity, fx, fade)
     }
 
     fn stroke(&mut self, s: Option<&Stroke>) -> StrokeFields {
-        let Some(s) = s else {
-            return StrokeFields {
-                color: Some(NONE_SWATCH.into()),
-                weight: Some(0.0),
-                ..StrokeFields::default()
-            };
-        };
-        let mut f = StrokeFields {
-            color: Some(self.paint(&s.paint)),
-            weight: Some(n(s.width)),
-            ..StrokeFields::default()
-        };
-        // One stroke style: a dashed line's dashes win over its compound.
-        if let Some(t) = compound_type(s).filter(|_| s.dash.is_none()) {
-            f.kind = Some(t.into());
-        }
-        if let Some(cap) = &s.cap {
-            f.cap = Some(
-                match cap.as_str() {
-                    "rnd" => "RoundEndCap",
-                    "sq" => "ProjectingEndCap",
-                    _ => "ButtEndCap",
-                }
-                .into(),
-            );
-        }
-        if let Some(j) = &s.join {
-            f.join = Some(
-                match j.as_str() {
-                    "round" => "RoundEndJoin",
-                    "bevel" => "BevelEndJoin",
-                    _ => "MiterEndJoin",
-                }
-                .into(),
-            );
-        }
-        let arrow = |k: &str| match k {
-            "triangle" => ArrowheadType::Triangle,
-            "arrow" => ArrowheadType::Simple,
-            "stealth" => ArrowheadType::Barbed,
-            "diamond" => ArrowheadType::Square,
-            "oval" => ArrowheadType::CircleSolid,
-            _ => ArrowheadType::Triangle,
-        };
-        f.head = s.head.as_deref().map(arrow);
-        f.tail = s.tail.as_deref().map(arrow);
-        if s.dash.is_some() {
-            f.kind = Some("StrokeStyle/$ID/Dashed".into());
-        }
-        f
+        self.dml.stroke(s)
     }
 
     /// Write `it`; `key` is its shape key on a slide (`None` on a master
@@ -866,7 +641,7 @@ impl Builder<'_> {
                 if has_fill || stroke.is_some() {
                     let fc = self.paint(fill);
                     let sf = self.stroke(stroke.as_ref());
-                    let gp = gradient_placement(fill, it.w, it.h);
+                    let gp = placement(fill, it.w, it.h);
                     // Item ids are `u` + hex, so derived ids take suffixes
                     // that are not hex digits (`p`, `s`, `t`, `i`).
                     let pid = if text.is_some() {
@@ -882,7 +657,7 @@ impl Builder<'_> {
                     } else {
                         stroke.as_ref().map(|s| &s.paint)
                     };
-                    let tr = self.transparency(it.opacity, it.shadow.as_ref(), feather);
+                    let tr = self.transparency(it.opacity, &it.effects, feather);
                     self.polygon(sb, it, &pid, Some(fc.clone()), &sf, &gp, &paths, tr, label);
                     let details: Vec<SubPath> = outline
                         .iter()
@@ -891,7 +666,7 @@ impl Builder<'_> {
                         .collect();
                     if has_fill && stroke.is_some() && !details.is_empty() {
                         let sf = self.stroke(stroke.as_ref());
-                        let tr = self.transparency(it.opacity, None, None);
+                        let tr = self.transparency(it.opacity, &Effects::default(), None);
                         let sid = format!("{}s", it.id);
                         self.polygon(
                             sb,
@@ -899,7 +674,7 @@ impl Builder<'_> {
                             &sid,
                             Some(NONE_SWATCH.into()),
                             &sf,
-                            &GradientPlacement::default(),
+                            &Placement::default(),
                             &details,
                             tr,
                             label,
@@ -915,7 +690,12 @@ impl Builder<'_> {
                 stroke,
                 image_part,
                 crop,
+                image_effects,
             } => {
+                self.dml.picture(&Picture {
+                    opacity: it.opacity,
+                    effects: image_effects.clone(),
+                });
                 let Some(bytes) = (self.images)(image_part) else {
                     self.diagnostics
                         .push(format!("{image_part}: image bytes missing"));
@@ -929,7 +709,7 @@ impl Builder<'_> {
                 let sf = self.stroke(stroke.as_ref());
                 self.element(&it.id, "rectangle", &it.id);
                 sb.name(&it.id, &it.name);
-                let tr = self.transparency(it.opacity, it.shadow.as_ref(), None);
+                let tr = self.transparency(it.opacity, &it.effects, None);
                 // The visible part of the image is (l, t)–(1-r, 1-b); stretch it
                 // over the frame.
                 let (l, t, r, b) = *crop;
@@ -957,6 +737,8 @@ impl Builder<'_> {
                     stroke_type: sf.kind,
                     end_cap: sf.cap,
                     end_join: sf.join,
+                    miter_limit: sf.miter_limit,
+                    stroke_dash: sf.dash,
                     applied_object_style: Some(NO_OBJECT_STYLE.into()),
                     has_image_element: true,
                     image_link: Some(uri),
@@ -988,7 +770,7 @@ impl Builder<'_> {
         id: &str,
         fill: Option<String>,
         sf: &StrokeFields,
-        gp: &GradientPlacement,
+        gp: &Placement,
         paths: &[SubPath],
         tr: Transparency,
         label: Option<&str>,
@@ -1008,6 +790,8 @@ impl Builder<'_> {
             stroke_type: sf.kind.clone(),
             end_cap: sf.cap.clone(),
             end_join: sf.join.clone(),
+            miter_limit: sf.miter_limit,
+            stroke_dash: sf.dash.clone(),
             start_arrow: sf.head.unwrap_or(ArrowheadType::None),
             end_arrow: sf.tail.unwrap_or(ArrowheadType::None),
             gradient_fill_angle: gp.angle,
@@ -1038,7 +822,7 @@ impl Builder<'_> {
         story: &str,
         transform: [f32; 6],
         fill: String,
-        gp: &GradientPlacement,
+        gp: &Placement,
         paths: &[SubPath],
         label: Option<&str>,
     ) -> Option<usize> {
@@ -1164,7 +948,7 @@ impl Builder<'_> {
         let bg = self.paint(&t.background);
         let h: f64 = t.rows.iter().map(|r| r.0).sum();
         let w: f64 = t.columns.iter().sum();
-        let gp = gradient_placement(&t.background, w, h);
+        let gp = placement(&t.background, w, h);
         let (dx, dy) = table_border_offset(t);
         let m = &it.transform;
         let shifted = [
@@ -1282,7 +1066,7 @@ impl Builder<'_> {
                         Some(s) => (
                             Some(self.paint(&s.paint)),
                             Some(n(border_width(s))),
-                            compound_type(s).map(str::to_string),
+                            compound_type(s.compound.as_deref()).map(str::to_string),
                         ),
                         None => (None, Some(0.0), None),
                     };
@@ -1394,7 +1178,7 @@ impl Builder<'_> {
             &story,
             matrix(&transform),
             NONE_SWATCH.into(),
-            &GradientPlacement::default(),
+            &Placement::default(),
             &paths,
             label,
         ) {
@@ -1581,13 +1365,7 @@ pub fn slide_key(it: &Item) -> String {
 pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) -> Built {
     let mut w = Builder {
         images,
-        colors: BTreeMap::new(),
-        theme_names: deck
-            .theme_colors
-            .iter()
-            .map(|(k, c)| (*c, k.clone()))
-            .collect(),
-        gradients: Vec::new(),
+        dml: Mapper::new(&deck.theme_colors),
         stories: Vec::new(),
         story_of: BTreeMap::new(),
         para_styles: BTreeSet::new(),
@@ -1693,35 +1471,11 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         vec![0.0, 0.0, 0.0, 100.0],
     );
     color("Color/Paper", "Paper", ColorSpace::Cmyk, vec![0.0; 4]);
-    for (rgb, id) in &w.colors {
-        color(
-            id,
-            id.trim_start_matches("Color/"),
-            ColorSpace::Rgb,
-            rgb.iter().map(|&c| c as f32).collect(),
-        );
+    for c in w.dml.palette.color_entries() {
+        palette.colors.insert(c.self_id.clone(), c);
     }
-    for (id, kind, stops) in &w.gradients {
-        palette.gradients.insert(
-            id.clone(),
-            GradientEntry {
-                self_id: id.clone(),
-                name: Some(id.trim_start_matches("Gradient/").to_string()),
-                kind: if *kind == "Radial" {
-                    GradientKind::Radial
-                } else {
-                    GradientKind::Linear
-                },
-                stops: stops
-                    .iter()
-                    .map(|(pos, c)| GradientStopRef {
-                        stop_color: c.clone(),
-                        location_pct: n(*pos),
-                        midpoint_pct: None,
-                    })
-                    .collect(),
-            },
-        );
+    for g in w.dml.palette.gradient_entries() {
+        palette.gradients.insert(g.self_id.clone(), g);
     }
     palette.swatches.insert(
         NONE_SWATCH.into(),
@@ -1860,7 +1614,13 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         document,
         stories: w.story_of,
         elements: w.elements,
-        diagnostics: w.diagnostics,
+        diagnostics: {
+            // What the engine could not hold of the deck's paint, once
+            // per kind.
+            let mut d = w.diagnostics;
+            d.extend(w.dml.take_losses());
+            d
+        },
     }
 }
 
@@ -1900,41 +1660,5 @@ mod tests {
         assert_eq!(v["data"]["deck"]["name"], "Präsentation 🎉");
         assert_eq!(v["data"]["deck"]["width"], 960.0);
         assert_eq!(v["data"]["deck"]["fonts"][0], "Calibri");
-    }
-
-    fn stroke(compound: Option<&str>, dash: Option<&str>) -> Stroke {
-        Stroke {
-            width: 3.0,
-            paint: Paint::None,
-            dash: dash.map(str::to_string),
-            compound: compound.map(str::to_string),
-            cap: None,
-            join: None,
-            head: None,
-            tail: None,
-        }
-    }
-
-    #[test]
-    fn compound_lines_map_to_engine_stroke_styles() {
-        let t = |c| compound_type(&stroke(Some(c), None));
-        assert_eq!(t("dbl"), Some("StrokeStyle/$ID/ThickThick"));
-        assert_eq!(t("thickThin"), Some("StrokeStyle/$ID/ThickThin"));
-        assert_eq!(t("thinThick"), Some("StrokeStyle/$ID/ThinThick"));
-        assert_eq!(t("tri"), None);
-        assert_eq!(compound_type(&stroke(None, None)), None);
-    }
-
-    #[test]
-    fn a_radial_gradient_is_placed_at_its_centre_with_the_farthest_corner_as_reach() {
-        let p = Paint::Radial {
-            stops: Vec::new(),
-            center: (0.25, 0.5),
-        };
-        // Centre (50, 50) on a 200 × 100 box; farthest corner (200, 0).
-        let g = gradient_placement(&p, 200.0, 100.0);
-        assert_eq!(g.start, Some([50.0, 50.0]));
-        assert_eq!(g.length, Some(n((150.0f64 * 150.0 + 50.0 * 50.0).sqrt())));
-        assert_eq!(g.angle, None);
     }
 }

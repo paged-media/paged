@@ -18,3 +18,4 @@ Range 700–749.
 | [711](711-powerpoint-parity-program.md) | The PowerPoint parity program; export keeps untouched slides byte for byte | Accepted 2026-10-24 |
 | [716](716-slide-show-and-presenter-view.md) | Slide show and presenter view: one presentation in three roles, PowerPoint's keys, the slide sorter as a module view | Accepted 2026-10-25 |
 | [721](721-transitions-and-shader-effects-are-pure-webgpu-wgsl.md) | Transitions and shader effects are pure WebGPU/WGSL | Accepted 2026-10-25 |
+| [722](722-one-drawingml-paint-and-effect-mapper.md) | One DrawingML paint and effect reader (`paged_ooxml::drawingml`), one mapper onto the engine (`dml-native`) | Accepted 2026-10-25 |

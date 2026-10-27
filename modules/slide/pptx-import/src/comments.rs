@@ -43,7 +43,7 @@ pub const REL_AUTHORS: &str = "http://schemas.microsoft.com/office/2018/10/relat
 pub const REL_LEGACY_AUTHORS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/commentAuthors";
 
-const EMU_PER_PT: f64 = 12_700.0;
+use paged_ooxml::units::EMU_PER_PT;
 const LEGACY_PER_PT: f64 = 8.0;
 
 /// The deck's comment authors: name and initials by author id (modern

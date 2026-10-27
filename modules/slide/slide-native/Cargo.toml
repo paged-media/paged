@@ -15,6 +15,7 @@ pptx-core.workspace = true
 slide-resolve.workspace = true
 slide-geom.workspace = true
 paged-model.workspace = true
+dml-native.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true
 serde_json.workspace = true

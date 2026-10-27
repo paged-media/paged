@@ -292,7 +292,11 @@ fn shape_stroke(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Op
     }
     // The shape's own line over the theme's line style, field by field;
     // the line ends are the shape's own.
-    fn pick<T: Clone>(own: Option<&Line>, base: Option<&Line>, f: fn(&Line) -> Option<T>) -> Option<T> {
+    fn pick<T: Clone>(
+        own: Option<&Line>,
+        base: Option<&Line>,
+        f: fn(&Line) -> Option<T>,
+    ) -> Option<T> {
         own.and_then(f).or_else(|| base.and_then(f))
     }
     let merged = Line {
@@ -332,7 +336,10 @@ fn effects(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Effects
                     .cloned()
                     .flatten()
             });
-            (fx, style_color(ctx, &style.and_then(|s| s.effect_ref.clone())))
+            (
+                fx,
+                style_color(ctx, &style.and_then(|s| s.effect_ref.clone())),
+            )
         }
     };
     fx.map(|fx| resolved::effects(&fx, &ctx.colors(ph), &mut |n| ctx.note(n)))

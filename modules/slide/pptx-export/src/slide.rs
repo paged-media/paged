@@ -316,6 +316,8 @@ const LINE: &[&str] = &[
     "start_arrow",
     "end_arrow",
     "stroke_dash",
+    "miter_limit",
+    "stroke_dash",
 ];
 const FRAME: &[&str] = &[
     "inset_spacing",
@@ -324,6 +326,21 @@ const FRAME: &[&str] = &[
     "auto_sizing_reference_point",
     "first_baseline_offset",
     "minimum_first_baseline_offset",
+];
+/// The item's drop shadow and effects: written back as `a:effectLst`.
+const EFFECTS: &[&str] = &["drop_shadow", "effects"];
+/// What `spPr` holds before an effect list.
+const BEFORE_EFFECTS: &[&str] = &[
+    "a:xfrm",
+    "a:prstGeom",
+    "a:custGeom",
+    "a:noFill",
+    "a:solidFill",
+    "a:gradFill",
+    "a:blipFill",
+    "a:pattFill",
+    "a:grpFill",
+    "a:ln",
 ];
 const IMAGE: &[&str] = &["image_item_transform", "image_bytes", "image_link"];
 const IGNORE: &[&str] = &[
@@ -967,8 +984,16 @@ impl<'a> Writer<'a, '_> {
                     )?;
                 }
             }
+            if has(EFFECTS) && eb.kind != Kind::TextFrame {
+                x = set_sppr(
+                    &x,
+                    &["a:effectLst", "a:effectDag"],
+                    self.effects_of(ec).as_deref(),
+                    BEFORE_EFFECTS,
+                )?;
+            }
             for k in keys {
-                let known = [PLACE, FILL, LINE, FRAME, IGNORE]
+                let known = [PLACE, FILL, LINE, FRAME, IGNORE, EFFECTS]
                     .iter()
                     .any(|s| s.contains(&k.as_str()));
                 if !known {
@@ -1181,6 +1206,19 @@ impl<'a> Writer<'a, '_> {
         )
     }
 
+    /// An element's drop shadow and effects as `a:effectLst` (the shared
+    /// mapper's inverse); `None` when it has none.
+    fn effects_of(&self, e: &Elem) -> Option<String> {
+        let drop: Option<paged_model::DropShadowSetting> =
+            e.v.get("drop_shadow")
+                .and_then(|v| serde_json::from_value(v.clone()).ok());
+        let fx: Option<paged_model::FrameEffects> =
+            e.v.get("effects")
+                .and_then(|v| serde_json::from_value(v.clone()).ok());
+        let back = dml_native::effects_of(drop.as_ref(), fx.as_ref(), &|id| self.colors.rgb(id));
+        paged_ooxml::drawingml::write::effects(&back, &|rgb, a| self.colors.rgb_color(rgb, a))
+    }
+
     fn line_of(&self, e: &Elem) -> String {
         let w = e.f("stroke_weight").unwrap_or(0.0);
         let color = e.s("stroke_color").filter(|c| c != "Swatch/None");
@@ -1194,16 +1232,36 @@ impl<'a> Writer<'a, '_> {
             Some("ProjectingEndCap") => r#" cap="sq""#,
             _ => "",
         };
-        let dash = match e.s("stroke_type").as_deref() {
-            Some(t) if t.contains("Dash") => r#"<a:prstDash val="dash"/>"#,
-            Some(t) if t.contains("Dotted") => r#"<a:prstDash val="sysDot"/>"#,
-            _ => "",
+        let pattern: Vec<f32> =
+            e.v.get("stroke_dash")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+        // The dash pattern when the item has one (a preset back as its
+        // name), else the stroke style's.
+        let dash = match dml_native::dash_of(&pattern, w) {
+            Some(Ok(name)) => format!(r#"<a:prstDash val="{name}"/>"#),
+            Some(Err(pairs)) => format!(
+                "<a:custDash>{}</a:custDash>",
+                pairs
+                    .iter()
+                    .map(|(d, sp)| format!(r#"<a:ds d="{d}" sp="{sp}"/>"#))
+                    .collect::<String>()
+            ),
+            None => match e.s("stroke_type").as_deref() {
+                Some(t) if t.contains("Dash") => r#"<a:prstDash val="dash"/>"#.into(),
+                Some(t) if t.contains("Dotted") => r#"<a:prstDash val="sysDot"/>"#.into(),
+                _ => String::new(),
+            },
         };
+        let lim = e
+            .f("miter_limit")
+            .map(|m| (m * 100_000.0).round() as i64)
+            .unwrap_or(800_000);
         let join = match e.s("end_join").as_deref() {
-            Some("RoundEndJoin") => "<a:round/>",
-            Some("BevelEndJoin") => "<a:bevel/>",
-            Some("MiterEndJoin") => r#"<a:miter lim="800000"/>"#,
-            _ => "",
+            Some("RoundEndJoin") => "<a:round/>".to_string(),
+            Some("BevelEndJoin") => "<a:bevel/>".to_string(),
+            Some("MiterEndJoin") => format!(r#"<a:miter lim="{lim}"/>"#),
+            _ => String::new(),
         };
         let arrow = |k: &str, tag: &str| -> String {
             match e.s(k).as_deref() {
@@ -1307,10 +1365,18 @@ impl<'a> Writer<'a, '_> {
                 }
             }
         }
+        if keys.iter().any(|k| EFFECTS.contains(&k.as_str())) {
+            x = set_sppr(
+                &x,
+                &["a:effectLst", "a:effectDag"],
+                self.effects_of(ec).as_deref(),
+                BEFORE_EFFECTS,
+            )?;
+        }
         let other: Vec<String> = keys
             .into_iter()
             .filter(|k| {
-                ![PLACE, IMAGE, IGNORE, LINE]
+                ![PLACE, IMAGE, IGNORE, LINE, EFFECTS]
                     .iter()
                     .any(|s| s.contains(&k.as_str()))
             })

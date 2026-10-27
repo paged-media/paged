@@ -16,6 +16,8 @@ pptx-core.workspace = true
 pptx-import.workspace = true
 slide-resolve.workspace = true
 slide-native.workspace = true
+# The shared DrawingML mapper's inverse (slide ADR 722).
+dml-native.workspace = true
 paged-model.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true
