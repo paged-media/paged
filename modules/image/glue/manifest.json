@@ -51,6 +51,7 @@
       "media.paged.image.command.setType",
       "media.paged.image.command.applyToFile",
       "media.paged.image.command.saveToFile",
+      "media.paged.image.command.exportAs",
       "media.paged.image.command.loadBrushLibrary",
       "media.paged.image.command.selectionToPath",
       "media.paged.image.command.pathToSelection",
@@ -217,7 +218,9 @@
     "exporters": [
       "media.paged.image.exporter.psd",
       "media.paged.image.exporter.png",
-      "media.paged.image.exporter.jpeg"
+      "media.paged.image.exporter.jpeg",
+      "media.paged.image.exporter.tiff",
+      "media.paged.image.exporter.webp"
     ],
     "editContexts": [
       {
@@ -1140,6 +1143,14 @@
         {
           "id": "media.paged.image.command.applyToFile",
           "title": "Apply adjustments to the file",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.exportAs",
+          "title": "Export as…",
           "args": {
             "kind": "struct",
             "fields": {}

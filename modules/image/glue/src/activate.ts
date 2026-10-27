@@ -129,6 +129,7 @@ const CMD = defineMessages("image.command", {
     "Shape blur (defined pattern as the shape)",
   applyAdjustmentsToTheFile: "Apply adjustments to the file",
   saveTheAdjustedFile: "Save the adjusted file",
+  exportAs: "Export as…",
   loadBrushLibraryAbr: "Load brush library (.abr)",
   selectionToPathImage: "Selection to path (image)",
   pathToSelectionImage: "Path to selection (image)",
@@ -220,11 +221,50 @@ const TOOL = defineMessages("image.tool", {
 });
 
 const IO = defineMessages("image.io", {
-  imagePsdPngJpeg: "Image (PSD/PNG/JPEG)",
+  imagePsdPngJpeg: "Image (PSD, TIFF, PNG, JPEG, WebP and more)",
+  tiffAdjustedPixels: "TIFF (adjusted pixels, metadata kept)",
+  webpAdjustedPixels: "WebP lossless (adjusted pixels, metadata kept)",
   psdAdjustedPixelsEditedLayers: "PSD (adjusted pixels + edited layers)",
   pngAdjustedPixels: "PNG (adjusted pixels)",
   jpegAdjustedPixels: "JPEG (adjusted pixels)",
 });
+
+/** The extensions the raster importer accepts: every format paged-raster
+ *  decodes (ADR 468). Exported for the bundle's own test. */
+export const RASTER_IMPORT_EXTENSIONS = [
+  ".psd",
+  ".psb",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".tif",
+  ".tiff",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".tga",
+  ".qoi",
+  ".ico",
+  ".hdr",
+  ".exr",
+  ".avif",
+  ".jxl",
+  ".dng",
+  ".eps",
+] as const;
+
+export const RASTER_IMPORT_MIME_TYPES = [
+  "image/vnd.adobe.photoshop",
+  "image/png",
+  "image/jpeg",
+  "image/tiff",
+  "image/webp",
+  "image/gif",
+  "image/bmp",
+  "image/avif",
+  "image/jxl",
+  "image/x-adobe-dng",
+] as const;
 
 // The commands' category stays English (an identity); the shell shows it
 // through its category labels.
@@ -1236,6 +1276,17 @@ export function activate(host: BundleHost): BundleHandle {
     },
   });
 
+  // FILE ▸ EXPORT AS… (ADR 468): the dialog on top of the Image panel.
+  command({
+    id: "media.paged.image.command.exportAs",
+    title: t(CMD.exportAs),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      session.openDialog("exportAs");
+    },
+  });
+
   command({
     id: "media.paged.image.command.saveToFile",
     title: t(CMD.saveTheAdjustedFile),
@@ -1489,15 +1540,16 @@ export function activate(host: BundleHost): BundleHandle {
   // the Magnetic Lasso and the Refine Edge brush.
   const maskingSub = contributeMasking(host, session, command, PANEL_ID);
 
-  // K-2 — the raster importer: opening/dropping a PSD/PNG/JPEG routes
+  // K-2 — the raster importer: opening/dropping a raster file routes
   // its bytes HERE (decode into the session, raise the panel; it does
   // NOT replace the document). Degrades honestly on an older host.
   if (host.supports("contribute.importer@1")) {
     host.contribute.importer({
       id: "media.paged.image.importer.raster",
       title: t(IO.imagePsdPngJpeg),
-      extensions: [".psd", ".psb", ".png", ".jpg", ".jpeg"],
-      mimeTypes: ["image/vnd.adobe.photoshop", "image/png", "image/jpeg"],
+      // Every format the engine's paged-raster decodes (ADR 468).
+      extensions: [...RASTER_IMPORT_EXTENSIONS],
+      mimeTypes: [...RASTER_IMPORT_MIME_TYPES],
       import: async ({ name, bytes }) => {
         host.shell.openPanel(PANEL_ID);
         await session.importBytes(name, bytes);
@@ -1541,6 +1593,20 @@ export function activate(host: BundleHost): BundleHandle {
       extension: ".jpg",
       mimeType: "image/jpeg",
       export: () => session.rasterExportBytes("jpeg"),
+    });
+    host.contribute.exporter({
+      id: "media.paged.image.exporter.tiff",
+      title: t(IO.tiffAdjustedPixels),
+      extension: ".tif",
+      mimeType: "image/tiff",
+      export: () => session.rasterExportBytes("tiff"),
+    });
+    host.contribute.exporter({
+      id: "media.paged.image.exporter.webp",
+      title: t(IO.webpAdjustedPixels),
+      extension: ".webp",
+      mimeType: "image/webp",
+      export: () => session.rasterExportBytes("webp"),
     });
   }
 

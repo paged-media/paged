@@ -16,7 +16,15 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Format sniffing from the first bytes.
+//! Raster format sniffing: which container a file's first bytes name.
+//!
+//! The one definition of "what format is this picture" for the engine.
+//! `paged-raster` re-exports [`sniff`] and [`Format`] and decodes what it
+//! names; a crate that only has to name or label an image (the IDML
+//! writer picks a file extension) depends on this crate alone and links
+//! no decoder.
+
+#![forbid(unsafe_code)]
 
 /// A raster container.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -54,9 +62,53 @@ pub enum Format {
 
 impl Format {
     /// Floating-point samples of this format are scene-linear light, not
-    /// sRGB-encoded values: [`crate::to_rgba8`] encodes them.
+    /// sRGB-encoded values.
     pub fn is_scene_linear(self) -> bool {
         matches!(self, Format::Hdr | Format::Exr)
+    }
+
+    /// The usual file extension, without the dot.
+    pub fn extension(self) -> &'static str {
+        match self {
+            Format::Tiff => "tif",
+            Format::Png => "png",
+            Format::Jpeg => "jpg",
+            Format::WebP => "webp",
+            Format::Gif => "gif",
+            Format::Bmp => "bmp",
+            Format::Psd => "psd",
+            Format::Eps => "eps",
+            Format::Dng => "dng",
+            Format::Avif => "avif",
+            Format::Jxl => "jxl",
+            Format::Tga => "tga",
+            Format::Qoi => "qoi",
+            Format::Ico => "ico",
+            Format::Hdr => "hdr",
+            Format::Exr => "exr",
+        }
+    }
+
+    /// The media type.
+    pub fn mime(self) -> &'static str {
+        match self {
+            Format::Tiff => "image/tiff",
+            Format::Png => "image/png",
+            Format::Jpeg => "image/jpeg",
+            Format::WebP => "image/webp",
+            Format::Gif => "image/gif",
+            Format::Bmp => "image/bmp",
+            Format::Psd => "image/vnd.adobe.photoshop",
+            Format::Eps => "application/postscript",
+            Format::Dng => "image/x-adobe-dng",
+            Format::Avif => "image/avif",
+            Format::Jxl => "image/jxl",
+            Format::Tga => "image/x-tga",
+            Format::Qoi => "image/qoi",
+            Format::Ico => "image/vnd.microsoft.icon",
+            Format::Hdr => "image/vnd.radiance",
+            Format::Exr => "image/x-exr",
+        }
     }
 }
 
@@ -68,7 +120,7 @@ pub fn sniff(bytes: &[u8]) -> Option<Format> {
     let head = |n: usize| bytes.get(..n);
     match head(4)? {
         [b'I', b'I', 42 | 43, 0] | [b'M', b'M', 0, 42 | 43] => {
-            return Some(if crate::dng::is_dng(bytes) {
+            return Some(if is_dng(bytes) {
                 Format::Dng
             } else {
                 Format::Tiff
@@ -103,6 +155,39 @@ pub fn sniff(bytes: &[u8]) -> Option<Format> {
         return Some(Format::Tga);
     }
     None
+}
+
+/// The DNGVersion tag (50706) of a TIFF's first IFD.
+const DNG_VERSION: u64 = 50706;
+
+/// A TIFF whose first IFD carries DNGVersion: classic or BigTIFF, either
+/// byte order. Only IFD0's entry tags are read.
+fn is_dng(bytes: &[u8]) -> bool {
+    let little = bytes.starts_with(b"II");
+    let int = |at: usize, n: usize| -> Option<u64> {
+        let s = bytes.get(at..at.checked_add(n)?)?;
+        Some(if little {
+            s.iter().rev().fold(0u64, |a, &b| (a << 8) | u64::from(b))
+        } else {
+            s.iter().fold(0u64, |a, &b| (a << 8) | u64::from(b))
+        })
+    };
+    let big = int(2, 2) == Some(43);
+    let (ifd0, count_len, entry_len) = if big {
+        (int(8, 8), 8, 20)
+    } else {
+        (int(4, 4), 2, 12)
+    };
+    let Some(ifd0) = ifd0.and_then(|o| usize::try_from(o).ok()) else {
+        return false;
+    };
+    let Some(count) = int(ifd0, count_len) else {
+        return false;
+    };
+    (0..count.min(4096) as usize).any(|i| {
+        let at = ifd0 + count_len + i * entry_len;
+        int(at, 2) == Some(DNG_VERSION)
+    })
 }
 
 /// An ISO BMFF `ftyp` box whose major or a compatible brand is `avif`
@@ -205,5 +290,92 @@ mod tests {
         tga[2] = 4;
         assert_eq!(sniff(&tga), None, "image type 4 is not TGA's");
         assert_eq!(sniff(b"II"), None);
+    }
+
+    /// A one-entry IFD0, little or big endian, classic or BigTIFF.
+    fn tiff_with_tag(tag: u16, little: bool, big: bool) -> Vec<u8> {
+        let mut b = Vec::new();
+        let w16 = |b: &mut Vec<u8>, v: u16| {
+            b.extend_from_slice(&if little {
+                v.to_le_bytes()
+            } else {
+                v.to_be_bytes()
+            })
+        };
+        b.extend_from_slice(if little { b"II" } else { b"MM" });
+        if big {
+            w16(&mut b, 43);
+            w16(&mut b, 8);
+            w16(&mut b, 0);
+            let off = 16u64;
+            b.extend_from_slice(&if little {
+                off.to_le_bytes()
+            } else {
+                off.to_be_bytes()
+            });
+            let n = 1u64;
+            b.extend_from_slice(&if little {
+                n.to_le_bytes()
+            } else {
+                n.to_be_bytes()
+            });
+            w16(&mut b, tag);
+            b.extend_from_slice(&[0; 18]);
+        } else {
+            w16(&mut b, 42);
+            let off = 8u32;
+            b.extend_from_slice(&if little {
+                off.to_le_bytes()
+            } else {
+                off.to_be_bytes()
+            });
+            w16(&mut b, 1);
+            w16(&mut b, tag);
+            b.extend_from_slice(&[0; 10]);
+        }
+        b
+    }
+
+    #[test]
+    fn a_dng_is_a_tiff_with_dng_version_in_ifd0() {
+        for little in [true, false] {
+            for big in [true, false] {
+                assert_eq!(
+                    sniff(&tiff_with_tag(50706, little, big)),
+                    Some(Format::Dng),
+                    "little {little} big {big}"
+                );
+                assert_eq!(
+                    sniff(&tiff_with_tag(256, little, big)),
+                    Some(Format::Tiff),
+                    "little {little} big {big}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_format_names_an_extension_and_a_media_type() {
+        for f in [
+            Format::Tiff,
+            Format::Png,
+            Format::Jpeg,
+            Format::WebP,
+            Format::Gif,
+            Format::Bmp,
+            Format::Psd,
+            Format::Eps,
+            Format::Dng,
+            Format::Avif,
+            Format::Jxl,
+            Format::Tga,
+            Format::Qoi,
+            Format::Ico,
+            Format::Hdr,
+            Format::Exr,
+        ] {
+            assert!(!f.extension().is_empty());
+            assert!(f.mime().contains('/'));
+        }
     }
 }

@@ -32,6 +32,7 @@
 mod codecs;
 mod colour;
 mod dng;
+mod encode;
 mod eps;
 mod formats;
 mod layouts;

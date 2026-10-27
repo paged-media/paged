@@ -2221,6 +2221,7 @@ dependencies = [
  "paged-model",
  "paged-mutate",
  "paged-scene",
+ "paged-sniff",
  "paged-template",
  "paged-test-resources",
  "quick-xml 0.41.0",
@@ -3604,6 +3605,7 @@ dependencies = [
  "paged-compose",
  "paged-gen",
  "paged-model",
+ "paged-raster",
  "paged-renderer",
  "paged-scene",
  "paged-test-resources",
@@ -3792,14 +3794,19 @@ dependencies = [
  "avif-parse",
  "flate2",
  "image",
+ "image-webp",
  "jxl-oxide",
+ "moxcms",
  "paged-color",
  "paged-psd",
+ "paged-sniff",
  "paged-test-resources",
  "sqzer-rav1d",
  "thiserror",
  "tiff",
  "tracing",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -3940,6 +3947,10 @@ dependencies = [
  "wasm-bindgen-test",
  "web-sys",
 ]
+
+[[package]]
+name = "paged-sniff"
+version = "0.0.0"
 
 [[package]]
 name = "paged-store"
