@@ -962,10 +962,8 @@ export function activate(host: BundleHost): BundleHandle {
     [
       "warpText",
       CMD.warpText,
-      () => {
-        host.shell.openPanel(PANEL_ID);
-        return true;
-      },
+      // The panel the loop raises holds the Warp text section.
+      () => true,
     ],
   ] as const) {
     command({

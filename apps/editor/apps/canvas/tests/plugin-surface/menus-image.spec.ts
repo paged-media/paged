@@ -1751,8 +1751,9 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  // WP5.10 — type layers. With no image there is no type layer: Warp text
-  // raises the panel that holds its controls; the other two act on nothing.
+  // WP5.10 — type layers. Like the Layer menu's verbs each raises the Image
+  // panel (Warp text's controls live there); with no image there is no type
+  // layer to act on.
   test("Image/Type/Warp text… — raises the Image panel (its Warp text section)", async () => {
     covers("menu:Image/Type/Warp text…");
     covers("command:media.paged.image.command.warpText");
@@ -1770,7 +1771,7 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
-  test("Image/Type/Rasterize type layer — with no type layer it changes nothing", async () => {
+  test("Image/Type/Rasterize type layer — raises the Image panel; with no type layer it changes nothing", async () => {
     covers("menu:Image/Type/Rasterize type layer");
     covers("command:media.paged.image.command.rasterizeType");
     await expectGreyedAndInert(bare, "Image/Type/Rasterize type layer");
@@ -1779,13 +1780,15 @@ test.describe.serial("plugin menus — paged.image", () => {
       "Image/Type/Rasterize type layer",
       "media.paged.image.command.rasterizeType",
     );
-    expect(out.shell).toEqual([]);
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
     expect(out.after, "with no image open there is nothing to act on").toBe(
       out.before,
     );
   });
 
-  test("Image/Type/Paint text into layer — with no image open it changes nothing", async () => {
+  test("Image/Type/Paint text into layer — raises the Image panel; with no image open it changes nothing", async () => {
     covers("menu:Image/Type/Paint text into layer");
     covers("command:media.paged.image.command.paintTextIntoLayer");
     await expectGreyedAndInert(bare, "Image/Type/Paint text into layer");
@@ -1794,7 +1797,9 @@ test.describe.serial("plugin menus — paged.image", () => {
       "Image/Type/Paint text into layer",
       "media.paged.image.command.paintTextIntoLayer",
     );
-    expect(out.shell).toEqual([]);
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
     expect(out.after, "with no image open there is nothing to act on").toBe(
       out.before,
     );
