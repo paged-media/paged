@@ -1056,6 +1056,90 @@ fn image_abr_brush_model_tool_options_class_id_names_the_tool_and_unknown_ids_fa
     // The ~25 keys this view deliberately does not model are still there.
     assert_eq!(t.descriptor.number(b"smoothingValue"), Some(0.0));
     assert_eq!(t.descriptor.i32(b"Smoo"), Some(0));
+    // The smoothing group is TYPED from there, and says so.
+    let s = f.brushes[0].options.smoothing.as_ref().expect("typed");
+    assert_eq!(s.source, image_psd::abr::OptionSource::ToolOptions);
+    assert_eq!(s.value_raw, Some(0.0));
+    assert_eq!(s.smoo_raw, Some(0));
+}
+
+#[test]
+fn image_abr_brush_model_brush_level_options_are_typed_on_the_brush_first() {
+    // Every once-seen brush-level key, on the BRUSH descriptor, plus a
+    // toolOptions copy of two of them that must LOSE to the brush.
+    let brush = brush_preset("Options", computed_tip())
+        .item(klong("protectTexture"), BValue::Bool(true))
+        .item(klong("usePressureOverridesSize"), BValue::Bool(true))
+        .item(klong("usePressureOverridesOpacity"), BValue::Bool(false))
+        .item(klong("useLegacy"), BValue::Bool(false))
+        .item(klong("smoothing"), BValue::Bool(true))
+        .item(klong("smoothingValue"), BValue::Doub(40.0))
+        .item(klong("smoothingRadiusMode"), BValue::Bool(true))
+        .item(klong("smoothingCatchup"), BValue::Bool(true))
+        .item(klong("smoothingCatchupAtEnd"), BValue::Bool(false))
+        .item(klong("smoothingZoomCompensation"), BValue::Bool(true))
+        .item(klong("pressureSmoothing"), BValue::Bool(false))
+        .item(
+            klong("toolOptions"),
+            BValue::Obj(
+                BDesc::new(k4("PbTl"))
+                    .item(klong("protectTexture"), BValue::Bool(false))
+                    .item(klong("smoothingValue"), BValue::Doub(5.0)),
+            ),
+        );
+    let f = AbrFile::parse(&AbrBuilder::new().brush(brush).build()).unwrap();
+    assert!(f.warnings.is_empty(), "{:?}", f.warnings);
+    let o = &f.brushes[0].options;
+    assert_eq!(o.protect_texture, Some(true));
+    assert_eq!(
+        o.protect_texture_source,
+        image_psd::abr::OptionSource::Brush
+    );
+    assert_eq!(o.pressure_overrides_size, Some(true));
+    assert_eq!(o.pressure_overrides_opacity, Some(false));
+    assert_eq!(o.use_legacy, Some(false));
+    let s = o.smoothing.as_ref().unwrap();
+    assert_eq!(s.source, image_psd::abr::OptionSource::Brush);
+    assert_eq!(s.amount(), Some(0.4), "40 on the 0..100 options-bar scale");
+    assert_eq!(
+        (s.enabled, s.radius_mode, s.catch_up, s.catch_up_at_end),
+        (Some(true), Some(true), Some(true), Some(false))
+    );
+    assert_eq!(s.zoom_compensation, Some(true));
+    assert_eq!(s.pressure_smoothing, Some(false));
+}
+
+#[test]
+fn image_abr_write_the_independent_emitters_files_survive_a_rewrite() {
+    // Emitter → reader → WRITER → reader: the second read equals the
+    // first in every typed field, and the rewritten file raises no
+    // warning the emitted one did not.
+    let tip = sampled_tip("tip", UUID_A, 4.0);
+    let mut brush = brush_preset("Rewritten", tip);
+    brush.items.retain(|(k, _)| !k.matches(b"useScatter"));
+    let brush = brush
+        .item(klong("useScatter"), BValue::Bool(true))
+        .item(
+            klong("scatterDynamics"),
+            BValue::Obj(dynamics(2, 25, 120.0, None)),
+        )
+        .item(k4("Cnt "), BValue::Doub(2.0))
+        .item(klong("bothAxes"), BValue::Bool(true));
+    let bytes = AbrBuilder::new()
+        .sample(SampleSpec::new(UUID_A, 4, 3, ramp_tip()).at_origin(300, 120))
+        .brush(brush)
+        .build();
+    let first = AbrFile::parse(&bytes).unwrap();
+    assert!(first.warnings.is_empty(), "{:?}", first.warnings);
+    assert!(first.brushes[0].scatter.is_some());
+    let again = AbrFile::parse(&image_psd::abr::write_abr(&first.brushes, &first.samples)).unwrap();
+    assert!(again.warnings.is_empty(), "{:?}", again.warnings);
+    assert_eq!(first.samples, again.samples, "coverage byte-identical");
+    let strip = |b: &image_psd::abr::AbrBrush| image_psd::abr::AbrBrush {
+        descriptor: Default::default(),
+        ..b.clone()
+    };
+    assert_eq!(strip(&first.brushes[0]), strip(&again.brushes[0]));
 }
 
 // ── generic modelling (§7.1) ─────────────────────────────────────────
@@ -1074,7 +1158,14 @@ fn image_abr_brush_model_unmodelled_keys_survive_on_the_descriptor() {
         .build();
     let f = AbrFile::parse(&bytes).unwrap();
     let d = &f.brushes[0].descriptor;
-    assert_eq!(d.bool(b"Rpt"), Some(true));
+    assert_eq!(d.bool(b"Rpt "), Some(true));
+    // …and the typed view now names it (Build-up), with where it sat.
+    let o = &f.brushes[0].options;
+    assert_eq!(o.build_up, Some(true));
+    assert_eq!(o.build_up_source, image_psd::abr::OptionSource::Brush);
+    assert!(o.brush_group_present);
+    assert_eq!(o.use_brush_group, Some(false));
+    assert_eq!(o.interpretation, Some(true));
     assert_eq!(
         d.descriptor(b"brushGroup")
             .and_then(|g| g.bool(b"useBrushGroup")),

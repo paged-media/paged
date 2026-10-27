@@ -15457,6 +15457,7 @@ pub(crate) fn paragraph_content(para: &paged_model::Paragraph) -> crate::channel
                 baseline_shift: run.baseline_shift,
                 position: run.position.clone(),
                 tracking: run.tracking,
+                text_variable: run.text_variable.clone(),
             })
             .collect(),
     }

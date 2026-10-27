@@ -364,7 +364,8 @@ describe("the Layer menu's parity commands [image.layers.photoshop-parity]", () 
       "Background",
       "Layer 1",
     ]);
-    expect(s.history?.undoSteps).toEqual(["Layer via Copy"]);
+    // Select All is a step of its own (a selection change, ADR 470).
+    expect(s.history?.undoSteps).toEqual(["Select All", "Layer via Copy"]);
     await k.run(`${C}.undo`);
     expect(k.session.state().layers.layers).toHaveLength(1);
     expect(k.docOps()).toEqual([]);
@@ -382,7 +383,8 @@ describe("the Layer menu's parity commands [image.layers.photoshop-parity]", () 
       "Background",
       "Layer 1",
     ]);
-    expect(s.history?.undoSteps).toEqual(["Layer via Cut"]);
+    // Select All is a step of its own (a selection change, ADR 470).
+    expect(s.history?.undoSteps).toEqual(["Select All", "Layer via Cut"]);
     // The cut layer alone shows: the composite is the original.
     expect(await sourcePixels(k.session)).toEqual(before);
     await k.run(`${C}.undo`);

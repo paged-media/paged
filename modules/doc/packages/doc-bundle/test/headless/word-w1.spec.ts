@@ -114,6 +114,7 @@ describe.skipIf(!docxPresent)(
         "keybinding:cmd+shift+d→media.paged.doc.command.word.doubleUnderline",
       );
       covers("keybinding:cmd+shift+h→media.paged.doc.command.word.hidden");
+      covers("keybinding:cmd+f→paged.edit.find");
       covers("keybinding:cmd+h→paged.edit.replace");
       covers("keybinding:cmd+g→paged.edit.goTo");
       for (const k of [
@@ -129,8 +130,6 @@ describe.skipIf(!docxPresent)(
           }),
         );
       }
-      // Cmd+F is the host's own key for Find everywhere (editor ADR 303):
-      // Word's scope adds only the keys whose host meaning differs.
       expect(WORD_HOST_KEYS.map((k) => k.command)).toEqual([
         "paged.edit.replace",
         "paged.edit.goTo",

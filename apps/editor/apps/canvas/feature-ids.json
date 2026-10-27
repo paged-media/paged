@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 581,
+    "command": 597,
     "keybinding": 140,
-    "menu": 399,
-    "panel": 132,
-    "tool": 91
+    "menu": 415,
+    "panel": 134,
+    "tool": 100
   },
   "features": [
     {
@@ -1301,6 +1301,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.colorRange",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.commitCrop",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1326,6 +1331,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.defineBrushPreset",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.definePattern",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1342,6 +1352,16 @@
     },
     {
       "id": "command:media.paged.image.command.distributeVertical",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.exportBrushPresetsAbr",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.exportBrushPresetsJson",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1551,7 +1571,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.focusArea",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.grow",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.imageSize",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.importBrushPresets",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1577,6 +1612,16 @@
     },
     {
       "id": "command:media.paged.image.command.loadBrushLibrary",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.loadSelection",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.makeWorkPath",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1711,12 +1756,27 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.openBrushPresets",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.openBrushSettings",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.openImage",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.pathToSelection",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.quickMask",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1756,12 +1816,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.saveSelection",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.saveToFile",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.selectAll",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.selectAndMask",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1781,7 +1851,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.similar",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.stampVisible",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.toggleLockTransparent",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -4426,6 +4506,41 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Brush/Brush presets",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Brush settings",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Define brush preset…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Export brush presets (.abr)…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Export brush presets (.json)…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Import brush presets…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Lock transparent pixels",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Commit edits to the document",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -4901,6 +5016,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Selection/Color range…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Selection/Deselect",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -4911,7 +5031,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Selection/Focus area…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Selection/From luminosity channel",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Grow",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -4921,7 +5051,37 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Selection/Load selection…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Make work path",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Quick mask",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Save selection",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Selection/Select all",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Select and mask…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Similar",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -5746,6 +5906,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "panel:media.paged.image.panel.brushPresets",
+      "kind": "panel",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "panel:media.paged.image.panel.brushSettings",
+      "kind": "panel",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "panel:media.paged.image.panel.properties",
       "kind": "panel",
       "owner": "media.paged.image"
@@ -6476,6 +6646,16 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.image.tool.artHistoryBrush",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.backgroundEraser",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.blur",
       "kind": "tool",
       "owner": "media.paged.image"
@@ -6497,6 +6677,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.clone",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.colorReplacement",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -6536,12 +6721,27 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.historyBrush",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.lasso",
       "kind": "tool",
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.magicEraser",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.magicWand",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.magneticLasso",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -6552,6 +6752,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.marqueeRect",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.mixerBrush",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -6586,7 +6791,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.refineEdge",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.sharpen",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.smudge",
       "kind": "tool",
       "owner": "media.paged.image"
     },

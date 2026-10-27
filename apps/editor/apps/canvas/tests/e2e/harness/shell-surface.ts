@@ -691,8 +691,7 @@ export interface KeyRow {
   key: string;
   command: string;
   guarded: boolean;
-  /** Scoped to an edit context (editor ADR 299): a plugin's binding,
-   *  live only inside its context, even when it names a host command. */
+  /** A bundle's binding scoped to its own edit context (extensions ADR 348). */
   scoped: boolean;
 }
 

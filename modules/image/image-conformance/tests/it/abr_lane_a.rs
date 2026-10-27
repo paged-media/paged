@@ -864,21 +864,31 @@ fn image_abr_lane_a4_a_desc_of_size_two_mod_four_followed_by_phry_stays_aligned(
     assert!(profile_has_it, "the corpus no longer contains this shape");
 
     let mut built = None;
-    for extra in 0..8 {
-        let name = "n".repeat(extra);
-        let bytes = AbrBuilder::new()
-            .sample(SampleSpec::new(UUID_A, 4, 3, ramp(4, 3)))
-            .brush(brush_preset(&name, sampled_tip(&name, UUID_A, 40.0)))
-            .hierarchy(vec![BDesc::new(klong("preset"))])
-            .build();
-        let sections = walk(&bytes).sections;
-        let desc = sections
-            .iter()
-            .find(|(k, _)| k == "desc")
-            .expect("a desc section");
-        if desc.1 % 4 == 2 {
-            built = Some((bytes, desc.1));
-            break;
+    'search: for odd in [false, true] {
+        for extra in 0..8 {
+            let name = "n".repeat(extra);
+            // Only the PRESET name varies: one UTF-16 string, 2 bytes a
+            // character. An optional unmodelled bool under a 2-byte
+            // long-form key (11 bytes) flips the size's parity, so the
+            // two knobs together reach every remainder.
+            let mut preset = brush_preset(&name, sampled_tip("tip", UUID_A, 40.0));
+            if odd {
+                preset = preset.item(klong("xy"), BValue::Bool(false));
+            }
+            let bytes = AbrBuilder::new()
+                .sample(SampleSpec::new(UUID_A, 4, 3, ramp(4, 3)))
+                .brush(preset)
+                .hierarchy(vec![BDesc::new(klong("preset"))])
+                .build();
+            let sections = walk(&bytes).sections;
+            let desc = sections
+                .iter()
+                .find(|(k, _)| k == "desc")
+                .expect("a desc section");
+            if desc.1 % 4 == 2 {
+                built = Some((bytes, desc.1));
+                break 'search;
+            }
         }
     }
     let (bytes, size) = built.expect("no brush-name length produced a desc of size ≡ 2 (mod 4)");
@@ -903,7 +913,10 @@ fn image_abr_lane_a4_both_last_section_terminations_read_the_same_file() {
         let build = |pad: bool| {
             AbrBuilder::new()
                 .sample(SampleSpec::new(UUID_A, 4, 3, ramp(4, 3)))
-                .brush(brush_preset(&name, sampled_tip(&name, UUID_A, 40.0)))
+                // Only the PRESET name varies: one UTF-16 string, 2 bytes a
+                // character, so the size walks through every even remainder.
+                // (Varying the tip's name too moved it 4 bytes at a time.)
+                .brush(brush_preset(&name, sampled_tip("tip", UUID_A, 40.0)))
                 .pad_last_section(pad)
                 .build()
         };

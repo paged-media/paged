@@ -134,7 +134,7 @@ const PALETTE = {
   "media.paged.slide.command.previousSlide": "Slide/Previous slide",
   "media.paged.slide.command.nextSlide": "Slide/Next slide",
   "media.paged.slide.command.addComment": "Slide/New comment",
-  // Insert ▸ Shapes… opens the Shapes panel (slide ADR 717).
+  // Insert is the host's menu; the entry opens the Shapes panel (ADR 717).
   "media.paged.slide.command.insertShapes": "Insert/Shapes…",
 } as const;
 
@@ -198,6 +198,7 @@ const DECLARED = {
     NEXT_SLIDE,
     // The slide show's typed twins carry their palette ids.
     ...Object.keys(SHOW),
+    // Insert ▸ Shapes' typed twin, for scripts and the CLI (ADR 717).
     INSERT_SHAPE,
   ],
   /** The deck's document context (editor ADR 307): no frame is entered. */
@@ -206,8 +207,8 @@ const DECLARED = {
 } as const;
 
 /** Each panel's title, and what it is: the sorter, the notes, the
- *  comments and the shapes gallery are React panels; the other four are
- *  schema panels of property rows. */
+ *  comments and the shapes are React panels; the other four are schema
+ *  panels of property rows. */
 const PANEL_TITLES: Record<string, string> = {
   [SLIDES_PANEL]: "Slides",
   [NOTES_PANEL]: "Notes",
@@ -555,6 +556,8 @@ test.describe("plugin surface · paged.slide", () => {
     expect(byId[NOTES_PANEL].iconSvg).toBe(true);
     expect(byId[COMMENTS_PANEL].iconSvg).toBe(true);
     expect(byId[SHAPES_PANEL].iconSvg).toBe(true);
+    // The Shapes panel never joins the rail: Insert ▸ Shapes… opens it.
+    expect(byId[SHAPES_PANEL].rail).toBe(false);
     for (const id of SCHEMA_PANELS)
       expect(byId[id].defaultDock, id).toBe("right");
 
@@ -619,9 +622,9 @@ test.describe("plugin surface · paged.slide", () => {
     await expect(page.locator("[data-comments-panel]")).toBeVisible({
       timeout: 15_000,
     });
-    // The Shapes panel: outside a deck it says to go to a slide.
+    // The Shapes panel mounts (its gallery is checked in a deck, below).
     await openPanel(page, SHAPES_PANEL);
-    await expect(page.locator("[data-shapes-panel]")).toBeVisible({
+    await expect(page.locator("[data-shapes-panel]")).toBeAttached({
       timeout: 15_000,
     });
 
@@ -1162,7 +1165,7 @@ test.describe("plugin surface · paged.slide", () => {
       });
 
     const blank = await reach();
-    // Eleven palette commands, titled for a user, in their own drawer.
+    // The palette commands, titled for a user, in their own drawer.
     expect(
       Object.fromEntries(blank.commands.map((x) => [x.id, x.title])),
     ).toEqual({
@@ -1298,6 +1301,18 @@ test.describe("plugin surface · paged.slide", () => {
       page.locator(row("media.paged.slide.command.newSlide")),
     ).toBeVisible({ timeout: 10_000 });
     await page.keyboard.press("Escape");
+
+    // Insert shape… opens the Shapes panel, its presets by category.
+    await page.evaluate(() =>
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(
+        "media.paged.slide.command.insertShapes",
+      ),
+    );
+    await expect(
+      page.locator('[data-shapes-panel=""] [data-shapes-category]').first(),
+    ).toBeVisible({ timeout: 15_000 });
 
     // The TYPED commands stay out of Edit ▸ Run command…, which lists core
     // commands only; their palette twins above are how a user runs them.

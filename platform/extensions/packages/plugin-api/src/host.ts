@@ -1186,6 +1186,9 @@ export interface RunContent {
   baselineShift?: number | null;
   position?: string | null;
   tracking?: number | null;
+  /** The text variable this run is an instance of (its id), when it is one;
+   *  `text` is the variable's current value. */
+  textVariable?: string | null;
 }
 
 /**

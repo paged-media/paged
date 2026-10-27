@@ -402,6 +402,20 @@
   tests:
     rust: ["image-conformance/tests/it/family_band.rs"]
 
+- id: band.keep_alpha
+  rust_path: families::band::BAND_KEEP_ALPHA
+  state_row: image.kernel.family-t0
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "elementary pointwise algebra / no reference reading"
+    - "rgb of in0, alpha of in1: Lock Transparent Pixels for every paint tool (image.editor.brush-engine)"
+  tests:
+    rust: ["image-conformance/tests/it/family_band.rs"]
+
 # ── minmax family ────────────────────────────────────────────
 
 - id: band.take
@@ -2024,3 +2038,22 @@
     - "all-zero deltas are the IDENTITY for every range, so one parity test covers all nine"
   tests:
     rust: ["image-conformance/tests/it/family_adjust.rs"]
+
+- id: select.color_range
+  rust_path: families::select::SELECT_COLOR_RANGE
+  state_row: image.selection.select-and-mask
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 16 }
+  oracle: photoshop
+  status: parity-ref-oracle
+  provenance:
+    - "Select > Color Range; the model was FITTED to Photoshop 27.10's recorded answers (scripts/photoshop/probes/selection.jsx), no reference code read"
+    - "sampled colours: Chebyshev distance to the samples' Lab (D50) box with L weighted 0.85, coverage = quadratic ease g(3d/F), 0 from d = F/3; agrees within 3/255"
+    - "hue presets: HSV-hue triangle 60 degrees wide x HSV chroma x (2 - V); agrees within 1/255"
+    - "tonal presets: Rec. 601 luma on 0..255, falloff width = fuzziness x distance from the limit to the far end of the scale (midtones: the nearer end); agrees within 8-bit luma quantisation"
+    - "skin tones: the elliptical Cb/Cr skin cluster of Hsu, Abdel-Mottaleb and Jain (2002), softened by the fuzziness; Photoshop's own model is unpublished, recorded as a convention"
+    - "writes a SELECTION (m, m, m, 1), never reads the ABI mask (a selection-producing kernel has nothing to be scoped by)"
+    - "CPU twin `color_range_rgba8` ships under feature `cpu` for the no-GPU realm (ADR 465 as amended by ADR 470)"
+  tests:
+    rust: ["image-kernels/src/families/select.rs", "image-conformance/tests/it/oracle_photoshop_selection.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]

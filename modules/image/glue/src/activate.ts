@@ -53,6 +53,7 @@ import manifest from "../manifest.json";
 import { createImageSession } from "./session";
 import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
+import { contributeMasking } from "./masking-contrib";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { adjustmentKindLabel } from "./panels/sections/layer-parity";
@@ -68,6 +69,15 @@ import {
 import { makePatchGesture } from "./patch-tool";
 import { makeSelectionGesture } from "./selection-tool";
 import { makeBrushGesture, PAINT_CURSOR } from "./brush-tool";
+import { makeMagicEraserGesture } from "./magic-eraser-tool";
+import {
+  BRUSH_SETTINGS_PANEL_ID,
+  makeBrushSettingsPanel,
+} from "./panels/brush-settings-panel";
+import {
+  BRUSH_PRESETS_PANEL_ID,
+  makeBrushPresetsPanel,
+} from "./panels/brush-presets-panel";
 import { makeTypeGesture } from "./type-tool";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
@@ -148,6 +158,13 @@ const CMD = defineMessages("image.command", {
   linkLayers: "Link the active layer with the layer below",
   unlinkLayer: "Unlink the active layer",
   newLayerComp: "New layer comp",
+  brushSettings: "Brush settings",
+  brushPresets: "Brush presets",
+  defineBrushPreset: "Define brush preset…",
+  importBrushPresets: "Import brush presets…",
+  exportBrushPresetsAbr: "Export brush presets (.abr)…",
+  exportBrushPresetsJson: "Export brush presets (.json)…",
+  lockTransparentPixels: "Lock transparent pixels",
 });
 
 const TOOL = defineMessages("image.tool", {
@@ -177,6 +194,13 @@ const TOOL = defineMessages("image.tool", {
   sponge: "Sponge",
   blurBrush: "Blur (brush)",
   sharpenBrush: "Sharpen (brush)",
+  smudge: "Smudge",
+  mixerBrush: "Mixer brush",
+  historyBrush: "History brush",
+  artHistoryBrush: "Art history brush",
+  backgroundEraser: "Background eraser",
+  magicEraser: "Magic eraser",
+  colorReplacement: "Color replacement",
 });
 
 const IO = defineMessages("image.io", {
@@ -221,6 +245,13 @@ const ERASER_TOOL_ID = "media.paged.image.tool.eraser";
 const CLONE_TOOL_ID = "media.paged.image.tool.clone";
 const HEAL_TOOL_ID = "media.paged.image.tool.heal";
 const TYPE_TOOL_ID = "media.paged.image.tool.type";
+const SMUDGE_TOOL_ID = "media.paged.image.tool.smudge";
+const MIXER_TOOL_ID = "media.paged.image.tool.mixerBrush";
+const HISTORY_TOOL_ID = "media.paged.image.tool.historyBrush";
+const ART_HISTORY_TOOL_ID = "media.paged.image.tool.artHistoryBrush";
+const BG_ERASER_TOOL_ID = "media.paged.image.tool.backgroundEraser";
+const MAGIC_ERASER_TOOL_ID = "media.paged.image.tool.magicEraser";
+const COLOR_REPLACE_TOOL_ID = "media.paged.image.tool.colorReplacement";
 
 export function activate(host: BundleHost): BundleHandle {
   const session = createImageSession(host);
@@ -325,6 +356,15 @@ export function activate(host: BundleHost): BundleHandle {
         gradient: GRADIENT_TOOL_ID,
         eyedropper: EYEDROPPER_TOOL_ID,
         colorSampler: COLOR_SAMPLER_TOOL_ID,
+        paintTools: {
+          smudge: SMUDGE_TOOL_ID,
+          mixer: MIXER_TOOL_ID,
+          history: HISTORY_TOOL_ID,
+          artHistory: ART_HISTORY_TOOL_ID,
+          backgroundEraser: BG_ERASER_TOOL_ID,
+          magicEraser: MAGIC_ERASER_TOOL_ID,
+          colorReplace: COLOR_REPLACE_TOOL_ID,
+        },
       })
     : null;
   const optionsFor = (toolId: string) =>
@@ -633,6 +673,84 @@ export function activate(host: BundleHost): BundleHandle {
       gesture: () => makeBrushGesture(host, session, tool),
     });
   }
+
+  // ── THE BRUSH ENGINE's tools (WP5.7) ──
+  //
+  // They join existing flyouts WITHOUT shortcuts (the single-letter and
+  // shift registers are full — INV-REG-1): smudge beside blur/sharpen,
+  // the mixer brush and colour replacement beside the brush, the two
+  // history brushes in a slot of their own, the background and magic
+  // erasers beside the eraser. All but the magic eraser are strokes of
+  // the same gesture; Brush Settings shapes every one of them.
+  contributeTool(host, {
+    id: SMUDGE_TOOL_ID,
+    ...optionsFor(SMUDGE_TOOL_ID),
+    title: t(TOOL.smudge),
+    icon: "tool-clone",
+    group: CLONE_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "smudge"),
+  });
+  contributeTool(host, {
+    id: MIXER_TOOL_ID,
+    ...optionsFor(MIXER_TOOL_ID),
+    title: t(TOOL.mixerBrush),
+    icon: "tool-paintbrush",
+    group: BRUSH_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "mixer"),
+  });
+  contributeTool(host, {
+    id: COLOR_REPLACE_TOOL_ID,
+    ...optionsFor(COLOR_REPLACE_TOOL_ID),
+    title: t(TOOL.colorReplacement),
+    icon: "tool-paintbrush",
+    group: BRUSH_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "color-replace"),
+  });
+  contributeTool(host, {
+    id: HISTORY_TOOL_ID,
+    ...optionsFor(HISTORY_TOOL_ID),
+    title: t(TOOL.historyBrush),
+    icon: "tool-paintbrush",
+    group: HISTORY_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "history"),
+  });
+  contributeTool(host, {
+    id: ART_HISTORY_TOOL_ID,
+    ...optionsFor(ART_HISTORY_TOOL_ID),
+    title: t(TOOL.artHistoryBrush),
+    icon: "tool-paintbrush",
+    group: HISTORY_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "art-history"),
+  });
+  contributeTool(host, {
+    id: BG_ERASER_TOOL_ID,
+    ...optionsFor(BG_ERASER_TOOL_ID),
+    title: t(TOOL.backgroundEraser),
+    icon: "tool-erase",
+    group: ERASER_TOOL_ID,
+    section: "drawType",
+    cursor: PAINT_CURSOR,
+    gesture: () => makeBrushGesture(host, session, "background-eraser"),
+  });
+  contributeTool(host, {
+    id: MAGIC_ERASER_TOOL_ID,
+    ...optionsFor(MAGIC_ERASER_TOOL_ID),
+    title: t(TOOL.magicEraser),
+    icon: "tool-erase",
+    group: ERASER_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeMagicEraserGesture(host, session),
+  });
 
   // SPOT HEALING BRUSH — shares the healing brush's slot; no anchor, no
   // shortcut. The heal lands on release (the engine searches for the
@@ -1061,6 +1179,82 @@ export function activate(host: BundleHost): BundleHandle {
     },
   });
 
+  // BRUSH ENGINE (WP5.7): the two panels and their verbs.
+  contributePanel(host, {
+    id: BRUSH_SETTINGS_PANEL_ID,
+    title: t(CMD.brushSettings),
+    icon: "tool-paintbrush",
+    component: makeBrushSettingsPanel(session),
+    defaultDock: "right",
+  });
+  contributePanel(host, {
+    id: BRUSH_PRESETS_PANEL_ID,
+    title: t(CMD.brushPresets),
+    icon: "tool-paintbrush",
+    component: makeBrushPresetsPanel(session),
+    defaultDock: "right",
+  });
+  command({
+    id: "media.paged.image.command.openBrushSettings",
+    title: t(CMD.brushSettings),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(BRUSH_SETTINGS_PANEL_ID);
+    },
+  });
+  command({
+    id: "media.paged.image.command.openBrushPresets",
+    title: t(CMD.brushPresets),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(BRUSH_PRESETS_PANEL_ID);
+    },
+  });
+  command({
+    id: "media.paged.image.command.defineBrushPreset",
+    title: t(CMD.defineBrushPreset),
+    category: "Image",
+    handler: async () => {
+      host.shell.openPanel(BRUSH_PRESETS_PANEL_ID);
+      await session.defineBrushPreset();
+    },
+  });
+  command({
+    id: "media.paged.image.command.importBrushPresets",
+    title: t(CMD.importBrushPresets),
+    category: "Image",
+    handler: async () => {
+      host.shell.openPanel(BRUSH_PRESETS_PANEL_ID);
+      await session.importBrushPresets();
+    },
+  });
+  command({
+    id: "media.paged.image.command.exportBrushPresetsAbr",
+    title: t(CMD.exportBrushPresetsAbr),
+    category: "Image",
+    handler: async () => {
+      await session.exportBrushPresets("abr");
+    },
+  });
+  command({
+    id: "media.paged.image.command.exportBrushPresetsJson",
+    title: t(CMD.exportBrushPresetsJson),
+    category: "Image",
+    handler: async () => {
+      await session.exportBrushPresets("json");
+    },
+  });
+  command({
+    id: "media.paged.image.command.toggleLockTransparent",
+    title: t(CMD.lockTransparentPixels),
+    category: "Image",
+    handler: () => {
+      session.setBrushDynamics({
+        lockAlpha: !session.state().dynamics.lockAlpha,
+      });
+    },
+  });
+
   // RASTER ↔ VECTOR — the conversion pair the "Paths / shapes" catalog
   // row priced as missing. The vector side stays host-owned; these are
   // only the bridge.
@@ -1190,6 +1384,10 @@ export function activate(host: BundleHost): BundleHandle {
       session.featherSelection();
     },
   });
+  // Selection and masking (WP5.5, ADR 470): Color Range, Select and
+  // Mask, Quick Mask, Grow / Similar, Focus Area, channels and paths,
+  // the Magnetic Lasso and the Refine Edge brush.
+  const maskingSub = contributeMasking(host, session, command, PANEL_ID);
 
   // K-2 — the raster importer: opening/dropping a PSD/PNG/JPEG routes
   // its bytes HERE (decode into the session, raise the panel; it does
@@ -1275,6 +1473,13 @@ export function activate(host: BundleHost): BundleHandle {
     [GRADIENT_TOOL_ID]: "gradient",
     [EYEDROPPER_TOOL_ID]: "eyedropper",
     [COLOR_SAMPLER_TOOL_ID]: "eyedropper",
+    [SMUDGE_TOOL_ID]: { paint: "smudge" },
+    [MIXER_TOOL_ID]: { paint: "mixer" },
+    [HISTORY_TOOL_ID]: { paint: "history" },
+    [ART_HISTORY_TOOL_ID]: { paint: "artHistory" },
+    [BG_ERASER_TOOL_ID]: { paint: "backgroundEraser" },
+    [MAGIC_ERASER_TOOL_ID]: { paint: "magicEraser" },
+    [COLOR_REPLACE_TOOL_ID]: { paint: "colorReplace" },
   });
   const willSave = host.supports("document.onWillSave@1")
     ? host.document.onWillSave(async () => {
@@ -1333,6 +1538,13 @@ export function activate(host: BundleHost): BundleHandle {
         SHARPEN_TOOL_ID,
         SPOT_HEAL_TOOL_ID,
         PATCH_TOOL_ID,
+        SMUDGE_TOOL_ID,
+        MIXER_TOOL_ID,
+        COLOR_REPLACE_TOOL_ID,
+        HISTORY_TOOL_ID,
+        ART_HISTORY_TOOL_ID,
+        BG_ERASER_TOOL_ID,
+        MAGIC_ERASER_TOOL_ID,
       ],
       // The context's OWN panel. Deliberately NOT the host panels it
       // serves (Layers, Character) — naming those here would put host
@@ -1482,6 +1694,7 @@ export function activate(host: BundleHost): BundleHandle {
       willSave?.dispose();
       toolSettingsSub?.dispose();
       menuSub.dispose();
+      maskingSub.dispose();
       providerInvalidate = null;
       for (const h of providerHandles.splice(0)) h.dispose();
       session.dispose();

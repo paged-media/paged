@@ -147,13 +147,16 @@ export function tapEvents(host: BundleHost): {
  * still out. Here the engine answers synchronously and the whole command
  * finishes first, which hides exactly the bug a late recipe write causes.
  * Hand this to the COMMAND under test; the panel stays on its own host.
+ * `ms` holds each write that long (default: one task) — longer than a
+ * listener's own coalescing window when the test needs the write to land
+ * after that listener's read.
  */
-export function slowRecipeWrites(host: BundleHost): BundleHost {
+export function slowRecipeWrites(host: BundleHost, ms = 0): BundleHost {
   const parts = override(
     host.parts,
     "write",
     async (path: string, bytes: Uint8Array): Promise<void> => {
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, ms));
       await host.parts.write(path, bytes);
     },
   );
