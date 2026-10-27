@@ -345,6 +345,8 @@ export function createEditorHostOptions(
     // (use-edit-context-entry.tsx), so this host vouches for
     // supports("editContext.enterPoint@1").
     editContextEnterPoint: true,
+    // Editor ADR 285 — the History panel lists an active context's steps.
+    editContextHistorySteps: true,
   };
   return {
     shared,

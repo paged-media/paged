@@ -1918,6 +1918,44 @@ fn snap_settings_survive_a_load_and_switch_snapping_off() {
     );
 }
 
+/// v77 (editor ADR 287) — the view settings are session state: they
+/// survive a load, reach the model, and change no build.
+#[test]
+#[allow(non_snake_case)]
+fn view_settings_survive_a_load_and_rebuild_nothing__feat__the_renderer_view_modes() {
+    let mut core = WorkerCore::new();
+    let (reply, effect) = roundtrip_with_effect(
+        &mut core,
+        &serde_json::json!({
+            "seq": 1,
+            "protocol": protocol(),
+            "kind": "setViewSettings",
+            "payload": { "settings": { "mode": "outline" } }
+        }),
+    );
+    assert_eq!(reply["kind"], "viewSettingsApplied", "{reply}");
+    assert_eq!(reply["payload"]["settings"]["mode"], "outline");
+    assert!(matches!(effect, CacheEffect::None));
+    let loaded = roundtrip(&mut core, &load_msg(2));
+    assert_eq!(loaded["kind"], "documentLoaded");
+    let model = core.model.as_ref().expect("loaded");
+    assert_eq!(model.view_settings().mode, paged_canvas::ViewMode::Outline);
+    let generation = model.built().pages[0].layout_generation;
+    let reply = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 3,
+            "protocol": protocol(),
+            "kind": "setViewSettings",
+            "payload": { "settings": {} }
+        }),
+    );
+    assert_eq!(reply["payload"]["settings"]["mode"], "preview");
+    let model = core.model.as_ref().expect("loaded");
+    assert_eq!(model.view_settings().mode, paged_canvas::ViewMode::Preview);
+    assert_eq!(model.built().pages[0].layout_generation, generation);
+}
+
 #[test]
 fn request_snap_point_without_a_document_answers_the_point() {
     let mut core = WorkerCore::new();
@@ -2132,4 +2170,157 @@ fn the_session_policy_survives_a_load_and_unfit_field_values_are_refused() {
     );
     assert_eq!(refused["kind"], "templateFieldsRefused", "{refused}");
     assert_eq!(refused["payload"]["problems"][0]["name"], "nobody");
+}
+
+// ---------------------------------------------------------------------
+// v77 (engine ADR 1030) — named undo steps over the wire
+// ---------------------------------------------------------------------
+
+fn type_at(core: &mut WorkerCore, seq: u64, text: &str, label: Option<&str>) -> u64 {
+    let reply = roundtrip(
+        core,
+        &serde_json::json!({
+            "seq": seq, "protocol": protocol(), "kind": "mutate",
+            "payload": {
+                "op": "insertText",
+                "args": { "storyId": "story1", "offset": 0, "text": text }
+            }
+        }),
+    );
+    assert_eq!(reply["kind"], "mutationApplied", "{reply}");
+    let applied = reply["payload"]["appliedSeq"].as_u64().unwrap();
+    if let Some(label) = label {
+        let named = roundtrip(
+            core,
+            &serde_json::json!({
+                "seq": seq + 1000, "protocol": protocol(), "kind": "labelStep",
+                "payload": { "appliedSeq": applied, "label": label }
+            }),
+        );
+        assert_eq!(named["kind"], "stepLabeled", "{named}");
+        assert_eq!(named["payload"]["labeled"], true);
+    }
+    applied
+}
+
+fn undo_log(core: &mut WorkerCore, limit: Option<u32>) -> serde_json::Value {
+    let payload = match limit {
+        Some(l) => serde_json::json!({ "limit": l }),
+        None => serde_json::json!({}),
+    };
+    let reply = roundtrip(
+        core,
+        &serde_json::json!({
+            "seq": 900, "protocol": protocol(), "kind": "requestUndoLog", "payload": payload
+        }),
+    );
+    assert_eq!(reply["kind"], "undoLog", "{reply}");
+    reply["payload"].clone()
+}
+
+#[test]
+#[allow(non_snake_case)] // `__feat__` links the cockpit feature
+fn the_undo_log_reads_named_steps__feat__plugin_platform_undo_log_labels() {
+    let mut core = loaded_core();
+    type_at(&mut core, 1, "a", None);
+    type_at(&mut core, 2, "b", Some("Add a word"));
+    let log = undo_log(&mut core, None);
+    assert_eq!(log["undo"][0]["label"], "Typing");
+    assert_eq!(log["undo"][0]["key"], "insertText");
+    assert_eq!(log["undo"][1]["label"], "Add a word");
+    assert!(log["undo"][1]["key"].is_null());
+    assert_eq!(log["undoLen"], 2);
+    assert_eq!(log["depth"], 10_000);
+    let cut = undo_log(&mut core, Some(1));
+    assert_eq!(cut["undo"].as_array().unwrap().len(), 1);
+    assert_eq!(cut["undo"][0]["label"], "Add a word");
+    // A step that is no longer the top keeps its name.
+    let first = log["undo"][0]["appliedSeq"].as_u64().unwrap();
+    let late = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 50, "protocol": protocol(), "kind": "labelStep",
+            "payload": { "appliedSeq": first, "label": "Too late" }
+        }),
+    );
+    assert_eq!(late["payload"]["labeled"], false);
+    assert_eq!(undo_log(&mut core, None)["undo"][0]["label"], "Typing");
+}
+
+#[test]
+#[allow(non_snake_case)] // `__feat__` links the cockpit feature
+fn undo_to_and_redo_to_step_in_one_round_trip__feat__plugin_platform_undo_log_labels() {
+    let mut core = loaded_core();
+    let _s1 = type_at(&mut core, 1, "a", None);
+    let s2 = type_at(&mut core, 2, "b", None);
+    let s3 = type_at(&mut core, 3, "c", None);
+    let reply = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 10, "protocol": protocol(), "kind": "undoTo",
+            "payload": { "appliedSeq": s2 }
+        }),
+    );
+    assert_eq!(reply["kind"], "undoApplied", "{reply}");
+    assert_eq!(reply["payload"]["steps"], 2);
+    assert_eq!(reply["payload"]["undoneSeq"], s2);
+    let log = undo_log(&mut core, None);
+    assert_eq!(log["undoLen"], 1);
+    assert_eq!(log["redo"][0]["appliedSeq"], s2, "next redo first");
+    assert_eq!(log["redo"][1]["appliedSeq"], s3);
+
+    let reply = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 11, "protocol": protocol(), "kind": "redoTo",
+            "payload": { "appliedSeq": s3 }
+        }),
+    );
+    assert_eq!(reply["kind"], "redoApplied", "{reply}");
+    assert_eq!(reply["payload"]["steps"], 2);
+    assert_eq!(undo_log(&mut core, None)["undoLen"], 3);
+
+    // A seq off the log is refused.
+    let reply = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 12, "protocol": protocol(), "kind": "redoTo",
+            "payload": { "appliedSeq": s3 }
+        }),
+    );
+    assert_eq!(reply["kind"], "mutationFailed");
+    // A plain undo carries no `steps`.
+    let reply = roundtrip(
+        &mut core,
+        &serde_json::json!({ "seq": 13, "protocol": protocol(), "kind": "undo" }),
+    );
+    assert!(reply["payload"].get("steps").is_none(), "{reply}");
+}
+
+#[test]
+#[allow(non_snake_case)] // `__feat__` links the cockpit feature
+fn the_history_depth_survives_a_load__feat__plugin_platform_undo_log_labels() {
+    let mut core = loaded_core();
+    let reply = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 1, "protocol": protocol(), "kind": "setHistoryDepth",
+            "payload": { "depth": 2 }
+        }),
+    );
+    assert_eq!(reply["kind"], "historyDepthApplied");
+    assert_eq!(reply["payload"]["depth"], 2);
+    for (i, t) in ["a", "b", "c"].iter().enumerate() {
+        type_at(&mut core, 2 + i as u64, t, None);
+    }
+    assert_eq!(undo_log(&mut core, None)["undoLen"], 2);
+    let reload = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 20, "protocol": protocol(), "kind": "loadDocument",
+            "payload": { "bytes": small_idml() }
+        }),
+    );
+    assert_eq!(reload["kind"], "documentLoaded", "{reload}");
+    assert_eq!(undo_log(&mut core, None)["depth"], 2);
 }

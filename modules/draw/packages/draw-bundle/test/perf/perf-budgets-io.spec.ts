@@ -37,6 +37,7 @@ import type { ElementId } from "@paged-media/plugin-api";
 
 import { importSvg, shapesFromSvgBytes } from "../../src";
 import { commitSvgImport } from "../../src/io/svg";
+import { tsLane } from "../headless/host";
 import { BUDGET_TIMEOUT_MS, countingHost, report } from "./counting-host";
 import {
   addPlainShapes,
@@ -203,7 +204,9 @@ setDefaultTimeout(BUDGET_TIMEOUT_MS);
 describe("perf budgets — interchange", () => {
   // COVERS: the SVG import lane in `io/svg.ts` — `commitSvgImport`, what
   // File ▸ Open runs, and `importSvg`, the variant that also answers the
-  // ids it inserted.
+  // ids it inserted. The TypeScript lane, the fallback for an engine
+  // before protocol 77 (`tsLane`): the engine's lane is one read and the
+  // same one batch, pinned by svg-engine.spec.ts.
   //
   // History of these budgets (a budget only goes DOWN):
   //
@@ -245,7 +248,7 @@ describe("perf budgets — interchange", () => {
       ).toHaveLength(10);
 
       const mark = await undoMark(w);
-      const { host, work } = countingHost(w.h.host);
+      const { host, work } = countingHost(tsLane(w.h.host));
       const done = await commitSvgImport(host, file);
       const counted = work.snapshot();
 
@@ -304,7 +307,7 @@ describe("perf budgets — interchange", () => {
     it("asking which elements were inserted costs nothing on top", async () => {
       const before = await leafIds(w.h);
       const mark = await undoMark(w);
-      const { host, work } = countingHost(w.h.host);
+      const { host, work } = countingHost(tsLane(w.h.host));
       const inserted = await importSvg(
         host,
         svgFile("perf.svg", syntheticSvg(SHAPES)),
@@ -352,7 +355,7 @@ describe("perf budgets — interchange", () => {
       const before = await leafIds(w.h);
       const swatchesBefore = (await swatchRows(w)).length;
       const mark = await undoMark(w);
-      const { host, work } = countingHost(w.h.host);
+      const { host, work } = countingHost(tsLane(w.h.host));
       const done = await commitSvgImport(
         host,
         svgFile("big.svg", denseSvg(BIG)),

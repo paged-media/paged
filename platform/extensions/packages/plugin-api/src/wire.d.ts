@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
 // AGPL-3.0-only OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
-// Synced from @paged-media/canvas-wasm@0.76.0-dev
+// Synced from @paged-media/canvas-wasm@0.77.0-dev
 /* tslint:disable */
 /* eslint-disable */
 
@@ -901,7 +901,7 @@ export type CaretDirection = "up" | "down";
 /**
  * Discriminated payload of a `WorkerToMain` message.
  */
-export type WorkerToMainKind = { kind: "ready"; payload: { protocol: ProtocolVersion } } | { kind: "documentLoaded"; payload: DocumentHandle } | { kind: "loadFailed"; payload: { error: LoadError } } | { kind: "mutationFailed"; payload: { error: WorkerError } } | { kind: "displayListReady"; payload: { pageId: PageId; lod: LodTier; commands: number; layoutGeneration: number; numberingGeneration: number } } | { kind: "hitResult"; payload: HitResult } | { kind: "pagesDirty"; payload: { pageIds: PageId[] } } | { kind: "storyDirty"; payload: { storyId: string } } | { kind: "warning"; payload: { kind: string; details: string } } | { kind: "stats"; payload: DocumentStats } | { kind: "snapshotReady"; payload: SnapshotPng } | { kind: "snapshotFailed"; payload: { error: SnapshotError } } | { kind: "mutationApplied"; payload: { clientSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; createdId?: ElementId | null; minted?: MintedElement[]; createdPages?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; reflow?: FrameReflowInfo | null } } | { kind: "selectionGeometry"; payload: { rects: SelectionRect[] } } | { kind: "caretGeometry"; payload: { caret: CaretGeometry | null } } | { kind: "caretNavResult"; payload: { offset?: number | null } } | { kind: "lineBoundsResult"; payload: { bounds?: LineBounds | null } } | { kind: "wordBoundsResult"; payload: { bounds?: WordBounds | null } } | { kind: "paragraphBoundsResult"; payload: { bounds?: ParagraphBounds | null } } | { kind: "storyContentResult"; payload: { content?: StoryContent | null } } | { kind: "elementsExported"; payload: { snippet?: string | null; text?: string; count?: number; refused?: string | null } } | { kind: "undoApplied"; payload: { undoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "redoApplied"; payload: { redoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "fontRegistered"; payload: { family: string; pageIds?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "fontRegistryCleared"; payload: { pageIds?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "colorProfileRegistered"; payload: { name: string } } | { kind: "elementSelectionApplied"; payload: { ids: ElementId[] } } | { kind: "marqueeHits"; payload: { ids: ElementId[] } } | { kind: "elementGeometry"; payload: { items: ElementGeometryItem[] } } | { kind: "groupLeaves"; payload: { ids: ElementId[] } } | { kind: "pathAnchors"; payload: { result: PathAnchorsResult | null } } | { kind: "textOutlines"; payload: { result: TextOutlinesResult | null } } | { kind: "snapPoint"; payload: { result: SnapPointResult } } | { kind: "snapSettingsApplied"; payload: { settings: SnapSettings } } | { kind: "sessionPolicyApplied"; payload: { policy: SessionPolicy } } | { kind: "templateFieldsRefused"; payload: { problems: TemplateFieldProblem[] } } | { kind: "foundText"; payload: { hits: FindHit[]; error?: string } } | { kind: "derivedTemplateFields"; payload: { derivation: Derivation } } | { kind: "planarRegions"; payload: { result: PlanarRegionsResult } } | { kind: "nearestPathPoint"; payload: { result: NearestPathPointResult | null } } | { kind: "layers"; payload: { items: LayerSummary[] } } | { kind: "collectionReply"; payload: { name: CollectionName; items: any } } | { kind: "frameChainResult"; payload: { links: FrameChainLink[] } } | { kind: "documentPlaceholders"; payload: { items: PlaceholderItem[] } } | { kind: "queryResult"; payload: { addresses: string[]; error: GrammarError | null } } | { kind: "propertyValue"; payload: { address: string; path: string; value: Value | null; error: string | null; code?: string | null; mixed?: boolean } } | { kind: "placedAssetBytes"; payload: { elementId: string; found: boolean; uri: string; width: number; height: number; encoded: number[] } } | { kind: "fontFaceBytes"; payload: { found: boolean; family: string; style: string | null; postscriptName: string | null; format: string; bytes: number[] } } | { kind: "measureTextResult"; payload: { advance: number; ascender: number; descender: number } } | { kind: "sceneLayerApplied"; payload: { elementId: string; applied: boolean; pageIds?: PageId[]; fontFallbacks?: string[] } } | { kind: "resourceClaimApplied"; payload: { imageId: string; applied: boolean; needed?: ResourceTilesNeededWire[] } } | { kind: "resourceTilesNeeded"; payload: ResourceTilesNeededWire } | { kind: "frameReflow"; payload: { frameId: string; contentBox: [number, number, number, number] } } | { kind: "documentMetaReply"; payload: { meta: DocumentMeta } } | { kind: "colorPreviewReply"; payload: { result: ColorPreview | null } } | { kind: "colorComputeReply"; payload: { rgbHex: string; cmyk: [number, number, number, number] | null; outOfGamut: boolean } } | { kind: "gradientDetailReply"; payload: { result: GradientDetail | null } } | { kind: "swatchLibraryExported"; payload: { aseBytes: number[] } } | { kind: "exportPdfBegun"; payload: { session: number; pageCount: number } } | { kind: "exportPdfProgress"; payload: { session: number; done: number; total: number } } | { kind: "pdfExported"; payload: { pdfBytes: number[]; diagnostics: string[]; findings?: PreflightFinding[] } } | { kind: "exportPdfCancelled"; payload: { session: number } } | { kind: "exportPdfFailed"; payload: { error: string } } | { kind: "idmlExported"; payload: { idmlBytes: number[]; lost?: string[]; links?: ExportedLinkWire[] } } | { kind: "exportIdmlFailed"; payload: { error: string } } | { kind: "pagedPartWritten"; payload: {} } | { kind: "pagedPartRead"; payload: { found: boolean; bytes: number[] } } | { kind: "pagedPartList"; payload: { paths: string[] } } | { kind: "pagedPartDeleted"; payload: { existed: boolean } } | { kind: "pagedExported"; payload: { bytes: number[] } } | { kind: "pagedPartFailed"; payload: { error: string } } | { kind: "elementProperties"; payload: { result: ElementProperties | null } } | { kind: "styleProperties"; payload: { result: StyleProperties | null } } | { kind: "sceneTree"; payload: { roots: SceneTreeNode[] } } | { kind: "scriptResult"; payload: { output: string[]; error: string | null; budgetKind?: ScriptBudgetKind; stats?: DocumentStats; writes?: number; pageIds?: PageId[]; appliedSeq?: number } } | { kind: "requestHostObjects"; payload: { session: number; calls: HostObjectCall[] } } | { kind: "gestureBegun"; payload: { handle: GestureHandle } } | { kind: "gestureUpdated"; payload: { handle: GestureHandle; pageIds: PageId[]; snapLines?: SnapLine[] } } | { kind: "gestureCommitted"; payload: { handle: GestureHandle; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; reflow?: FrameReflowInfo } } | { kind: "gestureCancelled"; payload: { handle: GestureHandle; pageIds: PageId[] } } | { kind: "gestureFailed"; payload: { error: GestureFailure } } | { kind: "attachReady"; payload: { gpuActive: boolean; sceneCacheBudget: number } } | { kind: "gestureSnapLines"; payload: { snapLines: SnapLine[] } } | { kind: "resolutionDone"; payload: ResolutionResult };
+export type WorkerToMainKind = { kind: "ready"; payload: { protocol: ProtocolVersion } } | { kind: "documentLoaded"; payload: DocumentHandle } | { kind: "loadFailed"; payload: { error: LoadError } } | { kind: "mutationFailed"; payload: { error: WorkerError } } | { kind: "displayListReady"; payload: { pageId: PageId; lod: LodTier; commands: number; layoutGeneration: number; numberingGeneration: number } } | { kind: "hitResult"; payload: HitResult } | { kind: "pagesDirty"; payload: { pageIds: PageId[] } } | { kind: "storyDirty"; payload: { storyId: string } } | { kind: "warning"; payload: { kind: string; details: string } } | { kind: "stats"; payload: DocumentStats } | { kind: "snapshotReady"; payload: SnapshotPng } | { kind: "svgImportPlanned"; payload: SvgImportPlan } | { kind: "svgExported"; payload: { svg: string; report: SvgReport } } | { kind: "exportSvgFailed"; payload: { error: string } } | { kind: "snapshotFailed"; payload: { error: SnapshotError } } | { kind: "mutationApplied"; payload: { clientSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; createdId?: ElementId | null; minted?: MintedElement[]; createdPages?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null; reflow?: FrameReflowInfo | null } } | { kind: "selectionGeometry"; payload: { rects: SelectionRect[] } } | { kind: "caretGeometry"; payload: { caret: CaretGeometry | null } } | { kind: "caretNavResult"; payload: { offset?: number | null } } | { kind: "lineBoundsResult"; payload: { bounds?: LineBounds | null } } | { kind: "wordBoundsResult"; payload: { bounds?: WordBounds | null } } | { kind: "paragraphBoundsResult"; payload: { bounds?: ParagraphBounds | null } } | { kind: "storyContentResult"; payload: { content?: StoryContent | null } } | { kind: "elementsExported"; payload: { snippet?: string | null; text?: string; count?: number; refused?: string | null } } | { kind: "undoApplied"; payload: { undoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; steps?: number; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "undoLog"; payload: { undo: UndoLogEntryWire[]; redo: UndoLogEntryWire[]; undoLen: number; redoLen: number; depth: number; evicted: number } } | { kind: "historyDepthApplied"; payload: { depth: number } } | { kind: "stepLabeled"; payload: { appliedSeq: number; labeled: boolean } } | { kind: "redoApplied"; payload: { redoneSeq: number; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; steps?: number; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "fontRegistered"; payload: { family: string; pageIds?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "fontRegistryCleared"; payload: { pageIds?: PageId[]; pageStructureChanged?: boolean; pageSizesPt?: [number, number][] | null } } | { kind: "colorProfileRegistered"; payload: { name: string } } | { kind: "elementSelectionApplied"; payload: { ids: ElementId[] } } | { kind: "marqueeHits"; payload: { ids: ElementId[] } } | { kind: "elementGeometry"; payload: { items: ElementGeometryItem[] } } | { kind: "groupLeaves"; payload: { ids: ElementId[] } } | { kind: "pathAnchors"; payload: { result: PathAnchorsResult | null } } | { kind: "textOutlines"; payload: { result: TextOutlinesResult | null } } | { kind: "snapPoint"; payload: { result: SnapPointResult } } | { kind: "snapSettingsApplied"; payload: { settings: SnapSettings } } | { kind: "viewSettingsApplied"; payload: { settings: ViewSettings } } | { kind: "sessionPolicyApplied"; payload: { policy: SessionPolicy } } | { kind: "templateFieldsRefused"; payload: { problems: TemplateFieldProblem[] } } | { kind: "foundText"; payload: { hits: FindHit[]; error?: string } } | { kind: "derivedTemplateFields"; payload: { derivation: Derivation } } | { kind: "planarRegions"; payload: { result: PlanarRegionsResult } } | { kind: "nearestPathPoint"; payload: { result: NearestPathPointResult | null } } | { kind: "layers"; payload: { items: LayerSummary[] } } | { kind: "collectionReply"; payload: { name: CollectionName; items: any } } | { kind: "frameChainResult"; payload: { links: FrameChainLink[] } } | { kind: "documentPlaceholders"; payload: { items: PlaceholderItem[] } } | { kind: "queryResult"; payload: { addresses: string[]; error: GrammarError | null } } | { kind: "propertyValue"; payload: { address: string; path: string; value: Value | null; error: string | null; code?: string | null; mixed?: boolean } } | { kind: "placedAssetBytes"; payload: { elementId: string; found: boolean; uri: string; width: number; height: number; encoded: number[] } } | { kind: "fontFaceBytes"; payload: { found: boolean; family: string; style: string | null; postscriptName: string | null; format: string; bytes: number[] } } | { kind: "measureTextResult"; payload: { advance: number; ascender: number; descender: number } } | { kind: "sceneLayerApplied"; payload: { elementId: string; applied: boolean; pageIds?: PageId[]; fontFallbacks?: string[] } } | { kind: "resourceClaimApplied"; payload: { imageId: string; applied: boolean; needed?: ResourceTilesNeededWire[] } } | { kind: "resourceTilesNeeded"; payload: ResourceTilesNeededWire } | { kind: "frameReflow"; payload: { frameId: string; contentBox: [number, number, number, number] } } | { kind: "documentMetaReply"; payload: { meta: DocumentMeta } } | { kind: "colorPreviewReply"; payload: { result: ColorPreview | null } } | { kind: "colorComputeReply"; payload: { rgbHex: string; cmyk: [number, number, number, number] | null; outOfGamut: boolean } } | { kind: "gradientDetailReply"; payload: { result: GradientDetail | null } } | { kind: "swatchLibraryExported"; payload: { aseBytes: number[] } } | { kind: "exportPdfBegun"; payload: { session: number; pageCount: number } } | { kind: "exportPdfProgress"; payload: { session: number; done: number; total: number } } | { kind: "pdfExported"; payload: { pdfBytes: number[]; diagnostics: string[]; findings?: PreflightFinding[] } } | { kind: "exportPdfCancelled"; payload: { session: number } } | { kind: "exportPdfFailed"; payload: { error: string } } | { kind: "idmlExported"; payload: { idmlBytes: number[]; lost?: string[]; links?: ExportedLinkWire[] } } | { kind: "exportIdmlFailed"; payload: { error: string } } | { kind: "pagedPartWritten"; payload: {} } | { kind: "pagedPartRead"; payload: { found: boolean; bytes: number[] } } | { kind: "pagedPartList"; payload: { paths: string[] } } | { kind: "pagedPartDeleted"; payload: { existed: boolean } } | { kind: "pagedExported"; payload: { bytes: number[] } } | { kind: "pagedPartFailed"; payload: { error: string } } | { kind: "elementProperties"; payload: { result: ElementProperties | null } } | { kind: "styleProperties"; payload: { result: StyleProperties | null } } | { kind: "sceneTree"; payload: { roots: SceneTreeNode[] } } | { kind: "scriptResult"; payload: { output: string[]; error: string | null; budgetKind?: ScriptBudgetKind; stats?: DocumentStats; writes?: number; pageIds?: PageId[]; appliedSeq?: number } } | { kind: "requestHostObjects"; payload: { session: number; calls: HostObjectCall[] } } | { kind: "gestureBegun"; payload: { handle: GestureHandle } } | { kind: "gestureUpdated"; payload: { handle: GestureHandle; pageIds: PageId[]; snapLines?: SnapLine[] } } | { kind: "gestureCommitted"; payload: { handle: GestureHandle; appliedSeq: number; pageIds: PageId[]; cacheStats: LayoutCacheStats; reflow?: FrameReflowInfo } } | { kind: "gestureCancelled"; payload: { handle: GestureHandle; pageIds: PageId[] } } | { kind: "gestureFailed"; payload: { error: GestureFailure } } | { kind: "attachReady"; payload: { gpuActive: boolean; sceneCacheBudget: number } } | { kind: "gestureSnapLines"; payload: { snapLines: SnapLine[] } } | { kind: "resolutionDone"; payload: ResolutionResult };
 
 /**
  * Editor-ops — wire mirror of `paged_model::GradientFeatherParams`.
@@ -1176,10 +1176,69 @@ export interface HitResult {
 export type SelectionMode = "replace" | "add" | "toggle";
 
 /**
+ * How a construct fared.
+ */
+export type SvgNoteSeverity = "approximated" | "dropped";
+
+/**
+ * How an SVG lands on the page. Every field is optional.
+ */
+export interface SvgImportOptions {
+    /**
+     * The page-local point (pt) the SVG\'s top-left corner lands on.
+     * Absent: the drawing is centred on the page.
+     */
+    origin?: [number, number] | null;
+    /**
+     * Points per SVG user unit (a CSS pixel). Absent: 1, the convention
+     * Illustrator and paged.draw read SVG by.
+     */
+    scale?: number | null;
+    /**
+     * What text becomes. Absent: [`SvgImportText::Auto`].
+     */
+    text?: SvgImportText | null;
+    /**
+     * Wrap the import in one group when it makes more than one item.
+     * Absent: true.
+     */
+    group?: boolean | null;
+}
+
+/**
  * How much a finding matters: an error makes the template unfit to hand
  * to a filler; a warning is worth a look.
  */
 export type FindingSeverity = "error" | "warning";
+
+/**
+ * How the export is written. Every field is optional.
+ */
+export interface SvgExportOptions {
+    /**
+     * Absent: [`SvgTextMode::Outlines`].
+     */
+    text?: SvgTextMode | null;
+    /**
+     * No line breaks and no indentation. Absent: false.
+     */
+    minify?: boolean | null;
+    /**
+     * Decimal places of coordinates (0–6). Absent: 3 (2 when minified).
+     */
+    precision?: number | null;
+    /**
+     * The page region written, `[x, y, width, height]` page-local pt.
+     * Absent: the whole page (or, for an export of some items, the box
+     * around what they draw).
+     */
+    region?: [number, number, number, number] | null;
+}
+
+/**
+ * Illustrator\'s four screen modes.
+ */
+export type ViewMode = "preview" | "outline" | "overprintPreview" | "pixelPreview";
 
 /**
  * Inspector P1 — one node in the scene tree. Children are nested
@@ -1379,11 +1438,24 @@ export interface PixelTile {
 /**
  * One active snap line surfaced to the overlay. `position` is in
  * page-local pt on `page_id`.
+ *
+ * v77 — the optional fields carry smart-guide extents and measurement
+ * labels (editor ADR 287). An alignment line with `from` / `to` is drawn
+ * between them (the point it came through and the snapped point) rather
+ * than across the page, and `distance` (pt) is the label the host
+ * formats in its units. All are absent from older engines and are
+ * omitted from the JSON when unset, so a v76 reader sees the shape it
+ * knows.
  */
 export interface SnapLine {
     axis: SnapAxis;
     position: number;
     pageId: PageId;
+    kind?: SnapLineKind;
+    from?: [number, number];
+    to?: [number, number];
+    angle?: number;
+    distance?: number;
 }
 
 /**
@@ -1511,6 +1583,26 @@ export interface ItemPolicy {
      * Permissions taken away, whatever granted them.
      */
     deny?: Permission[];
+}
+
+/**
+ * One kind of loss, with how often it happened.
+ */
+export interface SvgNote {
+    /**
+     * A stable code (`\"filter\"`, `\"gradient.focal\"`, `\"text.outlined\"`,
+     * …) a caller can switch on; the codes are listed in engine ADR 1031.
+     */
+    code: string;
+    severity: SvgNoteSeverity;
+    /**
+     * What happened, in a sentence.
+     */
+    message: string;
+    /**
+     * How many times.
+     */
+    count: number;
 }
 
 /**
@@ -2677,6 +2769,27 @@ export interface DocumentStats {
 }
 
 /**
+ * The answer of [`plan_import`].
+ */
+export interface SvgImportPlan {
+    /**
+     * The one batch to apply (one undo step), or `None` when the file
+     * draws nothing or could not be read.
+     */
+    mutation: Mutation | null;
+    report: SvgReport;
+    /**
+     * The drawing\'s size on the page (pt).
+     */
+    width: number;
+    height: number;
+    /**
+     * Why the file could not be read, when it could not.
+     */
+    error: string | null;
+}
+
+/**
  * The canonical mutation primitive. A closed set, extended only with
  * deliberation. Collection mutations (swatches, styles) operate on the
  * document\'s `BTreeMap` palettes/stylesheets rather than the scene
@@ -2691,7 +2804,7 @@ export type Operation = { kind: "SetProperty"; node: NodeId; path: PropertyPath;
  * variants so e.g. `cmyk_icc_profile` becomes `cmykIccProfile` on
  * the wire — the TS protocol mirror locks the camelCase contract.
  */
-export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[]; scope?: FontScope } } | { kind: "clearFontRegistry"; payload: ClearFontRegistryPayload | null } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "amendMutation"; payload: { appliedSeq: number; mutation: Mutation } } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null; hideItems?: ElementId[]; markers?: boolean; only?: ElementId[]; clip?: SnapshotClip; format?: SnapshotFormat; background?: SnapshotBackground; trim?: boolean } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number] } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestTextOutlines"; payload: { id: ElementId } } | { kind: "requestSnapPoint"; payload: { query: SnapPointQuery } } | { kind: "setSnapSettings"; payload: { settings: SnapSettings } } | { kind: "setSessionPolicy"; payload: { policy: SessionPolicy } } | { kind: "setTemplateFields"; payload: { values: TemplateFieldValue[] } } | { kind: "requestDerivedTemplateFields"; payload: { options?: DeriveOptions } } | { kind: "requestFindText"; payload: { spec: FindSpec } } | { kind: "openAsTemplate"; payload: { options?: DeriveOptions; only?: string[] | null } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "exportElements"; payload: { elementIds: ElementId[] } } | { kind: "requestStyleProperties"; payload: { collection: StyleCollection; styleId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer; caller?: string } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestQuery"; payload: { selector: string } } | { kind: "requestGet"; payload: { address: string; path: string } } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string; budget?: ScriptBudgetWire | null; hostObjects?: boolean } } | { kind: "hostObjectsResult"; payload: { session: number; answers: HostObjectAnswer[]; committed?: number[] } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: { linkBase?: string | null } } | { kind: "writePagedPart"; payload: { path: string; bytes: number[]; caller?: string } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "deletePagedPart"; payload: { path: string; caller?: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers } } | { kind: "commitGesture"; payload: { handle: GestureHandle } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } };
+export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[]; scope?: FontScope } } | { kind: "clearFontRegistry"; payload: ClearFontRegistryPayload | null } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "amendMutation"; payload: { appliedSeq: number; mutation: Mutation; label?: string } } | { kind: "labelStep"; payload: { appliedSeq: number; label: string } } | { kind: "requestUndoLog"; payload: { limit?: number } } | { kind: "undoTo"; payload: { appliedSeq: number } } | { kind: "redoTo"; payload: { appliedSeq: number } } | { kind: "restoreTo"; payload: { appliedSeq: number; label?: string } } | { kind: "setHistoryDepth"; payload: { depth: number } } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null; hideItems?: ElementId[]; markers?: boolean; only?: ElementId[]; clip?: SnapshotClip; format?: SnapshotFormat; background?: SnapshotBackground; trim?: boolean } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number] } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestTextOutlines"; payload: { id: ElementId } } | { kind: "requestSnapPoint"; payload: { query: SnapPointQuery } } | { kind: "setSnapSettings"; payload: { settings: SnapSettings } } | { kind: "setViewSettings"; payload: { settings: ViewSettings } } | { kind: "setSessionPolicy"; payload: { policy: SessionPolicy } } | { kind: "setTemplateFields"; payload: { values: TemplateFieldValue[] } } | { kind: "requestDerivedTemplateFields"; payload: { options?: DeriveOptions } } | { kind: "requestFindText"; payload: { spec: FindSpec } } | { kind: "openAsTemplate"; payload: { options?: DeriveOptions; only?: string[] | null } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "exportElements"; payload: { elementIds: ElementId[] } } | { kind: "requestSvgImport"; payload: { pageId: PageId; bytes: number[]; options?: SvgImportOptions } } | { kind: "exportSvg"; payload: { pageId: PageId; elementIds?: ElementId[]; options?: SvgExportOptions } } | { kind: "requestStyleProperties"; payload: { collection: StyleCollection; styleId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer; caller?: string } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestQuery"; payload: { selector: string } } | { kind: "requestGet"; payload: { address: string; path: string } } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string; budget?: ScriptBudgetWire | null; hostObjects?: boolean } } | { kind: "hostObjectsResult"; payload: { session: number; answers: HostObjectAnswer[]; committed?: number[] } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: { linkBase?: string | null } } | { kind: "writePagedPart"; payload: { path: string; bytes: number[]; caller?: string } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "deletePagedPart"; payload: { path: string; caller?: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers } } | { kind: "commitGesture"; payload: { handle: GestureHandle; label?: string } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } };
 
 /**
  * The document\'s policy.
@@ -2765,6 +2878,48 @@ export interface SnapSettings {
      * default, as in InDesign.
      */
     grid?: boolean;
+    /**
+     * v77 (editor ADR 287) — Snap to Pixel: an edge or point that snapped
+     * to nothing else lands on a whole point, which is a whole pixel at
+     * 72 ppi (page-local). Off by default.
+     */
+    pixel?: boolean;
+    /**
+     * v77 — the host\'s grid (\"Gridline every\", pt). When set, the snap
+     * grid is `grid_every / grid_subdivisions` on both axes instead of
+     * the document\'s gridline divisions, so what snaps is what the host
+     * draws.
+     */
+    gridEvery?: number;
+    /**
+     * v77 — subdivisions of `grid_every` (≥ 1; absent ⇒ 1).
+     */
+    gridSubdivisions?: number;
+    /**
+     * v77 — angle guides: from a point the caller supplied
+     * (`extraPoints`, the anchors of a path being drawn) along 45° and
+     * 135° — 0° and 90° are the alignment lines — and `custom_angle`.
+     */
+    angleGuides?: boolean;
+    /**
+     * v77 — one more construction-guide angle, degrees (Illustrator\'s
+     * \"Custom Angle\"); its perpendicular is offered too.
+     */
+    customAngle?: number;
+    /**
+     * v77 — equal-spacing hints and snapping while moving: the gaps to
+     * the neighbours on either side, or one repeating a neighbour pair\'s.
+     */
+    spacing?: boolean;
+    /**
+     * v77 — a rotate gesture snaps to 0/45/90° and to the angles of the
+     * items on the page (Shift\'s 15° steps apply regardless).
+     */
+    rotate?: boolean;
+    /**
+     * v77 — where two outlines cross is a point target.
+     */
+    intersections?: boolean;
 }
 
 /**
@@ -2773,6 +2928,21 @@ export interface SnapSettings {
  * from.
  */
 export type AddressKind = "doc" | "textFrame" | "rectangle" | "oval" | "polygon" | "graphicLine" | "group" | "frame" | "page" | "spread" | "layer" | "master" | "story" | "storyRange" | "field" | "table" | "cell" | "style" | "swatch" | "gradient" | "colorGroup" | "numberingList" | "guide" | "condition" | "conditionSet" | "section" | "hyperlink" | "textVariable" | "plugin" | "handle";
+
+/**
+ * The report of one import or export.
+ */
+export interface SvgReport {
+    /**
+     * Import: the page items the plan creates (groups included).
+     * Export: the elements written.
+     */
+    items: number;
+    /**
+     * The losses, one row per code, in the order they first happened.
+     */
+    notes: SvgNote[];
+}
 
 /**
  * The segment the query landed on.
@@ -2890,6 +3060,10 @@ export interface CameraSabLayout {
     offsetScale: number;
     offsetTx: number;
     offsetTy: number;
+    /**
+     * v77 — additive; a reader that predates it never reads the slot.
+     */
+    offsetRotation?: number;
     offsetGenLo: number;
     offsetGenHi: number;
 }
@@ -2916,7 +3090,7 @@ export type Value = { type: "bounds"; value: [number, number, number, number] } 
  * (`\"fill.color\"`) — so JS callers don\'t need to learn the Rust
  * enum shape.
  */
-export type PropertyPath = "frameBounds" | "frameFillColor" | "frameStrokeColor" | "frameStrokeWeight" | "frameOpacity" | "frameTransform" | "imageContentTransform" | "framePathPoint" | "pathPointInsert" | "pathPointRemove" | "pathPointCurveType" | "layerVisible" | "layerLocked" | "layerPrintable" | "layerName" | "characterFontSize" | "characterLeading" | "characterTracking" | "characterFillColor" | "paragraphSpaceBefore" | "paragraphSpaceAfter" | "paragraphFirstLineIndent" | "appliedParagraphStyle" | "appliedCharacterStyle" | "appliedObjectStyle" | "itemLayer" | "appliedCellStyle" | "appliedTableStyle" | "framePath" | "frameNonprinting" | "frameFillTint" | "frameGradientFillAngle" | "frameGradientFillLength" | "frameGradientStrokeAngle" | "frameGradientStrokeLength" | "pathOpenAt" | "outlineStroke" | "outlineStrokeVariable" | "offsetPath" | "simplifyPath" | "closePath" | "frameGradientFeather" | "pageBounds" | "frameDropShadowMode" | "frameDropShadowXOffset" | "frameDropShadowYOffset" | "frameDropShadowSize" | "frameDropShadowOpacity" | "frameDropShadowColor" | "frameDropShadow" | "frameFittingCrops" | "frameFittingType" | "frameTextWrapMode" | "frameTextWrapOffsets" | "frameTextWrapContourType" | "frameTextWrapContourIncludeInside" | "paragraphJustification" | "paragraphStyleNextStyle" | "paragraphAppliedNumberingList" | "frameStrokeEndCap" | "frameInsetSpacing" | "appliedConditions" | "characterFontFamily" | "characterFontStyle" | "characterKerningMethod" | "characterCase" | "characterPosition" | "characterLanguage" | "characterBaselineShift" | "characterHorizontalScale" | "characterVerticalScale" | "characterSkew" | "characterUnderline" | "characterStrikethru" | "characterNoBreak" | "characterLigatures" | "characterOtfFeatures" | "paragraphLeftIndent" | "paragraphRightIndent" | "paragraphDropCapCharacters" | "paragraphDropCapLines" | "paragraphHyphenation" | "paragraphHyphenationZone" | "paragraphKeepLinesTogether" | "paragraphKeepWithNext" | "paragraphKeepAllLinesTogether" | "paragraphKeepFirstLines" | "paragraphKeepLastLines" | "paragraphStartParagraph" | "paragraphSpanColumnType" | "paragraphSpanSplitColumnCount" | "paragraphSpanColumnMinSpaceBefore" | "paragraphSpanColumnMinSpaceAfter" | "paragraphSplitColumnInsideGutter" | "paragraphSplitColumnOutsideGutter" | "paragraphRuleAbove" | "paragraphRuleBelow" | "paragraphTabStops" | "paragraphListType" | "paragraphBulletCharacter" | "paragraphNumberingFormat" | "paragraphBulletsTextAfter" | "paragraphNumberingExpression" | "paragraphNumberingStartAt" | "paragraphNumberingContinue" | "paragraphNumberingLevel" | "paragraphNumberingApplyRestartPolicy" | "paragraphBulletsCharacterStyle" | "paragraphNumberingCharacterStyle" | "paragraphComposer" | "paragraphAutoLeading" | "paragraphSingleWordJustification" | "paragraphLastLineIndent" | "paragraphBalanceRaggedLines" | "textFrameColumnCount" | "textFrameColumnGutter" | "textFrameColumnBalance" | "textFrameVerticalJustification" | "textFrameAutoSizing" | "textFrameFirstBaseline" | "textWrapInvert" | "frameFittingReferencePoint" | "frameAutoFit" | "frameStrokeType" | "frameStrokeJoin" | "frameStrokeMiterLimit" | "frameStrokeAlignment" | "frameStrokeGapColor" | "frameStrokeGapTint" | "frameStrokeDashArray" | "frameCornerOptionTopLeft" | "frameCornerOptionTopRight" | "frameCornerOptionBottomLeft" | "frameCornerOptionBottomRight" | "frameCornerRadiusTopLeft" | "frameCornerRadiusTopRight" | "frameCornerRadiusBottomLeft" | "frameCornerRadiusBottomRight" | "frameRotationAngle" | "frameScaleX" | "frameScaleY" | "frameFlipH" | "frameFlipV" | "frameOverprintFill" | "frameOverprintStroke" | "frameInnerShadowEnabled" | "frameInnerShadowBlendMode" | "frameInnerShadowColor" | "frameInnerShadowOpacity" | "frameInnerShadowAngle" | "frameInnerShadowDistance" | "frameInnerShadowSize" | "frameInnerShadowChoke" | "frameInnerShadowNoise" | "frameOuterGlowEnabled" | "frameOuterGlowBlendMode" | "frameOuterGlowColor" | "frameOuterGlowOpacity" | "frameOuterGlowSpread" | "frameOuterGlowSize" | "frameOuterGlowNoise" | "frameInnerGlowEnabled" | "frameInnerGlowBlendMode" | "frameInnerGlowColor" | "frameInnerGlowOpacity" | "frameInnerGlowChoke" | "frameInnerGlowSize" | "frameInnerGlowSource" | "frameInnerGlowNoise" | "frameBevelEnabled" | "frameBevelStyle" | "frameBevelTechnique" | "frameBevelDepth" | "frameBevelDirection" | "frameBevelSize" | "frameBevelSoften" | "frameBevelAngle" | "frameBevelAltitude" | "frameBevelHighlightColor" | "frameBevelShadowColor" | "frameBevelHighlightOpacity" | "frameBevelShadowOpacity" | "frameSatinEnabled" | "frameSatinBlendMode" | "frameSatinColor" | "frameSatinOpacity" | "frameSatinAngle" | "frameSatinDistance" | "frameSatinSize" | "frameSatinInvert" | "frameFeatherEnabled" | "frameFeatherWidth" | "frameFeatherCornerType" | "frameFeatherNoise" | "frameFeatherChoke" | "frameDirectionalFeatherEnabled" | "frameDirectionalFeatherLeftWidth" | "frameDirectionalFeatherRightWidth" | "frameDirectionalFeatherTopWidth" | "frameDirectionalFeatherBottomWidth" | "frameDirectionalFeatherAngle" | "frameDirectionalFeatherNoise" | "frameDirectionalFeatherChoke" | "frameBlendMode" | "nextTextFrame" | "previousTextFrame" | "cellFillColor" | "cellFillTint" | "cellInsetTop" | "cellInsetLeft" | "cellInsetBottom" | "cellInsetRight" | "cellVerticalJustification" | "cellTopEdgeStrokeColor" | "cellTopEdgeStrokeWeight" | "cellTopEdgeStrokeTint" | "cellBottomEdgeStrokeColor" | "cellBottomEdgeStrokeWeight" | "cellBottomEdgeStrokeTint" | "cellLeftEdgeStrokeColor" | "cellLeftEdgeStrokeWeight" | "cellLeftEdgeStrokeTint" | "cellRightEdgeStrokeColor" | "cellRightEdgeStrokeWeight" | "cellRightEdgeStrokeTint" | "rowStartRow" | "rowKeepWithNext" | "tableRowCount" | "tableColumnCount" | "tableHeaderRowCount" | "tableFooterRowCount" | "pluginMetadata" | "anchoredPosition" | "anchorPoint" | "anchoredXOffset" | "anchoredYOffset" | "anchoredHorizontalReference" | "anchoredVerticalReference" | "anchoredHorizontalAlignment" | "anchoredVerticalAlignment" | "anchoredSpineRelative" | "anchoredLockPosition" | "elementVisible" | "elementLocked" | "frameStrokeStartArrowhead" | "frameStrokeEndArrowhead" | "pageMarginTop" | "pageMarginBottom" | "pageMarginLeft" | "pageMarginRight" | "pageColumnCount" | "pageColumnGutter" | "documentBleedTop" | "documentBleedBottom" | "documentBleedInsideOrLeft" | "documentBleedOutsideOrRight" | "documentSlugTop" | "documentSlugBottom" | "documentSlugInsideOrLeft" | "documentSlugRightOrOutside" | "textVariableName" | "textVariableType" | "textVariableContents" | "textVariableTextBefore" | "textVariableTextAfter" | "textVariableDateFormat" | "objectStyleStrokeTint" | "objectStyleCornerRadius" | "objectStyleCornerOption" | "cellStyleRotationAngle" | "tableStyleHeaderRegionCellStyle" | "tableStyleBodyRegionCellStyle" | "tableStyleFooterRegionCellStyle" | "tableStyleLeftColumnRegionCellStyle" | "tableStyleRightColumnRegionCellStyle" | "tableStyleTopBorderStrokeColor" | "tableStyleTopBorderStrokeWeight" | "tableStyleBottomBorderStrokeColor" | "tableStyleBottomBorderStrokeWeight" | "tableStyleLeftBorderStrokeColor" | "tableStyleLeftBorderStrokeWeight" | "tableStyleRightBorderStrokeColor" | "tableStyleRightBorderStrokeWeight" | "tableStyleAlternatingFills" | "tableStyleStartRowFillColor" | "tableStyleStartRowFillCount" | "tableStyleStartRowFillTint" | "tableStyleEndRowFillColor" | "tableStyleEndRowFillCount" | "tableStyleEndRowFillTint" | "itemName" | "frameFillOpacity" | "frameFillBlendMode" | "frameStrokeOpacity" | "frameStrokeBlendMode" | "frameContentOpacity" | "frameContentBlendMode" | "groupIsolateBlending" | "groupKnockout" | "groupClip" | "frameDropShadowBlendMode" | "frameDropShadowSpread" | "frameDropShadowNoise" | "frameDropShadowKnockedOut" | "frameDropShadowUseGlobalLight" | "documentGlobalLightAngle" | "documentGlobalLightAltitude" | "documentFootnoteNumberingStyle" | "documentFootnoteStartAt" | "documentFootnoteRestartNumbering" | "documentFootnotePrefix" | "documentFootnoteSuffix" | "documentFootnoteShowPrefixSuffix" | "documentFootnoteEnableStraddling" | "documentFootnoteNoSplitting" | "documentFootnoteSpaceBetween" | "documentFootnoteSpacer" | "documentFootnoteRuleOn" | "documentFootnoteContinuingRuleOn" | "framePdfPage" | "frameFillRule" | "characterHighlightColor" | "characterHidden" | "characterUnderlineType" | "characterUnderlineColor" | "characterDoubleStrikethrough" | "paragraphShadingOn" | "paragraphShadingColor" | "paragraphShadingTint" | "paragraphBorderOn" | "paragraphBorderColor" | "paragraphBorderWeight" | "documentShowHiddenText";
+export type PropertyPath = "frameBounds" | "frameFillColor" | "frameStrokeColor" | "frameStrokeWeight" | "frameOpacity" | "frameTransform" | "imageContentTransform" | "framePathPoint" | "pathPointInsert" | "pathPointRemove" | "pathPointCurveType" | "layerVisible" | "layerLocked" | "layerPrintable" | "layerName" | "characterFontSize" | "characterLeading" | "characterTracking" | "characterFillColor" | "paragraphSpaceBefore" | "paragraphSpaceAfter" | "paragraphFirstLineIndent" | "appliedParagraphStyle" | "appliedCharacterStyle" | "appliedObjectStyle" | "itemLayer" | "appliedCellStyle" | "appliedTableStyle" | "framePath" | "frameNonprinting" | "frameFillTint" | "frameGradientFillAngle" | "frameGradientFillLength" | "frameGradientStrokeAngle" | "frameGradientStrokeLength" | "pathOpenAt" | "outlineStroke" | "outlineStrokeVariable" | "offsetPath" | "simplifyPath" | "closePath" | "frameGradientFeather" | "pageBounds" | "frameDropShadowMode" | "frameDropShadowXOffset" | "frameDropShadowYOffset" | "frameDropShadowSize" | "frameDropShadowOpacity" | "frameDropShadowColor" | "frameDropShadow" | "frameFittingCrops" | "frameFittingType" | "frameTextWrapMode" | "frameTextWrapOffsets" | "frameTextWrapContourType" | "frameTextWrapContourIncludeInside" | "paragraphJustification" | "paragraphStyleNextStyle" | "paragraphAppliedNumberingList" | "frameStrokeEndCap" | "frameInsetSpacing" | "appliedConditions" | "characterFontFamily" | "characterFontStyle" | "characterKerningMethod" | "characterCase" | "characterPosition" | "characterLanguage" | "characterBaselineShift" | "characterHorizontalScale" | "characterVerticalScale" | "characterSkew" | "characterUnderline" | "characterStrikethru" | "characterNoBreak" | "characterLigatures" | "characterOtfFeatures" | "paragraphLeftIndent" | "paragraphRightIndent" | "paragraphDropCapCharacters" | "paragraphDropCapLines" | "paragraphHyphenation" | "paragraphHyphenationZone" | "paragraphKeepLinesTogether" | "paragraphKeepWithNext" | "paragraphKeepAllLinesTogether" | "paragraphKeepFirstLines" | "paragraphKeepLastLines" | "paragraphStartParagraph" | "paragraphSpanColumnType" | "paragraphSpanSplitColumnCount" | "paragraphSpanColumnMinSpaceBefore" | "paragraphSpanColumnMinSpaceAfter" | "paragraphSplitColumnInsideGutter" | "paragraphSplitColumnOutsideGutter" | "paragraphRuleAbove" | "paragraphRuleBelow" | "paragraphTabStops" | "paragraphListType" | "paragraphBulletCharacter" | "paragraphNumberingFormat" | "paragraphBulletsTextAfter" | "paragraphNumberingExpression" | "paragraphNumberingStartAt" | "paragraphNumberingContinue" | "paragraphNumberingLevel" | "paragraphNumberingApplyRestartPolicy" | "paragraphBulletsCharacterStyle" | "paragraphNumberingCharacterStyle" | "paragraphComposer" | "paragraphAutoLeading" | "paragraphSingleWordJustification" | "paragraphLastLineIndent" | "paragraphBalanceRaggedLines" | "textFrameColumnCount" | "textFrameColumnGutter" | "textFrameColumnBalance" | "textFrameVerticalJustification" | "textFrameAutoSizing" | "textFrameFirstBaseline" | "textWrapInvert" | "frameFittingReferencePoint" | "frameAutoFit" | "frameStrokeType" | "frameStrokeJoin" | "frameStrokeMiterLimit" | "frameStrokeAlignment" | "frameStrokeGapColor" | "frameStrokeGapTint" | "frameStrokeDashArray" | "frameCornerOptionTopLeft" | "frameCornerOptionTopRight" | "frameCornerOptionBottomLeft" | "frameCornerOptionBottomRight" | "frameCornerRadiusTopLeft" | "frameCornerRadiusTopRight" | "frameCornerRadiusBottomLeft" | "frameCornerRadiusBottomRight" | "frameRotationAngle" | "frameScaleX" | "frameScaleY" | "frameFlipH" | "frameFlipV" | "frameOverprintFill" | "frameOverprintStroke" | "frameInnerShadowEnabled" | "frameInnerShadowBlendMode" | "frameInnerShadowColor" | "frameInnerShadowOpacity" | "frameInnerShadowAngle" | "frameInnerShadowDistance" | "frameInnerShadowSize" | "frameInnerShadowChoke" | "frameInnerShadowNoise" | "frameOuterGlowEnabled" | "frameOuterGlowBlendMode" | "frameOuterGlowColor" | "frameOuterGlowOpacity" | "frameOuterGlowSpread" | "frameOuterGlowSize" | "frameOuterGlowNoise" | "frameInnerGlowEnabled" | "frameInnerGlowBlendMode" | "frameInnerGlowColor" | "frameInnerGlowOpacity" | "frameInnerGlowChoke" | "frameInnerGlowSize" | "frameInnerGlowSource" | "frameInnerGlowNoise" | "frameBevelEnabled" | "frameBevelStyle" | "frameBevelTechnique" | "frameBevelDepth" | "frameBevelDirection" | "frameBevelSize" | "frameBevelSoften" | "frameBevelAngle" | "frameBevelAltitude" | "frameBevelHighlightColor" | "frameBevelShadowColor" | "frameBevelHighlightOpacity" | "frameBevelShadowOpacity" | "frameSatinEnabled" | "frameSatinBlendMode" | "frameSatinColor" | "frameSatinOpacity" | "frameSatinAngle" | "frameSatinDistance" | "frameSatinSize" | "frameSatinInvert" | "frameFeatherEnabled" | "frameFeatherWidth" | "frameFeatherCornerType" | "frameFeatherNoise" | "frameFeatherChoke" | "frameDirectionalFeatherEnabled" | "frameDirectionalFeatherLeftWidth" | "frameDirectionalFeatherRightWidth" | "frameDirectionalFeatherTopWidth" | "frameDirectionalFeatherBottomWidth" | "frameDirectionalFeatherAngle" | "frameDirectionalFeatherNoise" | "frameDirectionalFeatherChoke" | "frameBlendMode" | "nextTextFrame" | "previousTextFrame" | "cellFillColor" | "cellFillTint" | "cellInsetTop" | "cellInsetLeft" | "cellInsetBottom" | "cellInsetRight" | "cellVerticalJustification" | "cellTopEdgeStrokeColor" | "cellTopEdgeStrokeWeight" | "cellTopEdgeStrokeTint" | "cellBottomEdgeStrokeColor" | "cellBottomEdgeStrokeWeight" | "cellBottomEdgeStrokeTint" | "cellLeftEdgeStrokeColor" | "cellLeftEdgeStrokeWeight" | "cellLeftEdgeStrokeTint" | "cellRightEdgeStrokeColor" | "cellRightEdgeStrokeWeight" | "cellRightEdgeStrokeTint" | "rowStartRow" | "rowKeepWithNext" | "tableRowCount" | "tableColumnCount" | "tableHeaderRowCount" | "tableFooterRowCount" | "pluginMetadata" | "anchoredPosition" | "anchorPoint" | "anchoredXOffset" | "anchoredYOffset" | "anchoredHorizontalReference" | "anchoredVerticalReference" | "anchoredHorizontalAlignment" | "anchoredVerticalAlignment" | "anchoredSpineRelative" | "anchoredLockPosition" | "elementVisible" | "elementLocked" | "frameStrokeStartArrowhead" | "frameStrokeEndArrowhead" | "pageMarginTop" | "pageMarginBottom" | "pageMarginLeft" | "pageMarginRight" | "pageColumnCount" | "pageColumnGutter" | "documentBleedTop" | "documentBleedBottom" | "documentBleedInsideOrLeft" | "documentBleedOutsideOrRight" | "documentSlugTop" | "documentSlugBottom" | "documentSlugInsideOrLeft" | "documentSlugRightOrOutside" | "textVariableName" | "textVariableType" | "textVariableContents" | "textVariableTextBefore" | "textVariableTextAfter" | "textVariableDateFormat" | "objectStyleStrokeTint" | "objectStyleCornerRadius" | "objectStyleCornerOption" | "cellStyleRotationAngle" | "tableStyleHeaderRegionCellStyle" | "tableStyleBodyRegionCellStyle" | "tableStyleFooterRegionCellStyle" | "tableStyleLeftColumnRegionCellStyle" | "tableStyleRightColumnRegionCellStyle" | "tableStyleTopBorderStrokeColor" | "tableStyleTopBorderStrokeWeight" | "tableStyleBottomBorderStrokeColor" | "tableStyleBottomBorderStrokeWeight" | "tableStyleLeftBorderStrokeColor" | "tableStyleLeftBorderStrokeWeight" | "tableStyleRightBorderStrokeColor" | "tableStyleRightBorderStrokeWeight" | "tableStyleAlternatingFills" | "tableStyleStartRowFillColor" | "tableStyleStartRowFillCount" | "tableStyleStartRowFillTint" | "tableStyleEndRowFillColor" | "tableStyleEndRowFillCount" | "tableStyleEndRowFillTint" | "itemName" | "frameFillOpacity" | "frameFillBlendMode" | "frameStrokeOpacity" | "frameStrokeBlendMode" | "frameContentOpacity" | "frameContentBlendMode" | "groupIsolateBlending" | "groupKnockout" | "groupClip" | "frameDropShadowBlendMode" | "frameDropShadowSpread" | "frameDropShadowNoise" | "frameDropShadowKnockedOut" | "frameDropShadowUseGlobalLight" | "documentGlobalLightAngle" | "documentGlobalLightAltitude" | "documentFootnoteNumberingStyle" | "documentFootnoteStartAt" | "documentFootnoteRestartNumbering" | "documentFootnotePrefix" | "documentFootnoteSuffix" | "documentFootnoteShowPrefixSuffix" | "documentFootnoteEnableStraddling" | "documentFootnoteNoSplitting" | "documentFootnoteSpaceBetween" | "documentFootnoteSpacer" | "documentFootnoteRuleOn" | "documentFootnoteContinuingRuleOn" | "framePdfPage" | "frameFillRule" | "characterHighlightColor" | "characterHidden" | "characterUnderlineType" | "characterUnderlineColor" | "characterDoubleStrikethrough" | "paragraphShadingOn" | "paragraphShadingColor" | "paragraphShadingTint" | "paragraphBorderOn" | "paragraphBorderColor" | "paragraphBorderWeight" | "documentShowHiddenText" | "frameGradientFillStart";
 
 /**
  * Typed worker-side error for non-load operations. Mutations,
@@ -3210,7 +3384,7 @@ export interface Constraints {
 /**
  * What a snap landed on.
  */
-export type SnapSource = "anchor" | "corner" | "center" | "page" | "guide" | "grid" | "extra";
+export type SnapSource = "anchor" | "corner" | "center" | "page" | "guide" | "grid" | "extra" | "pixel" | "angle" | "intersection" | "spacing";
 
 /**
  * What else besides XML tags becomes a field.
@@ -3244,6 +3418,16 @@ export type TemplateFieldKind = "text" | "textRun" | "variable" | "image" | "cho
  * `apply::permit`).
  */
 export type Permission = "select" | "text.edit" | "text.style" | "image.replace" | "image.crop" | "item.move" | "item.resize" | "item.rotate" | "item.flip" | "item.delete" | "item.duplicate" | "item.restack" | "item.visibility" | "appearance.fill" | "appearance.stroke" | "appearance.effects" | "appearance.opacity" | "appearance.other" | "document.add-item" | "document.pages" | "document.styles" | "document.metadata" | "template.author";
+
+/**
+ * What text becomes in the export.
+ */
+export type SvgTextMode = "outlines" | "text";
+
+/**
+ * What text becomes.
+ */
+export type SvgImportText = "auto" | "outlines";
 
 /**
  * What the resolver produced this pass. The canvas worker reads
@@ -3440,6 +3624,10 @@ export interface SnapPointResult {
     yTarget?: SnapAxisHit | null;
     segmentTarget?: SnapSegmentHit | null;
     /**
+     * v77 — the angle guide, when that is what snapped.
+     */
+    angleTarget?: SnapAngleHit;
+    /**
      * The guides to draw, same shape the translate gesture reports.
      */
     lines: SnapLine[];
@@ -3447,6 +3635,13 @@ export interface SnapPointResult {
      * The tolerance the query ran with, in pt.
      */
     tolerancePt: number;
+}
+
+/**
+ * `SetViewSettings` payload and `ViewSettingsApplied` reply.
+ */
+export interface ViewSettings {
+    mode?: ViewMode;
 }
 
 /**
@@ -3760,6 +3955,47 @@ export interface SwatchColorSpec {
      */
     tint?: number | null;
 }
+
+/**
+ * v77 (engine ADR 1030) — one named undo step on the wire.
+ */
+export interface UndoLogEntryWire {
+    /**
+     * What `UndoTo` / `RedoTo` name.
+     */
+    appliedSeq: number;
+    /**
+     * The step\'s name: the caller\'s words, or the engine\'s English
+     * default.
+     */
+    label: string;
+    /**
+     * The derivation key of an engine default (`moveFrame`,
+     * `set:fillColor`, `gesture:rotate`, `batch`, `script`), for a host
+     * that translates the defaults it knows; `None` when a caller named
+     * the step.
+     */
+    key?: string | null;
+}
+
+/**
+ * v77 — the angle guide the query was pulled onto.
+ */
+export interface SnapAngleHit {
+    /**
+     * The point the guide runs through (page-local).
+     */
+    through: [number, number];
+    /**
+     * Its direction, degrees clockwise from the +x axis on screen.
+     */
+    angle: number;
+}
+
+/**
+ * v77 — what a snap line shows. Absent on the wire ⇒ `Alignment`.
+ */
+export type SnapLineKind = "alignment" | "spacing" | "angle";
 
 /**
  * §21 advanced prepress — one ink plate\'s coverage on one page.
@@ -4145,13 +4381,20 @@ export class CanvasWorker {
      * Render the visible pages at the current camera into the
      * bound surface. Camera operates in CSS pixels; the
      * presenter applies `dpr` internally as we bake it into the
-     * per-page transforms below.
+     * per-page transforms below. `rotation` (radians, clockwise on
+     * screen) turns the view about the document origin (editor ADR
+     * 287, Rotate View): surface = `dpr · (scale · R(rotation) · doc +
+     * (tx, ty))`.
+     *
+     * The session's view mode picks each page's scene (Preview,
+     * Outline, Overprint Preview — [`crate::scene_cache::SceneView`])
+     * and Pixel Preview's two-pass present.
      *
      * Returns `false` if the surface presenter isn't initialised
      * or no document is loaded — the worker falls back to its
      * CPU path in that case.
      */
-    presentFrame(scale: number, tx: number, ty: number, dpr: number): boolean;
+    presentFrame(scale: number, tx: number, ty: number, dpr: number, rotation: number): boolean;
     /**
      * v66 — a `.paged` part's bytes as a `Uint8Array`, or `undefined`
      * when the part is absent or no document is loaded.
@@ -4336,7 +4579,7 @@ export interface InitOutput {
     readonly canvasworker_pageInfo: (a: number, b: number) => any;
     readonly canvasworker_perfCounters: (a: number) => any;
     readonly canvasworker_placedAssetBytesDirect: (a: number, b: number, c: number) => any;
-    readonly canvasworker_presentFrame: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly canvasworker_presentFrame: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly canvasworker_protocolVersion: (a: number) => number;
     readonly canvasworker_readPagedPartDirect: (a: number, b: number, c: number) => [number, number];
     readonly canvasworker_recoverGpu: (a: number) => any;

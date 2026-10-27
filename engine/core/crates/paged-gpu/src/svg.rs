@@ -114,27 +114,16 @@ impl Svg {
         self.finish(ctx)
     }
 
+    /// `group`'s children through the shared walk (`paged_svg::walk`):
+    /// paths drawn, isolated groups layered, nested SVG images and text
+    /// outlines walked in place.
     fn draw_children(&mut self, ctx: &mut RenderContext, group: &usvg::Group, ts: Affine) {
-        for node in group.children() {
-            match node {
-                usvg::Node::Group(g) => self.draw_group(ctx, g, ts),
-                usvg::Node::Path(p) => self.draw_path(ctx, p, ts),
-                usvg::Node::Image(image) => {
-                    if let (true, usvg::ImageKind::SVG(tree)) = (image.is_visible(), image.kind()) {
-                        self.draw_children(ctx, tree.root(), ts);
-                    }
-                }
-                usvg::Node::Text(text) => self.draw_group(ctx, text.flattened(), ts),
-            }
-        }
+        paged_svg::walk::walk_children(group, ts, &mut Draw { svg: self, ctx });
     }
 
-    fn draw_group(&mut self, ctx: &mut RenderContext, group: &usvg::Group, ts: Affine) {
-        let ts = ts * affine(group.transform());
-        if !group.should_isolate() {
-            self.draw_children(ctx, group, ts);
-            return;
-        }
+    /// An isolated group (`ts` its own space): a layer with its opacity,
+    /// blend mode, clip and mask, its children drawn into it, or filtered.
+    fn draw_isolated(&mut self, ctx: &mut RenderContext, group: &usvg::Group, ts: Affine) {
         let mut cov: Option<Coverage> = None;
         if let Some(clip) = group.clip_path() {
             cov = Some(multiply(cov, self.clip_coverage(clip, ts)));
@@ -424,7 +413,8 @@ impl Svg {
 
     /// Fill a clip path's shapes opaque into `ctx`. A child group with a
     /// clip path of its own is clipped on its own buffer and handed back
-    /// in `nested`, to be united with the rest.
+    /// in `nested`, to be united with the rest. The shapes are the shared
+    /// walk's (`paged_svg::walk::clip_nodes`).
     fn draw_clip_shapes(
         &mut self,
         ctx: &mut RenderContext,
@@ -432,14 +422,12 @@ impl Svg {
         ts: Affine,
         nested: &mut Vec<Coverage>,
     ) {
-        for node in group.children() {
+        let mut clipped: Vec<(&usvg::Group, Affine)> = Vec::new();
+        paged_svg::walk::clip_nodes(group, ts, &compose, &mut |node| {
             match node {
-                usvg::Node::Path(path) => {
-                    let Some(fill) = path.fill().filter(|_| path.is_visible()) else {
-                        continue;
-                    };
+                paged_svg::walk::ClipNode::Shape { path, ts, rule } => {
                     ctx.set_transform(ts);
-                    ctx.set_fill_rule(match fill.rule() {
+                    ctx.set_fill_rule(match rule {
                         usvg::FillRule::NonZero => Fill::NonZero,
                         usvg::FillRule::EvenOdd => Fill::EvenOdd,
                     });
@@ -447,27 +435,24 @@ impl Svg {
                     ctx.fill_path(&bez(path.data()));
                     ctx.set_fill_rule(Fill::NonZero);
                 }
-                usvg::Node::Text(text) => self.draw_clip_shapes(ctx, text.flattened(), ts, nested),
-                usvg::Node::Group(g) => {
-                    let ts = ts * affine(g.transform());
-                    match g.clip_path() {
-                        Some(clip) => {
-                            let mut own = self.context();
-                            let mut deeper = Vec::new();
-                            self.draw_clip_shapes(&mut own, g, ts, &mut deeper);
-                            let mut cov = alpha(&self.finish(own));
-                            for other in deeper {
-                                for (c, o) in cov.iter_mut().zip(other) {
-                                    *c = (*c as u16 + o as u16 - mul(*c, o) as u16) as u8;
-                                }
-                            }
-                            nested.push(multiply(Some(cov), self.clip_coverage(clip, ts)));
-                        }
-                        None => self.draw_clip_shapes(ctx, g, ts, nested),
-                    }
-                }
-                usvg::Node::Image(_) => {}
+                paged_svg::walk::ClipNode::ClippedGroup { group, ts } => clipped.push((group, ts)),
             }
+            paged_svg::walk::Enter::Skip
+        });
+        for (g, ts) in clipped {
+            let Some(clip) = g.clip_path() else {
+                continue;
+            };
+            let mut own = self.context();
+            let mut deeper = Vec::new();
+            self.draw_clip_shapes(&mut own, g, ts, &mut deeper);
+            let mut cov = alpha(&self.finish(own));
+            for other in deeper {
+                for (c, o) in cov.iter_mut().zip(other) {
+                    *c = (*c as u16 + o as u16 - mul(*c, o) as u16) as u8;
+                }
+            }
+            nested.push(multiply(Some(cov), self.clip_coverage(clip, ts)));
         }
     }
 
@@ -510,6 +495,37 @@ impl Svg {
             None => cov,
         }
     }
+}
+
+/// The raster lane's half of the shared walk.
+struct Draw<'a> {
+    svg: &'a mut Svg,
+    ctx: &'a mut RenderContext,
+}
+
+impl paged_svg::walk::Visitor for Draw<'_> {
+    type Ts = Affine;
+
+    fn compose(&self, parent: Affine, local: usvg::Transform) -> Affine {
+        compose(parent, local)
+    }
+
+    fn enter_group(&mut self, group: &usvg::Group, ts: Affine) -> paged_svg::walk::Enter {
+        if !group.should_isolate() {
+            return paged_svg::walk::Enter::Children;
+        }
+        self.svg.draw_isolated(self.ctx, group, ts);
+        paged_svg::walk::Enter::Skip
+    }
+
+    fn path(&mut self, path: &usvg::Path, ts: Affine) {
+        self.svg.draw_path(self.ctx, path, ts);
+    }
+}
+
+/// `parent` followed by `local` (applied first), in f64.
+fn compose(parent: Affine, local: usvg::Transform) -> Affine {
+    parent * affine(local)
 }
 
 fn affine(t: usvg::Transform) -> Affine {

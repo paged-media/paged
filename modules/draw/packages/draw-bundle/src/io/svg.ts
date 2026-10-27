@@ -141,7 +141,15 @@
 // → a colour ref resolved against the swatch collection by NAME), and
 // serializes an `<svg>` document.
 //
-// HONEST DEFERRALS (documented, asserted by tests where they bite):
+// THE ENGINE LANE (engine ADR 1031). On a host with `document.importSvg@1`
+// / `document.exportSvg@1` both halves delegate to the engine's paged-svg:
+// the import is the engine's one batch (gradients, text, images, <use>,
+// clip paths, masks and CSS included; what it approximates or leaves out is
+// logged from its report), the export is the engine's SVG of what the
+// selection draws. Everything below is the fallback for a host without the
+// doors (an engine before protocol 77), kept as it was.
+//
+// HONEST DEFERRALS of the fallback (documented, asserted by tests where they bite):
 //   · Gradient / pattern / spot fills export as their first solid
 //     approximation or are omitted — the SVG lane is sRGB-solid.
 //   · A colour ref whose swatch name isn't itself a parseable CSS colour
@@ -697,6 +705,71 @@ export function svgImportOpsFor(
   return ops;
 }
 
+/** The host features of the engine's SVG lane (engine ADR 1031). */
+export const IMPORT_SVG_FEATURE = "document.importSvg@1";
+export const EXPORT_SVG_FEATURE = "document.exportSvg@1";
+
+/**
+ * The engine's import (`host.document.importSvg`, paged-svg over usvg):
+ * gradients, text, images, `<use>`/`<defs>`/`<symbol>`, clip paths, masks
+ * and CSS come in as native items, and what it cannot say is in its
+ * report, each row logged here. `null` when the host has no such door or
+ * its engine predates it: the caller then takes this module's own reader.
+ *
+ * The drawing lands where it is drawn (the SVG's corner on the page's,
+ * a user unit a point, as the TypeScript reader places it) and each
+ * top-level shape stays its own element (`group: false`), as before.
+ */
+async function engineImport(
+  host: BundleHost,
+  file: ImportRequest,
+): Promise<{ commit: SvgImportCommit; ids: ElementId[] } | null> {
+  if (!host.supports(IMPORT_SVG_FEATURE)) return null;
+  const pageId = await resolveTargetPage(host);
+  if (!pageId) {
+    host.log.warn(`${SVG_IMPORTER_ID}: no target page — nothing inserted`);
+    return { commit: nothingCommitted(0), ids: [] };
+  }
+  const result = await host.document.importSvg(file.bytes, {
+    pageId,
+    origin: [0, 0],
+    group: false,
+  });
+  for (const note of result.report.notes) {
+    host.log.warn(
+      `${SVG_IMPORTER_ID}: ${file.name}: ${note.message} (${note.count}×)`,
+    );
+  }
+  if (!result.applied) {
+    // An engine before protocol 77 never answered the plan: read the file
+    // here instead. Any other refusal is the answer.
+    if (/predates protocol 77/.test(result.error ?? "")) return null;
+    host.log.warn(
+      `${SVG_IMPORTER_ID}: ${file.name} not imported — ${result.error ?? "refused"}`,
+    );
+    return { commit: nothingCommitted(0), ids: [] };
+  }
+  const outcome = result.outcome;
+  const ids =
+    outcome && outcome.applied
+      ? (outcome.minted ?? []).map((m) => m.element)
+      : [];
+  host.log.info(
+    `${SVG_IMPORTER_ID}: imported ${file.name} through the engine ` +
+      `(${result.report.items} items) in 1 undo step`,
+  );
+  return {
+    commit: {
+      shapes: result.report.items,
+      elements: result.report.items,
+      swatches: 0,
+      batches: 1,
+      refused: 0,
+    },
+    ids,
+  };
+}
+
 /** What one import put into the document. */
 export interface SvgImportCommit {
   /** Shapes the file parsed into. */
@@ -834,6 +907,8 @@ export async function commitSvgImport(
   host: BundleHost,
   file: ImportRequest,
 ): Promise<SvgImportCommit> {
+  const engine = await engineImport(host, file);
+  if (engine) return engine.commit;
   const shapes = shapesToImport(host, file);
   if (shapes.length === 0) return nothingCommitted(0);
   return commitShapes(host, shapes, file.name);
@@ -854,6 +929,8 @@ export async function importSvg(
   host: BundleHost,
   file: ImportRequest,
 ): Promise<ElementId[]> {
+  const engine = await engineImport(host, file);
+  if (engine) return engine.ids;
   const shapes = shapesToImport(host, file);
   if (shapes.length === 0) return [];
   const minted: ElementId[] = [];
@@ -959,6 +1036,25 @@ export async function exportSvg(
   if (selection.length === 0) {
     host.log.debug(`${SVG_EXPORTER_ID}: empty selection — nothing to export`);
     return null;
+  }
+  if (host.supports(EXPORT_SVG_FEATURE)) {
+    // The engine writes what the selection draws (engine ADR 1031):
+    // gradients, opacity and blend, clips, masks, pictures, text.
+    const result = await host.document.exportSvg({ elementIds: selection });
+    for (const note of result.report.notes) {
+      host.log.warn(`${SVG_EXPORTER_ID}: ${note.message} (${note.count}×)`);
+    }
+    if (result.svg !== null) {
+      const meta = await host.document.meta();
+      const base = meta.documentName?.trim() || "drawing";
+      return {
+        bytes: new TextEncoder().encode(result.svg),
+        fileName: `${base}.svg`,
+      };
+    }
+    host.log.warn(
+      `${SVG_EXPORTER_ID}: the engine did not export (${result.error ?? "no answer"}) — writing the paths here`,
+    );
   }
   let swatches: readonly { selfId: string; name: string }[] = [];
   try {

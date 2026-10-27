@@ -1,0 +1,61 @@
+[package]
+name = "paged-svg"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "SVG import to native page items (wire mutations, through usvg) and SVG export of a page's display list."
+
+[lints]
+workspace = true
+
+[features]
+# The walk over a usvg tree (`walk`) needs nothing but usvg: the raster
+# lane (paged-gpu) and the placed-SVG vector lane (paged-renderer) take
+# the crate with no default features, so the read-only viewer links
+# neither the mutation engine nor usvg's text shaper.
+default = ["import", "export"]
+# SVG → wire mutations (and usvg's text layout).
+import = [
+    "usvg/text",
+    "dep:paged-wire",
+    "dep:paged-mutate",
+    "dep:base64",
+    "dep:serde",
+    "dep:tsify-next",
+    "dep:wasm-bindgen",
+]
+# Display list → SVG.
+export = [
+    "dep:paged-compose",
+    "dep:image",
+    "dep:base64",
+    "dep:serde",
+    "dep:tsify-next",
+    "dep:wasm-bindgen",
+]
+
+[dependencies]
+# usvg resolves what an SVG means before we read it: <use>, <defs> and
+# <symbol>, CSS stylesheets and classes, units, nested transforms,
+# markers. The `import` feature turns on its `text` feature, which lays
+# text out against the fonts the caller hands in (no system font is read),
+# so an import keeps text as text frames: the 0.9 MB the renderer declined for
+# placed SVGs (engine ADR 1031).
+usvg = { version = "0.48", default-features = false, features = ["svgz"] }
+# The import's output is the wire's own vocabulary.
+paged-wire = { path = "../paged-wire", optional = true }
+paged-mutate = { path = "../paged-mutate", optional = true }
+# The export's input: a page's display list.
+paged-compose = { path = "../paged-compose", optional = true }
+# Images of the export that are not PNG or JPEG are re-encoded as PNG.
+image = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+tsify-next = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+flate2 = { workspace = true }

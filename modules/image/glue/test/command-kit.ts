@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import type {
   ElementGeometryItem,
+  EditContextContribution,
   PagedEditor,
   ToolContribution,
 } from "@paged-media/plugin-api";
@@ -148,11 +149,18 @@ export async function bundleOnFake(
     ...shellStub((id) => opened.push(id)),
     ...options.shell,
   };
+  /** The edit contexts the bundle registered, as the host's registry
+   *  would receive them. */
+  const contexts: EditContextContribution[] = [];
   const loaded = loadBundle(() => fake.editor, imageBundle, {
     console: silentConsole,
     storage: mapBacking(),
     shell,
     ...(options.toolSettings ? { toolSettings: options.toolSettings } : {}),
+    onEditContextRegistered: (c: EditContextContribution) => {
+      contexts.push(c);
+      return { dispose() {} };
+    },
   });
   const session = lastSession();
   const handler = (id: string): Handler => {
@@ -201,6 +209,7 @@ export async function bundleOnFake(
     opened,
     docOps,
     toolTarget,
+    contexts,
     dispose,
   };
 }

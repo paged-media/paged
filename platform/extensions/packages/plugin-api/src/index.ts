@@ -127,7 +127,13 @@ export type {
   SecretsSurface,
   SecretMaterial,
   DocumentSurface,
+  SvgExportRequest,
+  SvgExportResult,
+  SvgImportRequest,
+  SvgImportResult,
   MutateOptions,
+  UndoLog,
+  UndoLogStep,
   SwatchDisplay,
   MutateWithBytesOptions,
   SelectionSurface,
@@ -233,6 +239,7 @@ export type {
   ObjectTypeContribution,
   EditContextCandidate,
   EnteredEditContext,
+  EditContextHistory,
   ContentPointerEvent,
   ContentWheelEvent,
   EditContextDescriptor,
@@ -326,6 +333,18 @@ export type {
   SnapExclude,
   SnapSource,
   SnapSettings,
+} from "./wire.js";
+
+// Engine ADR 1031 — `host.document.importSvg` / `exportSvg`'s options and
+// their report.
+export type {
+  SvgExportOptions,
+  SvgImportOptions,
+  SvgImportText,
+  SvgNote,
+  SvgNoteSeverity,
+  SvgReport,
+  SvgTextMode,
 } from "./wire.js";
 
 // One element a mutation minted (`MutationOutcome.minted`): the element,

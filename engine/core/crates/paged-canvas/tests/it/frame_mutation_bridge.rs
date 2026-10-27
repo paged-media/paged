@@ -123,6 +123,7 @@ fn resize_frame_routes_through_idml_mutate_and_logs() {
         LoggedMutation::Composite(_) => panic!("expected Frame entry, got Composite"),
         LoggedMutation::Defaults { .. } => panic!("expected Frame entry, got Defaults"),
         LoggedMutation::AppState { .. } => panic!("expected Frame entry, got AppState"),
+        LoggedMutation::Reverted(_) => panic!("expected Frame entry, got Reverted"),
     }
 }
 
@@ -244,6 +245,7 @@ fn move_frame_routes_through_idml_mutate_and_round_trips() {
         LoggedMutation::Composite(_) => panic!("expected Frame entry, got Composite"),
         LoggedMutation::Defaults { .. } => panic!("expected Frame entry, got Defaults"),
         LoggedMutation::AppState { .. } => panic!("expected Frame entry, got AppState"),
+        LoggedMutation::Reverted(_) => panic!("expected Frame entry, got Reverted"),
     }
 
     // invert (undo) restores the identity transform.
