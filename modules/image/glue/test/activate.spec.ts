@@ -56,6 +56,8 @@ describe("imageBundle.activate", () => {
       PANEL_ID,
       "media.paged.image.panel.brushSettings",
       "media.paged.image.panel.brushPresets",
+      // WP5.8 — the Clone Source panel.
+      "media.paged.image.panel.cloneSource",
       "media.paged.image.panel.properties",
     ]);
     expect(fake.commands.ids()).toEqual([
@@ -187,6 +189,9 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.channelToSelection",
       "media.paged.image.command.setType",
       "media.paged.image.command.contentAwareFill",
+      // WP5.8 — Edit ▸ Content-Aware Fill… and the Clone Source panel.
+      "media.paged.image.command.contentAwareFillWorkspace",
+      "media.paged.image.command.openCloneSource",
       "media.paged.image.command.selectAll",
       "media.paged.image.command.deselect",
       "media.paged.image.command.invertSelection",
@@ -245,6 +250,10 @@ describe("imageBundle.activate", () => {
       "media.paged.image.tool.magicEraser",
       "media.paged.image.tool.spotHeal",
       "media.paged.image.tool.patch",
+      // WP5.8 — Content-Aware Move, Remove, the CAF sampling brush.
+      "media.paged.image.tool.contentAwareMove",
+      "media.paged.image.tool.remove",
+      "media.paged.image.tool.cafSampling",
       "media.paged.image.tool.type",
       // The Magnetic Lasso (lasso slot) and the Refine Edge brush (quick
       // selection slot), WP5.5.

@@ -43,6 +43,12 @@ import {
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
 
+import {
+  wrapRetouch,
+  type RetouchEngine,
+  type RetouchWasm,
+} from "./retouch-engine";
+
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
 export interface LevelsParams {
@@ -1166,7 +1172,10 @@ export interface FilterMask {
   feather?: number;
 }
 
-export interface ImageEngine extends MaskingEngine {
+/** WP5.8 — the retouching doors live in `retouch-engine.ts`. */
+export interface ImageEngine
+  extends MaskingEngine,
+    RetouchEngine<DecodedInfo> {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2120,7 +2129,7 @@ interface DecodedHandleWasm {
 
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
-export interface ImageWasmModule extends MaskingWasm {
+export interface ImageWasmModule extends MaskingWasm, RetouchWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -2876,6 +2885,7 @@ export interface ImageWasmModule extends MaskingWasm {
 export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
   return {
     ...maskingEngine(wasm),
+    ...wrapRetouch(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,

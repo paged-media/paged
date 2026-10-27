@@ -99,8 +99,8 @@ pub use device::GpuContext;
 pub use dispatch::{BatchTile, DispatchBatch};
 pub use distance::{distance_transform, DistanceParams, MaskChannel};
 pub use execute::{
-    execute_tile_once, execute_tile_once_async, execute_windowed_once, execute_windowed_once_async,
-    TileInput,
+    execute_gather_once, execute_gather_once_async, execute_tile_once, execute_tile_once_async,
+    execute_windowed_once, execute_windowed_once_async, SizedInput, TileInput,
 };
 pub use pipeline::KernelPipeline;
 pub use pool::{PoolSlot, TexturePool};

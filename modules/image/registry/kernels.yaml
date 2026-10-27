@@ -1901,6 +1901,21 @@
     - "identity dx=dy=0 is structural, not special-cased: the two half-pixel conversions cancel, so mix(p00, p10, 0.0) is bit-exactly p00 for every edge policy and every mask value"
   tests:
     rust: ["image-kernels/tests/it/geom_offset.rs"]
+- id: geom.patch_vote
+  rust_path: families::geom::GEOM_PATCH_VOTE
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "the VOTE half of PatchMatch inpainting (Barnes, Shechtman, Finkelstein & Goldman, SIGGRAPH 2009): each hole pixel is the weighted mean of what every overlapping target patch's nearest neighbour says it is (Wexler, Shechtman & Irani, IEEE TPAMI 2007, section 3.2); the SEARCH is sequential (scan-order propagation) and stays on the CPU"
+    - "a gather, not a scatter: an output texel reads its (2r+1)^2 field entries, so there are no write races and the result is independent of dispatch order"
+    - "the field is packed three texels per entry (split source centre, 2x2 patch transform, weight + colour bias) so rotation, scale and mirror adaptation and the colour bias vote on the device too; the split centre keeps whole-pixel precision past the f16 integer limit up to 8192 px"
+    - "bilinear taps clamped to the source window; an entry with weight at or below min_weight does not vote, and a texel no entry reaches keeps the pixel already there"
+  tests:
+    rust: ["image-js/src/patchmatch.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
 - id: conv.lens
   rust_path: families::conv::CONV_LENS
   state_row: image.kernel.family-t2

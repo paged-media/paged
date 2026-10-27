@@ -258,8 +258,11 @@ describe("the panel's Retouch section", () => {
     const text = render();
     expect(text).toContain("Content-aware fill");
     expect(text).toContain("texture copied from elsewhere in the image");
-    expect(text).toContain("half resolution");
-    expect(text).toContain("limited to a window");
+    // WP5.8: PatchMatch, coarse to fine, over the whole image — the
+    // windowed search and its stated limit are gone.
+    expect(text).toContain("coarse to fine");
+    expect(text).toContain("the search reaches the whole image");
+    expect(text).not.toContain("limited to a window");
     expect(text).not.toContain("is not offered");
   });
 

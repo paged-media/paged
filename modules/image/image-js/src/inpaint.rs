@@ -16,7 +16,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! CONTENT-AWARE FILL — exemplar-based inpainting.
+//! EXEMPLAR INPAINTING (Criminisi et al.) — now only the spot healing
+//! brush's PROXIMITY MATCH search. Content-Aware Fill, Move and Remove run
+//! on the multi-resolution PatchMatch in `crate::patchmatch`, which has
+//! neither of the limits stated below.
 //!
 //! The catalog priced this as the one genuine XL left in the retouching
 //! family, and it is the only one of the three that is not a brush:
@@ -64,8 +67,6 @@
 //!   retoucher who does not like the result changes the selection, and
 //!   the same selection twice gives the same answer.
 
-use image_gpu::SelectionCoverage;
-
 /// Patch half-width. The patch is `2·R+1` square — 9×9, the size the
 /// paper uses and the one that holds texture without over-smoothing.
 const R: i32 = 4;
@@ -85,50 +86,6 @@ const SEARCH: i32 = 96;
 /// named an offset. Small on purpose: the coarse decision is the answer,
 /// and this only lets the fine pass pick the best texture match near it.
 const REFINE: i32 = 12;
-
-/// Below this the half-resolution pass has nothing useful to say — a
-/// 9×9 patch at half res would cover most of the picture — so the
-/// single-scale path runs directly.
-const MIN_PYRAMID: u32 = 64;
-
-/// Fill every pixel the coverage marks, synthesising from the rest of
-/// the image.
-///
-/// `rgba` is canvas-extent straight RGBA8 and is returned MODIFIED.
-/// `coverage` marks the hole (any value at or above `threshold`).
-/// Returns `None` when there is nothing to fill, or nothing to fill FROM.
-///
-/// COARSE-TO-FINE. A 9×9 patch sees twice as much of the picture at half
-/// resolution, so large-scale structure is decided there and the full-
-/// resolution pass only has to get the texture right. The coarse pass
-/// records WHERE each filled pixel came from — a shift map — and the
-/// fine pass centres its search on twice that offset, which is both
-/// better (the coarse decision is honoured) and cheaper (a small window
-/// around a known-good offset instead of a wide blind one).
-///
-/// Below `MIN_PYRAMID` the image is too small for a half-resolution pass
-/// to mean anything and the single-scale path runs directly.
-pub fn fill(
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-    coverage: &SelectionCoverage,
-    threshold: u8,
-) -> Option<Vec<u8>> {
-    let mask = coverage_bytes(coverage, width, height, threshold);
-    if width < MIN_PYRAMID || height < MIN_PYRAMID {
-        return fill_pass(rgba, width, height, &mask, None).map(|(px, _)| px);
-    }
-    let (cw, ch) = (width / 2, height / 2);
-    let coarse_rgba = downsample2(rgba, width, height);
-    let coarse_mask = downsample_mask2(&mask, width, height);
-    // A coarse pass that finds nothing to do is not a failure — it just
-    // means the hole vanished at half resolution, and the fine pass has
-    // the whole job.
-    let bias = fill_pass(&coarse_rgba, cw, ch, &coarse_mask, None)
-        .map(|(_, shifts)| upsample_shifts(&shifts, cw, ch, width, height));
-    fill_pass(rgba, width, height, &mask, bias.as_deref()).map(|(px, _)| px)
-}
 
 /// The SPOT-HEALING search: where should a hole be healed FROM?
 ///
@@ -173,83 +130,6 @@ pub fn spot_source_offset(rgba: &[u8], width: u32, height: u32, hole: &[u8]) -> 
         })
     };
     ranked.into_iter().map(|(d, _)| d).find(|&d| clears(d))
-}
-
-/// The coverage as one byte per pixel: non-zero where the hole is.
-fn coverage_bytes(coverage: &SelectionCoverage, width: u32, height: u32, threshold: u8) -> Vec<u8> {
-    let mut v = vec![0u8; (width as usize) * (height as usize)];
-    for y in 0..height {
-        for x in 0..width {
-            if coverage.coverage_at(x, y) >= threshold {
-                v[(y * width + x) as usize] = 255;
-            }
-        }
-    }
-    v
-}
-
-/// Box-filter halving. Straight RGBA8 in, straight RGBA8 out.
-fn downsample2(rgba: &[u8], width: u32, height: u32) -> Vec<u8> {
-    let (cw, ch) = ((width / 2) as usize, (height / 2) as usize);
-    let mut out = vec![0u8; cw * ch * 4];
-    for y in 0..ch {
-        for x in 0..cw {
-            for c in 0..4 {
-                let mut sum = 0u32;
-                for (dy, dx) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
-                    let sy = (y * 2 + dy).min(height as usize - 1);
-                    let sx = (x * 2 + dx).min(width as usize - 1);
-                    sum += u32::from(rgba[(sy * width as usize + sx) * 4 + c]);
-                }
-                out[(y * cw + x) * 4 + c] = (sum / 4) as u8;
-            }
-        }
-    }
-    out
-}
-
-/// Halve the mask. A coarse pixel is a hole when ANY of its four is —
-/// growing the hole at the coarse scale rather than shrinking it, so the
-/// coarse pass never treats a hole pixel as source material.
-fn downsample_mask2(mask: &[u8], width: u32, height: u32) -> Vec<u8> {
-    let (cw, ch) = ((width / 2) as usize, (height / 2) as usize);
-    let mut out = vec![0u8; cw * ch];
-    for y in 0..ch {
-        for x in 0..cw {
-            let any = [(0, 0), (0, 1), (1, 0), (1, 1)].iter().any(|(dy, dx)| {
-                let sy = (y * 2 + dy).min(height as usize - 1);
-                let sx = (x * 2 + dx).min(width as usize - 1);
-                mask[sy * width as usize + sx] != 0
-            });
-            if any {
-                out[y * cw + x] = 255;
-            }
-        }
-    }
-    out
-}
-
-/// Scale a coarse shift map up to full resolution. Offsets DOUBLE with
-/// the resolution, which is the whole reason a coarse decision is worth
-/// carrying: it names a place, and the place is twice as far at twice
-/// the size.
-fn upsample_shifts(
-    shifts: &[(i32, i32)],
-    cw: u32,
-    ch: u32,
-    width: u32,
-    height: u32,
-) -> Vec<(i32, i32)> {
-    let mut out = vec![(0i32, 0i32); (width as usize) * (height as usize)];
-    for y in 0..height as usize {
-        for x in 0..width as usize {
-            let cy = (y / 2).min(ch as usize - 1);
-            let cx = (x / 2).min(cw as usize - 1);
-            let (dx, dy) = shifts[cy * cw as usize + cx];
-            out[y * width as usize + x] = (dx * 2, dy * 2);
-        }
-    }
-    out
 }
 
 /// One scale's fill. `bias`, when present, is a per-pixel offset the
@@ -550,244 +430,35 @@ fn best_exemplar(
 mod tests {
     use super::*;
 
-    /// `w × h` RGBA8 from a per-pixel colour.
-    fn img(w: u32, h: u32, f: impl Fn(u32, u32) -> [u8; 3]) -> Vec<u8> {
-        let mut v = Vec::with_capacity((w * h * 4) as usize);
-        for y in 0..h {
-            for x in 0..w {
-                let c = f(x, y);
-                v.extend_from_slice(&[c[0], c[1], c[2], 255]);
-            }
-        }
-        v
-    }
-
-    /// A rectangular hole.
-    fn hole(w: u32, h: u32, x0: u32, y0: u32, x1: u32, y1: u32) -> SelectionCoverage {
-        let mut d = vec![0u8; (w * h) as usize];
-        for y in y0..y1 {
-            for x in x0..x1 {
-                d[(y * w + x) as usize] = 255;
-            }
-        }
-        SelectionCoverage::from_data(w, h, d).expect("coverage")
-    }
-
+    /// The exemplar fill copies real pixels (a two-valued image stays
+    /// two-valued) and touches nothing outside the hole — what the spot
+    /// healing brush's proximity match relies on.
     #[test]
-    fn image_editor_inpaint_fills_every_selected_pixel() {
-        let (w, h) = (64u32, 64u32);
-        // Vertical stripes: a texture with a clear period.
-        let src = img(w, h, |x, _| {
-            let v = if (x / 4) % 2 == 0 { 30 } else { 220 };
-            [v, v, v]
-        });
-        let sel = hole(w, h, 28, 28, 36, 36);
-        let out = fill(&src, w, h, &sel, 128).expect("filled");
-        // The hole is gone: nothing is left at the sentinel value a
-        // partial fill would leave (the original pixels are 30 or 220,
-        // and every filled pixel is copied from those).
-        for y in 28..36 {
-            for x in 28..36 {
-                let i = ((y * w + x) * 4) as usize;
-                assert!(
-                    out[i] == 30 || out[i] == 220,
-                    "pixel ({x},{y}) is {} — filled from real image pixels",
-                    out[i]
-                );
-            }
-        }
-    }
-
-    /// The property that separates content-aware from blur: the fill is
-    /// made of REAL pixels, so a two-valued image stays two-valued. A
-    /// diffusion fill would produce intermediate greys.
-    #[test]
-    fn image_editor_inpaint_synthesises_texture_rather_than_averaging_it() {
+    fn image_editor_inpaint_the_exemplar_pass_only_copies() {
         let (w, h) = (48u32, 48u32);
-        let src = img(w, h, |x, _| {
-            let v = if (x / 3) % 2 == 0 { 0 } else { 255 };
-            [v, v, v]
-        });
-        let sel = hole(w, h, 20, 20, 28, 28);
-        let out = fill(&src, w, h, &sel, 128).expect("filled");
-        let mut intermediate = 0;
+        let mut rgba = Vec::new();
+        for _y in 0..h {
+            for x in 0..w {
+                let v = if (x / 3) % 2 == 0 { 0 } else { 255 };
+                rgba.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        let mut hole = vec![0u8; (w * h) as usize];
         for y in 20..28 {
             for x in 20..28 {
-                let v = out[((y * w + x) * 4) as usize];
-                if v > 20 && v < 235 {
-                    intermediate += 1;
-                }
+                hole[(y * w + x) as usize] = 255;
             }
         }
-        assert_eq!(
-            intermediate, 0,
-            "a blur would leave intermediate greys; an exemplar fill \
-             cannot, because every pixel it writes was copied"
-        );
-    }
-
-    /// STRUCTURE survives: a hole straddling a strong edge comes back
-    /// with the edge still crossing it.
-    ///
-    /// SCOPE, measured rather than assumed: this passes with the data
-    /// term REMOVED, which was checked by mutation. On a two-tone image
-    /// the exemplar SEARCH alone finds a patch matching the known half,
-    /// and that patch carries the edge — so what this test proves is
-    /// that copying real patches preserves structure, not that the
-    /// priority ordering does. The data term changes the ORDER patches
-    /// are filled in, which shows on harder geometry (a hole large
-    /// enough for the front to reach itself from two directions) and is
-    /// not isolated by any test here. Saying so is better than implying
-    /// a coverage this file does not have.
-    #[test]
-    fn image_editor_inpaint_preserves_an_edge_across_the_hole() {
-        let (w, h) = (64u32, 48u32);
-        // Top half dark, bottom half light: one strong horizontal edge.
-        let src = img(w, h, |_, y| {
-            let v = if y < 24 { 20 } else { 230 };
-            [v, v, v]
-        });
-        let sel = hole(w, h, 26, 18, 38, 30);
-        let out = fill(&src, w, h, &sel, 128).expect("filled");
-        let at = |x: u32, y: u32| out[((y * w + x) * 4) as usize] as i32;
-        // Inside the hole, above the edge should still be dark and below
-        // should still be light.
-        for x in 28..36 {
-            assert!(at(x, 20) < 128, "above the edge stayed dark at x={x}");
-            assert!(at(x, 28) > 128, "below the edge stayed light at x={x}");
-        }
-    }
-
-    /// Nothing to fill, or nothing to fill FROM, is `None` — never an
-    /// invented image.
-    #[test]
-    fn image_editor_inpaint_refuses_a_hole_with_no_source() {
-        let (w, h) = (16u32, 16u32);
-        let src = img(w, h, |_, _| [100, 100, 100]);
-        // Empty selection.
-        let empty = SelectionCoverage::from_data(w, h, vec![0u8; (w * h) as usize]).unwrap();
-        assert!(fill(&src, w, h, &empty, 128).is_none());
-        // Everything selected: no source region exists.
-        let all = SelectionCoverage::from_data(w, h, vec![255u8; (w * h) as usize]).unwrap();
-        assert!(fill(&src, w, h, &all, 128).is_none());
-    }
-
-    /// Same input, same output. A retoucher who reruns a fill on the
-    /// same selection gets the same answer, which is what makes the tool
-    /// predictable enough to iterate with.
-    #[test]
-    fn image_editor_inpaint_is_deterministic() {
-        let (w, h) = (48u32, 48u32);
-        let src = img(w, h, |x, y| [(x * 5) as u8, (y * 5) as u8, 128]);
-        let sel = hole(w, h, 18, 18, 26, 26);
-        let a = fill(&src, w, h, &sel, 128).expect("a");
-        let b = fill(&src, w, h, &sel, 128).expect("b");
-        assert_eq!(a, b);
-    }
-
-    /// The fill NEVER touches a pixel outside the selection.
-    #[test]
-    fn image_editor_inpaint_leaves_everything_outside_the_selection_alone() {
-        let (w, h) = (48u32, 48u32);
-        let src = img(w, h, |x, y| [(x * 5) as u8, (y * 5) as u8, 77]);
-        let sel = hole(w, h, 18, 18, 26, 26);
-        let out = fill(&src, w, h, &sel, 128).expect("filled");
-        for y in 0..h {
-            for x in 0..w {
-                if (18..26).contains(&x) && (18..26).contains(&y) {
-                    continue;
-                }
-                let i = ((y * w + x) * 4) as usize;
-                assert_eq!(
-                    &out[i..i + 4],
-                    &src[i..i + 4],
-                    "pixel ({x},{y}) outside the selection was modified"
-                );
+        let (out, _) = fill_pass(&rgba, w, h, &hole, None).expect("filled");
+        for (i, &m) in hole.iter().enumerate() {
+            let v = out[i * 4];
+            if m != 0 {
+                assert!(v == 0 || v == 255, "pixel {i} is {v}");
+            } else {
+                assert_eq!(&out[i * 4..i * 4 + 4], &rgba[i * 4..i * 4 + 4]);
             }
         }
-    }
-
-    // ── the pyramid ──────────────────────────────────────────────────
-
-    #[test]
-    fn image_editor_inpaint_the_coarse_mask_grows_the_hole() {
-        // A coarse pixel is a hole when ANY of its four is. Growing
-        // rather than shrinking is the safe direction: the coarse pass
-        // must never mistake a hole pixel for source material, and one
-        // extra coarse pixel of hole costs nothing.
-        let (w, h) = (4u32, 4u32);
-        let mut mask = vec![0u8; 16];
-        mask[0] = 255; // only the top-left of the first 2×2 block
-        let coarse = downsample_mask2(&mask, w, h);
-        assert_eq!(coarse.len(), 4);
-        assert_eq!(coarse[0], 255, "one hole pixel makes the block a hole");
-        assert_eq!(coarse[1], 0);
-    }
-
-    #[test]
-    fn image_editor_inpaint_shifts_double_with_the_resolution() {
-        // An offset names a PLACE, and the place is twice as far at twice
-        // the size — carrying a coarse offset down unscaled would point
-        // the fine search at the wrong half of the image.
-        let shifts = vec![(3i32, -5i32); 4];
-        let up = upsample_shifts(&shifts, 2, 2, 4, 4);
-        assert_eq!(up.len(), 16);
-        assert!(up.iter().all(|&s| s == (6, -10)));
-    }
-
-    #[test]
-    fn image_editor_inpaint_the_pyramid_path_still_only_copies() {
-        // Big enough to take the coarse-to-fine path (MIN_PYRAMID), so
-        // this is the multi-scale code under test rather than the
-        // single-scale one the earlier specs cover.
-        let (w, h) = (128u32, 128u32);
-        assert!(
-            w >= MIN_PYRAMID && h >= MIN_PYRAMID,
-            "exercises the pyramid"
-        );
-        let src = img(w, h, |x, _| {
-            let v = if (x / 8) % 2 == 0 { 10 } else { 245 };
-            [v, v, v]
-        });
-        let sel = hole(w, h, 50, 50, 78, 78);
-        let out = fill(&src, w, h, &sel, 128).expect("filled");
-        let mut intermediate = 0;
-        for y in 50..78 {
-            for x in 50..78 {
-                let v = out[((y * w + x) * 4) as usize];
-                if v > 20 && v < 235 {
-                    intermediate += 1;
-                }
-            }
-        }
-        assert_eq!(
-            intermediate, 0,
-            "the coarse pass DOWNSAMPLES (which averages), so the risk here \
-             is that averaged pixels leak into the output; they must not — \
-             the fine pass writes only full-resolution copies"
-        );
-    }
-
-    #[test]
-    fn image_editor_inpaint_the_pyramid_path_is_deterministic_too() {
-        let (w, h) = (96u32, 96u32);
-        let src = img(w, h, |x, y| [(x * 2) as u8, (y * 2) as u8, 90]);
-        let sel = hole(w, h, 40, 40, 56, 56);
-        let a = fill(&src, w, h, &sel, 128).expect("a");
-        let b = fill(&src, w, h, &sel, 128).expect("b");
-        assert_eq!(a, b);
-    }
-
-    #[test]
-    fn image_editor_inpaint_a_small_image_skips_the_pyramid() {
-        // Below MIN_PYRAMID a half-resolution 9×9 patch would cover most
-        // of the picture, so the coarse pass has nothing useful to say
-        // and the single-scale path runs directly. Asserted through
-        // behaviour: a small fill still works.
-        let (w, h) = (32u32, 32u32);
-        assert!(w < MIN_PYRAMID);
-        let src = img(w, h, |x, _| [(x * 7) as u8, 60, 60]);
-        let sel = hole(w, h, 12, 12, 20, 20);
-        assert!(fill(&src, w, h, &sel, 128).is_some());
+        // Nothing to fill from is None.
+        assert!(fill_pass(&rgba, w, h, &vec![255u8; (w * h) as usize], None).is_none());
     }
 }
