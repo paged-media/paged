@@ -1067,6 +1067,37 @@ export interface FindSpec {
 }
 
 /**
+ * Engine ADR 10XX — a story the document does not hold, drawn by the
+ * snapshot alone: laid out by the engine\'s text stack (the composer,
+ * justification, hyphenation and the document\'s fonts) in a frame at
+ * `bounds` on the snapshot\'s page, in a copy of the document. The
+ * document is not changed; no undo step, no id is minted in it.
+ *
+ * What paged.image\'s type layers are made of: their text lives in the
+ * image, and the engine draws it at the image\'s resolution.
+ */
+export interface SnapshotStory {
+    /**
+     * The text frame, page pt: `[top, left, bottom, right]`.
+     */
+    bounds: [number, number, number, number];
+    /**
+     * The paragraphs, in order. An empty list draws nothing.
+     */
+    paragraphs?: SnapshotParagraph[];
+    /**
+     * `\"top\"` (the default), `\"center\"`, `\"bottom\"` or `\"justify\"`.
+     */
+    verticalJustification?: string;
+    /**
+     * The first line\'s baseline this far (pt) below the frame\'s top
+     * (InDesign\'s Fixed first baseline offset): what places point type
+     * exactly on its anchor. Absent: one ascent, InDesign\'s default.
+     */
+    firstBaseline?: number;
+}
+
+/**
  * Every object in a document, by one name. See the module docs for the
  * string grammar, which is the canonical form; this enum is its typed
  * mirror on the wire.
@@ -1299,6 +1330,12 @@ export interface SnapshotPng {
      * exactly. Absent for a whole page.
      */
     region?: SnapshotClip;
+    /**
+     * Engine ADR 10XX — the request\'s `story` was drawn (alone). Absent
+     * when there was none, and from an engine that does not know the
+     * field (it drew the page instead).
+     */
+    story?: boolean;
 }
 
 /**
@@ -1522,6 +1559,30 @@ export interface AlternateMember {
 }
 
 /**
+ * One paragraph of a [`SnapshotStory`]. Every absent value is the
+ * document\'s default paragraph style\'s.
+ */
+export interface SnapshotParagraph {
+    runs: SnapshotRun[];
+    /**
+     * IDML\'s names: `LeftAlign`, `CenterAlign`, `RightAlign`,
+     * `LeftJustified`, `CenterJustified`, `RightJustified`,
+     * `FullyJustified`.
+     */
+    justification?: string;
+    firstLineIndent?: number;
+    leftIndent?: number;
+    rightIndent?: number;
+    spaceBefore?: number;
+    spaceAfter?: number;
+    hyphenation?: boolean;
+    /**
+     * `\"paragraph\"` (Adobe Paragraph Composer) or `\"single\"` (Single-line).
+     */
+    composer?: string;
+}
+
+/**
  * One part of a styled value: text, in a character style or the frame\'s
  * own, or a break.
  */
@@ -1570,6 +1631,56 @@ export interface TemplateFinding {
      * The finding in English.
      */
     message: string;
+}
+
+/**
+ * One run of a [`SnapshotParagraph`]: text in one set of character
+ * attributes. Absent values inherit (the paragraph style\'s).
+ */
+export interface SnapshotRun {
+    /**
+     * The text; a `\\n` or `\\r` inside it is a forced line break.
+     */
+    text: string;
+    /**
+     * Family name, as the document\'s fonts name it.
+     */
+    font?: string;
+    fontStyle?: string;
+    pointSize?: number;
+    /**
+     * Leading in pt; absent is auto.
+     */
+    leading?: number;
+    /**
+     * The fill, sRGB 0–255. Absent is the style\'s (black).
+     */
+    fillRgb?: [number, number, number];
+    /**
+     * 1/1000 em.
+     */
+    tracking?: number;
+    baselineShift?: number;
+    /**
+     * Percent (100 = none).
+     */
+    horizontalScale?: number;
+    verticalScale?: number;
+    /**
+     * Degrees.
+     */
+    skew?: number;
+    underline?: boolean;
+    strikethru?: boolean;
+    ligatures?: boolean;
+    /**
+     * IDML\'s `Normal`, `AllCaps`, `SmallCaps`, `CapToSmallCap`.
+     */
+    capitalization?: string;
+    /**
+     * IDML\'s `Normal`, `Superscript`, `Subscript`.
+     */
+    position?: string;
 }
 
 /**
@@ -2684,7 +2795,7 @@ export type Operation = { kind: "SetProperty"; node: NodeId; path: PropertyPath;
  * variants so e.g. `cmyk_icc_profile` becomes `cmykIccProfile` on
  * the wire — the TS protocol mirror locks the camelCase contract.
  */
-export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[]; scope?: FontScope } } | { kind: "clearFontRegistry"; payload: ClearFontRegistryPayload | null } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "amendMutation"; payload: { appliedSeq: number; mutation: Mutation } } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null; hideItems?: ElementId[]; markers?: boolean; only?: ElementId[]; clip?: SnapshotClip; format?: SnapshotFormat; background?: SnapshotBackground; trim?: boolean } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number] } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestTextOutlines"; payload: { id: ElementId } } | { kind: "requestSnapPoint"; payload: { query: SnapPointQuery } } | { kind: "setSnapSettings"; payload: { settings: SnapSettings } } | { kind: "setSessionPolicy"; payload: { policy: SessionPolicy } } | { kind: "setTemplateFields"; payload: { values: TemplateFieldValue[] } } | { kind: "requestDerivedTemplateFields"; payload: { options?: DeriveOptions } } | { kind: "requestFindText"; payload: { spec: FindSpec } } | { kind: "openAsTemplate"; payload: { options?: DeriveOptions; only?: string[] | null } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "exportElements"; payload: { elementIds: ElementId[] } } | { kind: "requestStyleProperties"; payload: { collection: StyleCollection; styleId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer; caller?: string } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestQuery"; payload: { selector: string } } | { kind: "requestGet"; payload: { address: string; path: string } } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string; budget?: ScriptBudgetWire | null; hostObjects?: boolean } } | { kind: "hostObjectsResult"; payload: { session: number; answers: HostObjectAnswer[]; committed?: number[] } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: { linkBase?: string | null } } | { kind: "writePagedPart"; payload: { path: string; bytes: number[]; caller?: string } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "deletePagedPart"; payload: { path: string; caller?: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers } } | { kind: "commitGesture"; payload: { handle: GestureHandle } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } };
+export type MainToWorkerKind = { kind: "hello" } | { kind: "loadDocument"; payload: { bytes: number[]; font?: number[] | null; cmykIccProfile?: number[] | null } } | { kind: "newBlankDocument"; payload: { widthPt: number; heightPt: number; font?: number[] | null } } | { kind: "registerFont"; payload: { family: string; style?: string | null; bytes: number[]; scope?: FontScope } } | { kind: "clearFontRegistry"; payload: ClearFontRegistryPayload | null } | { kind: "registerColorProfile"; payload: { name: string; bytes: number[] } } | { kind: "mutate"; payload: Mutation } | { kind: "amendMutation"; payload: { appliedSeq: number; mutation: Mutation } } | { kind: "requestPage"; payload: { pageId: PageId; lod: LodTier } } | { kind: "hitTest"; payload: { pageId: PageId; docPoint: [number, number]; filter: HitFilter } } | { kind: "requestSnapshot"; payload: { pageId: PageId; targetWidthPx: number; dpi?: number | null; hideItems?: ElementId[]; markers?: boolean; only?: ElementId[]; clip?: SnapshotClip; format?: SnapshotFormat; background?: SnapshotBackground; trim?: boolean; story?: SnapshotStory } } | { kind: "setSelection"; payload: { selection: ContentSelection | null } } | { kind: "requestSelectionGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretGeometry"; payload: { selection: ContentSelection } } | { kind: "requestCaretNav"; payload: { storyId: string; offset: number; direction: CaretDirection; cell?: TextCellAddr | null } } | { kind: "requestLineBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestWordBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "requestParagraphBounds"; payload: { storyId: string; offset: number; cell?: TextCellAddr | null } } | { kind: "undo" } | { kind: "redo" } | { kind: "setElementSelection"; payload: { ids: ElementId[]; mode: SelectionMode } } | { kind: "requestMarqueeHits"; payload: { pageId: PageId; rect: [number, number, number, number] } } | { kind: "requestElementGeometry"; payload: { ids: ElementId[] } } | { kind: "requestGroupLeaves"; payload: { groupId: string } } | { kind: "requestPathAnchors"; payload: { id: ElementId } } | { kind: "requestTextOutlines"; payload: { id: ElementId } } | { kind: "requestSnapPoint"; payload: { query: SnapPointQuery } } | { kind: "setSnapSettings"; payload: { settings: SnapSettings } } | { kind: "setSessionPolicy"; payload: { policy: SessionPolicy } } | { kind: "setTemplateFields"; payload: { values: TemplateFieldValue[] } } | { kind: "requestDerivedTemplateFields"; payload: { options?: DeriveOptions } } | { kind: "requestFindText"; payload: { spec: FindSpec } } | { kind: "openAsTemplate"; payload: { options?: DeriveOptions; only?: string[] | null } } | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } } | { kind: "requestPlanarRegions"; payload: { elementIds: ElementId[]; point?: [number, number] | null } } | { kind: "requestLayers" } | { kind: "requestCollection"; payload: { name: CollectionName } } | { kind: "requestFrameChain"; payload: { storyId: string } } | { kind: "requestStoryContent"; payload: { storyId: string } } | { kind: "exportElements"; payload: { elementIds: ElementId[] } } | { kind: "requestStyleProperties"; payload: { collection: StyleCollection; styleId: string } } | { kind: "requestPlacedAssetBytes"; payload: { elementId: string } } | { kind: "requestFontFaceBytes"; payload: { family: string; style?: string | null } } | { kind: "requestMeasureText"; payload: { family: string; style?: string | null; text: string; sizePt: number } } | { kind: "submitSceneLayer"; payload: { elementId: string; layer: SceneLayer; caller?: string } } | { kind: "clearSceneLayer"; payload: { elementId: string } } | { kind: "submitPixelLayer"; payload: { elementId: string; layer: PixelLayer } } | { kind: "clearPixelLayer"; payload: { elementId: string } } | { kind: "claimImageResource"; payload: { imageId: string; levels: number; tileSize: number; baseWidth: number; baseHeight: number; revision: number } } | { kind: "releaseImageResource"; payload: { imageId: string } } | { kind: "submitResourceTiles"; payload: { imageId: string; level: number; tiles: ProviderTileWire[]; generation: number } } | { kind: "requestDocumentMeta" } | { kind: "requestDocumentPlaceholders" } | { kind: "requestQuery"; payload: { selector: string } } | { kind: "requestGet"; payload: { address: string; path: string } } | { kind: "requestColorPreview"; payload: { swatchId: string } } | { kind: "requestColorCompute"; payload: { space: string; value: number[]; tint?: number | null; model?: string | null; alternateSpace?: string | null; alternateValue?: number[] | null } } | { kind: "requestGradientDetail"; payload: { gradientId: string } } | { kind: "exportSwatchLibrary"; payload: { groupId?: string | null } } | { kind: "executeScript"; payload: { source: string; budget?: ScriptBudgetWire | null; hostObjects?: boolean } } | { kind: "hostObjectsResult"; payload: { session: number; answers: HostObjectAnswer[]; committed?: number[] } } | { kind: "exportPdfBegin"; payload: { options: ExportPdfWireOptions } } | { kind: "exportPdfPage"; payload: { session: number } } | { kind: "exportPdfFinish"; payload: { session: number } } | { kind: "exportPdfCancel"; payload: { session: number } } | { kind: "exportIdml"; payload: { linkBase?: string | null } } | { kind: "writePagedPart"; payload: { path: string; bytes: number[]; caller?: string } } | { kind: "readPagedPart"; payload: { path: string } } | { kind: "listPagedParts"; payload: { prefix: string } } | { kind: "deletePagedPart"; payload: { path: string; caller?: string } } | { kind: "exportPaged"; payload: {} } | { kind: "requestElementProperties"; payload: { id: ElementId } } | { kind: "requestSceneTree" } | { kind: "beginGesture"; payload: { nodes: ElementId[]; gesture: GestureType; anchor?: GestureAnchor | null; cameraScale?: number | null } } | { kind: "updateGesture"; payload: { handle: GestureHandle; delta: [number, number]; modifiers: GestureModifiers } } | { kind: "commitGesture"; payload: { handle: GestureHandle } } | { kind: "cancelGesture"; payload: { handle: GestureHandle } };
 
 /**
  * The document\'s policy.

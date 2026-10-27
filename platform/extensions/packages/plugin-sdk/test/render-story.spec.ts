@@ -22,6 +22,8 @@
 // region, which the SDK must never hand out as the story).
 
 import { afterEach, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import type { PluginManifest, RenderStory } from "@paged-media/plugin-api";
 
@@ -44,6 +46,19 @@ const manifest = (
   capabilities,
 });
 
+/** The face the headless engine lays text out in (the editor's default
+ *  font provider's stand-in): without one nothing is drawn. */
+const FONT = new Uint8Array(
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../../../../engine/core/corpus/fonts/SpaceGrotesk-VF.ttf",
+        import.meta.url,
+      ),
+    ),
+  ),
+);
+
 const STORY: RenderStory = {
   bounds: [20, 20, 120, 220],
   paragraphs: [
@@ -62,7 +77,7 @@ afterEach(() => {
 
 describe("host.render.story [image.layers.type]", () => {
   it("draws the story alone, trimmed, and leaves the document as it was", async () => {
-    live = await createHeadlessHost({ console: silent });
+    live = await createHeadlessHost({ console: silent, defaultFont: FONT });
     const [pageId] = await live.load(minimalIdml());
     expect(live.host.supports("render.story@1")).toBe(true);
     const before = await live.host.document.tree();
