@@ -14,6 +14,7 @@ mod container_bytes;
 mod continuous;
 mod feature_evidence;
 mod files;
+mod first_fit;
 mod floats;
 mod footnote_numbering;
 mod headers;

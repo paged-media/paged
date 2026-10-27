@@ -24,7 +24,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [609](609-styles-and-theme.md) | Styles and theme: theme colours as a "Word theme" swatch group, theme fonts resolved, references written back | Accepted 2026-10-24 |
 | [610](610-save-back-across-sessions-and-new-parts.md) | Save-back across sessions and new parts (amends 602): reopen-then-splice, paragraph styles, styles.xml | Accepted 2026-10-24 |
 | [616](616-files.md) | Files: templates as new documents, macros carried, RTF and OpenDocument read onto docx-core, .doc refused, "Save as .docx" | Accepted 2026-10-25 |
-| [617](617-pagination-policy.md) | Pagination policy: Word's rules, the engine's first-fit composer | Accepted 2026-10-24 |
+| [617](617-pagination-policy.md) | Pagination policy: Word's rules, the engine's first-fit composer | Accepted 2026-10-24, amended 2026-10-25 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
