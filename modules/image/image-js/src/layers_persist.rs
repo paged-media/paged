@@ -67,12 +67,13 @@ use image_graph::journal::TileJournal;
 
 use super::{
     Adjustment, BlendIf, CompAppearance, CompEntry, FillLayer, FillSource, Knockout, Layer,
-    LayerComp, LayerExt, LayerGroup, LayerKind, LayerLocks, LayerStack, SmartSource,
+    LayerComp, LayerExt, LayerGroup, LayerKind, LayerLocks, LayerStack, SmartSource, TypeLayer,
+    TypeSource,
 };
 use crate::ingest::{AdjustParams, IngestError};
 
 const MAGIC: &[u8; 4] = b"PGIL";
-const VERSION: u32 = 4;
+const VERSION: u32 = 5;
 
 struct W(Vec<u8>);
 
@@ -245,6 +246,9 @@ impl LayerStack {
                 LayerKind::Fill(_) if version >= 4 => 3,
                 // An older reader takes a fill layer's render as pixels.
                 LayerKind::Fill(_) => 0,
+                LayerKind::Type(_) if version >= 5 => 5,
+                // An older reader takes a type layer's render as pixels.
+                LayerKind::Type(_) => 0,
             });
             w.u8(if l.rgba.is_16bit() { 16 } else { 8 });
             // A bounded layer is stored as it lives — expanding it here
@@ -306,6 +310,16 @@ impl LayerStack {
             match &l.kind {
                 LayerKind::Pixels => {}
                 LayerKind::Fill(_) if version < 4 => {}
+                LayerKind::Type(_) if version < 5 => {}
+                LayerKind::Type(t) => {
+                    w.str(&t.source.to_json());
+                    w.i64(
+                        t.psd
+                            .as_ref()
+                            .map_or(-1, |b| i64::from(slot(Arc::clone(b)))),
+                    );
+                    w.u8(u8::from(t.stale));
+                }
                 LayerKind::Adjustment(a) if version < 4 || matches!(**a, Adjustment::Chain(_)) => {
                     // An older reader takes a typed layer as the chain it
                     // evaluates to (a direct kind as the identity chain).
@@ -619,6 +633,15 @@ impl LayerStack {
                     LayerKind::Adjustment(Box::new(Adjustment::from_wire(
                         &kind, &values, &blob, &label,
                     )?))
+                }
+                5 if version >= 5 => {
+                    let source = TypeSource::from_json(&r.str()?).map_err(IngestError::Decode)?;
+                    let psd = match u32::try_from(r.i64()?).ok() {
+                        Some(slot) => Some(buffer(slot)?),
+                        None => None,
+                    };
+                    let stale = r.u8()? != 0;
+                    LayerKind::Type(Box::new(TypeLayer { source, stale, psd }))
                 }
                 2 => {
                     let (sw, sh, scale) = (r.u32()?, r.u32()?, r.f32()?);

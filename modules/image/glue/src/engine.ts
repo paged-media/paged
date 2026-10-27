@@ -530,6 +530,16 @@ function decodedInfoOf(h: DecodedHandleWasm): DecodedInfo {
   };
 }
 
+/** WP5.10 — a type layer's render: straight RGBA8, `width × height`, its
+ *  top-left at canvas pixel `(x, y)` (it may reach past the canvas). */
+export interface TypeRenderPixels {
+  rgba: Uint8Array;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** The distortion kinds `geom.warp_backward` carries. Order matches the
  *  kernel's `kind` discriminant. */
 export const WARP_KINDS = ["pinch", "spherize", "twirl", "wave"] as const;
@@ -783,7 +793,7 @@ export interface LayerInfo {
    *  transforms everything beneath it; a `smart` layer's pixels are a
    *  cached RENDER of preserved source bytes, so rescaling it is
    *  lossless. */
-  kind: "pixels" | "adjustment" | "smart" | "fill";
+  kind: "pixels" | "adjustment" | "smart" | "fill" | "type";
   /** Whether a layer mask is attached at all. */
   hasMask: boolean;
   /** Whether that mask APPLIES. Disabled keeps the coverage — the two
@@ -812,6 +822,8 @@ export interface LayerInfo {
   adjustKind: AdjustmentKind | "chain" | null;
   /** A fill layer's kind. */
   fillKind: FillKind | null;
+  /** A TYPE layer (WP5.10): whether its pixels need a new render. */
+  typeStale?: boolean | null;
 }
 
 /** A plain layer's parity fields (Photoshop's defaults) — for a reader
@@ -1941,8 +1953,31 @@ export interface ImageEngine {
     values: readonly number[],
     tileHandle: number,
   ): Promise<void>;
-  /** A fill layer's or smart object's render becomes pixels. */
+  /** A fill layer's, smart object's or type layer's render becomes
+   *  pixels. */
   layerRasterize(index: number): void;
+  /** WP5.10 — a TYPE layer of `source` (its JSON), its pixels the
+   *  engine's render `render`, bent by the source's warp. One undo step.
+   *  Returns its index. */
+  layerAddType(
+    source: string,
+    render: TypeRenderPixels,
+    name: string,
+  ): Promise<number>;
+  /** A type layer's new source and render; writes sharing `session`
+   *  merge into one undo step. */
+  layerSetType(
+    index: number,
+    source: string,
+    render: TypeRenderPixels,
+    session: string,
+  ): Promise<void>;
+  /** A type layer's source JSON and state, or null for another layer. */
+  layerTypeSource(index: number): {
+    stale: boolean;
+    fromPsd: boolean;
+    source: unknown;
+  } | null;
   layerSetFillOpacity(index: number, fill: number): void;
   /** Blend If's 32 sliders, or null to clear. */
   layerSetBlendIf(index: number, sliders: readonly number[] | null): void;
@@ -2668,6 +2703,26 @@ export interface ImageWasmModule {
     tile_handle: number,
   ): Promise<void>;
   layers_rasterize(index: number): void;
+  layers_add_type(
+    source: string,
+    rgba: Uint8Array,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    name: string,
+  ): Promise<number>;
+  layers_set_type(
+    index: number,
+    source: string,
+    rgba: Uint8Array,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    session: string,
+  ): Promise<void>;
+  layers_type_source(index: number): string;
   layers_set_fill_opacity(index: number, fill: number): void;
   layers_set_blend_if(index: number, sliders: Uint8Array): void;
   layers_set_knockout(index: number, knockout: string): void;
@@ -3687,6 +3742,23 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     layerSetFill: (index, kind, values, tile) =>
       wasm.layers_set_fill(index, kind, Float32Array.from(values), tile),
     layerRasterize: (index) => wasm.layers_rasterize(index),
+    layerAddType: (source, r, name) =>
+      wasm.layers_add_type(source, r.rgba, r.x, r.y, r.width, r.height, name),
+    layerSetType: (index, source, r, session) =>
+      wasm.layers_set_type(
+        index,
+        source,
+        r.rgba,
+        r.x,
+        r.y,
+        r.width,
+        r.height,
+        session,
+      ),
+    layerTypeSource: (index) => {
+      const json = wasm.layers_type_source(index);
+      return json ? (JSON.parse(json) as never) : null;
+    },
     layerSetFillOpacity: (index, fill) =>
       wasm.layers_set_fill_opacity(index, fill),
     layerSetBlendIf: (index, sliders) =>

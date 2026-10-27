@@ -135,8 +135,15 @@ fn warp_mesh_ref(win: &[Px], win_w: u32, win_h: u32, ox: u32, oy: u32, p: &WarpM
     if e[0] * e[0] + e[1] * e[1] > 0.25 {
         return Px([0.0; 4]);
     }
-    let sx = uv[0] * p.src_w - 0.5;
-    let sy = uv[1] * p.src_h - 0.5;
+    let snap = |v: f32| {
+        if (v - v.round()).abs() < 1.0e-3 {
+            v.round()
+        } else {
+            v
+        }
+    };
+    let sx = snap(uv[0] * p.src_w - 0.5);
+    let sy = snap(uv[1] * p.src_h - 0.5);
     let (x0, y0) = (sx.floor(), sy.floor());
     let (fx, fy) = (sx - x0, sy - y0);
     let (ix, iy) = (x0 as i32, y0 as i32);
@@ -207,7 +214,10 @@ fn geom_warp_mesh_bends_the_source_and_clears_outside__feat__image_layers_type()
     let corner = warp_mesh_ref(&px, w, h, 0, 0, &p);
     assert_eq!(corner.0, [0.0; 4], "top-left corner is outside the arc");
     let middle_top = warp_mesh_ref(&px, w, h, ow / 2, 1, &p);
-    assert!(middle_top.0[3] > 0.5, "the hump reaches the top: {middle_top:?}");
+    assert!(
+        middle_top.0[3] > 0.5,
+        "the hump reaches the top: {middle_top:?}"
+    );
 }
 
 fn parity_for(style: WarpStyle, bend: f64) {

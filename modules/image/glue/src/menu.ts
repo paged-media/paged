@@ -409,6 +409,10 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
 
   ["Image/Apply crop", "commitCrop", "crop"],
   ["Image/Set type", "setType", "type"],
+  // WP5.10 — type layers.
+  ["Image/Type/Warp text…", "warpText", "type-layer"],
+  ["Image/Type/Rasterize type layer", "rasterizeType", "type-layer"],
+  ["Image/Type/Paint text into layer", "paintTextIntoLayer", "type-layer"],
   ["Image/Load brush library (.abr)…", "loadBrushLibrary", "brush"],
 
   ["Image/Commit edits to the document", "commitImage", "commit"],

@@ -135,6 +135,9 @@
       "media.paged.image.command.linkLayers",
       "media.paged.image.command.unlinkLayer",
       "media.paged.image.command.newLayerComp",
+      "media.paged.image.command.rasterizeType",
+      "media.paged.image.command.paintTextIntoLayer",
+      "media.paged.image.command.warpText",
       "media.paged.image.command.newAdjustmentBrightnessContrast",
       "media.paged.image.command.newAdjustmentLevels",
       "media.paged.image.command.newAdjustmentCurves",
@@ -926,6 +929,30 @@
         {
           "id": "media.paged.image.command.newLayerComp",
           "title": "New layer comp",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rasterizeType",
+          "title": "Rasterize type layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.paintTextIntoLayer",
+          "title": "Paint text into layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.warpText",
+          "title": "Warp text…",
           "args": {
             "kind": "struct",
             "fields": {}

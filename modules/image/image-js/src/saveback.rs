@@ -971,6 +971,15 @@ pub fn psd_write_stack(
             addl.extend(crate::psd_layer_ext::fill_block(&f.source));
         }
         addl.extend(adjustment);
+        if let Some(t) = layer.type_layer() {
+            // The text stays editable in Photoshop (WP5.10): its own TySh
+            // while unedited, else this source written out.
+            let px = layer.rgba.canvas().to_rgba8();
+            addl.push(crate::layers::type_layer::psd_block(
+                t,
+                crate::layers::type_layer::ink_bounds(&px, width, height, &t.source.frame),
+            ));
+        }
         records.push(LayerRecord {
             top: 0,
             left: 0,

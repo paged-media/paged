@@ -145,6 +145,8 @@ mod fold;
 // Typed adjustments, fill layers, blending options, locks, comps.
 pub mod kinds;
 pub use kinds::*;
+pub mod type_layer;
+pub use type_layer::{TypeFrame, TypeLayer, TypeParagraph, TypeRun, TypeSource, TypeWarp};
 // A fill layer's render (the `gen.*` kernels).
 mod fill_render;
 pub use fill_render::render_fill;
@@ -154,6 +156,8 @@ pub use verbs::{AlignEdge, Axis};
 pub mod mask;
 #[cfg(test)]
 mod parity_tests;
+#[cfg(test)]
+mod type_tests;
 pub use mask::{BoundedMask, LayerMask};
 
 /// The default name of the layer an ingested image becomes.
@@ -193,6 +197,10 @@ pub enum LayerKind {
     /// pattern ([`FillLayer`]); like a smart object it composites as
     /// pixels and re-renders from its source when that changes.
     Fill(Box<FillLayer>),
+    /// A TYPE LAYER (WP5.10, image ADR 468): its pixels are the engine's
+    /// render of a text source ([`TypeLayer`]), re-rendered by the bundle
+    /// when the text, its styles, its frame or its warp change.
+    Type(Box<TypeLayer>),
 }
 
 /// The preserved original behind a smart object, plus the scale its
@@ -577,8 +585,16 @@ impl Layer {
         // layer's render is the same.
         matches!(
             self.kind,
-            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_)
+            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) | LayerKind::Type(_)
         )
+    }
+
+    /// The type layer's source and render state.
+    pub fn type_layer(&self) -> Option<&TypeLayer> {
+        match &self.kind {
+            LayerKind::Type(t) => Some(t),
+            _ => None,
+        }
     }
 
     /// The fill layer's source and render state.
@@ -609,6 +625,7 @@ impl Layer {
             LayerKind::Pixels => "pixels",
             LayerKind::Smart(_) => "smart",
             LayerKind::Fill(_) => "fill",
+            LayerKind::Type(_) => "type",
             LayerKind::Adjustment(_) => "adjustment",
         }
     }
@@ -666,7 +683,9 @@ impl Layer {
             },
             // A smart object or fill layer contributes PIXELS (its render),
             // not a transform of the backdrop — so it has no adjust params.
-            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) => None,
+            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) | LayerKind::Type(_) => {
+                None
+            }
         }
     }
 
@@ -1208,6 +1227,11 @@ impl LayerStack {
             let fill = record
                 .filter(|_| adjustment.is_none() && !import.converted_from_cmyk && !plate.smart)
                 .and_then(crate::psd_layer_ext::fill_source);
+            // A TYPE layer keeps its text editable; its pixels stay
+            // Photoshop's render until the text is edited (WP5.10).
+            let typed = record
+                .filter(|_| plate.text && adjustment.is_none() && !plate.smart)
+                .and_then(type_layer::from_psd_record);
             layers.push(Layer {
                 id: layers.len() as u32 + 1,
                 name: name.clone(),
@@ -1235,6 +1259,9 @@ impl LayerStack {
                 // source is not rendered here (`smart_renders_agree`).
                 kind: match (adjustment, fill) {
                     (Some(a), _) => LayerKind::Adjustment(Box::new(a)),
+                    (None, _) if typed.is_some() => {
+                        LayerKind::Type(Box::new(typed.expect("checked")))
+                    }
                     (None, Some(source)) => LayerKind::Fill(Box::new(FillLayer {
                         source,
                         stale: false,
@@ -1464,9 +1491,10 @@ impl LayerStack {
         self.check_canvas_op(op)?;
         // Always recorded, for the reason `remove` is: older pixel steps
         // address the old extent and must not be reachable across it.
-        self.recorded(op.label(), None, |s| {
+        let old = (self.width, self.height);
+        self.recorded(op.label(), None, move |s| {
             s.transform_canvas_unrecorded(op);
-            s.after_canvas_op(op);
+            s.after_canvas_op(op, old);
             Ok(())
         })
     }
@@ -1476,8 +1504,44 @@ impl LayerStack {
     /// mirroring with a rotate or flip, as Photoshop's does), and a
     /// layer comp's recorded positions — pixels at the old extent — are
     /// dropped (its visibility and appearance still apply).
-    fn after_canvas_op(&mut self, op: CanvasOp) {
+    ///
+    /// A TYPE layer's pixels moved with the canvas; its source follows: a
+    /// crop or Canvas Size moves its frame, Image Size scales it (and the
+    /// text re-renders at the new size), and a rotation, flip or
+    /// straighten — which upright text cannot follow — rasterizes it.
+    fn after_canvas_op(&mut self, op: CanvasOp, (old_w, old_h): (u32, u32)) {
         for layer in &mut self.layers {
+            if let LayerKind::Type(t) = &mut layer.kind {
+                let moved = match op {
+                    CanvasOp::Crop { x, y, .. } => Some((-f64::from(x), -f64::from(y))),
+                    CanvasOp::Resize {
+                        width,
+                        height,
+                        anchor_x,
+                        anchor_y,
+                    } => Some((
+                        (f64::from(width) - f64::from(old_w)) * f64::from(anchor_x) / 2.0,
+                        (f64::from(height) - f64::from(old_h)) * f64::from(anchor_y) / 2.0,
+                    )),
+                    _ => None,
+                };
+                match (op, moved) {
+                    (_, Some((dx, dy))) => {
+                        t.source.frame.translate(dx, dy);
+                        t.psd = None;
+                    }
+                    (CanvasOp::Resample { width, height, .. }, None) => {
+                        t.source = t.source.scaled(
+                            f64::from(width) / f64::from(old_w.max(1)),
+                            f64::from(height) / f64::from(old_h.max(1)),
+                        );
+                        t.stale = true;
+                        t.psd = None;
+                    }
+                    _ => layer.kind = LayerKind::Pixels,
+                }
+                continue;
+            }
             if let LayerKind::Fill(f) = &mut layer.kind {
                 f.stale = true;
                 if let FillSource::Gradient(g) = &mut f.source {
@@ -1637,7 +1701,7 @@ impl LayerStack {
             s.groups = groups;
             s.width = ow;
             s.height = oh;
-            s.after_canvas_op(op);
+            s.after_canvas_op(op, (w, h));
             Ok(())
         })
     }
@@ -1816,9 +1880,11 @@ impl LayerStack {
                 };
                 Ok(())
             }
-            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) => Err(
-                IngestError::Unsupported(format!("layer {index} holds pixels, not an adjustment")),
-            ),
+            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) | LayerKind::Type(_) => {
+                Err(IngestError::Unsupported(format!(
+                    "layer {index} holds pixels, not an adjustment"
+                )))
+            }
         }
     }
 
@@ -2572,6 +2638,12 @@ impl LayerStack {
         }
         let active = &self.layers[self.active];
         active.pixels_editable()?;
+        if active.type_layer().is_some() {
+            return Err(IngestError::Unsupported(format!(
+                "\"{}\" is a type layer — rasterize it to paint on it (Layer ▸ Rasterize ▸ Type)",
+                active.name
+            )));
+        }
         let clipped = damage
             .intersect(Region::new(0, 0, self.width, self.height))
             .unwrap_or(Region::new(0, 0, 0, 0));

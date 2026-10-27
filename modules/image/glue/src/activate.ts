@@ -69,6 +69,7 @@ import { makePatchGesture } from "./patch-tool";
 import { makeSelectionGesture } from "./selection-tool";
 import { makeBrushGesture, PAINT_CURSOR } from "./brush-tool";
 import { makeTypeGesture } from "./type-tool";
+import { makeTypeOverlay } from "./type-overlay";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
 import { makeColorBindingProvider } from "./binding-provider/color-provider";
@@ -130,6 +131,9 @@ const CMD = defineMessages("image.command", {
   newAdjustment: "New adjustment layer: {kind}",
   blendingOptions: "Blending options of the active layer…",
   rasterizeLayer: "Rasterize the active layer",
+  rasterizeType: "Rasterize type layer",
+  paintTextIntoLayer: "Paint text into layer",
+  warpText: "Warp text…",
   layerViaCopy: "Layer via copy",
   layerViaCut: "Layer via cut",
   mergeDown: "Merge down",
@@ -171,7 +175,7 @@ const TOOL = defineMessages("image.tool", {
   healingBrush: "Healing brush",
   spotHealingBrush: "Spot healing brush",
   patch: "Patch",
-  typeRaster: "Type (raster)",
+  typeRaster: "Type",
   dodge: "Dodge",
   burn: "Burn",
   sponge: "Sponge",
@@ -241,6 +245,19 @@ export function activate(host: BundleHost): BundleHandle {
     untyped.push({ id: c.id, title: c.title, handler: c.handler });
     return host.contribute.command(c);
   };
+
+  // WP5.10 — the on-canvas text field over a type layer being edited. A
+  // host without an overlay layer (headless, a test editor) has no canvas
+  // to put it on; type layers still work through the session there.
+  try {
+    host.contribute.overlay({
+      id: "media.paged.image.overlay.type",
+      render: makeTypeOverlay(session),
+      z: 200,
+    });
+  } catch (err) {
+    host.log.debug("type overlay: the host has no overlay layer", err);
+  }
 
   contributePanel(host, {
     id: PANEL_ID,
@@ -927,6 +944,29 @@ export function activate(host: BundleHost): BundleHandle {
       () => session.unlinkLayer(session.state().layers.active),
     ],
     ["newLayerComp", CMD.newLayerComp, () => session.newLayerComp()],
+    // TYPE LAYERS (WP5.10).
+    [
+      "rasterizeType",
+      CMD.rasterizeType,
+      () => {
+        const s = session.state();
+        const row = s.layers.layers[s.layers.active];
+        return row?.kind === "type" ? session.rasterizeLayer(row.index) : false;
+      },
+    ],
+    [
+      "paintTextIntoLayer",
+      CMD.paintTextIntoLayer,
+      () => session.paintTextIntoLayer(),
+    ],
+    [
+      "warpText",
+      CMD.warpText,
+      () => {
+        host.shell.openPanel(PANEL_ID);
+        return true;
+      },
+    ],
   ] as const) {
     command({
       id: `media.paged.image.command.${suffix}`,

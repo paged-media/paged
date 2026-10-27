@@ -418,8 +418,12 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
         textureStore(outp, xy, vec4<f32>(0.0));
         return;
     }
-    let sx = uv.x * params.src_w - 0.5;
-    let sy = uv.y * params.src_h - 0.5;
+    // A solve within a thousandth of a texel centre IS that centre: the
+    // Newton residual must not blend a neighbour into an unwarped pixel.
+    var sx = uv.x * params.src_w - 0.5;
+    var sy = uv.y * params.src_h - 0.5;
+    if (abs(sx - round(sx)) < 1.0e-3) { sx = round(sx); }
+    if (abs(sy - round(sy)) < 1.0e-3) { sy = round(sy); }
     let x0 = floor(sx);
     let y0 = floor(sy);
     let fx = sx - x0;
