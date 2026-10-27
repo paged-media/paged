@@ -225,8 +225,7 @@ impl Parser<'_> {
 
     fn number(&mut self) -> Result<EdValue> {
         let start = self.i;
-        while self.i < self.b.len() && matches!(self.b[self.i], b'0'..=b'9' | b'.' | b'-' | b'+')
-        {
+        while self.i < self.b.len() && matches!(self.b[self.i], b'0'..=b'9' | b'.' | b'-' | b'+') {
             self.i += 1;
         }
         let text = std::str::from_utf8(&self.b[start..self.i]).unwrap_or("");
@@ -410,7 +409,8 @@ mod tests {
     fn parses_photoshop_engine_data() {
         let v = parse(SAMPLE).expect("parses");
         assert_eq!(
-            v.at(&["EngineDict", "Editor", "Text"]).and_then(EdValue::as_str),
+            v.at(&["EngineDict", "Editor", "Text"])
+                .and_then(EdValue::as_str),
             Some("Hi(\r")
         );
         let d = v.get("EngineDict").unwrap();

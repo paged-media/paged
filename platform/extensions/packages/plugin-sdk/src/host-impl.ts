@@ -1615,6 +1615,7 @@ function wireStory(story: RenderStory): Record<string, unknown> {
   return strip({
     bounds: story.bounds.map(Number),
     verticalJustification: str(story.verticalJustification),
+    firstBaseline: num(story.firstBaseline),
     paragraphs: paragraphs.map((p) =>
       strip({
         runs: (Array.isArray(p?.runs) ? p.runs : []).map((r) =>

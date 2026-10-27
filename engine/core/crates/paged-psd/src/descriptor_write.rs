@@ -199,7 +199,10 @@ mod tests {
             class_name: "Ünïcode".into(),
             class_id: Key::long("TxLr"),
             items: vec![
-                (Key::four(b"Txt "), DescriptorValue::Text("Hi\rthere".into())),
+                (
+                    Key::four(b"Txt "),
+                    DescriptorValue::Text("Hi\rthere".into()),
+                ),
                 (Key::long("TextIndex"), DescriptorValue::Integer(-3)),
                 (Key::four(b"TxMP"), DescriptorValue::Bool(true)),
                 (

@@ -561,8 +561,8 @@ mod tests {
                 for k in 1..8 {
                     let (u, v) = (k as f64 / 8.0, i as f64 / 8.0);
                     let p = eval(&m, u, v);
-                    let (gu, gv) = invert(&m, p, 0.01)
-                        .unwrap_or_else(|| panic!("{style:?} lost ({u},{v})"));
+                    let (gu, gv) =
+                        invert(&m, p, 0.01).unwrap_or_else(|| panic!("{style:?} lost ({u},{v})"));
                     let back = eval(&m, gu, gv);
                     assert!(
                         (back.0 - p.0).abs() < 0.01 && (back.1 - p.1).abs() < 0.01,

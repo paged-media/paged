@@ -57,6 +57,7 @@ fn story(width: f32, text: &str, justification: &str, size: f32) -> SnapshotStor
             ..Default::default()
         }],
         vertical_justification: None,
+        first_baseline: None,
     }
 }
 
@@ -185,4 +186,20 @@ fn a_story_with_no_area_is_refused() {
         },
     )
     .is_err());
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn a_fixed_first_baseline_puts_the_line_where_it_is_asked__feat__image_layers_type() {
+    let m = model();
+    let mut s = story(190.0, "xxxx", "LeftAlign", 20.0);
+    let mut bottoms = Vec::new();
+    for fb in [30.0f32, 60.0] {
+        s.first_baseline = Some(fb);
+        let rows = ink(&draw(&m, &s)).0;
+        bottoms.push(*rows.last().expect("ink") as f32);
+    }
+    // An x has no descender: its ink ends on the baseline.
+    assert!((bottoms[1] - bottoms[0] - 30.0).abs() <= 1.0, "{bottoms:?}");
+    assert!((bottoms[0] - 30.0).abs() <= 1.5, "{bottoms:?}");
 }

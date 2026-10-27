@@ -1773,6 +1773,9 @@ export interface RenderStory {
   bounds: [number, number, number, number];
   paragraphs: RenderStoryParagraph[];
   verticalJustification?: "top" | "center" | "bottom" | "justify";
+  /** The first line's baseline this far (pt) below the frame's top: what
+   *  places point type exactly on its anchor. Absent: one ascent. */
+  firstBaseline?: number;
 }
 
 /** Extensions ADR 349 — one paragraph of a {@link RenderStory}. */

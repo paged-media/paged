@@ -181,6 +181,11 @@ pub struct SnapshotStory {
     /// `"top"` (the default), `"center"`, `"bottom"` or `"justify"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vertical_justification: Option<String>,
+    /// The first line's baseline this far (pt) below the frame's top
+    /// (InDesign's Fixed first baseline offset): what places point type
+    /// exactly on its anchor. Absent: one ascent, InDesign's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_baseline: Option<f32>,
 }
 
 /// One paragraph of a [`SnapshotStory`]. Every absent value is the

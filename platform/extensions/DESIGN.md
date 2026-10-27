@@ -424,6 +424,17 @@ the reply cannot be what was asked (no `rgba`, no `region`), never the
 wrong image, and the flag stays static like @1. The worker's GPU snapshot
 path draws only v1 requests; any @2 option is drawn on the CPU rasterizer.
 
+**A story the document does not hold** [ADR 349 · `render.story@1`].
+`render.story(pageId, story, { dpi, format, marginPt, trim })` lays out a
+`RenderStory` — paragraphs of styled runs, a frame `bounds` (pt), an
+optional `firstBaseline` — with the engine's text stack and the document's
+fonts, and draws it alone on a transparent ground, cropped to what it
+draws: an engine-made copy of the document holds it, the document gets no
+item, no id and no undo step. paged.image's type layers are made of it
+(their text lives in the image; the engine lays it out). The reply's
+`story` flag is what tells it apart from an engine that ignored the field
+and drew the page: the door answers `null` then.
+
 ### 4.4 `host.selection`, `host.viewport`
 
 `selection.get()/set()/onDidChange` (the post-insert select pattern

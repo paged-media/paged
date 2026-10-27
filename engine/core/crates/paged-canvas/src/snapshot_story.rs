@@ -99,6 +99,10 @@ fn insert_story(
         frame.inset_spacing = Some([0.0; 4]);
         frame.ignore_wrap = Some(true);
         frame.text_wrap = None;
+        if let Some(fb) = story.first_baseline.filter(|v| v.is_finite() && *v >= 0.0) {
+            frame.first_baseline_offset = Some(paged_model::FirstBaselineOffset::FixedHeight);
+            frame.minimum_first_baseline_offset = Some(fb);
+        }
         frame.vertical_justification = story
             .vertical_justification
             .as_deref()
@@ -137,8 +141,7 @@ fn vertical_justification(s: &str) -> Option<paged_model::VerticalJustification>
 }
 
 fn paragraph(palette: &mut paged_model::Graphic, p: &SnapshotParagraph) -> paged_model::Paragraph {
-    let mut runs: Vec<paged_model::CharacterRun> =
-        p.runs.iter().map(|r| run(palette, r)).collect();
+    let mut runs: Vec<paged_model::CharacterRun> = p.runs.iter().map(|r| run(palette, r)).collect();
     if runs.is_empty() {
         runs.push(paged_model::CharacterRun::default());
     }

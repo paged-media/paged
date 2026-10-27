@@ -63,6 +63,7 @@ and each one names the plugins that follow it and those that do not.
 | [344](344-the-actions-door.md) | The actions door: named pure steps, registered by any bundle, run and cached by any | Accepted 2026-10-24 |
 | [345](345-presentations-and-module-views.md) | Presentations and module views: a bundle's surface on the screen, a second window, in place of the canvas | Accepted 2026-10-25 |
 | [346](346-page-layers.md) | A page as layers: the background and each item alone, at one scale | Accepted 2026-10-25 |
+| [349](349-a-story-the-document-does-not-hold.md) | A story the document does not hold, laid out and drawn by the engine | Accepted 2026-10-27 |
 | [348](348-editing-doors.md) | The editing doors: control-bar groups, scoped keys, status items, the text selection | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this repository's code rests on are listed in

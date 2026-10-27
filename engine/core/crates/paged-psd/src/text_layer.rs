@@ -168,7 +168,10 @@ impl Default for TextParagraphRun {
 pub enum TextShape {
     Point,
     /// A text box of this size (text space), its top-left at the origin.
-    Box { width: f64, height: f64 },
+    Box {
+        width: f64,
+        height: f64,
+    },
 }
 
 /// A type layer's Warp Text.
@@ -448,19 +451,24 @@ impl TypeLayer {
                 })
                 .collect(),
         );
-        let lengths = |v: Vec<usize>| EdValue::Array(v.into_iter().map(|n| EdValue::Int(n as i64)).collect());
+        let lengths =
+            |v: Vec<usize>| EdValue::Array(v.into_iter().map(|n| EdValue::Int(n as i64)).collect());
         let (shape_type, shape_geometry) = match self.shape {
             TextShape::Point => (0, ("PointBase", EdValue::floats(&[0.0, 0.0]))),
-            TextShape::Box { width, height } => {
-                (1, ("BoxBounds", EdValue::floats(&[0.0, 0.0, width, height])))
-            }
+            TextShape::Box { width, height } => (
+                1,
+                ("BoxBounds", EdValue::floats(&[0.0, 0.0, width, height])),
+            ),
         };
         let rendered = EdValue::dict([
             ("Version", EdValue::Int(1)),
             (
                 "Shapes",
                 EdValue::dict([
-                    ("WritingDirection", EdValue::Int(i64::from(self.vertical) * 2)),
+                    (
+                        "WritingDirection",
+                        EdValue::Int(i64::from(self.vertical) * 2),
+                    ),
                     (
                         "Children",
                         EdValue::Array(vec![EdValue::dict([
@@ -469,7 +477,10 @@ impl TypeLayer {
                             (
                                 "Lines",
                                 EdValue::dict([
-                                    ("WritingDirection", EdValue::Int(i64::from(self.vertical) * 2)),
+                                    (
+                                        "WritingDirection",
+                                        EdValue::Int(i64::from(self.vertical) * 2),
+                                    ),
                                     ("Children", EdValue::Array(Vec::new())),
                                 ]),
                             ),
@@ -518,7 +529,10 @@ impl TypeLayer {
                         ]),
                     ),
                     ("RunArray", para_runs),
-                    ("RunLengthArray", lengths(paras.iter().map(|p| p.length).collect())),
+                    (
+                        "RunLengthArray",
+                        lengths(paras.iter().map(|p| p.length).collect()),
+                    ),
                     ("IsJoinable", EdValue::Int(1)),
                 ]),
             ),
@@ -533,7 +547,10 @@ impl TypeLayer {
                         )]),
                     ),
                     ("RunArray", style_runs),
-                    ("RunLengthArray", lengths(runs.iter().map(|r| r.length).collect())),
+                    (
+                        "RunLengthArray",
+                        lengths(runs.iter().map(|r| r.length).collect()),
+                    ),
                     ("IsJoinable", EdValue::Int(2)),
                 ]),
             ),
@@ -598,7 +615,10 @@ fn color(rgb: [u8; 3]) -> EdValue {
     let c = |v: u8| f64::from(v) / 255.0;
     EdValue::dict([
         ("Type", EdValue::Int(1)),
-        ("Values", EdValue::floats(&[1.0, c(rgb[0]), c(rgb[1]), c(rgb[2])])),
+        (
+            "Values",
+            EdValue::floats(&[1.0, c(rgb[0]), c(rgb[1]), c(rgb[2])]),
+        ),
     ])
 }
 
@@ -693,7 +713,8 @@ fn antialias_code(key: &str) -> i64 {
 const KINSOKU_HARD_NO_START: &str = "\u{3001}\u{3002}\u{ff0c}\u{ff0e}\u{30fb}\u{ff1a}\u{ff1b}\u{ff1f}\u{ff01}\u{30fc}\u{2015}\u{2019}\u{201d}\u{ff09}\u{3015}\u{ff3d}\u{ff5d}\u{3009}\u{300b}\u{300d}\u{300f}\u{3011}\u{30fd}\u{30fe}\u{309d}\u{309e}\u{3005}\u{3041}\u{3043}\u{3045}\u{3047}\u{3049}\u{3063}\u{3083}\u{3085}\u{3087}\u{308e}\u{30a1}\u{30a3}\u{30a5}\u{30a7}\u{30a9}\u{30c3}\u{30e3}\u{30e5}\u{30e7}\u{30ee}\u{30f5}\u{30f6}\u{309b}\u{309c}?!)]},.:;\u{2103}\u{2109}\u{a2}\u{ff05}\u{2030}";
 const KINSOKU_HARD_NO_END: &str = "\u{2018}\u{201c}\u{ff08}\u{3014}\u{ff3b}\u{ff5b}\u{3008}\u{300a}\u{300c}\u{300e}\u{3010}([{\u{ffe5}\u{ff04}\u{a3}\u{ff20}\u{a7}\u{3012}\u{ff03}";
 const KINSOKU_SOFT_NO_START: &str = "\u{3001}\u{3002}\u{ff0c}\u{ff0e}\u{30fb}\u{ff1a}\u{ff1b}\u{ff1f}\u{ff01}\u{2019}\u{201d}\u{ff09}\u{3015}\u{ff3d}\u{ff5d}\u{3009}\u{300b}\u{300d}\u{300f}\u{3011}\u{30fd}\u{30fe}\u{309d}\u{309e}\u{3005}";
-const KINSOKU_SOFT_NO_END: &str = "\u{2018}\u{201c}\u{ff08}\u{3014}\u{ff3b}\u{ff5b}\u{3008}\u{300a}\u{300c}\u{300e}\u{3010}";
+const KINSOKU_SOFT_NO_END: &str =
+    "\u{2018}\u{201c}\u{ff08}\u{3014}\u{ff3b}\u{ff5b}\u{3008}\u{300a}\u{300c}\u{300e}\u{3010}";
 const KINSOKU_KEEP: &str = "\u{2015}\u{2025}";
 const KINSOKU_HANGING: &str = "\u{3001}\u{3002}.,";
 
@@ -795,7 +816,12 @@ fn read_engine(root: &EdValue) -> Result<(Vec<TextStyleRun>, Vec<TextParagraphRu
         .and_then(EdValue::as_array)
         .map(|a| {
             a.iter()
-                .map(|f| f.get("Name").and_then(EdValue::as_str).unwrap_or("").to_string())
+                .map(|f| {
+                    f.get("Name")
+                        .and_then(EdValue::as_str)
+                        .unwrap_or("")
+                        .to_string()
+                })
                 .collect()
         })
         .unwrap_or_default();
@@ -809,7 +835,11 @@ fn read_engine(root: &EdValue) -> Result<(Vec<TextStyleRun>, Vec<TextParagraphRu
 
     let lengths = |v: Option<&EdValue>| -> Vec<usize> {
         v.and_then(EdValue::as_array)
-            .map(|a| a.iter().map(|n| n.as_i64().unwrap_or(0).max(0) as usize).collect())
+            .map(|a| {
+                a.iter()
+                    .map(|n| n.as_i64().unwrap_or(0).max(0) as usize)
+                    .collect()
+            })
             .unwrap_or_default()
     };
 
@@ -886,7 +916,9 @@ fn read_engine(root: &EdValue) -> Result<(Vec<TextStyleRun>, Vec<TextParagraphRu
             end_indent: num("EndIndent", 0.0),
             space_before: num("SpaceBefore", 0.0),
             space_after: num("SpaceAfter", 0.0),
-            auto_hyphenate: get("AutoHyphenate").and_then(EdValue::as_bool).unwrap_or(true),
+            auto_hyphenate: get("AutoHyphenate")
+                .and_then(EdValue::as_bool)
+                .unwrap_or(true),
         });
     }
 
@@ -895,12 +927,19 @@ fn read_engine(root: &EdValue) -> Result<(Vec<TextStyleRun>, Vec<TextParagraphRu
         .and_then(EdValue::as_array)
         .and_then(|c| c.first())
         .and_then(|c| c.at(&["Cookie", "Photoshop"]));
-    let shape = match photoshop.and_then(|p| p.get("ShapeType")).and_then(EdValue::as_i64) {
+    let shape = match photoshop
+        .and_then(|p| p.get("ShapeType"))
+        .and_then(EdValue::as_i64)
+    {
         Some(1) => {
             let b = photoshop
                 .and_then(|p| p.get("BoxBounds"))
                 .and_then(EdValue::as_array)
-                .map(|a| a.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect::<Vec<_>>())
+                .map(|a| {
+                    a.iter()
+                        .map(|v| v.as_f64().unwrap_or(0.0))
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
             if b.len() == 4 {
                 TextShape::Box {
@@ -977,7 +1016,10 @@ mod tests {
         l.runs.truncate(1); // covers 6 of 12 units
         let back = TypeLayer::parse(&l.to_block_data()).expect("parses");
         assert_eq!(back.runs.len(), 1);
-        assert_eq!(back.runs[0].length, 12, "stretched to text + paragraph mark");
+        assert_eq!(
+            back.runs[0].length, 12,
+            "stretched to text + paragraph mark"
+        );
     }
 
     #[test]
