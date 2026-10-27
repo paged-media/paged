@@ -47,6 +47,8 @@ const ENTRIES: [path: string, suffix: string, group: string, order: number][] =
     ["Slide/Previous slide", "previousSlide", "navigate", 10],
     ["Slide/Next slide", "nextSlide", "navigate", 20],
     ["Slide/New comment", "addComment", "comment", 10],
+    // Insert is the host's menu: Insert ▸ Shapes… opens the Shapes panel.
+    ["Insert/Shapes…", "insertShapes", "objects", 40],
   ];
 
 /** Register an entry for each of `registered` (the command ids the bundle

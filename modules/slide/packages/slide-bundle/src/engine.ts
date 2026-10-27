@@ -192,8 +192,60 @@ export interface SlidePlan {
   comments?: SlideComment[];
 }
 
+/** One labelled page element as the live-preset door takes it
+ *  (slide-native `live::Element`, slide ADR 717). */
+export interface LiveElement {
+  id: string;
+  /** The host's element kind: `polygon`, `rectangle`, `textFrame`, … */
+  kind: string;
+  /** The slide label's envelope JSON. */
+  label: string;
+  /** A path's anchors (`anchor`, `left`, `right`), own coordinates. */
+  anchors?: [number, number][][];
+  starts?: number[];
+  /** Own coordinates → page. */
+  transform: [number, number, number, number, number, number];
+  /** `[top, left, bottom, right]`, own coordinates (a text frame). */
+  bounds?: [number, number, number, number] | null;
+}
+
+/** What to write to one element (slide-native `live::Write`). */
+export interface LiveWrite {
+  id: string;
+  kind: string;
+  anchors?: [number, number][][];
+  starts?: number[];
+  transform?: [number, number, number, number, number, number];
+  bounds?: [number, number, number, number];
+  label?: string;
+  /** The element's new outline on the page, SVG path data (a preview). */
+  path?: string;
+}
+
+/** An adjust handle on the page. */
+export interface PageHandle {
+  index: number;
+  pos: [number, number];
+  polar: boolean;
+}
+
+/** A preset drawn as a new shape: the paste door's snippet. */
+export interface NewShape {
+  snippet: string;
+  elements: number;
+}
+
+/** One gallery entry: a preset, its Insert ▸ Shapes category and a 40 × 30
+ *  thumbnail as SVG path data. */
+export interface GalleryItem {
+  prst: string;
+  category: string;
+  path: string;
+}
+
 interface SlideWasmModule extends WasmBindgenGlue {
   importPptx(bytes: Uint8Array, name: string): WasmImported;
+  live(request: string): string;
   embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
   exportPptx(
     original: Uint8Array,
@@ -239,6 +291,43 @@ export class SlideEngine {
     } finally {
       out.free();
     }
+  }
+
+  /** Live presets and connectors (slide ADR 717): one JSON request to the
+   *  Rust side, which knows the labels and the geometry. */
+  private live<T>(request: object): T {
+    return JSON.parse(this.mod.live(JSON.stringify(request))) as T;
+  }
+
+  /** What an edit to these page elements asks of their live presets and
+   *  connectors: resized presets drawn again, connectors re-routed. */
+  follow(elements: readonly LiveElement[]): LiveWrite[] {
+    return this.live({ op: "follow", elements });
+  }
+
+  /** A live preset's adjust handles on the page (none for a reshaped one). */
+  handles(element: LiveElement): PageHandle[] {
+    return this.live({ op: "handles", element });
+  }
+
+  /** The writes a drag of handle `index` of `target` to `point` makes. */
+  adjust(
+    elements: readonly LiveElement[],
+    target: string,
+    index: number,
+    point: [number, number],
+  ): LiveWrite[] {
+    return this.live({ op: "adjust", elements, target, index, point });
+  }
+
+  /** Preset `prst` drawn as a new `w` × `h` shape labelled `key`. */
+  newShape(prst: string, w: number, h: number, key: string): NewShape | null {
+    return this.live({ op: "newShape", prst, w, h, key });
+  }
+
+  /** Every preset by Insert ▸ Shapes category, with a thumbnail. */
+  gallery(): GalleryItem[] {
+    return this.live({ op: "gallery" });
   }
 
   /** Write a `.pptx` from the deck the document was imported from and its

@@ -31,6 +31,9 @@ const WASM_DTS = fileURLToPath(
   new URL("../../manifest/wasm/image_js.d.ts", import.meta.url),
 );
 const ENGINE_TS = fileURLToPath(new URL("../src/engine.ts", import.meta.url));
+const MASKING_TS = fileURLToPath(
+  new URL("../src/masking-engine.ts", import.meta.url),
+);
 
 /**
  * wasm-bindgen's `--target web` glue also exports its init machinery,
@@ -65,11 +68,18 @@ const UNMODELLED_ON_PURPOSE = new Map([
 
 function declaredInTs(): string[] {
   const src = readFileSync(ENGINE_TS, "utf8");
-  const block = /export interface ImageWasmModule \{(.*?)\n\}/s.exec(src);
+  const block =
+    /export interface ImageWasmModule(?: extends \w+)? \{(.*?)\n\}/s.exec(src);
   if (!block)
     throw new Error("ImageWasmModule interface not found in engine.ts");
-  return [...block[1].matchAll(/^ {2}([a-z_][A-Za-z0-9_]*)\(/gm)].map(
-    (m) => m[1],
+  // The selection-and-masking doors are modelled beside it (ADR 470).
+  const masking = /export interface MaskingWasm \{(.*?)\n\}/s.exec(
+    readFileSync(MASKING_TS, "utf8"),
+  );
+  if (!masking)
+    throw new Error("MaskingWasm interface not found in masking-engine.ts");
+  return [block[1], masking[1]].flatMap((b) =>
+    [...b.matchAll(/^ {2}([a-z_][A-Za-z0-9_]*)\(/gm)].map((m) => m[1]),
   );
 }
 

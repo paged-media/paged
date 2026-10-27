@@ -154,6 +154,8 @@ pub use verbs::{AlignEdge, Axis};
 pub mod mask;
 #[cfg(test)]
 mod parity_tests;
+// Selection steps, document channels and paths (ADR 470).
+mod masking_ops;
 pub use mask::{BoundedMask, LayerMask};
 
 /// The default name of the layer an ingested image becomes.
@@ -457,7 +459,7 @@ impl CanvasOp {
 
     /// Remap a `bpp`-bytes-per-pixel buffer of extent `(w, h)`; added
     /// area takes `fill`. Exact ops only.
-    fn remap(&self, src: &[u8], w: u32, h: u32, bpp: usize, fill: u8) -> Vec<u8> {
+    pub(crate) fn remap(&self, src: &[u8], w: u32, h: u32, bpp: usize, fill: u8) -> Vec<u8> {
         debug_assert!(self.is_exact(), "a resampling op has no CPU remap");
         let (ow, oh) = self.output_size(w, h);
         let mut out = vec![fill; ow as usize * oh as usize * bpp];
@@ -946,6 +948,43 @@ pub struct LayerStack {
     /// LAYER COMPS, in the panel's order. Document state: in every
     /// snapshot (an edit to a comp is an undo step) and persisted.
     comps: Vec<LayerComp>,
+    /// The HISTORY BRUSH's sources per layer (session state, like the
+    /// edit target): see [`Self::history_source`].
+    history_states: HistoryStates,
+    /// Channels, paths, the selection's undo mirror and the channel edit
+    /// target (ADR 470; `layers/masking_ops.rs`).
+    masking: crate::masking::MaskingState,
+}
+
+/// Which earlier state of a layer the History / Art History brushes
+/// paint from. Until history snapshots exist these are the two states
+/// the session can name without them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryKind {
+    /// The layer as it was when the image was opened — precisely, before
+    /// its first pixel edit in this session (a layer added later starts
+    /// from its state at creation).
+    Open,
+    /// The layer before its NEWEST pixel edit — "the step before this
+    /// one". Recorded at that edit; an undo does not move it.
+    Previous,
+}
+
+impl HistoryKind {
+    pub fn from_wire(s: &str) -> Option<HistoryKind> {
+        match s {
+            "open" => Some(HistoryKind::Open),
+            "previous" => Some(HistoryKind::Previous),
+            _ => None,
+        }
+    }
+}
+
+/// Per layer id, straight RGBA8 at the canvas extent.
+#[derive(Debug, Default)]
+pub(crate) struct HistoryStates {
+    open: std::collections::HashMap<u32, Arc<[u8]>>,
+    previous: std::collections::HashMap<u32, Arc<[u8]>>,
 }
 
 /// Most structure steps kept (the journal bounds the pixel ones).
@@ -962,6 +1001,11 @@ struct Snapshot {
     active: usize,
     next_id: u32,
     comps: Vec<LayerComp>,
+    /// Channels and paths (ADR 470).
+    masking: crate::masking::MaskingDoc,
+    /// The selection at the time (ADR 470: each selection change is a
+    /// structure step, so undo walks back through selections too).
+    selection: Option<Arc<SelectionCoverage>>,
 }
 
 /// One undo step.
@@ -1052,6 +1096,8 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps: Vec::new(),
+            history_states: HistoryStates::default(),
+            masking: Default::default(),
         })
     }
 
@@ -1310,6 +1356,8 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps: Vec::new(),
+            history_states: HistoryStates::default(),
+            masking: Default::default(),
         };
         if let Some(deep) = stack
             .groups
@@ -1632,9 +1680,19 @@ impl LayerStack {
                 g.mask = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out)).map(Arc::new);
             }
         }
+        // Channels resample like masks (but grow unselected); paths map.
+        let mut masking = self.masking.doc.clone();
+        for c in &mut masking.channels {
+            let out = gpu_canvas_op(ctx, op, &coverage_to_f16(c.data.data()), w, h).await?;
+            if let Some(cov) = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out)) {
+                c.data = Arc::new(cov);
+            }
+        }
+        masking.map_paths(|p| masking_ops::map_point(op, w, h, p));
         self.recorded(op.label(), None, move |s| {
             s.layers = layers;
             s.groups = groups;
+            s.masking.doc = masking;
             s.width = ow;
             s.height = oh;
             s.after_canvas_op(op);
@@ -1727,6 +1785,13 @@ impl LayerStack {
                 g.mask = SelectionCoverage::from_data(ow, oh, m).map(Arc::new);
             }
         }
+        // Channels and paths follow (added area unselected).
+        self.masking.doc.follow_exact(
+            ow,
+            oh,
+            |d| op.remap(d, w, h, 1, 0),
+            |p| masking_ops::map_point(op, w, h, p),
+        );
         self.width = ow;
         self.height = oh;
     }
@@ -2086,6 +2151,7 @@ impl LayerStack {
         }
         self.set_active(index)?;
         self.edit_mask = mask;
+        self.masking.edit_channel = None;
         Ok(())
     }
 
@@ -2093,7 +2159,7 @@ impl LayerStack {
     /// while the mask target was chosen AND the layer still has a mask
     /// (an undo or a delete can take the mask away under the target).
     pub fn edit_target_is_mask(&self) -> bool {
-        self.edit_mask && self.layers[self.active].mask.is_some()
+        self.edit_channel().is_some() || (self.edit_mask && self.layers[self.active].mask.is_some())
     }
 
     /// The active layer's mask as an OPAQUE GREY RGBA8 plate (`v, v, v,
@@ -2101,6 +2167,9 @@ impl LayerStack {
     /// is the mask. Painting a mask is then painting a grey image through
     /// the very same stroke compositor; [`mask_from_grey`] reads it back.
     pub fn active_mask_as_grey(&self) -> Option<Arc<[u8]>> {
+        if let Some(ch) = self.edit_channel() {
+            return Some(mask_to_grey(&ch.data));
+        }
         let m = self.layers[self.active].mask.as_ref()?;
         Some(mask_to_grey(&m.to_canvas()))
     }
@@ -2126,6 +2195,9 @@ impl LayerStack {
                 mask.width(),
                 mask.height()
             )));
+        }
+        if self.edit_channel().is_some() {
+            return self.edit_channel_data(label, damage, mask);
         }
         let active = &self.layers[self.active];
         active.pixels_editable()?;
@@ -2164,6 +2236,12 @@ impl LayerStack {
         ctx: Option<&GpuContext>,
         mask: Arc<SelectionCoverage>,
     ) -> Result<Arc<[u8]>, IngestError> {
+        if self.edit_channel().is_some() {
+            // A channel is not part of the composite: the stroke in
+            // flight shows through the display view (`channel_preview`).
+            self.masking.channel_preview = Some(mask);
+            return self.composite(ctx, None).await;
+        }
         let i = self.active;
         let saved = self.layers[i].mask.replace(mask.into());
         let out = self.composite(ctx, None).await;
@@ -2601,6 +2679,24 @@ impl LayerStack {
             // happens to be selected when the user reaches for it.
             self.journal.record(label, active.id as u64, &view, clipped)
         };
+        // The history brush's sources: the state before this edit.
+        {
+            // An 8-bit layer's buffer is shared, not copied (the edit
+            // REPLACES the `Arc`, it never writes through it); a 16-bit
+            // one is reduced once, since the history brush paints 8-bit.
+            let rgba = &self.layers[self.active].rgba;
+            let before: Arc<[u8]> = if rgba.depth() == image_core::SampleDepth::U8 {
+                rgba.raw_arc()
+            } else {
+                Arc::from(rgba.canvas().to_rgba8().into_owned().into_boxed_slice())
+            };
+            let id = self.layers[self.active].id;
+            self.history_states
+                .open
+                .entry(id)
+                .or_insert_with(|| Arc::clone(&before));
+            self.history_states.previous.insert(id, before);
+        }
         self.layers[self.active].rgba = pixels.into();
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
             self.steps.push(Step::Pixels);
@@ -2608,6 +2704,35 @@ impl LayerStack {
         }
         self.sync_with_journal();
         Ok(outcome)
+    }
+
+    /// The ACTIVE layer's history state `kind` as canvas-extent straight
+    /// RGBA8 — the History brush's source. A layer never edited since it
+    /// was opened IS its open state (and its previous one). A state
+    /// recorded before the canvas changed size no longer fits and is
+    /// refused (`None`), never stretched.
+    pub fn history_source(&self, kind: HistoryKind) -> Option<Arc<[u8]>> {
+        let layer = self.active();
+        if !layer.is_pixels() {
+            return None;
+        }
+        let want = (self.width as usize) * (self.height as usize) * 4;
+        let stored = match kind {
+            HistoryKind::Open => self.history_states.open.get(&layer.id),
+            HistoryKind::Previous => self
+                .history_states
+                .previous
+                .get(&layer.id)
+                .or_else(|| self.history_states.open.get(&layer.id)),
+        };
+        match stored {
+            Some(px) if px.len() == want => Some(Arc::clone(px)),
+            Some(_) => None,
+            None => {
+                let now = layer.rgba.canvas().to_rgba8().into_owned();
+                Some(Arc::from(now.into_boxed_slice()))
+            }
+        }
     }
 
     /// Is the active layer editable (present, unlocked)? The doors check
@@ -2687,6 +2812,8 @@ impl LayerStack {
             active: self.active,
             next_id: self.next_id,
             comps: self.comps.clone(),
+            masking: self.masking.doc.clone(),
+            selection: self.masking.live_selection.clone(),
         }
     }
 
@@ -2698,6 +2825,8 @@ impl LayerStack {
         self.active = s.active;
         self.next_id = s.next_id;
         self.comps = s.comps;
+        self.masking.doc = s.masking;
+        self.restore_selection(s.selection);
     }
 
     /// The journal bounds its own entries (and clears itself when one
@@ -2814,6 +2943,9 @@ impl LayerStack {
         }?;
         if scope & MASK_SCOPE_BIT != 0 {
             return self.apply_mask_entry(scope & !MASK_SCOPE_BIT, undo);
+        }
+        if scope & masking_ops::CHANNEL_SCOPE_BIT != 0 {
+            return self.apply_channel_entry(scope & !masking_ops::CHANNEL_SCOPE_BIT, undo);
         }
         let idx = self.layers.iter().position(|l| l.id as u64 == scope)?;
         let (w, h) = (self.width, self.height);

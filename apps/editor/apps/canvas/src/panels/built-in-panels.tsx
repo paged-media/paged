@@ -96,6 +96,7 @@ import { StrokePanel } from "./stroke-panel";
 import { InspectorPanel } from "./inspector-panel";
 import { LayersPanel } from "./layers-panel";
 import { NavigatorPanel } from "./navigator-panel";
+import { FIND_RESULTS_PANEL, FindResultsPanel } from "../find/find-ui";
 import { OutlinePanel } from "./outline-panel";
 import { ActionsPanel } from "./actions-panel";
 import { ReplPanel } from "./repl-panel";
@@ -199,6 +200,7 @@ const M = defineMessages("app.builtInPanels", {
   layers: "Layers",
   info: "Info",
   navigator: "Navigator",
+  findResults: "Find results",
   attributes: "Attributes",
   properties: "Properties",
   aiAssistant: "AI Assistant",
@@ -257,6 +259,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.pages);
     },
     component: NavigatorPanel,
+    defaultDock: "left",
+    defaultGroup: "structure",
+  },
+  {
+    // ADR 303 — the Navigation pane's Results tab: search the document's
+    // text, every hit with its context; a click goes to the hit.
+    id: FIND_RESULTS_PANEL,
+    get title() {
+      return t(M.findResults);
+    },
+    component: FindResultsPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },

@@ -155,6 +155,13 @@ export type {
   TextPropertyRead,
   TextPropertyWrite,
   TextFormatResult,
+  // Extensions ADR 348 amendment 1 — find and replace on host.text.
+  TextFindMode,
+  TextFindSpec,
+  TextFindHit,
+  TextFindResult,
+  TextReplaceSpec,
+  TextReplaceResult,
   FrameChainLink,
   // B-22 (protocol v57) — the planar-region read door's result shapes.
   PlanarFace,
@@ -166,6 +173,7 @@ export type {
   // W-20 — a retained, data-only overlay layer.
   OverlayLayer,
   ShellSurface,
+  OpenPanelOptions,
   FilePickerOptions,
   PickedFile,
   // K-10 — the save-file door's payload (the inverse of PickedFile).

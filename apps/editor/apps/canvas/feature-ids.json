@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 569,
-    "keybinding": 145,
-    "menu": 409,
-    "panel": 131,
-    "tool": 91
+    "command": 595,
+    "keybinding": 140,
+    "menu": 415,
+    "panel": 134,
+    "tool": 100
   },
   "features": [
     {
@@ -226,7 +226,27 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.applyStyles",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.bold",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.borderBottom",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.borderBox",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.borderNone",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -241,12 +261,27 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.clearParagraph",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.continueNumbering",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.copyFormat",
       "kind": "command",
       "owner": "media.paged.doc"
     },
     {
       "id": "command:media.paged.doc.command.word.decreaseIndent",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.doubleUnderline",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -267,6 +302,16 @@
     },
     {
       "id": "command:media.paged.doc.command.word.heading3",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.hidden",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.highlight",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -301,12 +346,27 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.listBullets",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.listLegal",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.listLevelDown",
       "kind": "command",
       "owner": "media.paged.doc"
     },
     {
       "id": "command:media.paged.doc.command.word.listLevelUp",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.listOutline",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -322,6 +382,21 @@
     },
     {
       "id": "command:media.paged.doc.command.word.pasteFormat",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.restartNumbering",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.shading",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.showHidden",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -342,6 +417,21 @@
     },
     {
       "id": "command:media.paged.doc.command.word.strikethrough",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.styleModify",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.styleNew",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.styleUpdate",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -1201,6 +1291,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.colorRange",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.commitCrop",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1226,6 +1321,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.defineBrushPreset",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.definePattern",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1242,6 +1342,16 @@
     },
     {
       "id": "command:media.paged.image.command.distributeVertical",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.exportBrushPresetsAbr",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.exportBrushPresetsJson",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1451,7 +1561,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.focusArea",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.grow",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.imageSize",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.importBrushPresets",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1477,6 +1602,16 @@
     },
     {
       "id": "command:media.paged.image.command.loadBrushLibrary",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.loadSelection",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.makeWorkPath",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1611,12 +1746,27 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.openBrushPresets",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.openBrushSettings",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.openImage",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.pathToSelection",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.quickMask",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1656,12 +1806,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.saveSelection",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.saveToFile",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.selectAll",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.selectAndMask",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1681,7 +1841,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.similar",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.stampVisible",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.toggleLockTransparent",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2001,6 +2171,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.insertShapes",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.moveSlideDown",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2072,6 +2247,11 @@
     },
     {
       "id": "command:media.paged.slide.importPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.insertShape",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2366,12 +2546,37 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.edit.find",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.findNext",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.findPrevious",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.goTo",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.edit.paste",
       "kind": "command",
       "owner": "editor"
     },
     {
       "id": "command:paged.edit.pasteInPlace",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.replace",
       "kind": "command",
       "owner": "editor"
     },
@@ -2397,21 +2602,6 @@
     },
     {
       "id": "command:paged.file.exportPdf",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.file.exportSvgPage",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.file.exportSvgSelection",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.file.importSvg",
       "kind": "command",
       "owner": "editor"
     },
@@ -2756,11 +2946,6 @@
       "owner": "editor"
     },
     {
-      "id": "command:paged.view.guidesAndGridPreferences",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
       "id": "command:paged.view.lastPage",
       "kind": "command",
       "owner": "editor"
@@ -2771,62 +2956,7 @@
       "owner": "editor"
     },
     {
-      "id": "command:paged.view.outline",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.overprintPreview",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.pixelGrid",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.pixelPreview",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
       "id": "command:paged.view.previousPage",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.resetRotation",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.rotateClockwise",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.rotateCounterclockwise",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.showGrid",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.smartGuides",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.snapToGrid",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.view.snapToPixel",
       "kind": "command",
       "owner": "editor"
     },
@@ -2901,11 +3031,6 @@
       "owner": "media.paged.slide"
     },
     {
-      "id": "keybinding:alt+cmd+y→paged.view.pixelPreview",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
       "id": "keybinding:alt+ctrl+0→paged.view.fitSpread",
       "kind": "keybinding",
       "owner": "editor"
@@ -2926,11 +3051,6 @@
       "owner": "media.paged.slide"
     },
     {
-      "id": "keybinding:alt+ctrl+y→paged.view.pixelPreview",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
       "id": "keybinding:alt+f5→media.paged.slide.command.presenterView",
       "kind": "keybinding",
       "owner": "media.paged.slide"
@@ -2946,11 +3066,6 @@
       "owner": "media.paged.slide"
     },
     {
-      "id": "keybinding:alt+shift+cmd+y→paged.view.overprintPreview",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
       "id": "keybinding:alt+shift+ctrl+0→paged.view.zoomFit",
       "kind": "keybinding",
       "owner": "editor"
@@ -2959,11 +3074,6 @@
       "id": "keybinding:alt+shift+ctrl+n→media.paged.slide.command.duplicateSlide",
       "kind": "keybinding",
       "owner": "media.paged.slide"
-    },
-    {
-      "id": "keybinding:alt+shift+ctrl+y→paged.view.overprintPreview",
-      "kind": "keybinding",
-      "owner": "editor"
     },
     {
       "id": "keybinding:arrowdown→paged.object.nudgeDown",
@@ -2987,11 +3097,6 @@
     },
     {
       "id": "keybinding:backspace→paged.object.delete",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
-      "id": "keybinding:cmd+'→paged.view.showGrid",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3059,6 +3164,11 @@
       "id": "keybinding:cmd+alt+c→media.paged.doc.command.word.copyFormat",
       "kind": "keybinding",
       "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+alt+f→paged.edit.replace",
+      "kind": "keybinding",
+      "owner": "editor"
     },
     {
       "id": "keybinding:cmd+alt+shift+d→paged.edit.duplicate",
@@ -3131,9 +3241,24 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "keybinding:cmd+f→paged.edit.find",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+g→paged.edit.goTo",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+g→paged.object.group",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+h→paged.edit.replace",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+i→media.paged.doc.command.word.italic",
@@ -3144,6 +3269,11 @@
       "id": "keybinding:cmd+j→media.paged.doc.command.word.justify",
       "kind": "keybinding",
       "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+j→paged.edit.goTo",
+      "kind": "keybinding",
+      "owner": "editor"
     },
     {
       "id": "keybinding:cmd+k→paged.palette.toggle",
@@ -3201,9 +3331,19 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+shift+d→media.paged.doc.command.word.doubleUnderline",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+shift+g→paged.object.ungroup",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+shift+h→media.paged.doc.command.word.hidden",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+shift+h→paged.sample.hello",
@@ -3256,11 +3396,6 @@
       "owner": "media.paged.doc"
     },
     {
-      "id": "keybinding:cmd+u→paged.view.smartGuides",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
       "id": "keybinding:cmd+v→media.paged.sheet.command.pasteSelection",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
@@ -3276,17 +3411,7 @@
       "owner": "editor"
     },
     {
-      "id": "keybinding:cmd+y→paged.view.outline",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
       "id": "keybinding:contextmenu→paged.edit.contextMenu",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
-      "id": "keybinding:ctrl+'→paged.view.showGrid",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3381,7 +3506,17 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "keybinding:ctrl+f→paged.edit.find",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:ctrl+g→paged.object.group",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+h→paged.edit.replace",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3446,11 +3581,6 @@
       "owner": "editor"
     },
     {
-      "id": "keybinding:ctrl+u→paged.view.smartGuides",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
       "id": "keybinding:ctrl+v→media.paged.sheet.command.pasteSelection",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
@@ -3462,11 +3592,6 @@
     },
     {
       "id": "keybinding:ctrl+x→paged.edit.cut",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
-      "id": "keybinding:ctrl+y→paged.view.outline",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3537,26 +3662,6 @@
     },
     {
       "id": "keybinding:shift+arrowup→paged.object.nudgeUpLarge",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
-      "id": "keybinding:shift+cmd+'→paged.view.snapToGrid",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
-      "id": "keybinding:shift+cmd+1→paged.view.resetRotation",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
-      "id": "keybinding:shift+ctrl+'→paged.view.snapToGrid",
-      "kind": "keybinding",
-      "owner": "editor"
-    },
-    {
-      "id": "keybinding:shift+ctrl+1→paged.view.resetRotation",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -4141,7 +4246,27 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "menu:Edit/History",
+      "id": "menu:Edit/Find and replace…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Find next",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Find previous",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Find…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Go to page…",
       "kind": "menu",
       "owner": "editor"
     },
@@ -4261,21 +4386,6 @@
       "owner": "media.paged.slide"
     },
     {
-      "id": "menu:File/Export/SVG (page)…",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:File/Export/SVG (selection)…",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:File/Import/SVG…",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
       "id": "menu:File/New document…",
       "kind": "menu",
       "owner": "editor"
@@ -4382,6 +4492,41 @@
     },
     {
       "id": "menu:Image/Bake adjustments into layer",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Brush presets",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Brush settings",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Define brush preset…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Export brush presets (.abr)…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Export brush presets (.json)…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Import brush presets…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Brush/Lock transparent pixels",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -4861,6 +5006,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Selection/Color range…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Selection/Deselect",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -4871,7 +5021,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Selection/Focus area…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Selection/From luminosity channel",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Grow",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -4881,7 +5041,37 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Selection/Load selection…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Make work path",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Quick mask",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Save selection",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Selection/Select all",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Select and mask…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Similar",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -4894,6 +5084,11 @@
       "id": "menu:Image/Trim…",
       "kind": "menu",
       "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Insert/Shapes…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:Layout/Add page",
@@ -5476,21 +5671,6 @@
       "owner": "editor"
     },
     {
-      "id": "menu:View/Guides & grid preferences…",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:View/Outline view",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:View/Overprint Preview",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
       "id": "menu:View/Perspective grid/Hide grid",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -5526,42 +5706,12 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "menu:View/Pixel Preview",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:View/Rotate view/15° clockwise",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:View/Rotate view/15° counterclockwise",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:View/Rotate view/Reset rotation",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
       "id": "menu:View/Show data markers",
       "kind": "menu",
       "owner": "editor"
     },
     {
-      "id": "menu:View/Show grid",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
       "id": "menu:View/Show heading anchors",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:View/Show pixel grid",
       "kind": "menu",
       "owner": "editor"
     },
@@ -5574,21 +5724,6 @@
       "id": "menu:View/Slide Sorter",
       "kind": "menu",
       "owner": "media.paged.slide"
-    },
-    {
-      "id": "menu:View/Smart guides",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:View/Snap to grid",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:View/Snap to pixel",
-      "kind": "menu",
-      "owner": "editor"
     },
     {
       "id": "menu:View/Snap to points",
@@ -5761,6 +5896,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "panel:media.paged.image.panel.brushPresets",
+      "kind": "panel",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "panel:media.paged.image.panel.brushSettings",
+      "kind": "panel",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "panel:media.paged.image.panel.properties",
       "kind": "panel",
       "owner": "media.paged.image"
@@ -5802,6 +5947,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.placeholder",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.shapes",
       "kind": "panel",
       "owner": "media.paged.slide"
     },
@@ -5991,6 +6141,11 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.find-results",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.fonts",
       "kind": "panel",
       "owner": "editor"
@@ -6017,11 +6172,6 @@
     },
     {
       "id": "panel:paged.guides",
-      "kind": "panel",
-      "owner": "editor"
-    },
-    {
-      "id": "panel:paged.history",
       "kind": "panel",
       "owner": "editor"
     },
@@ -6486,6 +6636,16 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.image.tool.artHistoryBrush",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.backgroundEraser",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.blur",
       "kind": "tool",
       "owner": "media.paged.image"
@@ -6507,6 +6667,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.clone",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.colorReplacement",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -6546,12 +6711,27 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.historyBrush",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.lasso",
       "kind": "tool",
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.magicEraser",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.magicWand",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.magneticLasso",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -6562,6 +6742,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.marqueeRect",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.mixerBrush",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -6596,7 +6781,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.refineEdge",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.sharpen",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.smudge",
       "kind": "tool",
       "owner": "media.paged.image"
     },

@@ -29,6 +29,28 @@ crate. That is the next lever if later waves outgrow the headroom.
 `opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
 fifth slower (see `Cargo.toml`).
 
+## W1 (UI): Word editing chrome on the engine's E1 model (2026-10-25)
+
+Doc ADR 608 amendment 1, on engine ADRs 1018 / 1021, extensions ADR 348 amendment 1 and editor
+ADR 303. What the Word context (`wordDocument`, Open and Insert mode alike) now offers:
+
+| Area           | Built                                                                                                                                                                                                                                                                                 | Engine / door                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Find & Replace | Cmd+F (the host's Find results panel), Cmd+H and Cmd+Alt+F (the host's dialog), Cmd+G (Go To); match case, whole word, wildcards, regex, `^p` `^t` `^l` `^m`, find and replace by style; Replace All one undo step                                                                    | `RequestFindText`, `findReplace`; `host.text.find` / `replace`                                         |
+| Styles gallery | Styles menu beside the style box: Update style to match selection, Modify… (the host's Style Options on the style), New style from selection ("Style N", based on the paragraph's style, then its options), Apply styles (focus to the style box); Based on editable in Style Options | `setStyleProperty` batch, `createParagraphStyle`, `setStyleBasedOn`; `shell.openPanel(id, { target })` |
+| Lists          | Tab / Shift+Tab at the start of a list paragraph (or over a range) as one `setListLevel`; Restart / Continue numbering; multilevel presets `1. a. i.`, `1. 1.1. 1.1.1.`, `• ◦ ▪` as `NumberingListDef` levels                                                                         | `setListLevel`, `restartNumbering`, `createNumberingList { levels }`; `host.text.characterRange`       |
+| Character      | Highlight (button: last colour, else the document's Yellow, made once; colour menu; No colour), double underline (Cmd+Shift+D), hidden text (Cmd+Shift+H)                                                                                                                             | `characterHighlightColor`, `characterUnderlineType`, `characterHidden`                                 |
+| Paragraph      | Shading (black 15 % or a chosen swatch), borders (bottom = the rule below, box = the paragraph border, none), Clear paragraph formatting (drops the alignment, indent, spacing and line-spacing overrides)                                                                            | `paragraphShading*`, `paragraphRuleBelow`, `paragraphBorder*`                                          |
+| View           | Show hidden text (¶)                                                                                                                                                                                                                                                                  | `documentShowHiddenText` on `doc`                                                                      |
+
+Not yet: double strikethrough has no button (the path is there); a bottom border is InDesign's
+rule below, not Word's `w:pBdr/w:bottom` (no per-side border in the engine); Clear paragraph
+formatting cannot drop a paragraph's own shading, border or list (booleans have no "inherit"
+write); the style box is focused, not a searchable Apply Styles pane. Tests:
+`test/headless/word-w1.spec.ts` (every new command over the real engine), `word-commands.spec.ts`
+(each command's write), `test/panels/home-group.dom.test.tsx`, and the `doc-word-editing`
+journey (Cmd+H → Replace All → one undo; Tab demotes a list item; highlight via the button).
+
 ## Text after native tables (2026-10-25)
 
 A `.docx` opened standalone or placed lost ALL text after its first table when

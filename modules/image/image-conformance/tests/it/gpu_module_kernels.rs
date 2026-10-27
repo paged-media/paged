@@ -177,6 +177,19 @@ fn lut3d_channel_swap() -> Vec<u8> {
     bytemuck::bytes_of(&AdjustLut3dParams::from_fn(|r, g, b| [b, g, r])).to_vec()
 }
 
+/// A sampled Color Range (a mid orange, fuzziness 80) — every
+/// stimulus texel lands somewhere on the falloff or outside it.
+fn color_range_stress() -> Vec<u8> {
+    image_kernels::families::select::ColorRangeParams::sampled_box(
+        [60.0, 30.0, 40.0],
+        [70.0, 40.0, 60.0],
+        80.0,
+        false,
+    )
+    .as_bytes()
+    .to_vec()
+}
+
 fn gradient_map_teal_orange() -> Vec<u8> {
     bytemuck::bytes_of(&AdjustGradientMapParams::two_stop(
         [0.0, 0.35, 0.4],
@@ -683,6 +696,15 @@ const TABLE: &[Row] = &[
           identity: Identity::Params(P::Fields(&[("radius", V::U(0))])),
           stress: P::Fields(&[("radius", V::U(2))]),
           note: "radius 0 ⇒ the median of one sample is the sample" },
+
+    // ── select (kernels whose output is a selection, ADR 470) ───────────
+    Row { id: "select.color_range",
+          identity: Identity::NotDefined,
+          stress: P::Raw(color_range_stress),
+          note: "EXCLUDED from identity: the output is a COVERAGE field, not \
+                 the image, so no parameter returns the input. Its GPU twin \
+                 parity and the Photoshop agreement are \
+                 oracle_photoshop_selection.rs" },
 
     // ── resample (separable rational scale) ─────────────────────────────
     Row { id: "resample.nearest",

@@ -837,8 +837,22 @@ impl<'a> Writer<'a, '_> {
         ctx: &Ctx,
         name: &str,
     ) -> Result<String, String> {
-        let (d, reshaped) = self.delta(b, c, ctx)?;
-        let place = self.new_place(o, &d, ctx, false)?;
+        // A live preset (slide ADR 717) is placed by its box, and stays a
+        // preset: drawn again for a new box or with new adjust values.
+        let live = c
+            .elems
+            .iter()
+            .find(|e| e.kind == Kind::Polygon)
+            .and_then(|e| live_box(&c.label, e).map(|bx| (e, bx)))
+            .zip(c.label.preset.as_ref());
+        let (d, reshaped) = match live {
+            Some(_) => (IDENTITY, false),
+            None => self.delta(b, c, ctx)?,
+        };
+        let place = match live {
+            Some(_) => None,
+            None => self.new_place(o, &d, ctx, false)?,
+        };
         if let Some((_, nx)) = &place {
             x = set_sppr(
                 &x,
@@ -847,7 +861,36 @@ impl<'a> Writer<'a, '_> {
                 &[],
             )?;
         }
-        if reshaped {
+        if let Some(((poly, (w, h)), (prst, adj))) = live {
+            let m = geom::mul(&ctx.fx_cur, &poly.transform());
+            let p =
+                Placed::normalised(m, w, h).ok_or("it is skewed, which DrawingML cannot place")?;
+            let nx = ctx.space.xfrm_of(&p).ok_or("its group cannot hold it")?;
+            let was = o
+                .item
+                .map(|it| Placed {
+                    map: it.transform,
+                    w: it.w,
+                    h: it.h,
+                })
+                .and_then(|p| ctx.space.xfrm_of(&p));
+            if !was.is_some_and(|w| geom::same_xfrm(&w, &nx)) {
+                x = set_sppr(
+                    &x,
+                    &["a:xfrm"],
+                    Some(&geom::xfrm_xml("a", &with_ch(&nx, None))),
+                    &[],
+                )?;
+            }
+            if b.label.preset.as_ref() != Some(&(prst.clone(), adj.clone())) {
+                x = set_sppr(
+                    &x,
+                    &["a:prstGeom", "a:custGeom"],
+                    Some(&preset_xml(prst, adj)),
+                    &["a:xfrm"],
+                )?;
+            }
+        } else if reshaped {
             let poly = c
                 .elems
                 .iter()
@@ -1622,6 +1665,11 @@ impl<'a> Writer<'a, '_> {
         }
         let mut out = String::new();
         for e in &c.elems {
+            // A preset's stroke-only detail is in the preset its outline
+            // element writes.
+            if c.label.detail && live_box(&c.label, e).is_some() {
+                continue;
+            }
             match self.generate_elem(e, c, ctx) {
                 Ok(s) => out.push_str(&s),
                 Err(err) => self.note(&name, format!("{err}; not exported")),
@@ -1688,9 +1736,16 @@ impl<'a> Writer<'a, '_> {
 
     fn generate_elem(&self, e: &Elem, c: &NShape, ctx: &Ctx) -> Result<String, String> {
         let m = geom::mul(&ctx.fx_cur, &e.transform());
-        let (l, t, r, b) = bbox(e);
-        let placed = Placed::normalised(geom::mul(&m, &geom::translate(l, t)), r - l, b - t)
-            .ok_or("it is skewed, which DrawingML cannot place")?;
+        // A live preset is placed by its box (slide ADR 717), which its
+        // outline need not fill (a callout's tip, an arc).
+        let placed = match live_box(&c.label, e) {
+            Some((w, h)) => Placed::normalised(m, w, h),
+            None => {
+                let (l, t, r, b) = bbox(e);
+                Placed::normalised(geom::mul(&m, &geom::translate(l, t)), r - l, b - t)
+            }
+        }
+        .ok_or("it is skewed, which DrawingML cannot place")?;
         let xf = ctx
             .space
             .xfrm_of(&placed)
@@ -1839,6 +1894,25 @@ fn pairs<'s>(b: &'s NShape, c: &'s NShape) -> Result<Vec<(&'s Elem, Option<&'s E
         return Err("its items changed kind".into());
     }
     Ok(out)
+}
+
+/// The box of a live preset element (slide ADR 717): its label names a
+/// preset and the box it was drawn for, and its anchors are still that
+/// preset drawn for that box (not reshaped by hand since).
+fn live_box(label: &native::Label, e: &Elem) -> Option<(f64, f64)> {
+    let ((prst, adj), (w, h)) = (label.preset.as_ref()?, label.size?);
+    if e.kind != Kind::Polygon {
+        return None;
+    }
+    let anchors: Vec<slide_geom::live::Anchor> = e.anchors().into_iter().collect();
+    let (starts, _) = e.contours();
+    // Only the element's own anchors count here; a scale in its transform
+    // is moved into the box when it is placed.
+    matches!(
+        slide_geom::live::refit_preset(prst, adj, w, h, &anchors, &starts, &IDENTITY),
+        Some(slide_geom::live::Refit::Same)
+    )
+    .then_some((w, h))
 }
 
 fn preset_xml(prst: &str, adj: &[(String, String)]) -> String {

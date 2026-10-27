@@ -15,6 +15,7 @@ Range 700–749.
 | [708](708-a-deck-is-built-as-a-native-document.md) | A deck is built as a native document with the engine's model crates | Accepted 2026-10-19 |
 | [709](709-one-drawingml-chart-reader.md) | One DrawingML chart reader and model for paged.slide and paged.sheet; the layouts stay per module | Accepted 2026-10-19 |
 | [710](710-chart-labels-are-formatted-by-sheet-format.md) | Chart labels are formatted by sheet-format | Accepted 2026-10-19 |
-| [711](711-powerpoint-parity-program.md) | The PowerPoint parity program; export keeps untouched slides byte for byte | Accepted 2026-10-24 |
+| [711](711-powerpoint-parity-program.md) | The PowerPoint parity program; export keeps untouched slides byte for byte | Accepted 2026-10-24; amended 2026-10-25 (ADR 717) |
 | [716](716-slide-show-and-presenter-view.md) | Slide show and presenter view: one presentation in three roles, PowerPoint's keys, the slide sorter as a module view | Accepted 2026-10-25 |
+| [717](717-live-presets-and-connectors.md) | Live presets and connectors | Accepted 2026-10-25 |
 | [721](721-transitions-and-shader-effects-are-pure-webgpu-wgsl.md) | Transitions and shader effects are pure WebGPU/WGSL | Accepted 2026-10-25 |

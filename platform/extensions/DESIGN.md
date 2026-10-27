@@ -2863,8 +2863,16 @@ stands in for. Four doors, shipped together:
   words), or with `extent: "paragraphs"` the touched paragraphs whole (line spacing as
   `characterLeading`). The SDK converts the selection's content offsets (UTF-8 bytes, one
   synthetic `\n` per paragraph) to the character offsets a story range counts; passing one as
-  the other formats the wrong text from the second paragraph on. Find and replace is NOT in C4:
-  the engine's `FindReplace` op is not on main; it joins as an additive member when it lands.
+  the other formats the wrong text from the second paragraph on.
+- **C4 amendment 1: find and replace** (ADR 348 amendment 1, engine ADR 1021).
+  `find(spec)` → `{ hits, error? }` over `RequestFindText` (hits in caret AND character
+  offsets, context, paragraph; Word's `^p` `^t` `^l` `^m` `^?` `^#` `^$` `^^`; literal, Word
+  wildcards or ECMAScript regex; match case, whole word, paragraph / character style filter);
+  `replace(spec)` → `{ applied, replaced, error? }`, one `findReplace` = one undo step for
+  Replace All, nothing sent when nothing matches; `characterRange()` the selection in story
+  characters (for `setListLevel` / `restartNumbering`). The dialog and results panel are the
+  host's (editor ADR 303); a bundle's scoped keys name `paged.edit.find` / `.replace` /
+  `.goTo`. `shell.openPanel(id, { target })` points a panel at an ADR 131 address first.
 - **The document context, `host.shell.setDocumentContext(type | null)`.** A Word document
   opened as the whole document has no frame to enter, yet is Word content on every page. A
   bundle declares that the open document is one of its registered context types; the scoped
@@ -2876,10 +2884,11 @@ stands in for. Four doors, shipped together:
   keybindings still need `capabilities.keybindings`. No new manifest field.
 - **Probes.** Static doors: `contribute.controlBarGroup@1`, `contribute.statusItem@1`,
   `contribute.keybinding.scope@1`. Host backing: `controlBar.groups@1`, `statusBar.items@1`,
-  `text.selection@1`, `text.format@1`, `shell.documentContext@1`.
+  `text.selection@1`, `text.format@1`, `shell.documentContext@1`; `text.find@1` (static).
 - **Harness.** `createHeadlessHost` records groups and status items
   (`controlBarGroupsContributed()`, `statusItemsContributed()`), plays the caret
-  (`setTextSelection`) and reports the document context (`documentContext()`, dropped on load).
+  (`setTextSelection`) and reports the document context (`documentContext()`, dropped on load);
+  `shell` passes a shell backend through (to record `openPanel` and its target).
 - **Isolate.** The groups and status items are React in the host realm, like panels (§6).
 
 ## 27. Presentations, module views and page layers (ADRs 345, 346 — `shell.present@1`, `shell.views@1`, `render.layers@1`)

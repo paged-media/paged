@@ -30,7 +30,8 @@
     },
     "gpu": {
       "realm": "bundle"
-    }
+    },
+    "rendering": ["overlay"]
   },
   "contributes": {
     "commands": [
@@ -48,7 +49,8 @@
       "media.paged.slide.command.slideShowFromCurrent",
       "media.paged.slide.command.presenterView",
       "media.paged.slide.command.rehearseTimings",
-      "media.paged.slide.command.slideSorter"
+      "media.paged.slide.command.slideSorter",
+      "media.paged.slide.command.insertShapes"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
     "exporters": ["media.paged.slide.exporter.pptx"],
@@ -67,7 +69,8 @@
       "media.paged.slide.panel.transition",
       "media.paged.slide.panel.placeholder",
       "media.paged.slide.panel.deck",
-      "media.paged.slide.panel.comments"
+      "media.paged.slide.panel.comments",
+      "media.paged.slide.panel.shapes"
     ],
     "partTypes": [
       {
@@ -245,6 +248,12 @@
               }
             }
           }
+        },
+        {
+          "id": "media.paged.slide.insertShape",
+          "title": "Insert a shape",
+          "args": "schema/insert-shape.args.json",
+          "result": "schema/insert-shape.result.json"
         }
       ],
       "templateFields": [

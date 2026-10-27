@@ -147,6 +147,9 @@ import type {
   TextSelection,
   TextPropertyRead,
   TextFormatResult,
+  TextFindSpec,
+  TextFindHit,
+  TextFindResult,
   ViewportSurface,
   RenderSurface,
   SnapshotPng,
@@ -3905,7 +3908,108 @@ export function createBundleHost(
         },
       ]);
     },
+    // Extensions ADR 348 amendment 1 — the selection in characters, and
+    // find / replace over the engine's `RequestFindText` and `findReplace`
+    // (engine ADR 1021): hits come back in caret AND character offsets, so
+    // nothing converts here; Replace All is the engine's one batch.
+    async characterRange() {
+      requireDocRead("text.characterRange");
+      const sel = textSelection?.read() ?? null;
+      if (!sel) return null;
+      const content = await document.storyContent(sel.storyId);
+      if (!content) return null;
+      const paras = paragraphTexts(content);
+      return {
+        storyId: sel.storyId,
+        start: contentToChar(paras, sel.start),
+        end: contentToChar(paras, sel.end),
+      };
+    },
+    async find(spec) {
+      requireDocRead("text.find");
+      return findText(spec);
+    },
+    async replace(spec) {
+      if (!spec.find) {
+        return { applied: false, replaced: 0, error: "nothing to find" };
+      }
+      const found = await findText(spec);
+      if (found.error) {
+        return { applied: false, replaced: 0, error: found.error };
+      }
+      if (found.hits.length === 0) {
+        return { applied: false, replaced: 0, error: "nothing matches" };
+      }
+      const outcome = await document.mutate({
+        op: "findReplace",
+        args: {
+          spec: wireFindSpec(spec),
+          replace: spec.replace,
+          replaceAll: spec.all === true,
+          ...(spec.replaceParagraphStyle
+            ? { paragraphStyle: spec.replaceParagraphStyle }
+            : {}),
+          ...(spec.replaceCharacterStyle
+            ? { characterStyle: spec.replaceCharacterStyle }
+            : {}),
+        },
+      } as Mutation);
+      return outcome.applied
+        ? { applied: true, replaced: spec.all === true ? found.hits.length : 1 }
+        : {
+            applied: false,
+            replaced: 0,
+            error: describeError(outcome.error),
+          };
+    },
   };
+
+  /** The wire's `FindSpec` for a contract spec (absent fields stay absent). */
+  function wireFindSpec(
+    spec: TextFindSpec,
+  ): { find: string } & Record<string, unknown> {
+    const out: { find: string } & Record<string, unknown> = {
+      find: spec.find,
+    };
+    if (spec.storyId) out.storyId = spec.storyId;
+    if (spec.mode) out.mode = spec.mode;
+    if (spec.matchCase) out.matchCase = true;
+    if (spec.wholeWord) out.wholeWord = true;
+    if (spec.paragraphStyle) out.paragraphStyle = spec.paragraphStyle;
+    if (spec.characterStyle) out.characterStyle = spec.characterStyle;
+    if (typeof spec.limit === "number") out.limit = spec.limit;
+    return out;
+  }
+
+  async function findText(spec: TextFindSpec): Promise<TextFindResult> {
+    if (!spec.find) return { hits: [] };
+    try {
+      const r = (await getEditor().client.send({
+        kind: "requestFindText",
+        payload: { spec: wireFindSpec(spec) },
+      } as never)) as {
+        kind: string;
+        payload?: { hits?: TextFindHit[]; error?: string | null };
+      };
+      if (r?.kind !== "foundText" || !r.payload) {
+        return { hits: [], error: "the host answered no find result" };
+      }
+      const hits = (r.payload.hits ?? []).map((h) => ({
+        storyId: h.storyId,
+        start: h.start,
+        end: h.end,
+        charStart: h.charStart,
+        charEnd: h.charEnd,
+        paragraph: h.paragraph,
+        text: h.text,
+        context: h.context,
+        contextOffset: h.contextOffset,
+      }));
+      return r.payload.error ? { hits, error: r.payload.error } : { hits };
+    } catch (err) {
+      return { hits: [], error: String(err) };
+    }
+  }
 
   async function readTextPath(
     address: string,
@@ -4339,9 +4443,10 @@ export function createBundleHost(
   let holdsDocumentContext = false;
   const documentContextBackend = options?.documentContext;
   const shell: ShellSurface = {
-    openPanel(panelId) {
+    openPanel(panelId, panelOptions) {
       if (shellBackend) {
-        shellBackend.openPanel(panelId);
+        if (panelOptions) shellBackend.openPanel(panelId, panelOptions);
+        else shellBackend.openPanel(panelId);
         return;
       }
       log.warn(
@@ -5700,6 +5805,10 @@ export function createBundleHost(
     // actually read/write the clipboard (K-6 / S-14).
     featureSet.add("clipboard@1");
   }
+  // Extensions ADR 348 amendment 1 — find and replace go to the engine
+  // (`RequestFindText`, `findReplace`), which every host of this contract
+  // runs; no selection reader is needed.
+  featureSet.add("text.find@1");
   if (options?.textSelection) {
     // Extensions ADR 348 (C4) — a real selection reader is wired: the
     // property reads and format writes have a selection to work on.

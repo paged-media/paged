@@ -45,6 +45,7 @@ import type {
 } from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
 
+import { BIND_RECIPE_REVISION } from "../link-index";
 import { DRAW_ID } from "../object-model/shared";
 import { defineMessages, t } from "@paged-media/strings";
 
@@ -352,17 +353,36 @@ export const drawPropertiesPanel = (): PanelSchema => ({
 /** The lists re-read on object-model changes. A batch announces several
  *  changes and seven lists follow it, so the lists see ONE coalesced
  *  change per burst, after the writer's own reads (`ms` later), never in
- *  the middle of a batch. */
+ *  the middle of a batch.
+ *
+ *  A RECIPE WRITE IS A CHANGE TOO. The document kinds are read out of the
+ *  recipe parts, and a command saves its recipe AFTER its batch, through
+ *  a `.paged` part write that `objects.onDidChange` never reports. In the
+ *  editor every door is a worker round trip, so the read the batch's
+ *  change started could run before the write landed, and nothing re-read
+ *  afterwards: a repeat made from the menu was missing from its list. The
+ *  write's announcement (`announceRecipeChange`) is the missing event. */
 function coalescedChanges(host: BundleHost, ms = 50): BundleHost & Disposable {
   const listeners = new Set<() => void>();
   let timer: ReturnType<typeof setTimeout> | null = null;
-  const sub = host.objects.onDidChange(() => {
+  const changed = () => {
     if (timer) return;
     timer = setTimeout(() => {
       timer = null;
       for (const l of [...listeners]) l();
     }, ms);
-  });
+  };
+  const subs: Disposable[] = [host.objects.onDidChange(changed)];
+  try {
+    subs.push(
+      host.bindings.onDidChange((name) => {
+        if (name === BIND_RECIPE_REVISION) changed();
+      }),
+    );
+  } catch {
+    /* no binding store: a recipe write reaches the lists only through
+       the next document or selection change */
+  }
   const objects = Object.create(host.objects) as BundleHost["objects"];
   objects.onDidChange = (listener) => {
     const l = () => listener({ addresses: [], origin: "core" });
@@ -373,7 +393,7 @@ function coalescedChanges(host: BundleHost, ms = 50): BundleHost & Disposable {
     objects,
     dispose() {
       if (timer) clearTimeout(timer);
-      sub.dispose();
+      for (const s of subs) s.dispose();
       listeners.clear();
     },
   });

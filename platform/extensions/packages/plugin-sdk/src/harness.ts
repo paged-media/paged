@@ -209,6 +209,7 @@ export interface HarnessOptions
       | "willSave"
       | "toolSettings"
       | "pages"
+      | "shell"
     > {
   /** D-27 — back `host.text` with the ENGINE's shaper
    *  (`CanvasWorker.measureText`, the one the editor's worker calls)
@@ -1214,6 +1215,9 @@ export async function createHeadlessHost(
       // v70 — page navigation, when the test supplies a backend (absent:
       // `supports("viewport.pages@1")` is false, as before).
       pages: options.pages,
+      // Extensions ADR 348 amendment 1 — a test's shell backend (a
+      // recorder of `openPanel` with its target); absent, as before.
+      ...(options.shell ? { shell: options.shell } : {}),
       // Record the SCHEMA verbatim at registration — the panel registry
       // only ever sees the synthesized React panel, so the conformance
       // log gets the schema through this adapter seam (no host renderer
