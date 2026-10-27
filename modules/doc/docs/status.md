@@ -171,7 +171,12 @@ of 2026-10-24):
   796 → 801 of 813 and 605 → 605 of 624; page starts unchanged at 2 % and 13.1 %
   (`docs/reference/acceptance-real-docx.md`, round 14). Line breaking is no longer the gap.
 - `first_fit_docx()` and `scripts/word-first-fit-probe.sh` ask Word the breaking and picture
-  questions; Word's answer (`fixtures/first-fit.word.json`) is not committed yet.
+  questions; Word's answer is committed (`fixtures/first-fit.word.json`, 2026-10-25) and the
+  engine matches it: every case's words per line (33 of 33, 27 before), a justified line
+  compressed by up to one word space, breaks after en and em dashes, and a picture's line at
+  Word's height under single, 1.5-line and at-least spacing (ADR 617 and engine ADR 1016
+  amendments). Not matched: the step into a paragraph from one in another line spacing.
+  Tests: `docx-conformance/tests/it/first_fit.rs`, `test/headless/first-fit.spec.ts`.
 - Found, not fixed: the pour refuses all text after a table on current main (round 14).
 
 ## Object model and merge fields (ADR 605, `om/object-model` branch, plugin-api 0.2.43)

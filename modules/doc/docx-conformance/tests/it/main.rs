@@ -13,6 +13,7 @@ mod conformance;
 mod container_bytes;
 mod continuous;
 mod feature_evidence;
+mod first_fit;
 mod floats;
 mod footnote_numbering;
 mod headers;

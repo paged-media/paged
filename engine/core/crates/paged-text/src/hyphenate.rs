@@ -486,6 +486,39 @@ fn is_hard_hyphen(c: char) -> bool {
     c == '-' || c == '\u{2010}'
 }
 
+/// The en and em dashes inside `word` that Word's first-fit breaks after
+/// (`first-fit.word.json` H03 `1990–` / `2000`, H04 `word—` / `word`;
+/// engine ADR 1016): a dash with a character on either side. InDesign
+/// offers no break there (above), so only the Word mode asks.
+pub fn word_dash_opportunities(word: &str) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut prev: Option<char> = None;
+    let mut chars = word.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if is_word_dash(c)
+            && prev.is_some_and(|p| !is_word_dash(p))
+            && chars.peek().is_some_and(|(_, n)| !is_word_dash(*n))
+        {
+            out.push(i + c.len_utf8());
+        }
+        prev = Some(c);
+    }
+    out
+}
+
+fn is_word_dash(c: char) -> bool {
+    c == '\u{2013}' || c == '\u{2014}'
+}
+
+/// True when the break at byte `offset` of `text` follows an en or em
+/// dash ([`word_dash_opportunities`]): like a hyphen the text has, the
+/// line ends in it and gains no hyphen.
+pub fn breaks_after_word_dash(text: &str, offset: usize) -> bool {
+    text.get(..offset)
+        .and_then(|head| head.chars().next_back())
+        .is_some_and(is_word_dash)
+}
+
 /// True when the break at byte `offset` of `text` follows a hyphen the text
 /// already has, so the line needs no synthetic one.
 pub fn breaks_after_hard_hyphen(text: &str, offset: usize) -> bool {
