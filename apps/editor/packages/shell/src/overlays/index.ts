@@ -47,6 +47,11 @@ export {
 } from "./data-markers";
 export { tableCellOverlayContribution } from "./table-cell-overlay";
 export { snapLinesContribution } from "./snap-lines";
+export {
+  gridOverlayContribution,
+  gridPath,
+  PIXEL_GRID_MIN_SCALE,
+} from "./grid-overlay";
 
 export { OverlayHost, type OverlayHostProps } from "./overlay-host";
 

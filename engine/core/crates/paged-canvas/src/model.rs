@@ -1123,6 +1123,7 @@ fn story_id_of_logged(entry: &LoggedMutation) -> Option<String> {
         LoggedMutation::Composite(children) => children.iter().find_map(story_id_of_logged),
         // App state, not story content.
         LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => None,
+        LoggedMutation::Reverted(inner) => story_id_of_logged(inner),
     }
 }
 
@@ -2045,6 +2046,13 @@ pub struct CanvasModel {
     /// than the cap lost its first children to eviction outright, so no
     /// undo could remove them.
     applied_log_cap_held: bool,
+    /// Engine ADR 1030 — how many undo steps the log keeps
+    /// ([`Self::set_history_depth`]); `MAX_APPLIED_LOG` by default.
+    history_depth: usize,
+    /// Engine ADR 1030 — how many steps the depth has evicted since the
+    /// document opened: while `0`, undoing every step reaches the opened
+    /// document.
+    evicted_steps: usize,
     /// ADR 027 §4 — when set, every rebuild is checked against a
     /// cold build ([`Self::digest_gate_check`]) and a difference panics.
     /// Seeded from `PAGED_DIGEST_GATE=1`; a CI / debug lane only.
@@ -2075,6 +2083,9 @@ pub struct CanvasModel {
     /// v67 (RFI C-68) — the session's snapping preferences, shared by
     /// every gesture and by `RequestSnapPoint`.
     pub(crate) snap_settings: crate::snap_point::SnapSettings,
+    /// v77 (editor ADR 287) — how the screen draws the document. Session
+    /// state; no build reads it, only the screen's rasterization.
+    pub(crate) view_settings: crate::view::ViewSettings,
     /// v75 — the session's role and overrides; the document's template
     /// policy applies through them (engine ADR 1000). Session state.
     pub(crate) session_policy: paged_template::SessionPolicy,
@@ -2511,6 +2522,36 @@ const AMEND_ORIGINS_CAP: usize = 256;
 pub struct AppliedRecord {
     pub applied_seq: u64,
     pub kind: LoggedMutation,
+    /// Engine ADR 1030 — the step's name. Set by the entry point that
+    /// logged it (the caller's explicit label, else the default of the
+    /// wire mutation or gesture); `None` reads as the default of `kind`
+    /// ([`crate::undo_label::for_logged`]).
+    pub label: Option<crate::undo_label::UndoLabel>,
+}
+
+/// Engine ADR 1030 — one named step of the undo timeline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndoLogEntry {
+    /// The step's `applied_seq` — what `UndoTo` / `RedoTo` name.
+    pub applied_seq: u64,
+    pub label: crate::undo_label::UndoLabel,
+}
+
+/// Engine ADR 1030 — the named undo timeline ([`CanvasModel::undo_log`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndoLog {
+    /// Oldest first; the last entry is the step an undo reverts.
+    pub undo: Vec<UndoLogEntry>,
+    /// Next redo first.
+    pub redo: Vec<UndoLogEntry>,
+    /// The whole log's length (`undo` may be cut to the limit).
+    pub undo_len: usize,
+    pub redo_len: usize,
+    /// The history depth in force.
+    pub depth: usize,
+    /// Steps the depth evicted since the document opened (`0`: the oldest
+    /// undo step is the document's first edit).
+    pub evicted: usize,
 }
 
 /// W1.24 (audit B18) — per-rebuild timing + size instrumentation.
@@ -2599,6 +2640,12 @@ pub enum LoggedMutation {
         prev: Box<Mutation>,
         next: Box<Mutation>,
     },
+    /// v77 (engine ADR 1030) — a step that REVERSES the steps it holds:
+    /// applying it reverts `inner`, undoing it replays `inner`. A snapshot
+    /// restore (`restore_to`) logs the steps it walked back as one of
+    /// these, so going back to a snapshot is ONE new undo step instead of a
+    /// move along the history (the steps it reverted stay recoverable).
+    Reverted(Box<LoggedMutation>),
 }
 
 impl CanvasModel {
@@ -2825,6 +2872,8 @@ impl CanvasModel {
             rebuild_deferred: false,
             rebuild_owed: false,
             applied_log_cap_held: false,
+            history_depth: MAX_APPLIED_LOG,
+            evicted_steps: 0,
             digest_gate: std::env::var("PAGED_DIGEST_GATE").is_ok_and(|v| v == "1"),
             keep_seeds: Default::default(),
             pending_keep_hints: HashMap::new(),
@@ -2833,6 +2882,7 @@ impl CanvasModel {
             pending_edit_spans: HashMap::new(),
             build_generation: 0,
             snap_settings: Default::default(),
+            view_settings: Default::default(),
             session_policy: Default::default(),
             snap_index: None,
             emission_prints: Default::default(),
@@ -2986,7 +3036,40 @@ impl CanvasModel {
     /// the list of affected page ids (caller invalidates the LOD
     /// cache for them). Rebuild is full + synchronous —
     /// "correctness, not pessimisation" (see plan §Item 5).
+    ///
+    /// Engine ADR 1030 — the step it logs is named after `mutation`
+    /// ([`crate::undo_label::for_mutation`]); [`Self::apply_mutation_labeled`]
+    /// names it after the caller instead.
     pub fn apply_mutation(
+        &mut self,
+        mutation: &Mutation,
+    ) -> Result<MutationOutcome, crate::channel::WorkerError> {
+        let outcome = self.apply_mutation_unlabeled(mutation)?;
+        // The outermost call names the step last, so a `Set` reads as the
+        // property it wrote and a batch as its children, not as the op one
+        // of them lowered to.
+        if self.top_step_is(outcome.applied_seq) {
+            let label = crate::undo_label::for_mutation(mutation);
+            self.set_step_label(outcome.applied_seq, label);
+        }
+        Ok(outcome)
+    }
+
+    /// Engine ADR 1030 — [`Self::apply_mutation`], with the undo step named
+    /// `label` (the caller's words; blank keeps the default).
+    pub fn apply_mutation_labeled(
+        &mut self,
+        mutation: &Mutation,
+        label: Option<&str>,
+    ) -> Result<MutationOutcome, crate::channel::WorkerError> {
+        let outcome = self.apply_mutation(mutation)?;
+        if let Some(label) = label.and_then(crate::undo_label::UndoLabel::explicit) {
+            self.set_step_label(outcome.applied_seq, label);
+        }
+        Ok(outcome)
+    }
+
+    fn apply_mutation_unlabeled(
         &mut self,
         mutation: &Mutation,
     ) -> Result<MutationOutcome, crate::channel::WorkerError> {
@@ -3026,6 +3109,7 @@ impl CanvasModel {
                                 prev: Box::new(prev),
                                 next: Box::new(m),
                             },
+                            label: None,
                         });
                         self.redo_log.clear();
                         Ok(outcome)
@@ -3546,6 +3630,7 @@ impl CanvasModel {
                 op: text_op,
                 inverse: applied.inverse.clone(),
             },
+            label: None,
         });
         self.redo_log.clear();
         Ok(MutationOutcome {
@@ -3720,6 +3805,7 @@ impl CanvasModel {
                 self.push_applied(AppliedRecord {
                     applied_seq,
                     kind: LoggedMutation::Defaults { prev, next },
+                    label: None,
                 });
                 continue;
             }
@@ -3800,6 +3886,7 @@ impl CanvasModel {
             self.push_applied(AppliedRecord {
                 applied_seq,
                 kind: LoggedMutation::Composite(entries),
+                label: None,
             });
         }
         self.redo_log.clear();
@@ -3931,6 +4018,13 @@ impl CanvasModel {
                     next: next.clone(),
                 }
             }
+            // ADR 1030 — the step's forward effect is its inner steps'
+            // reversal; their inverses stay as captured (the state they run
+            // against is the one they were captured from).
+            LoggedMutation::Reverted(inner) => {
+                self.revert_logged(inner);
+                LoggedMutation::Reverted(inner.clone())
+            }
         })
     }
 
@@ -3959,6 +4053,9 @@ impl CanvasModel {
             // unlogged app-state writes, so this adds no record of its own.
             LoggedMutation::AppState { prev, .. } => {
                 let _ = self.apply_mutation(prev);
+            }
+            LoggedMutation::Reverted(inner) => {
+                let _ = self.replay_logged(inner);
             }
         }
     }
@@ -6101,6 +6198,7 @@ impl CanvasModel {
         self.push_applied(AppliedRecord {
             applied_seq,
             kind: LoggedMutation::Frame(applied.clone()),
+            label: None,
         });
         self.redo_log.clear();
         Ok(FrameMutationOutcome {
@@ -6152,6 +6250,11 @@ impl CanvasModel {
             LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => {
                 self.revert_logged(&rec.kind);
                 None
+            }
+            // ADR 1030 — undoing a restore replays what it reverted.
+            LoggedMutation::Reverted(inner) => {
+                self.revert_logged(&rec.kind);
+                story_id_of_logged(inner)
             }
         };
         // Perf-MasterText + Perf-BodyStory — undo replays an inverse
@@ -6221,6 +6324,9 @@ impl CanvasModel {
             LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => {
                 (self.replay_logged(&rec.kind)?, None)
             }
+            LoggedMutation::Reverted(inner) => {
+                (self.replay_logged(&rec.kind)?, story_id_of_logged(inner))
+            }
         };
         // Perf-MasterText + Perf-BodyStory — same invariant as undo():
         // the replayed op mutates content/structure under the caches.
@@ -6234,6 +6340,7 @@ impl CanvasModel {
         self.push_applied(AppliedRecord {
             applied_seq: redone_seq,
             kind: new_kind,
+            label: rec.label,
         });
         // Engine ADR 1004 — history moved: the replayed entry is not one a
         // follow-up write may join.
@@ -6286,6 +6393,7 @@ impl CanvasModel {
                 log.push(AppliedRecord {
                     applied_seq,
                     kind: LoggedMutation::Composite(children),
+                    label: Some(crate::undo_label::for_script()),
                 });
             }
         };
@@ -6341,6 +6449,14 @@ impl CanvasModel {
             return;
         }
         let records: Vec<AppliedRecord> = self.applied_log.drain(base - 1..).collect();
+        // Engine ADR 1030 — the amended step keeps its name: the write that
+        // joined it is a consequence of the edit, not a new edit.
+        let label = records.first().map(|first| {
+            first
+                .label
+                .clone()
+                .unwrap_or_else(|| crate::undo_label::for_logged(&first.kind))
+        });
         if let Some(first) = records.first() {
             if first.applied_seq != applied_seq {
                 self.amend_origins.push((applied_seq, first.applied_seq));
@@ -6362,7 +6478,11 @@ impl CanvasModel {
         } else {
             LoggedMutation::Composite(children)
         };
-        self.applied_log.push(AppliedRecord { applied_seq, kind });
+        self.applied_log.push(AppliedRecord {
+            applied_seq,
+            kind,
+            label,
+        });
         self.redo_log.clear();
         self.amend_anchor = Some(applied_seq);
     }
@@ -6415,6 +6535,219 @@ impl CanvasModel {
         let outcome = self.apply_mutation(mutation)?;
         self.fold_amend(base, outcome.applied_seq);
         Ok(outcome)
+    }
+
+    /// Engine ADR 1030 — is the step `applied_seq` the top of the undo log?
+    fn top_step_is(&self, applied_seq: u64) -> bool {
+        self.applied_log
+            .last()
+            .is_some_and(|r| r.applied_seq == applied_seq)
+    }
+
+    /// Engine ADR 1030 — name the undo step `applied_seq`, when it is the
+    /// top of the undo log (the step a write just made). Returns whether it
+    /// was named; a write that logged no step names nothing.
+    pub fn set_step_label(
+        &mut self,
+        applied_seq: u64,
+        label: crate::undo_label::UndoLabel,
+    ) -> bool {
+        match self.applied_log.last_mut() {
+            Some(top) if top.applied_seq == applied_seq => {
+                top.label = Some(label);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Engine ADR 1030 — the history depth: how many undo steps the log
+    /// keeps (oldest evicted first). [`MAX_APPLIED_LOG`] unless a host set
+    /// less with [`Self::set_history_depth`].
+    pub fn history_depth(&self) -> usize {
+        self.history_depth
+    }
+
+    /// Engine ADR 1030 — keep at most `depth` undo steps (clamped to
+    /// `1..=MAX_APPLIED_LOG`); a shallower depth evicts the oldest steps
+    /// now. Returns the depth in force.
+    pub fn set_history_depth(&mut self, depth: usize) -> usize {
+        self.history_depth = depth.clamp(1, MAX_APPLIED_LOG);
+        self.enforce_applied_log_cap();
+        self.history_depth
+    }
+
+    /// Engine ADR 1030 — the named undo timeline: the newest `limit` undo
+    /// steps, OLDEST FIRST (the last one is the step an undo reverts), and
+    /// the newest `limit` redo steps in the order redo replays them (the
+    /// first is the next redo).
+    pub fn undo_log(&self, limit: usize) -> UndoLog {
+        let entry = |r: &AppliedRecord| UndoLogEntry {
+            applied_seq: r.applied_seq,
+            label: r
+                .label
+                .clone()
+                .unwrap_or_else(|| crate::undo_label::for_logged(&r.kind)),
+        };
+        let start = self.applied_log.len().saturating_sub(limit);
+        UndoLog {
+            undo: self.applied_log[start..].iter().map(entry).collect(),
+            redo: self.redo_log.iter().rev().take(limit).map(entry).collect(),
+            undo_len: self.applied_log.len(),
+            redo_len: self.redo_log.len(),
+            depth: self.history_depth,
+            evicted: self.evicted_steps,
+        }
+    }
+
+    /// Engine ADR 1030 — undo every step down to and including
+    /// `applied_seq`, in one call. Refused (nothing undone) when that seq is
+    /// not on the undo log. Answers each step's outcome, newest first; an
+    /// undo that fails mid-way stops there and answers the steps it made.
+    pub fn undo_to(
+        &mut self,
+        applied_seq: u64,
+    ) -> Result<Vec<UndoOutcome>, crate::channel::WorkerError> {
+        if !self
+            .applied_log
+            .iter()
+            .any(|r| r.applied_seq == applied_seq)
+        {
+            return Err(crate::channel::WorkerError::NotImplemented {
+                what: format!("undoTo: step {applied_seq} is not on the undo log"),
+            });
+        }
+        let mut out = Vec::new();
+        while let Some(outcome) = self.undo() {
+            let done = outcome.undone_seq == applied_seq;
+            out.push(outcome);
+            if done {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    /// Engine ADR 1030 — redo every step up to and including
+    /// `applied_seq`, in one call. Refused (nothing redone) when that seq
+    /// is not on the redo log.
+    pub fn redo_to(
+        &mut self,
+        applied_seq: u64,
+    ) -> Result<Vec<UndoOutcome>, crate::channel::WorkerError> {
+        if !self.redo_log.iter().any(|r| r.applied_seq == applied_seq) {
+            return Err(crate::channel::WorkerError::NotImplemented {
+                what: format!("redoTo: step {applied_seq} is not on the redo log"),
+            });
+        }
+        let mut out = Vec::new();
+        while let Some(outcome) = self.redo() {
+            let done = outcome.undone_seq == applied_seq;
+            out.push(outcome);
+            if done {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    /// Engine ADR 1030 — make the document what it was right after the step
+    /// `applied_seq` (`0`: before the oldest step on the undo log — the
+    /// opened document while nothing was evicted), as ONE new undo step
+    /// named `label` (default "Restore"). A step on the undo log is reached
+    /// by reverting the newer steps: they stay on the undo log, and the
+    /// restore is one [`LoggedMutation::Reverted`] step on top of them, so
+    /// undoing it brings them back and the history stays whole. A step on
+    /// the redo log is reached by replaying the steps up to it (logged as
+    /// one step). Either
+    /// way the redo log is cleared, as by any new step. Refused (nothing
+    /// moves) when `applied_seq` is on neither log or is the current step.
+    pub fn restore_to(
+        &mut self,
+        applied_seq: u64,
+        label: Option<&str>,
+    ) -> Result<Vec<UndoOutcome>, crate::channel::WorkerError> {
+        let refuse = |what: &str| crate::channel::WorkerError::NotImplemented {
+            what: format!("restoreTo: {what}"),
+        };
+        let current = self.applied_log.last().map_or(0, |r| r.applied_seq);
+        if applied_seq == current {
+            return Err(refuse("the document is already at that step"));
+        }
+        let on_undo = applied_seq == 0
+            || self
+                .applied_log
+                .iter()
+                .any(|r| r.applied_seq == applied_seq);
+        let (outcomes, kind) = if on_undo {
+            // The first step newer than the target is the last to revert.
+            let first_newer = self
+                .applied_log
+                .iter()
+                .find(|r| r.applied_seq > applied_seq)
+                .map(|r| r.applied_seq)
+                .ok_or_else(|| refuse("no step is newer than that one"))?;
+            let outcomes = self.undo_to(first_newer)?;
+            let n = outcomes.len().min(self.redo_log.len());
+            // The redo log's tail holds them newest-undone LAST, i.e. the
+            // oldest step last: reversed, they are in apply order.
+            let walked: Vec<AppliedRecord> = self
+                .redo_log
+                .split_off(self.redo_log.len() - n)
+                .into_iter()
+                .rev()
+                .collect();
+            // They go back on the undo log as they were — the restore is a
+            // step ON TOP of the history, which therefore stays whole: the
+            // step below the restore is the one the user went back from.
+            // The scene is the snapshot's meanwhile; the `Reverted` step
+            // pushed next is what makes the log and the scene agree.
+            let mut steps: Vec<LoggedMutation> = walked.iter().map(|r| r.kind.clone()).collect();
+            for rec in walked {
+                self.applied_log.push(rec);
+            }
+            let inner = if steps.len() == 1 {
+                steps.pop().expect("one")
+            } else {
+                LoggedMutation::Composite(steps)
+            };
+            (outcomes, LoggedMutation::Reverted(Box::new(inner)))
+        } else if self.redo_log.iter().any(|r| r.applied_seq == applied_seq) {
+            let outcomes = self.redo_to(applied_seq)?;
+            let n = outcomes.len().min(self.applied_log.len());
+            let mut steps: Vec<LoggedMutation> = self
+                .applied_log
+                .split_off(self.applied_log.len() - n)
+                .into_iter()
+                .map(|r| r.kind)
+                .collect();
+            let kind = if steps.len() == 1 {
+                steps.pop().expect("one")
+            } else {
+                LoggedMutation::Composite(steps)
+            };
+            (outcomes, kind)
+        } else {
+            return Err(refuse(&format!(
+                "step {applied_seq} is on neither the undo nor the redo log"
+            )));
+        };
+        if outcomes.is_empty() {
+            return Err(refuse("no step could be moved"));
+        }
+        self.redo_log.clear();
+        let applied_seq = self.bump_applied_seq();
+        let label = label
+            .and_then(crate::undo_label::UndoLabel::explicit)
+            .unwrap_or_else(crate::undo_label::for_restore);
+        self.push_applied(AppliedRecord {
+            applied_seq,
+            kind,
+            label: Some(label),
+        });
+        // A restore is not a step a follow-up write may join.
+        self.amend_anchor = None;
+        Ok(outcomes)
     }
 
     /// Read-only inspection of the most recently logged mutation.
@@ -7501,6 +7834,12 @@ impl CanvasModel {
                                 value: Some(Value::Length(f.gradient_fill_length)),
                             },
                             PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    f.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
                                 value: Some(Value::Length(f.gradient_stroke_angle)),
                             },
@@ -7848,6 +8187,12 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientFillLength,
                                 value: Some(Value::Length(f.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    f.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
@@ -8244,6 +8589,12 @@ impl CanvasModel {
                                 value: Some(Value::Length(p.gradient_fill_length)),
                             },
                             PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    p.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
                                 value: Some(Value::Length(p.gradient_stroke_angle)),
                             },
@@ -8631,6 +8982,12 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientFillLength,
                                 value: Some(Value::Length(o.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    o.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
@@ -11266,6 +11623,8 @@ impl CanvasModel {
         // S4 — the first-class overset continuation (where the flow overran),
         // keyed by story id.
         let overset_at = self.built.diagnostics.overset_continuations();
+        // Data ADR 564 — the table cells whose text does not fit their row.
+        let overset_cells = self.built.diagnostics.overset_cells();
         self.scene
             .stories
             .iter()
@@ -11287,6 +11646,19 @@ impl CanvasModel {
                             paragraph: c.paragraph_idx,
                             line: c.line_idx,
                         }),
+                    overset_cells: overset_cells
+                        .get(&s.self_id)
+                        .map(|cells| {
+                            cells
+                                .iter()
+                                .map(|c| crate::channel::OversetCellAt {
+                                    table: c.table_id.clone(),
+                                    row: c.row,
+                                    column: c.column,
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                     grow_rule: s
                         .story
                         .grow
@@ -12770,6 +13142,12 @@ impl CanvasModel {
             .ok_or_else(|| crate::channel::LoadError::Build(format!("no page {page_id}")))
     }
 
+    /// The faces registered for the document's text (engine ADR 1031's
+    /// SVG import lays text out with them).
+    pub(crate) fn document_fonts(&self) -> &[FontEntry] {
+        &self.font_registry
+    }
+
     /// Concept 3 — read accessors for the export session's begin.
     pub fn font_table(&self) -> &paged_renderer::FontTable {
         &self.font_table
@@ -13829,13 +14207,14 @@ impl CanvasModel {
     /// from [`Self::push_applied`] so the mixed-batch executor can run it
     /// once over its collapsed entry (C-79).
     fn enforce_applied_log_cap(&mut self) {
-        if self.applied_log.len() > MAX_APPLIED_LOG {
+        if self.applied_log.len() > self.history_depth {
             // O(n) on the eviction only; eviction happens at most once
             // per push past the cap, so amortised O(1). A VecDeque would
             // make the front-pop O(1) but `applied_log` is read as a
             // slice elsewhere (`applied_log_back`); keep the Vec and pay
             // the rare shift.
-            let overflow = self.applied_log.len() - MAX_APPLIED_LOG;
+            let overflow = self.applied_log.len() - self.history_depth;
+            self.evicted_steps += overflow;
             self.applied_log.drain(0..overflow);
         }
     }
@@ -13908,6 +14287,17 @@ impl CanvasModel {
     /// not undoable.
     pub fn set_snap_settings(&mut self, settings: crate::snap_point::SnapSettings) {
         self.snap_settings = settings;
+    }
+
+    /// v77 — how the screen draws the document (editor ADR 287).
+    pub fn view_settings(&self) -> crate::view::ViewSettings {
+        self.view_settings
+    }
+
+    /// v77 — replace the view settings. Session state: not saved, not
+    /// undoable, and no rebuild — the build does not depend on them.
+    pub fn set_view_settings(&mut self, settings: crate::view::ViewSettings) {
+        self.view_settings = settings;
     }
 
     /// v75 — the session's role and overrides (engine ADR 1000).
@@ -14579,6 +14969,7 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameOverprintStroke
             | P::FrameGradientFillAngle
             | P::FrameGradientFillLength
+            | P::FrameGradientFillStart
             | P::FrameGradientStrokeAngle
             | P::FrameGradientStrokeLength
             | P::ImageContentTransform
@@ -16689,6 +17080,7 @@ nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
     fn dummy_record(seq: u64) -> AppliedRecord {
         AppliedRecord {
             applied_seq: seq,
+            label: None,
             kind: LoggedMutation::Text {
                 op: crate::mutate::TextOp::InsertText {
                     story_id: String::new(),

@@ -48,7 +48,7 @@ import {
 } from "../../src/io/svg";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { countingHost } from "../perf/counting-host";
-import { openHost } from "./host";
+import { openHost, tsLane } from "./host";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const file = (name: string, svg: string) => ({
@@ -213,7 +213,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     );
     let ids: ElementId[] = [];
     const painted = await paintedWith(h, 2, async () => {
-      ids = await importSvg(h.host, file("ring.svg", svg));
+      ids = await importSvg(tsLane(h.host), file("ring.svg", svg));
     });
     expect(ids).toHaveLength(1);
     const areas = await areasOf(h, ids[0]!);
@@ -247,7 +247,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
       h,
       2,
       async () => {
-        ids = await importSvg(h.host, file("evenodd.svg", svg));
+        ids = await importSvg(tsLane(h.host), file("evenodd.svg", svg));
       },
       "f*",
     );
@@ -268,7 +268,10 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     const authored = shapesFromSvgBytes(enc(svg))[0]!.anchors;
     let ids: ElementId[] = [];
     const painted = await paintedWith(h, 2, async () => {
-      ids = await importSvg(withoutFillRule(h.host), file("evenodd.svg", svg));
+      ids = await importSvg(
+        withoutFillRule(tsLane(h.host)),
+        file("evenodd.svg", svg),
+      );
     });
     expect(ids).toHaveLength(1);
     const areas = await areasOf(h, ids[0]!);
@@ -290,7 +293,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
       h,
       1,
       async () => {
-        ids = await importSvg(h.host, file("star.svg", svg));
+        ids = await importSvg(tsLane(h.host), file("star.svg", svg));
       },
       "f*",
     );
@@ -306,7 +309,10 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     const svg = svgOf(`<path d="${STAR}" fill-rule="evenodd" fill="#aa2200"/>`);
     let ids: ElementId[] = [];
     const painted = await paintedWith(h, 1, async () => {
-      ids = await importSvg(withoutFillRule(h.host), file("star.svg", svg));
+      ids = await importSvg(
+        withoutFillRule(tsLane(h.host)),
+        file("star.svg", svg),
+      );
     });
     expect(ids).toHaveLength(1);
     expect(await fillRuleOf(h, ids[0]!)).toBe("NonZero");
@@ -316,7 +322,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
 
   it("a NONZERO shape writes no fill rule: it is the engine's default", async () => {
     const svg = svgOf(`<path d="${STAR}" fill="#aa2200"/>`);
-    const { host, work } = countingHost(h.host);
+    const { host, work } = countingHost(tsLane(h.host));
     const done = await commitSvgImport(host, file("star-nz.svg", svg));
     expect(done.elements).toBe(1);
     const [batch] = work.snapshot().mutations;
@@ -329,7 +335,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     const svg = svgOf(
       `<path d="${sq(20, 20, 100)} ${sq(50, 50, 40)}" fill="#00cc33"/>`,
     );
-    const ids = await importSvg(h.host, file("solid.svg", svg));
+    const ids = await importSvg(tsLane(h.host), file("solid.svg", svg));
     expect(ids).toHaveLength(1);
     expect(relative(await areasOf(h, ids[0]!))).toEqual([1, 1]);
     await h.host.document.undo();
@@ -343,7 +349,10 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     );
     let ids: ElementId[] = [];
     const painted = await paintedWith(h, 4, async () => {
-      ids = await importSvg(withoutFillRule(h.host), file("nested.svg", svg));
+      ids = await importSvg(
+        withoutFillRule(tsLane(h.host)),
+        file("nested.svg", svg),
+      );
     });
     expect(ids).toHaveLength(1);
     expect(relative(await areasOf(h, ids[0]!))).toEqual([1, -1, 1, -1]);
@@ -356,7 +365,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
       h,
       4,
       async () => {
-        ids = await importSvg(h.host, file("nested.svg", svg));
+        ids = await importSvg(tsLane(h.host), file("nested.svg", svg));
       },
       "f*",
     );
@@ -374,7 +383,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
       h,
       2,
       async () => {
-        ids = await importSvg(h.host, file("apart.svg", svg));
+        ids = await importSvg(tsLane(h.host), file("apart.svg", svg));
       },
       "f*",
     );
@@ -396,7 +405,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
         `<path d="${sq(140, 20, 100)} ${sq(170, 50, 40)}" fill-rule="evenodd" fill="#222222"/>` +
         `<rect x="20" y="150" width="40" height="40" fill="#333333"/>`,
     );
-    const { host, work } = countingHost(h.host);
+    const { host, work } = countingHost(tsLane(h.host));
     const done = await commitSvgImport(host, file("batch.svg", svg));
     expect(done).toEqual({
       shapes: 3,
@@ -423,7 +432,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     const svg = svgOf(
       `<path d="M20 20 L120 20 M20 40 L120 40" fill="none" stroke="#000000" stroke-width="2"/>`,
     );
-    const ids = await importSvg(h.host, file("open.svg", svg));
+    const ids = await importSvg(tsLane(h.host), file("open.svg", svg));
     expect(ids).toHaveLength(2);
     for (const id of ids) {
       const r = await h.host.document.pathAnchors(id);
@@ -436,7 +445,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     // The `pages` rows without `pageOrigin`, as an engine before core
     // 0.71.13 sends them.
     const warned: string[] = [];
-    const blind = new Proxy(h.host, {
+    const blind = new Proxy(tsLane(h.host), {
       get(target, key, receiver) {
         if (key === "log") {
           return {
@@ -476,10 +485,10 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     const svg = svgOf(
       `<path d="${sq(20, 20, 100)} ${sq(50, 50, 40)}" fill-rule="evenodd" fill="#0033cc"/>`,
     );
-    const ids = await importSvg(h.host, file("rt.svg", svg));
+    const ids = await importSvg(tsLane(h.host), file("rt.svg", svg));
     expect(ids).toHaveLength(1);
     await h.host.selection.set(ids as never[]);
-    const out = await exportSvg(h.host);
+    const out = await exportSvg(tsLane(h.host));
     const text = new TextDecoder().decode(out!.bytes);
     expect(text.match(/<path /g)).toHaveLength(1);
     // The element fills even-odd over the windings it stores, and the
@@ -502,9 +511,11 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     const ring = svgOf(
       `<path d="${sq(20, 20, 100)} ${sq(50, 50, 40, false)}" fill="#cc3300"/>`,
     );
-    const ringIds = await importSvg(h.host, file("nz.svg", ring));
+    const ringIds = await importSvg(tsLane(h.host), file("nz.svg", ring));
     await h.host.selection.set(ringIds as never[]);
-    let text = new TextDecoder().decode((await exportSvg(h.host))!.bytes);
+    let text = new TextDecoder().decode(
+      (await exportSvg(tsLane(h.host)))!.bytes,
+    );
     expect(text).toContain(`fill-rule="nonzero"`);
     await h.host.selection.set([]);
     await h.host.document.undo();
@@ -512,9 +523,9 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     const star = svgOf(
       `<path d="${STAR}" fill-rule="evenodd" fill="#aa2200"/>`,
     );
-    const starIds = await importSvg(h.host, file("star.svg", star));
+    const starIds = await importSvg(tsLane(h.host), file("star.svg", star));
     await h.host.selection.set(starIds as never[]);
-    text = new TextDecoder().decode((await exportSvg(h.host))!.bytes);
+    text = new TextDecoder().decode((await exportSvg(tsLane(h.host)))!.bytes);
     expect(text).toContain(`fill-rule="evenodd"`);
     await h.host.selection.set([]);
     await h.host.document.undo();

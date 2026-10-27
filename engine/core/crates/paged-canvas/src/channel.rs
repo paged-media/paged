@@ -733,6 +733,8 @@ export type WorkerToMain = WorkerToMainKind & {
 //   which a caller detects by the reply's missing `format` / `region`.
 // Additive on 76, no bump (governance rule 1) — data ADR 564:
 //   `RunContent.textVariable`, the text variable a run is an instance of.
+// Additive on 77, no bump (governance rule 1) — data ADR 564:
+//   `StorySummary.oversetCells`, the table cells whose text overflows.
 // Rides v76 (unreleased; added before first consumer sync, governance rule
 //   4) — engine ADRs 1018 and 1021: the mutations setStyleBasedOn,
 //   setListLevel, restartNumbering and findReplace (Operations
@@ -741,7 +743,42 @@ export type WorkerToMain = WorkerToMainKind & {
 //   error? }`. Additive: twelve property paths (Word's character and
 //   paragraph additions, `documentShowHiddenText`) and
 //   `NumberingListSpec.levels`.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(76);
+// v77 — named undo steps (engine ADR 1030): `LabelStep { appliedSeq, label
+//   }` → `StepLabeled`; `RequestUndoLog { limit }` → `UndoLog
+//   { undo, redo, undoLen, redoLen, depth }`; `UndoTo { appliedSeq }` /
+//   `RedoTo { appliedSeq }` step the history several steps in one round trip
+//   (reply `UndoApplied` / `RedoApplied` with `steps`); `RestoreTo {
+//   appliedSeq, label }` goes back to a step as ONE new undo step (reply
+//   `MutationApplied`); `SetHistoryDepth {
+//   depth }` → `HistoryDepthApplied { depth }`. Additive on the same bump:
+//   `AmendMutation.label`, `CommitGesture.label`. New message kinds an older
+//   worker cannot answer, hence the bump.
+// v77 (rider) — SVG in and out of the engine (engine ADR 1031, `paged-svg`):
+//   `RequestSvgImport { pageId, bytes, options }` → `SvgImportPlanned`
+//   (the one batch to apply, one undo step, and the report of what was
+//   approximated or left out); `ExportSvg { pageId, elementIds, options }`
+//   → `SvgExported { svg, report }` / `ExportSvgFailed { error }`. The
+//   additive PropertyPath `frameGradientFillStart` rides it. New message
+//   kinds an older worker cannot answer, hence the bump.
+// v77 (rider) — view modes and snapping v2 (editor ADR 287):
+//   - `SetViewSettings { settings }` → `ViewSettingsApplied { settings }`:
+//     the screen's mode (Preview, Outline, Overprint Preview, Pixel
+//     Preview). Preview draws overprints as knockouts on both lanes (the
+//     GPU screen always did; the CPU tiles simulated them), Overprint
+//     Preview simulates them. A raster-time rewrite: no build depends on
+//     it.
+//   - `SnapSettings` gains `pixel`, `gridEvery` / `gridSubdivisions`,
+//     `angleGuides` / `customAngle`, `spacing`, `rotate` and
+//     `intersections` (serde-default fields); `SnapSource` gains `pixel`,
+//     `angle`, `intersection` and `spacing`; `SnapLine` gains the optional
+//     `kind`, `from`, `to`, `angle` and `distance`; `SnapPointResult` gains
+//     `angleTarget`; `CameraSabLayout` gains `offsetRotation`.
+//   - Gestures: translate snaps rotated members through their oriented
+//     box, equal spacing and pixels; scale snaps the dragged handle;
+//     rotate snaps to 0/45/90 and the neighbours' angles.
+//   - The camera SAB's spare slot (offset 12) carries the view rotation.
+//   A new message kind an older worker cannot answer, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
 
 /// A per-run script budget on the wire (v63). Every field is optional
 /// and falls back to the engine's default, so a caller overrides only
@@ -874,6 +911,34 @@ pub struct MintedElement {
     pub element: crate::element_selection::ElementId,
     /// The story minted with it, for the kinds that carry one.
     pub story_id: Option<String>,
+}
+
+/// v77 (engine ADR 1030) — one named undo step on the wire.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoLogEntryWire {
+    /// What `UndoTo` / `RedoTo` name.
+    pub applied_seq: u64,
+    /// The step's name: the caller's words, or the engine's English
+    /// default.
+    pub label: String,
+    /// The derivation key of an engine default (`moveFrame`,
+    /// `set:fillColor`, `gesture:rotate`, `batch`, `script`), for a host
+    /// that translates the defaults it knows; `None` when a caller named
+    /// the step.
+    #[serde(default)]
+    pub key: Option<String>,
+}
+
+impl From<crate::model::UndoLogEntry> for UndoLogEntryWire {
+    fn from(e: crate::model::UndoLogEntry) -> Self {
+        Self {
+            applied_seq: e.applied_seq,
+            label: e.label.text,
+            key: e.label.key,
+        }
+    }
 }
 
 /// Concept 3 — PDF export options as the dialog sends them. Every
@@ -1166,7 +1231,58 @@ pub enum MainToWorkerKind {
     AmendMutation {
         applied_seq: u64,
         mutation: Mutation,
+        /// v77 (engine ADR 1030) — rename the amended step. Absent keeps
+        /// the name it had.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
     },
+    /// v77 (engine ADR 1030) — name the undo step `applied_seq` `label`
+    /// (the caller's words, shown by the History panel and the Edit menu,
+    /// instead of the engine's default), when it is still the top of the
+    /// undo log: the step the caller's write just made (the `appliedSeq` of
+    /// its `MutationApplied` / `GestureCommitted` reply). A separate message
+    /// rather than a labelled `Mutate`, so a write's own message stays the
+    /// one every recorder and lane already knows. A blank label keeps the
+    /// default. Reply: `StepLabeled` (`labeled: false` when the step is no
+    /// longer the top, or the write logged none).
+    LabelStep { applied_seq: u64, label: String },
+    /// v77 (engine ADR 1030) — read the named undo timeline: the newest
+    /// `limit` undo steps (oldest first) and redo steps (next redo first);
+    /// absent = all of them. Reply: `UndoLog`.
+    RequestUndoLog {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        limit: Option<u32>,
+    },
+    /// v77 (engine ADR 1030) — undo every step down to and including the
+    /// step `applied_seq` (an `UndoLog.undo` entry), in one round trip.
+    /// Reply: `UndoApplied` (its `undoneSeq` is `applied_seq`, `steps` how
+    /// many were undone, `pageIds` every page they touched), or
+    /// `MutationFailed` when that step is not on the undo log.
+    UndoTo { applied_seq: u64 },
+    /// v77 (engine ADR 1030) — redo every step up to and including the
+    /// step `applied_seq` (an `UndoLog.redo` entry). Reply: `RedoApplied`
+    /// or `MutationFailed`, as for `UndoTo`.
+    RedoTo { applied_seq: u64 },
+    /// v77 (engine ADR 1030) — make the document what it was right after
+    /// the step `applied_seq` (`0`: before the oldest step on the undo
+    /// log), as ONE new undo step named `label` (default "Restore"): the
+    /// History panel's snapshot restore. The steps it walked over stay
+    /// recoverable — undoing the restore brings them back. Reply:
+    /// `MutationApplied` (its `appliedSeq` names the new step), or
+    /// `MutationFailed` when the step is on neither log or is current.
+    RestoreTo {
+        applied_seq: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
+    },
+    /// v77 (engine ADR 1030) — keep at most `depth` undo steps (clamped to
+    /// 1..=10,000, the cap of ADR 110); a shallower depth evicts the oldest
+    /// steps now. Held by the worker across document loads. Reply:
+    /// `HistoryDepthApplied` with the depth in force.
+    SetHistoryDepth { depth: u32 },
     /// Request the per-page display list. Worker replies with
     /// `DisplayListReady` carrying a small descriptor (page id +
     /// command count + generation counters). Phase 1 does not stream
@@ -1367,6 +1483,11 @@ pub enum MainToWorkerKind {
     SetSnapSettings {
         settings: crate::snap_point::SnapSettings,
     },
+    /// v77 (editor ADR 287) — how the screen draws the document: Preview,
+    /// Outline, Overprint Preview or Pixel Preview. Survives document
+    /// loads; not saved, not undoable, no rebuild; exports, snapshots and
+    /// separations never see it. Reply: `ViewSettingsApplied`.
+    SetViewSettings { settings: crate::view::ViewSettings },
     /// v75 — the session's role and the host's overrides, against which
     /// the document's template policy is applied (editor
     /// `docs/composable-editor.md` §7). Survives document loads; not saved,
@@ -1477,6 +1598,31 @@ pub enum MainToWorkerKind {
     /// different spreads).
     ExportElements {
         element_ids: Vec<crate::element_selection::ElementId>,
+    },
+    /// v77 (engine ADR 1031) — plan the import of an SVG (or SVGZ) file
+    /// onto `page_id`: `paged-svg` reads it with usvg (`<use>`, `<defs>`,
+    /// CSS, units and transforms resolved) and lowers it to ONE batch of
+    /// native page items. Pure READ: the reply `SvgImportPlanned` carries
+    /// the batch for the caller to apply with `Mutate` (one undo step,
+    /// the ordinary mutation lane) and the report of what was
+    /// approximated or left out.
+    RequestSvgImport {
+        page_id: PageId,
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+        #[serde(default)]
+        options: paged_svg::SvgImportOptions,
+    },
+    /// v77 (engine ADR 1031) — write the page `page_id` as an SVG
+    /// document; with `element_ids`, nothing but those items, the view
+    /// box fitted to what they draw. Pure READ. Reply: `SvgExported`, or
+    /// `ExportSvgFailed`.
+    ExportSvg {
+        page_id: PageId,
+        #[serde(default)]
+        element_ids: Vec<crate::element_selection::ElementId>,
+        #[serde(default)]
+        options: paged_svg::SvgExportOptions,
     },
     /// v65 — read one style definition's settable properties: every path
     /// `Mutation::SetStyleProperty` accepts for that collection, with the
@@ -1820,6 +1966,11 @@ pub enum MainToWorkerKind {
     /// committed mutation lands on the unified undo log.
     CommitGesture {
         handle: crate::gesture::GestureHandle,
+        /// v77 (engine ADR 1030) — the committed step's name. Absent names
+        /// it after the gesture ("Move", "Resize", "Rotate", …).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
     },
     /// Phase B — discard the active gesture. Reply
     /// `GestureCancelled { handle, page_ids }`; scene reverts to the
@@ -2003,6 +2154,17 @@ pub enum WorkerToMainKind {
     /// atlas. Carries the source page's generation counters so the
     /// main thread can detect staleness before drawing.
     SnapshotReady(crate::snapshot::SnapshotPng),
+    /// v77 — `RequestSvgImport` reply: `mutation` is the batch to apply
+    /// (absent when the file draws nothing or could not be read, `error`
+    /// then says why), `report` what was approximated or left out.
+    SvgImportPlanned(paged_svg::SvgImportPlan),
+    /// v77 — `ExportSvg` reply: the document and its report.
+    SvgExported {
+        svg: String,
+        report: paged_svg::SvgReport,
+    },
+    /// v77 — `ExportSvg` refused (no document, an unknown page).
+    ExportSvgFailed { error: String },
     /// `RequestSnapshot` failed (e.g. unknown page id).
     SnapshotFailed {
         error: crate::snapshot::SnapshotError,
@@ -2134,6 +2296,11 @@ pub enum WorkerToMainKind {
         applied_seq: u64,
         page_ids: Vec<PageId>,
         cache_stats: LayoutCacheStats,
+        /// v77 (engine ADR 1030) — how many steps an `UndoTo` undid
+        /// (`undoneSeq` is the last, `pageIds` the union). Absent for `Undo`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        steps: Option<u32>,
         /// Editor-ops — same page-grid refresh contract as
         /// `MutationApplied`: undoing a page mutation changes the
         /// page list and the editor must not need a reload to see
@@ -2144,12 +2311,37 @@ pub enum WorkerToMainKind {
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
     },
+    /// v77 (engine ADR 1030) — `RequestUndoLog` reply: the named undo
+    /// timeline. `undo` is oldest first (its last entry is what an undo
+    /// reverts), `redo` next-redo first; `undoLen` / `redoLen` are the
+    /// whole logs' lengths (the lists may be cut to the limit), `depth` the
+    /// history depth in force.
+    UndoLog {
+        undo: Vec<UndoLogEntryWire>,
+        redo: Vec<UndoLogEntryWire>,
+        undo_len: u32,
+        redo_len: u32,
+        depth: u32,
+        /// Steps the depth evicted since the document opened: while `0`,
+        /// `RestoreTo { appliedSeq: 0 }` reaches the opened document.
+        evicted: u32,
+    },
+    /// v77 (engine ADR 1030) — `SetHistoryDepth` reply.
+    HistoryDepthApplied { depth: u32 },
+    /// v77 (engine ADR 1030) — `LabelStep` reply: whether the step took
+    /// the name.
+    StepLabeled { applied_seq: u64, labeled: bool },
     /// Phase 3 Item 7 — redo applied.
     RedoApplied {
         redone_seq: u64,
         applied_seq: u64,
         page_ids: Vec<PageId>,
         cache_stats: LayoutCacheStats,
+        /// v77 (engine ADR 1030) — how many steps a `RedoTo` redid. Absent
+        /// for `Redo`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        steps: Option<u32>,
         #[serde(default)]
         page_structure_changed: bool,
         #[serde(default)]
@@ -2223,6 +2415,8 @@ pub enum WorkerToMainKind {
     SnapSettingsApplied {
         settings: crate::snap_point::SnapSettings,
     },
+    /// v77 — `SetViewSettings` reply: the settings now in force.
+    ViewSettingsApplied { settings: crate::view::ViewSettings },
     /// v75 — `SetSessionPolicy` reply: the policy now in force.
     SessionPolicyApplied {
         policy: paged_template::SessionPolicy,
@@ -4109,11 +4303,27 @@ pub struct StorySummary {
     /// older client that ignores it still reads the `overset` flag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overset_at: Option<OversetAt>,
+    /// The table cells in this story whose text does not fit their row, each
+    /// by its table and template row and column (data ADR 564). Empty when
+    /// none does. Additive on 77 (governance rule 1).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overset_cells: Vec<OversetCellAt>,
     /// v65 (thoughts ADR 026) — the story's grow rule, in the shape
     /// `Mutation::SetFlowGrowRule` takes (`grow` is always `true` here:
     /// a cleared rule reads as `None`). `None` = a fixed chain.
     #[serde(default)]
     pub grow_rule: Option<StoryGrowRule>,
+}
+
+/// One table cell whose text does not fit its row ([`StorySummary::overset_cells`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct OversetCellAt {
+    /// The table's `Self`.
+    pub table: String,
+    pub row: u32,
+    pub column: u32,
 }
 
 /// v65 — a story's grow rule on the read side ([`StorySummary::grow_rule`]).
@@ -4911,8 +5121,8 @@ mod tests {
     /// release commitment, not a detail — the protocol-governance
     /// record exists because nine bumps once shipped untagged.
     #[test]
-    fn protocol_version_is_v76() {
-        assert_eq!(PROTOCOL_VERSION.0, 76);
+    fn protocol_version_is_v77() {
+        assert_eq!(PROTOCOL_VERSION.0, 77);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the

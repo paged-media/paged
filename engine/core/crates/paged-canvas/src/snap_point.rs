@@ -80,6 +80,35 @@ pub struct SnapSettings {
     /// The document grid (`GridPreference` gridline divisions). Off by
     /// default, as in InDesign.
     pub grid: bool,
+    /// v77 (editor ADR 287) — Snap to Pixel: an edge or point that snapped
+    /// to nothing else lands on a whole point, which is a whole pixel at
+    /// 72 ppi (page-local). Off by default.
+    pub pixel: bool,
+    /// v77 — the host's grid ("Gridline every", pt). When set, the snap
+    /// grid is `grid_every / grid_subdivisions` on both axes instead of
+    /// the document's gridline divisions, so what snaps is what the host
+    /// draws.
+    #[tsify(optional)]
+    pub grid_every: Option<f32>,
+    /// v77 — subdivisions of `grid_every` (≥ 1; absent ⇒ 1).
+    #[tsify(optional)]
+    pub grid_subdivisions: Option<u32>,
+    /// v77 — angle guides: from a point the caller supplied
+    /// (`extraPoints`, the anchors of a path being drawn) along 45° and
+    /// 135° — 0° and 90° are the alignment lines — and `custom_angle`.
+    pub angle_guides: bool,
+    /// v77 — one more construction-guide angle, degrees (Illustrator's
+    /// "Custom Angle"); its perpendicular is offered too.
+    #[tsify(optional)]
+    pub custom_angle: Option<f32>,
+    /// v77 — equal-spacing hints and snapping while moving: the gaps to
+    /// the neighbours on either side, or one repeating a neighbour pair's.
+    pub spacing: bool,
+    /// v77 — a rotate gesture snaps to 0/45/90° and to the angles of the
+    /// items on the page (Shift's 15° steps apply regardless).
+    pub rotate: bool,
+    /// v77 — where two outlines cross is a point target.
+    pub intersections: bool,
 }
 
 impl Default for SnapSettings {
@@ -93,7 +122,53 @@ impl Default for SnapSettings {
             page: true,
             guides: true,
             grid: false,
+            pixel: false,
+            grid_every: None,
+            grid_subdivisions: None,
+            angle_guides: true,
+            custom_angle: None,
+            spacing: true,
+            rotate: true,
+            intersections: true,
         }
+    }
+}
+
+impl SnapSettings {
+    /// The snap grid in force: the host's (`grid_every` /
+    /// `grid_subdivisions`, both axes) when it names one, else the
+    /// document's gridline divisions. `(horizontal, vertical)` spacing, pt.
+    pub fn effective_grid(&self, document: Option<(f32, f32)>) -> Option<(f32, f32)> {
+        match self.grid_every {
+            Some(every) if every.is_finite() && every > 0.0 => {
+                let step = every / self.grid_subdivisions.unwrap_or(1).max(1) as f32;
+                Some((step, step))
+            }
+            _ => document,
+        }
+    }
+
+    /// The construction-guide angles, degrees in `[0, 180)`, without the
+    /// axis-parallel ones the alignment lines already cover.
+    pub fn guide_angles(&self) -> Vec<f32> {
+        let mut out = Vec::new();
+        if !self.angle_guides {
+            return out;
+        }
+        let mut push = |a: f32| {
+            let a = a.rem_euclid(180.0);
+            let axis = a.abs() < 1e-3 || (a - 90.0).abs() < 1e-3;
+            if !axis && !out.iter().any(|b: &f32| (b - a).abs() < 1e-3) {
+                out.push(a);
+            }
+        };
+        push(45.0);
+        push(135.0);
+        if let Some(c) = self.custom_angle.filter(|c| c.is_finite()) {
+            push(c);
+            push(c + 90.0);
+        }
+        out
     }
 }
 
@@ -118,6 +193,14 @@ pub enum SnapSource {
     Grid,
     /// A point the caller supplied (`extraPoints`).
     Extra,
+    /// v77 — a whole point (one pixel at 72 ppi), Snap to Pixel.
+    Pixel,
+    /// v77 — an angle guide through a caller-supplied point.
+    Angle,
+    /// v77 — where two outlines cross.
+    Intersection,
+    /// v77 — an equal-spacing position.
+    Spacing,
 }
 
 /// Leave an element (or some of its anchors) out of the targets. With
@@ -182,6 +265,17 @@ pub struct SnapAxisHit {
     pub through: Option<[f32; 2]>,
 }
 
+/// v77 — the angle guide the query was pulled onto.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapAngleHit {
+    /// The point the guide runs through (page-local).
+    pub through: [f32; 2],
+    /// Its direction, degrees clockwise from the +x axis on screen.
+    pub angle: f32,
+}
+
 /// The segment the query landed on.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
@@ -214,6 +308,10 @@ pub struct SnapPointResult {
     pub y_target: Option<SnapAxisHit>,
     #[serde(default)]
     pub segment_target: Option<SnapSegmentHit>,
+    /// v77 — the angle guide, when that is what snapped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub angle_target: Option<SnapAngleHit>,
     /// The guides to draw, same shape the translate gesture reports.
     pub lines: Vec<SnapLine>,
     /// The tolerance the query ran with, in pt.
@@ -229,6 +327,7 @@ impl SnapPointResult {
             x_target: None,
             y_target: None,
             segment_target: None,
+            angle_target: None,
             lines: Vec::new(),
             tolerance_pt,
         }
@@ -262,6 +361,9 @@ struct ElementTargets {
     /// The outline is the stored anchor table (segment indices mean
     /// something to the caller).
     path_is_anchors: bool,
+    /// v77 — the element's rotation, degrees (its transform's x axis),
+    /// a rotate gesture's snap target.
+    pub(crate) angle_deg: f32,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -534,6 +636,7 @@ fn element_targets(leaf: &LeafPath<'_>, origin: (f32, f32)) -> ElementTargets {
         starts,
         open,
         path_is_anchors,
+        angle_deg: m[1].atan2(m[0]).to_degrees(),
     }
 }
 
@@ -713,11 +816,24 @@ pub(crate) fn static_lines(
     out
 }
 
-fn nearest_line(lines: &[AxisLine], value: f32, tolerance: f32) -> Option<&AxisLine> {
+/// The line nearest `value`; among lines at the same position, the one
+/// whose point lies nearest `p` (v77: the smart guide is drawn from it).
+fn nearest_line(lines: &[AxisLine], value: f32, tolerance: f32, p: [f32; 2]) -> Option<&AxisLine> {
+    let reach = |l: &AxisLine| {
+        l.through
+            .map_or(f32::INFINITY, |t| (t[0] - p[0]).hypot(t[1] - p[1]))
+    };
     let mut best: Option<(&AxisLine, f32)> = None;
     for l in lines {
         let d = (l.position - value).abs();
-        if d <= tolerance && best.is_none_or(|(_, bd)| d < bd) {
+        if d > tolerance {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some((bl, bd)) => d < bd - 1e-4 || ((d - bd).abs() <= 1e-4 && reach(l) < reach(bl)),
+        };
+        if better {
             best = Some((l, d));
         }
     }
@@ -796,6 +912,17 @@ pub(crate) fn resolve(
             }
         }
     }
+    // v77 — where two outlines near the point cross.
+    if settings.intersections {
+        for (at, element) in outline_intersections(page, &query.exclude, p, tolerance) {
+            consider(SnapPointHit {
+                source: SnapSource::Intersection,
+                at,
+                element: Some(element),
+                anchor_index: None,
+            });
+        }
+    }
     if let Some((hit, _)) = best {
         let at = hit.at;
         return SnapPointResult {
@@ -805,14 +932,16 @@ pub(crate) fn resolve(
             x_target: None,
             y_target: None,
             segment_target: None,
+            angle_target: None,
             lines: Vec::new(),
             tolerance_pt: tolerance,
         };
     }
 
     // 2. alignment lines, each axis on its own.
-    let mut xs = static_lines(page, index.grid, settings, SnapAxis::X, p[0]);
-    let mut ys = static_lines(page, index.grid, settings, SnapAxis::Y, p[1]);
+    let grid = settings.effective_grid(index.grid);
+    let mut xs = static_lines(page, grid, settings, SnapAxis::X, p[0]);
+    let mut ys = static_lines(page, grid, settings, SnapAxis::Y, p[1]);
     if settings.alignment {
         let mut push = |at: [f32; 2], element: Option<ElementId>, source: SnapSource| {
             if (at[0] - p[0]).abs() <= tolerance {
@@ -847,9 +976,20 @@ pub(crate) fn resolve(
             }
         }
     }
-    let bx = nearest_line(&xs, p[0], tolerance);
-    let by = nearest_line(&ys, p[1], tolerance);
+    let bx = nearest_line(&xs, p[0], tolerance, p);
+    let by = nearest_line(&ys, p[1], tolerance, p);
     if bx.is_some() || by.is_some() {
+        // v77 — Snap to Pixel takes the axis no line took.
+        let pixel_line = |v: f32| AxisLine {
+            position: v.round(),
+            source: SnapSource::Pixel,
+            element: None,
+            through: None,
+        };
+        let px = (bx.is_none() && settings.pixel).then(|| pixel_line(p[0]));
+        let py = (by.is_none() && settings.pixel).then(|| pixel_line(p[1]));
+        let bx = bx.or(px.as_ref());
+        let by = by.or(py.as_ref());
         let x = bx.map_or(p[0], |l| l.position);
         let y = by.map_or(p[1], |l| l.position);
         let hit = |l: &AxisLine| SnapAxisHit {
@@ -859,19 +999,22 @@ pub(crate) fn resolve(
             through: l.through,
         };
         let mut lines = Vec::new();
-        if let Some(l) = bx {
-            lines.push(SnapLine {
-                axis: SnapAxis::X,
-                position: l.position,
-                page_id: query.page_id.clone(),
-            });
-        }
-        if let Some(l) = by {
-            lines.push(SnapLine {
-                axis: SnapAxis::Y,
-                position: l.position,
-                page_id: query.page_id.clone(),
-            });
+        for (axis, l) in [(SnapAxis::X, bx), (SnapAxis::Y, by)] {
+            let Some(l) = l else { continue };
+            // A pixel snap draws no guide.
+            if l.source == SnapSource::Pixel {
+                continue;
+            }
+            let mut line = SnapLine::new(axis, l.position, query.page_id.clone());
+            // The smart guide runs from the point it came through to
+            // the snapped point, with the distance between them.
+            if let Some(t) = l.through {
+                let at = [x, y];
+                line.from = Some(t);
+                line.to = Some(at);
+                line.distance = Some((at[0] - t[0]).hypot(at[1] - t[1]));
+            }
+            lines.push(line);
         }
         return SnapPointResult {
             point: [x, y],
@@ -880,9 +1023,50 @@ pub(crate) fn resolve(
             x_target: bx.map(hit),
             y_target: by.map(hit),
             segment_target: None,
+            angle_target: None,
             lines,
             tolerance_pt: tolerance,
         };
+    }
+
+    // 2b. v77 — angle guides through the caller's points.
+    let angles = settings.guide_angles();
+    if !angles.is_empty() && !query.extra_points.is_empty() {
+        let mut ba: Option<([f32; 2], [f32; 2], f32, f32)> = None; // through, at, angle, dist
+        for &e in &query.extra_points {
+            for &a in &angles {
+                let (sin, cos) = a.to_radians().sin_cos();
+                let (vx, vy) = (p[0] - e[0], p[1] - e[1]);
+                let t = vx * cos + vy * sin;
+                if t.abs() <= tolerance {
+                    continue; // at the point itself: step 1's business
+                }
+                let at = [e[0] + t * cos, e[1] + t * sin];
+                let d = (p[0] - at[0]).hypot(p[1] - at[1]);
+                if d <= tolerance && ba.is_none_or(|(_, _, _, bd)| d < bd) {
+                    ba = Some((e, at, a, d));
+                }
+            }
+        }
+        if let Some((through, at, angle, _)) = ba {
+            let mut line = SnapLine::new(SnapAxis::X, through[0], query.page_id.clone());
+            line.kind = Some(crate::snap::SnapLineKind::Angle);
+            line.from = Some(through);
+            line.to = Some(at);
+            line.angle = Some(angle);
+            line.distance = Some((at[0] - through[0]).hypot(at[1] - through[1]));
+            return SnapPointResult {
+                point: at,
+                snapped: true,
+                point_target: None,
+                x_target: None,
+                y_target: None,
+                segment_target: None,
+                angle_target: Some(SnapAngleHit { through, angle }),
+                lines: vec![line],
+                tolerance_pt: tolerance,
+            };
+        }
     }
 
     // 3. segments — the nearest point on the nearest outline.
@@ -921,12 +1105,73 @@ pub(crate) fn resolve(
                 x_target: None,
                 y_target: None,
                 segment_target: Some(seg),
+                angle_target: None,
                 lines: Vec::new(),
                 tolerance_pt: tolerance,
             };
         }
     }
+    // 4. v77 — Snap to Pixel: nothing else held the point, so it lands on
+    // the nearest whole point.
+    if settings.pixel {
+        let at = [p[0].round(), p[1].round()];
+        let hit = |position: f32| SnapAxisHit {
+            source: SnapSource::Pixel,
+            position,
+            element: None,
+            through: None,
+        };
+        return SnapPointResult {
+            point: at,
+            snapped: true,
+            point_target: None,
+            x_target: Some(hit(at[0])),
+            y_target: Some(hit(at[1])),
+            segment_target: None,
+            angle_target: None,
+            lines: Vec::new(),
+            tolerance_pt: tolerance,
+        };
+    }
     SnapPointResult::unsnapped(p, tolerance)
+}
+
+/// v77 — the crossings, within `tolerance` of `p`, of the outlines of
+/// two different elements near it. An excluded element (or one whose
+/// anchors are being edited) offers none.
+fn outline_intersections(
+    page: &PageTargets,
+    exclude: &[SnapExclude],
+    p: [f32; 2],
+    tolerance: f32,
+) -> Vec<([f32; 2], ElementId)> {
+    let near: Vec<&ElementTargets> = page
+        .elements
+        .iter()
+        .filter(|el| {
+            let a = el.aabb;
+            !editing(exclude, &el.id)
+                && p[0] >= a[1] - tolerance
+                && p[0] <= a[3] + tolerance
+                && p[1] >= a[0] - tolerance
+                && p[1] <= a[2] + tolerance
+        })
+        .collect();
+    let mut out = Vec::new();
+    for i in 0..near.len() {
+        for j in i + 1..near.len() {
+            let (a, b) = (near[i], near[j]);
+            for at in paged_mutate::kurbo_kernel::path_crossings(
+                (&a.path, &a.starts, &a.open),
+                (&b.path, &b.starts, &b.open),
+                (p[0], p[1]),
+                tolerance,
+            ) {
+                out.push(([at.0, at.1], a.id.clone()));
+            }
+        }
+    }
+    out
 }
 
 /// Every visible leaf's box on every page, the sibling set a translate
@@ -941,6 +1186,23 @@ pub(crate) fn frame_rects(index: &SnapIndex) -> Vec<crate::snap::FrameRect> {
                 page_id: PageId(page_id.clone()),
                 aabb: el.box_aabb,
             });
+        }
+    }
+    out
+}
+
+/// v77 — the rotation angles (degrees) of the visible leaves that are not
+/// moving, deduplicated: a rotate gesture's snap targets.
+pub(crate) fn element_angles(index: &SnapIndex, moving: &[ElementId]) -> Vec<f32> {
+    let mut out: Vec<f32> = Vec::new();
+    for page in index.pages.values() {
+        for el in &page.elements {
+            if moving.contains(&el.id) || !el.angle_deg.is_finite() {
+                continue;
+            }
+            if !out.iter().any(|a| (a - el.angle_deg).abs() < 1e-3) {
+                out.push(el.angle_deg);
+            }
         }
     }
     out
@@ -1133,5 +1395,107 @@ mod tests {
         let r = resolve(&idx, &SnapSettings::default(), &q(401.0, 299.0));
         assert_eq!(r.point, [400.0, 300.0]);
         assert_eq!(r.point_target.unwrap().source, SnapSource::AnchorPoint);
+    }
+
+    // ── v77 (editor ADR 287) ────────────────────────────────────────
+
+    #[test]
+    fn two_crossing_outlines_offer_their_intersection() {
+        // Two overlapping squares cross at (250, 200) and (200, 250).
+        let idx = page_with(vec![
+            rect("a", b(150.0, 150.0, 250.0, 250.0)),
+            rect("b", b(200.0, 200.0, 300.0, 300.0)),
+        ]);
+        let s = SnapSettings {
+            alignment: false,
+            ..SnapSettings::default()
+        };
+        let r = resolve(&idx, &s, &q(251.5, 201.0));
+        let hit = r.point_target.expect("a point");
+        assert_eq!(hit.source, SnapSource::Intersection);
+        assert!((hit.at[0] - 250.0).abs() < 1e-3 && (hit.at[1] - 200.0).abs() < 1e-3);
+        let off = SnapSettings {
+            intersections: false,
+            ..s
+        };
+        assert!(resolve(&idx, &off, &q(251.5, 201.0))
+            .point_target
+            .is_none_or(|h| h.source != SnapSource::Intersection));
+    }
+
+    #[test]
+    fn an_angle_guide_from_the_last_point_catches_the_diagonal() {
+        let idx = page_with(vec![]);
+        let mut query = q(452.0, 548.0);
+        query.extra_points = vec![[400.0, 500.0]];
+        let r = resolve(&idx, &SnapSettings::default(), &query);
+        let a = r.angle_target.expect("the 45° guide");
+        assert_eq!(a.through, [400.0, 500.0]);
+        assert!((a.angle - 45.0).abs() < 1e-3);
+        assert!((r.point[0] - 450.0).abs() < 1e-3 && (r.point[1] - 550.0).abs() < 1e-3);
+        let line = &r.lines[0];
+        assert_eq!(line.kind, Some(crate::snap::SnapLineKind::Angle));
+        assert!((line.distance.unwrap() - 50.0 * std::f32::consts::SQRT_2).abs() < 1e-2);
+        // A custom angle of 30° adds 30° and 120°.
+        let s = SnapSettings {
+            custom_angle: Some(30.0),
+            ..SnapSettings::default()
+        };
+        assert_eq!(s.guide_angles(), vec![45.0, 135.0, 30.0, 120.0]);
+        let off = SnapSettings {
+            angle_guides: false,
+            ..SnapSettings::default()
+        };
+        assert!(resolve(&idx, &off, &query).angle_target.is_none());
+    }
+
+    #[test]
+    fn snap_to_pixel_rounds_what_nothing_else_holds() {
+        let idx = page_with(vec![]);
+        let s = SnapSettings {
+            pixel: true,
+            ..SnapSettings::default()
+        };
+        let r = resolve(&idx, &s, &q(49.4, 410.6));
+        assert_eq!(r.point, [49.0, 411.0]);
+        assert_eq!(r.x_target.unwrap().source, SnapSource::Pixel);
+        // An axis a line holds keeps the line; the other rounds.
+        let r = resolve(&idx, &s, &q(101.0, 410.6));
+        assert_eq!(r.point, [100.0, 411.0]);
+        assert_eq!(r.x_target.unwrap().source, SnapSource::Guide);
+        assert_eq!(r.y_target.unwrap().source, SnapSource::Pixel);
+        assert_eq!(r.lines.len(), 1, "a pixel snap draws no guide");
+    }
+
+    #[test]
+    fn a_smart_guide_runs_from_its_point_with_the_distance() {
+        let idx = page_with(vec![rect("r", b(200.0, 200.0, 300.0, 300.0))]);
+        let r = resolve(&idx, &SnapSettings::default(), &q(402.0, 203.0));
+        let y = r.lines.iter().find(|l| l.axis == SnapAxis::Y).expect("y");
+        assert_eq!(y.from, Some([300.0, 200.0]));
+        assert_eq!(y.to, Some(r.point));
+        assert!((y.distance.unwrap() - 102.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn element_angles_lists_the_turned_items() {
+        let leaf = LeafPath {
+            id: ElementId::Rectangle("t".into()),
+            bounds: b(0.0, 0.0, 10.0, 10.0),
+            item_transform: Some([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]),
+            item_layer: None,
+            anchors: &[],
+            starts: &[],
+            open: &[],
+            oval: false,
+        };
+        let idx = page_with(vec![
+            element_targets(&leaf, (0.0, 0.0)),
+            rect("r", b(0.0, 0.0, 5.0, 5.0)),
+        ]);
+        let angles = element_angles(&idx, &[]);
+        assert!(angles.iter().any(|a| (a - 90.0).abs() < 1e-3), "{angles:?}");
+        let moving = element_angles(&idx, &[ElementId::Rectangle("t".into())]);
+        assert!(moving.iter().all(|a| (a - 90.0).abs() > 1e-3));
     }
 }

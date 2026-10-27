@@ -159,6 +159,16 @@ impl PathRasterizer for VelloRasterizer {
     }
 
     fn rasterize(&self, list: &DisplayList, options: &RasterOptions) -> Vec<u8> {
+        // Editor ADR 287 — the view rewrite and Pixel Preview's 72 ppi
+        // pass run here exactly as they do on the CPU lane.
+        crate::view::draw_with_view(list, options, |list, options| {
+            self.rasterize_composite(list, options)
+        })
+    }
+}
+
+impl VelloRasterizer {
+    fn rasterize_composite(&self, list: &DisplayList, options: &RasterOptions) -> Vec<u8> {
         let (px_w, px_h) = options.pixel_size();
         let mut state_borrow = self.state.borrow_mut();
         if state_borrow.is_none() {

@@ -76,6 +76,10 @@ import type {
   DocumentOpenedEvent,
   FrameChainLink,
   StoryContent,
+  SvgExportRequest,
+  SvgExportResult,
+  SvgImportRequest,
+  SvgImportResult,
   DocumentSurface,
   EditContextContribution,
   FrameSurfaceContribution,
@@ -110,9 +114,12 @@ import type {
   DataProviderSnapshot,
   Mutation,
   MutationInput,
+  PageId,
   MutateOptions,
   MutateWithBytesOptions,
   MutationOutcome,
+  UndoLog,
+  UndoLogStep,
   NetworkSurface,
   ObjectTypeContribution,
   OverlayLayer,
@@ -342,6 +349,11 @@ export const HOST_FEATURES: readonly string[] = [
   // STATIC like @1: the same pinned protocol answers both.
   "document.mutate.amend@2",
   "document.undo@1",
+  // Engine ADR 1030 (protocol 77) — the named undo timeline: `undoLog`,
+  // `undoTo` / `redoTo` (several steps, one round trip), and `label` on
+  // `mutate` and `host.objects.set/batch`. STATIC: the worker handshake
+  // refuses an engine older than the pinned protocol, which answers them.
+  "document.undoLog@1",
   "document.collection@1",
   "document.frameChain@1",
   "document.meta@1",
@@ -470,6 +482,14 @@ export const HOST_FEATURES: readonly string[] = [
   // ignores `clip` (a plain group) and refuses a group child. paged.draw's
   // clipped repeat asks it before choosing a clip group over paste-into.
   "document.clipGroups@1",
+  // Engine ADR 1031 (protocol v77) — SVG in and out through paged-svg.
+  // STATIC: the flag says this SDK forwards both doors. The worker
+  // handshake pins the protocol, and an engine without the messages
+  // answers an outcome (`applied: false` / `svg: null` with the reason),
+  // never a throw. paged.draw delegates its SVG importer and exporter here
+  // and keeps its own TypeScript reader for a host without the flags.
+  "document.importSvg@1",
+  "document.exportSvg@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -1449,6 +1469,11 @@ export interface CreateBundleHostOptions {
    *  makes `supports("editContext.enterPoint@1")` true, so it is the HOST
    *  that vouches for delivery. */
   editContextEnterPoint?: boolean;
+  /** Editor ADR 285 — the host's History panel lists an active edit
+   *  context's `historySteps` instead of the document's. Only makes
+   *  `supports("editContext.historySteps@1")` true; the SDK passes the
+   *  contribution through either way. */
+  editContextHistorySteps?: boolean;
   /** The host's tool-options store. When absent, `host.tools.settings`
    *  answers `{}` and `supports("tools.settings@1")` is false. */
   toolSettings?: ToolSettingsBackend;
@@ -2780,6 +2805,36 @@ export function createBundleHost(
     };
   };
 
+  /** Engine ADR 1030 — name the step a write just made (`labelStep`).
+   *  Best effort: a step that is no longer the top keeps its default, and
+   *  an engine that does not know the message changes nothing. */
+  const labelStep = async (
+    outcome: MutationOutcome,
+    label: string,
+  ): Promise<void> => {
+    if (!outcome.applied || typeof outcome.appliedSeq !== "number") return;
+    await getEditor()
+      .client.send({
+        kind: "labelStep",
+        payload: { appliedSeq: outcome.appliedSeq, label },
+      })
+      .catch(() => undefined);
+  };
+
+  /** The page a page-scoped door acts on when the caller names none: the
+   *  document's active page, else its first. */
+  const activePageId = async (): Promise<PageId | null> => {
+    const meta = (await getEditor().client.documentMeta()) as {
+      activePage?: PageId | null;
+    };
+    if (meta.activePage) return meta.activePage;
+    const pages = (await getEditor().client.collection("pages")) as Array<{
+      selfId?: string;
+    }>;
+    const first = pages.find((p) => typeof p.selfId === "string");
+    return first ? (first.selfId as PageId) : null;
+  };
+
   const document: DocumentSurface = {
     async mutate(
       mutation: MutationInput,
@@ -2787,6 +2842,11 @@ export function createBundleHost(
     ): Promise<MutationOutcome> {
       const gated = gateRawWrite(mutation, "document.mutate");
       if (gated !== null) return gated;
+      // Engine ADR 1030 — a caller's name for the step; blank is none.
+      const label =
+        typeof options?.label === "string" && options.label.trim() !== ""
+          ? options.label
+          : undefined;
       if (options?.amend !== undefined) {
         // Engine ADR 1004 — join the undo step `amend` names. The engine
         // checks it is still the last step and that no undo or redo ran
@@ -2801,7 +2861,11 @@ export function createBundleHost(
         try {
           const reply = await getEditor().client.send({
             kind: "amendMutation",
-            payload: { appliedSeq: amend, mutation: mutation as Mutation },
+            payload: {
+              appliedSeq: amend,
+              mutation: mutation as Mutation,
+              ...(label !== undefined ? { label } : {}),
+            },
           });
           return mutateOutcome(reply);
         } catch (error) {
@@ -2817,7 +2881,9 @@ export function createBundleHost(
         // union absorbs it. Widening the handle instead would demand
         // more of every host than the published wire promises.
         const reply = await getEditor().client.mutate(mutation as Mutation);
-        return mutateOutcome(reply);
+        const outcome = mutateOutcome(reply);
+        if (label !== undefined) await labelStep(outcome, label);
+        return outcome;
       } catch (error) {
         return { applied: false, error };
       }
@@ -2878,6 +2944,11 @@ export function createBundleHost(
           return { applied: false, error };
         }
       }
+      // Engine ADR 1030 — the step's name, set once the write landed.
+      const label =
+        typeof options?.label === "string" && options.label.trim() !== ""
+          ? options.label
+          : undefined;
       try {
         const editor = getEditor();
         if (typeof editor.mutateWithBytes === "function") {
@@ -2886,13 +2957,17 @@ export function createBundleHost(
             bytes,
             options?.transfer === true,
           );
-          return mutateOutcome(reply);
+          const outcome = mutateOutcome(reply);
+          if (label !== undefined) await labelStep(outcome, label);
+          return outcome;
         }
         // Older host: the bytes ride the JSON channel as a `number[]`.
         const reply = await editor.client.mutate(
           spliceBytesSlot(mutation, Array.from(bytes)) as Mutation,
         );
-        return mutateOutcome(reply);
+        const outcome = mutateOutcome(reply);
+        if (label !== undefined) await labelStep(outcome, label);
+        return outcome;
       } catch (error) {
         return { applied: false, error };
       }
@@ -2915,6 +2990,62 @@ export function createBundleHost(
         "capabilities.document.write",
       );
       await getEditor().client.redo();
+    },
+    async undoLog(opts?: { limit?: number }): Promise<UndoLog> {
+      requireDocRead("document.undoLog");
+      const limit = opts?.limit;
+      const reply = await getEditor().client.send({
+        kind: "requestUndoLog",
+        payload:
+          typeof limit === "number" && Number.isSafeInteger(limit) && limit >= 0
+            ? { limit }
+            : {},
+      });
+      if (reply.kind !== "undoLog")
+        throw new Error(`document.undoLog: unexpected reply ${reply.kind}`);
+      const step = (e: {
+        appliedSeq: number;
+        label: string;
+        key?: string | null;
+      }): UndoLogStep => ({
+        appliedSeq: e.appliedSeq,
+        label: e.label,
+        key: e.key ?? null,
+      });
+      const p = reply.payload;
+      return {
+        undo: p.undo.map(step),
+        redo: p.redo.map(step),
+        undoLen: p.undoLen,
+        redoLen: p.redoLen,
+        depth: p.depth,
+      };
+    },
+    async undoTo(appliedSeq: number): Promise<boolean> {
+      requireDeclared(
+        hasDoc("write"),
+        "document.undoTo",
+        "capabilities.document.write",
+      );
+      if (!Number.isSafeInteger(appliedSeq) || appliedSeq < 0) return false;
+      const reply = await getEditor().client.send({
+        kind: "undoTo",
+        payload: { appliedSeq },
+      });
+      return reply.kind === "undoApplied";
+    },
+    async redoTo(appliedSeq: number): Promise<boolean> {
+      requireDeclared(
+        hasDoc("write"),
+        "document.redoTo",
+        "capabilities.document.write",
+      );
+      if (!Number.isSafeInteger(appliedSeq) || appliedSeq < 0) return false;
+      const reply = await getEditor().client.send({
+        kind: "redoTo",
+        payload: { appliedSeq },
+      });
+      return reply.kind === "redoApplied";
     },
     collection(name) {
       requireDocRead("document.collection");
@@ -3243,6 +3374,85 @@ export function createBundleHost(
       return reply.kind === "storyContentResult"
         ? (reply.payload.content ?? null)
         : null;
+    },
+    async importSvg(
+      bytes: Uint8Array,
+      options: SvgImportRequest = {},
+    ): Promise<SvgImportResult> {
+      // Engine ADR 1031 (protocol v77). The engine PLANS (a read) and the
+      // plan's one batch goes through `mutate`, so the write gate, the
+      // namespace check and the undo step are the ordinary ones.
+      const empty = { items: 0, notes: [] };
+      const { pageId: wanted, ...svgOptions } = options;
+      try {
+        const pageId = wanted ?? (await activePageId());
+        if (pageId === null) {
+          return {
+            applied: false,
+            report: empty,
+            error: "no page to import onto",
+          };
+        }
+        const reply = await getEditor().client.send({
+          kind: "requestSvgImport",
+          payload: { pageId, bytes: Array.from(bytes), options: svgOptions },
+        });
+        if (reply.kind !== "svgImportPlanned") {
+          return {
+            applied: false,
+            report: empty,
+            error: `the engine did not plan the import (${reply.kind}); it predates protocol 77`,
+          };
+        }
+        const plan = reply.payload;
+        if (!plan.mutation) {
+          return {
+            applied: false,
+            report: plan.report,
+            error: plan.error ?? "the SVG draws nothing",
+          };
+        }
+        const outcome = await document.mutate(plan.mutation as MutationInput);
+        return outcome.applied
+          ? { applied: true, outcome, report: plan.report }
+          : {
+              applied: false,
+              outcome,
+              report: plan.report,
+              error: String(outcome.error ?? "the batch was refused"),
+            };
+      } catch (error) {
+        return { applied: false, report: empty, error: String(error) };
+      }
+    },
+    async exportSvg(request: SvgExportRequest = {}): Promise<SvgExportResult> {
+      // Engine ADR 1031 (protocol v77): a pure read.
+      requireDocRead("document.exportSvg");
+      const empty = { items: 0, notes: [] };
+      const { pageId: wanted, elementIds, ...options } = request;
+      try {
+        const pageId = wanted ?? (await activePageId());
+        if (pageId === null) {
+          return { svg: null, report: empty, error: "no page to export" };
+        }
+        const reply = await getEditor().client.send({
+          kind: "exportSvg",
+          payload: { pageId, elementIds: [...(elementIds ?? [])], options },
+        });
+        if (reply.kind === "svgExported") {
+          return { svg: reply.payload.svg, report: reply.payload.report };
+        }
+        if (reply.kind === "exportSvgFailed") {
+          return { svg: null, report: empty, error: reply.payload.error };
+        }
+        return {
+          svg: null,
+          report: empty,
+          error: `the engine did not export (${reply.kind}); it predates protocol 77`,
+        };
+      } catch (error) {
+        return { svg: null, report: empty, error: String(error) };
+      }
     },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
       requireDocRead("document.onDidChange");
@@ -5428,6 +5638,11 @@ export function createBundleHost(
     // or none: a host that can add a layer but not drop one would leak a
     // disposed bundle's shapes onto the canvas.
     featureSet.add("overlay.layers@1");
+  }
+  if (options?.editContextHistorySteps === true) {
+    // Editor ADR 285 — the host's History panel reads a context's
+    // `historySteps` (see the option).
+    featureSet.add("editContext.historySteps@1");
   }
   if (options?.editContextEnterPoint === true) {
     // W-19 — the host shell vouches that a pointer entry carries the

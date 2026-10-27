@@ -38,6 +38,8 @@ bytes = { workspace = true }
 # corpus being present.
 [dev-dependencies]
 zip = { workspace = true }
+# tests/it/scene_cache.rs pins the cache's zoom bucket to the rasterizers'.
+paged-gpu = { path = "../paged-gpu", default-features = false }
 
 # wasm test lane (tests/wasm.rs) — run headless via scripts/test-wasm.sh
 # with the Node-hosted `wasm-bindgen-test-runner`. Pinned to the same

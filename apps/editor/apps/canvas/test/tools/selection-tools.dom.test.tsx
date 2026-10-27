@@ -322,6 +322,7 @@ describe("Hand (paged.tool.hand)", () => {
       scale: start.scale,
       tx: start.tx + 50,
       ty: start.ty - 20,
+      rotation: 0,
     });
     expect(m.state.elementSelection).toEqual([]);
     expect(dumpDiff(before, await m.dump())).toEqual([]);
@@ -333,7 +334,7 @@ describe("Hand (paged.tool.hand)", () => {
     await m.g.tool("paged.tool.hand").zoom(2).settle();
     await m.g.drag({ from: on([100, 100]), to: on([130, 110]) }).settle();
     // 30 × 10 pt of document at 200 % is 60 × 20 px of screen.
-    expect(m.state.camera).toEqual({ scale: 2, tx: 60, ty: 20 });
+    expect(m.state.camera).toEqual({ scale: 2, tx: 60, ty: 20, rotation: 0 });
   });
 
   // Finding GT-5: a click with the Hand tool ran the Selection tool's
@@ -389,7 +390,7 @@ describe("Zoom (paged.tool.zoom)", () => {
     const m = await targets();
     await m.g.tool("paged.tool.zoom").zoom(1).settle();
     await m.g.drag({ from: on([300, 300]), to: on([280, 340]) }).settle();
-    expect(m.state.camera).toEqual({ scale: 1, tx: -20, ty: 40 });
+    expect(m.state.camera).toEqual({ scale: 1, tx: -20, ty: 40, rotation: 0 });
   });
 });
 

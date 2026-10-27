@@ -1314,14 +1314,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         const rect = e.currentTarget.getBoundingClientRect();
         const cx = e.clientX - rect.left;
         const cy = e.clientY - rect.top;
-        const [docX, docY] = viewportToDoc(props.camera, cx, cy);
         const factor = e.altKey ? 1 / 1.25 : 1.25;
-        const scale = Math.min(64, Math.max(0.01, props.camera.scale * factor));
-        props.onCameraChange({
-          scale,
-          tx: cx - docX * scale,
-          ty: cy - docY * scale,
-        });
+        // About the clicked point; the same formula at any view rotation.
+        props.onCameraChange(zoomAt(props.camera, cx, cy, factor, 0.01, 64));
         return;
       }
       // GT-5 — the Hand (and its Space spring-load) only pans: a click

@@ -73,4 +73,31 @@ describe("overset issues: the composer's word or an estimate [data.issues]", () 
     ]);
     expect(issues[0]!.message).toContain("record 3");
   });
+
+  it("names each table cell the composer reports overset, at the table's frame", async () => {
+    const host = {
+      document: {
+        frameChain: async () => [{ frameId: "f2", overflow: false }],
+        collection: async () => [
+          {
+            selfId: "s2",
+            oversetCells: [
+              { table: "ut", row: 2, column: 0 },
+              { table: "ut", row: 4, column: 1 },
+            ],
+          },
+          { selfId: "s9" },
+        ],
+      },
+    } as unknown as BundleHost;
+    const issues = await oversetIssues(
+      host,
+      [{ binding: "t", storyId: "s2", table: true }],
+      async () => null,
+    );
+    expect(issues.map((i) => [i.address, i.message])).toEqual([
+      ["textFrame:f2", expect.stringContaining("row 3, column 1")],
+      ["textFrame:f2", expect.stringContaining("row 5, column 2")],
+    ]);
+  });
 });

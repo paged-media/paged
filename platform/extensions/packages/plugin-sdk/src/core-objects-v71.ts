@@ -769,7 +769,7 @@ export function createCoreObjectsV71(
         : p.addresses;
     },
 
-    commit: (mutations) => v70.commit(mutations),
+    commit: (mutations, opts) => v70.commit(mutations, opts),
     noteTableStory() {
       /* protocol 71 addresses cells without a story */
     },

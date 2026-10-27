@@ -105,6 +105,7 @@ import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
 import { JournalPanel } from "./journal-panel";
 import { DataPanel } from "./data-panel";
+import { HistoryPanel } from "./history-panel";
 import { LibraryPanel } from "./library-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
@@ -211,6 +212,7 @@ const M = defineMessages("app.builtInPanels", {
   problems: "Problems",
   journal: "Journal",
   data: "Data",
+  history: "History",
   library: "Library",
   table: "Table",
   tabs: "Tabs",
@@ -1023,6 +1025,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: LayersPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
+  },
+  // Editor ADR 285 — every undo step by name (engine ADR 1030), click to
+  // go back to one; snapshots; the active edit context's own steps.
+  {
+    id: "paged.history",
+    get title() {
+      return t(M.history);
+    },
+    component: HistoryPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+    icon: "ui-history",
   },
   {
     // SDK Phase 5 (v1 sweep) — read-only document info. Expert
