@@ -337,8 +337,9 @@ function nextFrame(cb: () => void): void {
 class Emitter {
   private listeners = new Set<(change: SessionChange) => void>();
   /** Runs before the listeners on every emit (the session drops its read
-   *  caches there, so no listener can read a stale answer). */
-  constructor(private readonly beforeEmit?: () => void) {}
+   *  caches and renews its state view there, so no listener can read a
+   *  stale answer). */
+  constructor(private readonly beforeEmit?: (change: SessionChange) => void) {}
   on(listener: (change: SessionChange) => void): { dispose(): void } {
     this.listeners.add(listener);
     return {
@@ -348,8 +349,7 @@ class Emitter {
     };
   }
   emit(change: SessionChange = OTHER_CHANGE): void {
-    // The cell-edit buffer is not engine state: no cached read goes stale.
-    if (change.kind !== "edit") this.beforeEmit?.();
+    this.beforeEmit?.(change);
     for (const l of [...this.listeners]) l(change);
   }
   clear(): void {
@@ -1326,7 +1326,11 @@ export function createWorkbookSession(
     readCache.set(key, v);
     return v;
   }
-  const emitter = new Emitter(() => readCache.clear());
+  const emitter = new Emitter((change) => {
+    // The cell-edit buffer is not engine state: no cached read goes stale.
+    if (change.kind !== "edit") readCache.clear();
+    stateView = new Proxy(state, {});
+  });
   const state: SessionState = {
     engine: null,
     fileName: null,
@@ -1337,6 +1341,12 @@ export function createWorkbookSession(
     dataSource: null,
     findRequest: 0,
   };
+  // What `state()` hands out: a view that reads through to `state`, renewed
+  // on every change. The state is mutated in place, so the object itself
+  // never changes identity, and a memo keyed on it (the React Compiler's,
+  // in every panel) kept what it first rendered: the workbook panel went
+  // on naming the previous workbook after an import.
+  let stateView: SessionState = new Proxy(state, {});
 
   // S-15 — the live `onDidChange` subscription for the currently-linked
   // dataset (disposed + replaced on each `sourceFromDataset`, and on
@@ -4787,7 +4797,7 @@ export function createWorkbookSession(
   const api: WorkbookSession = {
     ...data.api,
     objectBridge: () => bridge,
-    state: () => state,
+    state: () => stateView,
     onDidChange: (l) => emitter.on(l),
 
     async import(bytes, name) {
