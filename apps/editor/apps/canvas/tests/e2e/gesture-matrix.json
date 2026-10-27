@@ -666,6 +666,14 @@
       "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/brush-engine.spec.ts); matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.image.tool.magneticLasso",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/masking-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.refineEdge",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/masking-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.image.tool.crop",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },

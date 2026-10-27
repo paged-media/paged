@@ -162,6 +162,15 @@ defineMessages("menu", {
   "Export brush presets (.abr)…": "Export brush presets (.abr)…",
   "Export brush presets (.json)…": "Export brush presets (.json)…",
   "Lock transparent pixels": "Lock transparent pixels",
+  "Color range…": "Color range…",
+  "Select and mask…": "Select and mask…",
+  "Quick mask": "Quick mask",
+  Grow: "Grow",
+  Similar: "Similar",
+  "Focus area…": "Focus area…",
+  "Save selection": "Save selection",
+  "Load selection…": "Load selection…",
+  "Make work path": "Make work path",
 });
 
 const C = "media.paged.image.command";
@@ -313,6 +322,15 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Image/Selection/Invert", "invertSelection", "sel"],
   ["Image/Selection/Feather…", "featherSelection", "sel-edit"],
   ["Image/Selection/From luminosity channel", "channelToSelection", "sel-conv"],
+  ["Image/Selection/Color range…", "colorRange", "sel-select"],
+  ["Image/Selection/Focus area…", "focusArea", "sel-select"],
+  ["Image/Selection/Select and mask…", "selectAndMask", "sel-refine"],
+  ["Image/Selection/Quick mask", "quickMask", "sel-refine"],
+  ["Image/Selection/Grow", "grow", "sel-grow"],
+  ["Image/Selection/Similar", "similar", "sel-grow"],
+  ["Image/Selection/Save selection", "saveSelection", "sel-channel"],
+  ["Image/Selection/Load selection…", "loadSelection", "sel-channel"],
+  ["Image/Selection/Make work path", "makeWorkPath", "sel-channel"],
 
   ["Image/Fill/Gradient…", "fillSelection", "fill"],
   ["Image/Fill/Noise…", "fillNoise", "fill"],

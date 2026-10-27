@@ -72,7 +72,8 @@ describe("Canvas ops keep the layers: Crop and Image Size", () => {
     expect(src).toMatchObject({ width: 1, height: 1 });
     expect(src.handle).toBe(handleBefore); // in place, no handle swap
     expect(session.state().layers.layers).toHaveLength(2);
-    expect(steps(session)).toEqual([...before, "Crop"]);
+    // The Select All before it is a step of its own (ADR 470).
+    expect(steps(session)).toEqual([...before, "Select All", "Crop"]);
     expect(session.state().selection).toBeNull(); // a crop deselects
     expect(
       session.sampleColor([0, 0])!.map((v) => Math.round(v * 255)),
@@ -82,7 +83,9 @@ describe("Canvas ops keep the layers: Crop and Image Size", () => {
     expect(await session.undo()).toBe(true);
     expect(session.state().source).toMatchObject({ width: 2, height: 1 });
     expect(session.state().layers.layers).toHaveLength(2);
-    expect(steps(session)).toEqual(before);
+    expect(steps(session)).toEqual([...before, "Select All"]);
+    // …and the selection the crop dropped comes back with it.
+    expect(session.state().selection).not.toBeNull();
     k.dispose();
   });
 

@@ -159,7 +159,16 @@
       "media.paged.image.command.importBrushPresets",
       "media.paged.image.command.exportBrushPresetsAbr",
       "media.paged.image.command.exportBrushPresetsJson",
-      "media.paged.image.command.toggleLockTransparent"
+      "media.paged.image.command.toggleLockTransparent",
+      "media.paged.image.command.colorRange",
+      "media.paged.image.command.selectAndMask",
+      "media.paged.image.command.quickMask",
+      "media.paged.image.command.grow",
+      "media.paged.image.command.similar",
+      "media.paged.image.command.focusArea",
+      "media.paged.image.command.saveSelection",
+      "media.paged.image.command.loadSelection",
+      "media.paged.image.command.makeWorkPath"
     ],
     "tools": [
       "media.paged.image.tool.crop",
@@ -194,7 +203,9 @@
       "media.paged.image.tool.historyBrush",
       "media.paged.image.tool.artHistoryBrush",
       "media.paged.image.tool.backgroundEraser",
-      "media.paged.image.tool.magicEraser"
+      "media.paged.image.tool.magicEraser",
+      "media.paged.image.tool.magneticLasso",
+      "media.paged.image.tool.refineEdge"
     ],
     "importers": ["media.paged.image.importer.raster"],
     "exporters": [
@@ -1267,6 +1278,78 @@
         {
           "id": "media.paged.image.command.featherSelection",
           "title": "Feather selection (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.colorRange",
+          "title": "Color range… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.selectAndMask",
+          "title": "Select and mask… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.quickMask",
+          "title": "Quick mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.grow",
+          "title": "Grow selection (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.similar",
+          "title": "Similar (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.focusArea",
+          "title": "Focus area… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.saveSelection",
+          "title": "Save selection as channel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.loadSelection",
+          "title": "Load selection… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.makeWorkPath",
+          "title": "Make work path from selection (image)",
           "args": {
             "kind": "struct",
             "fields": {}
