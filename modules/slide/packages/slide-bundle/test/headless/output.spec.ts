@@ -77,6 +77,11 @@ async function open(bytes: Uint8Array, name: string) {
   return { h, host, report };
 }
 
+type Exporter = {
+  id: string;
+  export(): Promise<{ bytes: Uint8Array; fileName: string } | null>;
+};
+
 type Ir = {
   slides: { part: string }[];
   sections: { name: string; id: string; slide_ids: number[] }[];
@@ -136,6 +141,19 @@ describe("[plugin-slide.output] files and output (slide ADR 720), headless", () 
     // The template opens as the same deck.
     const ir = await readBack(out.bytes);
     expect(ir.slides.length).toBeGreaterThan(0);
+  });
+
+  it("the .potx exporter writes the deck as a template", async () => {
+    covers("exporter:media.paged.slide.exporter.potx");
+    const { h } = await open(fixture("placeholders"), "placeholders");
+    const ex = (h.exportersContributed() as unknown as Exporter[]).find(
+      (e) => e.id === "media.paged.slide.exporter.potx",
+    )!;
+    const out = (await ex.export())!;
+    expect(out.fileName.endsWith(".potx")).toBe(true);
+    expect(entry(out.bytes, "[Content_Types].xml")).toContain(
+      "presentationml.template.main+xml",
+    );
   });
 
   it("custom shows: set, exported, read back; played from the typed command's list", async () => {

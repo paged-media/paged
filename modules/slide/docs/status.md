@@ -154,6 +154,20 @@ Read from the code on 2026-10-25.
   slides, golden frames hold at 0.25, 0.5 and 0.75, and every transition takes under 1 ms of
   GPU time per 1080p frame on an M3 Max (most take under 0.2 ms). The show runtime that plays
   them is the next part of M5.
+- **Files and output** (ADR 720, editor ADR 308). File ▸ Export… is a view in place of the
+  canvas: PDF slides, handouts (1, 2, 3, 4, 6 or 9 a page; three with lines for notes) and notes
+  pages, laid out by `slide-output` over the renderer's slide images (150 dpi; notes in
+  Helvetica); the outline as RTF (Word's outline levels) or text, read from the document's title
+  and body placeholders; Save as template (`.potx`, also File ▸ Save as template… and an
+  exporter); a video (720p, 1080p or 4K at 24, 30 or 60 fps, each slide for its recorded time or
+  the default seconds, transitions through the WGSL library) encoded with WebCodecs (H.264, else
+  VP9) and muxed into MP4 by the bundle's own ISO-BMFF writer, with progress and Cancel. Opening a
+  `.potx` makes an untitled presentation and says so. Typed commands run every export.
+- **Sections** ride the label of their first slide: imported from `p14:sectionLst`, headed in the
+  Slide Sorter (add at the selection, rename, move with their slides, remove), written back from
+  the document. **Custom shows** ride the deck label by page: imported from `p:custShowLst`,
+  edited in the Custom Shows panel (Slide Show ▸ Custom Shows…), played in their order, written
+  back with the slides that are still there.
 - **The PowerPoint oracle** (ADR 705). Scripts drive PowerPoint 16.113.3 to export PDF, per-shape
   geometry, first baselines and chart bars (`scripts/ppt-*`). Fixtures authored through PowerPoint:
   geometry, text, placeholders, motion, baselines.
@@ -231,4 +245,7 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   reported in the export's diagnostics, and the shape is written as the deck had it. A notes
   master for a deck that has none. Transitions, timing, masters and layouts are still copied, not
   regenerated (later waves of ADR 711).
-- Animations in the show (per-item layers, wave 5), custom shows, ink saved as annotations.
+- Animations in the show (per-item layers, wave 5), ink saved as annotations.
+- Vector handouts and notes pages (they are 150 dpi images until the host offers a door for
+  imposed PDF pages); notes text outside Windows-1252 in the PDF (printed as `?`); audio in
+  videos (media items, wave 4); a video runner in a worker.

@@ -18,4 +18,5 @@ Range 700–749.
 | [711](711-powerpoint-parity-program.md) | The PowerPoint parity program; export keeps untouched slides byte for byte | Accepted 2026-10-24; amended 2026-10-25 (ADR 717) |
 | [716](716-slide-show-and-presenter-view.md) | Slide show and presenter view: one presentation in three roles, PowerPoint's keys, the slide sorter as a module view | Accepted 2026-10-25 |
 | [717](717-live-presets-and-connectors.md) | Live presets and connectors | Accepted 2026-10-25 |
+| [720](720-output-formats-including-mp4.md) | Output formats, including MP4: .potx, PDF handouts and notes pages, the outline, video; sections and custom shows | Accepted 2026-10-28 |
 | [721](721-transitions-and-shader-effects-are-pure-webgpu-wgsl.md) | Transitions and shader effects are pure WebGPU/WGSL | Accepted 2026-10-25 |
