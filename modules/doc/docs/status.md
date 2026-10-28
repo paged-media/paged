@@ -43,6 +43,7 @@ editor ADR 301.
 | Notes | Footnotes and endnotes inserted at their references with their text; the document's footnote numbering from the first section; Cmd+Alt+F / Cmd+Alt+D; inserted documents leave references out |
 | Fields | Every field the engine can hold is a live Word field with Word's result; bookmarks as text anchors; F9 (caret's story), Shift+F9 / Alt+F9 field codes; Insert page number / page count / date / any field |
 | TOC, references | Word's TOC entries poured with live PAGEREFs; Insert table of contents from heading styles, Update table; cross-reference to a bookmark or heading; bookmark; index entry |
+| Save-back | Header/footer edits spliced into their parts; note text edits, new and removed notes (with new parts, rels, content types); F9 results; new fields as complex fields; new bookmarks; zero-edit identity per part (ADR 610 amendment 1). A TOC made in paged is not written as a TOC field |
 | Layout | Page break (Cmd+Enter), section breaks (next/odd/even/continuous as break rules); Page setup (size, orientation, margins, columns) in the References panel |
 
 Word's answer: `fixtures/structure.word.json` (`scripts/word-structure-probe.sh`, Word 16 for

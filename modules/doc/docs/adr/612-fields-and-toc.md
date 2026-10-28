@@ -48,8 +48,9 @@ columns and puts its frame on the margin box. Every command has a typed twin (AD
 
 **Save-back reads fields, TOC entries and bookmarks.** The story read names the field a run is
 the result of, the TOC style a paragraph is an entry of and the story's named text anchors;
-save-back uses them to write a field result changed by F9 into its result runs and new fields,
-bookmarks and tables of contents as Word's (ADR 610 amendment).
+save-back uses them to write a field result changed by F9 into its result runs and new fields
+and bookmarks as Word's (ADR 610 amendment 1). A table of contents made in paged is not yet
+written as a `TOC` field.
 
 ## Evidence
 

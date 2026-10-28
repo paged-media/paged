@@ -67,8 +67,9 @@ the section's grow rule. Insert ▸ Edit header / Edit footer enter the active p
 
 **Save-back.** Note markers are stripped from the baseline and the read-back before the diff
 (`notes::strip_lowered`, `strip_content`), so body edits around a reference keep it in place.
-Header, footer and note parts are spliced by the save-back work recorded in ADR 610's
-amendment.
+Header and footer edits splice into their parts; note edits, new and removed notes
+into the notes parts, with new parts, relationships and content types where needed (ADR 610
+amendment 1).
 
 ## Evidence
 
