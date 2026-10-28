@@ -181,21 +181,44 @@ const TILES: TileSpec[] = [
  *  oversets: Code Block is 8.5 pt JetBrains Mono on the 13 pt grid,
  *  ≈ 84 characters to the 432 pt measure. */
 function splitRoster(
-  paragraphs: string[],
-  budgetLines: number,
+  families: { name: string; ids: string[] }[],
+  budgetFirst: number,
+  budgetSecond: number,
 ): { first: string[]; second: string[] } {
+  const para = (f: { name: string; ids: string[] }) =>
+    `${f.name} (${f.ids.length})  ${f.ids.join(" ")}`;
   const lines = (s: string): number => Math.max(1, Math.ceil(s.length / 84));
   const first: string[] = [];
   const second: string[] = [];
   let used = 0;
-  for (const para of paragraphs) {
-    if (used + lines(para) <= budgetLines && second.length === 0) {
-      first.push(para);
-      used += lines(para);
-    } else {
-      second.push(para);
-    }
+  let i = 0;
+  for (; i < families.length; i++) {
+    const text = para(families[i]!);
+    if (used + lines(text) > budgetFirst) break;
+    first.push(text);
+    used += lines(text);
   }
+  // The second column has a budget too: the registry grows, the page does
+  // not. What does not fit is printed as counts on one closing line.
+  const rest = families.slice(i);
+  const total = rest.reduce((n, f) => n + lines(para(f)), 0);
+  if (total <= budgetSecond) return { first, second: rest.map(para) };
+  used = 0;
+  let j = 0;
+  for (; j < rest.length; j++) {
+    const text = para(rest[j]!);
+    if (used + lines(text) > budgetSecond - 1) break;
+    second.push(text);
+    used += lines(text);
+  }
+  second.push(
+    "+ " +
+      rest
+        .slice(j)
+        .map((f) => `${f.name} (${f.ids.length})`)
+        .join(", ") +
+      " — the ids are in registry/kernels.yaml",
+  );
   return { first, second };
 }
 
@@ -460,11 +483,15 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         100 * Number(order.indexOf(a) < 0) -
         (order.indexOf(b) + 100 * Number(order.indexOf(b) < 0)),
     );
-    const paragraphs = families.map((fam) => {
-      const names = roster.families.get(fam) ?? [];
-      return `${fam} (${names.length})  ${names.join(" ")}`;
-    });
-    const { first, second } = splitRoster(paragraphs, 12);
+    // Page 88's frame holds 12 lines of the code block, page 89's 13.
+    const { first, second } = splitRoster(
+      families.map((name) => ({
+        name,
+        ids: roster.families.get(name) ?? [],
+      })),
+      12,
+      13,
+    );
     const title88 = await proseFrame(
       ctx,
       p(88),

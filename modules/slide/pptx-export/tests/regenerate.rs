@@ -62,6 +62,7 @@ fn resolved(bytes: &[u8]) -> Deck {
 /// The plan the bundle sends: every page, in order, with its state.
 fn plan_of(doc: &Document) -> ExportPlan {
     ExportPlan {
+        charts: Vec::new(),
         slides: doc
             .spreads
             .iter()

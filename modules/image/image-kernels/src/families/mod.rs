@@ -40,6 +40,7 @@ pub mod morph;
 pub mod relational;
 pub mod resample;
 pub mod select;
+pub mod style;
 
 use crate::KernelDef;
 
@@ -64,4 +65,5 @@ pub static ALL_FAMILIES: &[&[&KernelDef]] = &[
     relational::FAMILY,
     resample::FAMILY,
     select::FAMILY,
+    style::FAMILY,
 ];

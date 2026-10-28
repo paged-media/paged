@@ -51,6 +51,7 @@
       "media.paged.image.command.setType",
       "media.paged.image.command.applyToFile",
       "media.paged.image.command.saveToFile",
+      "media.paged.image.command.exportAs",
       "media.paged.image.command.loadBrushLibrary",
       "media.paged.image.command.selectionToPath",
       "media.paged.image.command.pathToSelection",
@@ -138,6 +139,22 @@
       "media.paged.image.command.linkLayers",
       "media.paged.image.command.unlinkLayer",
       "media.paged.image.command.newLayerComp",
+      "media.paged.image.command.layerStyleBevel",
+      "media.paged.image.command.layerStyleStroke",
+      "media.paged.image.command.layerStyleInnerShadow",
+      "media.paged.image.command.layerStyleInnerGlow",
+      "media.paged.image.command.layerStyleSatin",
+      "media.paged.image.command.layerStyleColorOverlay",
+      "media.paged.image.command.layerStyleGradientOverlay",
+      "media.paged.image.command.layerStylePatternOverlay",
+      "media.paged.image.command.layerStyleOuterGlow",
+      "media.paged.image.command.layerStyleDropShadow",
+      "media.paged.image.command.copyLayerStyle",
+      "media.paged.image.command.pasteLayerStyle",
+      "media.paged.image.command.clearLayerStyle",
+      "media.paged.image.command.globalLight",
+      "media.paged.image.command.toggleEffects",
+      "media.paged.image.command.scaleEffects",
       "media.paged.image.command.newAdjustmentBrightnessContrast",
       "media.paged.image.command.newAdjustmentLevels",
       "media.paged.image.command.newAdjustmentCurves",
@@ -217,7 +234,9 @@
     "exporters": [
       "media.paged.image.exporter.psd",
       "media.paged.image.exporter.png",
-      "media.paged.image.exporter.jpeg"
+      "media.paged.image.exporter.jpeg",
+      "media.paged.image.exporter.tiff",
+      "media.paged.image.exporter.webp"
     ],
     "editContexts": [
       {
@@ -965,6 +984,134 @@
           }
         },
         {
+          "id": "media.paged.image.command.layerStyleBevel",
+          "title": "Layer style: bevel and emboss…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleStroke",
+          "title": "Layer style: stroke…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleInnerShadow",
+          "title": "Layer style: inner shadow…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleInnerGlow",
+          "title": "Layer style: inner glow…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleSatin",
+          "title": "Layer style: satin…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleColorOverlay",
+          "title": "Layer style: colour overlay…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleGradientOverlay",
+          "title": "Layer style: gradient overlay…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStylePatternOverlay",
+          "title": "Layer style: pattern overlay…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleOuterGlow",
+          "title": "Layer style: outer glow…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleDropShadow",
+          "title": "Layer style: drop shadow…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.copyLayerStyle",
+          "title": "Copy layer style",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.pasteLayerStyle",
+          "title": "Paste layer style",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearLayerStyle",
+          "title": "Clear layer style",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.globalLight",
+          "title": "Global light…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleEffects",
+          "title": "Hide or show all effects",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.scaleEffects",
+          "title": "Scale effects…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.newAdjustmentBrightnessContrast",
           "title": "New adjustment layer: Brightness/Contrast",
           "args": {
@@ -1140,6 +1287,14 @@
         {
           "id": "media.paged.image.command.applyToFile",
           "title": "Apply adjustments to the file",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.exportAs",
+          "title": "Export as…",
           "args": {
             "kind": "struct",
             "fields": {}

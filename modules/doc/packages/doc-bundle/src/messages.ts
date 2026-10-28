@@ -99,6 +99,13 @@ export const DOC = defineMessages("doc.bundle", {
 
 /** The menu item this bundle adds: the path stays English (it is the
  *  item's identity) and the shell shows the segment through this message. */
+/** Doc ADR 616 — the files paged.doc opens and writes. */
+export const FILES = defineMessages("doc.files", {
+  odtImporter: "OpenDocument text (.odt)",
+  newFromTemplate:
+    "A new document from the template {template}. You are not editing the template: saving writes a new Word document ({name}).",
+});
+
 export const MENU = defineMessages("menu", {
   "Insert Word document…": "Insert Word document…",
 });

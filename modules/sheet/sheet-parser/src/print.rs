@@ -478,16 +478,25 @@ impl Printer<'_> {
 
     fn binary(&self, op: BinOp, a: &Expr, b: &Expr, out: &mut String) {
         let prec = binop_prec(op);
+        let start = out.len();
         self.expr(a, out, prec, Side::Left);
+        let mut right = String::new();
+        self.expr(b, &mut right, prec, Side::Right);
         // `x:x` is the column band X:X (the lexer reads `word:word` as one
         // token, as Excel does), so a range whose left operand ends in a bare
         // word — a LET local or a name such as `x` — keeps a space before
-        // its `:`: the range of the local x with itself is `x :x`.
-        if op == BinOp::Range && self.ends_in_word(a) {
+        // its `:`: the range of the local x with itself is `x :x`. Likewise
+        // `word:Sheet!…` is a sheet span (`Sheet1:Sheet2!A1`), so a left
+        // operand ending in a word keeps the space before a sheet-qualified
+        // right operand.
+        if op == BinOp::Range
+            && (self.ends_in_word(a)
+                || (ends_in_identifier(&out[start..]) && starts_with_sheet(&right)))
+        {
             out.push(' ');
         }
         out.push_str(binop_text(op));
-        self.expr(b, out, prec, Side::Right);
+        out.push_str(&right);
     }
 
     /// Whether `e`, printed as the left operand of `:`, ends in a word that
@@ -565,6 +574,25 @@ impl Printer<'_> {
 
 /// Wrap `inner` in `[ ]` (a structured-ref bracketed token, e.g. `[#All]` or
 /// `[Col]`). Used for `#`-area keywords (which never need escaping).
+/// Whether printed text ends in a character a name or a sheet name can end in.
+fn ends_in_identifier(text: &str) -> bool {
+    text.chars()
+        .last()
+        .is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.')
+}
+
+/// Whether printed text starts with a sheet prefix (`Sheet!`, `'My sheet'!`).
+fn starts_with_sheet(text: &str) -> bool {
+    if text.starts_with('\'') {
+        return true;
+    }
+    let word: String = text
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.')
+        .collect();
+    !word.is_empty() && text[word.len()..].starts_with('!')
+}
+
 fn push_bracketed(out: &mut String, inner: &str) {
     out.push('[');
     out.push_str(inner);

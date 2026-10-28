@@ -28,6 +28,20 @@
 // the layers go into the document's parts and their composite replaces
 // the frame's placed image, as one document undo step.
 
+import {
+  builtInPresets,
+  cloneStyle,
+  effectEnabled,
+  emptyStyle,
+  setEffectEnabled,
+  styleOptionsBits,
+  type EffectKind,
+  type GlobalLight,
+  type LayerStyle,
+  type PatternRef,
+  type StyleOptions,
+  type StylePreset,
+} from "./layer-style";
 import type {
   BundleHost,
   ColorPickerProps,
@@ -105,6 +119,10 @@ import {
   type EditTarget,
   type PsdLayerInfo,
   type RasterFormat,
+  type ExportOptions,
+  type ExportNote,
+  EXPORT_FORMATS,
+  exportSpec,
   type ResampleFilter,
   type CanvasOpKind,
   type TrimBy,
@@ -288,7 +306,14 @@ export type ImageDialog =
   | { kind: "imageSize" }
   | { kind: "trim" }
   | { kind: "rotate" }
-  | { kind: "blendingOptions"; index: number };
+  | { kind: "exportAs" }
+  | { kind: "blendingOptions"; index: number }
+  | { kind: "layerStyle"; index: number; pane: LayerStylePane }
+  | { kind: "globalLight" }
+  | { kind: "scaleEffects"; index: number };
+
+/** The pane the Layer Style dialog shows: an effect, or Blending Options. */
+export type LayerStylePane = EffectKind | "blending";
 
 /** The Layers list's search and filter (Photoshop's filter bar): rows
  *  whose name contains `query`, of `kind`, with colour label `color`. */
@@ -493,6 +518,15 @@ export interface ImageSessionState {
   brushPresetActive: string | null;
   /** The dialog on top of the panel, or null. */
   dialog: ImageDialog | null;
+  /** Copy Layer Style's clipboard (null: nothing copied). */
+  styleClipboard: LayerStyle | null;
+  /** The Styles panel's presets (built-in, then saved). */
+  stylePresets: StylePreset[];
+  /** The document's Global Light. */
+  globalLight: GlobalLight;
+  /** The style of the layer the Layer Style dialog edits (else the active
+   *  layer's), read with the layers — what the panel renders. */
+  layerStyle: LayerStyle | null;
   /** The Layers list's search and filter. */
   layerFilter: LayerFilter;
   /** The resolution the image declares, in pixels per inch (read from a
@@ -500,6 +534,18 @@ export interface ImageSessionState {
    *  null when it declares none (Image Size then shows 72). The PNG and
    *  JPEG exporters write it. */
   ppi: number | null;
+  /** What the opened file carries besides its pixels (byte lengths; 0 =
+   *  absent): the Export As dialog's metadata row. Null before an open. */
+  sourceMetadata: {
+    icc: number;
+    exif: number;
+    xmp: number;
+    iptc: number;
+  } | null;
+  /** The CMYK output profile Export As converts through (picked with
+   *  `pickExportProfile`), by name; null = the source's own CMYK profile
+   *  or, without one, the naive formula. */
+  exportProfile: string | null;
   /** The Curves eyedropper waiting for a click on the image, or null. */
   curvesPicker: CurvesPick | null;
   /** The per-channel curves the Curves tools (Auto, the eyedroppers)
@@ -583,6 +629,17 @@ export interface ImageSession extends RetouchApi {
   rasterExportBytes(
     format: RasterFormat,
   ): Promise<{ bytes: Uint8Array; fileName: string } | null>;
+  /** FILE ▸ EXPORT AS (ADR 468): the adjusted image written as `options`
+   *  say — format, quality, size, colour mode, depth, metadata, profile,
+   *  resolution — and handed to the host's saver when it has one (else
+   *  staged on `saveBack` for the exporters). A 16-bit session at
+   *  identity exports its own 16-bit samples. Null, with the reason as
+   *  the status, when it cannot. */
+  exportAs(options: ExportOptions): Promise<SaveBackResult | null>;
+  /** Pick the CMYK output profile (.icc/.icm) Export As converts to. */
+  pickExportProfile(): Promise<boolean>;
+  /** Forget the picked CMYK profile. */
+  clearExportProfile(): void;
   /** FILL the current selection (the whole image when none) with a
    *  generator, composited through the coverage mask. DESTRUCTIVE: it
    *  swaps the engine-held source like a crop commit (the document and
@@ -709,10 +766,50 @@ export interface ImageSession extends RetouchApi {
   applyAverage(): Promise<boolean>;
   /** Show one of the Image dialogs (Image Size, Trim, Arbitrary
    *  rotation) on top of the panel. */
-  openDialog(kind: "imageSize" | "trim" | "rotate"): boolean;
+  openDialog(kind: "imageSize" | "trim" | "rotate" | "exportAs"): boolean;
   /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
    *  active one by default): fill opacity, knockout and Blend If. */
   openBlendingOptions(index?: number): boolean;
+  /** Layer ▸ Layer Style ▸ <effect>… / Blending Options: the Layer Style
+   *  dialog on `pane` for layer `index` (the active one). Opening it on an
+   *  effect the layer does not have adds it with Photoshop's defaults
+   *  (one undo step), as Photoshop's menu does. */
+  openLayerStyle(pane?: LayerStylePane, index?: number): Promise<boolean>;
+  /** Show another pane of the open Layer Style dialog. */
+  setLayerStylePane(pane: LayerStylePane): void;
+  /** Layer ▸ Layer Style ▸ Global Light… / Scale Effects… (the active
+   *  layer's): their small dialogs. */
+  openStyleDialog(kind: "globalLight" | "scaleEffects"): boolean;
+  /** The layer's style (null: none). */
+  layerStyle(index: number): LayerStyle | null;
+  /** Set (null: clear) a layer's style; a dialog's edits to one layer are
+   *  one undo step. */
+  setLayerStyle(index: number, style: LayerStyle | null): Promise<boolean>;
+  /** Blending Options' style switches. */
+  setLayerStyleOptions(index: number, opts: StyleOptions): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Copy Layer Style (the active layer's). */
+  copyLayerStyle(): boolean;
+  /** Layer ▸ Layer Style ▸ Paste Layer Style onto the active layer and the
+   *  layers linked with it (one undo step). */
+  pasteLayerStyle(): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Clear Layer Style (the active layer's). */
+  clearLayerStyle(): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Global Light. */
+  setGlobalLight(angle: number, altitude: number): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Scale Effects (percent) on the active layer. */
+  scaleEffects(percent: number): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Hide / Show All Effects (toggles when `on` is
+   *  not given). */
+  setEffectsVisible(on?: boolean): Promise<boolean>;
+  /** Styles panel: apply the preset `name` to the active layer. */
+  applyStylePreset(name: string): Promise<boolean>;
+  /** Styles panel: New Style… — the active layer's style saved as `name`. */
+  saveStylePreset(name: string): boolean;
+  /** Styles panel: delete a saved preset (a built-in one stays). */
+  deleteStylePreset(name: string): boolean;
+  /** The defined pattern (Edit ▸ Define Pattern) made available to the
+   *  styles, returned as the reference an effect stores; null without one. */
+  stylePattern(): PatternRef | null;
   /** Close the Image dialog (a filter dialog is cancelled). */
   closeDialog(): Promise<void>;
   /** IMAGE ▸ Trim away `by` (transparent pixels, or the top-left or
@@ -1304,6 +1401,11 @@ export function elementIdOf(value: unknown): string | null {
  *  and refusal a session action reports, in the editor's language when
  *  the action runs. */
 const S = defineMessages("image.status", {
+  noLayerStyleToCopy: "The active layer has no layer style",
+  layerStyleCopied: "Layer style copied",
+  noLayerStyleToPaste: "No layer style copied yet: use Copy layer style",
+  noLayerStyleToClear: "The active layer has no layer style to clear",
+  noSuchStylePreset: 'No style called "{name}"',
   nothingIngestedIngestAPlacedImage:
     "Nothing ingested — ingest a placed image first.",
   frameDeselectedInFramePreviewCleared:
@@ -1474,6 +1576,22 @@ const S = defineMessages("image.status", {
   jpegSaveBack:
     "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG).",
   pngSaveBack: "PNG save-back — lossless re-encode of the adjusted pixels.",
+  tiffSaveBack:
+    "TIFF save-back — LZW re-encode of the adjusted pixels, metadata kept.",
+  webpSaveBack:
+    "WebP save-back — lossless re-encode of the adjusted pixels, metadata kept.",
+  exported: "Exported {file}, {bytes} bytes.",
+  exportStaged: "{file}, {bytes} bytes — ready for the exporters.",
+  exportNoteWebpLossless: "WebP is written lossless (no lossy encoder).",
+  exportNoteCmykProfile: "Converted to CMYK through the profile.",
+  exportNoteCmykNaive:
+    "Converted to CMYK without a profile (naive formula); no profile embedded.",
+  exportNoteWidened: "8-bit pixels written as 16 bits (no added precision).",
+  exportNoteNarrowed: "This format holds 8 bits; the pixels were narrowed.",
+  exportNoteAlphaDropped: "JPEG has no transparency; it was dropped.",
+  exportNoteGrayUntagged: "Grayscale is written without a profile.",
+  exportProfileSet: "CMYK profile: {name}.",
+  noProfileChosen: "No profile chosen.",
   saveBackReady: "{note} {file}, {bytes} bytes — ready.",
   saveFromPanel:
     "Save it from the panel, or deliver it from the Export Center.",
@@ -1689,7 +1807,18 @@ const E = defineMessages("image.effect", {
 
 /** The Photoshop-parity layer verbs (WP5.3): their names, as the
  *  status line reports them, and their outcomes. */
+/** The name the defined pattern goes by in a style. */
+const STYLE_PATTERN_NAME = "Pattern";
+
 const L = defineMessages("image.layerOps", {
+  layerStyle: "Layer style",
+  clearLayerStyle: "Clear layer style",
+  pasteLayerStyle: "Paste layer style",
+  blendingOptions: "Blending options",
+  globalLight: "Global light",
+  scaleEffects: "Scale effects",
+  showEffects: "Show all effects",
+  hideEffects: "Hide all effects",
   newAdjustmentLayer: "New adjustment layer",
   adjustment: "Adjustment",
   newFillLayer: "New fill layer",
@@ -1819,6 +1948,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     committedRev: null,
     uncommitted: false,
     saveBack: null,
+    sourceMetadata: null,
+    exportProfile: null,
     brush: { ...DEFAULT_BRUSH_PARAMS, color: [...DEFAULT_BRUSH_PARAMS.color] },
     blendModes: [],
     strokeActive: false,
@@ -1856,6 +1987,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     brushPresets: defaultPresets(),
     brushPresetActive: null,
     dialog: null,
+    styleClipboard: null,
+    stylePresets: builtInPresets(),
+    globalLight: { angle: 120, altitude: 30 },
+    layerStyle: null,
     layerFilter: NO_LAYER_FILTER,
     ppi: null,
     curvesPicker: null,
@@ -1867,6 +2002,11 @@ export function createImageSession(host: BundleHost): ImageSession {
    *  ("jpeg" only when the ORIGINAL bytes were a JPEG — a re-encode
    *  never invents a lossy format). */
   let sourceFormat: RasterFormat | "psd" | null = null;
+  /** The bytes the session opened: Export As and the save-back carry
+   *  their EXIF, XMP and IPTC (and a CMYK source's profile). */
+  let sourceBytes: Uint8Array | null = null;
+  /** The picked CMYK output profile (`state.exportProfile` names it). */
+  let exportProfileBytes: Uint8Array | null = null;
   /** Pixel edits since the last ingest (layer ops, strokes, fills,
    *  filters, crop, resize, undo/redo). The PSD exporter reads it: the
    *  byte-identical re-emit is only correct while it is 0, because the
@@ -2159,6 +2299,12 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       state.layers = engine.layers();
       state.history = engine.layersHistory();
+      state.globalLight = engine.globalLight();
+      const styled =
+        state.dialog?.kind === "layerStyle"
+          ? state.dialog.index
+          : state.layers.active;
+      state.layerStyle = engine.layerStyle(styled);
     } catch (err) {
       host.log.debug("layer readout failed", err);
       state.layers = EMPTY_LAYER_STACK;
@@ -2658,6 +2804,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     psdHandle = null;
     state.psd = null;
     sourceFormat = null;
+    sourceBytes = null;
+    state.sourceMetadata = null;
     state.saveBack = null;
     pixelEdits = 0;
     sourceRef = null;
@@ -2697,19 +2845,79 @@ export function createImageSession(host: BundleHost): ImageSession {
     bytes[3] === 0x53;
 
   /** Sniff the ORIGINAL container so the save-back lane re-encodes into
-   *  the format the file already was (never inventing a lossy one).
-   *  Unknown containers fall to PNG — the lossless default. */
+   *  the format the file already was (never inventing a lossy one): JPEG,
+   *  TIFF and WebP go back as themselves. Every other container (GIF,
+   *  BMP, AVIF, HDR, ...) falls to PNG — the lossless default. */
   const sniffFormat = (bytes: Uint8Array): RasterFormat | "psd" => {
     if (isPsd(bytes)) return "psd";
-    if (
-      bytes.length >= 3 &&
-      bytes[0] === 0xff &&
-      bytes[1] === 0xd8 &&
-      bytes[2] === 0xff
-    )
-      return "jpeg";
+    const b = (i: number) => bytes[i] ?? -1;
+    if (b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff) return "jpeg";
+    const tiff =
+      (b(0) === 0x49 && b(1) === 0x49 && b(2) === 42 && b(3) === 0) ||
+      (b(0) === 0x4d && b(1) === 0x4d && b(2) === 0 && b(3) === 42);
+    if (tiff) return "tiff";
+    const riff =
+      b(0) === 0x52 && b(1) === 0x49 && b(2) === 0x46 && b(3) === 0x46;
+    const webp =
+      b(8) === 0x57 && b(9) === 0x45 && b(10) === 0x42 && b(11) === 0x50;
+    if (riff && webp) return "webp";
     return "png";
   };
+
+  const NOTE_TEXT: Record<ExportNote, (typeof S)[keyof typeof S]> = {
+    "webp-lossless": S.exportNoteWebpLossless,
+    "cmyk-profile": S.exportNoteCmykProfile,
+    "cmyk-naive": S.exportNoteCmykNaive,
+    widened: S.exportNoteWidened,
+    narrowed: S.exportNoteNarrowed,
+    "alpha-dropped": S.exportNoteAlphaDropped,
+    "gray-untagged": S.exportNoteGrayUntagged,
+  };
+  /** The engine's notes for the last export, as sentences. */
+  const exportNoteText = (): string =>
+    engine
+      ? engine
+          .exportNotes()
+          .map((n) => t(NOTE_TEXT[n]))
+          .join(" ")
+      : "";
+
+  /** Encode the session's (adjusted) pixels with `options`. At identity
+   *  the engine reads its own image, so a 16-bit session keeps 16 bits. */
+  const encodeExport = async (
+    src: NonNullable<ImageSessionState["source"]>,
+    options: ExportOptions,
+  ): Promise<Uint8Array> => {
+    if (!engine) throw new Error("engine unavailable");
+    const spec = exportSpec(options);
+    const source = sourceBytes ?? new Uint8Array(0);
+    const profile = exportProfileBytes ?? new Uint8Array(0);
+    if (isIdentity(state.params))
+      return engine.exportImageHandle(src.handle, spec, source, profile);
+    const rgba = await engine.adjust(src.handle, state.params);
+    return engine.exportImage(
+      rgba,
+      src.width,
+      src.height,
+      spec,
+      source,
+      profile,
+    );
+  };
+
+  /** The save-back's options: the format at its default quality, the
+   *  source's metadata kept, sRGB embedded, the image's resolution. */
+  const saveBackOptions = (format: RasterFormat): ExportOptions => ({
+    format,
+    quality: 90,
+    ppi: state.ppi,
+    keepMetadata: true,
+    embedProfile: true,
+    mode: "rgb",
+    bits: 8,
+    compression: "lzw",
+    intent: "relativeColorimetric",
+  });
 
   /** Strip the extension off a display name (a link URI or file name) so
    *  the save-back can stamp its own. */
@@ -3131,6 +3339,13 @@ export function createImageSession(host: BundleHost): ImageSession {
       const keptAll = elementId ? keptSelections.get(elementId) : undefined;
       if (elementId) keptSelections.delete(elementId);
       sourceFormat = sniffFormat(bytes);
+      sourceBytes = bytes;
+      try {
+        state.sourceMetadata = engine.imageMetadata(bytes);
+      } catch (err) {
+        host.log.debug("metadata read failed", err);
+        state.sourceMetadata = null;
+      }
       state.saveBack = null;
       // Metadata only: Image Size shows it and the exporters write it.
       try {
@@ -3195,10 +3410,6 @@ export function createImageSession(host: BundleHost): ImageSession {
       setStatus(t(S.frameDeselectedInFramePreviewCleared));
     }
   });
-
-  /** Encoded PNG / JPEG bytes carrying the image's resolution. */
-  const withPpi = (bytes: Uint8Array): Uint8Array =>
-    engine && state.ppi !== null ? engine.stampPpi(bytes, state.ppi) : bytes;
 
   // ── FILTER DIALOG (WP5.2) ───────────────────────────────────────────
   //
@@ -4153,12 +4364,28 @@ export function createImageSession(host: BundleHost): ImageSession {
           setStatus(t(S.psdSaveBackUnavailableTheStructural));
           return null;
         } else {
-          const fmt: RasterFormat = sourceFormat === "jpeg" ? "jpeg" : "png";
+          const fmt: RasterFormat = sourceFormat ?? "png";
+          // The source's EXIF, XMP and IPTC ride along, the pixels are
+          // tagged sRGB, the resolution is written (ADR 468).
           result = {
-            bytes: withPpi(engine.encode(rgba, src.width, src.height, fmt)),
-            fileName: `${stem}${fmt === "jpeg" ? ".jpg" : ".png"}`,
-            mimeType: fmt === "jpeg" ? "image/jpeg" : "image/png",
-            note: fmt === "jpeg" ? t(S.jpegSaveBack) : t(S.pngSaveBack),
+            bytes: engine.exportImage(
+              rgba,
+              src.width,
+              src.height,
+              exportSpec(saveBackOptions(fmt)),
+              sourceBytes ?? new Uint8Array(0),
+              new Uint8Array(0),
+            ),
+            fileName: `${stem}${EXPORT_FORMATS[fmt].extension}`,
+            mimeType: EXPORT_FORMATS[fmt].mimeType,
+            note: t(
+              {
+                jpeg: S.jpegSaveBack,
+                png: S.pngSaveBack,
+                tiff: S.tiffSaveBack,
+                webp: S.webpSaveBack,
+              }[fmt],
+            ),
           };
         }
         state.saveBack = result;
@@ -4203,6 +4430,75 @@ export function createImageSession(host: BundleHost): ImageSession {
         }),
       );
       return accepted;
+    },
+
+    async exportAs(options) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return null;
+      }
+      if (!state.gpu && !isIdentity(state.params)) {
+        setStatus(t(S.webgpuUnavailableTheAdjustedExportNeeds));
+        return null;
+      }
+      state.busy = true;
+      emit();
+      try {
+        const fmt = EXPORT_FORMATS[options.format];
+        const result: SaveBackResult = {
+          bytes: await encodeExport(src, options),
+          fileName: `${baseName(src.name)}${fmt.extension}`,
+          mimeType: fmt.mimeType,
+          note: exportNoteText(),
+        };
+        const size = { file: result.fileName, bytes: result.bytes.length };
+        if (host.supports("shell.saveFile@1")) {
+          const accepted = await host.shell.saveFile({
+            suggestedName: result.fileName,
+            bytes: result.bytes,
+            mimeType: result.mimeType,
+          });
+          setStatus(
+            `${t(accepted ? S.exported : S.saveDeclined, size)} ${result.note}`.trim(),
+          );
+        } else {
+          state.saveBack = result;
+          setStatus(`${t(S.exportStaged, size)} ${result.note}`.trim());
+        }
+        state.dialog = null;
+        return result;
+      } catch (err) {
+        setStatus(t(S.exportFailed, { error: errText(err) }));
+        return null;
+      } finally {
+        state.busy = false;
+        emit();
+      }
+    },
+
+    async pickExportProfile() {
+      if (!host.supports("shell.pickFile@1")) {
+        setStatus(t(S.thisHostWiresNoFilePicker));
+        return false;
+      }
+      const picked = await host.shell.pickFile({ accept: [".icc", ".icm"] });
+      const file = picked[0];
+      if (!file) {
+        setStatus(t(S.noProfileChosen));
+        return false;
+      }
+      exportProfileBytes = file.bytes;
+      state.exportProfile = file.name;
+      setStatus(t(S.exportProfileSet, { name: file.name }));
+      emit();
+      return true;
+    },
+
+    clearExportProfile() {
+      exportProfileBytes = null;
+      state.exportProfile = null;
+      emit();
     },
 
     async psdExportBytes() {
@@ -4253,13 +4549,10 @@ export function createImageSession(host: BundleHost): ImageSession {
         return null;
       }
       try {
-        const rgba = await engine.adjust(src.handle, state.params);
-        const bytes = withPpi(
-          engine.encode(rgba, src.width, src.height, format),
-        );
+        const bytes = await encodeExport(src, saveBackOptions(format));
         return {
           bytes,
-          fileName: `${baseName(src.name)}${format === "jpeg" ? ".jpg" : ".png"}`,
+          fileName: `${baseName(src.name)}${EXPORT_FORMATS[format].extension}`,
         };
       } catch (err) {
         setStatus(t(S.exportFailed, { error: errText(err) }));
@@ -6353,6 +6646,197 @@ export function createImageSession(host: BundleHost): ImageSession {
     setLayerFilter(patch) {
       state.layerFilter = { ...state.layerFilter, ...patch };
       emit();
+    },
+
+    async openLayerStyle(pane = "blending", index) {
+      if (!engine || !state.source || state.layers.layers.length === 0) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      const at = index ?? state.layers.active;
+      if (pane !== "blending") {
+        const style = api.layerStyle(at) ?? emptyStyle();
+        if (!effectEnabled(style, pane)) {
+          const pattern =
+            pane === "patternOverlay"
+              ? (api.stylePattern() ?? undefined)
+              : undefined;
+          // The effect is added whether or not the composite can be
+          // redrawn here (a realm without WebGPU still edits the style).
+          try {
+            engine.layerSetStyle(
+              at,
+              setEffectEnabled(style, pane, true, pattern),
+            );
+          } catch (err) {
+            setStatus(
+              t(S.whatFailed, { what: t(L.layerStyle), error: errText(err) }),
+            );
+            refreshLayers();
+            emit();
+            return false;
+          }
+          await recomposite();
+        }
+      }
+      state.dialog = { kind: "layerStyle", index: at, pane };
+      refreshLayers();
+      emit();
+      return true;
+    },
+
+    setLayerStylePane(pane) {
+      if (state.dialog?.kind !== "layerStyle") return;
+      state.dialog = { ...state.dialog, pane };
+      emit();
+    },
+
+    openStyleDialog(kind) {
+      if (!engine || !state.source || state.layers.layers.length === 0) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      state.dialog =
+        kind === "globalLight"
+          ? { kind }
+          : { kind, index: state.layers.active };
+      emit();
+      return true;
+    },
+
+    layerStyle(index) {
+      if (!engine || !state.source) return null;
+      try {
+        return engine.layerStyle(index);
+      } catch {
+        return null;
+      }
+    },
+
+    setLayerStyle(index, style) {
+      return layerOp(style ? L.layerStyle : L.clearLayerStyle, () =>
+        engine!.layerSetStyle(index, style),
+      );
+    },
+
+    setLayerStyleOptions(index, opts) {
+      return layerOp(L.blendingOptions, () =>
+        engine!.layerSetStyleOptions(index, styleOptionsBits(opts)),
+      );
+    },
+
+    copyLayerStyle() {
+      const style = api.layerStyle(state.layers.active);
+      if (!style) {
+        setStatus(t(S.noLayerStyleToCopy));
+        emit();
+        return false;
+      }
+      state.styleClipboard = style;
+      setStatus(t(S.layerStyleCopied));
+      emit();
+      return true;
+    },
+
+    pasteLayerStyle() {
+      const style = state.styleClipboard;
+      if (!style) {
+        setStatus(t(S.noLayerStyleToPaste));
+        emit();
+        return Promise.resolve(false);
+      }
+      const active = state.layers.active;
+      const link = state.layers.layers[active]?.link ?? null;
+      const targets = state.layers.layers
+        .map((l, i) =>
+          i === active || (link !== null && l.link === link) ? i : -1,
+        )
+        .filter((i) => i >= 0);
+      return layerOp(L.pasteLayerStyle, () =>
+        engine!.layersPasteStyle(targets, style),
+      );
+    },
+
+    clearLayerStyle() {
+      const at = state.layers.active;
+      if (!api.layerStyle(at)) {
+        setStatus(t(S.noLayerStyleToClear));
+        emit();
+        return Promise.resolve(false);
+      }
+      return api.setLayerStyle(at, null);
+    },
+
+    setGlobalLight(angle, altitude) {
+      return layerOp(L.globalLight, () =>
+        engine!.setGlobalLight(angle, altitude),
+      );
+    },
+
+    scaleEffects(percent) {
+      const at = state.layers.active;
+      return layerOp(L.scaleEffects, () =>
+        engine!.layerScaleEffects(at, percent),
+      );
+    },
+
+    setEffectsVisible(on) {
+      const at = state.layers.active;
+      const row = state.layers.layers[at];
+      const next = on ?? !(row?.styleOn ?? false);
+      return layerOp(next ? L.showEffects : L.hideEffects, () =>
+        engine!.layerSetEffectsVisible(at, next),
+      );
+    },
+
+    applyStylePreset(name) {
+      const preset = state.stylePresets.find((p) => p.name === name);
+      if (!preset) {
+        setStatus(t(S.noSuchStylePreset, { name }));
+        emit();
+        return Promise.resolve(false);
+      }
+      return api.setLayerStyle(state.layers.active, cloneStyle(preset.style));
+    },
+
+    saveStylePreset(name) {
+      const style = api.layerStyle(state.layers.active);
+      const trimmed = name.trim();
+      if (!style || trimmed === "") {
+        setStatus(t(S.noLayerStyleToCopy));
+        emit();
+        return false;
+      }
+      state.stylePresets = [
+        ...state.stylePresets.filter((p) => p.name !== trimmed || p.builtIn),
+        { name: trimmed, style: cloneStyle(style) },
+      ];
+      emit();
+      return true;
+    },
+
+    deleteStylePreset(name) {
+      const before = state.stylePresets.length;
+      state.stylePresets = state.stylePresets.filter(
+        (p) => p.builtIn || p.name !== name,
+      );
+      emit();
+      return state.stylePresets.length !== before;
+    },
+
+    stylePattern() {
+      if (!engine || patternHandle === null || !state.pattern) return null;
+      const { width, height } = state.pattern;
+      try {
+        const rgba = engine.tile(patternHandle, 0, 0, width, height);
+        engine.defineStylePattern(STYLE_PATTERN_NAME, rgba, width, height);
+        return { name: STYLE_PATTERN_NAME, id: STYLE_PATTERN_NAME };
+      } catch (err) {
+        host.log.debug("style pattern failed", err);
+        return null;
+      }
     },
 
     openBlendingOptions(index) {

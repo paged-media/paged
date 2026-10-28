@@ -258,17 +258,17 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   announces saves (`document.onWillSave@1`), saving the document commits first.
 - **Tiles** are level 0 only, served only after the command, and cut from the held image
   without the panel's chain. The mip export `image_tile_rgba8_level` has no TypeScript caller.
-- **Colour.** Transforms run once, on the CPU, at decode: RGB with an embedded profile to
-  sRGB (perceptual, no black-point compensation). CMYK (JPEG, and a PSD's composite and
-  layer plates through one transform) goes to sRGB through its embedded profile with the
-  perceptual table, which is how the lane approximates Photoshop's default view of a CMYK
-  document (relative colorimetric with black-point compensation, which moxcms lacks): within
-  4 levels, mean 0.44, on Coated FOGRA39 ink patches, up to 23 levels on saturated greens
-  outside sRGB (`image-conformance/tests/it/psd_cmyk_photoshop.rs`). Without a profile, CMYK is
-  converted by the plain ink formula, and the panel says so ("CMYK, converted to sRGB without a
-  profile"); a converted CMYK source is stated as converted, not as managed RGB. The profile of
-  an RGB PSD and of a PNG kept at 16 bits is not applied ("sRGB assumed"). There is no
-  rendering-intent control. Kernels receive encoded values.
+- **Colour.** Transforms run once, on the CPU, at decode, through the engine's CMS
+  (`paged_color::cms`, [ADR 457](adr/457-colour-management.md)): RGB with an embedded profile to
+  sRGB (qcms, perceptual, no black-point compensation). CMYK (JPEG, and a PSD's composite and
+  layer plates through one transform) goes to sRGB through its embedded profile with relative
+  colorimetric and black-point compensation, Photoshop's default view of a CMYK document: within
+  1 level, mean 0.06, on Coated FOGRA39 ink patches, 4 levels on the saturated green outside sRGB
+  that Photoshop clips differently (`image-conformance/tests/it/psd_cmyk_photoshop.rs`). Without
+  a profile, CMYK is converted by the plain ink formula, and the panel says so ("CMYK, converted
+  to sRGB without a profile"); a converted CMYK source is stated as converted, not as managed
+  RGB. The profile of an RGB PSD and of a PNG kept at 16 bits is not applied ("sRGB assumed").
+  There is no rendering-intent control. Kernels receive encoded values.
 - **Depth.** A 16-bit RGB or RGBA PNG decoded on the main thread is held at 16 bits. The
   decode worker returns RGBA8, a 16-bit PSD is reduced to 8 bits, and a 16-bit greyscale
   PNG is refused (`image-js/src/ingest.rs:812-831`; the PSD composite at `:745-765`).

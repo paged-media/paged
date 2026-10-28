@@ -11,7 +11,7 @@
 //! AppliedNumberingList, NumberingExpression) are not attributes and are
 //! spelled by their own passes (`based_on`, `face`, `paragraph_props`).
 
-use idml_import::styles::{CharacterStyleDef, ObjectStyleDef, ParagraphStyleDef};
+use idml_import::styles::{CellStyleDef, CharacterStyleDef, ObjectStyleDef, ParagraphStyleDef};
 
 use crate::emit::{
     grid_alignment_attrs, line_setting_attrs, list_level_attrs, paragraph_rule_attrs,
@@ -520,6 +520,119 @@ pub(crate) fn object_style_attr_patch(key: &[u8], raw: &[u8], s: &ObjectStyleDef
             raw,
             &corner_attrs_of(s.corner_radius, &s.corner_option, &s.corners),
         ),
+    }
+}
+
+/// Every attribute a `<CellStyle>` carries, from the model: the fill, the
+/// four edge strokes (colour, weight, type, tint), vertical justification,
+/// rotation and the first-baseline policy — the fields [`CellStyleDef`]
+/// holds and the importer reads back.
+pub(crate) fn cell_style_attrs(s: &CellStyleDef) -> Vec<(&'static str, String)> {
+    let mut out = Vec::new();
+    push_strs(&mut out, &[("Name", &s.name), ("FillColor", &s.fill_color)]);
+    push_f32s(&mut out, &[("FillTint", s.fill_tint)]);
+    push_strs(
+        &mut out,
+        &[
+            ("VerticalJustification", &s.vertical_justification),
+            ("FirstBaselineOffset", &s.first_baseline_offset),
+        ],
+    );
+    push_f32s(
+        &mut out,
+        &[
+            (
+                "MinimumFirstBaselineOffset",
+                s.minimum_first_baseline_offset,
+            ),
+            ("RotationAngle", s.rotation_angle),
+        ],
+    );
+    for edge in cell_style_edges(s) {
+        push_strs(
+            &mut out,
+            &[(edge.color.0, edge.color.1), (edge.kind.0, edge.kind.1)],
+        );
+        push_f32s(&mut out, &[edge.weight, edge.tint]);
+    }
+    out
+}
+
+/// One edge of a cell style: its stroke colour, type, weight and tint,
+/// each keyed by the attribute InDesign spells it as.
+struct CellStyleEdge<'a> {
+    color: (&'static str, &'a Option<String>),
+    kind: (&'static str, &'a Option<String>),
+    weight: (&'static str, Option<f32>),
+    tint: (&'static str, Option<f32>),
+}
+
+fn cell_style_edges(s: &CellStyleDef) -> [CellStyleEdge<'_>; 4] {
+    [
+        CellStyleEdge {
+            color: ("TopEdgeStrokeColor", &s.top_edge_stroke_color),
+            kind: ("TopEdgeStrokeType", &s.top_edge_stroke_type),
+            weight: ("TopEdgeStrokeWeight", s.top_edge_stroke_weight),
+            tint: ("TopEdgeStrokeTint", s.top_edge_stroke_tint),
+        },
+        CellStyleEdge {
+            color: ("BottomEdgeStrokeColor", &s.bottom_edge_stroke_color),
+            kind: ("BottomEdgeStrokeType", &s.bottom_edge_stroke_type),
+            weight: ("BottomEdgeStrokeWeight", s.bottom_edge_stroke_weight),
+            tint: ("BottomEdgeStrokeTint", s.bottom_edge_stroke_tint),
+        },
+        CellStyleEdge {
+            color: ("LeftEdgeStrokeColor", &s.left_edge_stroke_color),
+            kind: ("LeftEdgeStrokeType", &s.left_edge_stroke_type),
+            weight: ("LeftEdgeStrokeWeight", s.left_edge_stroke_weight),
+            tint: ("LeftEdgeStrokeTint", s.left_edge_stroke_tint),
+        },
+        CellStyleEdge {
+            color: ("RightEdgeStrokeColor", &s.right_edge_stroke_color),
+            kind: ("RightEdgeStrokeType", &s.right_edge_stroke_type),
+            weight: ("RightEdgeStrokeWeight", s.right_edge_stroke_weight),
+            tint: ("RightEdgeStrokeTint", s.right_edge_stroke_tint),
+        },
+    ]
+}
+
+/// A string attribute the model owns, keeping the source's bytes when it
+/// already says the model's value.
+fn preserving_str_patch(raw: Option<&str>, v: &Option<String>) -> Patch {
+    match v {
+        Some(s) if raw == Some(s.as_str()) => Patch::Keep,
+        _ => opt_string_patch(v),
+    }
+}
+
+/// The `<CellStyle>` attributes the model owns, so a cell style edited
+/// through `SetStyleProperty` is written back in place; an untouched one
+/// keeps every byte.
+pub(crate) fn cell_style_attr_patch(key: &[u8], raw: &[u8], s: &CellStyleDef) -> Option<Patch> {
+    let text = std::str::from_utf8(raw).ok();
+    match key {
+        b"Name" => Some(preserving_str_patch(text, &s.name)),
+        b"FillColor" => Some(swatch_patch(text, &s.fill_color)),
+        b"FillTint" => Some(preserving_tint_patch(text, s.fill_tint)),
+        b"VerticalJustification" => Some(preserving_str_patch(text, &s.vertical_justification)),
+        b"FirstBaselineOffset" => Some(preserving_str_patch(text, &s.first_baseline_offset)),
+        b"MinimumFirstBaselineOffset" => {
+            Some(preserving_f32_patch(text, s.minimum_first_baseline_offset))
+        }
+        b"RotationAngle" => Some(preserving_f32_patch(text, s.rotation_angle)),
+        _ => cell_style_edges(s).into_iter().find_map(|edge| {
+            if key == edge.color.0.as_bytes() {
+                Some(swatch_patch(text, edge.color.1))
+            } else if key == edge.kind.0.as_bytes() {
+                Some(preserving_str_patch(text, edge.kind.1))
+            } else if key == edge.weight.0.as_bytes() {
+                Some(preserving_f32_patch(text, edge.weight.1))
+            } else if key == edge.tint.0.as_bytes() {
+                Some(preserving_tint_patch(text, edge.tint.1))
+            } else {
+                None
+            }
+        }),
     }
 }
 

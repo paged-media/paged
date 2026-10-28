@@ -733,6 +733,8 @@ export type WorkerToMain = WorkerToMainKind & {
 //   which a caller detects by the reply's missing `format` / `region`.
 // Additive on 76, no bump (governance rule 1) — data ADR 564:
 //   `RunContent.textVariable`, the text variable a run is an instance of.
+// Additive on 77, no bump (governance rule 1) — data ADR 564:
+//   `StorySummary.oversetCells`, the table cells whose text overflows.
 // Rides v76 (unreleased; added before first consumer sync, governance rule
 //   4) — engine ADRs 1018 and 1021: the mutations setStyleBasedOn,
 //   setListLevel, restartNumbering and findReplace (Operations
@@ -4356,11 +4358,27 @@ pub struct StorySummary {
     /// older client that ignores it still reads the `overset` flag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overset_at: Option<OversetAt>,
+    /// The table cells in this story whose text does not fit their row, each
+    /// by its table and template row and column (data ADR 564). Empty when
+    /// none does. Additive on 77 (governance rule 1).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overset_cells: Vec<OversetCellAt>,
     /// v65 (thoughts ADR 026) — the story's grow rule, in the shape
     /// `Mutation::SetFlowGrowRule` takes (`grow` is always `true` here:
     /// a cleared rule reads as `None`). `None` = a fixed chain.
     #[serde(default)]
     pub grow_rule: Option<StoryGrowRule>,
+}
+
+/// One table cell whose text does not fit its row ([`StorySummary::overset_cells`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct OversetCellAt {
+    /// The table's `Self`.
+    pub table: String,
+    pub row: u32,
+    pub column: u32,
 }
 
 /// v65 — a story's grow rule on the read side ([`StorySummary::grow_rule`]).

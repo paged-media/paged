@@ -801,6 +801,23 @@ pub struct ImageMetadata {
     /// threshold. `None` when absent (then the canvas may derive it
     /// from pixel-dims ÷ placed-size if it has the decode).
     pub effective_ppi: Option<f32>,
+    /// `ImageRenderingIntent` — the intent this picture's colours convert
+    /// with: `"Perceptual"`, `"Saturation"`, `"RelativeColorimetric"`,
+    /// `"AbsoluteColorimetric"`, or `"UseColorSettings"` (the document's
+    /// Color Settings intent, InDesign's default). `None` when the element
+    /// omits it, which means the same as `UseColorSettings`.
+    #[serde(default)]
+    pub rendering_intent: Option<String>,
+}
+
+impl ImageMetadata {
+    /// The picture's own intent name, `None` when it follows the
+    /// document (`UseColorSettings` or absent).
+    pub fn explicit_rendering_intent(&self) -> Option<&str> {
+        self.rendering_intent
+            .as_deref()
+            .filter(|i| !i.is_empty() && *i != "UseColorSettings")
+    }
 }
 
 /// IDML `<ClippingPathSettings ClippingType="...">` value. InDesign

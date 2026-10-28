@@ -41,6 +41,9 @@ const ENGINE_NOT_BUILT =
 /** The wasm-bindgen `DocEngine` (snake_case surface from docx-js/src/lib.rs). */
 interface WasmDocEngine {
   load_docx(bytes: Uint8Array): void;
+  open_file(bytes: Uint8Array, name: string, odt: boolean): string;
+  source_docx(): Uint8Array;
+  native_docx(inputJson: string): Uint8Array;
   lowered_json(): string;
   block_count(): number;
   save_verbatim(): Uint8Array;
@@ -53,6 +56,19 @@ interface WasmDocEngine {
   set_mid_page_columns(on: boolean): void;
   uses_mid_page_columns(): boolean;
   free(): void;
+}
+
+/** What opening a file did (doc ADR 616, docx-js `OpenReport`). */
+export interface OpenReport {
+  format: "docx" | "docm" | "dotx" | "dotm" | "rtf" | "odt";
+  /** A template (or an .ott) opened as a new document: saving writes a
+   *  new .docx, never the file it came from. */
+  untitled: boolean;
+  /** The package carries macros (kept, never run). */
+  macros: boolean;
+  /** The name the document saves under. */
+  saveName: string;
+  diagnostics: string[];
 }
 
 /** The `--target web` glue module shape. */
@@ -72,6 +88,27 @@ export class DocEngine {
   /** Load a `.docx`; throws with the engine's message on a hard failure. */
   loadDocx(bytes: Uint8Array): void {
     this.inner.load_docx(bytes);
+  }
+
+  /** Open a file of any format paged.doc reads (doc ADR 616): the bytes
+   *  decide; a template opens as a new document, RTF and OpenDocument
+   *  (`odt`, behind a flag) become a .docx, a .doc is refused (throws with
+   *  what to do instead). */
+  openFile(bytes: Uint8Array, name: string, odt = false): OpenReport {
+    return JSON.parse(this.inner.open_file(bytes, name, odt)) as OpenReport;
+  }
+
+  /** The .docx the session works on: the file, or the package written for
+   *  a template, an RTF or an OpenDocument file (the stored source part). */
+  sourceDocx(): Uint8Array {
+    return this.inner.source_docx();
+  }
+
+  /** "Save as .docx" for a native document: the stories, styles, colours
+   *  and page as the bundle read them; the new package. What it leaves out
+   *  is {@link lastSaveSkips}. */
+  nativeDocx(input: unknown): Uint8Array {
+    return this.inner.native_docx(JSON.stringify(input));
   }
 
   /** The Tier-0 lowering (the host-model input). */

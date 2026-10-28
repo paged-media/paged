@@ -31,9 +31,11 @@ stood, for decisions made earlier; their status says so.
 | [465](465-cpu-twins-for-region-filters.md) | Where no GPU exists, a region filter runs on shipped CPU twins | Accepted 2026-10-23 (an exception to 450; amended 2026-10-23: a mask as data) |
 | [466](466-core-raster-crates-are-shared.md) | The engine's raster crates are shared: the module's Rust may depend on them | Accepted 2026-10-24 (amends the isolation contract and 456) |
 | [467](467-cpu-resample-for-headless-actions.md) | The CPU resample is a supported backend for headless and batch actions | Accepted 2026-10-25 (an exception to 450) |
+| [468](468-the-module-reads-and-writes-through-paged-raster.md) | The module reads and writes every raster through `paged-raster` | Accepted 2026-10-25 (amends 456) |
 | [469](469-patchmatch-retouching.md) | Retouching searches with multi-resolution PatchMatch; the vote is a kernel with a CPU twin | Accepted 2026-10-24 (amends 450 for that twin) |
 | [470](470-selection-and-masking.md) | Selection and masking: a selection kernel, selections on the undo list, channels and paths in the session | Accepted 2026-10-24 (amends 463 and 465) |
 | [471](471-brush-engine.md) | The brush engine: Brush Settings as a seeded dab planner over the one accumulator | Accepted 2026-10-24 |
+| [472](472-layer-styles.md) | A layer style is a sequence of fold steps around the layer's pixels | Accepted 2026-10-25 (WP5.4) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

@@ -44,8 +44,9 @@
 //  · nothing in the nine bundles registers a manifest category later than
 //    activation (sceneLayer surfaces, data providers and binding providers
 //    open lazily, but none of them is declared in `contributes`).
-// No bundle needs an allowance, so `allow` is empty for all nine; one, if it
-// is ever needed, must give its reason and is reported once it goes stale.
+// One allowance: doc's OpenDocument importer is declared but registered only
+// behind its flag (doc ADR 616). Every allowance gives its reason and is
+// reported once it goes stale.
 
 import { describe, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
@@ -186,6 +187,14 @@ const CHECKS: Record<string, BundleCheck> = {
       {
         feature: SCHEMA_PANEL,
         gates: "panel.properties (also needs the object model)",
+      },
+    ],
+    allow: [
+      {
+        category: "importers",
+        id: "media.paged.doc.importer.odt",
+        reason:
+          "OpenDocument import is behind a flag (docBundleWith({ odt: true }), doc ADR 616); the bundle the editor ships leaves it off",
       },
     ],
   },

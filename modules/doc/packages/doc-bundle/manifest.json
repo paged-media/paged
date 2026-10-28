@@ -81,7 +81,10 @@
       "media.paged.doc.command.word.styleNew",
       "media.paged.doc.command.word.applyStyles"
     ],
-    "importers": ["media.paged.doc.importer.docx"],
+    "importers": [
+      "media.paged.doc.importer.docx",
+      "media.paged.doc.importer.odt"
+    ],
     "exporters": ["media.paged.doc.exporter.docx"],
     "editContexts": [
       {
@@ -568,6 +571,46 @@
               },
               "fileName": {
                 "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.saveAsDocx",
+          "title": "Save as Word document",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "bytes": {
+                "kind": "bytes"
+              },
+              "fileName": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.pasteRtf",
+          "title": "Paste rich text (RTF)",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "rtf": {
+                "kind": "text"
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "paragraphs": {
+                "kind": "number",
+                "integer": true
               }
             }
           }

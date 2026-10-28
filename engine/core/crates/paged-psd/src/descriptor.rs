@@ -714,6 +714,207 @@ fn read_ref_item(r: &mut ByteReader) -> Result<RefItem> {
     })
 }
 
+// ── writing ──────────────────────────────────────────────────────────
+//
+// The inverse of the reader, for the blocks Paged CONSTRUCTS (a layer
+// style, a fill layer's content): an edited block is re-encoded; an
+// unedited one keeps its source bytes (the lazy-verbatim guard, crate
+// docs). Every value kind the reader produces is written in the layout
+// it was read from, so `read(write(d)) == d` for any tree.
+
+/// Write a `key-or-4cc` in the dialect the key records: a 4-byte key as
+/// length 0 plus its bytes, a long-form key as its length plus bytes.
+pub fn write_key(out: &mut Vec<u8>, key: &Key) {
+    if key.long_form || key.raw.len() != 4 {
+        out.extend_from_slice(&(key.raw.len() as u32).to_be_bytes());
+    } else {
+        out.extend_from_slice(&0u32.to_be_bytes());
+    }
+    out.extend_from_slice(&key.raw);
+}
+
+/// Write a descriptor unicode string: the count of UTF-16 units INCLUDING
+/// a trailing NUL (what Photoshop writes), then the big-endian units.
+pub fn write_unicode_string(out: &mut Vec<u8>, s: &str) {
+    let units: Vec<u16> = s.encode_utf16().chain(std::iter::once(0)).collect();
+    out.extend_from_slice(&(units.len() as u32).to_be_bytes());
+    for u in units {
+        out.extend_from_slice(&u.to_be_bytes());
+    }
+}
+
+/// Write the "version and descriptor" wrapper ([`DESCRIPTOR_VERSION`]).
+pub fn write_versioned_descriptor(out: &mut Vec<u8>, d: &Descriptor) {
+    out.extend_from_slice(&DESCRIPTOR_VERSION.to_be_bytes());
+    write_descriptor(out, d);
+}
+
+/// Write a descriptor: class name, class id, item count, items.
+pub fn write_descriptor(out: &mut Vec<u8>, d: &Descriptor) {
+    write_unicode_string(out, &d.class_name);
+    write_key(out, &d.class_id);
+    out.extend_from_slice(&(d.items.len() as u32).to_be_bytes());
+    for (k, v) in &d.items {
+        write_key(out, k);
+        write_value(out, v);
+    }
+}
+
+/// Write one OSType-tagged value.
+pub fn write_value(out: &mut Vec<u8>, v: &DescriptorValue) {
+    out.extend_from_slice(&v.ostype());
+    match v {
+        DescriptorValue::Descriptor(d) | DescriptorValue::GlobalObject(d) => {
+            write_descriptor(out, d)
+        }
+        DescriptorValue::List(items) => {
+            out.extend_from_slice(&(items.len() as u32).to_be_bytes());
+            for v in items {
+                write_value(out, v);
+            }
+        }
+        DescriptorValue::Double(x) => out.extend_from_slice(&x.to_bits().to_be_bytes()),
+        DescriptorValue::UnitFloat { unit, value } => {
+            out.extend_from_slice(unit);
+            out.extend_from_slice(&value.to_bits().to_be_bytes());
+        }
+        DescriptorValue::Text(s) => write_unicode_string(out, s),
+        DescriptorValue::Enum { type_key, value } => {
+            write_key(out, type_key);
+            write_key(out, value);
+        }
+        DescriptorValue::Integer(i) => out.extend_from_slice(&i.to_be_bytes()),
+        DescriptorValue::LargeInteger(i) => out.extend_from_slice(&i.to_be_bytes()),
+        DescriptorValue::Bool(b) => out.push(u8::from(*b)),
+        DescriptorValue::Class { name, id } => {
+            write_unicode_string(out, name);
+            write_key(out, id);
+        }
+        DescriptorValue::Alias(b) | DescriptorValue::RawData(b) | DescriptorValue::Path(b) => {
+            out.extend_from_slice(&(b.len() as u32).to_be_bytes());
+            out.extend_from_slice(b);
+        }
+        DescriptorValue::Reference(items) => {
+            out.extend_from_slice(&(items.len() as u32).to_be_bytes());
+            for item in items {
+                write_ref_item(out, item);
+            }
+        }
+        DescriptorValue::ObjectArray(d) => {
+            out.extend_from_slice(&DESCRIPTOR_VERSION.to_be_bytes());
+            write_descriptor(out, d);
+        }
+        DescriptorValue::UnitFloats { unit, values } => {
+            out.extend_from_slice(unit);
+            out.extend_from_slice(&(values.len() as u32).to_be_bytes());
+            for x in values {
+                out.extend_from_slice(&x.to_bits().to_be_bytes());
+            }
+        }
+    }
+}
+
+fn write_ref_item(out: &mut Vec<u8>, item: &RefItem) {
+    match item {
+        RefItem::Property { name, class, key } => {
+            out.extend_from_slice(b"prop");
+            write_unicode_string(out, name);
+            write_key(out, class);
+            write_key(out, key);
+        }
+        RefItem::Class { name, class } => {
+            out.extend_from_slice(b"Clss");
+            write_unicode_string(out, name);
+            write_key(out, class);
+        }
+        RefItem::Enumerated {
+            name,
+            class,
+            type_key,
+            value,
+        } => {
+            out.extend_from_slice(b"Enmr");
+            write_unicode_string(out, name);
+            write_key(out, class);
+            write_key(out, type_key);
+            write_key(out, value);
+        }
+        RefItem::Offset {
+            name,
+            class,
+            offset,
+        } => {
+            out.extend_from_slice(b"rele");
+            write_unicode_string(out, name);
+            write_key(out, class);
+            out.extend_from_slice(&offset.to_be_bytes());
+        }
+        RefItem::Identifier(i) => {
+            out.extend_from_slice(b"Idnt");
+            out.extend_from_slice(&i.to_be_bytes());
+        }
+        RefItem::Index(i) => {
+            out.extend_from_slice(b"indx");
+            out.extend_from_slice(&i.to_be_bytes());
+        }
+        RefItem::Name { name, class, value } => {
+            out.extend_from_slice(b"name");
+            write_unicode_string(out, name);
+            write_key(out, class);
+            write_unicode_string(out, value);
+        }
+    }
+}
+
+/// Small constructors for building a tree to write.
+pub mod build {
+    use super::{Descriptor, DescriptorValue, Key};
+
+    /// A key in the dialect its length implies (4 bytes: the legacy code).
+    pub fn key(k: &[u8]) -> Key {
+        match <[u8; 4]>::try_from(k) {
+            Ok(four) => Key::four(&four),
+            Err(_) => Key::long(&String::from_utf8_lossy(k)),
+        }
+    }
+
+    /// A descriptor of class `class` (empty class name).
+    pub fn desc(class: &[u8], items: Vec<(&[u8], DescriptorValue)>) -> Descriptor {
+        Descriptor {
+            class_name: String::new(),
+            class_id: key(class),
+            items: items.into_iter().map(|(k, v)| (key(k), v)).collect(),
+        }
+    }
+
+    /// An `Objc` value.
+    pub fn obj(class: &[u8], items: Vec<(&[u8], DescriptorValue)>) -> DescriptorValue {
+        DescriptorValue::Descriptor(desc(class, items))
+    }
+
+    pub fn en(type_key: &[u8], value: &[u8]) -> DescriptorValue {
+        DescriptorValue::Enum {
+            type_key: key(type_key),
+            value: key(value),
+        }
+    }
+
+    pub fn unit(u: &[u8; 4], v: f64) -> DescriptorValue {
+        DescriptorValue::UnitFloat { unit: *u, value: v }
+    }
+
+    pub fn rgb(c: [u8; 3]) -> DescriptorValue {
+        obj(
+            b"RGBC",
+            vec![
+                (b"Rd  ", DescriptorValue::Double(f64::from(c[0]))),
+                (b"Grn ", DescriptorValue::Double(f64::from(c[1]))),
+                (b"Bl  ", DescriptorValue::Double(f64::from(c[2]))),
+            ],
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -852,5 +1053,100 @@ mod tests {
         b.extend_from_slice(&0xFFFF_FFFFu32.to_be_bytes()); // item count
         let mut r = ByteReader::new(&b);
         assert!(read_descriptor(&mut r, 0).is_err());
+    }
+
+    /// Every value kind the reader knows survives `write` then `read`.
+    #[test]
+    fn image_psd_descriptor_write_read_round_trip() {
+        use build::*;
+        let inner = desc(
+            b"Clrt",
+            vec![
+                (b"Clr ", rgb([1, 2, 3])),
+                (b"Lctn", DescriptorValue::Integer(-7)),
+            ],
+        );
+        let d = Descriptor {
+            class_name: "Effects".into(),
+            class_id: Key::long("layerFXVisible"),
+            items: vec![
+                (key(b"Scl "), unit(b"#Prc", 100.0)),
+                (key(b"masterFXSwitch"), DescriptorValue::Bool(true)),
+                (key(b"Md  "), en(b"BlnM", b"multiply")),
+                (key(b"Nm  "), DescriptorValue::Text("Gr\u{fc}n".into())),
+                (
+                    key(b"Clrs"),
+                    DescriptorValue::List(vec![
+                        DescriptorValue::Descriptor(inner.clone()),
+                        DescriptorValue::Double(0.25),
+                    ]),
+                ),
+                (key(b"glob"), DescriptorValue::GlobalObject(inner)),
+                (key(b"comp"), DescriptorValue::LargeInteger(-1 << 40)),
+                (
+                    key(b"type"),
+                    DescriptorValue::Class {
+                        name: "c".into(),
+                        id: key(b"Lyr "),
+                    },
+                ),
+                (key(b"alis"), DescriptorValue::Alias(vec![1, 2, 3])),
+                (key(b"tdta"), DescriptorValue::RawData(vec![9; 5])),
+                (key(b"path"), DescriptorValue::Path(vec![4, 5])),
+                (
+                    key(b"refr"),
+                    DescriptorValue::Reference(vec![
+                        RefItem::Identifier(3),
+                        RefItem::Index(4),
+                        RefItem::Property {
+                            name: String::new(),
+                            class: key(b"Prpr"),
+                            key: key(b"Lefx"),
+                        },
+                        RefItem::Class {
+                            name: "n".into(),
+                            class: key(b"Lyr "),
+                        },
+                        RefItem::Enumerated {
+                            name: String::new(),
+                            class: key(b"Lyr "),
+                            type_key: key(b"Ordn"),
+                            value: key(b"Trgt"),
+                        },
+                        RefItem::Offset {
+                            name: String::new(),
+                            class: key(b"Lyr "),
+                            offset: 2,
+                        },
+                        RefItem::Name {
+                            name: String::new(),
+                            class: key(b"Lyr "),
+                            value: "shape".into(),
+                        },
+                    ]),
+                ),
+                (
+                    key(b"mesh"),
+                    DescriptorValue::ObjectArray(desc(
+                        b"rationalPoint",
+                        vec![(
+                            b"Hrzn",
+                            DescriptorValue::UnitFloats {
+                                unit: *b"#Pxl",
+                                values: vec![1.5, -2.0],
+                            },
+                        )],
+                    )),
+                ),
+            ],
+        };
+        let mut out = Vec::new();
+        write_versioned_descriptor(&mut out, &d);
+        out.extend_from_slice(b"tail");
+        let mut r = ByteReader::new(&out);
+        let (version, back) = read_versioned_descriptor(&mut r).unwrap();
+        assert_eq!(version, DESCRIPTOR_VERSION);
+        assert_eq!(back, d);
+        assert_eq!(r.take(4).unwrap(), b"tail", "framed exactly");
     }
 }

@@ -1511,6 +1511,12 @@ pub(super) fn build_document_inner(
                                     palette,
                                     color_ctx,
                                 ),
+                                image_rendering(
+                                    options,
+                                    copy.self_id
+                                        .as_deref()
+                                        .and_then(|id| master.spread.image_metadata.get(id)),
+                                ),
                             )
                         },
                     );
@@ -1925,6 +1931,12 @@ pub(super) fn build_document_inner(
                                         palette,
                                         color_ctx,
                                     ),
+                                    image_rendering(
+                                        options,
+                                        rect.self_id
+                                            .as_deref()
+                                            .and_then(|id| spread.image_metadata.get(id)),
+                                    ),
                                 )
                             },
                         );
@@ -2021,6 +2033,12 @@ pub(super) fn build_document_inner(
                                     options,
                                     image_cache,
                                     decoded_image_cache,
+                                    image_rendering(
+                                        options,
+                                        oval.self_id
+                                            .as_deref()
+                                            .and_then(|id| spread.image_metadata.get(id)),
+                                    ),
                                 )
                             },
                         );
@@ -2183,6 +2201,12 @@ pub(super) fn build_document_inner(
                                     options,
                                     image_cache,
                                     decoded_image_cache,
+                                    image_rendering(
+                                        options,
+                                        poly.self_id
+                                            .as_deref()
+                                            .and_then(|id| spread.image_metadata.get(id)),
+                                    ),
                                 )
                             },
                         );
@@ -8518,6 +8542,15 @@ fn emit_paragraph_lines(
         }
     }
     let mut line_object_shifts_64: Vec<i32> = vec![0; line_objects.len()];
+    // Word's first-fit sets a picture's line by Word's rule (ADR 1016).
+    let word_line = lopts
+        .compose
+        .single_line
+        .is_some_and(|s| s.word)
+        .then(|| anchored::WordLine {
+            auto_leading: lopts.auto_leading,
+            ascent: head_font_metrics.map_or(0.8, |m| m.hhea_ascender),
+        });
     if let Some(objs) = em.inline_objects.as_ref() {
         let top_inset_64 = em.chain[em.frame_idx].inset_spacing.map_or(0, |i| {
             (i[0] * paged_text::shape::ADVANCE_PRECISION).round() as i32
@@ -8533,6 +8566,7 @@ fn emit_paragraph_lines(
                     lopts.leading_override.is_none(),
                     line_leading_64(&line.glyphs),
                     first,
+                    word_line,
                 );
                 line_object_shifts_64[k] = d;
                 shift_64 += d;
@@ -8707,6 +8741,7 @@ fn emit_paragraph_lines(
                     lopts.leading_override.is_none(),
                     line_h,
                     Some((new_baseline, top_64)),
+                    word_line,
                 );
             }
             // …and on the continuation frame's grid.

@@ -122,6 +122,26 @@ function readFamilies(): Family[] | null {
   return [...byFamily.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** The roster table's frame holds a caption, the header and footer rows and
+ *  this many 20 pt family rows. The registry grows, so the smallest
+ *  families past that are one "other" row (their count kept in the total). */
+const ROSTER_ROWS = 12;
+
+function fitFamilies(families: Family[] | null): Family[] | null {
+  if (!families || families.length <= ROSTER_ROWS) return families;
+  const bySize = [...families].sort((a, b) => b.count - a.count);
+  const kept = new Set(bySize.slice(0, ROSTER_ROWS - 1).map((f) => f.name));
+  const rest = families.filter((f) => !kept.has(f.name));
+  return [
+    ...families.filter((f) => kept.has(f.name)),
+    {
+      name: `${rest.length} more families`,
+      count: rest.reduce((n, f) => n + f.count, 0),
+      samples: rest.map((f) => f.name).slice(0, 3),
+    },
+  ];
+}
+
 export async function build(ctx: PageContext): Promise<PageReport> {
   const { doc, page } = ctx;
   const pg99 = ctx.pageIds[0];
@@ -254,7 +274,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(sideCaption.frameId);
 
   // ── the function-family roster, from the registry ────────────────
-  const families = readFamilies();
+  const families = fitFamilies(readFamilies());
   if (!families) {
     notes.push(
       `the paged.sheet function registry is absent at ${FN_REGISTRY} — the roster ` +

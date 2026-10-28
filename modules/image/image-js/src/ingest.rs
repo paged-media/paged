@@ -17,7 +17,8 @@
  */
 
 //! The M4 ingest slice (spec §2.1.3 amended by C-1 Stage A): decode a
-//! placed image's ORIGINAL bytes (C-5 serves PSD/PNG/JPEG) to RGBA8,
+//! placed image's ORIGINAL bytes (PSD through its layer-aware lane, every
+//! other raster format through `paged-raster`, ADR 468) to RGBA,
 //! run the adjustments chain through Engine A, and hand the result back
 //! for the v41 `SceneItem::Image` composite. The RGBA that crosses to
 //! JS here is the Stage-A render payload destined for the HOST's scene
@@ -35,7 +36,7 @@
 use std::sync::Arc;
 
 use image_codecs::raw::{RawSource, RawTarget};
-use image_codecs::{ImageSource, JpegSource, MemoryByteSource, Orientation, PngSource};
+use image_codecs::{ImageSource, MemoryByteSource, Orientation, RasterSource};
 use image_core::{
     AlphaMode, ChannelLayout, ColorSpaceRef, NamedSpace, PixelFormat, Region, SampleDepth,
     TileSliceMut, Transfer,
@@ -702,43 +703,20 @@ const RGBA16F: PixelFormat = PixelFormat {
     ..RGBA8
 };
 
-/// Decode PSD / PNG / JPEG bytes (sniffed by magic) to straight RGBA8.
-/// The honest M4 subset: what the codec adapters + the PSD merged-
-/// composite decode carry today — 8-bit, non-CMYK. Everything else is a
-/// clean `Unsupported`, never a wrong-looking image.
+/// Decode any raster the engine reads (sniffed by magic) to the session's
+/// straight RGBA: PSD/PSB through the layer-aware PSD lane below, every
+/// other format through `paged-raster` (ADR 468): PNG, JPEG, TIFF (CMYK,
+/// 16-bit, a layered TIFF's composite), WebP, GIF (first frame), BMP, TGA,
+/// QOI, ICO, HDR and OpenEXR (clipped, stated), AVIF, JPEG XL, DNG and an
+/// EPS preview. Anything else is a clean `Unsupported`, never a
+/// wrong-looking image.
 pub fn decode_rgba8(bytes: &[u8]) -> Result<DecodedImage, IngestError> {
-    match sniff(bytes) {
-        Some(Format::Psd) => decode_psd(bytes),
-        Some(Format::Png) => decode_source(
-            PngSource::new(MemoryByteSource::new(bytes.to_vec())),
-            PngSource::source_was_16bit,
-        ),
-        // JPEG is 8-bit by the format; nothing to narrow.
-        Some(Format::Jpeg) => decode_source(
-            JpegSource::new(MemoryByteSource::new(bytes.to_vec())),
-            |_| false,
-        ),
+    match paged_raster::sniff(bytes) {
+        Some(paged_raster::Format::Psd) => decode_psd(bytes),
+        Some(_) => decode_source(RasterSource::new(MemoryByteSource::new(bytes.to_vec()))),
         None => Err(IngestError::Unsupported(
-            "unrecognized image container (PSD/PNG/JPEG in the M4 slice)".into(),
+            "unrecognized image container (not a raster format paged-raster reads)".into(),
         )),
-    }
-}
-
-enum Format {
-    Psd,
-    Png,
-    Jpeg,
-}
-
-fn sniff(bytes: &[u8]) -> Option<Format> {
-    if bytes.starts_with(b"8BPS") {
-        Some(Format::Psd)
-    } else if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
-        Some(Format::Png)
-    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
-        Some(Format::Jpeg)
-    } else {
-        None
     }
 }
 
@@ -794,64 +772,32 @@ pub fn psd_ink_transform(file: &PsdFile) -> crate::cmyk::InkTransform {
     crate::cmyk::InkTransform::for_profile(file.resources.icc_profile())
 }
 
-/// Full-frame decode through an `ImageSource` adapter, widened to RGBA8.
-/// `reduced` reports whether the SOURCE carried more depth than the
-/// buffer we get back, so the panel can say so. It is a function of the
-/// concrete source rather than of `SourceInfo`, because the narrowing
-/// happens inside the adapter and `ImageSource` is frozen.
-fn decode_source<S: ImageSource>(
-    mut source: S,
-    reduced: fn(&S) -> bool,
-) -> Result<DecodedImage, IngestError> {
+/// Full-frame decode through the raster adapter, widened to RGBA.
+///
+/// 16-BIT sources stay 16-bit (docs/design/16-bit-stack.md step 5): RGB
+/// and RGBA directly, Gray and Gray+alpha widened to RGBA16. CMYK (with or
+/// without alpha) is converted to RGB through its profile at 8 bits — a
+/// 16-bit CMYK file is narrowed first and says so. Lab and floating-point
+/// sources arrive from the adapter as RGBA8 (Lab through the CMS, HDR and
+/// EXR clipped, which the colour row states).
+fn decode_source(mut source: RasterSource<MemoryByteSource>) -> Result<DecodedImage, IngestError> {
     let info = source
         .probe()
         .map_err(|e| IngestError::Decode(e.to_string()))?;
-    // 16-BIT RGBA rides through at full depth (docs/design/16-bit-stack.md
-    // step 5). Other layouts at 16 bits would need their own widening
-    // arms below, so they still take the narrowing path and say so.
-    let keep16 =
-        info.format.depth == SampleDepth::U16 && info.format.channels == ChannelLayout::Rgba;
-    if info.format.depth != SampleDepth::U8 && !keep16 {
-        // A codec adapter narrows in its own lane and reports `U8` here,
-        // so reaching this arm means a depth NO adapter has a
-        // documented reduction for.
-        //
-        // This used to reject 16-bit PNG, on the grounds that "the
-        // sample byte order is unverified and there is no fixture to
-        // check a guess". Both halves were false: PNG's endianness is
-        // normative (§7.1, network byte order) and we never see the
-        // wire bytes anyway — zune returns assembled `u16`s. A fixture
-        // also cost about twenty lines to make, which is what
-        // `codec_png_16bit.rs` now does, MEASURING the byte order
-        // rather than asserting it.
-        return Err(IngestError::Unsupported(format!(
-            "depth {:?}: no adapter in this lane has a documented reduction \
-             for it (8-bit passes through; 16-bit PNG and PSD are accepted \
-             and narrowed, and the panel says so)",
-            info.format.depth
-        )));
-    }
-    let depth_reduced = reduced(&source);
-    // EXIF orientation (JPEG/TIFF carry it; PNG/PSD don't, so it parses to
-    // None and the auto-orient is a no-op). Auto-orientation is the
-    // architecturally honest job of the decode-to-RGBA bridge: it is a CPU
-    // memory reshuffle (transpose/flip) inherent to *ingest*, not a GPU
-    // kernel — it must run before the GPU adjustment pipeline so the
-    // adjustments and the C-1 composite see upright, correctly-dimensioned
-    // pixels. (Spec §10.3 EXIF read path; the value is also surfaced raw on
-    // SourceInfo for callers that want to defer the rotation.)
-    let orientation = info.exif_meta().orientation.unwrap_or(Orientation::TopLeft);
+    let file = source
+        .raster_info()
+        .cloned()
+        .ok_or_else(|| IngestError::Decode("no header after probe".into()))?;
+    let depth_reduced = source.depth_reduced();
+    // Orientation: the TIFF tag or the EXIF one (JPEG, PNG eXIf, WebP);
+    // the adapter reads both into `orientation`. Auto-orientation is the
+    // decode-to-RGBA bridge's job: a CPU reshuffle that must run before
+    // the GPU adjustment pipeline sees the pixels.
+    let orientation = orientation_of(file.orientation);
     let channels = info.format.channels;
-    // CMYK+alpha (5-channel) is not produced by any current codec adapter
-    // (the JPEG lane delivers 4-ink `Cmyk`); reject it cleanly rather than
-    // guess an alpha-from-ink rule.
-    if matches!(channels, ChannelLayout::Cmyka) {
-        return Err(IngestError::Unsupported(
-            "CMYK+alpha placed images (no 5-channel ingest lane)".into(),
-        ));
-    }
-    // The embedded ICC profile (if any) drives the colour-managed CMYK
-    // cast; clone it out before `info` is consumed below.
+    let sixteen = info.format.depth == SampleDepth::U16;
+    // The embedded ICC profile drives the RGB display transform and the
+    // colour-managed CMYK cast.
     let embedded_icc = info.icc.clone();
     let (w, h) = (info.width, info.height);
     let bpp = info.format.bytes_per_pixel();
@@ -867,15 +813,27 @@ fn decode_source<S: ImageSource>(
         .read_region(roi, 1, &mut out)
         .map_err(|e| IngestError::Decode(e.to_string()))?;
 
-    if keep16 {
-        // Straight through: `buf` already holds native-endian u16
-        // pairs, which is exactly what `Pixels` stores at `U16`.
-        let samples: Vec<u16> = buf
+    let cmyk = matches!(channels, ChannelLayout::Cmyk | ChannelLayout::Cmyka);
+    if sixteen && !cmyk {
+        // Straight through at 16 bits: `buf` holds native-endian u16s,
+        // which is what `Pixels` stores at `U16`; Gray widens to RGBA16.
+        let s: Vec<u16> = buf
             .as_chunks::<2>()
             .0
             .iter()
-            .map(|p| u16::from_ne_bytes([p[0], p[1]]))
+            .map(|p| u16::from_ne_bytes(*p))
             .collect();
+        let samples: Vec<u16> = match channels {
+            ChannelLayout::Rgba => s,
+            ChannelLayout::Gray => s.iter().flat_map(|&g| [g, g, g, u16::MAX]).collect(),
+            ChannelLayout::GrayA => s
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|p| [p[0], p[0], p[0], p[1]])
+                .collect(),
+            ChannelLayout::Cmyk | ChannelLayout::Cmyka => unreachable!("CMYK takes the 8-bit cast"),
+        };
         let px = crate::pixels::Pixels::from_rgba16(&samples);
         let (px, w, h) = if orientation == Orientation::TopLeft {
             (px, w, h)
@@ -889,10 +847,22 @@ fn decode_source<S: ImageSource>(
             width: w,
             height: h,
             display: crate::display::DisplayTreatment::AssumedSrgb,
-            depth_reduced: !px.is_16bit(),
+            depth_reduced: depth_reduced || !px.is_16bit(),
             rgba: px,
         });
     }
+    // 8-bit from here: a 16-bit CMYK file narrows by the high byte (the
+    // PSD composite's rule) and the Depth row says so.
+    let buf: Vec<u8> = if sixteen {
+        buf.as_chunks::<2>()
+            .0
+            .iter()
+            .map(|p| u16::from_ne_bytes(*p).to_be_bytes()[0])
+            .collect()
+    } else {
+        buf
+    };
+    let depth_reduced = depth_reduced || sixteen;
 
     let n = w as usize * h as usize;
     let mut cmyk_managed = false;
@@ -915,13 +885,32 @@ fn decode_source<S: ImageSource>(
         ChannelLayout::Cmyk => {
             // The print-lane ingest cast (spec §5.2): 4-ink CMYK → RGBA8,
             // colour-managed via the embedded ICC when present, else the
-            // uncalibrated device formula. `buf` is packed 4-byte true ink
-            // (the JPEG adapter already applied the Adobe-APP14 re-inversion).
+            // uncalibrated device formula. `buf` is true ink (the JPEG
+            // decoder already undid the Adobe APP14 inversion).
             let (rgba, managed) = crate::cmyk::cmyk8_to_rgba8(&buf, embedded_icc.as_deref())?;
             cmyk_managed = managed;
             rgba
         }
-        ChannelLayout::Cmyka => unreachable!("rejected above"),
+        ChannelLayout::Cmyka => {
+            // The same cast on the inks, the alpha carried beside it.
+            let inks: Vec<u8> = buf
+                .as_chunks::<5>()
+                .0
+                .iter()
+                .flat_map(|p| [p[0], p[1], p[2], p[3]])
+                .collect();
+            let (mut rgba, managed) = crate::cmyk::cmyk8_to_rgba8(&inks, embedded_icc.as_deref())?;
+            for (px, src) in rgba
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .zip(buf.as_chunks::<5>().0)
+            {
+                px[3] = src[4];
+            }
+            cmyk_managed = managed;
+            rgba
+        }
     };
 
     // Auto-orient on the straight-RGBA8 buffer. Identity short-circuits
@@ -932,17 +921,24 @@ fn decode_source<S: ImageSource>(
     // CMS RUNG 1 — the RGB display transform. The kernels' math is
     // specified over the post-CMS working space, so this belongs at
     // DECODE and nowhere later. CMYK already arrived colour-managed
-    // above (its cast consumed the same embedded profile), so only the
-    // RGB-ish layouts are transformed here.
-    let display = if matches!(channels, ChannelLayout::Cmyk) {
+    // above (its cast consumed the same embedded profile), and a Lab or
+    // float source arrived as sRGB from the adapter.
+    let lab_or_float = file.color_model == paged_raster::ColorModel::Lab
+        || file.sample_format == paged_raster::SampleFormat::Float;
+    let display = if cmyk {
         // Said as what it was: a CMYK conversion, through the profile or
-        // through the device formula (this used to read "ICC managed"
-        // for both).
+        // through the device formula.
         if cmyk_managed {
             crate::display::DisplayTreatment::CmykConverted
         } else {
             crate::display::DisplayTreatment::CmykUncalibrated
         }
+    } else if file.format.is_scene_linear()
+        || file.sample_format == paged_raster::SampleFormat::Float
+    {
+        crate::display::DisplayTreatment::HdrClipped
+    } else if lab_or_float {
+        crate::display::DisplayTreatment::Managed
     } else {
         crate::display::to_working_srgb(&mut rgba, embedded_icc.as_deref())
     };
@@ -952,11 +948,26 @@ fn decode_source<S: ImageSource>(
         height: h,
         rgba: rgba.into(),
         display,
-        // TRUE when the adapter narrowed the file's own samples — a
-        // 16-bit PNG opens, and the panel's Depth row says it was
-        // reduced rather than letting it look like an 8-bit original.
+        // TRUE when the file stored more depth than the session holds —
+        // the panel's Depth row says it was reduced rather than letting
+        // it look like an 8-bit original.
         depth_reduced,
     })
+}
+
+/// The TIFF/EXIF orientation value as the eight CIPA cases (1 and any
+/// value outside 1..=8 are the identity).
+fn orientation_of(tag: u16) -> Orientation {
+    match tag {
+        2 => Orientation::TopRight,
+        3 => Orientation::BottomRight,
+        4 => Orientation::BottomLeft,
+        5 => Orientation::LeftTop,
+        6 => Orientation::RightTop,
+        7 => Orientation::RightBottom,
+        8 => Orientation::LeftBottom,
+        _ => Orientation::TopLeft,
+    }
 }
 
 /// Apply an EXIF [`Orientation`] to a tightly-packed straight-RGBA8

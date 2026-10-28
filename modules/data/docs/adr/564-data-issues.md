@@ -60,12 +60,12 @@ address) and the record when known.
   first; it is not built. So a measured overset says so in its message ("as measured, an
   estimate"): a user knows when a notice is a measurement rather than the composer's word. The
   `DataIssue` contract is unchanged; the distinction is in the text.
-- **Tables.** A table paged.data lowered is checked at its frame like any placed text. When
-  the host reports its story overset, the message says that the table does not fit its frame
-  or a cell's text does not fit its row: the host reports a cell's overset as its story's, so
-  which it is is not known here. The cell is not named, and cells are not measured where the
-  host cannot lay out: a row's grow rule (`AutoGrow`, `MaximumHeight`) is not a read the host
-  serves, and a cell measured against a row that grows to fit it would be a false notice.
+- **Tables.** A table paged.data lowered is checked at its frame like any placed text. The
+  composer names each cell whose text does not fit its row (`StorySummary.oversetCells`: the
+  table, row and column), and each is its own notice ("row 3, column 2"). A table that does not
+  fit its frame, with no cell named, is the frame's notice. Cells are never measured by the
+  bundle: whether a row grows to fit (`AutoGrow`, `MaximumHeight`) is the composer's to apply,
+  and a cell measured against a row that grows would be a false notice.
 - **Where a text variable is.** A text variable's instances (ADR 559) are not fields the
   document lists by story, and the object model has no selector from a variable to the stories
   its instances are in. So the session keeps the story of every instance it places (the
@@ -133,3 +133,8 @@ address) and the record when known.
   paged.data's text variables is checked, a hand-pasted copy included. A run without its own
   size is measured at its character style's size, else its paragraph style's (`style:<family>/
   <id>` through the object model).
+- Amended 2026-10-27: a table cell is named. The composer reports each cell whose text does not
+  fit its row (its table, row and column: `StorySummary.oversetCells`, engine protocol 77
+  additive, plugin-sdk 0.74.3-canary.32), so a table's notice is one per cell, "row 3, column
+  2", at the table's frame; a table the composer names no cell of keeps the frame's notice.
+  Nothing about a table is left to the measurement: whether a row grows is the composer's.

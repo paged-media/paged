@@ -32,6 +32,7 @@ pub mod diff;
 pub mod engine;
 pub mod engine_serve;
 pub mod export;
+pub mod fetch;
 pub mod gen;
 pub mod inspect;
 pub mod invoke;

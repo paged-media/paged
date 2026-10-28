@@ -576,3 +576,16 @@ starts is vertical (round 13's list stands).
   registering a face (a full re-measure) grows them. bug59058 stops at 8 pages even then. The
   editor grows them (round 13), so either the headless host misses a step the editor takes or
   an incremental build skips the growth; not chased.
+
+## Round 15 — 2026-10-25: Word's answer to the first-fit probe
+
+Word 16 answered `first_fit_docx()` (`docx-conformance/fixtures/first-fit.word.json`). Against
+it the engine's Word first-fit was right on 27 of 33 paragraphs; the six it missed were justified
+lines Word compresses (J01–J03, H06) and breaks after an en and an em dash (H03, H04). Both are
+fixed (engine ADR 1016, amendment of 2026-10-25), and a picture's line now takes Word's height
+(43 pt for a 40 pt picture at single spacing, 48.7 at 1.5 lines, where the engine set 42; at
+least 14 pt: 43, ADR 617 amendment).
+
+**Not re-measured on the real documents:** Word's PDFs of 2026-10-02 are not in the corpus, so
+the round-14 table stands. The probe's own document is measured end to end instead
+(`packages/doc-bundle/test/headless/first-fit.spec.ts`).

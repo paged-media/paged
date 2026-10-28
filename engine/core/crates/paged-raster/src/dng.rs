@@ -73,7 +73,6 @@ const TILE_BYTE_COUNTS: u16 = 325;
 const SUB_IFDS: u16 = 330;
 const CFA_REPEAT_DIM: u16 = 33421;
 const CFA_PATTERN: u16 = 33422;
-const DNG_VERSION: u16 = 50706;
 const CFA_PLANE_COLOR: u16 = 50710;
 const CFA_LAYOUT: u16 = 50711;
 const LINEARIZATION: u16 = 50712;
@@ -119,16 +118,6 @@ fn malformed(detail: impl Into<String>) -> Error {
         format: Format::Dng,
         detail: detail.into(),
     }
-}
-
-/// The first IFD of a TIFF carries DNGVersion.
-pub(crate) fn is_dng(bytes: &[u8]) -> bool {
-    Header::read(bytes)
-        .and_then(|h| {
-            let ifd0 = *h.ifds(bytes).first()?;
-            h.entry(bytes, ifd0, DNG_VERSION)
-        })
-        .is_some()
 }
 
 /// The file, its first IFD and its raw IFD.
@@ -253,6 +242,7 @@ impl<'b> Dng<'b> {
                 .value(self.bytes, self.ifd0, crate::tif::XMP)
                 .map(<[u8]>::to_vec),
             iptc: None,
+            exif: None,
             photoshop_irb: None,
             has_layers: false,
             layer_count: Some(0),

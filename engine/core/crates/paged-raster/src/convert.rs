@@ -18,6 +18,10 @@
 
 //! Colour conversion of decoded rasters to straight-alpha sRGB bytes.
 
+use std::cell::RefCell;
+
+use paged_color::cms::{Backend, Layout, ProfileRef, Rendering, Transform};
+
 use crate::{Alpha, ColorModel, Error, RasterImage, Result, Rgba8, Samples};
 
 /// The colour conversions [`to_rgba8`] delegates. Each returns `false`
@@ -48,26 +52,92 @@ impl ColourConvert for NaiveColour {
 }
 
 /// The engine's conversion: a CMYK raster with an embedded profile goes
-/// through `paged_color::IccTransform::cmyk_to_linear_rgb` (lcms2 on
-/// native, qcms on wasm32), the transform the renderer has always used
-/// for CMYK JPEGs. Lab uses `paged_color::lab`.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct PagedColour;
+/// through `paged_color::cms` with this converter's [`Rendering`] (intent
+/// and black-point compensation) on the preferred backend: lcms2 on
+/// native, moxcms on wasm32 (both honour every intent and BPC). The
+/// default rendering, relative colorimetric with BPC, is the transform
+/// the renderer has always used for CMYK JPEGs. Lab uses
+/// `paged_color::lab`.
+///
+/// The transform is compiled once per profile and kept for the next
+/// batch, so build one converter per image (or per document) and reuse
+/// it.
+pub struct PagedColour {
+    rendering: Rendering,
+    cache: RefCell<Option<Compiled>>,
+}
+
+struct Compiled {
+    profile: Vec<u8>,
+    /// `None`: the profile was rejected (warned once).
+    transform: Option<Transform>,
+}
+
+impl PagedColour {
+    pub fn new(rendering: Rendering) -> PagedColour {
+        PagedColour {
+            rendering,
+            cache: RefCell::new(None),
+        }
+    }
+
+    pub fn rendering(&self) -> Rendering {
+        self.rendering
+    }
+}
+
+impl Default for PagedColour {
+    fn default() -> Self {
+        PagedColour::new(Rendering::default())
+    }
+}
+
+impl Clone for PagedColour {
+    fn clone(&self) -> Self {
+        PagedColour::new(self.rendering)
+    }
+}
+
+impl std::fmt::Debug for PagedColour {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PagedColour")
+            .field("rendering", &self.rendering)
+            .finish_non_exhaustive()
+    }
+}
 
 impl ColourConvert for PagedColour {
     fn cmyk_to_srgb(&self, icc: Option<&[u8]>, cmyk: &[[u8; 4]], rgb: &mut [[u8; 3]]) -> bool {
         let Some(profile) = icc else {
             return false;
         };
-        match paged_color::IccTransform::cmyk_to_linear_rgb(profile) {
-            Ok(xform) => {
-                xform.cmyk_bytes_to_rgb_bytes(cmyk, rgb);
+        let mut cache = self.cache.borrow_mut();
+        if cache.as_ref().is_none_or(|c| c.profile != profile) {
+            let transform = match Transform::new(
+                Backend::preferred(),
+                ProfileRef::Icc(profile),
+                Layout::CMYK,
+                ProfileRef::Srgb,
+                Layout::RGB,
+                self.rendering,
+            ) {
+                Ok(t) => Some(t),
+                Err(err) => {
+                    tracing::warn!(error = %err, "CMYK raster's ICC profile rejected; using naive");
+                    None
+                }
+            };
+            *cache = Some(Compiled {
+                profile: profile.to_vec(),
+                transform,
+            });
+        }
+        match cache.as_ref().and_then(|c| c.transform.as_ref()) {
+            Some(t) => {
+                t.apply_u8(cmyk.as_flattened(), rgb.as_flattened_mut());
                 true
             }
-            Err(err) => {
-                tracing::warn!(error = %err, "CMYK raster's ICC profile rejected; using naive");
-                false
-            }
+            None => false,
         }
     }
 

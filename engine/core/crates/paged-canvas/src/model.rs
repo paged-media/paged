@@ -11662,6 +11662,8 @@ impl CanvasModel {
         // S4 — the first-class overset continuation (where the flow overran),
         // keyed by story id.
         let overset_at = self.built.diagnostics.overset_continuations();
+        // Data ADR 564 — the table cells whose text does not fit their row.
+        let overset_cells = self.built.diagnostics.overset_cells();
         self.scene
             .stories
             .iter()
@@ -11683,6 +11685,19 @@ impl CanvasModel {
                             paragraph: c.paragraph_idx,
                             line: c.line_idx,
                         }),
+                    overset_cells: overset_cells
+                        .get(&s.self_id)
+                        .map(|cells| {
+                            cells
+                                .iter()
+                                .map(|c| crate::channel::OversetCellAt {
+                                    table: c.table_id.clone(),
+                                    row: c.row,
+                                    column: c.column,
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                     grow_rule: s
                         .story
                         .grow
@@ -14448,7 +14463,30 @@ impl CanvasModel {
     ) -> Option<TextMetrics> {
         use paged_renderer::AssetResolver;
         let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref())?;
-        let bytes = resolver.resolve_font(family, style)?;
+        // No family is "the face an un-styled run resolves to": layout gives
+        // such a run `[No paragraph style]`'s font, so measure in that face
+        // too. The resolver's own fallback differs from it in a document
+        // whose default font is another (a host sized a table's columns
+        // and rows in one face while the engine set them in another).
+        let default = family
+            .is_empty()
+            .then(|| {
+                self.scene
+                    .styles
+                    .resolve_paragraph("ParagraphStyle/$ID/[No paragraph style]")
+            })
+            .filter(|p| p.font.as_deref().is_some_and(|f| !f.is_empty()));
+        // A default family no face serves falls back to the resolver's own
+        // fallback, as the run it stands for does.
+        let bytes = default
+            .as_ref()
+            .and_then(|p| {
+                resolver.resolve_font(
+                    p.font.as_deref().unwrap_or(family),
+                    style.or(p.font_style.as_deref()),
+                )
+            })
+            .or_else(|| resolver.resolve_font(family, style))?;
         let face = paged_text::Face::from_bytes(&bytes, 0)?;
 
         let upem = face.units_per_em() as f32;
@@ -16598,6 +16636,7 @@ mod tests {
                 encoded: bytes::Bytes::from(file.clone()),
                 rgba: bytes::Bytes::new(),
                 icc: None,
+                rendering: None,
             },
         );
         // Now the door hands back the ORIGINAL encoded bytes + natural dims.

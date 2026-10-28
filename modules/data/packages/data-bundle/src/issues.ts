@@ -30,6 +30,13 @@ export const LOW_RESOLUTION_PPI = 150;
 /** The key the session publishes its issues under (`host.diagnostics`). */
 export const ISSUES_DIAGNOSTICS_KEY = "issues";
 
+/** A table cell whose text does not fit its row, as the host names it. */
+interface OversetCell {
+  table: string;
+  row: number;
+  column: number;
+}
+
 /** Text paged.data placed: a story it wrote into, or a frame whose story is
  *  read when needed. */
 export interface TextTarget {
@@ -122,11 +129,47 @@ export async function oversetIssues(
     if (story && !byStory.has(story)) byStory.set(story, t);
   }
   const out: DataIssue[] = [];
+  // The table cells each story's text overflows, as the host's layout names
+  // them (`StorySummary.oversetCells`, an engine that names none answers
+  // nothing): read once, for the tables among the targets.
+  let cellsOf = new Map<string, readonly OversetCell[]>();
+  if ([...byStory.values()].some((t) => t.table)) {
+    try {
+      const stories = await host.document.collection<{
+        selfId: string;
+        oversetCells?: readonly OversetCell[];
+      }>("stories");
+      cellsOf = new Map(
+        stories
+          .filter((s) => (s.oversetCells?.length ?? 0) > 0)
+          .map((s) => [s.selfId, s.oversetCells!]),
+      );
+    } catch {
+      // no story summaries: the table's frame is still checked
+    }
+  }
   for (const [story, t] of byStory) {
     let links: readonly { frameId: string; overflow: boolean }[];
     try {
       links = await host.document.frameChain(story);
     } catch {
+      continue;
+    }
+    const cells = t.table ? (cellsOf.get(story) ?? []) : [];
+    if (cells.length > 0 && links.length > 0) {
+      // The composer named the cells: one notice each, at the table's frame.
+      for (const c of cells)
+        out.push({
+          kind: "overset",
+          severity: "warning",
+          message: tr(ISSUES.oversetCell, {
+            binding: t.binding,
+            row: c.row + 1,
+            column: c.column + 1,
+          }),
+          binding: t.binding,
+          address: `textFrame:${links[0]!.frameId}`,
+        });
       continue;
     }
     let over = links.find((l) => l.overflow);

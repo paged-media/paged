@@ -55,8 +55,8 @@
 //! tighter **8/255 bulk gate** holds every non-corner patch (measured
 //! 1/255 — the 8 is conservative headroom across CMM minor versions).
 //! The registry row records both numbers and the paper-white-corner
-//! cause explicitly. (BPC stays inert in moxcms 0.8.1 exactly as for the
-//! RGB lane, so these transforms compile `bpc:false`.)
+//! cause explicitly. (These transforms compile `bpc:false`; BPC, which
+//! the engine's CMS supplies, is held to lcms2's in test (4).)
 
 use image_cms::moxcms_engine::MoxcmsEngine;
 use image_cms::{CmsEngine, CmsError, Intent, Profile};
@@ -271,6 +271,17 @@ fn lcms2_cmyk_to_rgb(
     cmyk: &[u8],
     lintent: lcms2_sys::Intent,
 ) -> Vec<u8> {
+    lcms2_cmyk_to_rgb_flags(cmyk_bytes, rgb_dst, cmyk, lintent, 0)
+}
+
+/// [`lcms2_cmyk_to_rgb`] with lcms2 transform flags (BPC).
+fn lcms2_cmyk_to_rgb_flags(
+    cmyk_bytes: &[u8],
+    rgb_dst: &[u8],
+    cmyk: &[u8],
+    lintent: lcms2_sys::Intent,
+    flags: u32,
+) -> Vec<u8> {
     use lcms2_sys as ffi;
     use std::os::raw::c_void;
     let n = cmyk.len() / 4;
@@ -292,7 +303,7 @@ fn lcms2_cmyk_to_rgb(
             dst,
             ffi::PixelFormat::RGB_8,
             lintent,
-            0,
+            flags,
         );
         assert!(!xf.is_null(), "lcms2 oracle CMYK→RGB transform");
         ffi::cmsDoTransform(
@@ -451,13 +462,17 @@ fn image_cms_cmyk_lane_moxcms_intents_not_ignored() {
     );
 }
 
-/// (4) BPC stays inert on the CMYK lane, exactly as on the RGB lane
-/// (moxcms 0.8.1 exposes no BPC knob): a `bpc:true` CMYK transform is
-/// byte-identical to `bpc:false`, and the flag is recorded on the handle.
+/// (4) BPC works on the CMYK lane: through the engine's BPC a `bpc:true`
+/// CMYK transform moves pixels where the profile's black differs from
+/// sRGB's, lands within the lane's tolerance of lcms2's
+/// BLACKPOINT_COMPENSATION, and the flag is recorded on the handle.
 #[test]
-fn image_cms_cmyk_lane_moxcms_bpc_documented_inert() {
-    let src = profile_from_bytes(cmyk_lut_icc());
-    let dst = profile_from_bytes(srgb_icc());
+#[allow(non_snake_case)]
+fn image_cms_cmyk_lane_moxcms_bpc_matches_lcms2__feat__color_swatches_cms_unified() {
+    let src_bytes = cmyk_lut_icc();
+    let src = profile_from_bytes(src_bytes.clone());
+    let dst_bytes = srgb_icc();
+    let dst = profile_from_bytes(dst_bytes.clone());
     let cmyk = cmyk_ramp();
 
     let off = MoxcmsEngine
@@ -469,11 +484,40 @@ fn image_cms_cmyk_lane_moxcms_bpc_documented_inert() {
     assert!(on.bpc, "bpc:true recorded on the handle");
     assert!(!off.bpc, "bpc:false recorded on the handle");
 
-    assert_eq!(
-        off.cmyk_to_rgba8_vec(&cmyk),
-        on.cmyk_to_rgba8_vec(&cmyk),
-        "moxcms 0.8.1 exposes no BPC — bpc:true must be byte-identical to bpc:false on the CMYK lane"
+    let ours = on.cmyk_to_rgba8_vec(&cmyk);
+    let want = lcms2_cmyk_to_rgb_flags(
+        &src_bytes,
+        &dst_bytes,
+        &cmyk,
+        lcms2_sys::Intent::RelativeColorimetric,
+        lcms2_sys::FLAGS_BLACKPOINTCOMPENSATION,
     );
+    let plain = lcms2_cmyk_to_rgb(
+        &src_bytes,
+        &dst_bytes,
+        &cmyk,
+        lcms2_sys::Intent::RelativeColorimetric,
+    );
+    let worst = ours
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(want.as_chunks::<3>().0)
+        .flat_map(|(m, l)| (0..3).map(move |c| m[c].abs_diff(l[c])))
+        .max()
+        .unwrap_or(0);
+    eprintln!("CMYK BPC: moxcms + engine BPC vs lcms2 BPC, worst per-channel = {worst}/255");
+    assert!(
+        worst <= MAX_CHANNEL_DEVIATION,
+        "{worst}/255 from lcms2's BPC"
+    );
+    if want != plain {
+        assert_ne!(
+            off.cmyk_to_rgba8_vec(&cmyk),
+            ours,
+            "lcms2's BPC moves pixels on this profile, so ours must too"
+        );
+    }
 }
 
 /// (5) The lane refuses a non-CMYK source profile: feeding an RGB (sRGB)

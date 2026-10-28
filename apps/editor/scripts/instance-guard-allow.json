@@ -77,6 +77,16 @@
     },
     "packages/shell/src/registries/presentation.ts": {
       "sessionSeq": "Numbers a presentation's BroadcastChannel and audience window, which are the page's (a channel name is shared by the whole origin): one counter per page keeps two editors' presentations on one page from opening the same channel."
+    },
+    "apps/canvas/src/panels/history-panel.tsx": {
+      "contextSnaps": "A WeakMap keyed by the edit context that owns the history (its owner object): one snapshot per context, so per editor by construction, and dropped with the context."
+    },
+    "apps/canvas/src/panels/history-store.ts": {
+      "stores": "A WeakMap keyed by the editor's engine client: one history store per engine, so per editor by construction, and dropped with the client."
+    },
+    "packages/shell/src/state/view-preferences.ts": {
+      "current": "The Guides & Grid preferences (editor ADR 287) are the user's, kept in localStorage like the unit preference: every editor on the page shows the same grid and snaps to it.",
+      "listeners": "Subscribers to the page's Guides & Grid preferences (see `current`)."
     }
   }
 }
