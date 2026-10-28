@@ -841,6 +841,13 @@ export interface StoryContent {
      * Paragraphs in body order.
      */
     paragraphs: ParagraphContent[];
+    /**
+     * Engine ADR 1022 — the story\'s named text anchors (Word\'s
+     * bookmarks), each at its paragraph and character offset in it. A
+     * content plugin writes them back as its own format\'s bookmarks.
+     * Additive on 77.
+     */
+    textAnchors?: TextAnchorContent[];
 }
 
 /**
@@ -852,6 +859,11 @@ export interface ParagraphContent {
      */
     paragraphStyle?: string;
     runs: RunContent[];
+    /**
+     * Engine ADR 1022 — the table of contents style this paragraph is an
+     * entry of (`Paragraph.toc`), when it is one. Additive on 77.
+     */
+    toc?: string;
 }
 
 /**
@@ -880,6 +892,12 @@ export interface RunContent {
      * data field\'s text variable is in, a copy pasted by hand included.
      */
     textVariable?: string;
+    /**
+     * Engine ADR 1022 — the Word field this run is the result of (its
+     * instruction, `PAGEREF _Ref1 \\h`), when it is one; the run\'s `text`
+     * is the field\'s result. Additive on 77.
+     */
+    fieldCode?: string;
 }
 
 /**
@@ -1084,6 +1102,23 @@ export interface FindSpec {
 export interface TocLevelSpec {
     style: string;
     level: number;
+}
+
+/**
+ * Engine ADR 1022 — one named text anchor of a story (a
+ * `HyperlinkTextDestination` in its text).
+ */
+export interface TextAnchorContent {
+    selfId: string;
+    name: string;
+    /**
+     * Index of the paragraph it stands in.
+     */
+    paragraph: number;
+    /**
+     * Its character offset in that paragraph.
+     */
+    offset: number;
 }
 
 /**
@@ -4680,19 +4715,6 @@ export interface InitOutput {
     readonly gestureSabBytes: () => number;
     readonly gestureSabLayout: () => any;
     readonly on_start: () => void;
-    readonly qcms_profile_precache_output_transform: (a: number) => void;
-    readonly lut_inverse_interp16: (a: number, b: number, c: number) => number;
-    readonly lut_interp_linear16: (a: number, b: number, c: number) => number;
-    readonly qcms_enable_iccv4: () => void;
-    readonly qcms_profile_is_bogus: (a: number) => number;
-    readonly qcms_transform_data_bgra_out_lut: (a: number, b: number, c: number, d: number) => void;
-    readonly qcms_transform_data_bgra_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
-    readonly qcms_transform_data_rgb_out_lut: (a: number, b: number, c: number, d: number) => void;
-    readonly qcms_transform_data_rgb_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
-    readonly qcms_transform_data_rgba_out_lut: (a: number, b: number, c: number, d: number) => void;
-    readonly qcms_transform_data_rgba_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
-    readonly qcms_transform_release: (a: number) => void;
-    readonly qcms_white_point_sRGB: (a: number) => void;
     readonly dav1d_apply_grain: (a: number, b: number, c: number) => number;
     readonly dav1d_close: (a: number) => void;
     readonly dav1d_data_create: (a: number, b: number) => number;
@@ -4713,6 +4735,19 @@ export interface InitOutput {
     readonly dav1d_version: () => number;
     readonly dav1d_version_api: () => number;
     readonly dav1d_set_cpu_flags_mask: (a: number) => void;
+    readonly qcms_profile_precache_output_transform: (a: number) => void;
+    readonly lut_inverse_interp16: (a: number, b: number, c: number) => number;
+    readonly lut_interp_linear16: (a: number, b: number, c: number) => number;
+    readonly qcms_enable_iccv4: () => void;
+    readonly qcms_profile_is_bogus: (a: number) => number;
+    readonly qcms_transform_data_bgra_out_lut: (a: number, b: number, c: number, d: number) => void;
+    readonly qcms_transform_data_bgra_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
+    readonly qcms_transform_data_rgb_out_lut: (a: number, b: number, c: number, d: number) => void;
+    readonly qcms_transform_data_rgb_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
+    readonly qcms_transform_data_rgba_out_lut: (a: number, b: number, c: number, d: number) => void;
+    readonly qcms_transform_data_rgba_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
+    readonly qcms_transform_release: (a: number) => void;
+    readonly qcms_white_point_sRGB: (a: number) => void;
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
