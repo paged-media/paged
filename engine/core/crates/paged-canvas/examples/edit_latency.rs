@@ -195,6 +195,10 @@ fn main() {
                 grow: true,
                 max_pages: None,
                 copy_frame_options: None,
+                master: None,
+                first_master: None,
+                even_master: None,
+                section_start: None,
             })
             .expect("grow");
             type_into("reflow", &mut m, &story, 40, edits);

@@ -367,6 +367,60 @@ pub(crate) fn apply_inner(
             style_id,
             based_on,
         } => apply_set_style_based_on(doc, *collection, style_id, based_on.as_deref()),
+        // Engine ADR 1022 — Word document structure.
+        Operation::InsertTextAnchor {
+            story_id,
+            paragraph,
+            offset,
+            self_id,
+            name,
+            index,
+        } => word_structure::apply_insert_text_anchor(
+            doc,
+            story_id,
+            *paragraph,
+            *offset,
+            self_id,
+            name.as_deref(),
+            *index,
+        ),
+        Operation::DeleteTextAnchor { anchor_id } => {
+            word_structure::apply_delete_text_anchor(doc, anchor_id)
+        }
+        Operation::SetStoryDestinations {
+            story_id,
+            destinations_json,
+        } => word_structure::apply_set_story_destinations(doc, story_id, destinations_json),
+        Operation::InsertIndexMarker {
+            story_id,
+            paragraph,
+            topic,
+            sort_order,
+        } => word_structure::apply_insert_index_marker(
+            doc,
+            story_id,
+            *paragraph,
+            topic,
+            sort_order.as_deref(),
+        ),
+        Operation::RestoreIndexMarkers {
+            story_id,
+            paragraph,
+            markers_json,
+            topics_json,
+            parents_json,
+        } => word_structure::apply_restore_index_markers(
+            doc,
+            story_id,
+            *paragraph,
+            markers_json,
+            topics_json,
+            parents_json,
+        ),
+        Operation::SetTocStyle {
+            toc_style_id,
+            def_json,
+        } => word_structure::apply_set_toc_style(doc, toc_style_id, def_json.as_deref()),
         Operation::SetStyleProperty {
             collection,
             style_id,
@@ -1192,6 +1246,7 @@ mod note;
 pub mod permit;
 mod tracked_change;
 mod word;
+pub mod word_structure;
 pub mod xml;
 /// ADR 132 — model → wire-spec readers, for the `Set` resolver: a
 /// virtual path on a swatch, gradient or numbering list is an edit of the

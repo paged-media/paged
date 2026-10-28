@@ -1030,6 +1030,7 @@ fn continuation(paragraph: &paged_model::Paragraph) -> paged_model::Paragraph {
         // (matches anchored-frame convention above).
         footnotes: Vec::new(),
         index_markers: Vec::new(),
+        toc: None,
         endnote_references: Vec::new(),
         endnote_ranges: Vec::new(),
         notes: Vec::new(),
@@ -1137,6 +1138,7 @@ pub(super) fn split_paragraph_into_segments(
         // empty vecs so the markers don't duplicate.
         footnotes: paragraph.footnotes.clone(),
         index_markers: paragraph.index_markers.clone(),
+        toc: paragraph.toc.clone(),
         endnote_references: Vec::new(),
         endnote_ranges: Vec::new(),
         notes: Vec::new(),
@@ -1421,6 +1423,7 @@ pub(super) fn split_paragraph_into_segments(
                 table_anchor: None,
                 footnotes: Vec::new(),
                 index_markers: Vec::new(),
+                toc: None,
                 endnote_references: Vec::new(),
                 endnote_ranges: Vec::new(),
                 notes: Vec::new(),

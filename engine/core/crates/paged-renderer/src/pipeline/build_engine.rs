@@ -3347,7 +3347,7 @@ pub(super) fn build_document_inner(
             .story
             .paragraphs
             .iter()
-            .any(|p| p.runs.iter().any(|r| r.text_variable.is_some()));
+            .any(|p| p.runs.iter().any(paged_model::CharacterRun::reads_layout));
         let seed_sig = options
             .keep_seeds
             .map(|_| body_story_signature(&chain_for_post, &chain_pages_pre, &wrap_rects_per_page));
@@ -3942,8 +3942,30 @@ pub(super) fn build_document_inner(
     let mut adopted = vec![false; pages.len()];
     if let (true, Some(previous)) = (adopt, options.previous_pages) {
         let mut previous = previous.borrow_mut();
+        // A previous page that holds lines of a story this build laid out
+        // afresh is stale: that story's text moved, and the page may now
+        // hold less of it, or none (a growing story shrinking after a
+        // delete kept its old last page otherwise).
+        let laid_out: std::collections::HashSet<&str> = pages
+            .iter()
+            .zip(fresh.iter())
+            .filter(|(_, f)| **f)
+            .flat_map(|(p, _)| p.story_layout.iter().map(|l| l.story_id.as_str()))
+            .collect();
+        let stale: Vec<bool> = previous
+            .iter()
+            .map(|p| {
+                p.story_layout
+                    .iter()
+                    .any(|l| laid_out.contains(l.story_id.as_str()))
+            })
+            .collect();
+        drop(laid_out);
         for (i, page) in pages.iter_mut().enumerate() {
-            if !fresh[i] && previous.get(i).is_some_and(|p| p.id == page.id) {
+            if !fresh[i]
+                && !stale.get(i).copied().unwrap_or(false)
+                && previous.get(i).is_some_and(|p| p.id == page.id)
+            {
                 std::mem::swap(page, &mut previous[i]);
                 adopted[i] = true;
             }
@@ -7051,7 +7073,12 @@ fn emit_paragraph_lines(
     // the resolved string flows through the same per-run text override
     // as `capitalized` / `page_substituted`.
     let total_pages = em.page_count;
-    let needs_var_subst = paragraph.runs.iter().any(|r| r.text_variable.is_some());
+    // Engine ADR 1022 — a Word field run is substituted like a variable's
+    // when it is live, or when the document shows field codes.
+    let show_codes = em.document.designmap.document_preference.show_field_codes == Some(true);
+    let needs_var_subst = paragraph.runs.iter().any(|r| {
+        r.text_variable.is_some() || r.field.as_ref().is_some_and(|f| show_codes || f.is_live())
+    });
     let variable_resolved: Vec<Option<String>> = if needs_var_subst {
         // W1.18 — the frame currently filling resolves variables FOR its
         // host page: date variables read the deterministic clock, the
@@ -7081,6 +7108,15 @@ fn emit_paragraph_lines(
             .runs
             .iter()
             .map(|r| {
+                if let Some(field) = &r.field {
+                    return super::word_fields::resolve_at_emit(
+                        field,
+                        em.document,
+                        &ctx,
+                        em.xref_pages,
+                        Some((em.current_story_id.as_str(), em.paragraph_idx)),
+                    );
+                }
                 let var_id = r.text_variable.as_deref()?;
                 // ADR 169 — a cross-reference's page number is its
                 // destination's page, live (InDesign prints it so before
@@ -8466,7 +8502,7 @@ fn emit_paragraph_lines(
                 paragraph
                     .runs
                     .get(i)
-                    .is_some_and(|r| r.text_variable.is_some())
+                    .is_some_and(|r| r.text_variable.is_some() || r.field.is_some())
             },
             &generated,
             placeholder_bytes.iter().map(|&p| p as usize + drop_split),
@@ -9733,12 +9769,12 @@ fn emit_paragraph_lines(
 fn story_prints_page_context(story: &paged_model::Story) -> bool {
     fn paragraphs_print(paragraphs: &[paged_model::Paragraph]) -> bool {
         paragraphs.iter().any(|p| {
-            p.runs.iter().any(|r| {
-                r.text_variable.is_some() || r.text.chars().any(paged_model::is_page_marker)
-            }) || p
-                .table
-                .as_ref()
-                .is_some_and(|t| t.cells.iter().any(|c| paragraphs_print(&c.paragraphs)))
+            p.runs
+                .iter()
+                .any(|r| r.reads_layout() || r.text.chars().any(paged_model::is_page_marker))
+                || p.table
+                    .as_ref()
+                    .is_some_and(|t| t.cells.iter().any(|c| paragraphs_print(&c.paragraphs)))
         })
     }
     paragraphs_print(&story.paragraphs)

@@ -1381,6 +1381,33 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("setStyleBasedOn"),
             3,
         )
+        // Engine ADR 1022.
+        .function(guarded(paged_update_fields), js_string!("updateFields"), 1)
+        .function(
+            guarded(paged_insert_text_anchor),
+            js_string!("insertTextAnchor"),
+            3,
+        )
+        .function(
+            guarded(paged_delete_text_anchor),
+            js_string!("deleteTextAnchor"),
+            1,
+        )
+        .function(
+            guarded(paged_insert_cross_reference),
+            js_string!("insertCrossReference"),
+            4,
+        )
+        .function(
+            guarded(paged_insert_table_of_contents),
+            js_string!("insertTableOfContents"),
+            4,
+        )
+        .function(
+            guarded(paged_insert_index_marker),
+            js_string!("insertIndexMarker"),
+            4,
+        )
         .function(
             guarded(paged_create_bookmark),
             js_string!("createBookmark"),
@@ -4342,6 +4369,192 @@ fn paged_set_list_level(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
     }))
 }
 
+/// `paged.updateFields({ storyId?, offset?, now? })` — Word's F9: the
+/// Word fields' results over the current layout (engine ADR 1022).
+fn paged_update_fields(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Spec {
+        story_id: Option<String>,
+        offset: Option<u32>,
+        now: Option<String>,
+    }
+    let spec = from_js::<Spec>(args.get_or_undefined(0), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::UpdateFields {
+        story_id: spec.story_id,
+        offset: spec.offset,
+        now: spec.now,
+    }))
+}
+
+/// The ids of every story's text destinations.
+fn text_anchor_ids() -> std::collections::HashSet<String> {
+    with_model(|m| {
+        m.scene()
+            .stories
+            .iter()
+            .flat_map(|s| s.story.destinations.iter().map(|d| d.self_id.clone()))
+            .collect()
+    })
+}
+
+/// `paged.insertTextAnchor(storyId, offset, name)` — Word's Insert ▸
+/// Bookmark at story char `offset`; returns the new destination's id, or
+/// `null` when refused (engine ADR 1022).
+fn paged_insert_text_anchor(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let name = args
+        .get_or_undefined(2)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let before = text_anchor_ids();
+    let ok = with_model(|m| {
+        m.apply_mutation(&Mutation::InsertTextAnchor {
+            story_id,
+            offset,
+            content_offset: None,
+            name,
+        })
+        .is_ok()
+    });
+    if !ok {
+        return Ok(JsValue::null());
+    }
+    Ok(text_anchor_ids()
+        .difference(&before)
+        .next()
+        .map(|id| JsValue::from(js_string!(id.as_str())))
+        .unwrap_or(JsValue::null()))
+}
+
+/// `paged.deleteTextAnchor(anchorId)` — delete a bookmark (engine ADR 1022).
+fn paged_delete_text_anchor(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let anchor_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteTextAnchor { anchor_id }))
+}
+
+/// `paged.insertCrossReference(storyId, offset, { bookmark } | { storyId,
+/// paragraph }, { referTo?: "text" | "pageNumber" | "aboveBelow",
+/// hyperlink? })` — Word's Insert Cross-reference (engine ADR 1022).
+fn paged_insert_cross_reference(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Options {
+        refer_to: paged_wire::CrossReferenceKind,
+        hyperlink: Option<bool>,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let Some(target) = from_js::<paged_wire::CrossReferenceTarget>(args.get_or_undefined(2), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let opts = from_js::<Options>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::InsertCrossReference {
+        story_id,
+        offset,
+        content_offset: None,
+        target,
+        refer_to: opts.refer_to,
+        hyperlink: opts.hyperlink,
+    }))
+}
+
+/// `paged.insertTableOfContents(storyId, offset, [{ style, level }],
+/// { title?, tocStyleName?, pageNumbers?, leader?, tabPosition? })` —
+/// Word's Insert Table of Contents (engine ADR 1022).
+fn paged_insert_table_of_contents(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Options {
+        title: Option<String>,
+        toc_style_name: Option<String>,
+        page_numbers: Option<bool>,
+        leader: Option<String>,
+        tab_position: Option<f32>,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let Some(levels) = from_js::<Vec<paged_wire::TocLevelSpec>>(args.get_or_undefined(2), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let o = from_js::<Options>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::InsertTableOfContents {
+        story_id,
+        offset,
+        content_offset: None,
+        levels,
+        title: o.title,
+        toc_style_name: o.toc_style_name,
+        page_numbers: o.page_numbers,
+        leader: o.leader,
+        tab_position: o.tab_position,
+    }))
+}
+
+/// `paged.insertIndexMarker(storyId, offset, topic | [topic, subtopic…],
+/// { sortOrder? })` — an index marker in the paragraph holding `offset`
+/// (engine ADR 1022).
+fn paged_insert_index_marker(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Options {
+        sort_order: Option<String>,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let topic_arg = args.get_or_undefined(2);
+    let topic = match from_js::<Vec<String>>(topic_arg, ctx) {
+        Some(t) => t,
+        None => vec![topic_arg.to_string(ctx)?.to_std_string_escaped()],
+    };
+    let o = from_js::<Options>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::InsertIndexMarker {
+        story_id,
+        offset,
+        content_offset: None,
+        topic,
+        sort_order: o.sort_order,
+    }))
+}
+
 /// `paged.restartNumbering(storyId, start, end, { startAt?,
 /// continueNumbering? })` — Word's Restart / Continue Numbering (engine
 /// ADR 1018).
@@ -4565,11 +4778,45 @@ fn paged_set_flow_grow_rule(
         v if v.is_undefined() || v.is_null() => None,
         v => Some(v.to_boolean()),
     };
+    // Engine ADR 1022 — an options object: `{ master, firstMaster,
+    // evenMaster, sectionStart }`.
+    let opts = args.get_or_undefined(4);
+    let opt_text = |name: &str, ctx: &mut Context| -> JsResult<Option<String>> {
+        let Some(obj) = opts.as_object() else {
+            return Ok(None);
+        };
+        let v = obj.get(js_string!(name), ctx)?;
+        if v.is_undefined() || v.is_null() {
+            Ok(None)
+        } else {
+            Ok(Some(v.to_string(ctx)?.to_std_string_escaped()))
+        }
+    };
+    let master = opt_text("master", ctx)?;
+    let first_master = opt_text("firstMaster", ctx)?;
+    let even_master = opt_text("evenMaster", ctx)?;
+    let section_start = match opt_text("sectionStart", ctx)?.as_deref() {
+        None => None,
+        Some("newPage") => Some(paged_wire::SectionStartSpec::NewPage),
+        Some("oddPage") => Some(paged_wire::SectionStartSpec::OddPage),
+        Some("evenPage") => Some(paged_wire::SectionStartSpec::EvenPage),
+        Some(other) => {
+            return Err(JsNativeError::typ()
+                .with_message(format!(
+                    "setFlowGrowRule: sectionStart is newPage, oddPage or evenPage, not {other:?}"
+                ))
+                .into())
+        }
+    };
     Ok(apply_bool(&Mutation::SetFlowGrowRule {
         story_id,
         grow,
         max_pages,
         copy_frame_options,
+        master,
+        first_master,
+        even_master,
+        section_start,
     }))
 }
 

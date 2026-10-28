@@ -587,6 +587,11 @@ impl CanvasModel {
                     grow,
                     max_pages,
                     copy_frame_options: Some(copy),
+                    // The section rules (engine ADR 1022) stay as they are.
+                    master: cur.as_ref().and_then(|g| g.master.clone()),
+                    first_master: cur.as_ref().and_then(|g| g.first_master.clone()),
+                    even_master: cur.as_ref().and_then(|g| g.even_master.clone()),
+                    section_start: cur.as_ref().map(|g| section_start_spec(g.section_start)),
                 })
             }
             // ---- page / master / section
@@ -1228,6 +1233,12 @@ impl CanvasModel {
                         PropertyPath::DocumentShowHiddenText => {
                             return Ok(Value::Bool(
                                 scene.designmap.document_preference.show_hidden_text == Some(true),
+                            ));
+                        }
+                        // Engine ADR 1022 — Word's "show field codes".
+                        PropertyPath::DocumentShowFieldCodes => {
+                            return Ok(Value::Bool(
+                                scene.designmap.document_preference.show_field_codes == Some(true),
                             ));
                         }
                         _ => {}
@@ -1977,4 +1988,13 @@ pub fn path_address_kind(path: PropertyPath) -> Option<&'static str> {
 
 fn numbering_style_idml(s: paged_model::NumberingStyle) -> &'static str {
     s.as_idml()
+}
+
+/// Engine ADR 1022 — the wire spelling of a section start.
+pub(crate) fn section_start_spec(start: paged_model::SectionStart) -> paged_wire::SectionStartSpec {
+    match start {
+        paged_model::SectionStart::NewPage => paged_wire::SectionStartSpec::NewPage,
+        paged_model::SectionStart::OddPage => paged_wire::SectionStartSpec::OddPage,
+        paged_model::SectionStart::EvenPage => paged_wire::SectionStartSpec::EvenPage,
+    }
 }
