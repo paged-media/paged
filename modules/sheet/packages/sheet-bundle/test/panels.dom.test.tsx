@@ -217,6 +217,29 @@ describe.skipIf(!ENGINE_BUILT)(
       expect(env.mutationsSince(m).map((e) => e.op)).toContain("batch");
     });
 
+    it("Workbook: a second import names the second workbook", async () => {
+      covers("panel:media.paged.sheet.panel.workbook");
+      const root = mount(env, WORKBOOK);
+      await act(async () => {
+        await openBook(env);
+      });
+      await settle(env);
+      expect(root.textContent).toContain("book.xlsx");
+      await act(async () => {
+        await env.importer("media.paged.sheet.importer.csv").import({
+          name: "second.csv",
+          bytes: new TextEncoder().encode("a,b\n1,2\n"),
+          mimeType: "",
+        });
+        await env.settle();
+      });
+      await settle(env);
+      // The session mutates its state object in place: a panel memo keyed
+      // on that object kept the first file's name.
+      expect(root.textContent).toContain("second.xlsx");
+      expect(root.textContent).not.toContain("book.xlsx");
+    });
+
     it("Workbook: New blank workbook asks a second click before it replaces the open one", async () => {
       covers("panel:media.paged.sheet.panel.workbook");
       await openBook(env);

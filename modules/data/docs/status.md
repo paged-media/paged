@@ -51,9 +51,14 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
   refresh keeps it), and the first run's sample data (`loadSample`: a made-up product list
   as `sample_products` and the query `sample`; `src/drop-place.ts`).
 
-Not built yet: the Data panel and the bind popover (editor ADRs 291, 292) and the remaining
-binding kinds headless. The record templates library and the pagination inspector that
-editor ADR 291 left to this module are built as its own panels (see Shipped).
+The Data panel and the bind popover (editor ADRs 291, 292) are built in the editor
+(`apps/canvas/src/panels/data-panel.tsx`, `packages/shell/src/catalog/bind-popover.tsx`) over
+the data door. The record templates library and the pagination inspector that editor ADR 291
+left to this module are built as its own panels (see Shipped). `paged data apply` writes every
+binding kind headless except record flows, remote image uris and document asset ids (core
+ADR 1014, amendment 3).
+
+Not built yet: record flows headless.
 
 ## Shipped
 

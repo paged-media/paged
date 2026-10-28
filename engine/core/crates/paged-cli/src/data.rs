@@ -29,22 +29,33 @@
 //! and `paged set` send: property bindings on the objects their selectors
 //! name, variable bindings on their text variables (`paged:<key>`).
 //!
-//! What the headless lane does not write yet is reported per binding, never
-//! skipped silently: images, tables, barcodes, record flows and rules need
-//! the module's lowering writers, and a colour no swatch has needs the
-//! swatch minted first.
+//! The other kinds are lowered by the engine (`paged-data-lower`) and
+//! written here with the mutations the module's writers send
+//! (`data-bundle/src/lower.ts`): a visibility binding is the
+//! `elementVisible` property; a table is a native table in its text frame's
+//! story, replacing the one an earlier apply put there; an image's local
+//! file or inline bytes go into its frame with its fit; a barcode is one
+//! filled path per dark module inside its frame, replacing the previous
+//! symbol; a rule sets its cell or text style on what fired; a colour no
+//! swatch has is minted as one first. What stays with the module is
+//! reported per binding, never skipped silently: record flows, remote
+//! images and document asset ids (core ADR 1014, amendment 2026-10-28).
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
-use data_core::{Binding, BindingId, PropertyOutcome, TargetRef};
+use data_core::{
+    Binding, BindingId, ColorIntent, ImageReference, ImageStatus, ImgFit, PropertyOutcome,
+    StyleAction, TargetRef,
+};
 use data_session::core::{DataSession, LoweredOutput};
 use data_session::labels::{
-    document_recipe, restore_from_labels, sources_to_relink, ElementRef, LabelledElement,
-    RestoredRecipe, DATA_LABEL_KEY,
+    document_recipe, label_data, restore_from_labels, sources_to_relink, ElementRef, HostFacts,
+    LabelledElement, RestoredRecipe, DATA_LABEL_KEY,
 };
-use paged_canvas::channel::{MainToWorkerKind, Mutation, WorkerToMainKind};
-use paged_wire::Address;
+use paged_canvas::channel::{MainToWorkerKind, MintedElement, Mutation, WorkerToMainKind};
+use paged_mutate::{PropertyPath, Value as MutateValue};
+use paged_wire::{Address, ElementId};
 use serde::Serialize;
 use serde_json::{json, Value};
 
@@ -68,16 +79,6 @@ fn query(session: &mut Session, selector: &str) -> Result<Vec<String>> {
 /// Every page item that carries our label, and the document label's recipe.
 fn read_recipe(session: &mut Session) -> Result<RestoredRecipe> {
     let addresses = query(session, &format!("frame[label={DATA_LABEL_KEY}]"))?;
-    let scene = session.model()?.scene();
-    let label_of = |id: &str| {
-        scene.spreads.iter().find_map(|s| {
-            s.spread
-                .labels
-                .get(id)
-                .and_then(|l| l.iter().find(|(k, _)| k == DATA_LABEL_KEY))
-                .map(|(_, v)| v.clone())
-        })
-    };
     let elements: Vec<LabelledElement> = addresses
         .iter()
         .filter_map(|a| a.split_once(':'))
@@ -86,10 +87,12 @@ fn read_recipe(session: &mut Session) -> Result<RestoredRecipe> {
                 kind: kind.to_string(),
                 id: id.to_string(),
             },
-            label: label_of(id),
+            label: label_of(session, id),
         })
         .collect();
-    let recipe = scene
+    let recipe = session
+        .model()?
+        .scene()
         .designmap
         .labels
         .iter()
@@ -308,7 +311,21 @@ fn apply_property(
             }
             .because(message.clone())
         }
-        PropertyOutcome::Write { value, .. } => serde_json::to_value(value).unwrap_or(Value::Null),
+        PropertyOutcome::Write { value, color } => match color {
+            // A colour is written as the swatch it names, minted first when
+            // a literal colour has none.
+            Some(intent) => match swatch_for(session, intent) {
+                Ok(self_id) => Value::String(self_id),
+                Err(e) => {
+                    return Applied {
+                        outcome: "failed",
+                        ..row
+                    }
+                    .because(e.to_string())
+                }
+            },
+            None => serde_json::to_value(value).unwrap_or(Value::Null),
+        },
     };
     row.value = Some(value.clone());
     let selector = match target {
@@ -389,6 +406,751 @@ fn apply_variable(session: &mut Session, binding: &str, key: &str, text: &str) -
     row
 }
 
+// ── The lowered kinds (core ADR 1014, amendment 2026-10-28) ────────────────
+//
+// Each writer below is the headless twin of one of the module's
+// (`data-bundle/src/lower.ts`): the engine has already resolved and lowered
+// the binding (`paged-data-lower`), so what is left is shaping the same
+// mutations and sending them through the one door, `Session::send`.
+
+/// The raw value of the page item `id`'s [`DATA_LABEL_KEY`] label.
+fn label_of(session: &Session, id: &str) -> Option<String> {
+    let scene = session.model().ok()?.scene();
+    scene.spreads.iter().find_map(|s| {
+        s.spread
+            .labels
+            .get(id)
+            .and_then(|l| l.iter().find(|(k, _)| k == DATA_LABEL_KEY))
+            .map(|(_, v)| v.clone())
+    })
+}
+
+/// Send one mutation; the elements it minted (a batch names them all).
+fn mutate(session: &mut Session, mutation: Mutation) -> Result<Vec<MintedElement>> {
+    match session.send(MainToWorkerKind::Mutate(mutation))? {
+        WorkerToMainKind::MutationApplied {
+            minted, created_id, ..
+        } => Ok(if minted.is_empty() {
+            created_id
+                .map(|element| MintedElement {
+                    handle: None,
+                    element,
+                    story_id: None,
+                })
+                .into_iter()
+                .collect()
+        } else {
+            minted
+        }),
+        WorkerToMainKind::MutationFailed { error } => bail!("{error}"),
+        other => bail!("the engine answered {other:?}"),
+    }
+}
+
+/// Send `ops` (wire JSON, as the module writes them) as ONE batch.
+fn batch(session: &mut Session, ops: Vec<Value>) -> Result<Vec<MintedElement>> {
+    let ops = ops
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<Result<Vec<Mutation>, _>>()
+        .context("shape the batch")?;
+    mutate(session, Mutation::Batch { ops })
+}
+
+/// The address of the page item whose `Self` is `raw` (`rectangle:u12`).
+fn frame_address(session: &mut Session, raw: &str) -> Result<String> {
+    query(session, &format!("frame:{raw}"))?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("no page item {raw} in the document"))
+}
+
+/// JSON with every non-ASCII character as a `\uXXXX` escape, as the module
+/// writes labels: an ASCII-only label comes back from InDesign byte-exact.
+fn ascii_json(value: &Value) -> String {
+    let text = value.to_string();
+    let mut out = String::with_capacity(text.len());
+    let mut units = [0u16; 2];
+    for c in text.chars() {
+        if c.is_ascii() {
+            out.push(c);
+        } else {
+            for u in c.encode_utf16(&mut units) {
+                out.push_str(&format!("\\u{u:04x}"));
+            }
+        }
+    }
+    out
+}
+
+/// The label envelope the module stamps on what a lowering creates.
+fn envelope(data: Value) -> String {
+    ascii_json(&json!({ "v": 1, "data": data }))
+}
+
+/// The page items an earlier lowering of `binding` created, by the stamp on
+/// their labels (`{ kind, binding }`, no `bind`: never a bound item itself).
+fn lowered_by(session: &mut Session, kind: &str, binding: &str) -> Result<Vec<String>> {
+    let addresses = query(session, &format!("frame[label={DATA_LABEL_KEY}]"))?;
+    Ok(addresses
+        .iter()
+        .filter_map(|a| a.split_once(':').map(|(_, id)| id.to_string()))
+        .filter(|id| {
+            label_of(session, id)
+                .as_deref()
+                .and_then(label_data)
+                .is_some_and(|d| {
+                    !d.contains_key("bind")
+                        && d.get("kind").and_then(Value::as_str) == Some(kind)
+                        && d.get("binding").and_then(Value::as_str) == Some(binding)
+                })
+        })
+        .collect())
+}
+
+/// A binding the user pinned or overrode keeps the document's content.
+fn kept_by_sync(data: &DataSession, id: &BindingId) -> Option<Applied> {
+    data.sync_state(id)
+        .filter(|st| !st.accepts_refresh())
+        .map(|st| {
+            Applied::new(id.as_str(), "kept")
+                .because(format!("the binding is {:?}", st.status).to_lowercase())
+        })
+}
+
+fn failed(binding: &str, message: impl Into<String>) -> Applied {
+    Applied::new(binding, "failed").because(message)
+}
+
+/// The story a text frame starts, by the frame's `Self`.
+fn story_of_frame(session: &Session, raw: &str) -> Option<String> {
+    let scene = session.model().ok()?.scene();
+    scene
+        .spreads
+        .iter()
+        .flat_map(|s| &s.spread.text_frames)
+        .find(|f| f.self_id.as_deref() == Some(raw))
+        .and_then(|f| f.parent_story.clone())
+}
+
+/// The ids of the tables in `story`, in story order.
+fn tables_in(session: &mut Session, story: &str) -> Result<Vec<String>> {
+    Ok(query(session, &format!("story:{story} > table"))?
+        .into_iter()
+        .filter_map(|a| a.strip_prefix("table:").map(str::to_string))
+        .collect())
+}
+
+/// A table binding: a native table in the story of the text frame that
+/// carries the binding (`lower.ts` `commitLoweredTable`, its `into` and
+/// in-place paths), the cells filled in the same batch. The table an
+/// earlier apply placed — its id is kept in the frame's label, under
+/// `extra.<binding>.tableId` — is deleted in that batch, so applying again
+/// replaces it rather than adding a second.
+fn apply_table(
+    session: &mut Session,
+    data: &mut DataSession,
+    id: &BindingId,
+    record: usize,
+    facts: &HostFacts,
+) -> Applied {
+    let binding = id.as_str();
+    let table = match data.resolve_lowered_at(id, record) {
+        Ok(LoweredOutput::Table(t)) => t,
+        Ok(_) => return failed(binding, "not a table"),
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let host = facts.lowered.get(binding);
+    let raw = host.map_or_else(|| table.region.to_string(), |e| e.id.clone());
+    let Some(story) = story_of_frame(session, &raw) else {
+        return match host {
+            Some(e) => failed(
+                binding,
+                format!("{}:{} carries the table but is not a text frame", e.kind, e.id),
+            ),
+            None => Applied::new(binding, "notHeadless").because(
+                "no text frame carries this table binding (placing a fresh frame is the data module's)",
+            ),
+        };
+    };
+    let mut label = label_of(session, &raw)
+        .as_deref()
+        .and_then(label_data)
+        .unwrap_or_default();
+    let previous = label
+        .get("extra")
+        .and_then(|x| x.get(binding))
+        .and_then(|x| x.get("tableId"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let tables = match tables_in(session, &story) {
+        Ok(t) => t,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let replaced = previous.filter(|t| tables.contains(t));
+
+    let header_rows = u32::from(table.rows.first().is_some_and(|r| r.header));
+    let mut ops = Vec::new();
+    if let Some(old) = &replaced {
+        ops.push(json!({ "op": "deleteTable", "args": { "storyId": story, "tableId": old } }));
+    }
+    ops.push(json!({ "op": "insertTable", "args": {
+        "storyId": story,
+        "rows": table.rows.len(),
+        "cols": table.columns.len(),
+        "headerRows": header_rows,
+        "columnWidths": table.columns.iter().map(|c| c.width_pt).collect::<Vec<_>>(),
+    }}));
+    ops.push(json!({ "op": "bindCreated", "args": { "handle": "table" } }));
+    for (r, row) in table.rows.iter().enumerate() {
+        for (c, text) in row.cells.iter().enumerate() {
+            if text.is_empty() {
+                continue;
+            }
+            ops.push(json!({ "op": "insertText", "args": {
+                "storyId": story, "offset": 0, "text": text,
+                "cell": { "tableId": "$h:table", "row": r, "col": c },
+            }}));
+        }
+    }
+    let minted = match batch(session, ops) {
+        Ok(m) => m,
+        Err(e) => return failed(binding, format!("the table batch was refused: {e}")),
+    };
+    let Some(table_id) = minted.iter().find_map(|m| match &m.element {
+        ElementId::Table { table_id, .. } => Some(table_id.clone()),
+        _ => None,
+    }) else {
+        return failed(binding, "the table batch applied but named no table");
+    };
+    // Where the table is now, for the next apply to replace it.
+    let extra = label.entry("extra").or_insert_with(|| json!({}));
+    if !extra.is_object() {
+        *extra = json!({});
+    }
+    extra[binding] = json!({ "tableId": table_id });
+    let stamp = Mutation::SetPluginMetadata {
+        element_id: ElementId::TextFrame(raw.clone()),
+        key: DATA_LABEL_KEY.to_string(),
+        value: Some(ascii_json(&json!({ "v": 1, "data": Value::Object(label) }))),
+        caller: None,
+    };
+    if let Err(e) = mutate(session, stamp) {
+        return failed(binding, format!("the table was placed, its label not: {e}"));
+    }
+    let mut row = Applied::new(binding, "written");
+    row.path = Some("table".into());
+    row.targets = vec![format!("textFrame:{raw}")];
+    row.value = Some(json!({
+        "tableId": table_id,
+        "rows": table.rows.len(),
+        "cols": table.columns.len(),
+    }));
+    if let Some(old) = replaced {
+        row.message = Some(format!("replaced table {old}"));
+    }
+    row
+}
+
+/// The IDML `FittingOnEmptyFrame` value an engine fit maps to (`idmlFit`).
+fn idml_fit(fit: ImgFit) -> &'static str {
+    match fit {
+        ImgFit::Fit => "Proportionally",
+        ImgFit::Fill => "FillProportionally",
+        ImgFit::Crop => "FitContentToFrame",
+    }
+}
+
+/// The inner image transform `fit` resolves to in the Rectangle `raw`
+/// (what `paged place --fit` writes; InDesign resolves a fit on place).
+fn fitted(session: &Session, raw: &str, fit: &str, bytes: &[u8]) -> Option<[f32; 6]> {
+    use paged_model::fitting::{fit_transform, FitMode};
+    let mode = FitMode::from_idml(fit)?;
+    let info = paged_raster::probe(bytes).ok()?;
+    let model = session.model().ok()?;
+    let rect = model
+        .scene()
+        .spreads
+        .iter()
+        .flat_map(|parsed| &parsed.spread.rectangles)
+        .find(|r| r.self_id.as_deref() == Some(raw))?;
+    let reference = rect
+        .frame_fitting
+        .as_ref()
+        .and_then(|f| f.reference_point.as_deref());
+    fit_transform(
+        mode,
+        reference,
+        rect.bounds,
+        info.width as f32,
+        info.height as f32,
+    )
+}
+
+/// An image binding: the picture's bytes into its frame
+/// (`ReplaceImageBytes`, the lane `paged place` uses: a link would resolve
+/// against a resolver this door never populates), then its fit. A local
+/// path is read relative to the `--source` files' folders; a remote uri is
+/// never fetched here.
+fn apply_image(
+    session: &mut Session,
+    data: &mut DataSession,
+    id: &BindingId,
+    record: usize,
+    facts: &HostFacts,
+    source_dirs: &[PathBuf],
+) -> Applied {
+    let binding = id.as_str();
+    let image = match data.resolve_lowered_at(id, record) {
+        Ok(LoweredOutput::Image(i)) => i,
+        Ok(_) => return failed(binding, "not an image"),
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    if image.status != ImageStatus::Present {
+        return Applied::new(binding, "kept").because(format!(
+            "the value is absent and the missing policy says {} — nothing placed",
+            format!("{:?}", image.status).to_lowercase()
+        ));
+    }
+    let Some(host) = facts.image.get(binding) else {
+        return Applied::new(binding, "notHeadless")
+            .because("no page item carries this image binding in its label");
+    };
+    let address = match frame_address(session, &host.element_id) {
+        Ok(a) => a,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let (bytes, shown) = match &image.reference {
+        ImageReference::Uri { uri } => {
+            return Applied::new(binding, "notHeadless").because(format!(
+                "{uri}: remote images need the editor's consented fetch"
+            ))
+        }
+        ImageReference::AssetId { id: asset } => {
+            return Applied::new(binding, "notHeadless").because(format!(
+                "asset:{asset}: a document asset id is resolved by the editor's asset store"
+            ))
+        }
+        ImageReference::None => {
+            return Applied::new(binding, "kept").because("the value names no image")
+        }
+        ImageReference::Bytes { bytes } => (bytes.clone(), format!("<{} bytes>", bytes.len())),
+        ImageReference::Path { path } => {
+            let given = path.strip_prefix("file://").unwrap_or(path);
+            let file = Path::new(given);
+            let found = if file.is_absolute() {
+                Some(file.to_path_buf())
+            } else {
+                source_dirs
+                    .iter()
+                    .map(|d| d.join(file))
+                    .chain(std::iter::once(file.to_path_buf()))
+                    .find(|p| p.is_file())
+            };
+            let Some(found) = found.filter(|p| p.is_file()) else {
+                return failed(
+                    binding,
+                    format!("no image file {given} (relative paths are read next to the --source files)"),
+                );
+            };
+            match std::fs::read(&found) {
+                Ok(b) => (b, found.display().to_string()),
+                Err(e) => return failed(binding, format!("read {}: {e}", found.display())),
+            }
+        }
+    };
+    if let Err(e) = paged_raster::probe(&bytes) {
+        return failed(
+            binding,
+            format!("{shown}: not an image the engine decodes ({e})"),
+        );
+    }
+    let placed = mutate(
+        session,
+        Mutation::ReplaceImageBytes {
+            element_id: address.clone(),
+            bytes: Some(bytes.clone().into()),
+        },
+    );
+    if let Err(e) = placed {
+        return failed(binding, format!("{address}: {e}"));
+    }
+    let fit = host
+        .fit
+        .clone()
+        .unwrap_or_else(|| idml_fit(image.fit).to_string());
+    let mut row = Applied::new(binding, "written");
+    row.path = Some("image".into());
+    row.targets = vec![address.clone()];
+    row.value = Some(json!({ "image": shown, "fit": fit }));
+    // Only a Rectangle carries a fitting (IDML `<FrameFittingOption>`).
+    if let Some(element) = ElementId::parse(&address).filter(|_| address.starts_with("rectangle:"))
+    {
+        let set_fit = mutate(
+            session,
+            Mutation::SetElementProperty {
+                element_id: element.clone(),
+                path: PropertyPath::FrameFittingType,
+                value: MutateValue::Text(fit.clone()),
+            },
+        );
+        if let Err(e) = set_fit {
+            return failed(binding, format!("the image was placed, its fit not: {e}"));
+        }
+        if let Some(t) = fitted(session, &host.element_id, &fit, &bytes) {
+            let set_transform = mutate(
+                session,
+                Mutation::SetElementProperty {
+                    element_id: element,
+                    path: PropertyPath::ImageContentTransform,
+                    value: MutateValue::Transform(Some(t)),
+                },
+            );
+            if let Err(e) = set_transform {
+                return failed(binding, format!("the image was placed, its fit not: {e}"));
+            }
+        }
+    }
+    row
+}
+
+/// A barcode binding: the symbol encoded and scaled into the frame's box by
+/// the engine, drawn as one closed filled path per dark module with the
+/// lowering's paint, each stamped `{ kind: "barcode", binding }` (`lower.ts`
+/// `commitLoweredBarcode`, `barcode.ts` `barcodeToMutations`). The previous
+/// symbol's stamped modules are removed in the same batch, after the new
+/// ones are drawn (core refuses inserts that follow deletes of the same
+/// spread's items). The modules go through the frame's own transform, so a
+/// rotated or scaled frame carries its symbol.
+fn apply_barcode(
+    session: &mut Session,
+    data: &mut DataSession,
+    id: &BindingId,
+    record: usize,
+    facts: &HostFacts,
+) -> Applied {
+    let binding = id.as_str();
+    let Some(host) = facts.barcode.get(binding) else {
+        return Applied::new(binding, "notHeadless")
+            .because("no page item carries this barcode binding in its label");
+    };
+    let address = match frame_address(session, &host.element_id) {
+        Ok(a) => a,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let Some(element) = ElementId::parse(&address) else {
+        return failed(binding, format!("{address} is not a page item"));
+    };
+    let item = match session.send(MainToWorkerKind::RequestElementGeometry { ids: vec![element] }) {
+        Ok(WorkerToMainKind::ElementGeometry { items }) => items.into_iter().next(),
+        Ok(other) => return failed(binding, format!("the engine answered {other:?}")),
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let Some(item) = item else {
+        return failed(binding, format!("{address} has no geometry"));
+    };
+    let Some(page_id) = item.page_id.clone() else {
+        return failed(
+            binding,
+            format!("{address} sits on the pasteboard, on no page"),
+        );
+    };
+    let [top, left, bottom, right] = item.bounds.map(f64::from);
+    let symbol = match data.lower_barcode_at(id, record, right - left, bottom - top) {
+        Ok(b) => b,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let old = match lowered_by(session, "barcode", binding) {
+        Ok(o) => o,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    if symbol.modules.is_empty() && old.is_empty() {
+        return Applied::new(binding, "kept")
+            .because("the value is empty (its missing policy) — nothing drawn");
+    }
+    let [a, b, c, d, tx, ty] = item
+        .item_transform
+        .map_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0], |t| t.map(f64::from));
+    let at = |x: f64, y: f64| {
+        let p = [a * x + c * y + tx, b * x + d * y + ty];
+        json!({ "anchor": p, "left": p, "right": p })
+    };
+    let stamp = envelope(json!({
+        "binding": binding,
+        "kind": "barcode",
+        "target": symbol.target.to_string(),
+        "symbology": symbol.symbology,
+    }));
+    // The lowering always carries its paint; the constants are its own.
+    let mut paint: Vec<(String, Value)> = symbol
+        .paint
+        .iter()
+        .map(|p| {
+            (
+                p.path.clone(),
+                serde_json::to_value(&p.value).unwrap_or(Value::Null),
+            )
+        })
+        .collect();
+    if paint.is_empty() {
+        paint = vec![
+            ("frameFillColor".into(), json!("Color/Black")),
+            ("frameStrokeColor".into(), json!("Swatch/None")),
+        ];
+    }
+    let mut ops = Vec::new();
+    for m in &symbol.modules {
+        let (x, y) = (left + m.x_pt, top + m.y_pt);
+        ops.push(json!({ "op": "insertPath", "args": {
+            "pageId": page_id,
+            "anchors": [at(x, y), at(x + m.w_pt, y), at(x + m.w_pt, y + m.h_pt), at(x, y + m.h_pt)],
+            "open": false,
+        }}));
+        for (path, value) in &paint {
+            ops.push(json!({ "op": "setElementProperty", "args": {
+                "elementId": { "kind": "polygon", "id": "$created" },
+                "path": path,
+                "value": { "type": "colorRef", "value": value },
+            }}));
+        }
+        ops.push(json!({ "op": "setPluginMetadata", "args": {
+            "elementId": { "kind": "polygon", "id": "$created" },
+            "key": DATA_LABEL_KEY,
+            "value": stamp,
+        }}));
+    }
+    for frame in &old {
+        ops.push(json!({ "op": "deleteFrame", "args": { "frameId": frame } }));
+    }
+    if let Err(e) = batch(session, ops) {
+        return failed(binding, format!("the barcode batch was refused: {e}"));
+    }
+    let mut row = Applied::new(binding, "written");
+    row.path = Some("barcode".into());
+    row.targets = vec![address];
+    row.value = Some(json!({
+        "symbology": symbol.symbology,
+        "modules": symbol.modules.len(),
+        "text": symbol.text,
+    }));
+    if !old.is_empty() {
+        row.message = Some(format!(
+            "replaced {} module(s) of the previous symbol",
+            old.len()
+        ));
+    }
+    row
+}
+
+/// The character ranges of a story's paragraphs, in core's offset space (a
+/// paragraph break is not a character; `paragraphRanges` in the module).
+fn paragraph_ranges(session: &mut Session, story: &str) -> Result<Vec<(u32, u32)>> {
+    let content = match session.send(MainToWorkerKind::RequestStoryContent {
+        story_id: story.to_string(),
+    })? {
+        WorkerToMainKind::StoryContentResult { content } => {
+            content.ok_or_else(|| anyhow!("no story {story}"))?
+        }
+        other => bail!("the engine answered {other:?}"),
+    };
+    let mut at = 0u32;
+    Ok(content
+        .paragraphs
+        .iter()
+        .map(|p| {
+            let len: usize = p.runs.iter().map(|r| r.text.chars().count()).sum();
+            let range = (at, at + len as u32);
+            at += len as u32;
+            range
+        })
+        .collect())
+}
+
+/// A rule: evaluated over the query its label names, its style written on
+/// the target the label records (`lower.ts` `commitRule`): a cell style on
+/// the fired rows of a table column (the style created when the document
+/// has none by that name), a paragraph or character style on a story range
+/// or on the fired records' paragraphs. A rule fires over every record, so
+/// `--record` does not apply to it.
+fn apply_rule(
+    session: &mut Session,
+    data: &mut DataSession,
+    id: &BindingId,
+    facts: &HostFacts,
+) -> Applied {
+    let binding = id.as_str();
+    let hosted = facts.story_hosted.get(binding);
+    let extra = hosted.and_then(|h| h.extra.as_ref());
+    let query_id = extra.and_then(|x| x.get("query")).and_then(Value::as_str);
+    let target = extra.and_then(|x| x.get("target"));
+    let (Some(hosted), Some(query_id), Some(target)) = (hosted, query_id, target) else {
+        return Applied::new(binding, "notHeadless").because(
+            "the rule's label records no target and query (they are chosen in the Bindings panel)",
+        );
+    };
+    let Some(story) = story_of_frame(session, &hosted.frame) else {
+        return failed(binding, format!("{} is not a text frame", hosted.frame));
+    };
+    let result = match data.evaluate_rule(id, &data_core::QueryId::new(query_id)) {
+        Ok(r) => r,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let (path, style) = result.apply.property();
+    let num = |k: &str| target.get(k).and_then(Value::as_u64).map(|n| n as u32);
+    let kind = target.get("kind").and_then(Value::as_str).unwrap_or("");
+    let mut row = Applied::new(binding, "written");
+    row.path = Some(path.to_string());
+    row.value = Some(json!({ "style": style, "fired": result.fires.len(), "of": result.total }));
+    let scope = match &result.apply {
+        StyleAction::ParagraphStyle { .. } => "paragraph",
+        StyleAction::CharacterStyle { .. } => "character",
+        StyleAction::TableStyle { .. } => "cell",
+    };
+    match (kind, scope) {
+        ("tableColumn", "cell") => {
+            let tables = match tables_in(session, &story) {
+                Ok(t) => t,
+                Err(e) => return failed(binding, e.to_string()),
+            };
+            let index = num("tableIndex").unwrap_or(0) as usize;
+            let Some(table) = target
+                .get("tableId")
+                .and_then(Value::as_str)
+                .filter(|t| tables.iter().any(|x| x == t))
+                .map(str::to_string)
+                .or_else(|| tables.get(index).cloned())
+            else {
+                return failed(binding, format!("story {story} has no table {index}"));
+            };
+            let (Some(col), header) = (num("col"), num("headerRows").unwrap_or(0)) else {
+                return failed(binding, "the rule's target names no column");
+            };
+            if result.fires.is_empty() {
+                return Applied::new(binding, "kept").because("the rule fired on no record");
+            }
+            let self_id = match cell_style(session, style) {
+                Ok(s) => s,
+                Err(e) => return failed(binding, e.to_string()),
+            };
+            let mut targets = Vec::new();
+            for r in &result.fires {
+                let cell = format!("cell:{table}/{},{col}", *r as u32 + header);
+                if let Err(e) = set(session, &cell, path, &json!(self_id)) {
+                    return failed(binding, format!("{cell}: {e}"));
+                }
+                targets.push(cell);
+            }
+            row.targets = targets;
+            row
+        }
+        ("storyRange" | "storyParagraphs", "paragraph" | "character") => {
+            let ranges = if kind == "storyRange" {
+                match (num("start"), num("end")) {
+                    (Some(s), Some(e)) if !result.fires.is_empty() => vec![(s, e)],
+                    (Some(_), Some(_)) => Vec::new(),
+                    _ => return failed(binding, "the rule's story range is incomplete"),
+                }
+            } else {
+                let paragraphs = match paragraph_ranges(session, &story) {
+                    Ok(p) => p,
+                    Err(e) => return failed(binding, e.to_string()),
+                };
+                let first = num("firstParagraph").unwrap_or(0) as usize;
+                result
+                    .fires
+                    .iter()
+                    .filter_map(|r| paragraphs.get(first + r).copied())
+                    .collect()
+            };
+            if ranges.is_empty() {
+                return Applied::new(binding, "kept")
+                    .because("the rule fired on nothing its target holds");
+            }
+            let ops = ranges
+                .iter()
+                .map(|(start, end)| {
+                    json!({ "op": "applyStyle", "args": {
+                        "storyId": story, "start": start, "end": end,
+                        "style": style, "scope": scope,
+                    }})
+                })
+                .collect();
+            if let Err(e) = batch(session, ops) {
+                return failed(binding, format!("the style batch was refused: {e}"));
+            }
+            row.targets = ranges
+                .iter()
+                .map(|(s, e)| format!("storyRange:{story}@{s}..{e}"))
+                .collect();
+            row
+        }
+        _ => Applied::new(binding, "kept")
+            .because(format!("a {scope} style does not apply to a {kind} target")),
+    }
+}
+
+/// The `Self` of the cell style `name` names, created when the document has
+/// none by that name (read first: minting is idempotent by name, and a
+/// second create would add a duplicate).
+fn cell_style(session: &mut Session, name: &str) -> Result<String> {
+    let bare = name.strip_prefix("CellStyle/").unwrap_or(name);
+    let self_id = format!("CellStyle/{bare}");
+    let styles = session.model()?.cell_styles();
+    if let Some(s) = styles
+        .iter()
+        .find(|s| s.self_id == name || s.self_id == self_id || s.name == name)
+    {
+        return Ok(s.self_id.clone());
+    }
+    mutate(
+        session,
+        Mutation::CreateCellStyle {
+            self_id: Some(self_id.clone()),
+            name: Some(bare.to_string()),
+            based_on: None,
+        },
+    )?;
+    Ok(self_id)
+}
+
+/// The swatch a colour value names, minted when a literal colour has none
+/// (`property.ts` `findSwatch` / `mintSwatch`): by `Self`, by name, or as
+/// `Color/<name>`. The swatches are read first, so applying again finds the
+/// one an earlier apply minted rather than minting a second.
+fn swatch_for(session: &mut Session, intent: &ColorIntent) -> Result<String> {
+    let swatches = session.model()?.swatches();
+    let named = format!("Color/{}", intent.name);
+    if let Some(s) = swatches
+        .iter()
+        .find(|s| s.self_id == intent.name)
+        .or_else(|| swatches.iter().find(|s| s.name == intent.name))
+        .or_else(|| swatches.iter().find(|s| s.self_id == named))
+    {
+        return Ok(s.self_id.clone());
+    }
+    let Some(spec) = &intent.spec else {
+        bail!("no swatch named \"{}\" in this document", intent.name);
+    };
+    mutate(
+        session,
+        Mutation::CreateSwatch {
+            spec: paged_mutate::SwatchSpec {
+                self_id: Some(named.clone()),
+                name: Some(intent.name.clone()),
+                space: spec.space.clone(),
+                value: spec.value.iter().map(|v| *v as f32).collect(),
+                model: Some("Process".into()),
+                alternate_space: None,
+                alternate_value: Vec::new(),
+                tint: None,
+                alpha: None,
+            },
+        },
+    )
+    .map_err(|e| anyhow!("mint the swatch {named}: {e}"))?;
+    Ok(named)
+}
+
 /// `paged data apply DOC --source ID=FILE … [--record N] [-o OUT]`.
 pub fn apply(
     doc: &Path,
@@ -456,9 +1218,51 @@ pub fn apply(
         .into_iter()
         .map(|d| (d.id, d.binding))
         .collect();
+    let source_dirs: Vec<PathBuf> = given
+        .iter()
+        .filter_map(|(_, file)| file.parent().map(Path::to_path_buf))
+        .collect();
+    let facts = &recipe.facts;
+    let mut rules = Vec::new();
     for (id, binding) in &defs {
+        let lowered = matches!(
+            binding,
+            Binding::Table { .. }
+                | Binding::Image { .. }
+                | Binding::Barcode { .. }
+                | Binding::Rule { .. }
+        );
+        if let Some(kept) = lowered.then(|| kept_by_sync(&data, id)).flatten() {
+            applied.push(kept);
+            continue;
+        }
         match binding {
+            // Written above: `resolve_properties_at` resolves a visibility
+            // binding as the `elementVisible` property it is (ADR 558 §4).
             Binding::Property { .. } | Binding::Visibility { .. } => {}
+            Binding::Table { .. } => {
+                applied.push(apply_table(&mut session, &mut data, id, record, facts))
+            }
+            Binding::Image { .. } => applied.push(apply_image(
+                &mut session,
+                &mut data,
+                id,
+                record,
+                facts,
+                &source_dirs,
+            )),
+            Binding::Barcode { .. } => {
+                applied.push(apply_barcode(&mut session, &mut data, id, record, facts))
+            }
+            // After everything else: a rule styles content (a table's cells)
+            // that this apply may just have replaced.
+            Binding::Rule { .. } => rules.push(id),
+            Binding::RecordFlow { .. } => {
+                applied.push(Applied::new(id.as_str(), "notHeadless").because(
+                    "a record flow paginates over the frame chain the editor reads and threads \
+                     (the data module's flow writer)",
+                ))
+            }
             Binding::Variable { .. } => match data.resolve_lowered_at(id, record) {
                 Ok(LoweredOutput::Variable(v)) => applied.push(apply_variable(
                     &mut session,
@@ -471,11 +1275,10 @@ pub fn apply(
                 }
                 Err(e) => applied.push(Applied::new(id.as_str(), "failed").because(e.to_string())),
             },
-            other => applied.push(Applied::new(id.as_str(), "notHeadless").because(format!(
-                "{} bindings are written by the data module",
-                kind_of(&serde_json::to_value(other).unwrap_or(Value::Null))
-            ))),
         }
+    }
+    for id in rules {
+        applied.push(apply_rule(&mut session, &mut data, id, facts));
     }
 
     if let Some(dest) = out {

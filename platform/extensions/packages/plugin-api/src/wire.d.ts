@@ -2052,7 +2052,7 @@ export interface StorySummary {
     /**
      * The table cells in this story whose text does not fit their row, each
      * by its table and template row and column (data ADR 564). Empty when
-     * none does. Additive on 76 (governance rule 1).
+     * none does. Additive on 77 (governance rule 1).
      */
     oversetCells?: OversetCellAt[];
     /**
