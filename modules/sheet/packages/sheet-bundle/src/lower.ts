@@ -79,6 +79,7 @@ import {
   tableRefreshOps,
   tableDataBarOps,
   tableDiagonalOps,
+  tablePictureLosses,
   tablePictureOps,
   cellRotationOps,
   needsRotationStyles,
@@ -570,17 +571,46 @@ async function barOps(
   // W2.2: diagonal borders are drawn page lines beside the bars (their
   // colours are the table's own cell-stroke mints).
   const diagonals = tableDiagonalOps(content, at.widths, at.pageId, at.origin);
-  // W2.3: the pictures over the table.
-  const pictures = tablePictureOps(content, at.widths, at.pageId, at.origin);
-  if (!bars && sparks.length === 0) return [...diagonals, ...pictures];
+  // W2.3: the pictures over the table; sheet ADR 527: their opacity and
+  // effects, whose colours are chart swatches too.
+  const styledPictures = (content.pictures ?? []).some((p) => p.fx);
+  const pictureLosses = tablePictureLosses(content);
+  if (pictureLosses.length > 0) {
+    host.log.warn(`lower: pictures drawn without: ${pictureLosses.join("; ")}`);
+  }
+  if (!bars && sparks.length === 0) {
+    const known = styledPictures ? await readKnownSwatchIds(host) : undefined;
+    return [
+      ...diagonals,
+      ...tablePictureOps(content, at.widths, at.pageId, at.origin, known),
+    ];
+  }
   const known = await readKnownSwatchIds(host);
-  return [
+  const art = [
     ...(bars
       ? tableDataBarOps(content, at.widths, at.pageId, at.origin, known)
       : []),
     ...sparklineOps(content, at, known),
+  ];
+  // A colour the bars or sparklines mint in this batch is not minted again.
+  const minted =
+    known === null
+      ? null
+      : new Set([
+          ...known,
+          ...art.flatMap((o) =>
+            o.op === "createSwatch"
+              ? [
+                  (o.args as { spec: { selfId?: string | null } }).spec
+                    .selfId ?? "",
+                ]
+              : [],
+          ),
+        ]);
+  return [
+    ...art,
     ...diagonals,
-    ...pictures,
+    ...tablePictureOps(content, at.widths, at.pageId, at.origin, minted),
   ];
 }
 

@@ -310,3 +310,30 @@ fn the_engine_effects_come_back_as_drawingml__feat__plugin_slide_native_effects(
     );
     assert!(xml.contains(r#"<a:softEdge rad="63500"/>"#));
 }
+
+#[test]
+fn a_linear_axis_starts_where_office_centres_it__feat__sheet_chart_native_effects() {
+    let lin = |ang: &str| {
+        paint_of(&format!(
+            r#"<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="{ang}"/></a:gradFill>"#
+        ))
+    };
+    // 0°: left to right across the box, from the middle of its left edge.
+    let p = placement(&lin("0"), 200.0, 100.0);
+    assert_eq!(axis_start(&p, 200.0, 100.0), Some([0.0, 50.0]));
+    // 90° in DrawingML (clockwise): top to bottom, from the top edge.
+    let p = placement(&lin("5400000"), 200.0, 100.0);
+    assert_eq!(p.angle, Some(-90.0));
+    assert_eq!(axis_start(&p, 200.0, 100.0), Some([100.0, 0.0]));
+    // 45°: top-left to bottom-right, from the top-left corner's projection.
+    let p = placement(&lin("2700000"), 100.0, 100.0);
+    let [x, y] = axis_start(&p, 100.0, 100.0).unwrap();
+    assert!((x - 0.0).abs() < 1e-3 && (y - 0.0).abs() < 1e-3, "{x} {y}");
+    // A radial gradient keeps the centre placement states.
+    let rad = paint_of(
+        r#"<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="100000"><a:srgbClr val="000000"/></a:gs></a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path></a:gradFill>"#,
+    );
+    let p = placement(&rad, 30.0, 40.0);
+    assert_eq!(axis_start(&p, 30.0, 40.0), Some([15.0, 20.0]));
+    assert_eq!(axis_start(&Placement::default(), 30.0, 40.0), None);
+}

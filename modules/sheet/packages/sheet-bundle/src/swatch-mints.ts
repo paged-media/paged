@@ -43,16 +43,24 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import type { KnownSwatchIds } from "../../sheet-host-model/src";
 
 /**
- * The document's current swatch ids, or `null` when the READ ITSELF failed
- * (which is NOT the same as "there are none" — the caller passes this
- * straight to a `swatchMintOps` consumer, which mints nothing for `null`).
+ * The document's current swatch ids — its colour swatches and (sheet ADR
+ * 527, when `gradients` is asked: the chart's gradient mints) its
+ * gradient swatches — or `null` when
+ * the READ ITSELF failed (which is NOT the same as "there are none" — the
+ * caller passes this straight to a `swatchMintOps` consumer, which mints
+ * nothing for `null`).
  */
 export async function readKnownSwatchIds(
   host: BundleHost,
+  opts?: { gradients?: boolean },
 ): Promise<KnownSwatchIds> {
   try {
     const rows = await host.document.collection<{ selfId: string }>("swatches");
-    return new Set(rows.map((s) => s.selfId));
+    // Only a lowering that mints gradients pays for their read.
+    const gradients = opts?.gradients
+      ? await host.document.collection<{ selfId: string }>("gradients")
+      : [];
+    return new Set([...rows, ...gradients].map((s) => s.selfId));
   } catch (err) {
     host.log.warn("swatch mints: document swatch read failed", err);
     return null;
