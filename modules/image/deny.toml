@@ -7,7 +7,13 @@
 
 [advisories]
 version = 2
-ignore = []
+# paste is unmaintained with no safe upgrade; it arrives through the
+# engine's paged-raster (image → exr → pulp → paste), which the engine's own
+# deny.toml allow-lists the same way (image ADR 468: the module reads through
+# paged-raster).
+ignore = [
+    "RUSTSEC-2024-0436", # paste — unmaintained (via paged-raster's image/exr)
+]
 
 [licenses]
 version = 2

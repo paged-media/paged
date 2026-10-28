@@ -5115,6 +5115,20 @@
             },
             {
               "defaults": [],
+              "help": "An origin remote images may be fetched from, repeatable: `--allow-origin https://images.example.com`. Exact `scheme://host[:port]`; redirects (at most 3) only to listed origins; plain http only for localhost; 50 MiB and 30 s per image; no cookies, credentials or proxies",
+              "long": "allow-origin",
+              "name": "allow_origins",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "ORIGIN"
+              ]
+            },
+            {
+              "defaults": [],
               "help": "Write the result here. The format follows the extension",
               "long": "out",
               "name": "out",
@@ -5312,7 +5326,7 @@
               ]
             }
           ],
-          "longAbout": "Resolve the bindings at one record and write their values.\n\nEach `--source ID=FILE` is imported into the store under the recipe's source id; every query passes the query guard first (a document's queries are code it carries). Property bindings are written on the objects their selectors name, variable bindings on their text variables, as `paged set` writes. Bindings the headless lane cannot write yet (images, tables, barcodes, record flows, rules) are listed, not skipped.",
+          "longAbout": "Resolve the bindings at one record and write their values.\n\nEach `--source ID=FILE` is imported into the store under the recipe's source id; every query passes the query guard first (a document's queries are code it carries). Property bindings are written on the objects their selectors name, variable bindings on their text variables, as `paged set` writes; tables, local images, barcodes and rules in their frames. A record flow is paginated into one frame per page from the page of its bound frame, adding pages, and replaces the flow an earlier apply placed; like a rule, it places every record, so `--record` does not restrict it. A remote image is fetched only from an origin `--allow-origin` lists. Bindings the headless lane cannot write (a remote image of an unlisted origin, document asset ids) are listed, not skipped.",
           "name": "apply",
           "subcommands": []
         }

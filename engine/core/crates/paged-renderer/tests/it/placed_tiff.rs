@@ -38,7 +38,8 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
 /// A one-page package with a 120 pt square frame at (40, 40) that places
 /// `picture.tif`, stretched over it.
-fn package() -> Vec<u8> {
+/// `image_attrs` are extra attributes on the `<Image>`.
+fn package_with(image_attrs: &str) -> Vec<u8> {
     let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
     let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
     let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
@@ -55,16 +56,18 @@ fn package() -> Vec<u8> {
     .unwrap();
     zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
     zip.write_all(
-        br#"<?xml version="1.0" encoding="UTF-8"?>
+        r#"<?xml version="1.0" encoding="UTF-8"?>
 <idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
   <Spread Self="sp1">
     <Page Self="p1" GeometricBounds="0 0 200 200"/>
     <Rectangle Self="r1" GeometricBounds="40 40 160 160" StrokeWeight="0">
       <FrameFittingOption LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="FillProportionally"/>
-      <Image Self="i1" LinkResourceURI="picture.tif"/>
+      <Image Self="i1" LinkResourceURI="picture.tif" IMAGE_ATTRS/>
     </Rectangle>
   </Spread>
-</idPkg:Spread>"#,
+</idPkg:Spread>"#
+            .replace("IMAGE_ATTRS", image_attrs)
+            .as_bytes(),
     )
     .unwrap();
     zip.finish().unwrap().into_inner()
@@ -91,6 +94,7 @@ fn flat(model: ColorModel, colour: &[u8], icc: Option<Vec<u8>>) -> RasterImage {
             icc,
             xmp: None,
             iptc: None,
+            exif: None,
             photoshop_irb: None,
             has_layers: false,
             layer_count: Some(0),
@@ -107,13 +111,25 @@ fn flat(model: ColorModel, colour: &[u8], icc: Option<Vec<u8>>) -> RasterImage {
 }
 
 fn render(tiff: Vec<u8>) -> (Vec<DisplayCommand>, image::RgbaImage) {
+    render_with(tiff, "", paged_color::Intent::RelativeColorimetric, true)
+}
+
+/// [`render`] with `<Image>` attributes and the document's Color Settings.
+fn render_with(
+    tiff: Vec<u8>,
+    image_attrs: &str,
+    intent: paged_color::Intent,
+    bpc: bool,
+) -> (Vec<DisplayCommand>, image::RgbaImage) {
     let mut br = BytesResolver::new();
     br.add_image("picture.tif", tiff);
     let opts = PipelineOptions {
         assets: Some(&br),
+        cmyk_intent: intent,
+        cmyk_bpc: bpc,
         ..PipelineOptions::default()
     };
-    let document = idml_import::import_idml_doc(&package()).unwrap();
+    let document = idml_import::import_idml_doc(&package_with(image_attrs)).unwrap();
     let (built, images) = pipeline::render_document(&document, &opts, 72.0, Color::WHITE).unwrap();
     (
         built.pages[0].list.commands.clone(),
@@ -184,4 +200,94 @@ fn a_cmyk_tiff_converts_through_its_embedded_profile__feat__images_graphics_tiff
         "centre {centre:?}, paged-color {:?}",
         rgb[0]
     );
+}
+
+/// The colour a CMYK pixel converts to through paged-color with `rendering`.
+fn expected(profile: &[u8], cmyk: [u8; 4], rendering: paged_color::cms::Rendering) -> [u8; 3] {
+    let t = paged_color::cms::Transform::new(
+        paged_color::cms::Backend::preferred(),
+        paged_color::cms::ProfileRef::Icc(profile),
+        paged_color::cms::Layout::CMYK,
+        paged_color::cms::ProfileRef::Srgb,
+        paged_color::cms::Layout::RGB,
+        rendering,
+    )
+    .expect("transform");
+    let mut rgb = [0u8; 3];
+    t.apply_u8(&cmyk, &mut rgb);
+    rgb
+}
+
+/// A placed CMYK TIFF converts with the frame's `ImageRenderingIntent`
+/// when it names one and with the document's Color Settings (intent and
+/// BPC) when it says `UseColorSettings`.
+#[test]
+fn a_placed_cmyk_tiff_converts_with_the_frames_rendering_intent__feat__color_swatches_cms_unified()
+{
+    use paged_color::cms::Rendering;
+    use paged_color::Intent;
+    let Some(profile) = paged_color::test_profiles::read_cmyk_profile(env!("CARGO_MANIFEST_DIR"))
+    else {
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
+    };
+    // A dark rich colour: the black point (BPC) and the paper white
+    // (absolute colorimetric) both move it.
+    let cmyk = [60u8, 40, 30, 200];
+    let tiff = || {
+        encode_tiff(
+            &flat(ColorModel::Cmyk, &cmyk, Some(profile.clone())),
+            TiffEncodeOptions::default(),
+        )
+        .unwrap()
+    };
+    let centre = |attrs: &str, intent: Intent, bpc: bool| {
+        let (_, img) = render_with(tiff(), attrs, intent, bpc);
+        *img.get_pixel(100, 100)
+    };
+    let rel_bpc = expected(
+        &profile,
+        cmyk,
+        Rendering::new(Intent::RelativeColorimetric, true),
+    );
+    let rel = expected(
+        &profile,
+        cmyk,
+        Rendering::new(Intent::RelativeColorimetric, false),
+    );
+    let abs = expected(
+        &profile,
+        cmyk,
+        Rendering::new(Intent::AbsoluteColorimetric, false),
+    );
+    assert_ne!(rel_bpc, rel, "BPC moves the dark colour");
+    assert_ne!(abs, rel, "absolute moves it");
+
+    // The document's settings, relative colorimetric with BPC.
+    let c = centre(
+        r#"ImageRenderingIntent="UseColorSettings""#,
+        Intent::RelativeColorimetric,
+        true,
+    );
+    assert!(close(c, rel_bpc, 1), "{c:?} vs {rel_bpc:?}");
+    // The document's settings without BPC.
+    let c = centre("", Intent::RelativeColorimetric, false);
+    assert!(close(c, rel, 1), "{c:?} vs {rel:?}");
+    // The frame's own intent outranks the document's.
+    let c = centre(
+        r#"ImageRenderingIntent="AbsoluteColorimetric""#,
+        Intent::RelativeColorimetric,
+        false,
+    );
+    assert!(close(c, abs, 1), "{c:?} vs {abs:?}");
+    let perc = expected(&profile, cmyk, Rendering::new(Intent::Perceptual, true));
+    let c = centre(
+        r#"ImageRenderingIntent="Perceptual""#,
+        Intent::RelativeColorimetric,
+        true,
+    );
+    assert!(close(c, perc, 1), "{c:?} vs {perc:?}");
 }

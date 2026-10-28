@@ -122,6 +122,8 @@ fn info(
         icc: resources.icc_profile().map(<[u8]>::to_vec),
         xmp: resource(resources, RES_XMP),
         iptc: resource(resources, RES_IPTC),
+        // Resource 1058, "EXIF data 1": the payload from its TIFF header on.
+        exif: resource(resources, 1058),
         photoshop_irb,
         has_layers: layer_count > 0,
         layer_count: Some(layer_count),

@@ -207,6 +207,7 @@ fn evaluate(bytes: &[u8], ctx: &image_gpu::GpuContext) -> Result<Row, String> {
                     D::ProfileRejected => "profile-rejected",
                     D::CmykConverted => "cmyk-converted",
                     D::CmykUncalibrated => "cmyk-uncalibrated",
+                    D::HdrClipped => "hdr-clipped",
                 }
             }
             Err(_) => "refused",

@@ -52,6 +52,7 @@ pub mod cmyk;
 pub mod content_aware;
 pub mod counters;
 pub mod display;
+pub mod export;
 pub mod fill;
 pub mod focus;
 pub mod heal;
@@ -339,6 +340,7 @@ mod wasm {
             D::ProfileRejected => 2,
             D::CmykConverted => 3,
             D::CmykUncalibrated => 4,
+            D::HdrClipped => 5,
         }
     }
 
@@ -6737,6 +6739,115 @@ mod wasm {
         let bytes = crate::saveback::encode_rgba8_opt(rgba, width, height, fmt, quality, reduce)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(js_sys::Uint8Array::from(&bytes[..]))
+    }
+
+    thread_local! {
+        /// The notes of the last `export_image*` call (wire names).
+        static EXPORT_NOTES: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
+    }
+
+    fn run_export(
+        pixels: crate::export::Rgba<'_>,
+        width: u32,
+        height: u32,
+        spec: &str,
+        source: &[u8],
+        cmyk_profile: &[u8],
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        let mut spec =
+            crate::export::ExportSpec::from_wire(spec).map_err(|e| JsValue::from_str(&e))?;
+        if !cmyk_profile.is_empty() {
+            spec.cmyk_profile = Some(cmyk_profile.to_vec());
+        }
+        let source = (!source.is_empty()).then_some(source);
+        let out = crate::export::export(pixels, width, height, &spec, source)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        EXPORT_NOTES.with(|n| *n.borrow_mut() = out.notes.iter().map(|n| n.wire()).collect());
+        Ok(js_sys::Uint8Array::from(&out.bytes[..]))
+    }
+
+    /// EXPORT AS (ADR 468): straight RGBA8 (`width*height*4`, the adjusted
+    /// result) written as `spec` says (`export::ExportSpec::from_wire`:
+    /// format, quality, size, ppi, metadata, profile, mode, bits,
+    /// compression, intent). `source` is the file the session opened (its
+    /// EXIF, XMP and IPTC are kept when the spec says `meta=1`; empty =
+    /// none); `cmyk_profile` the CMYK output profile (empty = none). The
+    /// notes are read with [`export_last_notes`].
+    #[wasm_bindgen]
+    pub fn export_image(
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+        spec: &str,
+        source: &[u8],
+        cmyk_profile: &[u8],
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        run_export(
+            crate::export::Rgba::U8(rgba),
+            width,
+            height,
+            spec,
+            source,
+            cmyk_profile,
+        )
+    }
+
+    /// [`export_image`] from an engine-held image, at ITS depth: a 16-bit
+    /// session exports its own 16-bit samples (PNG, TIFF) instead of the
+    /// 8-bit bytes the adjust door hands out.
+    #[wasm_bindgen]
+    pub fn export_image_handle(
+        handle: u32,
+        spec: &str,
+        source: &[u8],
+        cmyk_profile: &[u8],
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        let (w, h, px) = IMAGES
+            .with(|m| {
+                m.borrow()
+                    .get(&handle)
+                    .map(|i| (i.width, i.height, i.rgba.clone()))
+            })
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let pixels = if px.is_16bit() {
+            crate::export::Rgba::U16(
+                px.raw()
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|p| u16::from_ne_bytes(*p))
+                    .collect(),
+            )
+        } else {
+            let b = px.to_rgba8().into_owned();
+            return run_export(
+                crate::export::Rgba::U8(&b),
+                w,
+                h,
+                spec,
+                source,
+                cmyk_profile,
+            );
+        };
+        run_export(pixels, w, h, spec, source, cmyk_profile)
+    }
+
+    /// The notes of the last export, newline-separated wire names
+    /// (`webp-lossless`, `cmyk-profile`, `cmyk-naive`, `widened`,
+    /// `narrowed`, `alpha-dropped`, `gray-untagged`).
+    #[wasm_bindgen]
+    pub fn export_last_notes() -> String {
+        EXPORT_NOTES.with(|n| n.borrow().join("\n"))
+    }
+
+    /// What a file carries besides its pixels, for the Export As dialog's
+    /// metadata row: the byte length of its `[ICC, EXIF, XMP, IPTC]` (0 =
+    /// absent).
+    #[wasm_bindgen]
+    pub fn image_metadata(bytes: &[u8]) -> Vec<u32> {
+        let m = paged_raster::read_metadata(bytes);
+        let len = |v: &Option<Vec<u8>>| v.as_ref().map_or(0, |b| b.len() as u32);
+        vec![len(&m.icc), len(&m.exif), len(&m.xmp), len(&m.iptc)]
     }
 
     /// Write the open LAYER STACK into the retained PSD as its layers

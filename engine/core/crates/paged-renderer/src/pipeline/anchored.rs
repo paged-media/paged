@@ -1157,6 +1157,9 @@ pub(super) fn emit_anchored_rect_image(
         page_image_cache,
         decoded_cache,
         None,
+        // An anchored frame's `<Image>` keeps no metadata of its own here:
+        // it follows the document's Color Settings.
+        image_rendering(options, None),
     );
 }
 

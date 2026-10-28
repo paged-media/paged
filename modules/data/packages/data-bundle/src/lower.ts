@@ -66,6 +66,7 @@ import {
   type RuleTarget,
 } from "../../data-host-model/src";
 import { objectsOf } from "./property-lane";
+import { transformBounds } from "./merge";
 import { t as tr } from "@paged-media/strings";
 import { STATUS } from "./messages";
 import { ownTextVariables, textVariablesOn } from "./text-variables";
@@ -1015,7 +1016,13 @@ export async function commitLoweredBarcode(
     const bounds = geom[0]?.bounds as
       [number, number, number, number] | undefined;
     if (bounds) {
-      [topPt, leftPt] = bounds;
+      // The frame's own bounds through its item transform: page-local, the
+      // space `insertPath` takes. On a verso the bounds alone sit a page
+      // width into the spread, and the symbol landed beside its frame.
+      [topPt, leftPt] = transformBounds(
+        bounds,
+        geom[0]?.itemTransform as number[] | null | undefined,
+      );
     }
   }
 
@@ -1025,6 +1032,10 @@ export async function commitLoweredBarcode(
     kind: "barcode",
     target: barcode.target,
     symbology: barcode.symbology,
+    // The label lands on the LAST module only (one stamp per symbol keeps the
+    // batch small); the count lets a writer without this session's record —
+    // `paged data apply` — remove the unlabelled modules drawn just before it.
+    modules: barcode.modules.length,
   });
   // UPDATE IN PLACE (Wave 5): the previous symbol's modules are removed in
   // the same batch the new one is drawn in — one undo step, never a pile.

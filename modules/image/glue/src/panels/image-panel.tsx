@@ -94,6 +94,7 @@ import {
 } from "./sections/distort-section";
 import { Section } from "./sections/disclosure";
 import { FilterDialog } from "./sections/filter-dialog";
+import { ExportAsDialog } from "./sections/export-dialog";
 import {
   ContentAwareFillWorkspace,
   RetouchOptionsSection,
@@ -2527,6 +2528,21 @@ export function makeImagePanel(session: ImageSession) {
               session.setResolution(ppi);
               void session.closeDialog();
             }}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "exportAs" && s.source && (
+          <ExportAsDialog
+            width={s.source.width}
+            height={s.source.height}
+            ppi={s.ppi}
+            sixteenBit={false}
+            metadata={s.sourceMetadata}
+            profileName={s.exportProfile}
+            busy={s.busy}
+            onExport={(o) => void session.exportAs(o)}
+            onPickProfile={() => void session.pickExportProfile()}
+            onClearProfile={() => session.clearExportProfile()}
             onCancel={() => void session.closeDialog()}
           />
         )}

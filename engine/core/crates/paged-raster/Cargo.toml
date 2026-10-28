@@ -29,13 +29,30 @@ avif-parse = { workspace = true, optional = true }
 rav1d = { workspace = true, optional = true }
 # JPEG XL (feature `jxl`).
 jxl-oxide = { workspace = true, optional = true }
+# JPEG decode that keeps CMYK and YCCK inks (Adobe APP14), and the header
+# read the PDF export asks of a JPEG it passes through.
+zune-jpeg = { workspace = true }
+zune-core = { workspace = true }
+# WebP encode with ICC, EXIF and XMP (lossless: image-webp has no lossy
+# encoder).
+image-webp = { workspace = true }
+# The sRGB profile an export embeds (moxcms writes it).
+moxcms = { workspace = true }
 # PNG iCCP inflation (already in the graph through PNG and TIFF Deflate).
 flate2 = { workspace = true }
 # CMYK and Lab rasters convert through the engine's one CMS: lcms2 on native,
-# qcms on wasm32. Both halves are wasm-safe, see the crate docs.
-paged-color = { path = "../paged-color" }
+# moxcms on wasm32 (the `moxcms` feature), both with the frame's intent and
+# black-point compensation. Both halves are wasm-safe, see the crate docs.
+paged-color = { path = "../paged-color", features = ["moxcms"] }
 # PSD/PSB composites and the layer records of PSDs and layered TIFFs.
 paged-psd = { path = "../paged-psd" }
+# Format sniffing (the leaf crate the IDML writer shares).
+paged-sniff = { path = "../paged-sniff" }
+# The LZW and DCT decode filters (`filters`): weezl is the LZW of tiff and
+# gif, jpeg-decoder the renderer's JPEG decoder (it hands CMYK samples over
+# as stored, which a PostScript image's Decode array expects).
+weezl = "0.1"
+jpeg-decoder = "0.3"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

@@ -58,6 +58,8 @@
 //   4. `media.paged.image.command.setType` is titled "Set type (image)"
 //      and its whole handler is `openPanel`.
 
+import { readFileSync } from "node:fs";
+
 import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
 import { covers } from "@paged-media/test-kit";
@@ -85,6 +87,7 @@ const COMMANDS = [
   "media.paged.image.command.setType",
   "media.paged.image.command.applyToFile",
   "media.paged.image.command.saveToFile",
+  "media.paged.image.command.exportAs",
   "media.paged.image.command.loadBrushLibrary",
   "media.paged.image.command.selectionToPath",
   "media.paged.image.command.pathToSelection",
@@ -120,6 +123,8 @@ const EXPORTERS = [
   "media.paged.image.exporter.psd",
   "media.paged.image.exporter.png",
   "media.paged.image.exporter.jpeg",
+  "media.paged.image.exporter.tiff",
+  "media.paged.image.exporter.webp",
 ] as const;
 const EDIT_CONTEXT = "rasterImage";
 
@@ -757,6 +762,84 @@ test.describe("plugin surface · paged.image", () => {
       recovered,
       "Adjust image recovers the placed bytes into the engine (the workaround for the Place bypass)",
     ).toBe(true);
+  });
+
+  test("File ▸ Export as… writes the ingested image as a TIFF and downloads it @feat:image.codec.core-codecs @level:gesture", async ({
+    page,
+  }) => {
+    covers("command:media.paged.image.command.exportAs");
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+    await designer.openPanel(PANEL);
+
+    // Place a real PNG, then hand its frame to the image engine.
+    const rectsBefore = await designer.count("rectangle");
+    const chooser = page.waitForEvent("filechooser", { timeout: 30_000 });
+    const invoked = designer.runCommand(PLACE);
+    await (
+      await chooser
+    ).setFiles({
+      name: "export-sample.png",
+      mimeType: "image/png",
+      buffer: samplePng(),
+    });
+    await expect(
+      page.locator("[data-paged-editor][data-paged-placement='armed']"),
+    ).toHaveCount(1, { timeout: 15_000 });
+    const vp = (await page.locator("[data-paged-viewport]").boundingBox())!;
+    await page.mouse.click(
+      Math.round(vp.x + vp.width * 0.45),
+      Math.round(vp.y + vp.height * 0.4),
+    );
+    await invoked;
+    await expect
+      .poll(() => designer.count("rectangle"), { timeout: 20_000 })
+      .toBe(rectsBefore + 1);
+    const placed = await page.evaluate(async () => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              executeScript: (s: string) => Promise<{ output: string[] }>;
+            };
+          };
+        }
+      ).__canvas;
+      const r = await c.client.executeScript("paged.tree()");
+      const out: string[] = [];
+      const visit = (n: {
+        id?: { kind: string; id: string } | null;
+        children?: unknown[];
+      }) => {
+        if (n.id?.kind === "rectangle") out.push(n.id.id);
+        for (const ch of (n.children ?? []) as (typeof n)[]) visit(ch);
+      };
+      for (const root of JSON.parse(r.output[0] ?? "[]")) visit(root);
+      return out.at(-1) ?? "";
+    });
+    await designer.selectElement("rectangle", placed);
+    await designer.runCommand("media.paged.image.command.adjustSelected");
+    await expect
+      .poll(() => sourceReadout(page), { timeout: 30_000 })
+      .not.toBe("none");
+
+    // The dialog: TIFF, 16 bits, metadata kept.
+    await designer.runCommand("media.paged.image.command.exportAs");
+    const dialog = page.locator("[data-image-export-dialog]");
+    await expect(dialog).toBeVisible();
+    await dialog.locator("[data-export-format]").selectOption("tiff");
+    await dialog.locator("[data-export-bits]").selectOption("16");
+    const download = page.waitForEvent("download", { timeout: 30_000 });
+    await dialog.locator("[data-export-apply]").click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/\.tif$/);
+    const bytes = readFileSync((await file.path())!);
+    expect([...bytes.subarray(0, 4)]).toEqual([0x49, 0x49, 42, 0]);
+    await expect
+      .poll(() => status(page), { timeout: 10_000 })
+      .toMatch(/Exported .*\.tif/);
+    await expect(dialog).toHaveCount(0);
   });
 
   test("with a WebGPU device the GPU-only generators come alive @feat:image.editor.paint @feat:editor-shell.plugin-bundles @level:gesture", async ({

@@ -3338,7 +3338,8 @@ fn parse_ppi_x(s: &str) -> Option<f32> {
 }
 
 /// Build [`ImageMetadata`] from a nested `<Image>` element's
-/// `Space` / `ActualPpi` / `EffectivePpi` attributes. Returns `None`
+/// `Space` / `ActualPpi` / `EffectivePpi` / `ImageRenderingIntent`
+/// attributes. Returns `None`
 /// when the element carries none of them (so a plain placement
 /// doesn't allocate an empty record). `Space` is stripped of its
 /// `$ID/` namespace prefix.
@@ -3346,13 +3347,20 @@ fn read_image_metadata(e: &quick_xml::events::BytesStart) -> Option<ImageMetadat
     let space = attr(e, b"Space").map(|s| s.strip_prefix("$ID/").unwrap_or(&s).to_string());
     let actual_ppi = attr(e, b"ActualPpi").as_deref().and_then(parse_ppi_x);
     let effective_ppi = attr(e, b"EffectivePpi").as_deref().and_then(parse_ppi_x);
-    if space.is_none() && actual_ppi.is_none() && effective_ppi.is_none() {
+    let rendering_intent =
+        attr(e, b"ImageRenderingIntent").map(|s| s.strip_prefix("$ID/").unwrap_or(&s).to_string());
+    if space.is_none()
+        && actual_ppi.is_none()
+        && effective_ppi.is_none()
+        && rendering_intent.is_none()
+    {
         return None;
     }
     Some(ImageMetadata {
         space,
         actual_ppi,
         effective_ppi,
+        rendering_intent,
     })
 }
 
@@ -5679,6 +5687,32 @@ mod tests {
         assert!((meta.effective_ppi.unwrap() - 225.0).abs() < 1e-3);
         // Plain colour-swatch rectangle has no image metadata.
         assert!(!s.image_metadata.contains_key("r2"));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn parses_a_placed_images_rendering_intent__feat__color_swatches_cms_unified() {
+        let xml =
+            br#"<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+          <Spread Self="s">
+            <Rectangle Self="r1" GeometricBounds="0 0 100 100">
+              <Image Self="img1" ImageRenderingIntent="Perceptual"/>
+            </Rectangle>
+            <Rectangle Self="r2" GeometricBounds="0 0 100 100">
+              <Image Self="img2" ImageRenderingIntent="UseColorSettings" Space="$ID/RGB"/>
+            </Rectangle>
+          </Spread>
+        </idPkg:Spread>"#;
+        let s = parse_spread(xml).unwrap();
+        let r1 = s
+            .image_metadata
+            .get("r1")
+            .expect("the intent alone records metadata");
+        assert_eq!(r1.rendering_intent.as_deref(), Some("Perceptual"));
+        assert_eq!(r1.explicit_rendering_intent(), Some("Perceptual"));
+        let r2 = s.image_metadata.get("r2").expect("r2");
+        assert_eq!(r2.rendering_intent.as_deref(), Some("UseColorSettings"));
+        assert_eq!(r2.explicit_rendering_intent(), None, "follows the document");
     }
 
     #[test]

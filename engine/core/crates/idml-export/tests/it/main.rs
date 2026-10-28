@@ -14,6 +14,7 @@ mod autosizing_roundtrip;
 mod baseline_grid_roundtrip;
 mod bleed_roundtrip;
 mod bookmark_tree;
+mod cell_style_roundtrip;
 mod condition_roundtrip;
 mod consecutive_paragraph_marks;
 mod designmap_resources;

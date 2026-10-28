@@ -83,6 +83,14 @@ pub(crate) fn probe(bytes: &[u8], format: Format, page: usize) -> Result<RasterI
         _ => decoder.icc_profile().ok().flatten(),
     };
     let (color_model, alpha, sample_format) = describe(colour);
+    let meta = match format {
+        Format::Png | Format::WebP => crate::meta::read_metadata(bytes),
+        _ => crate::meta::Metadata::default(),
+    };
+    let resolution = match format {
+        Format::Png => crate::meta::png_ppi(bytes),
+        _ => None,
+    };
     Ok(RasterInfo {
         format,
         width,
@@ -93,12 +101,13 @@ pub(crate) fn probe(bytes: &[u8], format: Format, page: usize) -> Result<RasterI
         color_model,
         alpha,
         icc,
-        xmp: None,
+        xmp: meta.xmp,
         iptc: None,
+        exif: meta.exif,
         photoshop_irb: None,
         has_layers: false,
         layer_count: Some(0),
-        resolution: None,
+        resolution,
         orientation: 1,
         page_count: 1,
     })

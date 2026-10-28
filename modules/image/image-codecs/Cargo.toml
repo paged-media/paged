@@ -13,19 +13,8 @@ workspace = true
 [dependencies]
 image-core = { workspace = true }
 thiserror = { workspace = true }
-# D-4 winner (zune-png vs image-rs/png; bench in image-conformance):
-# zune-png. Pure-Rust decode+encode, no_std-capable, fastest decode and
-# competitive encode in the synthetic sweep. Provisional until the Links
-# corpus audit (pre-M1 freeze) — see registry/codecs.yaml.
-zune-png = { workspace = true }
-zune-core = { workspace = true }
-# JPEG codec (spec §10.3). zune-jpeg = decode (baseline + progressive,
-# Gray/YCbCr/RGB/CMYK/YCCK, APP14 Adobe transform + APP2 ICC concat);
-# jpeg-encoder = encode (RGB/Gray, 4:2:0). Explicit versions (NOT a
-# workspace entry — these two crates have no other workspace consumer).
-# NOTE: zune-jpeg 0.5.x pins zune-core 0.5.1, matching `zune-core = "0.5"`
-# above so no second zune-core version is pulled in. jpeg-encoder is
-# dependency-free at runtime; its license is `(MIT OR Apache-2.0) AND
-# IJG` — the IJG term is not yet in deny.toml's allow-list (see report).
-zune-jpeg = "0.5.15"
-jpeg-encoder = "0.7.0"
+# The codecs are the engine's (ADR 468, PM-0014): every decoder and encoder
+# behind these adapters is paged-raster's. The D-4 bench that once picked
+# zune-png over `png` was re-run on 2026-10-25 and reversed (registry
+# codecs.yaml), so the adapters carry no codec crate of their own.
+paged-raster = { workspace = true }

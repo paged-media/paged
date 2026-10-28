@@ -75,6 +75,20 @@ impl Orientation {
         })
     }
 
+    /// The tag value, 1 to 8.
+    pub fn tag(self) -> u16 {
+        match self {
+            Orientation::TopLeft => 1,
+            Orientation::TopRight => 2,
+            Orientation::BottomRight => 3,
+            Orientation::BottomLeft => 4,
+            Orientation::LeftTop => 5,
+            Orientation::RightTop => 6,
+            Orientation::RightBottom => 7,
+            Orientation::LeftBottom => 8,
+        }
+    }
+
     /// The identity orientation — nothing to apply.
     pub fn is_identity(self) -> bool {
         self == Orientation::TopLeft
@@ -128,6 +142,40 @@ impl Exif {
     pub fn parse(payload: &[u8]) -> Exif {
         parse_tiff(payload).unwrap_or_default()
     }
+}
+
+/// `payload` with IFD0's Orientation set to 1 (top-left), for an export
+/// of pixels that were already turned upright on open: copying the
+/// source's tag would turn them a second time in every viewer. A payload
+/// without the tag, or one that does not parse, comes back unchanged.
+pub fn with_upright_orientation(payload: &[u8]) -> Vec<u8> {
+    let mut out = payload.to_vec();
+    let Some(endian) = (match payload.get(0..2) {
+        Some(b"II") => Some(Endian::Little),
+        Some(b"MM") => Some(Endian::Big),
+        _ => None,
+    }) else {
+        return out;
+    };
+    let r = Reader {
+        buf: payload,
+        endian,
+    };
+    let Some(ifd0) = r.u32(4) else {
+        return out;
+    };
+    for entry in iter_ifd(&r, ifd0 as usize) {
+        if entry.tag == 0x0112 && entry.field_type == TYPE_SHORT {
+            let one = match endian {
+                Endian::Little => 1u16.to_le_bytes(),
+                Endian::Big => 1u16.to_be_bytes(),
+            };
+            if let Some(slot) = out.get_mut(entry.value_off..entry.value_off + 2) {
+                slot.copy_from_slice(&one);
+            }
+        }
+    }
+    out
 }
 
 // ---- TIFF/IFD walk (bounded, lenient) ------------------------------------
@@ -513,5 +561,20 @@ mod tests {
     fn exif_unknown_orientation_value_is_none() {
         let bytes = build_le(Some(99), None, None, None);
         assert_eq!(Exif::parse(&bytes).orientation, None);
+    }
+
+    #[test]
+    fn upright_orientation_rewrites_only_the_tag() {
+        let bytes = build_le(Some(6), Some((300, 1)), Some(2), Some(1));
+        let upright = with_upright_orientation(&bytes);
+        assert_eq!(upright.len(), bytes.len());
+        let e = Exif::parse(&upright);
+        assert_eq!(e.orientation, Some(Orientation::TopLeft));
+        assert_eq!(e.dpi_x, Some(300.0));
+        assert_eq!(e.color_space, Some(ColorSpaceTag::Srgb));
+        // No tag, nothing to do; garbage comes back as it was.
+        let none = build_le(None, None, None, None);
+        assert_eq!(with_upright_orientation(&none), none);
+        assert_eq!(with_upright_orientation(b"junk"), b"junk");
     }
 }
