@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 613,
+    "command": 622,
     "keybinding": 154,
-    "menu": 434,
-    "panel": 136,
+    "menu": 437,
+    "panel": 137,
     "tool": 103
   },
   "features": [
@@ -2156,7 +2156,22 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.slide.addAnimation",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.addComment",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.animationPainter",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.animationPane",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2216,6 +2231,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.previewAnimations",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.previousSlide",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2271,7 +2291,32 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.listAnimations",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.moveAnimation",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.newSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.previewAnimations",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.removeAnimation",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setAnimationTiming",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3864,6 +3909,21 @@
       "id": "keybinding:x→paged.fillStroke.swap",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "menu:Animations/Animation Painter",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Animations/Animation Pane",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Animations/Preview Animations",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:Context/Circle invalid data",
@@ -6189,6 +6249,11 @@
       "id": "panel:media.paged.sheet.panel.workbook",
       "kind": "panel",
       "owner": "media.paged.sheet"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.animations",
+      "kind": "panel",
+      "owner": "media.paged.slide"
     },
     {
       "id": "panel:media.paged.slide.panel.comments",
