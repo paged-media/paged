@@ -972,7 +972,6 @@ pub struct StyleDoc {
     pub patterns: Vec<Arc<PatternFill>>,
 }
 
-
 /// Which earlier state of a layer the History / Art History brushes
 /// paint from. Until history snapshots exist these are the two states
 /// the session can name without them.
