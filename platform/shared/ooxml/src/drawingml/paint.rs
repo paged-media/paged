@@ -123,6 +123,9 @@ pub struct Blip {
     pub rotate_with_shape: Option<bool>,
     /// `dpi`.
     pub dpi: Option<u32>,
+    /// The SVG part an `asvg:svgBlip` (Office 2016, in the blip's
+    /// `a:extLst`) names beside the raster `part`, its fallback (resolved).
+    pub svg: Option<String>,
 }
 
 /// `a:tile`.
@@ -319,8 +322,16 @@ pub fn blip(el: &El, rels: Rels) -> Blip {
             None => {}
         }
     }
+    let mut svg = None;
     if let Some(ext) = b.and_then(|b| b.child(Ns::A, "extLst")) {
         office_2010_effects(ext, &mut effects);
+        svg = ext
+            .children
+            .iter()
+            .flat_map(|e| e.children.iter())
+            .find(|c| c.local == "svgBlip")
+            .and_then(|c| c.attr_ns(Ns::R, "embed"))
+            .and_then(rels);
     }
     Blip {
         part: rel("embed"),
@@ -336,6 +347,7 @@ pub fn blip(el: &El, rels: Rels) -> Blip {
         effects,
         rotate_with_shape: el.attr_bool("rotWithShape"),
         dpi: el.attr_u32("dpi"),
+        svg,
     }
 }
 

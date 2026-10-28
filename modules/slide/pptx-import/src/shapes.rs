@@ -94,6 +94,7 @@ fn sp(el: &El, nv_name: &str, ctx: &Ctx) -> Sp {
         text_xfrm: el.child(Ns::P, "txXfrm").map(xfrm),
         st_cxn: cxn(el, "stCxn"),
         end_cxn: cxn(el, "endCxn"),
+        model_id: el.attr("modelId").map(str::to_string),
     }
 }
 

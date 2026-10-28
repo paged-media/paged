@@ -41,6 +41,7 @@ pub mod anchors;
 mod canonical;
 pub mod grow;
 pub mod layer;
+pub mod snippet;
 pub mod value;
 pub use anchors::{Anchor, AnchorId, AnchorKind, Field, FieldKind};
 pub use layer::{
