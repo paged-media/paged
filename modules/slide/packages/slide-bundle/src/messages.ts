@@ -176,6 +176,57 @@ export const SHOW = defineMessages("slide.show", {
     "Transitions need WebGPU, which this browser does not offer: the show cuts between slides.",
 });
 
+/** Animations (slide ADR 714): the Animations pane, its timeline and its
+ *  commands. Effect names are PowerPoint's and stay English. */
+export const ANIM = defineMessages("slide.anim", {
+  title: "Animations",
+  empty: "Go to a slide to animate its shapes.",
+  heading: "Slide {number} · {count} animations",
+  none: "No animations on this slide. Select a shape and add an effect.",
+  selectShape: "Select a shape to add an effect to it.",
+  add: "Add effect",
+  entrance: "Entrance",
+  emphasis: "Emphasis",
+  exit: "Exit",
+  motion: "Motion Paths",
+  search: "Search effects",
+  effectOptions: "Effect options",
+  direction: "Direction",
+  byParagraph: "By paragraph",
+  start: "Start",
+  onClick: "On Click",
+  withPrevious: "With Previous",
+  afterPrevious: "After Previous",
+  duration: "Duration (s)",
+  delay: "Delay (s)",
+  repeat: "Repeat",
+  repeatNone: "None",
+  repeatUntilClick: "Until Next Click",
+  rewind: "Rewind when done playing",
+  trigger: "Trigger",
+  triggerSequence: "As part of click sequence",
+  triggerOn: "On click of {shape}",
+  moveUp: "Move earlier",
+  moveDown: "Move later",
+  remove: "Remove",
+  preview: "Preview",
+  painter: "Animation Painter",
+  painterArmed: "Click a shape to give it these animations (Esc cancels).",
+  timeline: "Animation Pane",
+  seconds: "{s} s",
+  readOnly: "This effect is kept as the deck wrote it; its timing cannot be changed here.",
+  shape: "Shape {name}",
+  paragraph: "paragraph {n}",
+  addAnimation: "Add animation",
+  removeAnimation: "Remove animation",
+  setAnimationTiming: "Set animation timing",
+  moveAnimation: "Move animation",
+  listAnimations: "List animations",
+  previewAnimations: "Preview animations",
+  animationPainter: "Animation Painter",
+  animationPane: "Animation pane",
+});
+
 /** The menu items this bundle adds (menu.ts): the path stays English (it is
  *  the item's identity) and the shell shows each segment through this. */
 defineMessages("menu", {
@@ -197,6 +248,10 @@ defineMessages("menu", {
   "Rehearse Timings": "Rehearse Timings",
   "Slide Sorter": "Slide Sorter",
   "Shapes…": "Shapes…",
+  Animations: "Animations",
+  "Animation Pane": "Animation Pane",
+  "Preview Animations": "Preview Animations",
+  "Animation Painter": "Animation Painter",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled

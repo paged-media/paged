@@ -33,14 +33,19 @@ import type {
 } from "@paged-media/plugin-api";
 import { t } from "@paged-media/strings";
 
-import type { ImportReport } from "../engine.js";
+import { hasAnimations } from "../anim/model.js";
+import { pageShapes } from "../anim/shapes.js";
+import type { ImportReport, SlideEngine } from "../engine.js";
 import { SHOW } from "../messages.js";
 import {
   setStateMutation,
   type Slide,
   type SlidesStore,
 } from "../slides-model.js";
-import { createFrameSource } from "./frames.js";
+import type { Player } from "./animation.js";
+import { createFrameSource, createSceneSource } from "./frames.js";
+import { planScene } from "./scene.js";
+import type { SlideScene } from "./scene-source.js";
 import { mountConsole } from "./presenter.js";
 import type { ShowSlide } from "./show-model.js";
 import { mountAudience, mountShow, ShowController } from "./slide-show.js";
@@ -148,7 +153,58 @@ export function timingsMutation(
   return { op: "batch", args: { ops } } as MutationInput;
 }
 
+/** Give each animated slide its effects, its build clicks and how its page
+ *  splits into layers (slide ADR 714). A slide whose timing the engine
+ *  cannot read plays without animations. */
+export async function attachAnimations(
+  host: BundleHost,
+  engine: SlideEngine,
+  slides: ShowSlide[],
+  timings: ReadonlyMap<string, unknown>,
+): Promise<void> {
+  const animated = slides.filter((s) => hasAnimations(timings.get(s.pageId) as never));
+  if (animated.length === 0) return;
+  const pages = await pageShapes(host);
+  for (const s of animated) {
+    const timing = timings.get(s.pageId) as Parameters<SlideEngine["effects"]>[0];
+    try {
+      const list = engine.effects(timing);
+      s.clicks = list.clicks;
+      s.anim = {
+        timing: timing!,
+        effects: list.effects,
+        plan: planScene(pages.get(s.pageId), s.pageId, list.effects),
+      };
+    } catch (err) {
+      host.log.warn(
+        `paged.slide show: slide ${s.number}'s animations do not play (${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
+  }
+}
+
+/** The player of an animated slide's timing, for its drawn layers. */
+export function playerFor(
+  engine: () => Promise<SlideEngine>,
+): (slide: ShowSlide, scene: SlideScene) => Promise<Player | null> {
+  return async (slide, scene) => {
+    if (!slide.anim) return null;
+    try {
+      const e = await engine();
+      return e.animPlayer({
+        timing: slide.anim.timing,
+        slide: { w: slide.sizePt[0], h: slide.sizePt[1] },
+        boxes: scene.boxes,
+      });
+    } catch {
+      return null;
+    }
+  };
+}
+
 export interface ShowDeps {
+  /** The slide engine (animations; slide ADR 714). */
+  engine?: () => Promise<SlideEngine>;
   store: SlidesStore;
   /** The import report (the deck's own timings), if the deck kept one. */
   readReport(): Promise<ImportReport | null>;
@@ -231,11 +287,17 @@ export function contributeShow(
   function renderShow(el: HTMLElement, ctx: PresentationContext): () => void {
     const opts = ctx.options as ShowOptions;
     const frames = createFrameSource(host);
+    const scenes = createSceneSource(host);
+    const player = deps.engine ? playerFor(deps.engine) : undefined;
     if (ctx.role === "audience") {
-      const off = mountAudience(el, ctx.window, ctx.channel, frames);
+      const off = mountAudience(el, ctx.window, ctx.channel, frames, {
+        scenes,
+        player,
+      });
       return () => {
         off();
         frames.dispose();
+        scenes.dispose();
       };
     }
     const ctl = new ShowController({
@@ -246,6 +308,8 @@ export function contributeShow(
     });
     const surface = {
       frames,
+      scenes,
+      player,
       thumbnail: (pageId: string) => store.thumbnail(pageId),
       exit: () => ctx.exit(),
     };
@@ -265,6 +329,7 @@ export function contributeShow(
       off();
       ctl.dispose();
       frames.dispose();
+      scenes.dispose();
       // Back in the editor on the slide the show ended on.
       if (endedOn && host.supports("viewport.pages@1"))
         void host.viewport.goToPage(endedOn);
@@ -289,6 +354,20 @@ export function contributeShow(
       return false;
     }
     slides = showSlides(store.list(), await deps.readReport());
+    if (deps.engine) {
+      try {
+        await attachAnimations(
+          host,
+          await deps.engine(),
+          slides,
+          new Map(store.list().map((s) => [s.pageId, s.state.timing])),
+        );
+      } catch (err) {
+        log(
+          `animations do not play (${err instanceof Error ? err.message : String(err)})`,
+        );
+      }
+    }
     const out = await host.shell.present({
       id: SHOW_PRESENTATION,
       target,

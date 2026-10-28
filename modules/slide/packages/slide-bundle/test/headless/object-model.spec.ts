@@ -25,6 +25,7 @@
 // model claims (the report part is only a cache) — and a save-and-reopen
 // proves they travel in the document.
 
+import { ANIM_TYPED } from "../../src/anim/contribute";
 import { SHOW_CMD } from "../../src/show/contribute";
 import { readFileSync } from "node:fs";
 
@@ -131,6 +132,8 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
         NEW_SLIDE_COMMAND,
         // The slide show's twins of its palette commands.
         ...Object.values(SHOW_CMD),
+        // The animations' typed commands (slide ADR 714).
+        ...Object.values(ANIM_TYPED),
       ].sort(),
     );
   });

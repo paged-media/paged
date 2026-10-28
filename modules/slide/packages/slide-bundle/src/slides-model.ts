@@ -24,6 +24,8 @@
 
 import type { BundleHost, MutationInput } from "@paged-media/plugin-api";
 
+import type { Timing } from "./anim/model.js";
+
 /** One plugin-metadata entry as the engine reports it. */
 export interface PluginMetadataEntry {
   key: string;
@@ -59,6 +61,9 @@ export interface SlideState {
   notes?: string;
   hidden?: boolean;
   transition?: Transition;
+  /** The slide's animations (slide ADR 714): the engine's timing model,
+   *  with each shape named by its page item and shape key. */
+  timing?: Timing;
 }
 
 export interface Slide {
@@ -88,6 +93,13 @@ export function parseState(
     if (typeof d.transition === "object" && d.transition !== null) {
       out.transition = d.transition as Transition;
     }
+    if (
+      typeof d.timing === "object" &&
+      d.timing !== null &&
+      Array.isArray((d.timing as { nodes?: unknown }).nodes)
+    ) {
+      out.timing = d.timing as Timing;
+    }
     return out;
   } catch {
     return {};
@@ -102,6 +114,7 @@ export function encodeState(state: SlideState): string | null {
   if (state.notes && state.notes.trim() !== "") data.notes = state.notes;
   if (state.hidden) data.hidden = true;
   if (state.transition) data.transition = state.transition;
+  if (state.timing) data.timing = state.timing;
   return Object.keys(data).length === 0 ? null : JSON.stringify({ v: 1, data });
 }
 

@@ -126,6 +126,9 @@ export async function exportPlan(
       pageId: p.selfId,
       layout: state.layout ?? null,
       ...(comments ? { comments: comments.byPage[p.selfId] ?? [] } : {}),
+      // The animations as the document holds them; the engine keeps the
+      // deck's bytes for a timing that did not change (slide ADR 714).
+      ...(state.timing ? { timing: state.timing } : {}),
     };
   });
 }

@@ -11,11 +11,17 @@
       "readNative": true,
       "openNative": true
     },
-    "rendering": ["overlay"],
-    "editContext": ["slideDeck"],
+    "rendering": [
+      "overlay"
+    ],
+    "editContext": [
+      "slideDeck"
+    ],
     "clipboard": "none",
     "keybindings": true,
-    "assets": ["fonts"],
+    "assets": [
+      "fonts"
+    ],
     "wasm": [
       {
         "name": "slide-engine",
@@ -30,8 +36,7 @@
     },
     "gpu": {
       "realm": "bundle"
-    },
-    "rendering": ["overlay"]
+    }
   },
   "contributes": {
     "commands": [
@@ -50,12 +55,23 @@
       "media.paged.slide.command.presenterView",
       "media.paged.slide.command.rehearseTimings",
       "media.paged.slide.command.slideSorter",
-      "media.paged.slide.command.insertShapes"
+      "media.paged.slide.command.insertShapes",
+      "media.paged.slide.command.animationPane",
+      "media.paged.slide.command.previewAnimations",
+      "media.paged.slide.command.animationPainter"
     ],
-    "importers": ["media.paged.slide.importer.pptx"],
-    "exporters": ["media.paged.slide.exporter.pptx"],
-    "presentations": ["media.paged.slide.show"],
-    "views": ["media.paged.slide.view.sorter"],
+    "importers": [
+      "media.paged.slide.importer.pptx"
+    ],
+    "exporters": [
+      "media.paged.slide.exporter.pptx"
+    ],
+    "presentations": [
+      "media.paged.slide.show"
+    ],
+    "views": [
+      "media.paged.slide.view.sorter"
+    ],
     "editContexts": [
       {
         "type": "slideDeck",
@@ -70,7 +86,8 @@
       "media.paged.slide.panel.placeholder",
       "media.paged.slide.panel.deck",
       "media.paged.slide.panel.comments",
-      "media.paged.slide.panel.shapes"
+      "media.paged.slide.panel.shapes",
+      "media.paged.slide.panel.animations"
     ],
     "partTypes": [
       {
@@ -254,6 +271,42 @@
           "title": "Insert a shape",
           "args": "schema/insert-shape.args.json",
           "result": "schema/insert-shape.result.json"
+        },
+        {
+          "id": "media.paged.slide.addAnimation",
+          "title": "Add an animation",
+          "args": "schema/add-animation.args.json",
+          "result": "schema/add-animation.result.json"
+        },
+        {
+          "id": "media.paged.slide.removeAnimation",
+          "title": "Remove an animation",
+          "args": "schema/remove-animation.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.setAnimationTiming",
+          "title": "Set an animation's timing",
+          "args": "schema/set-animation-timing.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.moveAnimation",
+          "title": "Move an animation",
+          "args": "schema/move-animation.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.listAnimations",
+          "title": "List a slide's animations",
+          "args": "schema/list-animations.args.json",
+          "result": "schema/list-animations.result.json"
+        },
+        {
+          "id": "media.paged.slide.previewAnimations",
+          "title": "Preview a slide's animations",
+          "args": "schema/preview-animations.args.json",
+          "result": "schema/empty.json"
         }
       ],
       "templateFields": [
