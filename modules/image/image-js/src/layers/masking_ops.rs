@@ -44,7 +44,7 @@ use image_core::Region;
 use image_gpu::coverage::SelectionCoverage;
 use image_graph::journal::{FlatImage, RecordOutcome};
 
-use super::{CanvasOp, LayerStack, Step};
+use super::{CanvasOp, LayerStack};
 use crate::ingest::IngestError;
 use crate::masking::{ChannelKind, DocChannel, MaskingDoc, SubPath};
 
@@ -294,8 +294,7 @@ impl LayerStack {
         self.masking.doc.channels[idx].data = Arc::new(data);
         self.masking.channel_preview = None;
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
-            self.steps.push(Step::Pixels);
-            self.undone.clear();
+            self.push_pixel_step();
         }
         self.sync_with_journal();
         Ok(outcome)

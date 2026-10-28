@@ -845,7 +845,7 @@ impl LayerStack {
             groups,
             active,
             next_id,
-            journal: TileJournal::new(),
+            journal: TileJournal::with_budget(super::history::default_budget()),
             steps: Vec::new(),
             undone: Vec::new(),
             dropped_steps: 0,
@@ -856,6 +856,9 @@ impl LayerStack {
             history_states: Default::default(),
             masking: Default::default(),
             styles,
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
         };
         stack.masking.doc = masking;
         Ok(stack)
