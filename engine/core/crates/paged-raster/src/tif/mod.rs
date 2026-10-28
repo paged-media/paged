@@ -48,7 +48,7 @@ pub(crate) const XMP: u16 = 700;
 pub(crate) const IPTC: u16 = 33723;
 pub(crate) const PHOTOSHOP: u16 = 34377;
 pub(crate) const ICC: u16 = 34675;
-const IMAGE_SOURCE_DATA: u16 = 37724;
+pub(crate) const IMAGE_SOURCE_DATA: u16 = 37724;
 
 fn malformed(detail: impl Into<String>) -> Error {
     Error::Malformed {

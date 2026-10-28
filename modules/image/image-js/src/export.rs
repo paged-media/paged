@@ -16,15 +16,16 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! EXPORT AS — the session's pixels written as PNG, JPEG, WebP or TIFF
-//! with the choices the Export As dialog offers (ADR 468):
+//! EXPORT AS — the session's pixels written as PNG, JPEG, WebP, TIFF,
+//! GIF, BMP, TGA or JPEG XL with the choices the Export As dialog offers
+//! (ADR 468; GIF, BMP, TGA and JPEG XL from engine ADR 1038):
 //!
 //! * **format** and, for JPEG, **quality**;
 //! * **size** (the export is resampled, Lanczos 3; the session is not);
 //! * **colour**: RGB, Grayscale, or CMYK (TIFF only) through a chosen CMYK
 //!   output profile with an intent — or the naive formula without one,
 //!   which the result says;
-//! * **depth**: 8 or 16 bits (PNG, TIFF); a 16-bit session exports its
+//! * **depth**: 8 or 16 bits (PNG, TIFF, JPEG XL); a 16-bit session exports its
 //!   own samples, an 8-bit one is widened and says so;
 //! * **metadata**: keep the source's EXIF, XMP and IPTC (EXIF written with
 //!   Orientation 1, since the pixels were turned upright on open) or strip
@@ -75,7 +76,8 @@ pub struct ExportSpec {
     pub keep_metadata: bool,
     pub embed_profile: bool,
     pub mode: ExportMode,
-    /// 16 bits per channel (PNG and TIFF; the other formats write 8).
+    /// 16 bits per channel (PNG, TIFF and JPEG XL; the other formats
+    /// write 8).
     pub sixteen: bool,
     pub compression: TiffCompression,
     /// The CMYK output profile for [`ExportMode::Cmyk`].
@@ -105,7 +107,8 @@ impl ExportSpec {
 
 impl ExportSpec {
     /// Parse the bundle's spec string: `;`-separated `key=value` pairs —
-    /// `format` (png, jpeg, webp, tiff; required), `quality` (1–100),
+    /// `format` (png, jpeg, webp, tiff, gif, bmp, tga, jxl, avif;
+    /// required), `quality` (1–100),
     /// `width` and `height` (both, or neither), `ppi`, `meta` and `icc`
     /// (`1`/`0`), `mode` (rgb, gray, cmyk), `bits` (8, 16), `compression`
     /// (none, lzw, deflate) and `intent` (perceptual, relativeColorimetric,
@@ -184,6 +187,14 @@ pub enum ExportNote {
     AlphaDropped,
     /// Grayscale is written without a profile (no gray profile ships).
     GrayUntagged,
+    /// GIF holds 256 colours and one bit of alpha: the image had more
+    /// colours (quantized) or partial transparency (thresholded).
+    GifPalette,
+    /// JPEG XL is written lossless (the encoder writes no lossy mode).
+    JxlLossless,
+    /// The format carries no metadata or profile (GIF, BMP, TGA, JPEG
+    /// XL): what was asked to be kept or embedded is not in the file.
+    NoMetadata,
 }
 
 impl ExportNote {
@@ -196,6 +207,9 @@ impl ExportNote {
             ExportNote::Narrowed => "narrowed",
             ExportNote::AlphaDropped => "alpha-dropped",
             ExportNote::GrayUntagged => "gray-untagged",
+            ExportNote::GifPalette => "gif-palette",
+            ExportNote::JxlLossless => "jxl-lossless",
+            ExportNote::NoMetadata => "no-metadata",
         }
     }
 }
@@ -226,7 +240,10 @@ pub fn export(
     let n = width as usize * height as usize;
     let mut notes = Vec::new();
     let err = |e: paged_raster::Error| IngestError::Decode(e.to_string());
-    let holds16 = matches!(spec.format, EncodeFormat::Png | EncodeFormat::Tiff);
+    let holds16 = matches!(
+        spec.format,
+        EncodeFormat::Png | EncodeFormat::Tiff | EncodeFormat::Jxl
+    );
     let want16 = spec.sixteen && holds16 && spec.mode != ExportMode::Cmyk;
     if spec.sixteen && !want16 {
         notes.push(ExportNote::Narrowed);
@@ -234,10 +251,26 @@ pub fn export(
     if spec.format == EncodeFormat::WebP {
         notes.push(ExportNote::WebpLossless);
     }
+    if spec.format == EncodeFormat::Jxl {
+        notes.push(ExportNote::JxlLossless);
+    }
     if spec.mode == ExportMode::Cmyk && spec.format != EncodeFormat::Tiff {
         return Err(IngestError::Unsupported(
-            "CMYK export is written as TIFF (PNG, JPEG and WebP hold RGB)".into(),
+            "CMYK export is written as TIFF (the other formats hold Gray or RGB)".into(),
         ));
+    }
+    if !spec.format.available() {
+        return Err(IngestError::Unsupported(format!(
+            "{} export is not in this build",
+            spec.format.name().to_uppercase()
+        )));
+    }
+    let carries_none = matches!(
+        spec.format,
+        EncodeFormat::Gif | EncodeFormat::Bmp | EncodeFormat::Tga | EncodeFormat::Jxl
+    );
+    if carries_none && (spec.keep_metadata || spec.embed_profile) {
+        notes.push(ExportNote::NoMetadata);
     }
 
     // Samples as the target depth, RGBA.
@@ -277,6 +310,9 @@ pub fn export(
     };
     if !opaque && spec.format == EncodeFormat::Jpeg {
         notes.push(ExportNote::AlphaDropped);
+    }
+    if spec.format == EncodeFormat::Gif && !fits_a_gif_palette(&data) {
+        notes.push(ExportNote::GifPalette);
     }
     let keep_alpha = !opaque && spec.format != EncodeFormat::Jpeg;
     let data = rgba_to(data, spec.mode == ExportMode::Gray, keep_alpha);
@@ -354,6 +390,26 @@ pub fn export(
     };
     let bytes = paged_raster::encode(&img, spec.format, &options).map_err(err)?;
     Ok(Exported { bytes, notes })
+}
+
+/// At most 256 distinct RGBA colours and no partial alpha: what a GIF
+/// holds exactly.
+fn fits_a_gif_palette(data: &Samples) -> bool {
+    let Samples::U8(v) = data else {
+        return false;
+    };
+    let mut seen = std::collections::HashSet::new();
+    for p in v.as_chunks::<4>().0 {
+        if p[3] != 0 && p[3] != 255 {
+            return false;
+        }
+        // Every fully transparent pixel is the one transparent index.
+        let key = if p[3] == 0 { [0; 4] } else { *p };
+        if seen.insert(key) && seen.len() > 256 {
+            return false;
+        }
+    }
+    true
 }
 
 /// RGBA samples as Gray or RGB, with or without the alpha.
@@ -465,7 +521,7 @@ mod tests {
         assert!(ExportSpec::from_wire("quality=80")
             .unwrap_err()
             .contains("no format"));
-        assert!(ExportSpec::from_wire("format=bmp")
+        assert!(ExportSpec::from_wire("format=heic")
             .unwrap_err()
             .contains("format"));
         assert!(ExportSpec::from_wire("format=png;width=3").is_err());
@@ -630,6 +686,78 @@ mod tests {
                     .collect()
             ),
             "lossless"
+        );
+    }
+
+    #[test]
+    fn gif_bmp_tga_and_jxl_write_the_pixels_and_say_what_they_drop__feat__images_graphics_codecs_long_tail(
+    ) {
+        // An opaque 8 x 6 ramp: 48 colours, so GIF keeps them exactly.
+        let px = ramp(8, 6, 255);
+        let rgb: Vec<u8> = px.chunks(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
+        for (format, extra) in [
+            (EncodeFormat::Gif, None),
+            (EncodeFormat::Bmp, None),
+            (EncodeFormat::Tga, None),
+            (EncodeFormat::Jxl, Some(ExportNote::JxlLossless)),
+        ] {
+            let out = export(Rgba::U8(&px), 8, 6, &spec(format), None).unwrap();
+            let mut want: Vec<ExportNote> = extra.into_iter().collect();
+            want.push(ExportNote::NoMetadata);
+            assert_eq!(out.notes, want, "{format:?}");
+            assert_eq!(paged_raster::sniff(&out.bytes), Some(format.format()));
+            let back = paged_raster::decode(&out.bytes, DecodeOptions::default()).unwrap();
+            let got: Vec<u8> = match (&back.data, back.channels()) {
+                (Samples::U8(v), 3) => v.clone(),
+                (Samples::U8(v), 4) => v.chunks(4).flat_map(|p| [p[0], p[1], p[2]]).collect(),
+                other => panic!("{format:?}: {other:?}"),
+            };
+            assert_eq!(got, rgb, "{format:?} is lossless here");
+        }
+        // Stripping says nothing; more colours than a GIF palette are said.
+        let quiet = ExportSpec {
+            keep_metadata: false,
+            embed_profile: false,
+            ..spec(EncodeFormat::Gif)
+        };
+        let out = export(Rgba::U8(&ramp(32, 32, 255)), 32, 32, &quiet, None).unwrap();
+        assert_eq!(out.notes, vec![ExportNote::GifPalette]);
+        let out = export(Rgba::U8(&ramp(8, 6, 128)), 8, 6, &quiet, None).unwrap();
+        assert_eq!(out.notes, vec![ExportNote::GifPalette], "partial alpha");
+    }
+
+    #[test]
+    fn jxl_keeps_sixteen_bits_and_cmyk_stays_a_tiff_affair__feat__images_graphics_codecs_long_tail()
+    {
+        let v: Vec<u16> = (0..4 * 3 * 4)
+            .map(|i| {
+                if i % 4 == 3 {
+                    u16::MAX
+                } else {
+                    (i * 4099) as u16
+                }
+            })
+            .collect();
+        let s = ExportSpec {
+            sixteen: true,
+            ..spec(EncodeFormat::Jxl)
+        };
+        let out = export(Rgba::U16(v.clone()), 4, 3, &s, None).unwrap();
+        assert!(!out.notes.contains(&ExportNote::Narrowed));
+        assert_eq!(probe(&out.bytes).unwrap().bits_per_sample, 16);
+        for format in [EncodeFormat::Gif, EncodeFormat::Jxl, EncodeFormat::Bmp] {
+            let s = ExportSpec {
+                mode: ExportMode::Cmyk,
+                ..spec(format)
+            };
+            match export(Rgba::U8(&ramp(2, 2, 255)), 2, 2, &s, None) {
+                Err(IngestError::Unsupported(m)) => assert!(m.contains("TIFF"), "{m}"),
+                other => panic!("{format:?}: {other:?}"),
+            }
+        }
+        assert_eq!(
+            ExportSpec::from_wire("format=gif").unwrap().format,
+            EncodeFormat::Gif
         );
     }
 }

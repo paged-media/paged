@@ -32,9 +32,13 @@
 //! - [`decode_rgba8`] (and [`decode_rgba8_with`], which takes the colour
 //!   conversion) is the one call the render paths make.
 //! - [`encode`] writes PNG, JPEG, WebP (lossless) and TIFF with the ICC
-//!   profile, EXIF, XMP, IPTC and resolution of an [`EncodeOptions`];
-//!   [`encode_tiff`] is the TIFF half (Gray, RGB and CMYK at 8 or 16 bits,
-//!   with or without alpha, uncompressed, LZW or Deflate).
+//!   profile, EXIF, XMP, IPTC and resolution of an [`EncodeOptions`], and
+//!   GIF, BMP, TGA, lossless JPEG XL (feature `jxl-encode`) and AVIF
+//!   (feature `avif-encode`, off by default) without most of them (ADR
+//!   1038); [`encode_tiff`] is the TIFF half (Gray, RGB and CMYK at 8 or
+//!   16 bits, with or without alpha, uncompressed, LZW or Deflate), and
+//!   [`encode_layered_tiff`] / [`psd_to_layered_tiff`] write a TIFF with
+//!   Photoshop's layers in tag 37724.
 //! - [`read_metadata`] collects a file's ICC, EXIF, XMP, IPTC and
 //!   Photoshop resources, so an edit can write them back.
 //! - [`resize`] and [`rgb_to_cmyk`] prepare pixels for an export at
@@ -90,9 +94,11 @@
 //! AVIF (feature `avif`: `avif-parse` and rav1d) and JPEG XL (feature
 //! `jxl`: `jxl-oxide`) decode in pure Rust on native and wasm32; TGA,
 //! QOI, ICO, Radiance HDR and OpenEXR (feature `exr`) through `image`.
-//! The scene-linear floats of HDR and EXR are clipped and sRGB-encoded by
-//! [`to_rgba8`]. A build without a feature sniffs the format and refuses
-//! it, naming the feature.
+//! HDR and EXR decode to 32-bit float samples (an OpenEXR alpha is
+//! associated: the format stores colour premultiplied); their
+//! scene-linear floats are clipped and sRGB-encoded by [`to_rgba8`]. A
+//! deep or non-RGB OpenEXR is refused by name. A build without a feature
+//! sniffs the format and refuses it, naming the feature.
 //!
 //! ## Colour
 //!
@@ -112,10 +118,10 @@
 //! ## Not here yet
 //!
 //! Orientation is reported, not applied (the renderer never applied it).
-//! Region decode, lossy WebP encoding, and gray or RGB ICC conversion
-//! follow in later work. A layered TIFF
-//! (tag 37724) decodes its flattened image; its layer records are read
-//! through `paged-psd` for [`RasterInfo::layer_count`] only.
+//! Region decode, lossy WebP and JPEG XL encoding, and gray or RGB ICC
+//! conversion follow in later work. A layered TIFF (tag 37724) decodes
+//! its flattened image; its layer records are read through `paged-psd`
+//! for [`RasterInfo::layer_count`] only.
 
 #![forbid(unsafe_code)]
 
@@ -150,7 +156,10 @@ pub use meta::{extract_icc_any, read_metadata, Metadata};
 pub use paged_color::cms::{Intent, Rendering};
 pub use paged_sniff::{sniff, Format};
 pub use shrink::shrunk_dimensions;
-pub use tif::encode::{encode_tiff, encode_tiff_pages, TiffCompression, TiffEncodeOptions};
+pub use tif::encode::{
+    encode_layered_tiff, encode_tiff, encode_tiff_pages, psd_to_layered_tiff, TiffCompression,
+    TiffEncodeOptions,
+};
 
 /// Everything a header tells about one page of a raster file.
 #[derive(Clone, Debug, PartialEq)]

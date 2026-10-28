@@ -1,5 +1,6 @@
-// FILE ▸ EXPORT AS… (ADR 468) — the image written as PNG, JPEG, WebP or
-// TIFF with the choices Photoshop's Export As and Save As offer: format,
+// FILE ▸ EXPORT AS… (ADR 468) — the image written as PNG, JPEG, WebP,
+// TIFF, GIF, BMP, TGA or JPEG XL (the last four from engine ADR 1038)
+// with the choices Photoshop's Export As and Save As offer: format,
 // JPEG quality, size, colour mode (CMYK through a chosen profile, TIFF
 // only), depth, metadata keep/strip, embed profile and resolution. The
 // engine's `export_image*` doors do the work (`paged-raster`); this is
@@ -48,6 +49,13 @@ const M = defineMessages("image.exportAs", {
   export: "Export",
   cancel: "Cancel",
   webpNote: "WebP is written lossless: there is no lossy WebP encoder.",
+  gifNote:
+    "GIF holds 256 colours and one bit of transparency; an image with more " +
+    "colours is reduced. No metadata or colour profile is written.",
+  jxlNote:
+    "JPEG XL is written lossless, at 8 or 16 bits. No metadata or colour " +
+    "profile is written.",
+  plainNote: "This format carries no metadata or colour profile.",
   cmykNote:
     "CMYK is written as TIFF, converted through the chosen profile (or the " +
     "source's own CMYK profile); without one, the naive formula is used and " +
@@ -76,17 +84,50 @@ export interface SourceMetadata {
   iptc: number;
 }
 
-/** The formats a mode allows: CMYK is a TIFF affair. */
-export function formatsFor(mode: ExportOptions["mode"]): RasterFormat[] {
-  return mode === "cmyk" ? ["tiff"] : ["png", "jpeg", "webp", "tiff"];
+/** Every format the dialog offers, in menu order. */
+export const EXPORT_AS_FORMATS: readonly RasterFormat[] = [
+  "png",
+  "jpeg",
+  "webp",
+  "tiff",
+  "gif",
+  "bmp",
+  "tga",
+  "jxl",
+];
+
+/** The menu label of a format. */
+export function formatLabel(format: RasterFormat): string {
+  return format === "jxl" ? "JPEG XL" : format.toUpperCase();
 }
 
-/** 16 bits only where the format holds them (PNG, TIFF) and not CMYK. */
+/** The formats a mode allows: CMYK is a TIFF affair. */
+export function formatsFor(mode: ExportOptions["mode"]): RasterFormat[] {
+  return mode === "cmyk" ? ["tiff"] : [...EXPORT_AS_FORMATS];
+}
+
+/** 16 bits only where the format holds them (PNG, TIFF, JPEG XL) and not
+ *  CMYK. */
 export function sixteenAllowed(
   format: RasterFormat,
   mode: ExportOptions["mode"],
 ): boolean {
-  return (format === "png" || format === "tiff") && mode !== "cmyk";
+  return (
+    (format === "png" || format === "tiff" || format === "jxl") &&
+    mode !== "cmyk"
+  );
+}
+
+/** The dialog's closing sentence for a format and mode. */
+function noteFor(
+  format: RasterFormat,
+  mode: ExportOptions["mode"],
+): (typeof M)[keyof typeof M] {
+  if (format === "webp") return M.webpNote;
+  if (format === "gif") return M.gifNote;
+  if (format === "jxl") return M.jxlNote;
+  if (format === "bmp" || format === "tga") return M.plainNote;
+  return mode === "cmyk" ? M.cmykNote : M.rgbNote;
 }
 
 export function ExportAsDialog({
@@ -196,7 +237,7 @@ export function ExportAsDialog({
         >
           {formatsFor(mode).map((f) => (
             <option key={f} value={f}>
-              {f.toUpperCase()}
+              {formatLabel(f)}
             </option>
           ))}
         </select>
@@ -364,11 +405,7 @@ export function ExportAsDialog({
         </button>
       </div>
       <div style={note} data-export-note>
-        {format === "webp"
-          ? t(M.webpNote)
-          : mode === "cmyk"
-            ? t(M.cmykNote)
-            : t(M.rgbNote)}
+        {t(noteFor(format, mode))}
       </div>
     </section>
   );

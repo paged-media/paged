@@ -407,25 +407,38 @@ fn emit_layer_info(info: &LayerAndMaskInfo, w: &mut ByteWriter, container: Conta
     }
     let anchor = w.len() + width.bytes();
     w.framed(width, |w| {
-        let count = info.layers.len() as i16;
-        let signed = if info.transparency_in_merged {
-            -count
-        } else {
-            count
-        };
-        w.i16(signed);
-        for layer in &info.layers {
-            layer.emit_record(w, container);
-        }
-        for layer in &info.layers {
-            for cd in &layer.channel_data {
-                cd.emit(w);
-            }
-        }
+        emit_layer_info_body(&info.layers, info.transparency_in_merged, w, container);
         // Layer info content is rounded up to even (brief §4a). Anchor on
         // the content start (just after the length field).
         w.pad_to(2, anchor);
     });
+}
+
+/// The layer info sub-block AFTER its length field, the inverse of
+/// [`parse_layer_info_body`]: the signed layer count, every record, then
+/// every channel's image data in layer/channel order. Unpadded; the
+/// caller frames and pads it (the layer info sub-block to 2, a `Layr` /
+/// `Lr16` / `Lr32` block to 4).
+pub(crate) fn emit_layer_info_body(
+    layers: &[LayerRecord],
+    transparency_in_merged: bool,
+    w: &mut ByteWriter,
+    container: Container,
+) {
+    let count = layers.len() as i16;
+    w.i16(if transparency_in_merged {
+        -count
+    } else {
+        count
+    });
+    for layer in layers {
+        layer.emit_record(w, container);
+    }
+    for layer in layers {
+        for cd in &layer.channel_data {
+            cd.emit(w);
+        }
+    }
 }
 
 impl ChannelData {
