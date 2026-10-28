@@ -62,7 +62,8 @@ use crate::operation::{
     PathfinderRegionVerb, PropertyPath, Value,
 };
 use crate::planar::{
-    arrangement_edges, build_arrangement, union_faces, PlanarError, PlanarFace, MAX_PLANAR_INPUTS,
+    arrangement_edges, build_arrangement, PlanarArrangement, PlanarError, PlanarFace,
+    MAX_PLANAR_INPUTS,
 };
 
 use super::apply_inner;
@@ -151,7 +152,8 @@ pub(super) fn apply_pathfinder_faces(
         .filter_map(|f| f.signature.first().copied())
         .min()
         .unwrap_or(0);
-    let (anchors, starts) = union_faces(&selected);
+    let ids: Vec<&str> = selected.iter().map(|f| f.id.as_str()).collect();
+    let (anchors, starts) = arrangement.union_of(&ids);
     if anchors.is_empty() {
         return Err(invalid(
             &inputs[0].node,
@@ -240,7 +242,7 @@ fn region_plan(
             // Each input keeps only what nothing above it covers.
             for i in 0..n {
                 let mine: Vec<&PlanarFace> = faces.iter().filter(|f| owner_of(f) == i).collect();
-                if let Some(region) = united(i, &mine) {
+                if let Some(region) = united(&arrangement, i, &mine) {
                     results.push(region);
                 }
             }
@@ -263,7 +265,7 @@ fn region_plan(
                     .filter(|f| members.contains(&owner_of(f)))
                     .collect();
                 let top = members.iter().copied().min().unwrap_or(0);
-                if let Some(region) = united(top, &mine) {
+                if let Some(region) = united(&arrangement, top, &mine) {
                     results.push(region);
                 }
             }
@@ -298,7 +300,7 @@ fn region_plan(
                 .iter()
                 .filter(|f| f.signature.as_slice() == [front])
                 .collect();
-            if let Some(region) = united(front, &mine) {
+            if let Some(region) = united(&arrangement, front, &mine) {
                 results.push(region);
             }
         }
@@ -368,14 +370,20 @@ fn region_from(owner: usize, face: &PlanarFace) -> ResultRegion {
     }
 }
 
-/// Union a set of faces into one result owned by `owner`. `None` when
-/// the set is empty or unites to nothing (the input was fully hidden —
-/// Trim deletes it, which is the point of the verb).
-fn united(owner: usize, faces: &[&PlanarFace]) -> Option<ResultRegion> {
+/// Union a set of faces into one result owned by `owner`, read off the
+/// arrangement's face walk (engine ADR 1019). `None` when the set is
+/// empty or unites to nothing (the input was fully hidden — Trim deletes
+/// it, which is the point of the verb).
+fn united(
+    arrangement: &PlanarArrangement,
+    owner: usize,
+    faces: &[&PlanarFace],
+) -> Option<ResultRegion> {
     if faces.is_empty() {
         return None;
     }
-    let (anchors, subpath_starts) = union_faces(faces);
+    let ids: Vec<&str> = faces.iter().map(|f| f.id.as_str()).collect();
+    let (anchors, subpath_starts) = arrangement.union_of(&ids);
     if anchors.is_empty() {
         return None;
     }

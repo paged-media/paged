@@ -154,6 +154,7 @@ is not written yet.
 | [1016](1016-word-first-fit-composer.md) | Word's first-fit is a composer of its own | Accepted 2026-10-24, amended 2026-10-25 |
 | [1017](1017-styled-field-values-and-alternates.md) | A text field takes the styles and breaks its author allows; alternates choose a frame | Accepted 2026-10-24 |
 | [1018](1018-word-paragraph-character-and-list-model.md) | Word's paragraph, character and list model: highlight, hidden text, underline kinds, double strike, direct shading and borders, list levels, based-on, Next Style | Accepted 2026-10-24 |
+| [1019](1019-geometry-kernels-walk-the-arrangement.md) | The planar arrangement is a face walk; offsets and variable width work on whole paths | Accepted 2026-10-25 |
 | [1021](1021-find-and-replace.md) | Find and replace: the caret space, Word's specials and wildcards on `regress`, Replace All as one undo step | Accepted 2026-10-24 |
 | [1022](1022-word-document-structure.md) | Word document structure: section first / odd / even masters and odd/even starts (amends 026), Word fields and F9, creating tables of contents, cross-references, bookmarks and index markers | Accepted 2026-10-25 |
 | [1030](1030-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |

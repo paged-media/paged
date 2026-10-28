@@ -1943,7 +1943,7 @@
           ]
         },
         {
-          "description": "B-05 (protocol v30) — inset (`delta < 0`) / outset\n(`delta > 0`) of a single closed contour.",
+          "description": "B-05 (protocol v30) — inset (`delta < 0`) / outset\n(`delta > 0`). Engine ADR 1019: any path — a compound path keeps\nits holes (each contour moves by its nesting), and an OPEN contour\nbecomes the two-sided band, or with `side` `\"left\"` / `\"right\"`\none open parallel path on that side of its direction on the page.",
           "type": "object",
           "properties": {
             "op": {
@@ -1966,6 +1966,13 @@
                 "miterLimit": {
                   "type": "number",
                   "format": "float"
+                },
+                "side": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -8677,6 +8684,14 @@
                 "miterLimit": {
                   "type": "number",
                   "format": "float"
+                },
+                "side": {
+                  "description": "Engine ADR 1019 — which side an OPEN contour is offset to:\n`\"both\"` (absent: the two-sided band), `\"left\"` or `\"right\"`\nof its direction on the page (one open parallel path).\nClosed contours ignore it.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 },
                 "prevAnchors": {
                   "type": [

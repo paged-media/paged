@@ -2657,6 +2657,12 @@ pub enum Value {
         delta: f32,
         join: String,
         miter_limit: f32,
+        /// Engine ADR 1019 — which side an OPEN contour is offset to:
+        /// `"both"` (absent: the two-sided band), `"left"` or `"right"`
+        /// of its direction on the page (one open parallel path).
+        /// Closed contours ignore it.
+        #[serde(default)]
+        side: Option<String>,
         #[serde(default)]
         prev_anchors: Option<Vec<PathAnchorSpec>>,
         #[serde(default)]

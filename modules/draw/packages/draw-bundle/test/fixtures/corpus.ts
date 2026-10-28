@@ -153,31 +153,28 @@ export const F4_OVERLAP: CorpusFixture & { secondId: string } = {
  *  kernel's `MAX_PLANAR_INPUTS` (12). The fixture exists to prove the
  *  engine REFUSES rather than truncating, and that the refusal's reason
  *  reaches the UI (B-22). Ids are `u0` … `u12`. */
-export const F5_THIRTEEN: CorpusFixture & {
+export const F5_OVER_CAP: CorpusFixture & {
   count: number;
   idAt(i: number): string;
 } = {
-  id: "thirteen-overlap",
-  about: "13 mutually overlapping quads — one past the planar input cap",
+  id: "over-the-cap",
+  about:
+    "1001 small quads on a lattice, each overlapping its neighbours — one past the planar input cap (1000, engine ADR 1019)",
   pageId: "usp",
   ids: { polygon: "u0" },
-  count: 13,
+  count: 1001,
   idAt: (i: number) => `u${i}`,
   bytes() {
-    const items = Array.from({ length: 13 }, (_, i) => {
-      const o = i * 5;
-      return pathItem(
-        "Polygon",
-        `u${i}`,
-        `${100 + o} ${100 + o} ${300 + o} ${300 + o}`,
-        false,
-        [
-          { a: [100 + o, 100 + o] },
-          { a: [300 + o, 100 + o] },
-          { a: [300 + o, 300 + o] },
-          { a: [100 + o, 300 + o] },
-        ],
-      );
+    const items = Array.from({ length: 1001 }, (_, i) => {
+      const l = 40 + (i % 40) * 12;
+      const t = 40 + Math.floor(i / 40) * 12;
+      const [r, b] = [l + 16, t + 16];
+      return pathItem("Polygon", `u${i}`, `${t} ${l} ${b} ${r}`, false, [
+        { a: [l, t] },
+        { a: [r, t] },
+        { a: [r, b] },
+        { a: [l, b] },
+      ]);
     }).join("");
     return packageWithSpread(items);
   },
