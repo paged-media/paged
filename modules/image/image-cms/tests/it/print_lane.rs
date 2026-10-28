@@ -155,6 +155,28 @@ fn patch_ramp() -> Vec<u8> {
 /// curves → CLUT → output tone curves); the v4 `mAB` form rejects a bare
 /// CLUT. The `shift` perturbs the colorimetric table away from the
 /// perceptual one.
+/// sRGB primaries with a TRC lifted to Y = 0.04 at black (L* ≈ 24), ICC v2
+/// (lcms2 forces BPC into v4 perceptual, not under test here).
+fn lifted_rgb_icc() -> Vec<u8> {
+    let e = 0.04f64;
+    let g = 2.2f64;
+    let curve = ToneCurve::new_parametric(5, &[g, (1.0 - e).powf(1.0 / g), 0.0, 0.0, 0.0, e, 0.0])
+        .expect("curve");
+    let p = |x, y| CIExyY { x, y, Y: 1.0 };
+    let mut prof = LcmsProfile::new_rgb(
+        &p(0.3127, 0.3290),
+        &CIExyYTRIPLE {
+            Red: p(0.64, 0.33),
+            Green: p(0.30, 0.60),
+            Blue: p(0.15, 0.06),
+        },
+        &[&curve, &curve, &curve],
+    )
+    .expect("profile");
+    prof.set_version(2.1);
+    prof.icc().expect("encode")
+}
+
 fn rgb_lut_icc() -> Vec<u8> {
     use lcms2_sys as ffi;
     use std::os::raw::c_void;
@@ -404,33 +426,20 @@ fn image_cms_print_lane_moxcms_lcms2_oracle_per_channel() {
     );
 }
 
-/// (3) BPC on/off. moxcms 0.8.1 does **not** expose black-point
-/// compensation (the `TransformOptions::black_point_compensation` field
-/// is commented out upstream; the BPC module is dead code). So a
-/// `bpc: true` transform must be **byte-identical** to `bpc: false` — the
-/// documented degradation. We assert that identity (proving the flag is
-/// honestly inert, not silently mis-applied) and, to make the gap
-/// audit-visible, contrast it with lcms2 *with* BLACKPOINT_COMPENSATION
-/// on the **same** profile pair, which DOES move pixels.
-///
-/// The profile pair is the LUT-bearing source → sRGB at
-/// RelativeColorimetric: BPC only acts on colorimetric intents and only
-/// when there is a real (non-trivial) black point to compensate — which
-/// a LUT/CLUT source has and a plain matrix sRGB does not. So this pair
-/// is the one where lcms2 BPC genuinely bites, making the moxcms gap
-/// concrete rather than a vacuous 0-vs-0.
-///
-/// REGISTRY NOTE: the BPC-fidelity conformance row stays pinned to a
-/// future moxcms release (or the lcms2-shaped export oracle) that exposes
-/// the knob — this test guards the M1 reality, it does not claim BPC.
+/// (3) BPC on/off. moxcms 0.8 has no black-point compensation of its
+/// own; the engine's CMS (`paged_color::cms::bpc`, Adobe's published
+/// algorithm) supplies it. On a display profile whose black is LIFTED
+/// (its TRC never reaches zero) → sRGB at RelativeColorimetric — a pair
+/// with a real black point to compensate — `bpc: true` must MOVE pixels,
+/// the way lcms2's BLACKPOINT_COMPENSATION does, and land within the
+/// lane's per-channel tolerance of lcms2's BPC result. (The LUT probe
+/// profile of the intent tests is no use here: its black sits at L* 0
+/// with a chroma, which Adobe's detection makes the PCS black.)
 #[test]
-fn image_cms_print_lane_moxcms_bpc_documented_degradation() {
-    // LUT source → sRGB: the pair where colorimetric BPC has a real
-    // black point to compensate (see the doc comment).
-    let src = profile_from_bytes(rgb_lut_icc());
+#[allow(non_snake_case)]
+fn image_cms_print_lane_moxcms_bpc_matches_lcms2__feat__color_swatches_cms_unified() {
+    let src = profile_from_bytes(lifted_rgb_icc());
     let dst = profile_from_bytes(srgb_icc());
-
-    // moxcms: bpc:false vs bpc:true must be identical (flag is inert).
     let t_off = MoxcmsEngine
         .compile(&src, &dst, Intent::RelativeColorimetric, false)
         .expect("moxcms compile (bpc off)");
@@ -444,24 +453,13 @@ fn image_cms_print_lane_moxcms_bpc_documented_degradation() {
     let mut on = patch_ramp();
     t_off.apply_rgba8(&mut off);
     t_on.apply_rgba8(&mut on);
-    assert_eq!(
+    assert_ne!(
         off, on,
-        "moxcms 0.8.1 exposes no BPC — bpc:true must be byte-identical to bpc:false"
+        "BPC must move pixels on a pair with a real black point"
     );
 
-    // Oracle contrast: lcms2 BLACKPOINT_COMPENSATION vs none on the same
-    // profile pair DOES differ — documenting the capability moxcms lacks.
     let lsrc = LcmsProfile::new_icc(&src.bytes).expect("lcms2 src");
     let ldst = LcmsProfile::new_icc(&dst.bytes).expect("lcms2 dst");
-    let no_bpc: Transform<[u8; 3], [u8; 3]> = Transform::new_flags(
-        &lsrc,
-        PixelFormat::RGB_8,
-        &ldst,
-        PixelFormat::RGB_8,
-        lcms2::Intent::RelativeColorimetric,
-        Flags::default(),
-    )
-    .expect("lcms2 no-bpc transform");
     let with_bpc: Transform<[u8; 3], [u8; 3]> = Transform::new_flags(
         &lsrc,
         PixelFormat::RGB_8,
@@ -471,7 +469,6 @@ fn image_cms_print_lane_moxcms_bpc_documented_degradation() {
         Flags::BLACKPOINT_COMPENSATION,
     )
     .expect("lcms2 bpc transform");
-
     let ramp = patch_ramp();
     let rgb_in: Vec<[u8; 3]> = ramp
         .as_chunks::<4>()
@@ -479,23 +476,20 @@ fn image_cms_print_lane_moxcms_bpc_documented_degradation() {
         .iter()
         .map(|p| [p[0], p[1], p[2]])
         .collect();
-    let mut a = vec![[0u8; 3]; rgb_in.len()];
-    let mut b = vec![[0u8; 3]; rgb_in.len()];
-    no_bpc.transform_pixels(&rgb_in, &mut a);
-    with_bpc.transform_pixels(&rgb_in, &mut b);
-    let lcms_bpc_max = a
+    let mut want = vec![[0u8; 3]; rgb_in.len()];
+    with_bpc.transform_pixels(&rgb_in, &mut want);
+    let worst = on
+        .as_chunks::<4>()
+        .0
         .iter()
-        .zip(b.iter())
-        .flat_map(|(x, y)| (0..3).map(move |c| x[c].abs_diff(y[c])))
+        .zip(&want)
+        .flat_map(|(m, l)| (0..3).map(move |c| m[c].abs_diff(l[c])))
         .max()
         .unwrap_or(0);
+    eprintln!("BPC: moxcms + engine BPC vs lcms2 BPC, worst per-channel = {worst}/255");
     assert!(
-        lcms_bpc_max > 0,
-        "oracle sanity: lcms2 BPC vs none should differ on the LUT→sRGB colorimetric pair \
-         (if this is 0 the contrast is vacuous and the chosen profile pair is wrong)"
-    );
-    eprintln!(
-        "BPC: moxcms 0.8.1 inert (off==on); lcms2 oracle BPC vs none max per-channel = {lcms_bpc_max}/255 (the capability the print lane awaits)"
+        worst <= MAX_CHANNEL_DEVIATION,
+        "moxcms+BPC vs lcms2+BPC: {worst}/255 > {MAX_CHANNEL_DEVIATION}"
     );
 }
 

@@ -526,7 +526,8 @@ export type DisplayTreatment =
   | "assumed-srgb"
   | "profile-rejected"
   | "cmyk-converted"
-  | "cmyk-uncalibrated";
+  | "cmyk-uncalibrated"
+  | "hdr-clipped";
 
 /** The DecodedInfo every kernel-apply returns. One place, because six
  *  hand-written copies of the same field list is six chances to forget
@@ -557,6 +558,8 @@ export function displayTreatmentOf(code: number | undefined): DisplayTreatment {
       return "cmyk-converted";
     case 4:
       return "cmyk-uncalibrated";
+    case 5:
+      return "hdr-clipped";
     default:
       return "assumed-srgb";
   }
@@ -568,6 +571,7 @@ const TREATMENT = defineMessages("image.colourTreatment", {
   profileRejected: "sRGB assumed (profile rejected)",
   cmykConverted: "CMYK, converted to sRGB",
   cmykUncalibrated: "CMYK, converted to sRGB without a profile",
+  hdrClipped: "HDR, clipped to sRGB (no tone mapping)",
   assumed: "sRGB assumed",
 });
 
@@ -581,6 +585,8 @@ export function displayTreatmentLabel(treatment: DisplayTreatment): string {
       return t(TREATMENT.cmykConverted);
     case "cmyk-uncalibrated":
       return t(TREATMENT.cmykUncalibrated);
+    case "hdr-clipped":
+      return t(TREATMENT.hdrClipped);
     default:
       return t(TREATMENT.assumed);
   }
@@ -629,7 +635,73 @@ export const GRADIENT_KINDS: GradientKind[] = [
 export type Rgba01 = [number, number, number, number];
 
 /** The raster re-encode formats the non-PSD save-back lane offers. */
-export type RasterFormat = "png" | "jpeg";
+export type RasterFormat = "png" | "jpeg" | "webp" | "tiff";
+
+/** EXPORT AS (ADR 468): what the dialog chooses. */
+export interface ExportOptions {
+  format: RasterFormat;
+  /** JPEG quality, 1–100. */
+  quality: number;
+  /** The written size in px (the session's own when absent). */
+  width?: number;
+  height?: number;
+  /** Pixels per inch to write (none when null). */
+  ppi: number | null;
+  /** Keep the source's EXIF, XMP and IPTC. */
+  keepMetadata: boolean;
+  /** Embed the profile of the pixels as written (sRGB, or the CMYK one). */
+  embedProfile: boolean;
+  mode: "rgb" | "gray" | "cmyk";
+  bits: 8 | 16;
+  compression: "none" | "lzw" | "deflate";
+  intent:
+    | "perceptual"
+    | "relativeColorimetric"
+    | "saturation"
+    | "absoluteColorimetric";
+}
+
+/** What an export did that the user is told (the engine's wire names). */
+export type ExportNote =
+  | "webp-lossless"
+  | "cmyk-profile"
+  | "cmyk-naive"
+  | "widened"
+  | "narrowed"
+  | "alpha-dropped"
+  | "gray-untagged";
+
+/** The engine's spec string for `export_image*`. */
+export function exportSpec(o: ExportOptions): string {
+  const parts = [
+    `format=${o.format}`,
+    `quality=${Math.round(Math.min(100, Math.max(1, o.quality)))}`,
+    `meta=${o.keepMetadata ? 1 : 0}`,
+    `icc=${o.embedProfile ? 1 : 0}`,
+    `mode=${o.mode}`,
+    `bits=${o.bits}`,
+    `compression=${o.compression}`,
+    `intent=${o.intent}`,
+  ];
+  if (o.width !== undefined && o.height !== undefined)
+    parts.push(
+      `width=${Math.max(1, Math.round(o.width))}`,
+      `height=${Math.max(1, Math.round(o.height))}`,
+    );
+  if (o.ppi !== null && o.ppi > 0) parts.push(`ppi=${o.ppi}`);
+  return parts.join(";");
+}
+
+/** The file extension and media type of an export format. */
+export const EXPORT_FORMATS: Record<
+  RasterFormat,
+  { extension: string; mimeType: string }
+> = {
+  png: { extension: ".png", mimeType: "image/png" },
+  jpeg: { extension: ".jpg", mimeType: "image/jpeg" },
+  webp: { extension: ".webp", mimeType: "image/webp" },
+  tiff: { extension: ".tif", mimeType: "image/tiff" },
+};
 
 // ─────────────────────────────── PAINT ───────────────────────────────
 
@@ -1360,6 +1432,34 @@ export interface ImageEngine extends MaskingEngine, RetouchEngine<DecodedInfo> {
     quality: number,
     reduce: boolean,
   ): Uint8Array;
+  /** EXPORT AS: straight RGBA8 written as `spec` (`exportSpec`) says,
+   *  carrying `source`'s metadata (empty = none) and converting to CMYK
+   *  through `cmykProfile` (empty = the naive formula). */
+  exportImage(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    spec: string,
+    source: Uint8Array,
+    cmykProfile: Uint8Array,
+  ): Uint8Array;
+  /** `exportImage` from an engine-held image at its own depth (a 16-bit
+   *  session writes 16-bit PNG/TIFF samples). */
+  exportImageHandle(
+    handle: number,
+    spec: string,
+    source: Uint8Array,
+    cmykProfile: Uint8Array,
+  ): Uint8Array;
+  /** The notes of the last export. */
+  exportNotes(): ExportNote[];
+  /** Byte lengths of the ICC, EXIF, XMP and IPTC a file carries. */
+  imageMetadata(bytes: Uint8Array): {
+    icc: number;
+    exif: number;
+    xmp: number;
+    iptc: number;
+  };
   /** FILL the bound SELECTION (the whole image when none) with a fixed
    *  two-stop gradient, compositing through the coverage mask on the
    *  GPU. DESTRUCTIVE: returns a NEW engine-held image (the crop/resize
@@ -2252,6 +2352,22 @@ export interface ImageWasmModule extends MaskingWasm, RetouchWasm {
     quality: number,
     reduce: boolean,
   ): Uint8Array;
+  export_image(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    spec: string,
+    source: Uint8Array,
+    cmyk_profile: Uint8Array,
+  ): Uint8Array;
+  export_image_handle(
+    handle: number,
+    spec: string,
+    source: Uint8Array,
+    cmyk_profile: Uint8Array,
+  ): Uint8Array;
+  export_last_notes(): string;
+  image_metadata(bytes: Uint8Array): Uint32Array;
   psd_apply_adjusted(
     psd_handle: number,
     width: number,
@@ -3060,6 +3176,19 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       wasm.encode_image(rgba, width, height, format),
     encodeOpt: (rgba, width, height, format, quality, reduce) =>
       wasm.encode_image_opt(rgba, width, height, format, quality, reduce),
+    exportImage: (rgba, width, height, spec, source, cmykProfile) =>
+      wasm.export_image(rgba, width, height, spec, source, cmykProfile),
+    exportImageHandle: (handle, spec, source, cmykProfile) =>
+      wasm.export_image_handle(handle, spec, source, cmykProfile),
+    exportNotes: () =>
+      wasm
+        .export_last_notes()
+        .split("\n")
+        .filter((n) => n !== "") as ExportNote[],
+    imageMetadata(bytes) {
+      const [icc = 0, exif = 0, xmp = 0, iptc = 0] = wasm.image_metadata(bytes);
+      return { icc, exif, xmp, iptc };
+    },
     psdApplyAdjusted: (psdHandle, width, height, rgba) =>
       wasm.psd_apply_adjusted(psdHandle, width, height, rgba),
     resize: async (handle, outW, outH, filter) => {

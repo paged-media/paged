@@ -67,6 +67,7 @@ defineMessages("menu", {
   File: "File",
   "Apply adjustments to the file": "Apply adjustments to the file",
   "Save the adjusted file": "Save the adjusted file",
+  "Export as…": "Export as…",
   "Selection to path": "Selection to path",
   "Path to selection": "Path to selection",
   "Add noise…": "Add noise…",
@@ -462,6 +463,7 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
 
   ["Image/File/Apply adjustments to the file", "applyToFile", "file"],
   ["Image/File/Save the adjusted file", "saveToFile", "file"],
+  ["Image/File/Export as…", "exportAs", "file"],
 
   // These two convert between the DOCUMENT's paths and the image's
   // selection, so they belong beside the host's selection verbs rather

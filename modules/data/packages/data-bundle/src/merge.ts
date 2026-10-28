@@ -258,6 +258,9 @@ const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
   // Core ADR 1006: every frame with an outline reads its fill rule, and a
   // fresh one is non-zero (IDML has no other); only even-odd is worth a copy.
   frameFillRule: ["NonZero"],
+  // Engine ADR 1031: every frame reads its gradient fill's start, the origin
+  // on a fresh one; only a moved start is worth a copy.
+  frameGradientFillStart: [[0, 0]],
   textFrameColumnCount: [1],
   textFrameVerticalJustification: ["TopAlign"],
   textFrameFirstBaseline: ["AscentOffset"],
@@ -284,7 +287,13 @@ export function isSetValue(
   if (!v) return false;
   const x = v.value;
   if (x === null || x === undefined) return false;
-  if (path && FRESH_FRAME_DEFAULTS[path]?.includes(x)) return false;
+  if (
+    path &&
+    FRESH_FRAME_DEFAULTS[path]?.some(
+      (d) => d === x || JSON.stringify(d) === JSON.stringify(x),
+    )
+  )
+    return false;
   if (typeof x === "boolean") return x;
   if (typeof x === "string") return x !== "" && !/\[None\]$/.test(x);
   if (Array.isArray(x))
@@ -355,7 +364,10 @@ export function pageElements(
 }
 
 /** Apply an IDML item transform `[a b c d e f]` to bounds (axis-aligned). */
-function transformBounds(b: Bounds, t: number[] | null | undefined): Bounds {
+export function transformBounds(
+  b: Bounds,
+  t: number[] | null | undefined,
+): Bounds {
   if (!t) return b;
   const [a, bb, c, d, e, f] = t;
   const pts = [

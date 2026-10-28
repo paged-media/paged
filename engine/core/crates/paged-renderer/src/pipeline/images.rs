@@ -22,6 +22,38 @@
 
 use super::*;
 
+/// The intent and black-point compensation a placed picture's colours
+/// convert with: the frame's `ImageRenderingIntent` when it names one,
+/// else the document's Color Settings intent; BPC is the document's (an
+/// IDML picture carries no BPC of its own).
+pub(super) fn image_rendering(
+    options: &PipelineOptions,
+    meta: Option<&paged_model::ImageMetadata>,
+) -> paged_color::cms::Rendering {
+    let intent = meta
+        .and_then(|m| m.explicit_rendering_intent())
+        .and_then(paged_color::Intent::from_name)
+        .unwrap_or(options.cmyk_intent);
+    paged_color::cms::Rendering::new(intent, options.cmyk_bpc)
+}
+
+/// The cache key of a picture decoded with `rendering`: the plain key for
+/// the engine default (so every existing lookup by link or element still
+/// finds it), a suffixed one otherwise, so a picture decoded under two
+/// renderings is two entries and a Color Settings change never serves a
+/// stale conversion.
+fn rendering_key(base: &str, rendering: paged_color::cms::Rendering) -> std::borrow::Cow<'_, str> {
+    if rendering == paged_color::cms::Rendering::default() {
+        std::borrow::Cow::Borrowed(base)
+    } else {
+        std::borrow::Cow::Owned(format!(
+            "{base}#rendering={}/{}",
+            rendering.intent.name(),
+            if rendering.bpc { "bpc" } else { "nobpc" }
+        ))
+    }
+}
+
 /// Record a render diagnostic for a placed image that didn't resolve.
 /// Shared by the rectangle / polygon / oval image emitters so the
 /// "missing link" / "decode failed" signals are reported consistently.
@@ -128,6 +160,7 @@ pub(super) fn emit_rectangle_image(
     page_image_cache: &mut HashMap<String, paged_compose::ImageId>,
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
     shadow: Option<paged_compose::DropShadow>,
+    rendering: paged_color::cms::Rendering,
 ) {
     // Routing: a `<Image>`-bearing frame whose link is *missing*
     // gets InDesign's 50% grey + diagonal-X placeholder. A link that
@@ -147,6 +180,7 @@ pub(super) fn emit_rectangle_image(
             &mut page.list,
             page_image_cache,
             decoded_cache,
+            rendering,
         )
     } else {
         match rect.image_link.as_deref() {
@@ -156,6 +190,7 @@ pub(super) fn emit_rectangle_image(
                 &mut page.list,
                 page_image_cache,
                 decoded_cache,
+                rendering,
             ),
             None => ImageResolution::LinkMissing,
         }
@@ -320,6 +355,11 @@ pub(super) fn emit_rectangle_image(
                     .compose(&Transform::scale(1.0 / img_w, 1.0 / img_h));
                 super::placed_svg::draw(art, t, &mut page.list);
             }
+            Placed::Eps(art) => {
+                let t = Transform::for_rect_in(r, outer)
+                    .compose(&Transform::scale(1.0 / img_w, 1.0 / img_h));
+                super::placed_eps::draw(art, t, &mut page.list);
+            }
         }
     }
 }
@@ -403,6 +443,7 @@ pub(super) fn emit_polygon_image(
     options: &PipelineOptions,
     page_image_cache: &mut HashMap<String, paged_compose::ImageId>,
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+    rendering: paged_color::cms::Rendering,
 ) {
     let resolved = if let Some(bytes) = poly.image_bytes.as_deref() {
         resolve_inline_image_bytes(
@@ -411,6 +452,7 @@ pub(super) fn emit_polygon_image(
             &mut page.list,
             page_image_cache,
             decoded_cache,
+            rendering,
         )
     } else {
         match poly.image_link.as_deref() {
@@ -420,6 +462,7 @@ pub(super) fn emit_polygon_image(
                 &mut page.list,
                 page_image_cache,
                 decoded_cache,
+                rendering,
             ),
             None => ImageResolution::LinkMissing,
         }
@@ -589,6 +632,7 @@ pub(super) fn emit_oval_image(
     options: &PipelineOptions,
     page_image_cache: &mut HashMap<String, paged_compose::ImageId>,
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+    rendering: paged_color::cms::Rendering,
 ) {
     let resolved = if let Some(bytes) = oval.image_bytes.as_deref() {
         resolve_inline_image_bytes(
@@ -597,6 +641,7 @@ pub(super) fn emit_oval_image(
             &mut page.list,
             page_image_cache,
             decoded_cache,
+            rendering,
         )
     } else {
         match oval.image_link.as_deref() {
@@ -606,6 +651,7 @@ pub(super) fn emit_oval_image(
                 &mut page.list,
                 page_image_cache,
                 decoded_cache,
+                rendering,
             ),
             None => ImageResolution::LinkMissing,
         }
@@ -791,6 +837,8 @@ fn emit_image_under_clip(
         }
         // So do an SVG's user units, as its raster's pixels would.
         Placed::Svg(art) => super::placed_svg::draw(art, image_transform, list),
+        // And an EPS's points (engine ADR 1033).
+        Placed::Eps(art) => super::placed_eps::draw(art, image_transform, list),
     }
     if extra_clip.is_some() {
         list.push(DisplayCommand::PopClip(Transform::IDENTITY));
@@ -827,6 +875,8 @@ enum Placed {
     Raster(paged_compose::ImageId),
     Pdf(std::sync::Arc<[u8]>, super::placed_pdf::PdfView),
     Svg(std::sync::Arc<super::placed_svg::SvgArt>),
+    /// An EPS drawn from its PostScript (engine ADR 1033).
+    Eps(std::sync::Arc<super::placed_eps::EpsArt>),
 }
 
 /// A placed PDF (an Illustrator `.ai` is one) resolved to its page box,
@@ -890,6 +940,7 @@ fn placed_svg(
             encoded: bytes::Bytes::copy_from_slice(bytes),
             rgba: bytes::Bytes::new(),
             icc: None,
+            rendering: None,
         });
     Some(ImageResolution::Resolved(
         Placed::Svg(std::sync::Arc::new(art)),
@@ -898,10 +949,46 @@ fn placed_svg(
     ))
 }
 
-/// The vector SVG a `decoded_cache` entry stands for: an encoded-only SVG
-/// entry, as [`placed_svg`] leaves one.
+/// A placed EPS interpreted to vectors, resolved to its bounding box, or
+/// `None` for bytes that are not PostScript or a program the interpreter
+/// does not run to its end (the raster path, and with it the EPS's
+/// preview, then takes it). Remembered encoded-only, as an SVG is.
+fn placed_eps(
+    bytes: &[u8],
+    key: &str,
+    options: &PipelineOptions,
+    decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+) -> Option<ImageResolution> {
+    if !super::placed_eps::is_eps(bytes) {
+        return None;
+    }
+    let art = super::placed_eps::prepare(bytes, options)?;
+    let (w, h) = (art.width, art.height);
+    if !(w > 0.0 && h > 0.0) {
+        return None;
+    }
+    decoded_cache
+        .entry(key.to_string())
+        .or_insert_with(|| paged_compose::DecodedImage {
+            width: w.ceil() as u32,
+            height: h.ceil() as u32,
+            encoded: bytes::Bytes::copy_from_slice(bytes),
+            rgba: bytes::Bytes::new(),
+            icc: None,
+            rendering: None,
+        });
+    Some(ImageResolution::Resolved(
+        Placed::Eps(std::sync::Arc::new(art)),
+        w,
+        h,
+    ))
+}
+
+/// The vector SVG (or EPS) a `decoded_cache` entry stands for: an
+/// encoded-only entry, as [`placed_svg`] and [`placed_eps`] leave one.
 fn cached_svg(
     key: &str,
+    options: Option<&PipelineOptions>,
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
 ) -> Option<ImageResolution> {
     let d = decoded_cache.get(key)?;
@@ -913,6 +1000,9 @@ fn cached_svg(
     if let Some(pdf) = placed_pdf(&encoded) {
         return Some(pdf);
     }
+    if let Some(eps) = options.and_then(|o| placed_eps(&encoded, key, o, decoded_cache)) {
+        return Some(eps);
+    }
     placed_svg(&encoded, key, decoded_cache)
 }
 
@@ -922,14 +1012,16 @@ fn resolve_image_id(
     list: &mut paged_compose::DisplayList,
     page_image_cache: &mut HashMap<String, paged_compose::ImageId>,
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+    rendering: paged_color::cms::Rendering,
 ) -> ImageResolution {
-    let id = match page_image_cache.get(uri).copied() {
+    let key = rendering_key(uri, rendering);
+    let id = match page_image_cache.get(key.as_ref()).copied() {
         Some(id) => id,
         None => {
-            if let Some(svg) = cached_svg(uri, decoded_cache) {
+            if let Some(svg) = cached_svg(uri, Some(options), decoded_cache) {
                 return svg;
             }
-            let decoded = if let Some(d) = decoded_cache.get(uri) {
+            let decoded = if let Some(d) = decoded_cache.get(key.as_ref()) {
                 d.clone()
             } else {
                 // A `data:` URI is the bytes themselves (ADR 208): no
@@ -959,6 +1051,7 @@ fn resolve_image_id(
                                 encoded: bytes.clone(),
                                 rgba: bytes::Bytes::new(),
                                 icc: None,
+                                rendering: None,
                             },
                         );
                     }
@@ -967,15 +1060,20 @@ fn resolve_image_id(
                 if let Some(svg) = placed_svg(bytes.as_ref(), uri, decoded_cache) {
                     return svg;
                 }
-                let Some(d) = decode_image_bytes(bytes.as_ref()) else {
+                // An EPS draws from its PostScript when the interpreter
+                // runs it; its preview (the raster decode) otherwise.
+                if let Some(eps) = placed_eps(bytes.as_ref(), uri, options, decoded_cache) {
+                    return eps;
+                }
+                let Some(d) = decode_image_bytes(bytes.as_ref(), rendering) else {
                     tracing::warn!(uri, "image decode failed; skipping");
                     return ImageResolution::DecodeFailed;
                 };
-                decoded_cache.insert(uri.to_string(), d.clone());
+                decoded_cache.insert(key.to_string(), d.clone());
                 d
             };
             let id = list.push_image(decoded);
-            page_image_cache.insert(uri.to_string(), id);
+            page_image_cache.insert(key.into_owned(), id);
             id
         }
     };
@@ -1051,12 +1149,14 @@ fn resolve_inline_image_bytes(
     list: &mut paged_compose::DisplayList,
     page_image_cache: &mut HashMap<String, paged_compose::ImageId>,
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+    rendering: paged_color::cms::Rendering,
 ) -> ImageResolution {
-    let key = inline_image_cache_key(element_id, bytes);
+    let base = inline_image_cache_key(element_id, bytes);
+    let key = rendering_key(&base, rendering).into_owned();
     let id = match page_image_cache.get(&key).copied() {
         Some(id) => id,
         None => {
-            if let Some(svg) = cached_svg(&key, decoded_cache) {
+            if let Some(svg) = cached_svg(&base, None, decoded_cache) {
                 return svg;
             }
             let decoded = if let Some(d) = decoded_cache.get(&key) {
@@ -1065,10 +1165,10 @@ fn resolve_inline_image_bytes(
                 if let Some(pdf) = placed_pdf(bytes) {
                     return pdf;
                 }
-                if let Some(svg) = placed_svg(bytes, &key, decoded_cache) {
+                if let Some(svg) = placed_svg(bytes, &base, decoded_cache) {
                     return svg;
                 }
-                let Some(d) = decode_image_bytes(bytes) else {
+                let Some(d) = decode_image_bytes(bytes, rendering) else {
                     tracing::warn!(len = bytes.len(), "inline image decode failed; skipping");
                     return ImageResolution::DecodeFailed;
                 };

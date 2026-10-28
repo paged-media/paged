@@ -48,6 +48,7 @@ import {
   subscribeChainReflow,
   type SheetEngine,
 } from "../src";
+import { measureColumns } from "../src/lower";
 
 // A fake engine: returns a fixed 2x1 region + one sheet.
 function fakeEngine(): SheetEngine {
@@ -263,8 +264,9 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     // The refused one-call batch, then the placement batch + the content
     // batch — nothing per cell.
     expect(mutations).toHaveLength(3);
-    // Batch 1 — frame + binding + native table (NO drawn rules: the table
-    // draws borders). The table addresses the frame's story by handle.
+    // Batch 1 — frame (auto-sized to its table) + binding + native table
+    // (NO drawn rules: the table draws borders). The table addresses the
+    // frame's story by handle.
     expect(mutations[1].op).toBe("batch");
     const ops = (
       mutations[1] as {
@@ -274,12 +276,15 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     expect(ops.map((o) => o.op)).toEqual([
       "insertTextFrame",
       "bindCreated",
+      "setElementProperty",
       "setPluginMetadata",
       "insertTable",
     ]);
+    expect(ops[2].args.path).toBe("textFrameAutoSizing");
     expect(ops[1].args.handle).toBe("f");
     expect(ops[2].args.elementId).toEqual({ kind: "textFrame", id: "$h:f" });
-    const tbl = ops[3].args as {
+    expect(ops[3].args.elementId).toEqual({ kind: "textFrame", id: "$h:f" });
+    const tbl = ops[4].args as {
       storyId: string;
       rows: number;
       cols: number;
@@ -1426,6 +1431,21 @@ describe("sheet_plugin_lower_measure: the measured size is the rendered size", (
     expect(DEFAULT_CELL_POINT_SIZE).toBe(12);
     // …and at the face a bare run resolves to, not a guessed name.
     expect(region?.family).toBe("");
+  });
+
+  // A padded page writes `textInsetPt` as each text cell's left and right
+  // inset (sheet ADR 510). The column has to hold both: sized to the text
+  // plus the 4 pt slack alone, a word within 2 pt of its width hyphenated
+  // onto a second line and the frame sized to one line per row lost its
+  // last row (the showcase's Ledger, "SumProduct").
+  it("a padded page's column holds its text and both cell insets", async () => {
+    const { host } = recordingHost(CREATED, "Story/u9");
+    const content = styledEngine().getRangeLowered!(0, "A1:B1")!;
+    const plain = await measureColumns(host, content);
+    const padded = await measureColumns(host, { ...content, textInsetPt: 3 });
+    // The recording shaper answers 30 pt for every string.
+    expect(plain.widths).toEqual([34, 34]);
+    expect(padded.widths).toEqual([40, 40]);
   });
 
   it("measures a styled column at ITS size, which the pour then writes", async () => {

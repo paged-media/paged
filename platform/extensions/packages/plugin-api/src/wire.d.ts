@@ -1690,6 +1690,18 @@ export interface GradientStopSpec {
 }
 
 /**
+ * One table cell whose text does not fit its row ([`StorySummary::overset_cells`]).
+ */
+export interface OversetCellAt {
+    /**
+     * The table\'s `Self`.
+     */
+    table: string;
+    row: number;
+    column: number;
+}
+
+/**
  * One-time facts about a loaded document. Sent to the main thread
  * on a successful `LoadDocument` so the navigator + page count UI
  * can render before the first page is rasterised.
@@ -2037,6 +2049,12 @@ export interface StorySummary {
      * older client that ignores it still reads the `overset` flag.
      */
     oversetAt?: OversetAt;
+    /**
+     * The table cells in this story whose text does not fit their row, each
+     * by its table and template row and column (data ADR 564). Empty when
+     * none does. Additive on 77 (governance rule 1).
+     */
+    oversetCells?: OversetCellAt[];
     /**
      * v65 (thoughts ADR 026) — the story\'s grow rule, in the shape
      * `Mutation::SetFlowGrowRule` takes (`grow` is always `true` here:

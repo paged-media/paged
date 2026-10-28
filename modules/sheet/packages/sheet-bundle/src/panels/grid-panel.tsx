@@ -203,7 +203,10 @@ export function makeGridPanel(
     const [editor, setEditor] = useState<EditorState | null>(null);
     const editorRef = useRef<HTMLInputElement | null>(null);
 
-    const st = live.state();
+    // A copy: the session mutates its state object in place, so a memo keyed
+    // on that one object would never see a field change (a second import's
+    // file name stayed the first one's); the view is new after each change.
+    const st = { ...live.state() };
 
     // The viewport width, measured from the panel (see DEFAULT_VIEWPORT_W_PT).
     // A callback ref, because the empty state and the grid render different

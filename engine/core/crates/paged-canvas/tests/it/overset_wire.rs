@@ -126,3 +126,44 @@ fn a_fitting_story_has_no_continuation() {
     assert!(!story.overset);
     assert_eq!(story.overset_at, None::<OversetAt>);
 }
+
+/// Data ADR 564 — a table cell whose text does not fit its fixed row is
+/// named on the story's summary (its table, row and column), not only
+/// reported as the story's overset. `tables-rows` holds a table of fixed
+/// (`AutoGrow="false"`) rows whose cells overset.
+#[test]
+fn stories_name_the_table_cells_that_overset() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/generated/tables-rows.idml");
+    let Ok(bytes) = std::fs::read(&path) else {
+        eprintln!(
+            "skipped: {} absent (scripts/regen-fixtures.sh)",
+            path.display()
+        );
+        return;
+    };
+    let m = model(&bytes);
+    let cells: Vec<_> = m
+        .stories()
+        .into_iter()
+        .flat_map(|s| {
+            s.overset_cells
+                .into_iter()
+                .map(move |c| (s.self_id.clone(), c))
+        })
+        .collect();
+    assert!(!cells.is_empty(), "the fixed rows' cells overset");
+    for (story, c) in &cells {
+        assert!(!c.table.is_empty(), "{story}: the cell names its table");
+    }
+    // Every story naming a cell is overset as a whole too.
+    let overset: Vec<_> = m
+        .stories()
+        .into_iter()
+        .filter(|s| s.overset)
+        .map(|s| s.self_id)
+        .collect();
+    for (story, _) in &cells {
+        assert!(overset.contains(story), "{story} is overset");
+    }
+}

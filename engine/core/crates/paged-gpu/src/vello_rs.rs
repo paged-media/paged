@@ -232,25 +232,21 @@ impl VelloRasterizer {
 /// Materialise an RGBA8 buffer from encoded image bytes at the
 /// dimensions the build phase recorded. Used by the wasm32 lazy
 /// path (`DecodedImage.rgba` empty, `encoded` populated) so peak
-/// heap stays at one decoded image at a time. Mirror of `vcpu.rs`'s
-/// helper of the same name; duplicated so this lane builds without the
-/// `cpu` feature.
-fn decode_image_for_render(bytes: &[u8], expected_w: u32, expected_h: u32) -> Option<Vec<u8>> {
-    // paged-raster: a TIFF decodes (capped at the recorded size) as the
-    // renderer's build-time decode does; every other format is `image`'s
-    // decode and RGBA8 conversion, unchanged.
-    let decoded = paged_raster::decode_rgba8(bytes, Some(expected_w.max(expected_h))).ok()?;
-    if decoded.width == expected_w && decoded.height == expected_h {
-        return Some(decoded.data);
-    }
-    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, decoded.data)?;
-    let raw = image::imageops::resize(
-        &img,
-        expected_w,
-        expected_h,
-        image::imageops::FilterType::Triangle,
-    );
-    Some(raw.into_raw())
+/// heap stays at one decoded image at a time. `vcpu.rs` has a helper of
+/// the same name so each lane builds without the other's feature; both
+/// are `paged_raster::decode_rgba8_at_with`.
+fn decode_image_for_render(
+    bytes: &[u8],
+    expected_w: u32,
+    expected_h: u32,
+    rendering: Option<paged_raster::Rendering>,
+) -> Option<Vec<u8>> {
+    // One function for both lanes: paged-raster decodes (a TIFF or PSD
+    // capped at the recorded size) and resamples to it, converting with
+    // the frame's rendering intent that the build recorded on the lazy
+    // image.
+    let conv = paged_raster::PagedColour::new(rendering.unwrap_or_default());
+    paged_raster::decode_rgba8_at_with(bytes, expected_w, expected_h, &conv)
 }
 
 /// Decoded image pixels kept across scene builds, keyed by the identity
@@ -320,7 +316,8 @@ fn cached_image_data(img: &paged_compose::DecodedImage) -> Option<ImageData> {
     let pixels: Box<[u8]> = if eager {
         img.rgba.as_ref().to_vec().into_boxed_slice()
     } else {
-        decode_image_for_render(&img.encoded, img.width, img.height)?.into_boxed_slice()
+        decode_image_for_render(&img.encoded, img.width, img.height, img.rendering)?
+            .into_boxed_slice()
     };
     let size = pixels.len();
     let data = ImageData {
@@ -2672,6 +2669,7 @@ mod tests {
             encoded: bytes.into(),
             rgba: Vec::new().into(),
             icc: None,
+            rendering: None,
         };
         let red = lazy(png([255, 0, 0, 255]));
         let blue = lazy(png([0, 0, 255, 255]));
@@ -2756,6 +2754,7 @@ mod tests {
             encoded: Vec::new().into(),
             rgba: vec![255, 0, 0, 255].into(),
             icc: None,
+            rendering: None,
         });
 
         // RadialGradient: red → blue.
@@ -3426,6 +3425,7 @@ mod tests {
             encoded: Vec::new().into(),
             rgba: vec![200, 80, 80, 255].into(),
             icc: None,
+            rendering: None,
         });
         list.commands.push(DisplayCommand::Image {
             image_id,
@@ -3455,6 +3455,7 @@ mod tests {
             encoded: Vec::new().into(),
             rgba: vec![200, 80, 80, 255].into(),
             icc: None,
+            rendering: None,
         });
         baseline.commands.push(DisplayCommand::Image {
             image_id: image_id_b,
@@ -4730,6 +4731,7 @@ mod tests {
             encoded: Vec::new().into(),
             rgba: rgba.into(),
             icc: None,
+            rendering: None,
         }
     }
 

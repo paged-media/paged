@@ -67,6 +67,11 @@ pub enum DisplayTreatment {
     /// CMYK converted WITHOUT a usable profile: the multiplicative device
     /// formula, not colour management.
     CmykUncalibrated,
+    /// Scene-linear floating-point light (Radiance HDR, OpenEXR, a float
+    /// TIFF) CLIPPED to 0..1 and sRGB-encoded at ingest: no tone mapping,
+    /// so highlights above diffuse white are lost. Stated like a CMYK
+    /// conversion: the working pixels are a lossy reading of the file.
+    HdrClipped,
 }
 
 impl DisplayTreatment {
@@ -78,6 +83,7 @@ impl DisplayTreatment {
             Self::ProfileRejected => "sRGB assumed (embedded profile rejected)",
             Self::CmykConverted => "CMYK converted to sRGB (embedded profile)",
             Self::CmykUncalibrated => "CMYK converted to sRGB (no usable profile — device formula)",
+            Self::HdrClipped => "HDR clipped to sRGB (no tone mapping)",
         }
     }
 

@@ -92,6 +92,7 @@ mod imp {
             icc,
             xmp: None,
             iptc: None,
+            exif: None,
             photoshop_irb: None,
             has_layers: false,
             layer_count: Some(0),
