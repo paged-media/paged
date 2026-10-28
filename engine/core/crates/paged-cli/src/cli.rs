@@ -401,9 +401,11 @@ pub enum DataCommand {
     /// one frame per page from the page of its bound frame, adding pages,
     /// and replaces the flow an earlier apply placed; like a rule, it
     /// places every record, so `--record` does not restrict it. A remote
-    /// image is fetched only from an origin `--allow-origin` lists.
-    /// Bindings the headless lane cannot write (a remote image of an
-    /// unlisted origin, document asset ids) are listed, not skipped.
+    /// image is fetched only from an origin `--allow-origin` lists; a
+    /// document asset id (`asset:<id>`) is placed from the bytes a `.paged`
+    /// container carries. Bindings the headless lane cannot write (a
+    /// remote image of an unlisted origin, an asset id the document does
+    /// not carry) are listed, not skipped.
     Apply {
         /// IDML or `.paged` document.
         doc: PathBuf,

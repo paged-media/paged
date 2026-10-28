@@ -55,7 +55,9 @@ The Data panel and the bind popover (editor ADRs 291, 292) are built in the edit
 (`apps/canvas/src/panels/data-panel.tsx`, `packages/shell/src/catalog/bind-popover.tsx`) over
 the data door. The record templates library and the pagination inspector that editor ADR 291
 left to this module are built as its own panels (see Shipped). `paged data apply` writes every
-binding kind headless except document asset ids (core ADR 1014, amendments 3 to 5). A record
+binding kind headless (core ADR 1014, amendments 3 to 6); a document asset id (`asset:<id>`) is
+placed from the bytes a `.paged` carries, and stays `notHeadless` for an IDML input or a `.paged`
+without that asset, with a reason naming which. A record
 flow is paginated by the engine into one frame per page, on the pages it adds, and replaces the
 flow an earlier apply or the editor placed. A remote image uri is fetched only for an origin the
 run lists with `--allow-origin` (exact `scheme://host[:port]`; redirects, at most 3, only to
@@ -63,8 +65,11 @@ listed origins; plain http only for localhost; 50 MiB and 30 s; no cookies, cred
 proxies), the per-run form of the editor's per-origin consent (editor ADR 218). Without the flag it
 stays `notHeadless`, and the reason names the flag.
 
-Not built yet: a document asset id is placed nowhere: no document keeps its bytes, and the editor
-skips it too.
+A saved `.paged` carries its asset columns' pictures: one part per content hash and an index
+(`assets/<sha256>`, `assets.json`; ADR 563, amended 2026-10-28), written on save, deduplicated,
+stale parts deleted. A document opened elsewhere reads them from its parts instead of fetching. IDML
+exports still link. An `asset:<id>` image value is placed from those parts, in the editor and by
+`paged data apply`.
 
 ## Shipped
 
@@ -467,7 +472,8 @@ query, expr }` (an expression property binding, which `apply` writes with the se
   `offset` and as `insertField.contentOffset`: an engine on protocol 69 converts the caret
   unit and places it right in any paragraph; an older engine ignores `contentOffset` and the
   field lands early after the first paragraph.
-- **Images** are placed only from a URL or path. Inline bytes and asset ids are skipped.
+- **Images** are placed in the editor from a URL, a path or an asset id the document carries.
+  Inline bytes are skipped there.
 - **Remote sources.** A `credentialRef` can be stored on the descriptor, but nothing
   resolves it and the fetch is made without it. The editor's page policy cannot follow
   consent grants (a header CSP is fixed at load). Since editor ADR 218, a deployment lists
