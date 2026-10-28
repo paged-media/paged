@@ -33,7 +33,6 @@ import {
   elementScreenBox,
   elementScreenCenter,
   importAndLower,
-  MOD,
   placedValues,
 } from "./sheet-kit";
 
@@ -158,11 +157,23 @@ test.describe("journey · paged.sheet — the grid shows what the page prints", 
       })
       .toBe("n");
 
-    // ── Zoom in (100 %, then two steps): a point is a couple of pixels. ──
-    await page.keyboard.press(`${MOD}+1`);
-    await page.keyboard.press(`${MOD}+Equal`);
-    await page.keyboard.press(`${MOD}+Equal`);
-    await page.waitForTimeout(800);
+    // ── Zoom to 200 %: a point is a couple of pixels. ──
+    // The preset, not keystrokes: on a loaded runner the zoom keys raced the
+    // first fit and the page was measured at 95 % or 130 %, where the blur
+    // alone moved the distance past the bound. The readout must hold 200 %.
+    await page.locator("[data-zoom-control]").click();
+    await page.locator('[data-zoom-preset="2"]').click();
+    await expect
+      .poll(
+        async () => {
+          await page.waitForTimeout(400);
+          return (await page.locator("[data-zoom-control]").textContent())
+            ?.replace(/\s/g, "")
+            .includes("200%");
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
     // Scroll the frame into the middle of the canvas.
     for (let i = 0; i < 4; i++) {
       const b = await elementScreenBox(page, frame);
@@ -279,7 +290,7 @@ test.describe("journey · paged.sheet — the grid shows what the page prints", 
       type: "screen-vs-page",
       description: `distance ${same.toFixed(3)} · a row off ${row.toFixed(3)} · a column off ${col.toFixed(3)}`,
     });
-    // Measured 2026-10-24 (CPU canvas, 225 %): 0.20 · 0.48 · 0.74.
+    // Measured 2026-10-28 (CPU canvas, 200 %): 0.22 · 0.51 · 0.74.
     expect(same, "the grid's cells and the page's table line up").toBeLessThan(
       0.3,
     );
