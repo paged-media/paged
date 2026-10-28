@@ -36,6 +36,9 @@
 // comes a black end screen ("End of slide show"), and the next advance
 // ends the show; with `loop` the show starts over instead, until Esc.
 
+import type { EffectInfo, Timing } from "../anim/model.js";
+import type { ScenePlan } from "./scene.js";
+
 /** One slide as the show plays it. */
 export interface ShowSlide {
   pageId: string;
@@ -55,6 +58,19 @@ export interface ShowSlide {
   } | null;
   notes: string;
   sizePt: [number, number];
+  /** Clicks the slide's animations take before it advances (slide ADR
+   *  714); absent: none. */
+  clicks?: number;
+  /** Its animations: the timing, its effects as listed, and how its page
+   *  splits into layers. */
+  anim?: SlideAnim | null;
+}
+
+/** A slide's animations as the show plays them. */
+export interface SlideAnim {
+  timing: Timing;
+  effects: EffectInfo[];
+  plan: ScenePlan;
 }
 
 export type PointerTool = "arrow" | "laser" | "pen";
@@ -76,6 +92,10 @@ export interface ShowState {
   done: boolean;
   /** Bumped by `erase`: the controller clears the slide's ink. */
   erased: number;
+  /** The build step of the slide up: how many of its animation clicks
+   *  have played (slide ADR 714). An advance plays the next one before it
+   *  goes to the next slide; going back undoes one. */
+  step: number;
 }
 
 export type ShowAction =
@@ -121,8 +141,11 @@ export function startShow(
     tool: "arrow",
     done: false,
     erased: 0,
+    step: 0,
   };
 }
+
+const clicksOf = (s: ShowState, i: number) => s.slides[i]?.clicks ?? 0;
 
 /** The show after `action`. */
 export function reduce(s: ShowState, action: ShowAction): ShowState {
@@ -135,28 +158,40 @@ export function reduce(s: ShowState, action: ShowAction): ShowState {
     case "next": {
       if (s.blank) return { ...s, blank: null, typed: "" };
       if (s.ended) return s.loop ? restart(s, shown) : { ...s, done: true };
+      if (s.step < clicksOf(s, s.index))
+        return { ...s, step: s.step + 1, typed: "" };
       const next = shown.find((i) => i > s.index);
-      if (next !== undefined) return { ...s, index: next, typed: "" };
+      if (next !== undefined) return { ...s, index: next, step: 0, typed: "" };
       if (s.loop) return restart(s, shown);
       return { ...s, ended: true, typed: "" };
     }
     case "prev": {
       if (s.blank) return { ...s, blank: null, typed: "" };
       if (s.ended) return { ...s, ended: false, typed: "" };
+      if (s.step > 0) return { ...s, step: s.step - 1, typed: "" };
       const prev = [...shown].reverse().find((i) => i < s.index);
+      // The slide before comes back built, as PowerPoint shows it.
       return prev === undefined
         ? { ...s, typed: "" }
-        : { ...s, index: prev, typed: "" };
+        : { ...s, index: prev, step: clicksOf(s, prev), typed: "" };
     }
     case "first":
       return shown.length
-        ? { ...s, index: shown[0], ended: false, blank: null, typed: "" }
+        ? {
+            ...s,
+            index: shown[0],
+            step: 0,
+            ended: false,
+            blank: null,
+            typed: "",
+          }
         : s;
     case "last":
       return shown.length
         ? {
             ...s,
             index: shown[shown.length - 1],
+            step: 0,
             ended: false,
             blank: null,
             typed: "",
@@ -167,6 +202,7 @@ export function reduce(s: ShowState, action: ShowAction): ShowState {
       return {
         ...s,
         index: action.index,
+        step: 0,
         ended: false,
         blank: null,
         grid: null,
@@ -209,6 +245,7 @@ function restart(s: ShowState, shown: number[]): ShowState {
   return {
     ...s,
     index: shown[0] ?? 0,
+    step: 0,
     ended: false,
     blank: null,
     typed: "",

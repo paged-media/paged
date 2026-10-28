@@ -23,7 +23,11 @@
 // box shows it while it runs. A device without WebGPU gets a plain cut, and
 // the show is told once (`onNoGpu`) so it can say so.
 
+import type { SlideAnimation } from "./animation.js";
+import { createLayerRenderer, type LayerRenderer } from "./effects/index.js";
 import type { Frame } from "./frames.js";
+import { drawScene2d } from "./scene-2d.js";
+import type { SlideScene } from "./scene-source.js";
 import {
   resolveShowTransition,
   transitionDurationMs,
@@ -56,6 +60,16 @@ export interface Compositor {
     aspect: number,
     transition?: ShowSlide["transition"],
   ): void;
+  /** Show an animated slide (slide ADR 714): its layers composited each
+   *  frame from `anim`, on WebGPU where the device has it, else Canvas2D.
+   *  A transition into it runs to the slide's first state. */
+  showAnimated(
+    anim: SlideAnimation,
+    aspect: number,
+    transition?: ShowSlide["transition"],
+  ): void;
+  /** The animation changed (a click, a step): draw its frames again. */
+  kick(): void;
   /** Cover the slide with black or white, or uncover it. */
   blank(color: "black" | "white" | null): void;
   /** The slide's box in CSS px within the container. */
@@ -69,6 +83,7 @@ interface Gpu {
   device: GPUDevice;
   format: GPUTextureFormat;
   renderer: TransitionRenderer;
+  layers: LayerRenderer | null;
   canvas: HTMLCanvasElement;
   context: GPUCanvasContext;
 }
@@ -171,12 +186,18 @@ export function createCompositor(
         if (!context) return null;
         context.configure({ device, format, alphaMode: "opaque" });
         const renderer = factory(device, format);
+        let layers: LayerRenderer | null = null;
+        try {
+          layers = createLayerRenderer(device, format);
+        } catch {
+          // The 2D compositor draws animated slides instead.
+        }
         // Compile every pipeline now, so the first transition does not
         // wait for its shader.
         void (renderer as { prepare?: () => Promise<unknown> })
           .prepare?.()
           .catch(() => {});
-        gpu = { device, format, renderer, canvas: surface, context };
+        gpu = { device, format, renderer, layers, canvas: surface, context };
         return gpu;
       } catch {
         gpuMissing = true;
@@ -252,10 +273,182 @@ export function createCompositor(
     return true;
   };
 
+  // ---- animated slides (slide ADR 714)
+  let animated: SlideAnimation | null = null;
+  let animFrame = 0;
+  let sceneTextures: { scene: SlideScene; textures: GPUTexture[] } | null =
+    null;
+
+  const dropTextures = () => {
+    for (const t of sceneTextures?.textures ?? []) t.destroy();
+    sceneTextures = null;
+  };
+
+  const texturesOf = (device: GPUDevice, scene: SlideScene): GPUTexture[] => {
+    if (sceneTextures?.scene === scene) return sceneTextures.textures;
+    dropTextures();
+    const textures = [
+      scene.background,
+      ...scene.layers.map((l) => l.image),
+    ].map((img) => texture(device, img));
+    sceneTextures = { scene, textures };
+    return textures;
+  };
+
+  /** The animated slide's state now, as an image (a transition's ends). */
+  const still = (a: SlideAnimation): Frame | null => {
+    const OC = (win as unknown as { OffscreenCanvas?: typeof OffscreenCanvas })
+      .OffscreenCanvas;
+    const scene = a.scene;
+    if (!OC) return scene.background;
+    const [w, h] = scene.sizePt;
+    const c = new OC(
+      Math.max(1, Math.round(w * scene.scale)),
+      Math.max(1, Math.round(h * scene.scale)),
+    );
+    const g = c.getContext("2d");
+    if (!g) return scene.background;
+    g.setTransform(scene.scale, 0, 0, scene.scale, 0, 0);
+    drawScene2d(g, scene, a.draws().states);
+    return c.transferToImageBitmap();
+  };
+
+  /** Draw the animated slide now; true while something moves. */
+  const drawAnimated = (): boolean => {
+    const a = animated;
+    if (!a || blankColor) return false;
+    const { states, running } = a.draws();
+    const scene = a.scene;
+    if (gpu?.layers) {
+      const { dpr } = size();
+      const b = box();
+      Object.assign(gpu.canvas.style, {
+        display: "block",
+        left: `${b.x}px`,
+        top: `${b.y}px`,
+        width: `${b.width}px`,
+        height: `${b.height}px`,
+      });
+      const pw = Math.max(1, Math.round(b.width * dpr));
+      const ph = Math.max(1, Math.round(b.height * dpr));
+      if (gpu.canvas.width !== pw) gpu.canvas.width = pw;
+      if (gpu.canvas.height !== ph) gpu.canvas.height = ph;
+      const textures = texturesOf(gpu.device, scene);
+      const [w, h] = scene.sizePt;
+      gpu.layers.render(
+        gpu.context.getCurrentTexture().createView(),
+        scene.sizePt,
+        [
+          {
+            texture: textures[0],
+            region: { x: 0, y: 0, width: w, height: h },
+            state: {
+              visible: true,
+              opacity: 1,
+              matrix: [1, 0, 0, 1, 0, 0],
+              masks: [],
+              tint: null,
+            },
+          },
+          ...scene.layers.map((l, i) => ({
+            texture: textures[i + 1],
+            region: l.region,
+            state: states[i],
+          })),
+        ],
+      );
+      container.dataset.animation = "gpu";
+    } else if (g) {
+      const { w, h, dpr } = size();
+      if (canvas.width !== Math.round(w * dpr))
+        canvas.width = Math.round(w * dpr);
+      if (canvas.height !== Math.round(h * dpr))
+        canvas.height = Math.round(h * dpr);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.fillStyle = "#000";
+      g.fillRect(0, 0, w, h);
+      const b = letterbox(aspect, w, h);
+      const k = b.width / scene.sizePt[0];
+      g.setTransform(dpr * k, 0, 0, dpr * k, dpr * b.x, dpr * b.y);
+      drawScene2d(g, scene, states);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      container.dataset.animation = "2d";
+    }
+    container.dataset.animationRunning = running ? "true" : "false";
+    // What the frame shows of the animated layers (tests, diagnostics).
+    container.dataset.visibleLayers = String(
+      scene.layers.filter(
+        (l, i) => l.target && states[i]?.visible && states[i].opacity > 0,
+      ).length,
+    );
+    return running;
+  };
+
+  const loop = () => {
+    animFrame = 0;
+    if (drawAnimated()) animFrame = win.requestAnimationFrame(loop);
+  };
+
+  const stopAnimated = () => {
+    if (animFrame) win.cancelAnimationFrame(animFrame);
+    animFrame = 0;
+    if (animated) {
+      // What was up stays the outgoing frame of the next transition.
+      current = still(animated);
+    }
+    animated = null;
+    dropTextures();
+    delete container.dataset.animation;
+    delete container.dataset.animationRunning;
+    delete container.dataset.visibleLayers;
+  };
+
   return {
+    showAnimated(next, a, transition) {
+      if (anim) win.cancelAnimationFrame(anim);
+      anim = 0;
+      stopAnimated();
+      if (gpu) gpu.canvas.style.display = "none";
+      aspect = a > 0 ? a : aspect;
+      const from = current;
+      const to = still(next);
+      current = to;
+      const resolved = resolveShowTransition(transition);
+      const durationMs = transition ? transitionDurationMs(transition) : 0;
+      const start = () => {
+        animated = next;
+        loop();
+      };
+      if (from && to && resolved && durationMs > 0 && !blankColor) {
+        if (
+          gpuTransition(
+            from,
+            to,
+            resolved.kind,
+            durationMs,
+            resolved.params,
+            start,
+          )
+        ) {
+          container.dataset.transition = `gpu:${resolved.kind}`;
+          paint(null, from, 1);
+          return;
+        }
+        if (gpuMissing && !toldNoGpu) {
+          toldNoGpu = true;
+          opts.onNoGpu?.();
+        }
+      }
+      paint(null, to, 1);
+      start();
+    },
+    kick() {
+      if (animated && !animFrame) loop();
+    },
     show(frame, a, transition) {
       if (anim) win.cancelAnimationFrame(anim);
       anim = 0;
+      stopAnimated();
       if (gpu) gpu.canvas.style.display = "none";
       const from = current;
       current = frame;
@@ -297,14 +490,21 @@ export function createCompositor(
       blankColor = color;
       if (anim) win.cancelAnimationFrame(anim);
       anim = 0;
+      if (gpu && color) gpu.canvas.style.display = "none";
       paint(null, current, 1);
+      if (!color && animated) loop();
     },
     box,
     resize() {
       paint(null, current, 1);
+      if (animated) drawAnimated();
     },
     dispose() {
       if (anim) win.cancelAnimationFrame(anim);
+      if (animFrame) win.cancelAnimationFrame(animFrame);
+      animated = null;
+      dropTextures();
+      gpu?.layers?.destroy();
       canvas.remove();
       gpu?.canvas.remove();
       gpu?.device.destroy();

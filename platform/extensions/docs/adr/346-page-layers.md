@@ -1,6 +1,6 @@
 # ADR 346 — A page as layers
 
-- **Status:** Accepted 2026-10-25.
+- **Status:** Accepted 2026-10-25; amended 2026-10-28 (C4, paragraph layers).
 - **Scope:** `RenderSurface.layers`, `RenderLayersOptions`, `RenderedLayer` and `RenderedLayers`
   in `packages/plugin-api/src/host.ts`; `render.layers` in `packages/plugin-sdk/src/host-impl.ts`;
   the flag `render.layers@1`. Contract C2 of the PowerPoint parity program (slide ADR 711).
@@ -38,3 +38,25 @@ they go to the GPU without a decode per frame.
   animated items become layers of their own with the animation wave.
 - A layer per item costs a document build each (ADR 338's `only`). A batched engine request is a
   later optimisation behind its own flag.
+
+## Amendment 2026-10-28 — paragraph layers (C4)
+
+paged.slide builds a list paragraph by paragraph (slide ADR 714): each paragraph of a text frame
+moves, fades and wipes on its own, so the show needs the frame's paragraphs as layers. The engine
+can draw an item alone but not part of a story, so the cut is made from what it can say: where
+each paragraph's lines are.
+
+- **`paragraphs?: ElementId[]`** on `RenderLayersOptions`: text frames whose paragraphs come
+  back in `RenderedLayers.paragraphs`, each a `RenderedLayer` with `paragraph` (its index in the
+  story, 0-based) and `id` the frame. A frame named here is left out of the background.
+- **How a paragraph is cut.** The frame's story is its `elementGeometry` row's `storyId`; each
+  paragraph's content range goes to the engine's selection geometry (`requestSelectionGeometry`),
+  whose line rectangles in this frame give the paragraph's band: from its first line to the next
+  paragraph's first line (the first band from the frame's top, the last to its bottom, the frame's
+  width; all grown by `marginPt`). The layer is the frame alone (`only`), clipped to the band and
+  trimmed. An empty paragraph, or one the frame does not show, has no layer.
+- **Static flag** `render.layers.paragraphs@1`.
+
+Consequence: a glyph that reaches past its line box into the next paragraph's band (a deep
+descender in tight leading) is cut at the band; the band boundary sits at the next paragraph's
+line top, so this needs negative leading to show.

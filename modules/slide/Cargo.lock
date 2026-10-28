@@ -537,6 +537,7 @@ dependencies = [
  "dml-geom",
  "paged-ooxml",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -857,6 +858,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "slide-anim"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "pptx-core",
+ "pptx-import",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "slide-chart"
 version = "0.0.0"
 dependencies = [
@@ -876,6 +888,7 @@ dependencies = [
  "pptx-import",
  "serde",
  "serde_json",
+ "slide-anim",
  "slide-chart",
  "slide-native",
  "slide-output",
