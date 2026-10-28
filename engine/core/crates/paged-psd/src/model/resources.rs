@@ -205,6 +205,46 @@ impl ImageResources {
 }
 
 impl ImageResourceBlock {
+    /// A CONSTRUCTED block (`8BIM`, `id`, `name`, `data`) whose
+    /// `raw_block` is its canonical encoding — the shape a writer adds or
+    /// replaces a resource with. The name is a Pascal string padded to
+    /// even, the data padded to even and its size field excluding the pad.
+    pub fn constructed(id: u16, name: PascalString, data: &[u8]) -> ImageResourceBlock {
+        let mut w = ByteWriter::new();
+        w.fourcc(RESOURCE_SIGNATURE);
+        w.u16(id);
+        let name_start = w.len();
+        if name.raw.is_empty() {
+            w.u8(0);
+        } else {
+            w.bytes(&name.raw);
+        }
+        w.pad_to(2, name_start);
+        w.u32(data.len() as u32);
+        let data_start = w.len();
+        w.bytes(data);
+        w.pad_to(2, data_start);
+        ImageResourceBlock {
+            id,
+            name,
+            body: ResourceBody::Opaque,
+            raw_block: Some(w.into_bytes()),
+        }
+    }
+
+    /// The block's DATA (after the size field, without the pad), read
+    /// from its source bytes; `None` for a constructed typed block.
+    pub fn data(&self) -> Option<&[u8]> {
+        let raw = self.raw_block.as_deref()?;
+        let n = usize::from(*raw.get(6)?);
+        let content = 1 + n;
+        let at = 6 + content + (content & 1);
+        let size = u32::from_be_bytes(raw.get(at..at + 4)?.try_into().ok()?) as usize;
+        raw.get(at + 4..at + 4 + size)
+    }
+}
+
+impl ImageResourceBlock {
     fn parse(r: &mut ByteReader) -> Result<ImageResourceBlock> {
         // Probe the header on a clone to learn the full block length, then
         // take the whole block as one slice — that slice IS `raw_block`
@@ -311,4 +351,32 @@ fn read_pascal_field(r: &mut ByteReader, field_len: usize) -> Result<PascalStrin
     Ok(PascalString {
         raw: field[..1 + n].to_vec(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_constructed_block_parses_back_with_its_name_and_data__feat__image_paths_vectors() {
+        let blocks = ImageResources {
+            blocks: vec![
+                ImageResourceBlock::constructed(2000, PascalString::new("Path 1"), &[1, 2, 3]),
+                ImageResourceBlock::constructed(1025, PascalString::default(), &[9; 26]),
+            ],
+        };
+        let mut w = ByteWriter::new();
+        blocks.emit(&mut w);
+        let bytes = w.into_bytes();
+        let back = ImageResources::parse(&mut ByteReader::new(&bytes)).expect("parses");
+        assert_eq!(back.blocks.len(), 2);
+        assert_eq!(back.blocks[0].id, 2000);
+        assert_eq!(back.blocks[0].name.text_lossy(), "Path 1");
+        assert_eq!(back.blocks[0].data(), Some(&[1u8, 2, 3][..]));
+        assert_eq!(back.blocks[1].data(), Some(&[9u8; 26][..]));
+        assert_eq!(back.blocks[1].name.text_lossy(), "");
+        // The constructed block IS its canonical encoding.
+        assert_eq!(back.blocks[0].raw_block, blocks.blocks[0].raw_block);
+    }
 }
