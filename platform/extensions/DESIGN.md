@@ -2972,3 +2972,31 @@ move along it, and name the steps it makes (protocol 77).
 - **Additivity.** Three `DocumentSurface` members, `label` on `MutateOptions` and `MutateWithBytesOptions`, the
   `UndoLog` / `UndoLogStep` / `EditContextHistory` types, two optional edit-context members,
   one host option and two flags. An older host ignores `label` and lacks the three doors.
+
+## 29. Sub-contexts: headers, footers and notes edited in place (ADR 349 — `shell.subContext@1`)
+
+A Word header lives on a master (engine ADR 1022) and is shown on every page; the user edits it
+on the page they see it on (editor ADR 301). C6 is the door.
+
+- **Provider.** `contribute.subContextProvider({ editContext, resolve(hit) })`: while
+  `editContext` is active, or is the document context (§26), every page double-click is offered
+  to `resolve` FIRST, with `SubContextHit { editContext, pageId, pagePoint }` (page-local
+  points). It answers a `SubContextSpec` to enter, or `null` to leave the double-click to the
+  host. Providers of one context are asked in registration order; one that throws answers
+  nothing. The context must be declared and registered by the same bundle (§26's gate).
+- **The spec.** `SubContextSpec`: `kind` (`"header"`, `"footer"` or `"note"`), `pageId`,
+  `storyId`, `bounds` (`[top, left, bottom, right]`, page-local), and optionally `masterId`,
+  `frameId`, `label`, `commands`, `offset`. `storyId` is what the text edits address;
+  `commands` are the bundle's command ids shown on the bar; `offset` (UTF-8 bytes) is where
+  the caret starts, else the story's end.
+- **Shell.** `host.shell.enterSubContext(spec)` (replaces the one shown), `exitSubContext()`
+  (only one's own), `subContext()` (any bundle's, `SubContextState` = spec + `pluginId`),
+  `onDidChangeSubContext(handler)` (null: left). A bundle's disposal leaves its sub-context.
+- **The host's part.** The caret goes into the story, its geometry is pinned to `pageId`, the
+  rest is veiled, a bar shows the label, the commands and Close. Escape, the caret leaving the
+  story, Close or a new document leave it.
+- **Probes.** `contribute.subContextProvider@1` (static); `shell.subContext@1` (the editor's
+  `subContexts` registry). The harness wires one and plays the double-click:
+  `doubleClickPage(pageId, pagePoint, editContext?)`, `subContext()`, `exitSubContext()`.
+- **Additivity.** One `ContributeSurface` member, four `ShellSurface` members, six types and an
+  optional `ShellRegistries.subContexts`. An older host warns and answers false / null.

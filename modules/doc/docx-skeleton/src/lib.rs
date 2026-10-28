@@ -106,6 +106,14 @@ pub struct SkeletonPage {
     pub width: f32,
     pub height: f32,
     pub margins: Margins,
+    /// The master the page shows (doc ADR 611): its section's first
+    /// master, else its master. The grow rule the bundle sets names the
+    /// masters of every page of the story (engine ADR 1022).
+    pub master: Option<String>,
+    /// `w:pgNumType/@w:start`: the section restarts its page numbers.
+    pub page_number_start: Option<i32>,
+    /// `w:pgNumType/@w:fmt` (`lowerRoman`, …).
+    pub page_number_format: Option<String>,
 }
 
 impl SkeletonPage {
@@ -152,10 +160,19 @@ pub fn skeleton_pages(doc: &DocxDocument) -> Vec<SkeletonPage> {
 
 /// [`skeleton_pages`] for an engine that can lay out what `options` says.
 pub fn skeleton_pages_with(doc: &DocxDocument, options: LowerOptions) -> Vec<SkeletonPage> {
+    let (_, section_masters) = masters_with(doc, options);
     story_sections(doc, options)
         .into_iter()
         .enumerate()
         .map(|(k, (sec, frame))| SkeletonPage {
+            master: doc
+                .sections
+                .iter()
+                .position(|s| std::ptr::eq(s, sec))
+                .and_then(|i| section_masters.get(i).cloned().flatten())
+                .and_then(|m| m.first_master.or(m.master)),
+            page_number_start: sec.page_number_start,
+            page_number_format: sec.page_number_format.clone(),
             story_id: section_story_id(k),
             page_id: section_page_id(k),
             spread_id: section_spread_id(k),
@@ -174,6 +191,21 @@ pub fn skeleton_pages_with(doc: &DocxDocument, options: LowerOptions) -> Vec<Ske
         .collect()
 }
 
+/// The masters the skeleton writes and the masters each section's pages
+/// take (doc ADR 611, `docx_lower::structure::plan_masters`), as the
+/// lowering plans them.
+pub fn masters_with(
+    doc: &DocxDocument,
+    options: LowerOptions,
+) -> (
+    Vec<docx_lower::ir::LoweredMaster>,
+    Vec<Option<docx_lower::ir::LoweredSectionMasters>>,
+) {
+    let placements =
+        docx_lower::sections::place_sections_with(&doc.sections, options, &mut Vec::new());
+    docx_lower::structure::plan_masters(doc, &placements)
+}
+
 /// The skeleton packaged as a `.paged` document, named `name`.
 pub fn skeleton(doc: &DocxDocument, name: &str) -> Result<Skeleton, String> {
     skeleton_with(doc, name, LowerOptions::default())
@@ -186,7 +218,8 @@ pub fn skeleton_with(
     options: LowerOptions,
 ) -> Result<Skeleton, String> {
     let pages = skeleton_pages_with(doc, options);
-    let document = native::skeleton_document(&pages, name);
+    let (masters, _) = masters_with(doc, options);
+    let document = native::skeleton_document_with(&pages, &masters, name);
     // The container's fallback page (read only if the model part ever
     // fails to decode) takes the first story's page size.
     let (w, h) = pages

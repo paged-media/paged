@@ -180,7 +180,7 @@ impl DocSession {
     /// cell list) and `para` (the paragraph in the cell); the cell writes
     /// become [`CellRunEdit`]s.
     pub fn object_edits(&self, edits: &ObjectEdits) -> Result<EditSet, String> {
-        let ir = self.lowered();
+        let ir = docx_export::notes::strip_lowered(self.lowered());
         let paragraph = |block: usize| match ir.story.blocks.get(block) {
             Some(LoweredBlock::Paragraph(p)) => Ok(p),
             Some(LoweredBlock::Table(_)) => Err(format!(
@@ -362,11 +362,47 @@ impl DocSession {
         styles: &[docx_export::StyleIn],
         layout: docx_export::TableParagraphs,
     ) -> Result<(Vec<u8>, Vec<String>), String> {
-        let baseline = self.lowered();
-        let mut coloured = baseline.clone();
+        self.save_edited_structure(
+            content,
+            cells,
+            tables,
+            colors,
+            styles,
+            layout,
+            &docx_export::structure::StructureIn::default(),
+        )
+    }
+
+    /// [`Self::save_edited_full`] with the document's structure read back
+    /// too (doc ADRs 611/612, [`docx_export::structure::StructureIn`]):
+    /// the master stories showing each header and footer part, the
+    /// engine's notes in document order and the body's text anchors. A
+    /// header or footer edit is spliced into its part; a note's text edit
+    /// into its notes part; a note added on the canvas is appended to the
+    /// notes part (made, with its relationship and content type, when the
+    /// document had none) and its reference written where it stands; a
+    /// removed note leaves the part with its reference; a field or a
+    /// bookmark added on the canvas is written as Word's complex field or
+    /// `w:bookmarkStart`/`w:bookmarkEnd` where it stands.
+    #[allow(clippy::too_many_arguments)]
+    pub fn save_edited_structure(
+        &self,
+        content: &StoryContentIn,
+        cells: &[CellContentIn],
+        tables: &[docx_export::TableContentIn],
+        colors: &std::collections::BTreeMap<String, String>,
+        styles: &[docx_export::StyleIn],
+        layout: docx_export::TableParagraphs,
+        structure: &docx_export::structure::StructureIn,
+    ) -> Result<(Vec<u8>, Vec<String>), String> {
+        use docx_export::structure as st;
+        // The body as the canvas holds it: note references as the engine's
+        // marker characters, fields as runs (doc ADR 611).
+        let marked = self.lowered();
+        let mut coloured = marked.clone();
         docx_export::add_canvas_colors(&mut coloured, colors);
         let plan =
-            docx_export::plan_styles(&self.model, &baseline, &coloured, &self.bindings, styles);
+            docx_export::plan_styles(&self.model, &marked, &coloured, &self.bindings, styles);
         // The created styles' tokens name their new Word ids.
         let mut bindings = self.bindings.clone();
         for (token, id) in plan.created_ids(true) {
@@ -380,14 +416,51 @@ impl DocSession {
                 .insert(token.to_string(), id.to_string());
         }
         let created = |t: &str| bindings.para_token_to_style_id.contains_key(t);
-        let mut edited = overlay_story_content_with(&baseline, content, layout, &created);
+        let mut edited_marked = overlay_story_content_with(&marked, content, layout, &created);
+        // What the canvas put into the text that is not text: notes kept,
+        // added and removed; new fields (taken out of the edited runs).
+        let changes = st::extract_structure(&marked, &mut edited_marked);
+        // Save-back works on Word's text, where a note reference is an
+        // element, not the engine's marker character.
+        let baseline = docx_export::notes::strip_lowered(marked.clone());
+        let mut edited = docx_export::notes::strip_lowered(edited_marked);
         docx_export::add_canvas_colors(&mut edited, colors);
-        let mut skips = docx_export::overlay_tables(&mut edited, tables);
+        let mut skips = changes.skips.clone();
+        skips.extend(docx_export::overlay_tables(&mut edited, tables));
         skips.extend(overlay_cells_known(&mut edited, cells, &created));
         let edits = diff(&baseline, &edited, &bindings);
         let mut package = self.package.clone();
+        let note_plan = st::plan_new_notes(&package, &self.main_part, &changes);
+        let bookmarks = st::new_bookmarks(&marked, content, &structure.anchors, layout);
+        let atoms = st::render_atoms(
+            &self.model,
+            &baseline,
+            &bindings,
+            &changes,
+            &note_plan,
+            &bookmarks,
+            package
+                .require(&self.main_part)
+                .map_err(|e| e.to_string())?,
+        );
         skips.extend(
-            apply_edits(&mut package, &self.main_part, &bindings, &edits)
+            docx_export::apply_edits_with(&mut package, &self.main_part, &bindings, &edits, &atoms)
+                .map_err(|e| e.to_string())?,
+        );
+        skips.extend(
+            st::save_notes(
+                &mut package,
+                &self.main_part,
+                &self.model,
+                &marked,
+                &changes,
+                &note_plan,
+                structure,
+            )
+            .map_err(|e| e.to_string())?,
+        );
+        skips.extend(
+            st::save_headers(&mut package, &self.model, &marked, &structure.headers)
                 .map_err(|e| e.to_string())?,
         );
         skips.extend(

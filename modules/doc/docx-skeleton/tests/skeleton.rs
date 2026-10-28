@@ -269,3 +269,66 @@ fn continuous_sections_share_the_story_of_the_page_they_continue() {
         docx_skeleton::story_ids_with(&docx, old)
     );
 }
+
+/// Doc ADR 611: a document with headers and footers gets its section
+/// masters in the skeleton, each a page of its section's size with a
+/// header frame and a footer frame holding an empty story, and every
+/// story's page shows its section's first master. A section restarting
+/// its page numbers gets a numbering section on its page.
+#[test]
+#[allow(non_snake_case)]
+fn the_skeleton_writes_the_section_masters_and_numbering__feat__doc_word_headers_footers() {
+    let doc = docx_import::import_docx(&docx_conformance::headers_docx()).expect("import");
+    let sk = skeleton(&doc, "headers.docx").unwrap();
+    let m = model(&sk);
+    let (masters, per_section) = docx_skeleton::masters_with(&doc, Default::default());
+    assert!(masters.len() >= 3, "{masters:?}");
+    for lm in &masters {
+        let spread = &m.master_spreads[&lm.id];
+        assert_eq!(spread.spread.pages.len(), 1);
+        let ids: Vec<&str> = spread
+            .spread
+            .text_frames
+            .iter()
+            .filter_map(|f| f.self_id.as_deref())
+            .collect();
+        for f in [&lm.header, &lm.footer].into_iter().flatten() {
+            assert!(ids.contains(&f.frame_id.as_str()), "{ids:?}");
+            let story = m
+                .stories
+                .iter()
+                .find(|s| s.self_id == f.story_id)
+                .expect("the frame's story");
+            assert_eq!(story.story.paragraphs.len(), 1, "an empty story to pour");
+        }
+    }
+    // Each story page shows its section's first master (S1 and S3 have a
+    // different first page; S2 its master).
+    let applied: Vec<Option<String>> = m
+        .spreads
+        .iter()
+        .map(|s| s.spread.pages[0].applied_master.clone())
+        .collect();
+    let want: Vec<Option<String>> = per_section
+        .iter()
+        .map(|p| {
+            let p = p.clone().unwrap();
+            p.first_master.or(p.master)
+        })
+        .collect();
+    assert_eq!(applied, want);
+    // S2 restarts at 1: a section on its page, after the first page's.
+    let sections: Vec<(Option<&str>, bool, Option<u32>)> = m
+        .designmap
+        .sections
+        .iter()
+        .map(|s| (s.page_start.as_deref(), s.continue_numbering, s.start_at))
+        .collect();
+    assert_eq!(
+        sections,
+        [
+            (Some("docx_p0"), false, Some(1)),
+            (Some("docx_p1"), false, Some(1))
+        ]
+    );
+}

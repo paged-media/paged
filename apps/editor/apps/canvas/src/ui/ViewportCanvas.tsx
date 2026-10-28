@@ -43,6 +43,7 @@ import {
   TEXT_TOOL_ID,
   useContentSelection,
   useEditContextEntry,
+  useSubContextEntry,
   useOptionalEditContextStack,
   useOptionalTool,
   useOverlaySignals,
@@ -300,6 +301,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // consults this BEFORE group descent: a polygon enters the
   // vectorGraphic context, a webFrame enters its source context.
   const { tryEnterEditContext, tryEnterOwnedContent } = useEditContextEntry();
+  // Editor ADR 301 — headers, footers and notes edited in place.
+  const { trySubContext } = useSubContextEntry();
   const tool = useOptionalTool();
   const { activeGroup } = useSelection();
 
@@ -1579,13 +1582,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   };
 
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Phase H — double-click on a frame nested inside a group →
-    // select the whole outermost containing group as a unit.
-    if (!props.onDoubleClickGroup) return;
-    // W2.11 — with the Type tool, double-/triple-click is text
-    // granularity (handled in onPointerUp's click branch); skip the
-    // group-descent path so the two don't fight over the same click.
-    if ((props.activeTool ?? "select") === "text") return;
     // Path-edit mode — a double-click whose second click the session
     // took (on an anchor it converts corner ↔ smooth) is not ALSO a
     // request to enter whatever lies under that anchor.
@@ -1598,6 +1594,21 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     if (!containing) return;
     const [pageId, pageRect] = containing;
     const pagePoint: [number, number] = [docX - pageRect.x, docY - pageRect.y];
+    // W2.11 — with the Type tool, double-/triple-click is text
+    // granularity (handled in onPointerUp's click branch); skip the
+    // group-descent path so the two don't fight over the same click.
+    const typeTool = (props.activeTool ?? "select") === "text";
+    // Editor ADR 301 — FIRST, with any tool: the active context's (or the
+    // document context's) sub-context providers may take the double-click
+    // for a header, footer or note edited in place. None answering leaves
+    // it to what follows.
+    const offerFirst = async () => {
+      if (await trySubContext({ pageId, pagePoint })) return;
+      // Phase H — double-click on a frame nested inside a group →
+      // select the whole outermost containing group as a unit.
+      if (!props.onDoubleClickGroup || typeTool) return;
+      await resolveDoubleClick();
+    };
     // A promise chain, not a try (ADR 229).
     const resolveDoubleClick = async () => {
       const reply = await props.client.send({
@@ -1680,7 +1691,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       // context by kind) enters vectorGraphic.
       await (holdsImage ? tryEnterOwnedContent(at) : tryEnterEditContext(at));
     };
-    void resolveDoubleClick().catch((err: unknown) => {
+    void offerFirst().catch((err: unknown) => {
       // Same fail-quiet approach as the click hitTest.
       console.warn("doubleClick hitTest failed:", err);
     });

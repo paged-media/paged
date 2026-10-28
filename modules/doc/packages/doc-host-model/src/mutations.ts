@@ -15,6 +15,7 @@ import type {
   LoweredStyle,
   LoweredTable,
 } from "./lowered.js";
+import { ENDNOTE_MARKER, FOOTNOTE_MARKER } from "./lowered.js";
 
 /**
  * Count a string's length in Unicode scalar values (code points), matching the
@@ -116,6 +117,44 @@ interface LinkAt {
   url: string;
 }
 
+/** Something the pour does not write as text but inserts after it, at its
+ *  place in the poured story (doc ADRs 611 / 612): a live Word field (its
+ *  result is its text) or a note reference (the engine's marker). Both
+ *  addresses are of the FINISHED pour: inserted in ascending order after
+ *  the text, every atomic before one is already there when it lands. */
+interface AtomicAt {
+  /** Contiguous char offset (the style space). */
+  offset: number;
+  /** The `insertText` space: UTF-8 bytes plus one per paragraph break,
+   *  from the pour's `textBase` (the caller adds it). */
+  bytes: number;
+  /** The native paragraph it stands in (relative to the pour). */
+  paragraph: number;
+  kind: "field" | "footnote" | "endnote";
+  /** A field's instruction. */
+  code?: string;
+  /** A field's result: the text it shows. */
+  result?: string;
+  /** A note's Word id. */
+  noteId?: number;
+}
+
+/** A Word bookmark (doc ADR 612): a named text anchor at a paragraph's
+ *  start. */
+interface AnchorAt {
+  offset: number;
+  bytes: number;
+  name: string;
+}
+
+/** Word's hidden bookmark for the last edit place: not a destination. */
+const SKIPPED_BOOKMARKS = new Set(["_GoBack"]);
+
+const utf8 = new TextEncoder();
+function byteLen(s: string): number {
+  return utf8.encode(s).length;
+}
+
 /** The joined text of a paragraph run + the style ranges over it + image
  *  placements, offsets relative to `base`.
  *
@@ -135,13 +174,21 @@ function poured(
   ranges: Range[];
   images: ImageAt[];
   links: LinkAt[];
+  atomics: AtomicAt[];
+  anchors: AnchorAt[];
   length: number;
+  /** UTF-8 bytes of the finished pour (text, breaks and atomics). */
+  bytes: number;
   breaks: number;
 } {
   const ranges: Range[] = [];
   const images: ImageAt[] = [];
   const links: LinkAt[] = [];
+  const atomics: AtomicAt[] = [];
+  const anchors: AnchorAt[] = [];
   let text = "";
+  // Bytes of the finished pour so far: the text plus every atomic.
+  let bytes = 0;
   let offset = base;
   // Separators emitted so far: each starts a new native paragraph.
   let breaks = 0;
@@ -157,25 +204,108 @@ function poured(
     // separator, does not advance the contiguous offsets.
     const cuts = (para.segments ?? []).map((s) => s.at);
     let local = 0;
+    // Doc ADR 612 — Word bookmarks start here.
+    for (const name of para.bookmarks ?? []) {
+      if (!SKIPPED_BOOKMARKS.has(name)) {
+        anchors.push({ offset, bytes, name });
+      }
+    }
+    // The live field the previous run belongs to (its runs are one engine
+    // field, inserted with their joined text as its result).
+    let field: AtomicAt | null = null;
+    let fieldSeq = -1;
+    let fieldStyle: Range | null = null;
     for (const run of para.runs) {
       const runStart = offset;
       const chars = Array.from(run.text);
+      const atomic = run.field != null;
       chars.forEach((ch, i) => {
         if (cuts.includes(local + i) && local + i > 0) {
           text += "\n";
+          bytes += 1;
           breaks += 1;
         }
-        text += ch;
+        if (run.note != null && isNoteMarker(ch)) {
+          // A note reference: the engine's marker, written by
+          // insertFootnote / insertEndnote (the engine draws the
+          // reference). Word may write text around it in the same run.
+          atomics.push({
+            offset: offset + i,
+            bytes,
+            paragraph: breaks,
+            kind: run.note.endnote ? "endnote" : "footnote",
+            noteId: run.note.id,
+          });
+          bytes += byteLen(ch);
+        } else if (!atomic) {
+          text += ch;
+          if (run.note != null) bytes += byteLen(ch);
+        }
       });
+      if (run.note != null) {
+        // (bytes counted char by char above)
+      } else if (run.field != null) {
+        if (field !== null && fieldSeq === run.field.seq) {
+          field.result += run.text;
+          if (fieldStyle) fieldStyle.end = offset + chars.length;
+        } else {
+          field = {
+            offset,
+            bytes,
+            paragraph: breaks,
+            kind: "field",
+            code: run.field.code,
+            result: run.text,
+          };
+          fieldSeq = run.field.seq;
+          atomics.push(field);
+          fieldStyle = null;
+          // The field takes its first run's look.
+          if (run.charStyleId) {
+            fieldStyle = {
+              start: runStart,
+              end: offset + chars.length,
+              style: run.charStyleId,
+              scope: "character",
+            };
+            ranges.push(fieldStyle);
+          }
+        }
+        bytes += byteLen(run.text);
+      } else {
+        bytes += byteLen(run.text);
+      }
+      if (run.field == null) {
+        field = null;
+        fieldSeq = -1;
+      }
       local += chars.length;
       offset += chars.length;
-      if (run.charStyleId) {
-        ranges.push({
-          start: runStart,
-          end: offset,
-          style: run.charStyleId,
-          scope: "character",
+      if (run.charStyleId && !atomic) {
+        // A note reference's marker keeps the engine's own look (its
+        // reference style); the text around it takes the run's.
+        let from = runStart;
+        chars.forEach((ch, i) => {
+          if (run.note != null && isNoteMarker(ch)) {
+            if (runStart + i > from) {
+              ranges.push({
+                start: from,
+                end: runStart + i,
+                style: run.charStyleId!,
+                scope: "character",
+              });
+            }
+            from = runStart + i + 1;
+          }
         });
+        if (offset > from) {
+          ranges.push({
+            start: from,
+            end: offset,
+            style: run.charStyleId,
+            scope: "character",
+          });
+        }
       }
       if (run.hyperlinkUrl && offset > runStart) {
         links.push({ start: runStart, end: offset, url: run.hyperlinkUrl });
@@ -185,6 +315,7 @@ function poured(
     for (const at of cuts) {
       if (at >= local) {
         text += "\n";
+        bytes += 1;
         breaks += 1;
       }
     }
@@ -241,10 +372,21 @@ function poured(
     // Separator text for insertText, but NOT an offset advance (contiguous).
     if (pIdx < paragraphs.length - 1) {
       text += "\n";
+      bytes += 1;
       breaks += 1;
     }
   });
-  return { text, ranges, images, links, length: offset - base, breaks };
+  return {
+    text,
+    ranges,
+    images,
+    links,
+    atomics,
+    anchors,
+    length: offset - base,
+    bytes,
+    breaks,
+  };
 }
 
 /** A zero-length paragraph-style range: a CARET, which styles the empty
@@ -281,6 +423,9 @@ export function buildTextPour(
      *  is a new one after it (`paraBase` names that new paragraph). The
      *  break is counted in `byteLength`, not in `breaks`. */
     leadingBreak?: boolean;
+    /** The notes' text (doc ADR 611): what each note reference's note
+     *  holds. Without it a note is inserted empty. */
+    notes?: NoteTexts;
   } = {},
 ): {
   mutations: Mutation[];
@@ -289,8 +434,15 @@ export function buildTextPour(
   carets: Mutation[];
   breaks: number;
 } {
-  const body = poured(paragraphs, styleBase, opts.paraBase);
+  // Notes are placed only when the caller has their text (a document
+  // opened standalone); anywhere else their references are left out.
+  const body = poured(
+    opts.notes ? paragraphs : withoutNotes(paragraphs),
+    styleBase,
+    opts.paraBase,
+  );
   const { ranges, images, links, length, breaks } = body;
+  const lead = opts.leadingBreak ? 1 : 0;
   const text = (opts.leadingBreak ? "\n" : "") + body.text;
   const ops: Mutation[] = [];
   const carets: Mutation[] = [];
@@ -299,6 +451,11 @@ export function buildTextPour(
       op: "insertText",
       args: { storyId, offset: textBase, text, cell: null },
     } as Mutation);
+  }
+  // Doc ADRs 611 / 612 — fields and note references, in ascending order,
+  // each at its place in the finished pour.
+  for (const a of body.atomics) {
+    ops.push(atomicOp(storyId, a, textBase + lead, opts.paraBase, opts.notes));
   }
   for (const r of ranges.filter((r) => r.scope === "paragraph")) {
     const op = applyStyleOp(
@@ -341,11 +498,116 @@ export function buildTextPour(
       args: { storyId, start: link.start, end: link.end, url: link.url },
     } as unknown as Mutation);
   }
+  // Doc ADR 612 — Word bookmarks as named text anchors (engine ADR 1022).
+  for (const a of body.anchors) {
+    ops.push({
+      op: "insertTextAnchor",
+      args: {
+        storyId,
+        offset: a.offset,
+        contentOffset: textBase + lead + a.bytes,
+        name: a.name,
+      },
+    } as Mutation);
+  }
   // The engine's insertText space counts BYTES, so report UTF-8 length (not code
-  // points) for the caller's running text offset.
+  // points) for the caller's running text offset — of the finished pour, the
+  // fields' results and the note markers included.
   // (U+2028, Word's line break, is 3 bytes here and 1 char in `length`.)
-  const byteLength = new TextEncoder().encode(text).length;
+  const byteLength = lead + body.bytes;
   return { mutations: ops, length, byteLength, carets, breaks };
+}
+
+/** The mutation that inserts a field or a note reference (doc ADRs 611 /
+ *  612). A field is addressed in the `insertText` space (`contentOffset`),
+ *  which names an empty paragraph where a char offset cannot; a note by its
+ *  char offset and, when the pour knows it, its paragraph. */
+function atomicOp(
+  storyId: string,
+  a: AtomicAt,
+  textBase: number,
+  paraBase: number | undefined,
+  notes: NoteTexts | undefined,
+): Mutation {
+  if (a.kind === "field") {
+    return {
+      op: "insertField",
+      args: {
+        storyId,
+        offset: a.offset,
+        contentOffset: textBase + a.bytes,
+        field: { word: { code: a.code ?? "", result: a.result } },
+      },
+    } as Mutation;
+  }
+  return {
+    op: a.kind === "endnote" ? "insertEndnote" : "insertFootnote",
+    args: {
+      storyId,
+      offset: a.offset,
+      ...(paraBase !== undefined ? { paragraph: paraBase + a.paragraph } : {}),
+      text: notes?.get(noteKey(a.kind === "endnote", a.noteId ?? -1)) ?? "",
+    },
+  } as Mutation;
+}
+
+/** `paragraphs` without their note references (doc ADR 611): where notes
+ *  are not placed (an inserted document, ADR 603), a reference's marker
+ *  would be a stray character. The pictures and break segments after one
+ *  move back by it, as `docx-export`'s `notes::strip_lowered` does. */
+export function withoutNotes(
+  paragraphs: readonly LoweredParagraph[],
+): LoweredParagraph[] {
+  return paragraphs.map((p) => {
+    if (!p.runs.some((r) => r.note != null)) return p;
+    const gone: number[] = [];
+    let at = 0;
+    for (const r of p.runs) {
+      for (const ch of Array.from(r.text)) {
+        if (r.note != null && isNoteMarker(ch)) gone.push(at);
+        at += 1;
+      }
+    }
+    const shift = (offset: number) =>
+      offset - gone.filter((g) => g < offset).length;
+    return {
+      ...p,
+      runs: p.runs
+        .map((r) =>
+          r.note == null
+            ? r
+            : {
+                ...r,
+                note: null,
+                text: Array.from(r.text)
+                  .filter((ch) => !isNoteMarker(ch))
+                  .join(""),
+              },
+        )
+        .filter((r) => r.text.length > 0),
+      images: p.images?.map((i) => ({ ...i, at: shift(i.at ?? 0) })),
+      segments: p.segments?.map((g) => ({ ...g, at: shift(g.at) })),
+    };
+  });
+}
+
+function isNoteMarker(ch: string): boolean {
+  return ch === FOOTNOTE_MARKER || ch === ENDNOTE_MARKER;
+}
+
+/** The notes' text by {@link noteKey} (doc ADR 611). */
+export type NoteTexts = ReadonlyMap<string, string>;
+
+/** A note's key: Word numbers footnotes and endnotes apart. */
+export function noteKey(endnote: boolean, id: number): string {
+  return `${endnote ? "e" : "f"}${id}`;
+}
+
+/** The text of every note of `ir`, for the pour. */
+export function noteTexts(ir: LoweredDoc): NoteTexts {
+  return new Map(
+    (ir.notes ?? []).map((n) => [noteKey(n.endnote, n.id), n.text] as const),
+  );
 }
 
 function applyStyleOp(
@@ -720,7 +982,11 @@ export function pouredParagraphCount(
 export function buildStoryBlocks(
   blocks: readonly LoweredBlock[],
   storyId: string,
+  /** `notes`: the notes' text, to place each note at its reference (doc
+   *  ADR 611, a standalone open); without it references are left out. */
+  opts: { notes?: NoteTexts } = {},
 ): StoryStep[] {
+  const notes = opts.notes;
   const steps: StoryStep[] = [];
   let pending: LoweredParagraph[] = [];
   // Each text step's carets, filled in when the pour runs it (the style base
@@ -741,7 +1007,7 @@ export function buildStoryBlocks(
     const paras = pending;
     pending = [];
     const leadingBreak = endsInTable;
-    const probe = buildTextPour(paras, storyId, 0, 0, { leadingBreak });
+    const probe = buildTextPour(paras, storyId, 0, 0, { leadingBreak, notes });
     const slot = caretsByStep.length;
     caretsByStep.push([]);
     const paraBase = last + 1;
@@ -757,6 +1023,7 @@ export function buildStoryBlocks(
           deferCarets: true,
           paraBase,
           leadingBreak,
+          notes,
         });
         caretsByStep[slot] = out.carets;
         return out.mutations;

@@ -32,17 +32,17 @@
 //     (Ctrl+Shift+M indent, Cmd+Alt+C/V for copy/paste formatting —
 //     Cmd+Shift+C opens the browser's inspector). Cmd+H (Replace) is bound,
 //     for the browsers that hand it over; Cmd+Alt+F, the host's own
-//     Find/Change key, opens the same dialog everywhere;
+//     Find/Change key, is Word's footnote inside a Word document;
 //   · Cmd+Shift+= (superscript): with Shift the key reports "+", which a
 //     combo cannot name; the control bar's button does it;
 //   · Cmd+Shift+S (the style box, Word's "Apply Styles"): the host keeps it
 //     for Save As (a reserved key); the `applyStyles` command and the Styles
 //     menu put the focus in the control bar's style box instead;
 //   · keys whose target the engine does not have yet: Cmd+D (no Font
-//     dialog), the structure keys (page and column breaks, nbsp and
-//     Alt+Shift+arrows need an insertion and a paragraph move host.text
-//     does not offer), fields, notes, links, comments and track changes
-//     (waves 2 and 3).
+//     dialog), column breaks, nbsp and Alt+Shift+arrows (an insertion and a
+//     paragraph move host.text does not offer), links, comments and track
+//     changes (wave 3). The structure keys of wave 2 (Cmd+Enter, Cmd+Alt+F
+//     / D, F9, Shift+F9, Alt+F9) are bound (doc ADRs 611 / 612).
 //
 // Find, Replace and Go To are the HOST's commands (editor ADR 303: one
 // Find & Replace for every text document); the Word keys below only name
@@ -56,6 +56,11 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { LIST_PRESETS, type ListPresetId } from "./lists.js";
+import {
+  HEADER_BAR_COMMANDS,
+  runStructureCommand,
+  type WordStructure,
+} from "./structure.js";
 import { readShowHidden } from "./word-state.js";
 import {
   ALIGNMENTS,
@@ -126,6 +131,32 @@ export const WORD_COMMAND = {
   styleModify: `${ID}.styleModify`,
   styleNew: `${ID}.styleNew`,
   applyStyles: `${ID}.applyStyles`,
+  // Doc ADRs 611 / 612 — the document structure (`structure.ts`).
+  pageBreak: `${ID}.pageBreak`,
+  sectionNextPage: `${ID}.sectionNextPage`,
+  sectionOddPage: `${ID}.sectionOddPage`,
+  sectionEvenPage: `${ID}.sectionEvenPage`,
+  sectionContinuous: `${ID}.sectionContinuous`,
+  footnote: `${ID}.footnote`,
+  endnote: `${ID}.endnote`,
+  updateFields: `${ID}.updateFields`,
+  toggleFieldCodes: `${ID}.toggleFieldCodes`,
+  insertToc: `${ID}.insertToc`,
+  updateToc: `${ID}.updateToc`,
+  insertPageNumber: `${ID}.insertPageNumber`,
+  insertPageCount: `${ID}.insertPageCount`,
+  insertDate: `${ID}.insertDate`,
+  editHeader: `${ID}.editHeader`,
+  editFooter: `${ID}.editFooter`,
+  closeHeaderFooter: `${ID}.closeHeaderFooter`,
+  differentFirstPage: `${ID}.differentFirstPage`,
+  differentOddEven: `${ID}.differentOddEven`,
+  linkToPrevious: `${ID}.linkToPrevious`,
+  crossReference: `${ID}.crossReference`,
+  field: `${ID}.field`,
+  bookmark: `${ID}.bookmark`,
+  indexEntry: `${ID}.indexEntry`,
+  pageSetup: `${ID}.pageSetup`,
 } as const;
 export type WordCommandName = keyof typeof WORD_COMMAND;
 
@@ -166,6 +197,15 @@ export const WORD_KEYS: ReadonlyArray<{
   { key: "cmd+alt+v", command: WORD_COMMAND.pasteFormat },
   { key: "cmd+shift+d", command: WORD_COMMAND.doubleUnderline },
   { key: "cmd+shift+h", command: WORD_COMMAND.hidden },
+  // Doc ADRs 611 / 612 — Word for Mac's structure keys. Cmd+Alt+F is the
+  // host's Find/Change elsewhere; inside a Word document it is Word's
+  // footnote, as in Word (Find stays on Cmd+F and Cmd+H).
+  { key: "cmd+enter", command: WORD_COMMAND.pageBreak },
+  { key: "cmd+alt+f", command: WORD_COMMAND.footnote },
+  { key: "cmd+alt+d", command: WORD_COMMAND.endnote },
+  { key: "f9", command: WORD_COMMAND.updateFields },
+  { key: "shift+f9", command: WORD_COMMAND.toggleFieldCodes },
+  { key: "alt+f9", command: WORD_COMMAND.toggleFieldCodes },
 ];
 
 /** The host's Find & Replace commands (editor ADR 303). */
@@ -228,6 +268,9 @@ export interface WordCommandState {
   shading?: string | null;
   /** Put the focus in the control bar's style box (Apply Styles). */
   focusStyleBox?: () => void;
+  /** Doc ADR 611 — the open Word document's sections and masters, for the
+   *  header and footer commands; `null` for any other document. */
+  structure?: () => WordStructure | null;
 }
 
 const text = (value: string): Value => ({ type: "text", value });
@@ -726,5 +769,12 @@ export async function runWordCommand(
     case "applyStyles":
       state.focusStyleBox?.();
       return { applied: state.focusStyleBox !== undefined };
+    default:
+      return runStructureCommand(
+        host,
+        name,
+        state.structure ?? (() => null),
+        HEADER_BAR_COMMANDS.map((n) => WORD_COMMAND[n]),
+      );
   }
 }
