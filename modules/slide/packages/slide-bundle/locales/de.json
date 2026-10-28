@@ -215,5 +215,17 @@
   "slide.template.placeholderTextTitle": "Text eines Folienplatzhalters",
   "slide.template.refused": "die Präsentation hat den Wert abgelehnt",
   "slide.template.shownTitle": "Folie angezeigt",
-  "slide.template.yesOrNo": "Ob eine Folie angezeigt wird, ist Ja oder Nein."
+  "slide.template.yesOrNo": "Ob eine Folie angezeigt wird, ist Ja oder Nein.",
+  "slide.outputModel.saveAsTemplate": "Als Vorlage speichern",
+  "slide.outputModel.customShows": "Zielgruppenorientierte Präsentationen",
+  "slide.outputModel.exportPdf": "PDF exportieren (Folien, Handzettel, Notizenseiten)",
+  "slide.outputModel.exportOutline": "Die Gliederung exportieren",
+  "slide.outputModel.exportVideo": "Ein Video erstellen (MP4)",
+  "slide.outputModel.setCustomShow": "Eine zielgruppenorientierte Präsentation festlegen",
+  "slide.outputModel.deleteCustomShow": "Eine zielgruppenorientierte Präsentation löschen",
+  "slide.outputModel.playCustomShow": "Eine zielgruppenorientierte Präsentation vorführen",
+  "slide.outputModel.sections": "Die Abschnitte auflisten",
+  "slide.outputModel.renameSection": "Einen Abschnitt umbenennen",
+  "slide.outputModel.moveSection": "Einen Abschnitt verschieben",
+  "slide.outputModel.deleteSection": "Einen Abschnitt entfernen"
 }
