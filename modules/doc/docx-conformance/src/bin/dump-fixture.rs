@@ -52,6 +52,7 @@ fn main() {
         "cell-blank-lines" => docx_conformance::cell_blank_lines_docx(),
         "symbols" => docx_conformance::symbols_docx(),
         "headers" => docx_conformance::headers_docx(),
+        "structure" => docx_conformance::structure_docx(),
         "footnote-numbering" => docx_conformance::footnote_numbering_docx(),
         "floats" => docx_conformance::floats_docx(),
         "real-docx" => docx_conformance::real_docx_docx(),

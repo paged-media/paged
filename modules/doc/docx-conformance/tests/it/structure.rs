@@ -211,3 +211,60 @@ fn the_bundle_fixture_is_the_structure_builder__feat__doc_word_headers_footers()
         assert_eq!(a.part(name), b.part(name), "{name}");
     }
 }
+
+/// Word's answer for `structure_docx()` (`scripts/word-structure-probe.sh`,
+/// Word 16 for Mac, 2026-10-28): three pages — S1's title page (its TOC),
+/// S1's second page (the page break), S2's page restarting at 1 — and per
+/// page the header and footer the lowering's masters print there, the
+/// footer's PAGE and NUMPAGES with Word's numbers, and every footnote on
+/// the page of its reference.
+#[test]
+fn the_masters_and_notes_print_where_word_prints_them__feat__doc_word_headers_footers() {
+    let word: serde_json::Value =
+        serde_json::from_str(include_str!("../../fixtures/structure.word.json")).unwrap();
+    let pages = word["pages"].as_array().unwrap();
+    assert_eq!(pages.len(), 3);
+    let ir = lowered();
+    let total = pages.len();
+    // Word's pages: (section, first page of its section, page number).
+    let layout = [(0usize, true, 1), (0, false, 2), (1, true, 1)];
+    for ((k, first, number), w) in layout.iter().zip(pages) {
+        let m = ir.sections[*k].masters.clone().unwrap();
+        let id = if *first && m.first_master.is_some() {
+            m.first_master
+        } else {
+            m.master
+        }
+        .unwrap();
+        let master = ir.masters.iter().find(|x| x.id == id).unwrap();
+        let print = |f: Option<&docx_lower::ir::LoweredMasterFrame>| {
+            f.map(|f| {
+                ir.header_footer_parts[f.part].paragraphs[0]
+                    .runs
+                    .iter()
+                    .map(|r| match r.field.as_ref().map(|x| x.code.as_str()) {
+                        Some("PAGE") => number.to_string(),
+                        Some("NUMPAGES") => total.to_string(),
+                        _ => r.text.clone(),
+                    })
+                    .collect::<String>()
+            })
+            .unwrap_or_default()
+        };
+        assert_eq!(print(master.header.as_ref()), w["header"].as_str().unwrap());
+        assert_eq!(print(master.footer.as_ref()), w["footer"].as_str().unwrap());
+    }
+    // Each footnote's text is on the page of its reference.
+    for (note, page) in [("First note text.", 1), ("Second note text.", 2)] {
+        assert!(
+            pages[page]["body"].as_str().unwrap().contains(note),
+            "{note} on page {}",
+            page + 1
+        );
+        assert!(ir.notes.iter().any(|n| n.text == note));
+    }
+    // Word puts the endnote after the document's last text, numbered in
+    // lower roman (its default); the engine's endnote story is a page of
+    // its own after the last, numbered 1 (doc ADR 611 residual).
+    assert!(pages[2]["body"].as_str().unwrap().contains("An endnote. i"));
+}
