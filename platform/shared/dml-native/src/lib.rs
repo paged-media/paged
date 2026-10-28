@@ -49,11 +49,19 @@
 //!   shadow, effects and dash pattern back as the neutral IR, which
 //!   `paged_ooxml::drawingml::write` writes as DrawingML.
 //!
+//! - **For a module that places items through mutations** ([`native`]):
+//!   [`native::Lowering`] runs the whole chain for a shape's or a
+//!   picture's authored DrawingML and restates the result as
+//!   [`native::NativeFx`], serialisable, colours as `#RRGGBB` (doc ADR
+//!   618).
+//!
 //! What the engine cannot hold is never dropped silently: it goes to
 //! [`Mapper::losses`], one line per kind of loss, for the module's
 //! diagnostics.
 
 use std::collections::BTreeMap;
+
+pub mod native;
 
 use paged_model::{
     ArrowheadType, ColorEntry, ColorModel, ColorSpace, DropShadowSetting, FeatherParams,
@@ -114,6 +122,24 @@ pub fn span(angle: f64, w: f64, h: f64) -> Placement {
         length: Some(pt(w * cs.abs() + h * sn.abs())),
         start: None,
     }
+}
+
+/// Where a fill gradient's axis starts on a `w` × `h` box, relative to the
+/// box's top-left: a radial one's centre ([`placement`] already says it);
+/// for a linear one, the start of the axis PowerPoint and Excel run
+/// through the box's centre, `length` long at the engine's (counter-
+/// clockwise) angle. The engine starts an unplaced linear gradient at
+/// the box's bottom-left corner, which is that start only for an axis
+/// running up or right (0°–90°); a module that knows the item's inner
+/// coordinates states the start instead (sheet ADR 527).
+pub fn axis_start(p: &Placement, w: f64, h: f64) -> Option<[f32; 2]> {
+    if p.start.is_some() {
+        return p.start;
+    }
+    let (sn, cs) = (p.angle? as f64).to_radians().sin_cos();
+    let half = p.length? as f64 / 2.0;
+    // The engine's axis direction on the y-down page is (cos θ, −sin θ).
+    Some([pt(w / 2.0 - half * cs), pt(h / 2.0 + half * sn)])
 }
 
 /// A gradient swatch: id, kind, (location %, colour id) stops.

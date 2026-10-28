@@ -22,9 +22,13 @@ standalone = ["paged-ooxml/deflate"]
 [dependencies]
 paged-ooxml = { path = "../ooxml" }
 paged-model = { path = "../../../engine/core/crates/paged-model" }
+# The wire form of the mapper's result (`native`), which a module's IR
+# carries to its TypeScript host model.
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 paged-ooxml = { path = "../ooxml", features = ["deflate"] }
+serde_json = "1"
 
 [lints.clippy]
 all = "warn"

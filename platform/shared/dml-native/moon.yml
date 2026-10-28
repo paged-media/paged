@@ -2,8 +2,8 @@ $schema: "../../../.moon/cache/schemas/project.json"
 
 # dml-native: the one DrawingML-to-engine mapper (slide ADR 722). It lowers
 # paged-ooxml's neutral resolved paint onto paged-model. A path dependency
-# of modules/slide and modules/doc, which list its sources in their own
-# rust-sources file group.
+# of modules/slide and modules/doc (doc ADR 618), which list its sources in
+# their own rust-sources file group.
 language: "rust"
 layer: "library"
 stack: "systems"

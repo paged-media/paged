@@ -50,3 +50,40 @@ pub use paint::{
     blip, fill, fill_in, gradient, line, rect_attrs, Blip, BlipEffect, Fill, Gradient,
     GradientStop, Line, LineEnd, Pattern, RelRect, Rels, Shade, Tile,
 };
+
+use crate::tree::{El, Ns};
+
+/// What a shape's properties (`a:spPr`, `pic:spPr`, `wps:spPr`, …) paint
+/// with, as authored: the fill, the line and the effect list (the geometry
+/// and transform are the module's). A picture's `pic:spPr` fills behind
+/// the image, outlines it and casts its effects.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ShapeProperties {
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub fill: Option<Fill>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub line: Option<Line>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub effects: Effects,
+}
+
+impl ShapeProperties {
+    /// Neither a fill, a line nor an effect.
+    pub fn is_empty(&self) -> bool {
+        self.fill.is_none() && self.line.is_none() && self.effects.is_empty()
+    }
+}
+
+/// Read a shape-properties element (whatever its namespace: the children
+/// are DrawingML's).
+pub fn shape_properties(sp_pr: &El, rels: Rels) -> ShapeProperties {
+    ShapeProperties {
+        fill: fill_in(sp_pr, rels),
+        line: sp_pr.child(Ns::A, "ln").map(|l| line(l, rels)),
+        effects: sp_pr
+            .child(Ns::A, "effectLst")
+            .map(|e| effects(e, rels))
+            .unwrap_or_default(),
+    }
+}
