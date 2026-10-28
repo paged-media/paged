@@ -94,6 +94,8 @@ describe("the editor's built-in bundles, activated together in the headless edit
         "network.consent@1",
         "dataProviders@1",
         "bindings.provider@1",
+        "bindings.workspace@1",
+        "bindings.readouts@1",
         "objects.shared@1",
         "tools.settings@1",
         "document.onWillSave@1",

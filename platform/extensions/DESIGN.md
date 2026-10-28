@@ -2098,6 +2098,32 @@ that its content has retargeted; the "provided by" affordance lives INSIDE the
 panel and is therefore invisible until you open it. That is a legitimate
 residual (a provenance mark on the tab), not part of this rule.
 
+### 18.13 The workspace and readout lanes (extensions ADR 3XX, 2026-10-27)
+
+Two more optional lanes, for host CHROME rather than panel values, both
+borrowing the provider's lifetime like the others:
+
+- **Workspace** (`provides.workspace`, `readWorkspace`, `editGuide`,
+  optional `workspaceView`). The active context names the frame the host
+  rulers measure in: a page, an origin on it, page pt per base unit (an
+  image pixel), the extent, the ruler unit and base units per physical
+  point, plus its own guides and whether they show and are locked. The
+  host draws those guides and drives them with its one guide machinery
+  (drag out of a ruler, move, drop on a ruler to delete, Escape), sending
+  each result to `editGuide`; the host grid covers the workspace in its
+  units; `workspaceView` hands the provider the host's grid and snap state
+  so the context's own tools snap to the lines the host draws.
+- **Readouts** (`provides.readouts: ["info"]`, `readReadouts`). Labelled
+  rows the Info panel shows while the context is active (a raster image's
+  pixel colour under the cursor, its selection and Ruler measurements).
+
+Neither is a `PropertyPath`: rulers, guides and a readout are not
+document values and nothing is written to core, so the vocabulary rule
+(§18.6) is not widened. The host asks one question per lane whose answer
+has the same shape for every content type. Both are probed as dynamic
+flags, `bindings.workspace@1` and `bindings.readouts@1`, true when a
+shared registry is wired.
+
 ## 19. One entry gesture for canvas content (K-13 — `entry: "doubleClick"`)
 
 **Rule: any plugin that exposes content to the canvas is entered by
