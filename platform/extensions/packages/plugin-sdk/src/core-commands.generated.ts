@@ -62,7 +62,7 @@ export const CORE_WIRE_OPS: Readonly<Record<string, CoreWireOpRow>> = {
   "pathPointRemove": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"index":{"kind":"number"}}}, nullFill: [] },
   "pathOpenAt": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"index":{"kind":"number"}}}, nullFill: [] },
   "outlineStroke": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"width":{"kind":"number"},"cap":{"kind":"text"},"join":{"kind":"text"},"miterLimit":{"kind":"number"}}}, nullFill: [] },
-  "offsetPath": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"delta":{"kind":"number"},"join":{"kind":"text"},"miterLimit":{"kind":"number"}}}, nullFill: [] },
+  "offsetPath": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"delta":{"kind":"number"},"join":{"kind":"text"},"miterLimit":{"kind":"number"},"side":{"kind":"text","optional":true}}}, nullFill: [] },
   "simplifyPath": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"tolerance":{"kind":"number"}}}, nullFill: [] },
   "closePath": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"subpath":{"kind":"number","optional":true}}}, nullFill: [] },
   "joinPaths": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"otherId":{"kind":"ref","to":"item"}}}, nullFill: [] },

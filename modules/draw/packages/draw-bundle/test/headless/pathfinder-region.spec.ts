@@ -60,7 +60,7 @@ import {
   regionRefusalReason,
   type PlanarRegionsWire,
 } from "../../src";
-import { F4_OVERLAP, F5_THIRTEEN } from "../fixtures/corpus";
+import { F4_OVERLAP, F5_OVER_CAP } from "../fixtures/corpus";
 import { openHost } from "./host";
 
 /** `ua` — the BACK square. */
@@ -227,12 +227,12 @@ describe("draw conformance — the region Pathfinder row (B-22)", () => {
           details: {
             what:
               "frame mutation failed: invalid value for FramePath on " +
-              'Polygon("u0"): planar arrangement takes at most 12 inputs (got 13)',
+              'Polygon("u0"): planar arrangement takes at most 1000 inputs (got 1001)',
           },
         },
       };
       expect(regionRefusalReason(wrapped)).toBe(
-        "planar arrangement takes at most 12 inputs (got 13)",
+        "planar arrangement takes at most 1000 inputs (got 1001)",
       );
       expect(regionRefusalReason(undefined)).toBeNull();
     });
@@ -527,16 +527,16 @@ describe("draw conformance — the region Pathfinder row (B-22)", () => {
     });
   });
 
-  describe("the caps REFUSE — 13 inputs (F5)", () => {
+  describe("the caps REFUSE — 1001 inputs (F5)", () => {
     let h: HeadlessHost;
     let ids: ElementId[];
     beforeAll(async () => {
       h = await openHost();
-      await h.load(F5_THIRTEEN.bytes());
+      await h.load(F5_OVER_CAP.bytes());
       h.loadBundle(drawBundle);
       ids = Array.from(
-        { length: F5_THIRTEEN.count },
-        (_, i) => ({ kind: "polygon", id: F5_THIRTEEN.idAt(i) }) as ElementId,
+        { length: F5_OVER_CAP.count },
+        (_, i) => ({ kind: "polygon", id: F5_OVER_CAP.idAt(i) }) as ElementId,
       );
     });
     afterAll(() => h?.dispose());
@@ -546,21 +546,21 @@ describe("draw conformance — the region Pathfinder row (B-22)", () => {
       expect(r.found).toBe(false);
       expect(r.faces).toEqual([]);
       expect(r.complete).toBe(false);
-      expect(r.reason).toContain("at most 12");
+      expect(r.reason).toContain("at most 1000");
       // The POINT form refuses on the same cap (inputs, not faces).
       const p = await planarRegions(h, ids, [250, 250]);
       expect(p.found).toBe(false);
-      expect(p.reason).toContain("at most 12");
+      expect(p.reason).toContain("at most 1000");
     });
 
-    it("twelve inputs — the cap itself — are answered, not refused", async () => {
-      const r = await planarRegions(h, ids.slice(0, 12));
+    it("forty inputs — past the old cap of 12 — are answered, not refused", async () => {
+      const r = await planarRegions(h, ids.slice(0, 40));
       expect(r.found).toBe(true);
-      expect(r.inputCount).toBe(12);
+      expect(r.inputCount).toBe(40);
       expect(r.faces.length).toBeGreaterThan(0);
     });
 
-    it("a verb over 13 inputs refuses and mutates NOTHING; the reason is readable", async () => {
+    it("a verb over 1001 inputs refuses and mutates NOTHING; the reason is readable", async () => {
       const before = await leaves(h);
       const outcome = await h.host.document.mutate(
         pathfinderRegionMutationFor("pathfinderDivide", ids),
@@ -569,8 +569,8 @@ describe("draw conformance — the region Pathfinder row (B-22)", () => {
       const reason = regionRefusalReason(
         (outcome as { error?: unknown }).error,
       );
-      expect(reason).toContain("planar arrangement takes at most 12");
-      expect(reason).toContain("13");
+      expect(reason).toContain("planar arrangement takes at most 1000");
+      expect(reason).toContain("1001");
       expect(await leaves(h)).toHaveLength(before.length);
     });
 
@@ -580,10 +580,10 @@ describe("draw conformance — the region Pathfinder row (B-22)", () => {
         undefined,
       );
       const status = h.host.bindings.get("media.paged.draw.pathfinderStatus");
-      expect(String(status)).toContain("at most 12");
+      expect(String(status)).toContain("at most 1000");
       // Nothing changed and the selection is untouched.
-      expect(await leaves(h)).toHaveLength(F5_THIRTEEN.count);
-      expect(h.host.selection.get()).toHaveLength(F5_THIRTEEN.count);
+      expect(await leaves(h)).toHaveLength(F5_OVER_CAP.count);
+      expect(h.host.selection.get()).toHaveLength(F5_OVER_CAP.count);
     });
   });
 });

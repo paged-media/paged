@@ -3832,6 +3832,8 @@ dependencies = [
  "paged-canvas",
  "paged-compose",
  "paged-gen",
+ "paged-model",
+ "paged-mutate",
  "paged-store",
  "serde_json",
  "zip",

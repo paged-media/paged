@@ -1700,12 +1700,17 @@ pub enum Mutation {
         miter_limit: f32,
     },
     /// B-05 (protocol v30) — inset (`delta < 0`) / outset
-    /// (`delta > 0`) of a single closed contour.
+    /// (`delta > 0`). Engine ADR 1019: any path — a compound path keeps
+    /// its holes (each contour moves by its nesting), and an OPEN contour
+    /// becomes the two-sided band, or with `side` `"left"` / `"right"`
+    /// one open parallel path on that side of its direction on the page.
     OffsetPath {
         element_id: ElementId,
         delta: f32,
         join: String,
         miter_limit: f32,
+        #[serde(default)]
+        side: Option<String>,
     },
     /// B-05 (protocol v30) — re-express the path within `tolerance`
     /// pt max deviation with fewer anchors.
