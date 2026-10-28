@@ -1,0 +1,79 @@
+{
+  "fixture": "psd-containers",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/psd-containers.jsx",
+    "script_sha256": "20cdd1aad9779228b2dd6423b3e8a78c415d4a9b111ad17222c2406ccb3e5097",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-28T16:51:31.511Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "sixteen-bit",
+      "params": {
+        "depth": 16,
+        "layers": [
+          "Background",
+          "square",
+          "Curves"
+        ]
+      },
+      "profile": "none",
+      "bits": 16,
+      "files": [
+        "psd-containers/sixteen-bit.psd",
+        "psd-containers/sixteen-bit.png"
+      ]
+    },
+    {
+      "id": "psb",
+      "params": {
+        "depth": 8,
+        "layers": [
+          "Background",
+          "square",
+          "Curves"
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-containers/psb.psb",
+        "psd-containers/psb.png"
+      ]
+    },
+    {
+      "id": "cmyk",
+      "params": {
+        "mode": "CMYK (Coated FOGRA39)",
+        "layers": [
+          "Background",
+          "square"
+        ]
+      },
+      "profile": "Coated FOGRA39 (ISO 12647-2:2004)",
+      "bits": 8,
+      "files": [
+        "psd-containers/cmyk.psd"
+      ]
+    },
+    {
+      "id": "smart-embedded",
+      "params": {
+        "what": "the square converted to an embedded smart object"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-containers/smart-embedded.psd",
+        "psd-containers/smart-embedded.png"
+      ]
+    }
+  ]
+}

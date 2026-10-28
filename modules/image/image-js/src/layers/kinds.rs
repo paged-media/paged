@@ -1442,6 +1442,9 @@ pub struct LayerExt {
     /// and multiplied with its user mask. On a fill layer it makes a
     /// SHAPE LAYER.
     pub vector_mask: Option<std::sync::Arc<crate::vectors::LayerVectorMask>>,
+    /// The PSD record this layer was read from and the state the import
+    /// left it in (`crate::psd_source`); `None` for a layer made here.
+    pub source: Option<Arc<crate::psd_source::PsdSource>>,
 }
 
 /// Blending Options ▸ Advanced Blending: the switches that change how a
@@ -1517,6 +1520,7 @@ impl Default for LayerExt {
             style: None,
             style_options: StyleOptions::default(),
             vector_mask: None,
+            source: None,
         }
     }
 }

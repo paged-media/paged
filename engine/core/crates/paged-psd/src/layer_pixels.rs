@@ -53,8 +53,9 @@
 //!   beside — none of these is modelled;
 //! * **layer effects** that are drawn (`lfx2`; a block whose effects are
 //!   all off draws nothing and imports) other than a Color Overlay,
-//!   **adjustment layers** other than Curves, Levels, Exposure, Invert and
-//!   Hue/Saturation (`crate::adjustment`), and **artboards** — importing
+//!   **adjustment layers** the stack does not reproduce (the legacy
+//!   Hue/Saturation, Color Lookup, and the parts
+//!   `crate::adjustment::Adjustment::unmodelled` names), and **artboards** — importing
 //!   them as plain pixel layers would draw something else;
 //! * **fill opacity** below 100 % on one of Photoshop's eight special
 //!   blend modes (where fill and layer opacity differ), or on a group;
@@ -435,20 +436,25 @@ const UNMODELLED: &[(&[u8; 4], &str)] = &[
     // `artb` is READ (an artboard group: `artboard_of`).
     (b"artd", "an artboard"),
     (b"abdd", "an artboard"),
-    // `levl`, `curv`, `hue2`, `expA` and `nvrt` are READ
-    // (`crate::adjustment`); the legacy `hue ` is not.
+    // Every `Adjustment::KEYS` block is READ (`crate::adjustment`); the
+    // legacy `hue ` and Color Lookup are not.
     (b"hue ", "a legacy Hue/Saturation adjustment layer"),
-    (b"brit", "a Brightness/Contrast adjustment layer"),
-    (b"blnc", "a Color Balance adjustment layer"),
-    (b"mixr", "a Channel Mixer adjustment layer"),
-    (b"phfl", "a Photo Filter adjustment layer"),
-    (b"post", "a Posterize adjustment layer"),
-    (b"thrs", "a Threshold adjustment layer"),
-    (b"selc", "a Selective Color adjustment layer"),
-    (b"vibA", "a Vibrance adjustment layer"),
-    (b"blwh", "a Black & White adjustment layer"),
-    (b"grdm", "a Gradient Map adjustment layer"),
     (b"clrL", "a Color Lookup adjustment layer"),
+];
+
+/// Adjustment kinds that are READ (and written back) but whose render in
+/// the layer stack is not yet Photoshop's, so a layer of one opens the
+/// file flattened rather than drawn differently. Measured against layers
+/// Photoshop 27.10 wrote (`modules/image/image-conformance/fixtures/
+/// photoshop/adjustment-layers*`, the stack's fold vs Photoshop's merged
+/// composite, 8-bit levels, max over the colour sweep) [OBS].
+const NOT_REPRODUCED: &[(&[u8; 4], &str)] = &[
+    (b"brit", "Brightness/Contrast (25 levels from Photoshop)"),
+    (b"blnc", "Color Balance (109 levels from Photoshop)"),
+    (b"vibA", "Vibrance (77 levels from Photoshop)"),
+    (b"phfl", "Photo Filter (89 levels from Photoshop)"),
+    (b"grdm", "Gradient Map (50 levels from Photoshop)"),
+    (b"selc", "Selective Color (47 levels from Photoshop)"),
 ];
 
 /// Blend modes a CMYK document's layers may use and still import. The
@@ -565,12 +571,7 @@ fn flag_byte(layer: &LayerRecord, k: &[u8; 4], default: u8) -> u8 {
 /// The record's adjustment, when it is an adjustment layer this module
 /// reads.
 fn adjustment_of(layer: &LayerRecord) -> Result<Option<Adjustment>> {
-    for a in &layer.addl {
-        if Adjustment::KEYS.contains(&&a.key) {
-            return Adjustment::parse(&a.key, addl_payload(a));
-        }
-    }
-    Ok(None)
+    Adjustment::from_blocks(layer.addl.iter().map(|a| (&a.key, addl_payload(a))))
 }
 
 /// Does the record's mask carry parameters this import cannot apply?
@@ -1068,6 +1069,20 @@ impl PsdFile {
                                  (\"{}\"): only normal is modelled, so the merged composite \
                                  is kept instead",
                                 String::from_utf8_lossy(&layer.blend_key),
+                                layer.name()
+                            ),
+                        );
+                    }
+                    if let Some((_, what)) = NOT_REPRODUCED
+                        .iter()
+                        .find(|(k, _)| layer.addl.iter().any(|a| &a.key == *k))
+                    {
+                        block(
+                            "adjustment-layers",
+                            format!(
+                                "layer import of a {what} adjustment layer (\"{}\"): the layer \
+                                 stack does not draw it as Photoshop does yet, so the merged \
+                                 composite is kept instead",
                                 layer.name()
                             ),
                         );

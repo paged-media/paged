@@ -278,13 +278,38 @@ fn image_psd_layer_channel_data_zip_prediction_handapplied_delta() {
 }
 
 #[test]
-fn image_psd_layer_channel_data_zip_prediction_non8bit_unsupported() {
-    // Depth != 8 on method 3 is deferred to M2 -> Unsupported.
-    let zlib = miniz_oxide::deflate::compress_to_vec_zlib(&[0u8; 12], 6);
+fn image_psd_layer_channel_data_zip_prediction_32bit_unsupported() {
+    // 8- and 16-bit prediction decode; 32-bit -> Unsupported.
+    let zlib = miniz_oxide::deflate::compress_to_vec_zlib(&[0u8; 48], 6);
     let cd = ChannelData {
         compression: Compression::ZipPrediction,
         bytes: zlib,
     };
-    let err = cd.decode(Container::Psd, 2, 6, 16).unwrap_err();
+    let err = cd.decode(Container::Psd, 2, 6, 32).unwrap_err();
     assert!(matches!(err, PsdError::Unsupported(_)));
+}
+
+#[test]
+fn image_psd_layer_channel_data_zip_prediction_16bit_deltas_samples() {
+    // Two rows of three 16-bit samples, each row delta-coded over SAMPLES
+    // (a byte delta would carry differently across the low byte).
+    let samples: [u16; 6] = [0x01ff, 0x0201, 0x0100, 0xff00, 0x0001, 0x8000];
+    let mut deltaed = Vec::new();
+    for row in samples.chunks(3) {
+        let mut prev = 0u16;
+        for (i, &s) in row.iter().enumerate() {
+            let d = if i == 0 { s } else { s.wrapping_sub(prev) };
+            deltaed.extend_from_slice(&d.to_be_bytes());
+            prev = s;
+        }
+    }
+    let cd = ChannelData {
+        compression: Compression::ZipPrediction,
+        bytes: miniz_oxide::deflate::compress_to_vec_zlib(&deltaed, 6),
+    };
+    assert_eq!(cd.decode_samples16(2, 3).unwrap(), samples);
+    assert_eq!(
+        cd.decode(Container::Psd, 2, 3, 16).unwrap(),
+        samples.map(|s| (s >> 8) as u8)
+    );
 }

@@ -103,7 +103,10 @@ fn the_summary_reads_header_resources_and_records_without_pixels() {
 fn a_sixteen_bit_documents_layers_are_read_from_its_lr16_block() {
     let bytes = lr16_document();
     let file = PsdFile::parse(&bytes).unwrap();
-    assert!(file.layer_mask.layers.is_empty());
+    // The records are read into the model's one list, and remembered as
+    // stored in the block.
+    assert_eq!(file.layer_mask.deep_key, Some(*b"Lr16"));
+    assert_eq!(file.layer_mask.layers.len(), 3);
     let list = file.layer_list().unwrap();
     assert_eq!(list.key, Some(*b"Lr16"));
     assert_eq!(names(&list), ["Backdrop", "Plate", "Signal"]);
@@ -111,6 +114,14 @@ fn a_sixteen_bit_documents_layers_are_read_from_its_lr16_block() {
     assert_eq!(names(&summary(&bytes).unwrap().layers), names(&list));
     // The zero-edit round trip holds for the moved layers too.
     assert_eq!(file.write().unwrap(), bytes);
+    // A re-encode writes them back into the block and leaves the layer
+    // info empty, and reads back the same.
+    let mut edited = file.clone();
+    edited.layer_mask.section_raw = None;
+    let again = PsdFile::parse(&edited.write().unwrap()).unwrap();
+    assert_eq!(again.layer_mask.deep_key, Some(*b"Lr16"));
+    assert_eq!(names(&again.layer_list().unwrap()), names(&list));
+    assert_eq!(again.layer_mask.layers, file.layer_mask.layers);
 }
 
 #[test]
