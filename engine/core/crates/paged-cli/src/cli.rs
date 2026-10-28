@@ -396,9 +396,10 @@ pub enum DataCommand {
     /// recipe's source id; every query passes the query guard first (a
     /// document's queries are code it carries). Property bindings are
     /// written on the objects their selectors name, variable bindings on
-    /// their text variables, as `paged set` writes. Bindings the headless
-    /// lane cannot write yet (images, tables, barcodes, record flows,
-    /// rules) are listed, not skipped.
+    /// their text variables, as `paged set` writes; tables, local images,
+    /// barcodes and rules in their frames. Bindings the headless lane
+    /// cannot write (record flows, remote images, document asset ids) are
+    /// listed, not skipped.
     Apply {
         /// IDML or `.paged` document.
         doc: PathBuf,
