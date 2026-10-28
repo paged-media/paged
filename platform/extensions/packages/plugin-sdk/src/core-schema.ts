@@ -210,6 +210,12 @@ export const CORE_PATHS: Record<
   closePath: OP,
   frameGradientFeather: { scope: "frame", wire: "gradientFeather" },
   pageBounds: { scope: "page", wire: "bounds", type: { kind: "bounds" } },
+  // Engine ADR 1011 — a page's place on the canvas, `[x, y]` pt.
+  pageCanvasOrigin: {
+    scope: "page",
+    wire: "lengths",
+    type: { kind: "list", of: { kind: "length" } },
+  },
   frameDropShadowMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameDropShadowXOffset: {
     scope: "frame",

@@ -4706,6 +4706,7 @@
             "applyMasterToPage",
             "duplicatePage",
             "movePage",
+            "placePage",
             "onMaster",
             "createMaster",
             "deleteMaster",

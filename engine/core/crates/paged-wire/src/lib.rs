@@ -2686,6 +2686,18 @@ pub enum Mutation {
         #[serde(default)]
         after: Option<PageId>,
     },
+    /// v77 (engine ADR 1011) — put a page (an artboard) at `origin_pt`
+    /// on the canvas: its top-left in document points. Absent returns the
+    /// page to its default slot, the vertical stack the canvas always
+    /// showed. The page's content keeps its page coordinates and moves
+    /// with it; no other page moves; the page ORDER is `movePage`'s. One
+    /// undo step (a `batch` of them, e.g. rearranging every artboard, is
+    /// one too). Lowers to `set(page, page.canvasOrigin)`.
+    PlacePage {
+        page: PageId,
+        #[serde(default)]
+        origin_pt: Option<(f32, f32)>,
+    },
     /// W0.5 — insert a `<Section>` anchored at `at_page`.
     InsertSection {
         at_page: PageId,
@@ -3009,6 +3021,7 @@ mutation_vocabulary! {
     ApplyMasterToPage,
     DuplicatePage,
     MovePage,
+    PlacePage,
     OnMaster,
     CreateMaster,
     DeleteMaster,

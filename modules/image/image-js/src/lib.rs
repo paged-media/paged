@@ -66,6 +66,7 @@ pub mod mip;
 pub mod patchmatch;
 pub mod paths;
 pub mod pixels;
+pub mod preset_files;
 pub mod psd_layer_ext;
 pub mod psd_vector_mask;
 pub mod readouts;
@@ -4970,8 +4971,9 @@ mod wasm {
                 return "null".to_string();
             };
             let h = doc.stack.history();
+            let ids = doc.stack.step_ids();
             format!(
-                "{{\"canUndo\":{},\"canRedo\":{},\"depth\":{},\"redoDepth\":{},\"bytes\":{},\"maxBytes\":{},\"maxEntries\":{},\"dropped\":{},\"generation\":{},\"undoLabel\":{},\"redoLabel\":{},\"undoSteps\":[{}],\"redoSteps\":[{}]}}",
+                "{{\"canUndo\":{},\"canRedo\":{},\"depth\":{},\"redoDepth\":{},\"bytes\":{},\"maxBytes\":{},\"maxEntries\":{},\"dropped\":{},\"generation\":{},\"undoLabel\":{},\"redoLabel\":{},\"undoSteps\":[{}],\"redoSteps\":[{}],\"undoIds\":[{}],\"redoIds\":[{}],\"snapshots\":[{}],\"snapshotBytes\":{}}}",
                 h.can_undo,
                 h.can_redo,
                 h.depth,
@@ -4999,8 +5001,90 @@ mod wasm {
                     .map(|l| json_escape(l))
                     .collect::<Vec<_>>()
                     .join(","),
+                ids.0
+                    .iter()
+                    .map(u64::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+                ids.1
+                    .iter()
+                    .map(u64::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+                doc.stack
+                    .snapshots()
+                    .iter()
+                    .map(|s| format!(
+                        "{{\"id\":{},\"name\":{},\"width\":{},\"height\":{}}}",
+                        s.id,
+                        json_escape(&s.name),
+                        s.width,
+                        s.height
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(","),
+                doc.stack.snapshot_bytes(),
             )
         })
+    }
+
+    /// HISTORY OPTIONS (ADR 477): the journal's depth (steps) and byte
+    /// budget, for the open stack and every stack opened after. Clamped
+    /// (1–1000 steps, 16 MiB–2 GiB); answers `{maxEntries, maxBytes}` as
+    /// set. A tighter bound drops the oldest steps at once.
+    #[wasm_bindgen]
+    pub fn layers_set_history_budget(max_entries: u32, max_bytes: f64) -> String {
+        let bytes = if max_bytes.is_finite() && max_bytes > 0.0 {
+            max_bytes.min(usize::MAX as f64) as usize
+        } else {
+            0
+        };
+        let b = crate::layers::set_default_history_budget(max_entries as usize, bytes);
+        LAYERS.with(|l| {
+            if let Some(doc) = l.borrow_mut().as_mut() {
+                doc.stack.set_history_budget(b.max_entries, b.max_bytes);
+            }
+        });
+        format!(
+            "{{\"maxEntries\":{},\"maxBytes\":{}}}",
+            b.max_entries, b.max_bytes
+        )
+    }
+
+    /// Name the current state as a SNAPSHOT (not an undo step). Answers
+    /// its id.
+    #[wasm_bindgen]
+    pub fn layers_snapshot_take(name: &str) -> Result<u32, JsValue> {
+        with_stack(|d| Ok(d.stack.take_snapshot(name)))
+    }
+
+    /// Rename snapshot `id` (an empty name is refused).
+    #[wasm_bindgen]
+    pub fn layers_snapshot_rename(id: u32, name: &str) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.rename_snapshot(id, name).map_err(ingest_err))
+    }
+
+    /// Delete snapshot `id`.
+    #[wasm_bindgen]
+    pub fn layers_snapshot_delete(id: u32) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.delete_snapshot(id).map_err(ingest_err))
+    }
+
+    /// RESTORE snapshot `id` as ONE undo step named `label`, then
+    /// re-composite exactly as an undo does (extent, selection). Answers
+    /// `label`.
+    #[wasm_bindgen]
+    pub async fn layers_snapshot_restore(id: u32, label: String) -> Result<String, JsValue> {
+        with_stack_async(|mut doc| async move {
+            match doc.stack.restore_snapshot(id, &label) {
+                Ok(()) => {
+                    let out = after_history_move(&mut doc, label).await;
+                    (doc, out)
+                }
+                Err(e) => (doc, Err(ingest_err(e))),
+            }
+        })
+        .await
     }
 
     /// Add an empty transparent layer above the active one (it becomes
@@ -6335,7 +6419,6 @@ mod wasm {
     }
 
     async fn history_step(undo: bool) -> Result<String, JsValue> {
-        let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {
             let label = if undo {
                 doc.stack.undo()
@@ -6345,28 +6428,37 @@ mod wasm {
             let Some(label) = label else {
                 return (doc, Ok(String::new()));
             };
-            // A step taken with another selection puts it back (ADR 470)
-            // — after the extent is followed below, which rebinds.
-            let sel_change = doc.stack.take_selection_change();
-            // Finding IMG-1: a step across a canvas operation (rotate,
-            // canvas size) changes the stack's EXTENT, so the bound image
-            // takes the extent with the pixels — the 4x2 image came back
-            // from an undone 90 degree turn as its bytes read as 2x4.
-            let (w, h) = (doc.stack.width(), doc.stack.height());
-            let result = match doc.stack.composite(ctx.as_deref(), None).await {
-                Ok(rgba) => set_image_extent(doc.handle, w, h, rgba).map(|()| label),
-                Err(e) => Err(ingest_err(e)),
-            };
-            match sel_change {
-                Some(sel) => SELECTION.with(|s| s.borrow_mut().restore(sel)),
-                // A rebind may have dropped the selection: the mirror follows.
-                None => doc
-                    .stack
-                    .sync_selection(SELECTION.with(|s| s.borrow().coverage().cloned())),
-            }
+            let result = after_history_move(&mut doc, label).await;
             (doc, result)
         })
         .await
+    }
+
+    /// After the stack moved through its history (an undo, a redo, a
+    /// snapshot restore): re-composite into the bound image at the
+    /// stack's extent and put the selection back.
+    async fn after_history_move(doc: &mut LayerDoc, label: String) -> Result<String, JsValue> {
+        let ctx = GPU.with(|g| g.borrow().clone());
+        // A step taken with another selection puts it back (ADR 470)
+        // — after the extent is followed below, which rebinds.
+        let sel_change = doc.stack.take_selection_change();
+        // Finding IMG-1: a step across a canvas operation (rotate,
+        // canvas size) changes the stack's EXTENT, so the bound image
+        // takes the extent with the pixels — the 4x2 image came back
+        // from an undone 90 degree turn as its bytes read as 2x4.
+        let (w, h) = (doc.stack.width(), doc.stack.height());
+        let result = match doc.stack.composite(ctx.as_deref(), None).await {
+            Ok(rgba) => set_image_extent(doc.handle, w, h, rgba).map(|()| label),
+            Err(e) => Err(ingest_err(e)),
+        };
+        match sel_change {
+            Some(sel) => SELECTION.with(|s| s.borrow_mut().restore(sel)),
+            // A rebind may have dropped the selection: the mirror follows.
+            None => doc
+                .stack
+                .sync_selection(SELECTION.with(|s| s.borrow().coverage().cloned())),
+        }
+        result
     }
 
     // ───────────────────────── PAINT doors ───────────────────────────
@@ -6522,15 +6614,16 @@ mod wasm {
 
     /// The HISTORY STATE the in-flight History / Art History stroke paints
     /// from: `open` (the active layer as opened — before its first edit
-    /// this session) or `previous` (before its newest edit). Snapshots
-    /// are a later package; these are the two states nameable without
-    /// them. Errors for any other tool, without a layer stack, or when
-    /// the canvas changed size since the state was recorded.
+    /// this session), `previous` (before its newest edit), `step:<id>`
+    /// (right after that undo or redo step) or `snapshot:<id>` (a named
+    /// snapshot; ADR 477). Errors for any other tool, without a layer
+    /// stack, or when the state no longer fits (another canvas size, a
+    /// step no longer held, a layer that did not exist then).
     #[wasm_bindgen]
     pub fn brush_stroke_set_history_source(kind: &str) -> Result<(), JsValue> {
         let kind = crate::layers::HistoryKind::from_wire(kind).ok_or_else(|| {
             JsValue::from_str(&format!(
-                "unknown history state \"{kind}\" (open | previous)"
+                "unknown history state \"{kind}\" (open | previous | step:<id> | snapshot:<id>)"
             ))
         })?;
         let handle = with_stroke(|session| {
@@ -6555,7 +6648,7 @@ mod wasm {
             }
             Some(None) => {
                 return Err(JsValue::from_str(
-                    "that history state no longer fits the canvas (it changed size), or the active layer has no pixels",
+                    "that history state no longer fits: the canvas changed size, the step is no longer held, or the active layer has no pixels in it",
                 ))
             }
             Some(Some(px)) => px,
@@ -7505,6 +7598,64 @@ mod wasm {
     #[wasm_bindgen]
     pub fn abr_presets(bytes: &[u8]) -> Result<String, JsValue> {
         crate::brushes::presets_json(bytes).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    // ── the Preset Manager's files (ADR 477; `crate::preset_files`) ──
+
+    fn preset_err(e: IngestError) -> JsValue {
+        JsValue::from_str(&e.to_string())
+    }
+
+    /// Photoshop `.grd` → `{gradients: [{display, gradient}], skipped}`.
+    #[wasm_bindgen]
+    pub fn presets_read_grd(bytes: &[u8]) -> Result<String, JsValue> {
+        crate::preset_files::read_grd_json(bytes).map_err(preset_err)
+    }
+
+    /// `[gradient]` → `.grd` bytes.
+    #[wasm_bindgen]
+    pub fn presets_write_grd(json: &str) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::write_grd_json(json).map_err(preset_err)
+    }
+
+    /// Photoshop `.pat` → `{patterns: [meta], skipped}`.
+    #[wasm_bindgen]
+    pub fn presets_read_pat(bytes: &[u8]) -> Result<String, JsValue> {
+        crate::preset_files::read_pat_json(bytes).map_err(preset_err)
+    }
+
+    /// `.pat` → every pattern's RGBA8, in order.
+    #[wasm_bindgen]
+    pub fn presets_read_pat_pixels(bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::read_pat_pixels(bytes).map_err(preset_err)
+    }
+
+    /// Pattern metadata and their RGBA8 → `.pat` bytes.
+    #[wasm_bindgen]
+    pub fn presets_write_pat(meta: &str, rgba: &[u8]) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::write_pat_json(meta, rgba).map_err(preset_err)
+    }
+
+    /// Photoshop `.asl` → `{styles, patterns, skipped}`.
+    #[wasm_bindgen]
+    pub fn presets_read_asl(bytes: &[u8]) -> Result<String, JsValue> {
+        crate::preset_files::read_asl_json(bytes).map_err(preset_err)
+    }
+
+    /// `.asl` → its patterns' RGBA8, in order.
+    #[wasm_bindgen]
+    pub fn presets_read_asl_pixels(bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::read_asl_pixels(bytes).map_err(preset_err)
+    }
+
+    /// Style rows, pattern metadata and their RGBA8 → `.asl` bytes.
+    #[wasm_bindgen]
+    pub fn presets_write_asl(
+        styles: &str,
+        patterns: &str,
+        rgba: &[u8],
+    ) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::write_asl_json(styles, patterns, rgba).map_err(preset_err)
     }
 
     /// The parity properties of one `layers_list` row (appended inside

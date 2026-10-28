@@ -106,6 +106,9 @@ export interface ViewportCanvasProps {
   docId: string;
   pageIds: ReadonlyArray<PageId>;
   pageSizesPt: ReadonlyArray<readonly [number, number]>;
+  /** Engine ADR 1011 — each page's top-left on the canvas, pt (absent:
+   *  the pages stack). */
+  pageOriginsPt?: ReadonlyArray<readonly [number, number]>;
   camera: Camera;
   onCameraChange: (cam: Camera) => void;
   /** Called when the user clicks (not drags) on a page, and when a
@@ -323,8 +326,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // Document-space layout — only used to compute initial fit-to-document.
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const rects = useMemo(
-    () => layoutPages(props.pageSizesPt),
-    [props.pageSizesPt],
+    () => layoutPages(props.pageSizesPt, props.pageOriginsPt),
+    [props.pageSizesPt, props.pageOriginsPt],
   );
 
   // Mount: transfer the canvas. Cleanup: nothing — once an

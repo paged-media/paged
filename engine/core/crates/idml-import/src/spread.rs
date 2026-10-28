@@ -1216,6 +1216,9 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                             show_master_items: spread_show_master_items.or_else(|| {
                                 attr(&e, b"ShowMasterItems").and_then(|s| s.parse().ok())
                             }),
+                            // Engine ADR 1011 — IDML stacks its spreads; an
+                            // imported page takes the default canvas slot.
+                            canvas_origin: None,
                         });
                     }
                 }

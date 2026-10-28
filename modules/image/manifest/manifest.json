@@ -15,6 +15,10 @@
     "actions": {
       "register": true
     },
+    "storage": {
+      "blob": true,
+      "quotaBytes": 67108864
+    },
     "workers": {
       "max": 4,
       "sharedMemory": true
@@ -247,6 +251,9 @@
       "media.paged.image.command.importBrushPresets",
       "media.paged.image.command.exportBrushPresetsAbr",
       "media.paged.image.command.exportBrushPresetsJson",
+      "media.paged.image.command.newSnapshot",
+      "media.paged.image.command.historyOptions",
+      "media.paged.image.command.presetManager",
       "media.paged.image.command.toggleLockTransparent",
       "media.paged.image.command.colorRange",
       "media.paged.image.command.selectAndMask",
@@ -2008,6 +2015,30 @@
         {
           "id": "media.paged.image.command.exportBrushPresetsJson",
           "title": "Export brush presets (.json)…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newSnapshot",
+          "title": "New snapshot",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.historyOptions",
+          "title": "History options…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.presetManager",
+          "title": "Preset manager…",
           "args": {
             "kind": "struct",
             "fields": {}

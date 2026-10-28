@@ -311,6 +311,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.resizePage", "(pageId, [t,l,b,r])", "bool", "write", "Set a page's GeometricBounds in page-inner points."),
         f!("paged.applyMasterToPage", "(pageId, masterId?)", "bool", "write", "Apply a master to a page (omit/null detaches)."),
         f!("paged.movePage", "(pageId, afterPageId?)", "bool", "write", "Move a page to follow another (omit/null: to the front)."),
+        f!("paged.placePage", "(pageId, [x, y]?)", "bool", "write", "Put a page (an artboard) at [x, y] pt on the canvas (omit/null: its default slot)."),
         f!("paged.createMaster", "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })", "bool", "author", "Create a master spread: one page of the given size, or a copy of another master."),
         f!("paged.deleteMaster", "(masterId)", "bool", "author", "Delete a master no page applies."),
         f!("paged.renameMaster", "(masterId, name?)", "bool", "write", "Set (omit/null: clear) a master's name."),
@@ -1025,6 +1026,10 @@ property_paths! {
         LayerPrintable => "layerPrintable" : bool_().default_bool(true).idml(idml![attr(Layer, Printable)]), "layer",
         LayerName => "layerName" : text().required().idml(idml![attr(Layer, Name)]), "layer",
         PageBounds => "pageBounds" : bounds().idml(idml![attr(Page, GeometricBounds)]), "page",
+        // Engine ADR 1011 — a page's place on the canvas (an artboard
+        // position), `[x, y]` pt; `[]` is the default slot. Native: IDML
+        // stacks its spreads (a loss on export).
+        PageCanvasOrigin => "pageCanvasOrigin" : lengths(), "page",
         PageMarginTop => "pageMarginTop" : length_pos().default_num(36.0).idml(idml![attr(MarginPreference, Top)]), "page",
         PageMarginBottom => "pageMarginBottom" : length_pos().default_num(36.0).idml(idml![attr(MarginPreference, Bottom)]), "page",
         PageMarginLeft => "pageMarginLeft" : length_pos().default_num(36.0).idml(idml![attr(MarginPreference, Left)]), "page",

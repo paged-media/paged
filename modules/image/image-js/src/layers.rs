@@ -161,6 +161,9 @@ mod parity_tests;
 mod masking_ops;
 // Vector masks, shape layers and the paths as geometry (ADR 476).
 mod vector_ops;
+// Snapshots, the journal's bounds and past states (ADR 477).
+pub mod history;
+pub use history::{set_default_history_budget, SnapshotInfo};
 pub use mask::{BoundedMask, LayerMask};
 pub use vector_ops::VectorMaskStart;
 
@@ -991,6 +994,12 @@ pub struct LayerStack {
     /// The document's GLOBAL LIGHT and the patterns its styles draw.
     /// Document state: in every snapshot and persisted.
     styles: StyleDoc,
+    /// Named SNAPSHOTS of the whole stack, oldest first (ADR 477;
+    /// `layers/history.rs`). Session state: not persisted, not undone.
+    snapshots: Vec<history::NamedSnapshot>,
+    next_snapshot_id: u32,
+    /// The id the next recorded step takes (see [`Step`]).
+    next_step_id: u64,
 }
 
 /// What a document's layer styles share: the Global Light every effect
@@ -1003,8 +1012,8 @@ pub struct StyleDoc {
 }
 
 /// Which earlier state of a layer the History / Art History brushes
-/// paint from. Until history snapshots exist these are the two states
-/// the session can name without them.
+/// paint from: the two states the session names on its own, any step on
+/// the undo or redo list (by its id), or a named snapshot (ADR 477).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HistoryKind {
     /// The layer as it was when the image was opened — precisely, before
@@ -1014,6 +1023,11 @@ pub enum HistoryKind {
     /// The layer before its NEWEST pixel edit — "the step before this
     /// one". Recorded at that edit; an undo does not move it.
     Previous,
+    /// The layer as it was right AFTER the step with this id (an undo
+    /// or a redo step).
+    Step(u64),
+    /// The layer in the named snapshot with this id.
+    Snapshot(u32),
 }
 
 impl HistoryKind {
@@ -1021,7 +1035,15 @@ impl HistoryKind {
         match s {
             "open" => Some(HistoryKind::Open),
             "previous" => Some(HistoryKind::Previous),
-            _ => None,
+            _ => {
+                if let Some(id) = s.strip_prefix("step:") {
+                    id.parse().ok().map(HistoryKind::Step)
+                } else if let Some(id) = s.strip_prefix("snapshot:") {
+                    id.parse().ok().map(HistoryKind::Snapshot)
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -1064,11 +1086,14 @@ struct Snapshot {
 /// history instead of wiping it.
 #[derive(Debug, Clone)]
 enum Step {
-    /// One journal entry (its label lives in the journal).
-    Pixels,
+    /// One journal entry (its label lives in the journal). `id` names
+    /// the step for its life (undo and redo keep it; ADR 477): the
+    /// History brush's source refers to a step by it.
+    Pixels { id: u64 },
     /// A structure change; `other` is the state on the far side of it
     /// (before, on the undo list; after, on the redo list).
     Structure {
+        id: u64,
         label: String,
         /// Consecutive steps with the same key merge into one (a slider
         /// drag is one undo step, not twenty).
@@ -1135,7 +1160,7 @@ impl LayerStack {
             }],
             active: 0,
             next_id: 2,
-            journal: TileJournal::new(),
+            journal: TileJournal::with_budget(history::default_budget()),
             steps: Vec::new(),
             undone: Vec::new(),
             dropped_steps: 0,
@@ -1146,6 +1171,9 @@ impl LayerStack {
             history_states: HistoryStates::default(),
             masking: Default::default(),
             styles: StyleDoc::default(),
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
         })
     }
 
@@ -1383,7 +1411,7 @@ impl LayerStack {
             active: layers.len() - 1,
             layers,
             next_id,
-            journal: TileJournal::new(),
+            journal: TileJournal::with_budget(history::default_budget()),
             steps: Vec::new(),
             undone: Vec::new(),
             dropped_steps: 0,
@@ -1394,6 +1422,9 @@ impl LayerStack {
             history_states: HistoryStates::default(),
             masking: Default::default(),
             styles: StyleDoc::default(),
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
         };
         stack.styles.global_light = import.global_light;
         if let Some(deep) = stack
@@ -2308,8 +2339,7 @@ impl LayerStack {
         };
         self.layers[self.active].mask = Some(Arc::new(mask).into());
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
-            self.steps.push(Step::Pixels);
-            self.undone.clear();
+            self.push_pixel_step();
         }
         self.sync_with_journal();
         Ok(outcome)
@@ -2787,8 +2817,7 @@ impl LayerStack {
         }
         self.layers[self.active].rgba = pixels.into();
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
-            self.steps.push(Step::Pixels);
-            self.undone.clear();
+            self.push_pixel_step();
         }
         self.sync_with_journal();
         Ok(outcome)
@@ -2806,6 +2835,8 @@ impl LayerStack {
         }
         let want = (self.width as usize) * (self.height as usize) * 4;
         let stored = match kind {
+            HistoryKind::Step(id) => return self.layer_after_step(layer.id, id),
+            HistoryKind::Snapshot(id) => return self.layer_in_snapshot(layer.id, id),
             HistoryKind::Open => self.history_states.open.get(&layer.id),
             HistoryKind::Previous => self
                 .history_states
@@ -2855,7 +2886,9 @@ impl LayerStack {
             (Some(Step::Structure { merge_key: Some(k), .. }), Some(m)) if k == m
         );
         if !merges {
+            let id = self.take_step_id();
             self.steps.push(Step::Structure {
+                id,
                 label: label.to_string(),
                 merge_key: merge_key.map(str::to_string),
                 other: Box::new(before),
@@ -2879,7 +2912,9 @@ impl LayerStack {
         let before = self.snapshot();
         let changed = f(self)?;
         if changed {
+            let id = self.take_step_id();
             self.steps.push(Step::Structure {
+                id,
                 label: label.to_string(),
                 merge_key: None,
                 other: Box::new(before),
@@ -2928,12 +2963,12 @@ impl LayerStack {
         let mut pixel_steps = self
             .steps
             .iter()
-            .filter(|s| matches!(s, Step::Pixels))
+            .filter(|s| matches!(s, Step::Pixels { .. }))
             .count();
         while pixel_steps > held {
             match self.steps.remove(0) {
                 // The journal already counted its own eviction.
-                Step::Pixels => pixel_steps -= 1,
+                Step::Pixels { .. } => pixel_steps -= 1,
                 Step::Structure { .. } => self.dropped_steps += 1,
             }
         }
@@ -2948,7 +2983,7 @@ impl LayerStack {
             .iter()
             .filter(|s| matches!(s, Step::Structure { .. }))
             .count()
-            > MAX_STRUCTURE_STEPS
+            > self.structure_step_bound()
         {
             self.steps.remove(0);
             self.dropped_steps += 1;
@@ -2960,9 +2995,9 @@ impl LayerStack {
     pub fn undo(&mut self) -> Option<String> {
         let step = self.steps.pop()?;
         match step {
-            Step::Pixels => match self.apply_pixels(true) {
+            Step::Pixels { id } => match self.apply_pixels(true) {
                 Some(label) => {
-                    self.undone.push(Step::Pixels);
+                    self.undone.push(Step::Pixels { id });
                     Some(label)
                 }
                 None => {
@@ -2973,6 +3008,7 @@ impl LayerStack {
                 }
             },
             Step::Structure {
+                id,
                 label,
                 merge_key,
                 other,
@@ -2981,6 +3017,7 @@ impl LayerStack {
                 self.restore(*other);
                 self.structure_generation += 1;
                 self.undone.push(Step::Structure {
+                    id,
                     label: label.clone(),
                     merge_key,
                     other: Box::new(now),
@@ -2994,12 +3031,13 @@ impl LayerStack {
     pub fn redo(&mut self) -> Option<String> {
         let step = self.undone.pop()?;
         match step {
-            Step::Pixels => {
+            Step::Pixels { id } => {
                 let label = self.apply_pixels(false)?;
-                self.steps.push(Step::Pixels);
+                self.steps.push(Step::Pixels { id });
                 Some(label)
             }
             Step::Structure {
+                id,
                 label,
                 merge_key,
                 other,
@@ -3008,6 +3046,7 @@ impl LayerStack {
                 self.restore(*other);
                 self.structure_generation += 1;
                 self.steps.push(Step::Structure {
+                    id,
                     label: label.clone(),
                     merge_key,
                     other: Box::new(now),
@@ -3112,7 +3151,7 @@ impl LayerStack {
         self.steps
             .iter()
             .map(|s| match s {
-                Step::Pixels => pixel.next().unwrap_or("Edit"),
+                Step::Pixels { .. } => pixel.next().unwrap_or("Edit"),
                 Step::Structure { label, .. } => label.as_str(),
             })
             .collect()
@@ -3125,7 +3164,7 @@ impl LayerStack {
             .iter()
             .rev()
             .map(|s| match s {
-                Step::Pixels => pixel.next().unwrap_or("Edit"),
+                Step::Pixels { .. } => pixel.next().unwrap_or("Edit"),
                 Step::Structure { label, .. } => label.as_str(),
             })
             .collect()

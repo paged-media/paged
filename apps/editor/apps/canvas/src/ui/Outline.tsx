@@ -42,6 +42,9 @@ export interface OutlineProps {
   resolution: ResolutionResult | null;
   pageIds: ReadonlyArray<PageId>;
   pageSizesPt: ReadonlyArray<readonly [number, number]>;
+  /** Engine ADR 1011 — each page's top-left on the canvas, pt (absent:
+   *  the pages stack). */
+  pageOriginsPt?: ReadonlyArray<readonly [number, number]>;
   viewportSize: readonly [number, number];
   onCameraChange: (cam: Camera) => void;
 }
@@ -97,7 +100,7 @@ export function Outline(props: OutlineProps) {
     return out;
   }, [props.resolution]);
 
-  const rects = layoutPages(props.pageSizesPt);
+  const rects = layoutPages(props.pageSizesPt, props.pageOriginsPt);
 
   const onJump = (entry: OutlineEntry) => {
     if (!entry.pageId) return;

@@ -132,6 +132,13 @@ import {
   type FilterId,
 } from "../filters";
 import { MoreFilters } from "./sections/more-filters";
+import { HistorySection } from "./sections/history-section";
+import {
+  HistoryOptionsDialog,
+  PresetManagerDialog,
+  type PresetRowDetail,
+} from "./sections/preset-manager";
+import type { PresetEntry, PresetKind } from "../preset-library";
 import {
   actionBar,
   kicker,
@@ -2572,6 +2579,40 @@ export function makeImagePanel(session: ImageSession) {
             onCancel={() => void session.closeDialog()}
           />
         )}
+        {s.dialog?.kind === "presetManager" &&
+          (() => {
+            const tab = s.dialog.tab;
+            const { entries, details } = presetRows(s, tab);
+            return (
+              <PresetManagerDialog
+                tab={tab}
+                entries={entries}
+                details={details}
+                busy={s.busy}
+                onTab={(k) => session.setPresetManagerTab(k)}
+                onApply={(id) => void session.applyPresetOf(tab, id)}
+                onRename={(id, name) => session.renamePresetOf(tab, id, name)}
+                onDelete={(id) => session.deletePresetOf(tab, id)}
+                onMove={(from, to) => session.movePresetOf(tab, from, to)}
+                onSave={(name) => void session.savePresetOf(tab, name)}
+                onImport={() => void session.importPresetsOf(tab)}
+                onExport={() => void session.exportPresetsOf(tab)}
+                onClose={() => void session.closeDialog()}
+              />
+            );
+          })()}
+        {s.dialog?.kind === "historyOptions" && (
+          <HistoryOptionsDialog
+            prefs={s.historyPrefs}
+            usedBytes={s.history?.bytes ?? 0}
+            snapshotBytes={s.history?.snapshotBytes ?? 0}
+            onApply={(p) => {
+              session.setHistoryPrefs(p);
+              void session.closeDialog();
+            }}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
         {s.dialog?.kind === "trim" && (
           <TrimDialog
             busy={s.busy}
@@ -3526,6 +3567,19 @@ export function makeImagePanel(session: ImageSession) {
           onFilter={(patch) => session.setLayerFilter(patch)}
           onColor={(i, c) => session.setLayerColor(i, c)}
         />
+        <HistorySection
+          history={s.history}
+          source={s.paintTools.history.source}
+          disabled={disabled}
+          onSnapshot={() => session.takeSnapshot()}
+          onRestore={(id) => void session.restoreSnapshot(id)}
+          onRename={(id, name) => session.renameSnapshot(id, name)}
+          onDelete={(id) => session.deleteSnapshot(id)}
+          onSource={(source) =>
+            session.setPaintToolOptions("history", { source })
+          }
+          onOptions={() => session.openHistoryOptions()}
+        />
         {s.layers.layers.length > 0 ? (
           <>
             <ActiveLayerStrip
@@ -4020,4 +4074,44 @@ export function makeImagePanel(session: ImageSession) {
     );
   }
   return ImagePanel;
+}
+
+/** The Preset Manager's rows for one kind, with what each row shows
+ *  beside its name (a pattern's size, a gradient's swatch). */
+function presetRows(
+  s: ReturnType<ImageSession["state"]>,
+  tab: PresetKind,
+): { entries: readonly PresetEntry[]; details: PresetRowDetail[] } {
+  switch (tab) {
+    case "brushes":
+      return { entries: s.brushPresets, details: [] };
+    case "tools":
+      return { entries: s.toolPresets, details: [] };
+    case "adjustments":
+      return { entries: s.adjustmentPresets, details: [] };
+    case "styles":
+      return { entries: s.stylePresets, details: [] };
+    case "patterns":
+      return {
+        entries: s.patternPresets,
+        details: s.patternPresets.map((p) => ({
+          id: p.id,
+          detail: `${p.width}×${p.height}`,
+        })),
+      };
+    case "gradients":
+      return {
+        entries: s.gradientPresets,
+        details: s.gradientPresets.map((g) => ({
+          id: g.id,
+          swatch: `linear-gradient(to right, ${[...g.gradient.stops]
+            .sort((a, b) => a.at - b.at)
+            .map(
+              (st) =>
+                `rgb(${st.rgb[0]} ${st.rgb[1]} ${st.rgb[2]}) ${Math.round(st.at * 100)}%`,
+            )
+            .join(", ")})`,
+        })),
+      };
+  }
 }
