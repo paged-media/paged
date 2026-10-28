@@ -279,7 +279,10 @@ fn sample_straight(im: Img<'_>, p: (f32, f32)) -> [f32; 3] {
     [0, 1, 2].map(|k| (c[k] / c[3]).clamp(0.0, 1.0))
 }
 
-fn channel_cov(
+/// The paper a channel's screen leaves at `gp` (1 − the largest dot
+/// coverage, as the smallest `dist − rad + 0.5`: no cancellation where the
+/// ink nearly fills a pixel).
+fn channel_paper(
     im: Img<'_>,
     p: &PixelateColorHalftoneParams,
     gp: (f32, f32),
@@ -287,13 +290,20 @@ fn channel_cov(
     ch: usize,
     r_max: f32,
 ) -> f32 {
-    let th = deg * 0.017_453_292;
-    let (sn, cs) = th.sin_cos();
+    // Quarter turns reduced exactly, as the kernel's sincos_deg does.
+    let q = (deg / 90.0).round();
+    let (sn0, cs0) = ((deg - q * 90.0) * 0.017_453_292).sin_cos();
+    let (sn, cs) = match (q as i32).rem_euclid(4) {
+        1 => (cs0, -sn0),
+        2 => (-sn0, -cs0),
+        3 => (-cs0, sn0),
+        _ => (sn0, cs0),
+    };
     let cell = 2.0 * r_max;
     let u = (cs * gp.0 + sn * gp.1, cs * gp.1 - sn * gp.0);
     let idx = ((u.0 / cell).floor(), (u.1 / cell).floor());
     let o = (p.ox as f32, p.oy as f32);
-    let mut best = 0.0f32;
+    let mut paper = 1.0f32;
     for j in -1..=1 {
         for i in -1..=1 {
             let uc = (
@@ -305,10 +315,10 @@ fn channel_cov(
             let rad = r_max * (2.0 * (1.0 - v)).sqrt();
             let dv = (u.0 - uc.0, u.1 - uc.1);
             let dist = (dv.0 * dv.0 + dv.1 * dv.1).sqrt();
-            best = best.max((rad - dist + 0.5).clamp(0.0, 1.0));
+            paper = paper.min((dist - rad + 0.5).clamp(0.0, 1.0));
         }
     }
-    best
+    paper
 }
 
 fn color_halftone_ref(
@@ -323,12 +333,12 @@ fn color_halftone_ref(
     let a = im.tap(x as i32, y as i32);
     let r_max = p.max_radius.clamp(4.0, 127.0);
     let gp = (x as f32 + 0.5 + p.ox as f32, y as f32 + 0.5 + p.oy as f32);
-    let ink = [
-        channel_cov(im, p, gp, p.angle1, 0, r_max),
-        channel_cov(im, p, gp, p.angle2, 1, r_max),
-        channel_cov(im, p, gp, p.angle3, 2, r_max),
+    let paper = [
+        channel_paper(im, p, gp, p.angle1, 0, r_max),
+        channel_paper(im, p, gp, p.angle2, 1, r_max),
+        channel_paper(im, p, gp, p.angle3, 2, r_max),
     ];
-    finish(a, assoc(ink.map(|k| 1.0 - k), a[3]), p.amount)
+    finish(a, assoc(paper, a[3]), p.amount)
 }
 
 #[test]
