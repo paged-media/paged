@@ -1674,7 +1674,7 @@ fn read_contour(d: &Descriptor, k: &[u8]) -> Contour {
     }
 }
 
-fn read_gradient(d: &Descriptor) -> Gradient {
+pub(crate) fn read_gradient(d: &Descriptor) -> Gradient {
     let loc = |s: &Descriptor| (s.number(b"Lctn").unwrap_or(0.0) / 4096.0).clamp(0.0, 1.0) as f32;
     let mid = |s: &Descriptor| (s.number(b"Mdpn").unwrap_or(50.0) / 100.0).clamp(0.0, 1.0) as f32;
     let stops = d
@@ -1994,7 +1994,7 @@ fn contour_value(c: &Contour) -> DescriptorValue {
     )
 }
 
-fn gradient_value(g: &Gradient) -> DescriptorValue {
+pub(crate) fn gradient_value(g: &Gradient) -> DescriptorValue {
     let mut d = start(&g.source, b"Grdn");
     set(&mut d, b"Nm  ", DescriptorValue::Text(g.name.clone()));
     set(&mut d, b"GrdF", en(b"GrdF", b"CstS"));

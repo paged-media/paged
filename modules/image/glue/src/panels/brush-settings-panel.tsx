@@ -35,7 +35,8 @@ import { onDidChangeOf, useLive } from "@paged-media/react-live";
 import { defineMessages, t, useStrings } from "@paged-media/strings";
 import { space } from "@paged-media/panel-kit";
 
-import type { BrushParams } from "../engine";
+import type { BrushParams, LayerHistory } from "../engine";
+import { historySourceChoices } from "./sections/history-section";
 import {
   ART_HISTORY_STYLES,
   BRUSH_CONTROLS,
@@ -66,6 +67,8 @@ export interface BrushSettingsSession {
     gpu: boolean;
     strokeActive: boolean;
     brushPresets?: readonly UserBrushPreset[];
+    /** The image's history (the History brush's sources). */
+    history?: LayerHistory | null;
   };
   setBrushParams(p: Partial<BrushParams>): void;
   setBrushDynamics(patch: DynamicsPatch): void;
@@ -268,10 +271,8 @@ const M = defineMessages("image.brushSettings", {
   cleanAfter: "Clean the brush after each stroke",
   history: "History brush",
   source: "Source",
-  sourceOpen: "The image as it was opened",
-  sourcePrevious: "The step before the newest edit",
   historyNote:
-    "History snapshots are not available yet, so the source is one of these two states.",
+    "Any step in the history and any snapshot can be the source; the Image panel lists them under Snapshots.",
   artHistory: "Art history brush",
   style: "Style",
   area: "Area (px)",
@@ -562,6 +563,9 @@ export interface BrushSettingsViewProps {
   brush: BrushParams;
   dynamics: BrushDynamics;
   tools: PaintToolOptions;
+  /** The image's history, for the History brush's step and snapshot
+   *  sources (image ADR 477); absent = the two fixed states. */
+  history?: LayerHistory | null;
   pattern: { width: number; height: number } | null;
   gpu: boolean;
   disabled: boolean;
@@ -1327,7 +1331,13 @@ function SymmetryPane({
   );
 }
 
-function ToolsPane({ tools, disabled, onTool }: BrushSettingsViewProps) {
+function ToolsPane({
+  tools,
+  history,
+  disabled,
+  onTool,
+}: BrushSettingsViewProps) {
+  const sources = historySourceChoices(history ?? null);
   const sm = tools.smudge;
   const mx = tools.mixer;
   const ah = tools.artHistory;
@@ -1405,9 +1415,13 @@ function ToolsPane({ tools, disabled, onTool }: BrushSettingsViewProps) {
       <Choice
         field="history.source"
         label={t(M.source)}
-        value={tools.history.source}
-        options={["open", "previous"] as const}
-        labelOf={(s) => t(s === "open" ? M.sourceOpen : M.sourcePrevious)}
+        value={
+          sources.some((c) => c.value === tools.history.source)
+            ? tools.history.source
+            : "open"
+        }
+        options={sources.map((c) => c.value)}
+        labelOf={(s) => sources.find((c) => c.value === s)?.label ?? s}
         disabled={disabled}
         onChange={(source) => onTool("history", { source })}
       />
@@ -1661,6 +1675,7 @@ export function makeBrushSettingsPanel(session: BrushSettingsSession) {
         brush={s.brush}
         dynamics={s.dynamics}
         tools={s.paintTools}
+        history={s.history}
         pattern={s.pattern}
         gpu={s.gpu}
         disabled={false}
