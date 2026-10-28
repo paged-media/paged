@@ -142,5 +142,6 @@ mod web_bake_one_batch;
 mod wire_robustness;
 mod wire_vocabulary;
 mod word_editing;
+mod word_structure;
 mod xml_tags_wire;
 mod xref_ops;

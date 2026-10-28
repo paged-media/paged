@@ -1,0 +1,38 @@
+{
+  "kind": "struct",
+  "fields": {
+    "bytes": {
+      "kind": "bytes",
+      "mime": ["video/mp4"]
+    },
+    "fileName": {
+      "kind": "text"
+    },
+    "codec": {
+      "kind": "text"
+    },
+    "width": {
+      "kind": "number",
+      "integer": true
+    },
+    "height": {
+      "kind": "number",
+      "integer": true
+    },
+    "fps": {
+      "kind": "number",
+      "integer": true
+    },
+    "frames": {
+      "kind": "number",
+      "integer": true
+    },
+    "durationMs": {
+      "kind": "number"
+    },
+    "gpu": {
+      "kind": "bool",
+      "summary": "Transitions ran on WebGPU (false: they cut)."
+    }
+  }
+}

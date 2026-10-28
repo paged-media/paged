@@ -1,0 +1,8 @@
+{
+  "kind": "struct",
+  "fields": {
+    "presented": {
+      "kind": "bool"
+    }
+  }
+}

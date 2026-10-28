@@ -166,6 +166,20 @@ Read from the code on 2026-10-25.
   slides, golden frames hold at 0.25, 0.5 and 0.75, and every transition takes under 1 ms of
   GPU time per 1080p frame on an M3 Max (most take under 0.2 ms). The show runtime that plays
   them is the next part of M5.
+- **Files and output** (ADR 720, editor ADR 308). File ▸ Export… is a view in place of the
+  canvas: PDF slides, handouts (1, 2, 3, 4, 6 or 9 a page; three with lines for notes) and notes
+  pages, laid out by `slide-output` over the renderer's slide images (150 dpi; notes in
+  Helvetica); the outline as RTF (Word's outline levels) or text, read from the document's title
+  and body placeholders; Save as template (`.potx`, also File ▸ Save as template… and an
+  exporter); a video (720p, 1080p or 4K at 24, 30 or 60 fps, each slide for its recorded time or
+  the default seconds, transitions through the WGSL library) encoded with WebCodecs (H.264, else
+  VP9) and muxed into MP4 by the bundle's own ISO-BMFF writer, with progress and Cancel. Opening a
+  `.potx` makes an untitled presentation and says so. Typed commands run every export.
+- **Sections** ride the label of their first slide: imported from `p14:sectionLst`, headed in the
+  Slide Sorter (add at the selection, rename, move with their slides, remove), written back from
+  the document. **Custom shows** ride the deck label by page: imported from `p:custShowLst`,
+  edited in the Custom Shows panel (Slide Show ▸ Custom Shows…), played in their order, written
+  back with the slides that are still there.
 - **The PowerPoint oracle** (ADR 705). Scripts drive PowerPoint 16.113.3 to export PDF, per-shape
   geometry, first baselines and chart bars (`scripts/ppt-*`). Fixtures authored through PowerPoint:
   geometry, text, placeholders, motion, baselines.
@@ -195,6 +209,8 @@ Read from the code on 2026-10-25.
 | Comments, import                                                   | `comments` fixture (PowerPoint-saved: a thread with a reply, a resolved shape-anchored comment, a converted legacy one) and a legacy deck (Rust)                                     | every comment's text, author, date, status, position (EMU and 1/8 pt confirmed by PowerPoint's own conversion), anchor and replies read                                                                                                                                                                          |
 | Comments, export                                                   | Rust fixtures and the importer→editor→exporter path headless and in the editor (journey): unchanged; added, replied, resolved, deleted; duplicate; legacy; new slide                 | unchanged: the original bytes; changed: only that slide's comment part and relationships, re-imported equal to what the document held                                                                                                                                                                            |
 | Comment decks open in PowerPoint                                   | PowerPoint 16.113.3 opening and re-saving the six comment decks the Rust tests write                                                                                                 | no repair prompt; the re-saved decks read back with the same comments (PowerPoint drops the milliseconds of the date)                                                                                                                                                                                            |
+| Sections, custom shows, `.potx` (ADR 720)                          | PowerPoint 16 opening and saving as PDF the decks `pptx-export/tests/output.rs` writes; re-saving two as `.pptx`                                                                     | no repair prompt, every slide; the re-saved decks keep both custom shows and both sections by name; the `.potx` opens as a new untitled presentation                                                                                                                                                             |
+| MP4 video (ADR 720, editor ADR 308)                                | Chromium's `<video>` (journey), bundled Chromium and Chrome with WebGPU                                                                                                              | H.264 720p24, 89 frames: the duration the element reports within 0.1 s of the runner's, a frame decodes; the fade drawn on WebGPU in Chrome                                                                                                                                                                      |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
 renderer with the fonts PowerPoint used, 48 dpi, SSIM per slide):
@@ -246,9 +262,12 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   reported in the export's diagnostics, and the shape is written as the deck had it. A notes
   master for a deck that has none. Transitions, timing, masters and layouts are still copied, not
   regenerated (later waves of ADR 711).
-- Animations in the show (per-item layers, wave 5), custom shows, ink saved as annotations.
+- Animations in the show (per-item layers, wave 5), ink saved as annotations.
 - Live charts (ADR 715): a chart inside a PowerPoint group is drawn and its data exported, but
   not redrawn on the page after an edit; a duplicated slide's chart shares its chart part (an
   edit redraws both); the workbook edit itself is not on the undo stack (undo restores the old
   drawing); a chart's formatting is not editable; the data sheet edits values and formulas, not
   rows, columns or the series' ranges.
+- Vector handouts and notes pages (they are 150 dpi images until the host offers a door for
+  imposed PDF pages); notes text outside Windows-1252 in the PDF (printed as `?`); audio in
+  videos (media items, wave 4); a video runner in a worker.

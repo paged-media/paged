@@ -334,7 +334,10 @@ export function contributeSlideCommands(
             log("deleteSlide", "the last slide cannot be deleted");
             return;
           }
-          await mutate("deleteSlide", deleteMutation(slide.pageId));
+          await mutate(
+            "deleteSlide",
+            deleteMutation(slide.pageId, store.list()),
+          );
         }),
       }),
     );

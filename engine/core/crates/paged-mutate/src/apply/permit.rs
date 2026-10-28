@@ -251,9 +251,13 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         O::Batch { ops } => ops.iter().flat_map(required).collect(),
         O::RemoveStory { story_id } => vec![story(P::TextEdit, story_id)],
         O::RestoreStory { .. } => vec![doc(P::DocumentAddItem)],
-        O::ReplaceStoryParagraphs { story_id, .. } | O::RestoreParagraphs { story_id, .. } => {
-            vec![story(P::TextEdit, story_id)]
-        }
+        O::ReplaceStoryParagraphs { story_id, .. }
+        | O::RestoreParagraphs { story_id, .. }
+        | O::InsertTextAnchor { story_id, .. }
+        | O::SetStoryDestinations { story_id, .. }
+        | O::InsertIndexMarker { story_id, .. }
+        | O::RestoreIndexMarkers { story_id, .. } => vec![story(P::TextEdit, story_id)],
+        O::DeleteTextAnchor { .. } => vec![doc(P::TextEdit)],
         // Removing or duplicating a page is asked of that page: its own
         // policy (an `x-paged:template` label keyed by the page's id) may
         // grant `document.pages` beyond the document's defaults, so a
@@ -295,6 +299,7 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::DeleteNumberingList { .. }
         | O::SetStyleProperty { .. }
         | O::SetStyleBasedOn { .. }
+        | O::SetTocStyle { .. }
         | O::CreateTextVariable { .. }
         | O::DeleteTextVariable { .. }
         // Tag definitions are the document's vocabulary, like its styles
