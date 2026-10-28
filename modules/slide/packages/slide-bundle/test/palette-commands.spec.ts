@@ -49,6 +49,7 @@ import {
 } from "../src/commands";
 import { contributeMenu, MENU_ENTRIES } from "../src/menu";
 import { SHOW_CMD, SHOW_MENU } from "../src/show/contribute";
+import { OUTPUT_CMD, OUTPUT_MENU } from "../src/output/commands";
 import { SHAPES_PANEL_ID } from "../src/shapes";
 import {
   DUPLICATE_SLIDE_COMMAND,
@@ -244,7 +245,11 @@ describe("paged.slide palette commands", () => {
     const s = setup();
     // The slide show's commands are the show's (show/contribute.ts, its
     // own suite); these are the deck verbs.
-    const show = new Set<string>(Object.values(SHOW_CMD));
+    // The outputs' commands are output/commands.ts's (their own suite).
+    const show = new Set<string>([
+      ...Object.values(SHOW_CMD),
+      ...Object.values(OUTPUT_CMD),
+    ]);
     const verbs = MANIFEST.contributes.commands.filter((c) => !show.has(c));
     expect([...s.commands.keys()].sort()).toEqual([...verbs].sort());
     expect(s.menus.map((m) => m.command).sort()).toEqual([...verbs].sort());
@@ -609,7 +614,9 @@ describe("paged.slide palette commands", () => {
     // door this host does not have, and Insert ▸ Shapes…, which opens the
     // Shapes panel and needs the panel and snapshot doors this host lacks.
     expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 2);
-    expect(r.menus.length).toBe(MENU_ENTRIES.length + SHOW_MENU.length - 2);
+    expect(r.menus.length).toBe(
+      MENU_ENTRIES.length + SHOW_MENU.length + OUTPUT_MENU.length - 2,
+    );
     h.dispose();
     expect(r.commands.size).toBe(0);
     expect(r.menus.length).toBe(0);

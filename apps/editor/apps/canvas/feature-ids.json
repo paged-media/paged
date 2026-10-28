@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 631,
+    "command": 627,
     "keybinding": 154,
-    "menu": 450,
-    "panel": 136,
+    "menu": 438,
+    "panel": 137,
     "tool": 103
   },
   "features": [
@@ -201,17 +201,7 @@
       "owner": "media.paged.doc"
     },
     {
-      "id": "command:media.paged.doc.command.pasteRtf",
-      "kind": "command",
-      "owner": "media.paged.doc"
-    },
-    {
       "id": "command:media.paged.doc.command.placeDoc",
-      "kind": "command",
-      "owner": "media.paged.doc"
-    },
-    {
-      "id": "command:media.paged.doc.command.saveAsDocx",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -1301,11 +1291,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.clearLayerStyle",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.colorRange",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1332,11 +1317,6 @@
     },
     {
       "id": "command:media.paged.image.command.convertLayerToSmart",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.copyLayerStyle",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1596,11 +1576,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.globalLight",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.grow",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1617,56 +1592,6 @@
     },
     {
       "id": "command:media.paged.image.command.invertSelection",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStyleBevel",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStyleColorOverlay",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStyleDropShadow",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStyleGradientOverlay",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStyleInnerGlow",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStyleInnerShadow",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStyleOuterGlow",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStylePatternOverlay",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStyleSatin",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.layerStyleStroke",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1851,11 +1776,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.pasteLayerStyle",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.pathToSelection",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1911,11 +1831,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.scaleEffects",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.selectAll",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1947,11 +1862,6 @@
     },
     {
       "id": "command:media.paged.image.command.stampVisible",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.toggleEffects",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2251,6 +2161,16 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.addSection",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.customShows",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.deleteComment",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2262,6 +2182,11 @@
     },
     {
       "id": "command:media.paged.slide.command.duplicateSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.export",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2326,6 +2251,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.saveAsTemplate",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.slideShowFromBeginning",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2341,12 +2271,37 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.deleteCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.deleteSection",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.duplicateSlide",
       "kind": "command",
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.exportOutline",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.exportPdf",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.exportPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.exportVideo",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2361,7 +2316,32 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.moveSection",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.newSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.playCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.renameSection",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.sections",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setCustomShow",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -4656,6 +4636,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:File/Export…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:File/Import/SVG…",
       "kind": "menu",
       "owner": "editor"
@@ -4719,6 +4704,11 @@
       "id": "menu:File/Save As IDML…",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:File/Save as template…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:Help/About",
@@ -5121,87 +5111,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Layer/Layer style/Bevel and emboss…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "menu:Image/Layer/Layer style/Blending options…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Clear layer style",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Colour overlay…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Copy layer style",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Drop shadow…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Global light…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Gradient overlay…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Hide all effects",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Inner glow…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Inner shadow…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Outer glow…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Paste layer style",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Pattern overlay…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Satin…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Scale effects…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Layer style/Stroke…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -5906,6 +5816,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "menu:Slide Show/Custom Shows…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide Show/From Beginning",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -5922,6 +5837,11 @@
     },
     {
       "id": "menu:Slide Show/Rehearse Timings",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/Add Section",
       "kind": "menu",
       "owner": "media.paged.slide"
     },
@@ -6362,6 +6282,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.comments",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.customShows",
       "kind": "panel",
       "owner": "media.paged.slide"
     },

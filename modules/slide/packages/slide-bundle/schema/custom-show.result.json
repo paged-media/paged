@@ -1,0 +1,9 @@
+{
+  "kind": "struct",
+  "fields": {
+    "id": {
+      "kind": "number",
+      "integer": true
+    }
+  }
+}

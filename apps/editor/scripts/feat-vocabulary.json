@@ -569,6 +569,7 @@
     "plugin-slide.layouts",
     "plugin-slide.native-effects",
     "plugin-slide.object-model",
+    "plugin-slide.output",
     "plugin-slide.page-doors",
     "plugin-slide.powerpoint-oracle",
     "plugin-slide.pptx-export",

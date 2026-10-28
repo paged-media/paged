@@ -600,6 +600,105 @@ pub fn live_snippet(
         .ok_or_else(|| format!("chart frame {shape_id} did not resolve"))?;
     slide_native::snippet(&resolved, slide, item)
 }
+/// The deck's outline (slide ADR 720) from the document's `.paged`
+/// serialization: the titles and body paragraphs of `pages` (a JSON array
+/// of page ids, in order) as `rtf` or `txt` (UTF-8) bytes.
+#[wasm_bindgen(js_name = exportOutline)]
+pub fn export_outline(document: &[u8], pages: &str, format: &str) -> Result<Vec<u8>, JsError> {
+    outline_bytes(document, pages, format).map_err(|e| JsError::new(&e))
+}
+
+/// [`export_outline`] without the wasm boundary.
+pub fn outline_bytes(document: &[u8], pages: &str, format: &str) -> Result<Vec<u8>, String> {
+    let pages: Vec<String> = serde_json::from_str(pages).map_err(|e| format!("pages: {e}"))?;
+    let o = pptx_export::outline::outline(document, &pages)?;
+    match format {
+        "rtf" => Ok(slide_output::outline_rtf(&o).into_bytes()),
+        "txt" => Ok(slide_output::outline_txt(&o).into_bytes()),
+        other => Err(format!("unknown outline format {other:?}")),
+    }
+}
+
+/// A PDF of the deck's slides, handouts or notes pages (slide ADR 720),
+/// built one slide at a time so a long deck never holds every image
+/// uncompressed: each slide's pixels are deflated as they arrive.
+#[wasm_bindgen]
+pub struct PdfWriter {
+    options: slide_output::pdf::Options,
+    slides: Vec<slide_output::pdf::Slide>,
+}
+
+#[wasm_bindgen]
+impl PdfWriter {
+    /// `options`: `slide_output::pdf::Options` as JSON.
+    #[wasm_bindgen(constructor)]
+    pub fn new(options: &str) -> Result<PdfWriter, JsError> {
+        let options =
+            serde_json::from_str(options).map_err(|e| JsError::new(&format!("options: {e}")))?;
+        Ok(PdfWriter {
+            options,
+            slides: Vec::new(),
+        })
+    }
+
+    /// Add the next slide: its straight-alpha RGBA pixels, its number in
+    /// the deck and its speaker notes.
+    #[wasm_bindgen(js_name = addSlide)]
+    pub fn add_slide(
+        &mut self,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+        number: u32,
+        notes: &str,
+    ) -> Result<(), JsError> {
+        let image = slide_output::pdf::image_from_rgba(rgba, width, height)
+            .map_err(|e| JsError::new(&e))?;
+        self.slides.push(slide_output::pdf::Slide {
+            image,
+            number,
+            notes: notes.to_string(),
+        });
+        Ok(())
+    }
+
+    /// Lay the slides out and write the file.
+    pub fn finish(&self) -> Result<PdfOut, JsError> {
+        let w =
+            slide_output::pdf::write(&self.slides, &self.options).map_err(|e| JsError::new(&e))?;
+        Ok(PdfOut {
+            bytes: w.bytes,
+            pages: w.pages as u32,
+            replaced: w.replaced as u32,
+        })
+    }
+}
+
+/// A written PDF: its bytes, its page count and how many characters of
+/// text the PDF's standard font could not draw.
+#[wasm_bindgen]
+pub struct PdfOut {
+    bytes: Vec<u8>,
+    pages: u32,
+    replaced: u32,
+}
+
+#[wasm_bindgen]
+impl PdfOut {
+    #[wasm_bindgen(getter)]
+    pub fn bytes(&self) -> Vec<u8> {
+        self.bytes.clone()
+    }
+    #[wasm_bindgen(getter)]
+    pub fn pages(&self) -> u32 {
+        self.pages
+    }
+    #[wasm_bindgen(getter)]
+    pub fn replaced(&self) -> u32 {
+        self.replaced
+    }
+}
+
 /// Live presets and connectors (slide ADR 717): one JSON request, one JSON
 /// answer. `op` is
 /// - `follow` (`elements`): what an edit to those page elements asks of
