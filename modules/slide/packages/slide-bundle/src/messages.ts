@@ -219,14 +219,20 @@ export const ANIM = defineMessages("slide.anim", {
     "This effect is kept as the deck wrote it; its timing cannot be changed here.",
   shape: "Shape {name}",
   paragraph: "paragraph {n}",
-  addAnimation: "Add animation",
-  removeAnimation: "Remove animation",
-  setAnimationTiming: "Set animation timing",
-  moveAnimation: "Move animation",
-  listAnimations: "List animations",
   previewAnimations: "Preview animations",
   animationPainter: "Animation Painter",
   animationPane: "Animation pane",
+});
+
+/** The typed twins' titles (anim/contribute.ts), worded as the manifest's
+ *  objectModel commands are, like OUTPUT_MODEL's. */
+export const ANIM_MODEL = defineMessages("slide.animModel", {
+  addAnimation: "Add an animation",
+  removeAnimation: "Remove an animation",
+  setAnimationTiming: "Set an animation's timing",
+  moveAnimation: "Move an animation",
+  listAnimations: "List a slide's animations",
+  previewAnimations: "Preview a slide's animations",
 });
 
 /** The menu items this bundle adds (menu.ts): the path stays English (it is
