@@ -3451,13 +3451,14 @@ export interface BundleHost {
    *  `capabilities.secrets`. */
   readonly secrets: SecretsSurface;
   /** The capability-gated CLIPBOARD door (K-6 / S-14): read/write the
-   *  SYSTEM clipboard with a rich `{ text?, tabular? }` payload (the
-   *  sheets grid's range copy/paste interchange). Always present — when
-   *  the host app injects no clipboard backend, `read` answers `null`,
-   *  `write` is a no-op, and `supports("clipboard@1")` is false (the
-   *  honest no-clipboard door). Capability-gated on
-   *  `capabilities.clipboard`: `"full"` grants text + tabular, `"vector"`
-   *  grants text only, `"none"`/absent denies. */
+   *  SYSTEM clipboard with a rich `{ text?, tabular?, svg? }` payload
+   *  (the sheets grid's range copy/paste interchange; the vector
+   *  interchange, `image/svg+xml`, behind `clipboard.svg@1`). Always
+   *  present — when the host app injects no clipboard backend, `read`
+   *  answers `null`, `write` is a no-op, and `supports("clipboard@1")` is
+   *  false (the honest no-clipboard door). Capability-gated on
+   *  `capabilities.clipboard`: `"full"` grants text + tabular + svg,
+   *  `"vector"` grants text + svg, `"none"`/absent denies. */
   readonly clipboard: ClipboardSurface;
   /** The tool-settings READ door: the option values the host's
    *  tool-options UI holds for this bundle's tools, plus a change

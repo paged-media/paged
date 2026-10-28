@@ -333,6 +333,9 @@ export function inMemoryBlobStore(): BlobStore {
 export function inMemoryClipboard(): ClipboardBackend {
   let slot: ClipboardPayload | null = null;
   return {
+    // Carries the svg half (extensions ADR 341), so `clipboard.svg@1`
+    // holds headlessly.
+    svg: true,
     async read() {
       if (!slot) return null;
       // Clone so the reader can't mutate the stored grid.
@@ -341,6 +344,7 @@ export function inMemoryClipboard(): ClipboardBackend {
         ...(slot.tabular
           ? { tabular: { rows: slot.tabular.rows.map((r) => [...r]) } }
           : {}),
+        ...(slot.svg !== undefined ? { svg: slot.svg } : {}),
       };
     },
     async write(payload) {
@@ -355,6 +359,7 @@ export function inMemoryClipboard(): ClipboardBackend {
         ...(payload.tabular
           ? { tabular: { rows: payload.tabular.rows.map((r) => [...r]) } }
           : {}),
+        ...(payload.svg !== undefined ? { svg: payload.svg } : {}),
       };
     },
   };
