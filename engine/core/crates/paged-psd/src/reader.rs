@@ -78,6 +78,11 @@ impl<'a> ByteReader<'a> {
         Ok(s)
     }
 
+    /// The unread bytes, without advancing.
+    pub fn rest(&self) -> &'a [u8] {
+        &self.buf[self.pos..]
+    }
+
     /// A sub-reader over the next `n` bytes (length-framed section);
     /// the parent cursor advances past them.
     pub fn sub(&mut self, n: usize) -> Result<ByteReader<'a>> {

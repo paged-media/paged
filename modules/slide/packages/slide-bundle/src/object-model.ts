@@ -555,6 +555,9 @@ export interface SlideObjectModelOptions {
   /** More typed commands to register with the model: the slide show's
    *  twins of its palette commands (show/contribute.ts). */
   extraCommands?: readonly TypedCommandContribution[];
+  /** The output's typed commands (output/commands.ts, slide ADR 720),
+   *  registered after Insert ▸ Shapes, in the manifest's order. */
+  outputCommands?: readonly TypedCommandContribution[];
   /** Insert a preset as a live preset (Insert ▸ Shapes, ADR 717): the new
    *  outline element's address, or null with the reason. */
   insertShape?(args: {
@@ -1381,6 +1384,7 @@ export function contributeSlideObjectModel(
       stepCommand(NEXT_SLIDE_COMMAND, t(MODEL.nextSlide), 1),
       ...(options.extraCommands ?? []),
       insertShape,
+      ...(options.outputCommands ?? []),
     ] as readonly TypedCommandContribution[],
     // Editor plan G3a: a placeholder's text, whether a slide is shown.
     templateFields: slideTemplateFields(host),

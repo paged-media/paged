@@ -27,6 +27,8 @@ import { C, bundleOnFake, quiesce } from "./command-kit";
 describe("[editor-shell.panels.history] the rasterImage context's history steps", () => {
   it("lists the pixel steps oldest first and steps through them", async () => {
     const k = await bundleOnFake();
+    // The steps alone (snapshots head the list: history-presets.spec.ts).
+    k.session.setHistoryPrefs({ autoSnapshot: false });
     await k.ingest();
     const ctx = k.contexts.find((c) => c.type === "rasterImage");
     expect(ctx?.historySteps).toBeDefined();

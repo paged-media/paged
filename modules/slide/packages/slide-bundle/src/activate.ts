@@ -361,15 +361,13 @@ export function activate(host: BundleHost): BundleHandle {
   const model = contributeSlideObjectModel(host, {
     openDeck,
     exportDeck,
-    extraCommands: [
-      ...showTypedCommands((id) =>
-        runShow ? runShow(id) : Promise.resolve(false),
-      ),
-      ...outputTypedCommands(
-        () => output,
-        () => outputUi,
-      ),
-    ],
+    extraCommands: showTypedCommands((id) =>
+      runShow ? runShow(id) : Promise.resolve(false),
+    ),
+    outputCommands: outputTypedCommands(
+      () => output,
+      () => outputUi,
+    ),
     comments: () => comments,
     step,
     activePage: () => store?.activePage() ?? null,

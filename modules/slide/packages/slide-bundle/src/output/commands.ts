@@ -28,7 +28,7 @@ import type {
 } from "@paged-media/plugin-api";
 import { t } from "@paged-media/strings";
 
-import { OUTPUT } from "../messages.js";
+import { OUTPUT, OUTPUT_MODEL } from "../messages.js";
 import type { Output } from "./output.js";
 
 import exportPdfArgs from "../../schema/export-pdf.args.json" with { type: "json" };
@@ -134,14 +134,14 @@ export function outputTypedCommands(
     ),
     typed(
       OUTPUT_CMD.saveAsTemplate,
-      t(OUTPUT.saveAsTemplate),
+      t(OUTPUT_MODEL.saveAsTemplate),
       emptyStruct,
       exportTemplateResult,
       () => out().template(),
     ),
     typed(
       OUTPUT_CMD.customShows,
-      t(OUTPUT.customShows),
+      t(OUTPUT_MODEL.customShows),
       emptyStruct,
       customShowsResult,
       async () => {
@@ -173,7 +173,7 @@ export function outputTypedCommands(
       unknown
     >(
       OUTPUT_TYPED.exportPdf,
-      t(OUTPUT.exportPdf),
+      t(OUTPUT_MODEL.exportPdf),
       exportPdfArgs,
       exportPdfResult,
       async (a) => {
@@ -188,7 +188,7 @@ export function outputTypedCommands(
     ),
     typed<{ format: "rtf" | "txt" }, unknown>(
       OUTPUT_TYPED.exportOutline,
-      t(OUTPUT.outline),
+      t(OUTPUT_MODEL.exportOutline),
       exportOutlineArgs,
       exportOutlineResult,
       async (a) => {
@@ -210,7 +210,7 @@ export function outputTypedCommands(
       unknown
     >(
       OUTPUT_TYPED.exportVideo,
-      t(OUTPUT.video),
+      t(OUTPUT_MODEL.exportVideo),
       exportVideoArgs,
       exportVideoResult,
       async (a) => {
@@ -230,14 +230,14 @@ export function outputTypedCommands(
     ),
     typed<{ name: string; slides: number[] }, { id: number }>(
       OUTPUT_TYPED.setCustomShow,
-      t(OUTPUT.newShow),
+      t(OUTPUT_MODEL.setCustomShow),
       customShowArgs,
       customShowResult,
       async (a) => ({ id: await out().setCustomShow(a.name, a.slides ?? []) }),
     ),
     typed<{ name: string }, Record<string, never>>(
       OUTPUT_TYPED.deleteCustomShow,
-      t(OUTPUT.delete),
+      t(OUTPUT_MODEL.deleteCustomShow),
       namedArgs,
       emptyStruct,
       async (a) => {
@@ -247,14 +247,14 @@ export function outputTypedCommands(
     ),
     typed<{ name: string }, { presented: boolean }>(
       OUTPUT_TYPED.playCustomShow,
-      t(OUTPUT.play),
+      t(OUTPUT_MODEL.playCustomShow),
       namedArgs,
       presentedResult,
       async (a) => ({ presented: await out().playCustomShow(a.name) }),
     ),
     typed(
       OUTPUT_TYPED.sections,
-      t(OUTPUT.section),
+      t(OUTPUT_MODEL.sections),
       emptyStruct,
       sectionsResult,
       async () => ({
@@ -263,7 +263,7 @@ export function outputTypedCommands(
     ),
     typed<{ name: string; to: string }, Record<string, never>>(
       OUTPUT_TYPED.renameSection,
-      t(OUTPUT.renameSection),
+      t(OUTPUT_MODEL.renameSection),
       renameSectionArgs,
       emptyStruct,
       async (a) => {
@@ -273,7 +273,7 @@ export function outputTypedCommands(
     ),
     typed<{ name: string; by: "up" | "down" }, Record<string, never>>(
       OUTPUT_TYPED.moveSection,
-      t(OUTPUT.sectionUp),
+      t(OUTPUT_MODEL.moveSection),
       moveSectionArgs,
       emptyStruct,
       async (a) => {
@@ -283,7 +283,7 @@ export function outputTypedCommands(
     ),
     typed<{ name: string; withSlides?: boolean }, Record<string, never>>(
       OUTPUT_TYPED.deleteSection,
-      t(OUTPUT.removeSection),
+      t(OUTPUT_MODEL.deleteSection),
       deleteSectionArgs,
       emptyStruct,
       async (a) => {

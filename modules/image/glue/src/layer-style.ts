@@ -728,12 +728,16 @@ export function styleOptionsBits(o: StyleOptions): number {
   );
 }
 
-/** A saved style (the Styles panel). */
+/** A saved style (the Styles panel, the Preset Manager). */
 export interface StylePreset {
+  /** Stable for the preset's life (image ADR 477). */
+  id: string;
   name: string;
   style: LayerStyle;
   /** A built-in preset (cannot be deleted). */
   builtIn?: boolean;
+  /** Photoshop's style id, when it came from an `.asl`. */
+  psId?: string;
 }
 
 /** The Styles panel's built-in presets. */
@@ -749,11 +753,16 @@ export function builtInPresets(): StylePreset[] {
   button.gradientOverlays[0]!.opacity = 40;
   const satin = setEffectEnabled(emptyStyle(), "satin", true);
   return [
-    { name: "Drop Shadow", style: shadow, builtIn: true },
-    { name: "Soft Glow", style: glow, builtIn: true },
-    { name: "Emboss", style: emboss, builtIn: true },
-    { name: "Outline", style: outline, builtIn: true },
-    { name: "Button", style: button, builtIn: true },
-    { name: "Satin", style: satin, builtIn: true },
+    {
+      id: "builtin-drop-shadow",
+      name: "Drop Shadow",
+      style: shadow,
+      builtIn: true,
+    },
+    { id: "builtin-soft-glow", name: "Soft Glow", style: glow, builtIn: true },
+    { id: "builtin-emboss", name: "Emboss", style: emboss, builtIn: true },
+    { id: "builtin-outline", name: "Outline", style: outline, builtIn: true },
+    { id: "builtin-button", name: "Button", style: button, builtIn: true },
+    { id: "builtin-satin", name: "Satin", style: satin, builtIn: true },
   ];
 }

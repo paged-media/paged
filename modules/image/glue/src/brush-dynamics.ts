@@ -171,10 +171,12 @@ export const COLOR_REPLACE_MODES: readonly ColorReplaceMode[] = [
   "luminosity",
 ];
 
-/** The History / Art History brushes' source state. Until history
- *  snapshots exist, the two states the journal can name: the image as
- *  it was opened, and the state before the newest edit of the layer. */
-export type HistorySource = "open" | "previous";
+/** The History / Art History brushes' source state: the layer as it was
+ *  opened, the state before its newest edit, the state right after any
+ *  step on the undo or redo list (by the step's id), or a named snapshot
+ *  (image ADR 477). */
+export type HistorySource =
+  "open" | "previous" | `step:${number}` | `snapshot:${number}`;
 
 /** A bitmap (sampled) tip, held by the session; `id` names it in the
  *  preset library. */

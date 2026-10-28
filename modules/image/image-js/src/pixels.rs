@@ -360,6 +360,16 @@ impl LayerPixels {
             LayerPixels::Bounded(b) => b.px.len(),
         }
     }
+
+    /// The address of the stored allocation: two layers (or a layer and a
+    /// snapshot of it) with the same key share their bytes. What the
+    /// history's memory accounting dedupes by (ADR 477).
+    pub fn storage_key(&self) -> usize {
+        match self {
+            LayerPixels::Canvas(p) => p.bytes.as_ptr() as usize,
+            LayerPixels::Bounded(b) => b.px.bytes.as_ptr() as usize,
+        }
+    }
 }
 
 #[cfg(test)]
