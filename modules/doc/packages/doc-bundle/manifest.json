@@ -27,7 +27,8 @@
   "contributes": {
     "panels": [
       "media.paged.doc.panel.outline",
-      "media.paged.doc.panel.properties"
+      "media.paged.doc.panel.properties",
+      "media.paged.doc.panel.references"
     ],
     "commands": [
       "media.paged.doc.command.placeDoc",
@@ -99,7 +100,12 @@
       "media.paged.doc.command.word.closeHeaderFooter",
       "media.paged.doc.command.word.differentFirstPage",
       "media.paged.doc.command.word.differentOddEven",
-      "media.paged.doc.command.word.linkToPrevious"
+      "media.paged.doc.command.word.linkToPrevious",
+      "media.paged.doc.command.word.crossReference",
+      "media.paged.doc.command.word.field",
+      "media.paged.doc.command.word.bookmark",
+      "media.paged.doc.command.word.indexEntry",
+      "media.paged.doc.command.word.pageSetup"
     ],
     "importers": [
       "media.paged.doc.importer.docx",
@@ -1488,6 +1494,66 @@
         {
           "id": "media.paged.doc.command.word.linkToPrevious",
           "title": "Link to previous",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.crossReference",
+          "title": "Cross-reference…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.field",
+          "title": "Field…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.bookmark",
+          "title": "Bookmark…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.indexEntry",
+          "title": "Mark index entry…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.pageSetup",
+          "title": "Page setup",
           "args": {
             "kind": "struct",
             "fields": {}

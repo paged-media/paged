@@ -42,8 +42,11 @@ import {
   makeWordsStatus,
   makeZoomStatus,
 } from "./status-items.js";
+import { makeReferencesPanel } from "../panels/references-panel.js";
+import { referencesActions } from "./references.js";
 import {
   HEADER_BAR_COMMANDS,
+  REFERENCES_PANEL,
   resolveHeaderFooter,
   type WordStructure,
 } from "./structure.js";
@@ -131,6 +134,11 @@ const TITLES: Record<WordCommandName, () => string> = {
   differentFirstPage: () => t(WORD.differentFirstPage),
   differentOddEven: () => t(WORD.differentOddEven),
   linkToPrevious: () => t(WORD.linkToPrevious),
+  crossReference: () => t(WORD.crossReference),
+  field: () => t(WORD.field),
+  bookmark: () => t(WORD.bookmark),
+  indexEntry: () => t(WORD.indexEntry),
+  pageSetup: () => t(WORD.pageSetup),
 };
 
 /** What `contributeWord` hands back: its teardown, the store (tests read
@@ -291,6 +299,14 @@ export function contributeWord(
       );
     }
   }
+
+  // Doc ADR 612 — Word's References and Insert dialogs, as a panel.
+  disposers.push(
+    host.contribute.panel({
+      id: REFERENCES_PANEL,
+      ...makeReferencesPanel(referencesActions(host, deps.docStories)),
+    }).dispose,
+  );
 
   // Editor ADR 301 / contract C6 — a double-click in a page's header or
   // footer band edits its master's story in place.

@@ -152,6 +152,11 @@ export const WORD_COMMAND = {
   differentFirstPage: `${ID}.differentFirstPage`,
   differentOddEven: `${ID}.differentOddEven`,
   linkToPrevious: `${ID}.linkToPrevious`,
+  crossReference: `${ID}.crossReference`,
+  field: `${ID}.field`,
+  bookmark: `${ID}.bookmark`,
+  indexEntry: `${ID}.indexEntry`,
+  pageSetup: `${ID}.pageSetup`,
 } as const;
 export type WordCommandName = keyof typeof WORD_COMMAND;
 

@@ -131,7 +131,15 @@ export const STRUCTURE_COMMANDS = [
   "differentFirstPage",
   "differentOddEven",
   "linkToPrevious",
+  "crossReference",
+  "field",
+  "bookmark",
+  "indexEntry",
+  "pageSetup",
 ] as const;
+
+/** The References panel (`panels/references-panel.tsx`). */
+export const REFERENCES_PANEL = "media.paged.doc.panel.references";
 export type StructureCommandName = (typeof STRUCTURE_COMMANDS)[number];
 
 /** The commands the header/footer bar shows (editor ADR 301). */
@@ -737,6 +745,14 @@ export async function runStructureCommand(
       return editBand(host, structure(), "footer", barCommandIds);
     case "closeHeaderFooter":
       return { applied: host.shell.exitSubContext?.() ?? false };
+    case "crossReference":
+    case "field":
+    case "bookmark":
+    case "indexEntry":
+    case "pageSetup":
+      // Word's dialogs: sections of the References panel.
+      host.shell.openPanel(REFERENCES_PANEL, { target: name });
+      return { applied: true };
     case "differentFirstPage":
     case "differentOddEven":
     case "linkToPrevious": {

@@ -33,6 +33,7 @@ import { covers } from "@paged-media/test-kit";
 
 import { docBundle } from "../../src";
 import { WORD_COMMAND } from "../../src/word/commands";
+import { referencesActions } from "../../src/word/references";
 import {
   docxPresent,
   ENGINE_ANCHOR,
@@ -174,6 +175,37 @@ describe.skipIf(!docxPresent)(
       const n = await paras();
       await run("pageBreak", await at("on page"));
       expect(await paras()).toBe(n + 1);
+    });
+
+    it("the References panel's bookmark, cross-reference, index entry and page setup", async () => {
+      const refs = referencesActions(h.host, async () => [STORY, "docx_s1"]);
+      h.setTextSelection(await at("A closing"));
+      expect(await refs.insertBookmark("Closing")).toBe(true);
+      const targets = await refs.targets();
+      expect(targets.map((x) => x.label)).toContain("Closing");
+      expect(targets.map((x) => x.label)).toContain("Background");
+      const heading = targets.find((x) => x.label === "Background")!;
+      h.setTextSelection(await at("A closing"));
+      expect(
+        await refs.insertCrossReference(heading.target, "pageNumber"),
+      ).toBe(true);
+      expect((await codes()).some((c) => c.startsWith("PAGEREF"))).toBe(true);
+      h.setTextSelection(await at("A closing"));
+      expect(await refs.insertIndexEntry(["Remarks", "Closing"])).toBe(true);
+      h.setTextSelection(await at("A closing"));
+      const setup = (await refs.pageSetup())!;
+      expect(Math.round(setup.widthPt)).toBe(360);
+      expect(
+        await refs.applyPageSetup({
+          ...setup,
+          widthPt: setup.heightPt,
+          heightPt: setup.widthPt,
+          marginLeftPt: 36,
+        }),
+      ).toBe(true);
+      const after = (await refs.pageSetup())!;
+      expect(Math.round(after.widthPt)).toBe(288);
+      expect(after.marginLeftPt).toBe(36);
     });
   },
 );
