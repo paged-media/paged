@@ -193,7 +193,9 @@ test.describe("journey · paged.slide animations", () => {
             apiVersion: "^0.2",
             capabilities: { document: { read: "broad", write: "broad" } },
           },
-          activate(host: { selection: { set(ids: unknown[]): Promise<unknown> } }) {
+          activate(host: {
+            selection: { set(ids: unknown[]): Promise<unknown> };
+          }) {
             void host.selection.set([id]).then(() => resolve());
             return { dispose() {} };
           },

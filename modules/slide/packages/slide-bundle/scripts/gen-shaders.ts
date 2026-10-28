@@ -70,7 +70,13 @@ export function renderSourcesModule(files: Record<string, string>): string {
 
 /** The animation layer compositor's shaders (slide ADR 714), beside
  *  their own module. */
-export const EFFECT_DIR = resolve(import.meta.dir, "..", "src", "show", "effects");
+export const EFFECT_DIR = resolve(
+  import.meta.dir,
+  "..",
+  "src",
+  "show",
+  "effects",
+);
 export const EFFECT_GENERATED = join(EFFECT_DIR, "sources.generated.ts");
 
 export function renderEffectsModule(files: Record<string, string>): string {

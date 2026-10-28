@@ -3777,7 +3777,11 @@ export function createBundleHost(
       }
       const paras: RenderedLayer[] = [];
       for (const id of paragraphs) {
-        for (const band of await paragraphBands(pageId, id, opts?.marginPt ?? 72)) {
+        for (const band of await paragraphBands(
+          pageId,
+          id,
+          opts?.marginPt ?? 72,
+        )) {
           const shot = await render.snapshot(pageId, {
             dpi,
             only: [id],
@@ -3828,8 +3832,7 @@ export function createBundleHost(
     const content = await document.storyContent(storyId);
     if (!content) return [];
     const frame = regionAround([geometry], marginPt);
-    const lines: Array<{ paragraph: number; top: number; bottom: number }> =
-      [];
+    const lines: Array<{ paragraph: number; top: number; bottom: number }> = [];
     let offset = 0;
     const utf8 = new TextEncoder();
     for (const [i, p] of content.paragraphs.entries()) {
@@ -3873,7 +3876,12 @@ export function createBundleHost(
         : Math.max(frame.y + frame.height, l.bottom);
       return {
         paragraph: l.paragraph,
-        region: { x: frame.x, y: top, width: frame.width, height: bottom - top },
+        region: {
+          x: frame.x,
+          y: top,
+          width: frame.width,
+          height: bottom - top,
+        },
       };
     });
   }
