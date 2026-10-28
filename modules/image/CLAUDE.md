@@ -132,7 +132,8 @@ image-graph/         Engine B: tiled buffer graph — store, eval, tile cache,
                      set_params/gesture split, COW undo journal (journal.rs:
                      bounded, tile-granular, scoped per buffer)
 image-cms/           CmsEngine trait; qcms display backend (D-11: hybrid)
-image-codecs/        ImageSource/ImageTarget/ByteSource + adapters
+image-codecs/        ImageSource/ImageTarget/ByteSource + adapters over the
+                     engine's paged-raster, the only decoder/encoder (ADR 468)
 (engine) paged-psd    PSD/PSB model + parser + preservation writer
                      (`image-psd` here; engine/core/crates/paged-psd)
 image-js/            wasm-bindgen surface (the bundle's compute artifact) +

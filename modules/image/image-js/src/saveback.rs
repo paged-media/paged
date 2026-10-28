@@ -26,8 +26,10 @@
 //!   is handled per [`PsdSaveBackShape`]. Everything the model does not
 //!   touch (resources, ICC, unmodeled blocks) still rides the
 //!   preservation writer verbatim.
-//! * **PNG / JPEG** ([`encode_rgba8`]) — a straight re-encode through the
-//!   `image-codecs` targets (CPU entropy coding, spec §1).
+//! * **PNG / JPEG / WebP / TIFF** ([`encode_rgba8`]) — a straight re-encode
+//!   through the `image-codecs` targets over `paged-raster` (CPU entropy
+//!   coding, spec §1). The metadata-keeping save-back and Export As are
+//!   `crate::export`.
 //!
 //! # HONEST SCOPE (stated in the panel string, never silently)
 //!
@@ -110,6 +112,10 @@ impl PsdSaveBackShape {
 pub enum RasterFormat {
     Png,
     Jpeg,
+    /// Lossless WebP (paged-raster has no lossy WebP encoder).
+    WebP,
+    /// TIFF, LZW-compressed, RGB(A) at 8 bits.
+    Tiff,
 }
 
 impl RasterFormat {
@@ -117,6 +123,8 @@ impl RasterFormat {
         Some(match s {
             "png" => RasterFormat::Png,
             "jpeg" | "jpg" => RasterFormat::Jpeg,
+            "webp" => RasterFormat::WebP,
+            "tiff" | "tif" => RasterFormat::Tiff,
             _ => return None,
         })
     }
@@ -125,6 +133,8 @@ impl RasterFormat {
         match self {
             RasterFormat::Png => ".png",
             RasterFormat::Jpeg => ".jpg",
+            RasterFormat::WebP => ".webp",
+            RasterFormat::Tiff => ".tif",
         }
     }
 
@@ -132,8 +142,37 @@ impl RasterFormat {
         match self {
             RasterFormat::Png => "image/png",
             RasterFormat::Jpeg => "image/jpeg",
+            RasterFormat::WebP => "image/webp",
+            RasterFormat::Tiff => "image/tiff",
         }
     }
+
+    /// The engine encoder's name for it.
+    pub fn encode_format(self) -> paged_raster::EncodeFormat {
+        match self {
+            RasterFormat::Png => paged_raster::EncodeFormat::Png,
+            RasterFormat::Jpeg => paged_raster::EncodeFormat::Jpeg,
+            RasterFormat::WebP => paged_raster::EncodeFormat::WebP,
+            RasterFormat::Tiff => paged_raster::EncodeFormat::Tiff,
+        }
+    }
+}
+
+/// WebP and TIFF through the engine's encoder (straight RGBA8 in; an
+/// opaque frame is written without its alpha).
+fn encode_other(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    format: RasterFormat,
+) -> Result<Vec<u8>, IngestError> {
+    let spec = crate::export::ExportSpec {
+        keep_metadata: false,
+        embed_profile: false,
+        ..crate::export::ExportSpec::save_back(format.encode_format(), JPEG_QUALITY_DEFAULT, None)
+    };
+    crate::export::export(crate::export::Rgba::U8(rgba), width, height, &spec, None)
+        .map(|e| e.bytes)
 }
 
 /// The fixed v0 JPEG quality for the save-back lane. A quality slider is
@@ -230,6 +269,9 @@ pub fn encode_rgba8_opt(
             "encode: {} bytes for {width}x{height} (expected {expected})",
             rgba.len()
         )));
+    }
+    if matches!(format, RasterFormat::WebP | RasterFormat::Tiff) {
+        return encode_other(rgba, width, height, format);
     }
     let err = |e: image_codecs::CodecError| IngestError::Decode(e.to_string());
     let region = Region::new(0, 0, width, height);
@@ -349,6 +391,7 @@ pub fn encode_rgba8(
             t.finish().map_err(err)?;
             Ok(t.into_bytes())
         }
+        RasterFormat::WebP | RasterFormat::Tiff => encode_other(rgba, width, height, format),
     }
 }
 
@@ -1122,9 +1165,28 @@ mod tests {
         assert_eq!(RasterFormat::from_wire("png"), Some(RasterFormat::Png));
         assert_eq!(RasterFormat::from_wire("jpg"), Some(RasterFormat::Jpeg));
         assert_eq!(RasterFormat::from_wire("jpeg"), Some(RasterFormat::Jpeg));
-        assert_eq!(RasterFormat::from_wire("webp"), None);
+        assert_eq!(RasterFormat::from_wire("webp"), Some(RasterFormat::WebP));
+        assert_eq!(RasterFormat::from_wire("tif"), Some(RasterFormat::Tiff));
+        assert_eq!(RasterFormat::from_wire("bmp"), None);
         assert_eq!(RasterFormat::Png.extension(), ".png");
         assert_eq!(RasterFormat::Jpeg.mime(), "image/jpeg");
+        assert_eq!(RasterFormat::Tiff.extension(), ".tif");
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn webp_and_tiff_reencode_losslessly__feat__image_codec_core_codecs() {
+        let rgba: Vec<u8> = (0..4 * 3 * 4).map(|i| (i * 7) as u8 | 1).collect();
+        let rgba: Vec<u8> = rgba
+            .chunks(4)
+            .flat_map(|p| [p[0], p[1], p[2], 200])
+            .collect();
+        for f in [RasterFormat::WebP, RasterFormat::Tiff] {
+            let bytes = encode_rgba8(&rgba, 4, 3, f).unwrap();
+            let back = crate::ingest::decode_rgba8(&bytes).unwrap();
+            assert_eq!((back.width, back.height), (4, 3), "{f:?}");
+            assert_eq!(&back.rgba.to_rgba8()[..], &rgba[..], "{f:?}");
+        }
     }
 
     /// A 4×2 stack: background, a grouped + clipped + masked layer, a

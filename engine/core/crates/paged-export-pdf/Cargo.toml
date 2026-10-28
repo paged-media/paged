@@ -15,6 +15,9 @@ idml-import = { path = "../idml-import" }
 paged-compose = { path = "../paged-compose" }
 paged-renderer = { path = "../paged-renderer", default-features = false }
 paged-color = { path = "../paged-color" }
+# JPEG sniffing and the frame header of a DCT passthrough (already in the
+# tree through paged-renderer).
+paged-raster = { path = "../paged-raster" }
 paged-model = { path = "../paged-model" }
 pdf-writer = "0.15"
 subsetter = "0.2"

@@ -216,6 +216,22 @@ impl IccCmm {
         });
     }
 
+    /// Convert sRGB bytes to destination CMYK bytes (0 = no ink) through
+    /// the export destination configured by [`Self::configure_export`],
+    /// in bulk: a raster export (a CMYK TIFF) converts every pixel through
+    /// one transform. `false`, with `out` untouched, when no destination
+    /// is configured. Panics when the slices differ in length.
+    pub fn export_rgb8_to_cmyk8(&self, rgb: &[[u8; 3]], out: &mut [[u8; 4]]) -> bool {
+        assert_eq!(rgb.len(), out.len(), "one CMYK pixel per RGB pixel");
+        match &self.export_dest {
+            Some(d) => {
+                d.inner.rgb8_to_cmyk8(rgb, out);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn export_policy(&self) -> ExportPolicy {
         self.export_policy
     }
@@ -468,6 +484,10 @@ mod native_export {
             }
         }
 
+        pub(super) fn rgb8_to_cmyk8(&self, rgb: &[[u8; 3]], out: &mut [[u8; 4]]) {
+            self.rgb.transform_pixels(rgb, out);
+        }
+
         pub(super) fn lab_to_cmyk(&self, l: f32, a: f32, b: f32) -> Cmyk {
             // lcms2 CMYK_FLT is 0..100 natively.
             let mut out = [[0f32; 4]];
@@ -523,6 +543,10 @@ mod wasm_export {
                 y: pct(out[2]),
                 k: pct(out[3]),
             }
+        }
+
+        pub(super) fn rgb8_to_cmyk8(&self, rgb: &[[u8; 3]], out: &mut [[u8; 4]]) {
+            self.rgb.convert(rgb.as_flattened(), out.as_flattened_mut());
         }
 
         pub(super) fn lab_to_cmyk(&self, l: f32, a: f32, b: f32) -> Cmyk {

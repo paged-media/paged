@@ -250,24 +250,22 @@ fn sanitize_file_stem(id: &str) -> String {
 /// The file extension for an encoded image, from its magic bytes —
 /// the formats InDesign places. `None` for anything else.
 pub fn sniff_image_extension(bytes: &[u8]) -> Option<&'static str> {
-    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        Some("png")
-    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
-        Some("jpg")
-    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        Some("gif")
-    } else if bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*") {
-        Some("tif")
-    } else if bytes.starts_with(b"8BPS") {
-        Some("psd")
-    } else if bytes.starts_with(b"BM") && bytes.len() > 14 {
-        Some("bmp")
-    } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
-        Some("webp")
-    } else if bytes.starts_with(b"%PDF") {
-        Some("pdf")
-    } else {
-        None
+    use paged_sniff::Format;
+    // The engine's one sniff (paged-sniff, dependency-free, ADR 1005 C5),
+    // narrowed to what InDesign places; a DNG keeps the `tif` it is.
+    match paged_sniff::sniff(bytes) {
+        Some(Format::Dng) => Some("tif"),
+        Some(
+            f @ (Format::Png
+            | Format::Jpeg
+            | Format::Gif
+            | Format::Tiff
+            | Format::Psd
+            | Format::Bmp
+            | Format::WebP),
+        ) => Some(f.extension()),
+        _ if bytes.starts_with(b"%PDF") => Some("pdf"),
+        _ => None,
     }
 }
 

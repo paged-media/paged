@@ -150,6 +150,29 @@ describe("panel, ingest and readouts", () => {
     k.dispose();
   });
 
+  it("exportAs: the dialog opens, and without a saver the export is staged for the exporters", async () => {
+    covers("command:media.paged.image.command.exportAs");
+    const k = await ingested();
+    await k.run(`${C}.exportAs`);
+    expect(k.session.state().dialog).toEqual({ kind: "exportAs" });
+    const r = await k.session.exportAs({
+      format: "tiff",
+      quality: 90,
+      ppi: null,
+      keepMetadata: true,
+      embedProfile: true,
+      mode: "rgb",
+      bits: 8,
+      compression: "lzw",
+      intent: "relativeColorimetric",
+    });
+    expect(Array.from(r!.bytes.slice(0, 2))).toEqual([0x49, 0x49]);
+    expect(k.session.state().saveBack?.fileName).toMatch(/\.tif$/);
+    expect(k.session.state().status).toMatch(/ready for the exporters/);
+    sentNothing(k);
+    k.dispose();
+  });
+
   it("loadBrushLibrary: the headless host wires no picker, and the command says so", async () => {
     covers("command:media.paged.image.command.loadBrushLibrary");
     const k = await ingested();
