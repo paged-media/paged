@@ -108,6 +108,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dml-native"
+version = "0.0.0"
+dependencies = [
+ "paged-model",
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
 name = "docx-conformance"
 version = "0.0.0"
 dependencies = [
@@ -127,6 +136,7 @@ dependencies = [
 name = "docx-core"
 version = "0.0.0"
 dependencies = [
+ "paged-ooxml",
  "serde",
 ]
 
@@ -175,6 +185,7 @@ name = "docx-lower"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "dml-native",
  "docx-core",
  "paged-ooxml",
  "serde",
@@ -415,6 +426,7 @@ dependencies = [
  "flate2",
  "ooxmlsdk",
  "quick-xml",
+ "serde",
  "thiserror",
  "zip 9.0.5",
 ]

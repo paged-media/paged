@@ -331,6 +331,16 @@ pub struct LoweredImage {
     /// picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub float: Option<LoweredFloat>,
+    /// The picture's DrawingML look as the shared mapper lowers it (doc
+    /// ADR 618): fill, outline, opacity (`a:alphaModFix`) and effects,
+    /// colours as `#RRGGBB`, a gradient's start in the picture's box.
+    /// Carried for the host model, which applies it once the engine's
+    /// anchored frames hold it. Absent for a plain picture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fx: Option<dml_native::native::NativeFx>,
+    /// What the engine cannot hold of the look, one line per kind.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub losses: Vec<String>,
 }
 
 /// A floating drawing's position and wrap, in points (thoughts ADR 035).

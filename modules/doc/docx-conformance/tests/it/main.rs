@@ -24,6 +24,7 @@ mod line_spacing;
 mod merge_fields;
 mod mixed_sizes;
 mod paragraph_spacing;
+mod picture_effects;
 mod pictures;
 mod poi_corpus;
 mod real_docx;

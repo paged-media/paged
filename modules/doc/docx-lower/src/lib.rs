@@ -146,6 +146,8 @@ fn lower_image(img: &docx_core::Image) -> LoweredImage {
         height_pt: emu_to_pt(img.height_emu),
         uri: format!("data:{};base64,{}", img.mime, b64),
         float: img.float.as_ref().map(lower_float),
+        fx: None,
+        losses: Vec::new(),
     }
 }
 
@@ -450,6 +452,11 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             .find(|s| s.kind == StyleKind::Paragraph && s.is_default)
             .map(|s| s.style_id.clone()),
         diagnostics,
+        dml_slots: doc
+            .theme
+            .as_ref()
+            .map(docx_core::Theme::drawingml_slots)
+            .unwrap_or_default(),
         ..Lowering::default()
     };
 
@@ -921,6 +928,28 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             2,
         ));
     }
+    // Pictures' DrawingML looks (doc ADR 618): lowered through the shared
+    // mapper and carried in the IR, but the engine's anchored frames, where
+    // pictures are placed, hold no fill, outline, opacity or effects yet.
+    if ctx.looked_pictures > 0 {
+        let kinds: Vec<&str> = ctx.look_kinds.iter().map(String::as_str).collect();
+        ctx.diagnostics.push(Diagnostic::warning(
+            format!(
+                "{} picture(s) carry a DrawingML look ({}) that is NOT shown: pictures are \
+                 placed as anchored frames, which hold no fill, outline, opacity or effects \
+                 yet; the look is kept in the document and lowered for when they do",
+                ctx.looked_pictures,
+                kinds.join(", ")
+            ),
+            2,
+        ));
+    }
+    for (loss, n) in &ctx.look_losses {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!("picture look in {n} picture(s): {loss}"),
+            3,
+        ));
+    }
     // Drawings that are not pictures (ADR 035 decision 8).
     for (block, n) in &ctx.other_drawings {
         ctx.diagnostics.push(Diagnostic::warning(
@@ -1156,9 +1185,49 @@ struct Lowering {
     cell_floats: usize,
     /// Drawings that are not pictures, per body block.
     other_drawings: BTreeMap<usize, u32>,
+    /// The document theme as DrawingML scheme slots, for the pictures'
+    /// looks (doc ADR 618).
+    dml_slots: Vec<(String, paged_ooxml::drawingml::Rgba)>,
+    /// Body pictures whose look lowered to native effects, and what those
+    /// are (`drop shadow`, `glow`, …), by kind.
+    looked_pictures: usize,
+    look_kinds: BTreeSet<String>,
+    /// What the engine cannot hold of the pictures' looks: each line, with
+    /// how many pictures it is about.
+    look_losses: BTreeMap<String, usize>,
 }
 
 impl Lowering {
+    /// A picture's DrawingML look through the shared mapper (doc ADR 618):
+    /// what it lowers to rides the IR; what the engine cannot hold is
+    /// counted for the diagnostics.
+    fn lower_look(&mut self, img: &docx_core::Image, li: &mut LoweredImage) {
+        let Some(look) = &img.look else {
+            return;
+        };
+        let mut mapper = dml_native::native::Lowering::new(self.dml_slots.clone());
+        let fx = mapper.picture(
+            &look.blip,
+            &look.shape,
+            li.width_pt as f64,
+            li.height_pt as f64,
+        );
+        li.losses = mapper.take_losses();
+        if self.in_cell {
+            // Not poured at all; the cell-picture diagnostic says so.
+        } else {
+            for l in &li.losses {
+                *self.look_losses.entry(l.clone()).or_default() += 1;
+            }
+            if !fx.is_empty() {
+                self.looked_pictures += 1;
+                self.look_kinds
+                    .extend(fx.describe().split(", ").map(str::to_string));
+            }
+        }
+        li.fx = (!fx.is_empty()).then_some(fx);
+    }
+
     /// Create the `docx-Default` base paragraph style from docDefaults (if it
     /// carries anything), so every un-based style and un-styled paragraph
     /// inherits Word's document defaults.
@@ -1734,6 +1803,7 @@ impl Lowering {
         for r in &p.runs {
             for img in &r.images {
                 let mut li = lower_image(img);
+                self.lower_look(img, &mut li);
                 if below_text(img) {
                     // The break joins the last run: read back, the
                     // paragraph has the runs it was poured with, so an
@@ -3119,6 +3189,7 @@ mod tests {
                 height_emu: 12700 * 200,
                 float: None,
                 band_offset_emu: Some(12700 * offset_pt),
+                look: None,
             }],
             ..Default::default()
         };
@@ -3606,6 +3677,7 @@ mod tests {
                 height_emu: 12700 * 36,
                 float: None,
                 band_offset_emu: None,
+                look: None,
             }],
             ..run("", RunProps::default())
         }

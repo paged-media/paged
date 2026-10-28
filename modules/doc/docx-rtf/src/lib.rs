@@ -916,6 +916,7 @@ impl<'a> Reader<'a> {
             height_emu: h * 635,
             float: None,
             band_offset_emu: None,
+            look: None,
         };
         let st = self.stack.last().cloned().unwrap_or_else(State::root);
         self.runs.push(Run {
