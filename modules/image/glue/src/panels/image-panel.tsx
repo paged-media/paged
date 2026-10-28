@@ -124,7 +124,14 @@ import {
   matchesLayerFilter,
 } from "./sections/layer-parity";
 import type { LayerFilter } from "../session";
-import { FILTERS, filterDef, type FilterId } from "../filters";
+import {
+  FILTERS,
+  FIRST_FAMILIES,
+  GALLERY_EFFECTS,
+  filterDef,
+  type FilterId,
+} from "../filters";
+import { MoreFilters } from "./sections/more-filters";
 import {
   actionBar,
   kicker,
@@ -2328,6 +2335,14 @@ export function makeImagePanel(session: ImageSession) {
     }
     // The Curves tools (Auto, the eyedroppers) set the channel curves in
     // the session; the editor here follows them.
+    // Curves' targeted adjustment moves a point on the image; the editor
+    // follows the curve it moved.
+    const [targetFor, setTargetFor] = useState(s.curvesTarget);
+    if (targetFor !== s.curvesTarget) {
+      setTargetFor(s.curvesTarget);
+      const c = s.curvesTarget;
+      if (c) setCurvePointsBy((m) => ({ ...m, [c.channel]: c.points }));
+    }
     const [curvesFor, setCurvesFor] = useState(s.channelCurves);
     if (curvesFor !== s.channelCurves) {
       setCurvesFor(s.channelCurves);
@@ -2505,6 +2520,10 @@ export function makeImagePanel(session: ImageSession) {
             onBefore={(b) => void session.setFilterBefore(b)}
             onOk={() => void session.commitFilterDialog()}
             onCancel={() => void session.cancelFilterDialog()}
+            onChooseImage={(key, choice) =>
+              void session.chooseFilterImage(key, choice)
+            }
+            effects={GALLERY_EFFECTS}
           />
         )}
         {s.dialog?.kind === "contentAwareFill" && s.retouch.caf && (
@@ -3424,7 +3443,7 @@ export function makeImagePanel(session: ImageSession) {
 
         <div style={sectionTitle}>{t(P.stylize)}</div>
         <div style={row}>
-          {FILTERS.filter((f) => !RANK_FILTERS.has(f.id)).map((f) => (
+          {FIRST_FAMILIES.filter((f) => !RANK_FILTERS.has(f.id)).map((f) => (
             <button
               key={f.id}
               type="button"
@@ -3448,6 +3467,13 @@ export function makeImagePanel(session: ImageSession) {
           </button>
         </div>
         <div style={note}>{t(P.galleryNote)}</div>
+        <MoreFilters
+          filters={FILTERS.filter((f) => !FIRST_FAMILIES.includes(f))}
+          disabled={s.busy || !s.source}
+          onOpen={(id) => void session.openFilterDialog(id)}
+          onOneShot={(k) => void session.applyOneShot(k)}
+          onBlurGallery={(k) => void session.openBlurGallery(k)}
+        />
 
         {/* LAYERS — the layer graph itself: order, visibility, opacity,
             blend and the active-layer choice paint/fill/bake land in,
@@ -3847,6 +3873,10 @@ export function makeImagePanel(session: ImageSession) {
           disabled={disabled}
           onAuto={() => void session.autoCurves()}
           onArm={(k) => session.armCurvesPicker(k)}
+          targeting={s.curvesTarget !== null}
+          onTarget={(on) =>
+            session.armCurvesTarget(on ? curveChannel : null, curvePoints)
+          }
         />
 
         {/* Crop + straighten */}
