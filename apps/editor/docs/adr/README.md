@@ -93,6 +93,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [284](284-the-breadcrumb-stays-under-the-title-bar.md) | The edit-context breadcrumb stays under the title bar; full screen carries its own | Accepted 2026-10-24 |
 | [285](285-the-history-panel.md) | The History panel lists every step by name, and a snapshot restore is one step | Accepted 2026-10-24 |
 | [287](287-view-modes.md) | View modes, grids and smart guides: Outline, Overprint and Pixel Preview, the grids, snapping v2, Rotate View | Accepted 2026-10-24 |
+| [289](289-the-vector-clipboard.md) | The vector clipboard: copy writes SVG, paste reads SVG | Accepted 2026-10-28 |
 | [291](291-the-data-panel.md) | The Data panel: the document's data as a grid, over the data door | Accepted 2026-10-24 |
 | [292](292-the-bind-popover.md) | The bind popover: field, rules, map or expression on any property field | Accepted 2026-10-24 |
 | [293](293-a-template-opened-as-a-document-says-so.md) | A template opened as a document says so, and offers "Edit template" | Accepted 2026-10-24 |

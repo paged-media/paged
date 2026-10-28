@@ -36,6 +36,21 @@ Recorded with **Adobe Illustrator 30.1.0** (build 136R, de_DE, macOS
 | `compound-path`      | 9     | Make Compound Path keeps the fill rule NON-ZERO and rewrites direction by PAINT ORDER: the backmost path clockwise, every other counter-clockwise, whatever the inputs were. So overlaps are knocked out, and a shape nested three levels deep is solid again (31600, where even-odd would give 31200).                                                                                                                                                                                    |
 | `perspective-grid`   | 15    | Each plane of the default two-point grid is ONE homography: fitted to one rectangle it predicts the others to 0.05 pt. The walls' verticals stay vertical, their ground lines vanish on one horizontal horizon, and the floor vanishes at those same two points; draw-geometry's construction from those points reproduces every corner after rescaling the two plane axes (0.1 pt). An ellipse keeps FOUR anchors (control points mapped; ours subdivides onto the conic — a convention). |
 
+`clipboard-copy` (2026-10-28) is not a path operation: it records what
+Edit › Copy puts on the macOS clipboard, for the editor's vector clipboard
+(apps/editor ADR 289). Its runner, `run-clipboard-probe.sh <out-dir>`,
+runs the probe through `run-probe.sh`, then reads the pasteboard and
+writes, beside the geometry, every type with its size
+(`clipboard-copy.pasteboard.json`) and the SVG flavour
+(`clipboard-copy.illustrator.svg`); the recording lives in
+`apps/editor/apps/canvas/test/fixtures/clipboard/`. Illustrator 30.1 put
+`com.adobe.illustrator.aicb` (EPS), `public.svg-image`, `com.adobe.pdf`,
+`com.adobe.illustrator.svg`/`.svgm`, `public.utf8-plain-text` (the SVG
+source again), `public.png` and its PGF (the pasteboard also lists `public.tiff`, which its one item does not carry). The PDF and AICB
+flavours are recorded by type and size only: Illustrator embeds the
+account's user name in their private data. The probe replaces the
+clipboard; the runner puts its previous plain text back.
+
 Each fixture's `script_sha256` identifies the exact text (library + probe)
 that produced it. The library has grown since the first recording (stroke,
 paint and fill-rule fields), so older fixtures carry fewer fields; re-record
