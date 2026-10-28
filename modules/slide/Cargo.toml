@@ -16,6 +16,7 @@ members = [
     "pptx-export",
     "slide-js",
     "slide-shaders",
+    "slide-anim",
 ]
 
 [workspace.package]
@@ -67,6 +68,7 @@ slide-chart = { path = "slide-chart" }
 slide-resolve = { path = "slide-resolve" }
 slide-native = { path = "slide-native" }
 slide-js = { path = "slide-js" }
+slide-anim = { path = "slide-anim" }
 # WGSL front end and validator: slide-shaders' tests check every slide
 # transition shader (slide ADR 721), as the browser would compile it. The
 # version modules/image and the engine's wgpu use.

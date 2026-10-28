@@ -22,6 +22,7 @@ serde_json.workspace = true
 slide-native.workspace = true
 pptx-export.workspace = true
 slide-resolve.workspace = true
+slide-anim.workspace = true
 wasm-bindgen.workspace = true
 
 [dev-dependencies]

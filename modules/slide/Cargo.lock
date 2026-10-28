@@ -439,6 +439,7 @@ dependencies = [
  "dml-chart",
  "dml-geom",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -654,6 +655,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "slide-anim"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "pptx-core",
+ "pptx-import",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "slide-chart"
 version = "0.0.0"
 dependencies = [
@@ -673,6 +685,7 @@ dependencies = [
  "pptx-import",
  "serde",
  "serde_json",
+ "slide-anim",
  "slide-native",
  "slide-resolve",
  "wasm-bindgen",
