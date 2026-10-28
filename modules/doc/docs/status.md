@@ -30,6 +30,40 @@ crate. That is the next lever if later waves outgrow the headroom.
 `opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
 fifth slower (see `Cargo.toml`).
 
+## W2: document structure (2026-10-28)
+
+Doc ADRs [611](adr/611-headers-footers-and-notes-placed.md) and [612](adr/612-fields-and-toc.md),
+on engine ADR 1022 (protocol 77 with a story-read rider), contract C6 (extensions ADR 349) and
+editor ADR 301.
+
+| Area | Built |
+| --- | --- |
+| Headers / footers | One master per distinct header/footer pair a section shows (first page, even pages, link to previous = the same master), written into the skeleton with header and footer frames; each story's grow rule names its masters and odd/even start; parts poured with live fields; page-numbering sections for restarts and formats |
+| In place | Double-click in a page's header or footer band edits its master's story with the body dimmed; bar: Different first page, Different odd & even, Link to previous, page number, number of pages, date, Close; Esc returns |
+| Notes | Footnotes and endnotes inserted at their references with their text; the document's footnote numbering from the first section; Cmd+Alt+F / Cmd+Alt+D; inserted documents leave references out |
+| Fields | Every field the engine can hold is a live Word field with Word's result; bookmarks as text anchors; F9 (caret's story), Shift+F9 / Alt+F9 field codes; Insert page number / page count / date / any field |
+| TOC, references | Word's TOC entries poured with live PAGEREFs; Insert table of contents from heading styles, Update table; cross-reference to a bookmark or heading; bookmark; index entry |
+| Save-back | Header/footer edits spliced into their parts; note text edits, new and removed notes (with new parts, rels, content types); F9 results; new fields as complex fields; new bookmarks; zero-edit identity per part (ADR 610 amendment 1). A TOC made in paged is not written as a TOC field |
+| Layout | Page break (Cmd+Enter), section breaks (next/odd/even/continuous as break rules); Page setup (size, orientation, margins, columns) in the References panel |
+
+Word's answer: `fixtures/structure.word.json` (`scripts/word-structure-probe.sh`, Word 16 for
+Mac, 2026-10-28) — the masters print Word's header and footer on every page with PAGE / NUMPAGES
+at Word's numbers, each footnote on its reference's page. `headers.word.json` (both variants)
+matches the planned masters page by page.
+
+Not yet (ADR 611 / 612 residuals): header height does not push the body; pictures and tables in
+headers; note text is plain and cannot be edited in place; endnotes are a page of their own,
+numbered from 1 (Word: after the text, lower roman); the bar's toggles are not written back into
+`w:sectPr`; a Word TOC is not an engine TOC (Update table rebuilds only one made in paged);
+fields in cells stay text; section breaks are break rules, not new sections. Pagination
+acceptance was not re-measured: the headless host grows pages only as they are requested.
+
+Tests: `docx-conformance/tests/it/structure.rs` (6), `headers.rs` (+2), `docx-skeleton` (+1),
+`docx-lower` structure units (3), `doc-host-model/test/structure.spec.ts` (11),
+`doc-bundle/test/structure-commands.spec.ts` (12), `test/headless/word-structure.spec.ts` (5),
+`test/headless/word-structure-commands.spec.ts` (7), `test/panels/references-panel.dom.test.tsx`
+(5).
+
 ## W1 (UI): Word editing chrome on the engine's E1 model (2026-10-25)
 
 Doc ADR 608 amendment 1, on engine ADRs 1018 / 1021, extensions ADR 348 amendment 1 and editor

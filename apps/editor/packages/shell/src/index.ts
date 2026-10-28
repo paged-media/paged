@@ -173,7 +173,9 @@ export type {
 export {
   ContentSelectionProvider,
   heldTypingStyle,
+  pinToPage,
   useContentSelection,
+  type PagePin,
   type TypingStyle,
 } from "./state/content-selection-context";
 
@@ -383,6 +385,10 @@ export {
   type PresentationRegistry,
   type ViewContribution,
   type ViewRegistry,
+  createSubContextRegistry,
+  type SubContextRegistry,
+  type SubContextSpec,
+  type SubContextState,
 } from "./registries";
 
 // ── W3.2 — edit-context + object-type registries (B-02 / W-03) ──
@@ -430,6 +436,12 @@ export {
   useEditContextEntry,
   type DoubleClickHit,
 } from "./state/use-edit-context-entry";
+export {
+  SubContextController,
+  storyEndOffset,
+  useSubContextEntry,
+  type SubContextDoubleClick,
+} from "./state/sub-context-controller";
 export {
   useSelectionObjectType,
   useSelectionEditContext,
@@ -618,6 +630,8 @@ export {
   renderPreviewShape,
   pageDecorationsContribution,
   isolationDimContribution,
+  subContextContribution,
+  subContextHole,
   isolationScopeRoot,
   isolationOutline,
   isolationVeilPath,

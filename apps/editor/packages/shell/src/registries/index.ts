@@ -82,6 +82,13 @@ export {
 } from "./view";
 
 export {
+  createSubContextRegistry,
+  type SubContextRegistry,
+  type SubContextSpec,
+  type SubContextState,
+} from "./sub-context";
+
+export {
   activeScopeContext,
   createControlBarGroupRegistry,
   createDocumentContextStore,

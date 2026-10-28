@@ -43,6 +43,7 @@ use docx_core::{
 pub mod ir;
 pub mod line_height;
 pub mod sections;
+pub mod structure;
 
 pub use sections::LowerOptions;
 use sections::{SectionColumns, SectionPlacement};
@@ -285,6 +286,18 @@ fn describe_note_numbering(n: Option<&LoweredNoteNumbering>, endnote: bool) -> S
         dflt(n.num_restart, "continuous"),
         dflt(n.pos, "pageBottom")
     )
+}
+
+/// A note's text as the engine's note holds it (doc ADR 611): its
+/// paragraphs' run text joined by `\n`, without the space Word writes
+/// after its reference mark.
+pub fn note_text(paragraphs: &[LoweredParagraph]) -> String {
+    let joined: Vec<String> = paragraphs
+        .iter()
+        .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+        .collect();
+    let text = joined.join("\n");
+    text.strip_prefix(' ').map(str::to_string).unwrap_or(text)
 }
 
 /// ADR 033 — a section's headers and footers for the IR, by part name.
@@ -559,9 +572,13 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         }
         // The FIRST section's kind is not applied: it has nothing before it
         // to start after, and Word was not asked about it.
+        // An odd- or even-page section that opens a story starts by its
+        // grow rule's section start instead (engine ADR 1022, doc ADR 611):
+        // the engine puts a blank page before it, showing the previous
+        // section's header, as Word prints it.
         let entry = match section_start.filter(|_| idx > 0) {
-            Some((_, SectionKind::OddPage, _)) => Some("NextOddPage"),
-            Some((_, SectionKind::EvenPage, _)) => Some("NextEvenPage"),
+            Some((_, SectionKind::OddPage, Some(_))) => Some("NextOddPage"),
+            Some((_, SectionKind::EvenPage, Some(_))) => Some("NextEvenPage"),
             Some((_, _, Some(p))) if p.next_column => Some("NextColumn"),
             _ => None,
         };
@@ -790,15 +807,11 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             ));
         }
         msg.push_str(&format!(
-            " parsed ({refs} in-text reference(s)), the numbering carried per section; \
-             NOT placed on the page: neither the note text nor its reference mark is \
-             shown, because footnotes cannot be added to the page yet{}. The note text \
-             is preserved in the source .docx and round-trips on save",
-            if endnotes > 0 {
-                " and endnotes are not supported yet"
-            } else {
-                ""
-            }
+            " ({refs} in-text reference(s)) placed as native notes at their references \
+             when the document is opened (an inserted document keeps them unplaced); \
+             the note text is set plain in the engine's note style (Word's note styles \
+             and the separator are the engine's), and a reference in a table cell is \
+             not placed"
         ));
         ctx.diagnostics.push(Diagnostic::info(msg, 3));
     }
@@ -817,8 +830,9 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                 _ => None,
             })
             .flat_map(|p| p.runs.iter())
+            .filter(|r| structure::word_field(r).is_none())
             .filter_map(|r| r.field.as_deref())
-            .filter(|f| *f != "HYPERLINK")
+            .filter(|f| !["HYPERLINK", "MERGEFIELD", "TOC"].contains(f))
             .collect();
         kinds.sort_unstable();
         let total = kinds.len();
@@ -826,10 +840,10 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         if total > 0 {
             ctx.diagnostics.push(Diagnostic::info(
                 format!(
-                    "{total} field(s) ({}) lowered as their last-computed TEXT — a \
-                     frozen snapshot. The value is preserved and round-trips on \
-                     save, but nothing recomputes it (the native model has no \
-                     equivalent for these field kinds)",
+                    "{total} field result run(s) ({}) lowered as their last-computed \
+                     TEXT — a frozen snapshot (in a table cell, or holding a picture or \
+                     a break). The value is preserved and round-trips on save, but \
+                     nothing recomputes it",
                     kinds.join(", ")
                 ),
                 3,
@@ -874,10 +888,9 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             kinds.push("inherited from an earlier section");
         }
         msg.push_str(&format!(
-            " parsed across {} section(s){}, each section's headers and footers read; \
-             NOT placed on the page yet (headers and footers are not shown on the pages \
-             yet). Their text is preserved in the source .docx and \
-             round-trips on save",
+            " across {} section(s){} placed on section masters when the document is \
+             opened (an inserted document keeps them unplaced); pictures and tables in \
+             them are not shown",
             doc.sections.len().max(1),
             if kinds.is_empty() {
                 String::new()
@@ -976,7 +989,82 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
 
+    // Doc ADRs 611 / 612: headers and footers on masters, notes, tables
+    // of contents.
+    let header_footer_parts: Vec<ir::LoweredHeaderFooterPart> = doc
+        .headers_footers
+        .iter()
+        .map(|h| {
+            ctx.current_block = 0;
+            ir::LoweredHeaderFooterPart {
+                part: h.part.clone(),
+                footer: h.footer,
+                paragraphs: {
+                    // A header's text is as wide as its first section's
+                    // margin box; positional tabs reach its right edge.
+                    let s = doc.sections.get(h.section).cloned().unwrap_or_default();
+                    ctx.text_width =
+                        Some(twip_to_pt(s.page_width - s.margin_left - s.margin_right));
+                    ctx.section_indent = (0.0, 0.0);
+                    ctx.section_columns = SectionColumns::Frame;
+                    h.paragraphs
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| {
+                            ctx.spacing_override = (None, false);
+                            ctx.lower_body_paragraph(p, i as u32, None, Some(false)).0
+                        })
+                        .collect()
+                },
+            }
+        })
+        .collect();
+    let referenced: BTreeSet<(bool, i64)> = doc
+        .body
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        })
+        .flat_map(|p| p.runs.iter())
+        .filter_map(|r| r.note_ref.map(|id| (r.note_is_endnote, id)))
+        .collect();
+    let notes: Vec<ir::LoweredNote> = doc
+        .notes
+        .iter()
+        .filter(|n| referenced.contains(&(n.endnote, n.id)))
+        .map(|n| {
+            let paragraphs: Vec<LoweredParagraph> = n
+                .paragraphs
+                .iter()
+                .enumerate()
+                .map(|(i, p)| ctx.lower_paragraph(p, i as u32))
+                .collect();
+            ir::LoweredNote {
+                id: n.id,
+                endnote: n.endnote,
+                text: note_text(&paragraphs),
+                paragraphs,
+            }
+        })
+        .collect();
+    let (masters, section_masters) = structure::plan_masters(doc, &placements);
+    let tocs = structure::find_tocs(doc);
+    if ctx.live_fields > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} field result run(s) kept as live Word fields (PAGE, NUMPAGES, \
+                 SECTIONPAGES, PAGEREF and STYLEREF follow the layout; DATE, REF and SEQ \
+                 update on F9; other kinds keep the result Word stored)",
+                ctx.live_fields
+            ),
+            3,
+        ));
+    }
+
     let full = |k: usize, s: Option<&Section>| LoweredSection {
+        masters: section_masters.get(k).cloned().flatten(),
+        section_start: structure::section_start(doc, &placements, k),
         header_footer: s.and_then(|s| lower_header_footer(doc, s)),
         footnote_numbering: lower_note_numbering(&doc.footnote_numbering(k)),
         endnote_numbering: lower_note_numbering(&doc.endnote_numbering(k)),
@@ -1034,6 +1122,10 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         diagnostics: ctx.diagnostics,
         color_groups,
         theme_fonts,
+        header_footer_parts,
+        masters,
+        notes,
+        tocs,
     }
 }
 
@@ -1156,6 +1248,8 @@ struct Lowering {
     cell_floats: usize,
     /// Drawings that are not pictures, per body block.
     other_drawings: BTreeMap<usize, u32>,
+    /// Field result runs lowered as live engine fields (doc ADR 612).
+    live_fields: usize,
 }
 
 impl Lowering {
@@ -1392,6 +1486,26 @@ impl Lowering {
         start: Option<&'static str>,
         can_carry: Option<bool>,
     ) -> (LoweredParagraph, Option<BreakKind>) {
+        // A note reference reads as the engine's marker character (doc ADR
+        // 611): give its run that text, so every offset below counts it.
+        let marked;
+        let p = if !self.in_cell && p.runs.iter().any(|r| r.note_ref.is_some()) {
+            let mut q = p.clone();
+            for r in q.runs.iter_mut() {
+                if let Some(mark) = r.note_marker() {
+                    let at = r
+                        .text
+                        .char_indices()
+                        .nth(r.note_at)
+                        .map_or(r.text.len(), |(b, _)| b);
+                    r.text.insert(at, mark);
+                }
+            }
+            marked = q;
+            &marked
+        } else {
+            p
+        };
         let explicit = self
             .style_of(p)
             .map(|id| format!("{PARA_PREFIX}{}", sanitize(id)));
@@ -1843,11 +1957,35 @@ impl Lowering {
         } else {
             Some(self.synthesize(StyleCollection::Character, base, props))
         };
+        // A note reference (doc ADR 611): the engine's marker character,
+        // which the pour writes with `insertFootnote` / `insertEndnote`. A
+        // cell's runs carry text only.
+        let note = r
+            .note_ref
+            .filter(|_| !self.in_cell)
+            .map(|id| ir::LoweredNoteRef {
+                id,
+                endnote: r.note_is_endnote,
+            });
+        // (`lower_body_paragraph` has put the marker into the run's text.)
+        let text = r.text.clone();
+        // A field the engine keeps live (doc ADR 612): not in a cell, whose
+        // text the cell pour writes as it is.
+        let field = if self.in_cell {
+            None
+        } else {
+            structure::word_field(r)
+        };
+        if field.is_some() {
+            self.live_fields += 1;
+        }
         LoweredRun {
-            text: r.text.clone(),
+            text,
             char_style_id,
             hyperlink_url: external_url,
             merge_field: r.merge_field.clone(),
+            field,
+            note,
         }
     }
 
@@ -2867,6 +3005,8 @@ fn lower_section(section: Option<&Section>) -> LoweredSection {
         header_footer: None,
         footnote_numbering: None,
         endnote_numbering: None,
+        masters: None,
+        section_start: None,
     }
 }
 
@@ -3010,6 +3150,7 @@ mod tests {
                 source_cell: None,
                 held: Default::default(),
                 bookmarks: Vec::new(),
+                toc_field: None,
             }));
         }
         let lowered = lower(&doc);
@@ -3067,6 +3208,7 @@ mod tests {
                 source_cell: None,
                 held: Default::default(),
                 bookmarks: Vec::new(),
+                toc_field: None,
             })
         };
         // Body, a 24 pt heading, body, body.
@@ -3135,6 +3277,7 @@ mod tests {
                 source_cell: None,
                 held: Default::default(),
                 bookmarks: Vec::new(),
+                toc_field: None,
             }));
         }
         let lowered = lower(&doc);
@@ -3172,6 +3315,7 @@ mod tests {
                     source_cell: None,
                     held: Default::default(),
                     bookmarks: Vec::new(),
+                    toc_field: None,
                 }],
                 grid_span: 1,
                 v_merge: VMerge::None,
@@ -3218,6 +3362,7 @@ mod tests {
                 source_cell: None,
                 held: Default::default(),
                 bookmarks: Vec::new(),
+                toc_field: None,
             }));
         }
         let lowered = lower(&doc);
@@ -3301,6 +3446,7 @@ mod tests {
             source_cell: None,
             held: Default::default(),
             bookmarks: Vec::new(),
+            toc_field: None,
         }));
 
         let lowered = lower(&doc);

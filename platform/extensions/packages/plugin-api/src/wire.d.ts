@@ -841,6 +841,13 @@ export interface StoryContent {
      * Paragraphs in body order.
      */
     paragraphs: ParagraphContent[];
+    /**
+     * Engine ADR 1022 — the story\'s named text anchors (Word\'s
+     * bookmarks), each at its paragraph and character offset in it. A
+     * content plugin writes them back as its own format\'s bookmarks.
+     * Additive on 77.
+     */
+    textAnchors?: TextAnchorContent[];
 }
 
 /**
@@ -852,6 +859,11 @@ export interface ParagraphContent {
      */
     paragraphStyle?: string;
     runs: RunContent[];
+    /**
+     * Engine ADR 1022 — the table of contents style this paragraph is an
+     * entry of (`Paragraph.toc`), when it is one. Additive on 77.
+     */
+    toc?: string;
 }
 
 /**
@@ -880,6 +892,12 @@ export interface RunContent {
      * data field\'s text variable is in, a copy pasted by hand included.
      */
     textVariable?: string;
+    /**
+     * Engine ADR 1022 — the Word field this run is the result of (its
+     * instruction, `PAGEREF _Ref1 \\h`), when it is one; the run\'s `text`
+     * is the field\'s result. Additive on 77.
+     */
+    fieldCode?: string;
 }
 
 /**
@@ -1084,6 +1102,23 @@ export interface FindSpec {
 export interface TocLevelSpec {
     style: string;
     level: number;
+}
+
+/**
+ * Engine ADR 1022 — one named text anchor of a story (a
+ * `HyperlinkTextDestination` in its text).
+ */
+export interface TextAnchorContent {
+    selfId: string;
+    name: string;
+    /**
+     * Index of the paragraph it stands in.
+     */
+    paragraph: number;
+    /**
+     * Its character offset in that paragraph.
+     */
+    offset: number;
 }
 
 /**

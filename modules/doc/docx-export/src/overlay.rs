@@ -82,6 +82,10 @@ pub struct RunContentIn {
     pub position: Option<String>,
     #[serde(default)]
     pub tracking: Option<f32>,
+    /// The Word field this run is the result of, as the engine reads it
+    /// back (engine ADR 1022): its instruction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_code: Option<String>,
 }
 
 impl RunContentIn {
@@ -168,6 +172,9 @@ fn overlay_runs(styles: &mut Vec<LoweredStyle>, runs: &mut Vec<LoweredRun>, read
         for ((run, r), token) in runs.iter_mut().zip(read).zip(tokens) {
             run.text = r.text.clone();
             run.char_style_id = token;
+            if let Some(code) = &r.field_code {
+                run.field = Some(field_of(code));
+            }
         }
     } else {
         *runs = read
@@ -176,9 +183,18 @@ fn overlay_runs(styles: &mut Vec<LoweredStyle>, runs: &mut Vec<LoweredRun>, read
             .map(|(r, token)| LoweredRun {
                 text: r.text.clone(),
                 char_style_id: token,
+                field: r.field_code.as_deref().map(field_of),
                 ..Default::default()
             })
             .collect();
+    }
+}
+
+/// A read-back field instruction as the lowering's field.
+fn field_of(code: &str) -> docx_lower::ir::LoweredField {
+    docx_lower::ir::LoweredField {
+        code: code.trim().to_string(),
+        seq: 0,
     }
 }
 
@@ -745,7 +761,7 @@ fn restructure_cell(
 /// Rewrite `runs` so their texts concatenate to `new`, keeping the run list:
 /// the span that differs from the old concatenation goes to the run it
 /// starts in. Errors when there is no run to hold new text.
-fn patch_runs(runs: &mut [LoweredRun], new: &str) -> Result<(), String> {
+pub(crate) fn patch_runs(runs: &mut [LoweredRun], new: &str) -> Result<(), String> {
     let old: Vec<char> = runs.iter().flat_map(|r| r.text.chars()).collect();
     let next: Vec<char> = new.chars().collect();
     if old == next {

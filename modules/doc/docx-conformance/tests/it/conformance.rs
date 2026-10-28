@@ -476,7 +476,9 @@ fn footnotes_are_parsed_and_honestly_diagnosed() {
     let refs: Vec<i64> = para.runs.iter().filter_map(|r| r.note_ref).collect();
     assert_eq!(refs, [2]);
 
-    // Lowering surfaces an honest diagnostic and does NOT inline the note text.
+    // Lowering places the note (doc ADR 611): the reference is the engine's
+    // marker in the run, the note travels beside the story, and its text is
+    // never inlined into the flow.
     let ir = lower(&doc);
     let msg = ir
         .diagnostics
@@ -485,7 +487,20 @@ fn footnotes_are_parsed_and_honestly_diagnosed() {
         .find(|m| m.contains("footnote"))
         .expect("a footnote diagnostic");
     assert!(msg.contains("1 footnote(s)"), "{msg}");
-    assert!(msg.contains("NOT placed"), "{msg}");
+    assert!(msg.contains("placed as native notes"), "{msg}");
+    assert_eq!(ir.notes.len(), 1);
+    assert_eq!(ir.notes[0].id, 2);
+    assert!(!ir.notes[0].endnote);
+    assert_eq!(ir.notes[0].text, "The note body.");
+    let reference = ir
+        .story
+        .paragraphs()
+        .iter()
+        .flat_map(|p| p.runs.iter())
+        .find(|r| r.note.is_some())
+        .expect("the reference run");
+    assert_eq!(reference.text, "\u{E01C}");
+    assert_eq!(reference.note.unwrap().id, 2);
     let flow: String = ir
         .story
         .paragraphs()
@@ -591,18 +606,42 @@ fn headers_footers_and_frozen_fields_are_parsed_and_diagnosed() {
     );
 
     let msgs: Vec<&str> = ir.diagnostics.iter().map(|d| d.message.as_str()).collect();
-    let fields = msgs
+    // Both fields are kept live as engine Word fields (doc ADR 612), their
+    // results poured as the fields' results.
+    let fields: Vec<(&str, &str)> = ir
+        .story
+        .paragraphs()
         .iter()
-        .find(|m| m.contains("field(s)"))
+        .flat_map(|p| p.runs.iter())
+        .filter_map(|r| r.field.as_ref().map(|f| (f.code.as_str(), r.text.as_str())))
+        .collect();
+    assert_eq!(fields.len(), 2, "{fields:?}");
+    assert!(fields[0].0.starts_with("DATE"), "{fields:?}");
+    assert_eq!(fields[0].1, "23 July 2026");
+    assert!(fields[1].0.starts_with("PAGE"), "{fields:?}");
+    assert_eq!(fields[1].1, "7");
+    let live = msgs
+        .iter()
+        .find(|m| m.contains("live Word fields"))
         .expect("field diagnostic");
-    assert!(fields.contains("DATE, PAGE"), "{fields}");
-    assert!(fields.contains("frozen snapshot"), "{fields}");
+    assert!(live.contains("2 field result run(s)"), "{live}");
+    assert!(
+        !msgs.iter().any(|m| m.contains("frozen snapshot")),
+        "no field is frozen: {msgs:?}"
+    );
     let hf = msgs
         .iter()
         .find(|m| m.contains("header(s)"))
         .expect("header diagnostic");
     assert!(hf.contains("1 header(s) + 1 footer(s)"), "{hf}");
-    assert!(hf.contains("NOT placed"), "{hf}");
+    assert!(hf.contains("placed on section masters"), "{hf}");
+    // One master shows both; the header part is lowered for its story.
+    assert_eq!(ir.masters.len(), 1);
+    assert_eq!(ir.header_footer_parts.len(), 2);
+    assert_eq!(
+        ir.sections[0].masters.as_ref().unwrap().master.as_deref(),
+        Some("docx_m0")
+    );
 }
 
 #[test]

@@ -43,6 +43,7 @@ import {
   guideOverlayContribution,
   pageDecorationsContribution,
   isolationDimContribution,
+  subContextContribution,
   marginGuidesContribution,
   pathEditContribution,
   resizeHandlesContribution,
@@ -353,6 +354,9 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   pageDecorationsContribution,
   // WP4.6 — the isolation veil outside an entered edit context or group.
   isolationDimContribution,
+  // Editor ADR 301 — a header, footer or note edited in place: the veil
+  // around it and its bar.
+  subContextContribution,
   // Template fields (docs/composable-editor.md §7.10): outlines, labels and a
   // picture's Replace button, for an author and a filler only.
   templateFieldsContribution,
@@ -952,7 +956,10 @@ function CanvasAppIntegration() {
     setSelection: setContentSelection,
     // useTextEditing calls these through the latest render's context.
     undoOwnedByContext: () => !!editContextStack?.activeContribution?.onUndo,
-    escapeOwnedByContext: () => !!editContextStack?.active,
+    // Editor ADR 301 — inside a header edited in place, Escape takes the
+    // caret out of the header (which leaves it), not the context.
+    escapeOwnedByContext: () =>
+      !!editContextStack?.active && !registries.subContexts.current(),
     // ED-1 — Escape out of the text is InDesign's: the frame that held
     // the caret becomes the selection and the Selection tool is in hand,
     // so the next key is a shortcut again rather than more text.
