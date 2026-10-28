@@ -13,10 +13,15 @@ workspace = true
 # The larger decoders, each a feature so a build can leave it out; all on by
 # default (the wasm size each costs is in ADR 1005's amendment).
 [features]
-default = ["avif", "jxl", "exr"]
+default = ["avif", "jxl", "exr", "jxl-encode"]
 avif = ["dep:avif-parse", "dep:rav1d"]
 jxl = ["dep:jxl-oxide"]
 exr = ["image/exr"]
+# Lossless JPEG XL encode (zune-jpegxl; small, on by default).
+jxl-encode = ["dep:zune-jpegxl"]
+# AVIF encode (ravif + rav1e). OFF by default: rav1e is far larger than
+# every decoder here, so no wasm build carries it (ADR 1038).
+avif-encode = ["dep:ravif"]
 
 [dependencies]
 # TIFF decode and encode (features: the workspace pin).
@@ -24,6 +29,10 @@ tiff = { workspace = true }
 # PNG, JPEG, WebP, GIF and BMP decode exactly as the renderer always did;
 # TGA, QOI, ICO and Radiance HDR are small decoders of the same crate.
 image = { workspace = true, features = ["tga", "qoi", "ico", "hdr"] }
+# JPEG XL encode (feature `jxl-encode`) and AVIF encode (feature
+# `avif-encode`), ADR 1038.
+zune-jpegxl = { workspace = true, optional = true }
+ravif = { workspace = true, optional = true }
 # AVIF: the container and the AV1 decoder (feature `avif`).
 avif-parse = { workspace = true, optional = true }
 rav1d = { workspace = true, optional = true }
@@ -59,3 +68,5 @@ tracing = { workspace = true }
 [dev-dependencies]
 paged-test-resources.workspace = true
 flate2 = { workspace = true }
+# The Photoshop oracle's recorded reply (tests/it/oracle.rs).
+serde_json = { workspace = true }
