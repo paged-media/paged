@@ -20,7 +20,7 @@ offsets and replaces in one batch (engine ADR 1021); what was missing was the UI
 
 - **A host feature, not a plugin's.** Find & Replace works on any text document, so the dialog,
   the results panel and the commands live in the host. A content type's scoped keys only name
-  the host's command ids (paged.doc binds Cmd+F / Cmd+H / Cmd+G inside a Word document).
+  the host's command ids (paged.doc binds Cmd+H / Cmd+G inside a Word document; Cmd+F is already the host's).
 - **Commands** (Edit menu, palette): `paged.edit.find` (opens the results panel and focuses its
   search field), `paged.edit.replace` (the dialog), `paged.edit.findNext`,
   `paged.edit.findPrevious`, `paged.edit.goTo` (the Go To dialog: a page number). Host keys:

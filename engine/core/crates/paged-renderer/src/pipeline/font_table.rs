@@ -195,6 +195,11 @@ pub(super) struct FontMetrics {
     /// The top of a CJK face's em box, fraction of em above the baseline
     /// (`ideographic_em_top`); `None`: centred on half the cap height.
     pub(super) em_top: Option<f32>,
+    /// `hhea.ascender`, fraction of em: the ascent Microsoft Word sets a
+    /// line by (its single line is the hhea ascender minus descender plus
+    /// line gap, measured on 25 faces, doc ADR 029), which a picture in a
+    /// Word first-fit line rises above (`anchored::line_object_shift`).
+    pub(super) hhea_ascender: f32,
 }
 
 impl FontTable {
@@ -515,6 +520,7 @@ impl FontTable {
                     ascender: ov.ascender,
                     descender: 0.0,
                     em_top: None,
+                    hhea_ascender: ov.ascender,
                 });
             family_metrics.insert(
                 family.clone(),
@@ -527,6 +533,7 @@ impl FontTable {
                     descender: substitute.descender,
                     // A pinned cap height places the em box itself.
                     em_top: substitute.em_top.filter(|_| ov.cap_height.is_none()),
+                    hhea_ascender: substitute.hhea_ascender,
                 },
             );
         }
@@ -812,6 +819,7 @@ pub(super) fn parse_font_metrics(bytes: &[u8]) -> Option<FontMetrics> {
         ascender,
         descender,
         em_top: ideographic_em_top(&face),
+        hhea_ascender: f32::from(face.tables().hhea.ascender) / upem,
     })
 }
 

@@ -29,14 +29,17 @@
 mod bindings;
 mod diff;
 mod edit;
+mod native;
 mod overlay;
 mod rpr;
 mod splice;
 mod styles;
+mod write;
 
 pub use bindings::{build_bindings, BlockBinding, DocxBindings, ParaUse, RunBinding, RunLock};
 pub use diff::diff;
 pub use edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit};
+pub use native::{native_document, NativeDocIn, PageIn};
 pub use overlay::{
     add_canvas_colors, overlay_cells, overlay_cells_known, overlay_story_content,
     overlay_story_content_in, overlay_story_content_known, overlay_story_content_with,
@@ -47,6 +50,7 @@ pub use styles::{
     plan_styles, splice_styles, CreatedStyle, ModifiedStyle, StyleEntryIn, StyleIn, StylePlan,
     WireValue,
 };
+pub use write::{heading_level, write_docx, WriteReport, DOCUMENT_MAIN};
 
 use std::collections::BTreeMap;
 

@@ -16,11 +16,11 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Charts: [`slide_chart::layout`]'s primitives as native items, grouped
-//! under the chart's frame. Every child shares the frame's transform and
-//! draws in the frame's own points.
+//! Charts: a chart's primitives ([`slide_chart::layout`]'s, or paged.sheet's
+//! geometry for a live chart, ADR 715) as native items, grouped under the
+//! chart's frame. Every child shares the frame's transform and draws in the
+//! frame's own points.
 
-use pptx_core::chart::Chart;
 use pptx_core::{Paragraph, ParagraphProps, Run, RunKind, ShapeProps};
 use slide_chart::{Align, Prim};
 use slide_geom::{PathPoint, SubPath};
@@ -28,7 +28,7 @@ use slide_geom::{PathPoint, SubPath};
 use super::{shape_fill, shape_stroke, text, Affine, Ctx, EMPTY_FONTS};
 use crate::model::*;
 
-pub(super) fn items(chart: &Chart, t: Affine, w: f64, h: f64, ctx: &Ctx) -> Vec<Item> {
+pub(super) fn items(prims: Vec<Prim>, t: Affine, w: f64, h: f64, ctx: &Ctx) -> Vec<Item> {
     let colors = ctx.colors(None);
     let (major, minor) = match ctx.theme {
         Some(th) => (&th.major_font, &th.minor_font),
@@ -45,7 +45,7 @@ pub(super) fn items(chart: &Chart, t: Affine, w: f64, h: f64, ctx: &Ctx) -> Vec<
         shrink: None,
     };
     let mut out = Vec::new();
-    for prim in slide_chart::layout(chart, w, h) {
+    for prim in prims {
         let item = |outline: Vec<SubPath>, fill, line, text| {
             let props = ShapeProps {
                 fill,

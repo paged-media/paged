@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 629,
+    "command": 631,
     "keybinding": 154,
     "menu": 450,
     "panel": 136,
@@ -201,7 +201,17 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.pasteRtf",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.placeDoc",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.saveAsDocx",
       "kind": "command",
       "owner": "media.paged.doc"
     },

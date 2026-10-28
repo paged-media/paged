@@ -77,6 +77,24 @@ impl DocSession {
         })
     }
 
+    /// Open a file of any format paged.doc reads (doc ADR 616): the bytes
+    /// decide the format; templates, RTF and OpenDocument become the
+    /// `.docx` this session works on, `.doc` is refused.
+    pub fn open_file(
+        bytes: &[u8],
+        name: &str,
+        options: crate::files::FileOptions,
+    ) -> Result<(DocSession, crate::files::OpenReport), String> {
+        let (docx, report) = crate::files::to_docx(bytes, name, options)?;
+        Ok((DocSession::load(&docx)?, report))
+    }
+
+    /// The `.docx` bytes this session works on (for a converted file, the
+    /// written package; the source part the bundle stores).
+    pub fn source(&self) -> &[u8] {
+        &self.source
+    }
+
     /// The Tier-0 lowering (the IR the host-model turns into mutations).
     pub fn lowered(&self) -> LoweredDoc {
         lower_with(&self.model, self.options)

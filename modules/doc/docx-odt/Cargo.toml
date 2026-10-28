@@ -1,0 +1,20 @@
+[package]
+name = "docx-odt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.doc OpenDocument Text reader (doc ADR 616): an .odt package onto the docx-core model — paragraphs, headings, spans, named and automatic styles, lists, tables and pictures, and the page layout. Read only: an .odt is saved as .docx."
+
+[lints]
+workspace = true
+
+[dependencies]
+docx-core.workspace = true
+paged-ooxml.workspace = true
+quick-xml.workspace = true
+
+[dev-dependencies]
+zip.workspace = true
+flate2.workspace = true

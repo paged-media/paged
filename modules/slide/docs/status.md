@@ -29,6 +29,18 @@ Read from the code on 2026-10-25.
   (smoothed), areas, pies and doughnuts, gridlines, axis lines, tick and data labels, legends;
   Excel's automatic value scale; Office's default chart-style paints. Drawn as groups of native
   shapes.
+- **Live charts** (ADR 715; `slide-sheet`, `charts.ts`). Each chart's workbook is paged.sheet's,
+  linked into the slide wasm: the embedded workbook (`c:externalData`) read by `sheet-xlsx`, or
+  one made from the chart's cached values in PowerPoint's sheet layout, the series bound to the
+  cells by their formulas, formulas calculated by `sheet-calc`. Kept per chart as a container
+  part. Double-click a chart (twice: group, then chart) to edit its data in the chart data
+  sheet (the `slideChart` context's frame surface: the bound cells tinted, sheet tabs, full
+  screen); leaving redraws every frame of the chart in one undo step, where the frame stands now.
+  `slide-chart` draws the 2-D bar, line, area, pie and doughnut charts from the live values;
+  paged.sheet's chart engine draws every other kind (scatter, bubble, radar, stock, surface,
+  3-D, the Office 2016 kinds). Export writes an edited chart's part (caches from the cells) and
+  its workbook; a made workbook becomes the chart's embedded one. Untouched charts keep their
+  bytes. The slide wasm is 4.94 MiB with the sheet engine (+2.1 MB).
 - **Tables and table styles.** All 74 built-in table styles (eleven families, plain or per
   accent) and a deck's own styles, resolved cell by cell in PowerPoint's layer order and written
   as native table styles (region cell styles, alternating fills) with local values only where
@@ -99,8 +111,8 @@ Read from the code on 2026-10-25.
   select, Shift/Cmd+click, drag to move the selection, hide, set the transition, double-click to
   open a slide.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
-  `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
-  a report; the host opens the package, and the source deck and the report are kept as container
+  `.ppsx` and `.potx`: one wasm call (`importPptx`; `slide_js_bg.wasm` is 4.94 MiB, 1.8 MiB
+  gzipped, with paged.sheet's workbook engine for live charts) returns the package and a report; the host opens the package, and the source deck and the report are kept as container
   parts.
 - **Embedded fonts** (ADR 707). `pptx-fonts` decodes the faces PowerPoint embeds: Embedded
   OpenType (all three header versions, XOR obfuscation) and MicroType Express (LZCOMP and the
@@ -168,6 +180,8 @@ Read from the code on 2026-10-25.
 | Table styles                                                       | `tables` and `tablestyles` fixtures: 150 tables, all 74 built-in styles                                                                                                              | every cell's fill within 4 RGB units, text weight and colour exact, every border by colour and width                                                                                                                                                                                                             |
 | SmartArt                                                           | `smartart` fixture                                                                                                                                                                   | every block within 1 pt, text colours exact                                                                                                                                                                                                                                                                      |
 | Engine placement                                                   | the published canvas-wasm, headless, all five fixtures                                                                                                                               | a page per slide; every drawn item within 0.5 pt of the import                                                                                                                                                                                                                                                   |
+| Live charts                                                        | `charts` fixture (PowerPoint-saved: column, line, pie and scatter charts with workbooks, a column chart without one), Rust and headless on the real engine; corpus decks' 44 bars    | workbooks read and made; a cell entered redraws the chart (one undo step) and exports; the exported deck re-imports with the same cells; an untouched deck exports its own bytes; slide-chart from the cells within 3 pt of every PowerPoint bar (paged.sheet's geometry: up to 19 pt off)                       |
+| Edited charts open in PowerPoint                                   | PowerPoint 16.114.1 opening and saving as PDF the decks the Rust tests write (an edited embedded workbook; a made workbook embedded)                                                 | no repair prompt; the edited values and series name drawn                                                                                                                                                                                                                                                        |
 | Export of slide order, duplicates, deletions, hidden slides, notes | PowerPoint 16.113.3 opening the written decks (a fixture and a corpus deck)                                                                                                          | opens without a repair prompt; every page pixel-identical to the expected original slide, in the planned order; notes read back by PowerPoint, line breaks kept                                                                                                                                                  |
 | Embedded fonts, whole faces                                        | `fonts-full` fixture: PowerPoint embedding Lato (4 styles) and Gloria Hallelujah                                                                                                     | every glyph's outline and program, every advance and every other table identical to the source fonts                                                                                                                                                                                                             |
 | Embedded fonts, subsets                                            | `fonts` fixture: PowerPoint's default subsets, Caveat added                                                                                                                          | every glyph a subset holds is the source's; each holds every character of the deck's text                                                                                                                                                                                                                        |
@@ -224,7 +238,8 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 - Editing layouts (master spreads) from the plugin, and layouts no slide uses (they are not
   imported).
 - PPTX export of what the native model cannot say yet, or what export does not write yet:
-  effect changes (shadow, opacity on its own), edits inside charts and SmartArt, added, removed or
+  effect changes (shadow, opacity on its own), edits inside SmartArt, a chart's formatting
+  (only its data is live), added, removed or
   merged table rows and columns, cell fills and borders, font styles other than bold and italic,
   palette edits (a swatch's new colour does not mark its shapes edited), a picture frame's
   reshaped outline, placeholders other than text ones on a slide made in the editor. Each is
@@ -232,3 +247,8 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   master for a deck that has none. Transitions, timing, masters and layouts are still copied, not
   regenerated (later waves of ADR 711).
 - Animations in the show (per-item layers, wave 5), custom shows, ink saved as annotations.
+- Live charts (ADR 715): a chart inside a PowerPoint group is drawn and its data exported, but
+  not redrawn on the page after an edit; a duplicated slide's chart shares its chart part (an
+  edit redraws both); the workbook edit itself is not on the undo stack (undo restores the old
+  drawing); a chart's formatting is not editable; the data sheet edits values and formulas, not
+  rows, columns or the series' ranges.

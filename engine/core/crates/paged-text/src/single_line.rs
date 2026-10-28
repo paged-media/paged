@@ -68,6 +68,17 @@ use crate::layout::FINISHING_STRETCH;
 /// ([`SingleLineOptions::word`]). Only the Word mode's item list has it.
 pub(crate) const OVERFLOW_PENALTY: i32 = INFINITE_PENALTY - 1;
 
+/// How far Word's first-fit compresses a justified line to keep its last
+/// word, in natural word spaces for the whole line, however many spaces it
+/// has. Word's answer (`fixtures/first-fit.word.json`, Courier New 10 pt,
+/// a 6.0 pt space) keeps a word 0.5 and 3 pt over the measure on a line of
+/// 15 spaces (J01, J02) and 5.68 pt over on one of 6 (H06's last line), and
+/// wraps it 8 and 9 pt over on lines of 15 (J03, J04): not a share of each
+/// space (5.68 over 6 spaces is 16 % of each, 8 over 15 only 9 %) but one
+/// allowance per line between 5.68 and 8 pt. One space (6.0 pt) is the
+/// simplest value in that interval.
+pub(crate) const WORD_LINE_SHRINK_SPACES: f32 = 1.0;
+
 /// A paragraph's Single-line Composer settings, as the caller knows them
 /// from the paragraph's attributes. [`ComposeOptions::single_line`]
 /// carries them; `None` there is the Paragraph Composer.
@@ -88,12 +99,15 @@ pub struct SingleLineOptions {
     /// is too loose to keep when its next word could be hyphenated.
     pub max_stretch_ratio: f32,
     /// Microsoft Word's first-fit instead of InDesign's Single-line
-    /// Composer (`Composer::WordFirstFit`, engine ADR 1016): no space or
-    /// letter is ever compressed, justified or not; a word is hyphenated
-    /// only when the line would otherwise end `zone` or more short of the
-    /// margin, at its last point that fits; and a word wider than the
-    /// measure is split where it overflows. The other fields keep their
-    /// meaning (`letter_shrink_ratio` and `max_stretch_ratio` are unused).
+    /// Composer (`Composer::WordFirstFit`, engine ADR 1016): a ragged line
+    /// never compresses; a justified one with a word space on it takes as
+    /// many words as fit compressed by at most
+    /// [`WORD_LINE_SHRINK_SPACES`] word spaces in all, letters never; a word is hyphenated only when the line would otherwise end
+    /// `zone` or more short of the margin, at its last point that fits;
+    /// a hyphen, an en dash or an em dash the text has is an ordinary
+    /// break; and a word wider than the measure is split where it
+    /// overflows. The other fields keep their meaning
+    /// (`letter_shrink_ratio` and `max_stretch_ratio` are unused).
     pub word: bool,
 }
 
@@ -142,6 +156,9 @@ pub(crate) struct SingleLineParams {
     pub loose_per_space: i32,
     /// Word's first-fit ([`SingleLineOptions::word`]).
     pub word: bool,
+    /// Word's first-fit, justified: how far a line with a word space on it
+    /// may compress in all ([`WORD_LINE_SHRINK_SPACES`]); 0 otherwise.
+    pub word_shrink: i32,
 }
 
 impl SingleLineParams {
@@ -167,6 +184,11 @@ impl SingleLineParams {
             hyphen_slack: ((point_size + 7.3) * crate::shape::ADVANCE_PRECISION).round() as i32,
             loose_per_space: (space * o.max_stretch_ratio.max(0.6)).round() as i32,
             word: o.word,
+            word_shrink: if o.word && justified {
+                (space * WORD_LINE_SHRINK_SPACES).round() as i32
+            } else {
+                0
+            },
         }
     }
 }
@@ -198,9 +220,14 @@ pub(crate) fn single_line_breaks<T>(
     opts: &SingleLineParams,
 ) -> Vec<Breakpoint> {
     let mut breaks = Vec::new();
-    // Word never compresses a line to keep a word on it, justified or not
-    // (`fixtures/first-fit.word.json`, J01: 0.5 pt over 15 spaces wraps).
+    // The Single-line Composer's compressed candidate (B). Word's first-fit
+    // compresses a justified line differently: by at most `word_shrink` in
+    // all once the line has a word space, and it keeps every further word
+    // that fits so (`fixtures/first-fit.word.json`, J01/J02/H06 kept,
+    // J03/J04 wrap).
     let compress = opts.justified && !opts.word;
+    let word_shrink = |spaces: i32| if spaces > 0 { opts.word_shrink } else { 0 };
+    let word_fits = |c: &Candidate, m: i32| opts.word_shrink > 0 && c.width - c.shrink <= m;
     if items.is_empty() {
         return breaks;
     }
@@ -280,7 +307,7 @@ pub(crate) fn single_line_breaks<T>(
                         shrink: if compress {
                             shrink + letters(start, i.saturating_sub(1))
                         } else {
-                            0
+                            word_shrink(spaces)
                         },
                         spaces,
                         hyphen: false,
@@ -290,6 +317,8 @@ pub(crate) fn single_line_breaks<T>(
                     if fits_natural(&c) {
                         a = Some(c);
                         points.clear();
+                    } else if word_fits(&c, m) {
+                        b = Some(c);
                     } else {
                         if compress && fits(&c) {
                             b = Some(c);
@@ -331,7 +360,7 @@ pub(crate) fn single_line_breaks<T>(
                             shrink: if compress {
                                 shrink + letters(start, i)
                             } else {
-                                0
+                                word_shrink(spaces)
                             },
                             spaces,
                             hyphen: false,
@@ -341,6 +370,11 @@ pub(crate) fn single_line_breaks<T>(
                         if fits_natural(&c) {
                             a = Some(c);
                             points.clear();
+                            if forced {
+                                break;
+                            }
+                        } else if word_fits(&c, m) {
+                            b = Some(c);
                             if forced {
                                 break;
                             }
@@ -415,6 +449,11 @@ fn choose(
     hyphens_in_a_row: usize,
 ) -> Option<Candidate> {
     if let Some(b) = b {
+        // Word keeps the words that fit compressed, however little A
+        // would have been short.
+        if opts.word {
+            return Some(b);
+        }
         return Some(match a {
             Some(a) if m - a.width <= b.width - m => a,
             _ => b,
@@ -518,6 +557,7 @@ mod tests {
             hyphen_slack: 60,
             loose_per_space: 1000,
             word: false,
+            word_shrink: 0,
         }
     }
 
@@ -626,19 +666,45 @@ mod tests {
             zone,
             ladder_limit: 0,
             word: true,
+            word_shrink: if justified { 1 } else { 0 },
             ..opts(justified)
         }
     }
 
     #[test]
-    fn word_first_fit_never_compresses_a_justified_line() {
-        // The compressed line that InDesign takes at 136 (above) is not
-        // Word's: the third word goes to the next line.
+    fn word_first_fit_compresses_a_justified_line_only_by_its_own_limit() {
+        // The compressed line that InDesign takes at 136 (above) needs 4:
+        // past Word's allowance of 1 for the line, the third word goes to
+        // the next line, whatever shrink the glue offers.
         let items = para(&[&[40], &[40], &[40]], 50);
         let b = single_line_breaks(&items, &[136], &[], &word(true, 100));
         assert_eq!(b.len(), 2);
         assert_eq!(b[0].index, 3);
         assert_eq!(b[0].ratio, 0.0);
+        // At 139 (1 over) it stays, compressed.
+        let b = single_line_breaks(&items, &[139], &[], &word(true, 100));
+        assert_eq!(b.len(), 1, "all three words on one line");
+        assert!(b[0].ratio < 0.0);
+        // Ragged, nothing is compressed.
+        let b = single_line_breaks(&items, &[139], &[], &word(false, 100));
+        assert_eq!(b.len(), 2);
+        // The allowance is the line's, not each space's: one word with no
+        // space before it on its line has nothing to compress.
+        let items = para(&[&[50]], 0);
+        let b = single_line_breaks(&items, &[49], &[], &word(true, 100));
+        assert_eq!(b[0].width, 50, "the word overruns, uncompressed");
+        // Every further word that fits compressed is kept, not only the
+        // first: at 49 three 10-wide words (50) and four (70) both fit only
+        // compressed when the line may take 21; with 20 the fourth wraps
+        // and three stay compressed.
+        let items = para(&[&[10], &[10], &[10], &[10]], 0);
+        let mut w = word(true, 100);
+        w.word_shrink = 21;
+        assert_eq!(single_line_breaks(&items, &[49], &[], &w).len(), 1);
+        w.word_shrink = 20;
+        let b = single_line_breaks(&items, &[49], &[], &w);
+        assert_eq!(b.len(), 2);
+        assert_eq!(b[0].index, 5, "the glue before the fourth word");
     }
 
     #[test]

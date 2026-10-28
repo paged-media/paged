@@ -4097,6 +4097,7 @@ dependencies = [
  "hypher",
  "paged-scene",
  "paragraph-breaker",
+ "serde_json",
  "thiserror",
  "tracing",
  "ttf-parser",

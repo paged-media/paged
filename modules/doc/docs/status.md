@@ -5,12 +5,13 @@
 `docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-release` profile,
 then `wasm-opt -Oz`):
 
-|                     | bytes                |
-| ------------------- | -------------------- |
-| raw                 | 6,879,227 (6.56 MiB) |
-| gzip -9             | 1,876,393 (1.79 MiB) |
-| brotli -q 11        | 1,070,924 (1.02 MiB) |
-| manifest `maxBytes` | 8,388,608 (8 MiB)    |
+|                      | bytes                |
+| -------------------- | -------------------- |
+| raw (2026-10-25, W5) | 7,321,347 (6.98 MiB) |
+| raw                  | 6,879,227 (6.56 MiB) |
+| gzip -9              | 1,876,393 (1.79 MiB) |
+| brotli -q 11         | 1,070,924 (1.02 MiB) |
+| manifest `maxBytes`  | 8,388,608 (8 MiB)    |
 
 That leaves 1.44 MiB of headroom under the budget. The 8.64 MB in the editor's
 panel audit (2026-10-11) was measured before the `wasm-release` profile existed.
@@ -50,6 +51,41 @@ write); the style box is focused, not a searchable Apply Styles pane. Tests:
 `test/headless/word-w1.spec.ts` (every new command over the real engine), `word-commands.spec.ts`
 (each command's write), `test/panels/home-group.dom.test.tsx`, and the `doc-word-editing`
 journey (Cmd+H → Replace All → one undo; Tab demotes a list item; highlight via the button).
+
+## W5: files (2026-10-25)
+
+Word-parity wave W5 ([ADR 616](adr/616-files.md)). The engine decides the format by the
+bytes (`DocSession::open_file`) and turns each into the `.docx` the session works on:
+
+- **`.dotx` / `.dotm`** open as a new untitled document (`Untitled.docx` / `.docm`): only
+  the main part's content type changes; the panel says it came from the template and
+  that saving writes a new document (editor ADR 293's rule).
+- **`.docm`** keeps `vbaProject.bin` and its relationships byte for byte through
+  save-back, saves as `.docm`, and says the macros are never run.
+- **`.rtf`** (also RTF named `.doc`) is read by the new `docx-rtf` crate and written as
+  a new package (`docx_export::write_docx`).
+- **`.odt` / `.ott`** are read by the new `docx-odt` crate, behind a flag
+  (`docBundleWith({ odt: true })`; the docx-js `odt` feature). They save as `.docx`.
+- **`.doc`** is refused at the door: "save it as a Word Document (.docx)".
+- **"Save as .docx"** for a document not from Word: the exporter and
+  `media.paged.doc.command.saveAsDocx` write a new package from the stories, the styles
+  they use, their colours and the first page (`docx_export::native_document`). Not
+  written: tables, pictures, frames (not in the story read).
+- **Styled paste**: `media.paged.doc.command.pasteRtf` pours RTF at the caret. Paste from
+  the system clipboard needs contract C8 (`host.clipboard` carries text and tabular data
+  only); that is a follow-up.
+- **Tagged PDF (checked, not changed):** two engine gaps.
+  - Headings are tagged `P`: the PDF export maps a paragraph to `H1`–`H6` only from the
+    style's `pdf_export_tag`, which no wire property sets.
+  - The PDF has no outline from the headings: it comes only from document bookmarks, and
+    the Word lowering creates none.
+- Wasm: 6.98 MiB raw (+0.43 MiB).
+- Tests: `docx-rtf` (8), `docx-odt` (4), `docx-conformance/tests/it/files.rs` (8),
+  `packages/doc-bundle/test/headless/files.spec.ts` (7).
+- Word open-check (Word 16, macOS, `scripts/word-pagination-probe.sh`, 2026-10-25): the
+  packages written for `memo.rtf`, `minutes.odt`, `template-letter.dotx` and a native
+  document (heading, bold red run, bullet item) open in Word and save as PDF with their
+  text (`Memo` …, `Minutes` …, `Quarterly letter` …, `Plan` / `Ship it now` / `• One`).
 
 ## Text after native tables (2026-10-25)
 
@@ -193,7 +229,12 @@ of 2026-10-24):
   796 → 801 of 813 and 605 → 605 of 624; page starts unchanged at 2 % and 13.1 %
   (`docs/reference/acceptance-real-docx.md`, round 14). Line breaking is no longer the gap.
 - `first_fit_docx()` and `scripts/word-first-fit-probe.sh` ask Word the breaking and picture
-  questions; Word's answer (`fixtures/first-fit.word.json`) is not committed yet.
+  questions; Word's answer is committed (`fixtures/first-fit.word.json`, 2026-10-25) and the
+  engine matches it: every case's words per line (33 of 33, 27 before), a justified line
+  compressed by up to one word space, breaks after en and em dashes, and a picture's line at
+  Word's height under single, 1.5-line and at-least spacing (ADR 617 and engine ADR 1016
+  amendments). Not matched: the step into a paragraph from one in another line spacing.
+  Tests: `docx-conformance/tests/it/first_fit.rs`, `test/headless/first-fit.spec.ts`.
 - Found, not fixed: the pour refuses all text after a table on current main (round 14).
 
 ## Object model and merge fields (ADR 605, `om/object-model` branch, plugin-api 0.2.43)
