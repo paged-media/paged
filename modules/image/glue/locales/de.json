@@ -263,8 +263,6 @@
   "image.brushSettings.smoothingNote": "Glättung mit gezogener Schnur: Der Strich folgt dem Zeiger im Abstand der Schnurlänge.",
   "image.brushSettings.smudge": "Wischfinger",
   "image.brushSettings.source": "Quelle",
-  "image.brushSettings.sourceOpen": "Das Bild, wie es geöffnet wurde",
-  "image.brushSettings.sourcePrevious": "Der Schritt vor der neuesten Bearbeitung",
   "image.brushSettings.spacing": "Abstand (× Durchmesser)",
   "image.brushSettings.spacingEnabled": "Abstand",
   "image.brushSettings.strength": "Stärke",
