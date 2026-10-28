@@ -97,7 +97,9 @@ export function makeChartSurface(
   session: ChartEditSession,
   canFullScreen: () => boolean,
 ): React.ComponentType<FrameSurfaceProps> {
-  return function ChartSurface(props: FrameSurfaceProps) {
+  // A declaration, so the React Compiler sees the component (it cannot see
+  // `return function ChartSurface()`, editor ADR 229).
+  function ChartSurface(props: FrameSurfaceProps) {
     const { t } = useStrings();
     const grid = React.useSyncExternalStore(
       session.subscribe,
@@ -359,5 +361,6 @@ export function makeChartSurface(
         )}
       </div>
     );
-  };
+  }
+  return ChartSurface;
 }
