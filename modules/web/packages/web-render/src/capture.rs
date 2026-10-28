@@ -40,6 +40,7 @@
 //! (Gated `#[cfg(feature = "blitz")]` at the `mod capture` declaration in
 //! `lib.rs`, so this whole module only compiles with the engine stack.)
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyrender::{Filter, Glyph, NormalizedCoord, PaintRef, PaintScene, RenderContext};
@@ -59,6 +60,7 @@ use crate::display_list::{
     WebGradient, WebGradientStop, WebImage,
 };
 use crate::fonts::BUNDLED_FAMILY;
+use crate::fx_capture::FxElement;
 use crate::perf::{self, Counter};
 use crate::wire::{RectPt, ScenePaint, ScenePathSeg};
 
@@ -101,11 +103,112 @@ pub struct CapturingScene {
     /// `BlendMode` (its `mix` drives blended fills; its `compose` marks the
     /// inset-shadow layer blitz-paint wraps in `Compose::DestOut`).
     blend_stack: Vec<BlendMode>,
+    /// The elements whose effect layers open a group (ADR 415), by node id
+    /// ([`crate::fx_capture`]); empty for a sink built with [`Self::new`].
+    fx: HashMap<usize, FxElement>,
+    /// What each open layer is, innermost last — parallel to `blend_stack`.
+    layers: Vec<LayerKind>,
+    /// The `PushGroup` command index of the group closed last: a CSS mask is
+    /// painted right after its element's group closes.
+    last_group: Option<usize>,
+    /// The elements of `fx` whose layer was painted.
+    painted: std::collections::HashSet<usize>,
 }
+
+/// What an open layer is, for the effect-group capture.
+#[derive(Debug, Clone)]
+enum LayerKind {
+    /// A layer with no group of its own.
+    Plain,
+    /// A clip (an overflow clip or a `clip-path`), with its outline.
+    Clip(Affine, BezPath),
+    /// An element's effect layer; the index of its `PushGroup` command.
+    Group(usize),
+    /// The isolation layer a CSS mask wraps an element in.
+    MaskIsolation,
+    /// The `DestIn` layer the mask images paint into; the index of the
+    /// `PushGroup` command of the element they mask.
+    MaskContent(usize),
+}
+
+/// The opacity blitz-paint gives a mask's isolation layer (just below 1, so a
+/// renderer allocates an isolated buffer).
+const MASK_ISOLATION_ALPHA: f32 = 1.0 - f32::EPSILON;
 
 impl CapturingScene {
     pub fn new() -> Self {
         CapturingScene::default()
+    }
+
+    /// A sink that opens an effect group for each element of `fx`.
+    pub(crate) fn with_effects(fx: HashMap<usize, FxElement>) -> Self {
+        CapturingScene {
+            fx,
+            ..CapturingScene::default()
+        }
+    }
+
+    /// The elements of `fx` no layer was painted for, in id order.
+    fn unpainted_effects(&self) -> Vec<usize> {
+        let mut ids: Vec<usize> = self
+            .fx
+            .keys()
+            .filter(|id| !self.painted.contains(id))
+            .copied()
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// Record a command: into the mask of the element whose mask is being
+    /// painted, else into the display list.
+    fn emit(&mut self, cmd: WebDrawCmd) {
+        let mask_of = self.layers.iter().rev().find_map(|l| match l {
+            LayerKind::MaskContent(i) => Some(*i),
+            _ => None,
+        });
+        match mask_of {
+            Some(i) => {
+                if let Some(WebDrawCmd::PushGroup(fx)) = self.dl.commands.get_mut(i) {
+                    fx.mask.push(cmd);
+                }
+            }
+            None => self.dl.push(cmd),
+        }
+    }
+
+    /// Open the effect group of element `node`: its computed effects, the
+    /// layer's opacity, and the `clip-path` outline of the clip layer
+    /// blitz-paint pushed just outside (outside the mask isolation layer,
+    /// when there is one).
+    fn open_group(&mut self, node: usize, alpha: f32) {
+        let Some(el) = self.fx.get(&node) else {
+            self.layers.push(LayerKind::Plain);
+            return;
+        };
+        self.painted.insert(node);
+        let mut effect = el.effect.clone();
+        effect.opacity = alpha.clamp(0.0, 1.0);
+        if el.has_clip_path {
+            let mut outer = self.layers.iter().rev();
+            if el.has_mask {
+                outer.next(); // the mask isolation layer
+            }
+            match outer.next() {
+                Some(LayerKind::Clip(transform, path)) => {
+                    effect.clip = Some(flatten_shape(path, *transform));
+                }
+                _ => effect.losses.push("clipPath.unsupported".to_string()),
+            }
+        }
+        if el.has_mask {
+            // The mask is painted after the group closes; an element whose
+            // mask paints nothing reports it then.
+            effect.losses.push("mask.unpainted".to_string());
+        }
+        let idx = self.dl.commands.len();
+        self.dl.push(WebDrawCmd::PushGroup(Box::new(effect)));
+        self.layers.push(LayerKind::Group(idx));
     }
 
     /// Consume the sink and return what was painted.
@@ -508,6 +611,8 @@ impl PaintScene for CapturingScene {
     fn reset(&mut self) {
         self.dl = WebDisplayList::default();
         self.blend_stack.clear();
+        self.layers.clear();
+        self.last_group = None;
     }
 
     // The clip GEOMETRY is not lowered (C-1 already clips the layer to the
@@ -527,30 +632,62 @@ impl PaintScene for CapturingScene {
     // image/text emitted).
     //
     // KNOWN LIMIT: a CSS `filter` / `backdrop-filter` (passed with the layer
-    // since blitz-paint 0.3.0-alpha.5) is not lowered — the C-1 wire has no
-    // filter item — so the layer's content paints unfiltered, as it did when
-    // Blitz itself ignored those properties.
+    // since blitz-paint 0.3.0-alpha.5) is not lowered to the canvas — the C-1
+    // wire has no filter item — so the layer's content paints unfiltered, as
+    // it did when Blitz itself ignored those properties. A bake maps the
+    // filter from the effect group below (ADR 415).
+    //
+    // EFFECT GROUPS (ADR 415): an element tagged by `fx_capture` arrives as a
+    // layer whose filter list ends in a tag carrying its node id. That layer opens a
+    // `PushGroup` (its opacity, the element's computed effects, the clip-path
+    // outline of the clip layer just outside it) and its pop closes it. A
+    // CSS mask's `DestIn` layer, painted after the element's group closed,
+    // collects what it paints into that group's mask instead of the list.
     fn push_layer(
         &mut self,
         blend: impl Into<BlendMode>,
-        _alpha: f32,
+        alpha: f32,
         _transform: Affine,
         _clip: &impl Shape,
-        _filter: Option<Arc<Filter>>,
+        filter: Option<Arc<Filter>>,
         _backdrop_filter: Option<Arc<Filter>>,
     ) {
-        self.blend_stack.push(blend.into());
+        let blend = blend.into();
+        self.blend_stack.push(blend);
+        if let Some(node) = crate::fx_capture::sentinel_node(filter.as_deref()) {
+            self.open_group(node, alpha);
+        } else if blend.compose == peniko::Compose::DestIn {
+            match self.last_group.take() {
+                Some(i) => {
+                    if let Some(WebDrawCmd::PushGroup(fx)) = self.dl.commands.get_mut(i) {
+                        fx.losses.retain(|l| l != "mask.unpainted");
+                    }
+                    self.layers.push(LayerKind::MaskContent(i));
+                }
+                None => self.layers.push(LayerKind::Plain),
+            }
+        } else if alpha == MASK_ISOLATION_ALPHA && blend.mix == Mix::Normal {
+            self.layers.push(LayerKind::MaskIsolation);
+        } else {
+            self.layers.push(LayerKind::Plain);
+        }
     }
 
-    fn push_clip_layer(&mut self, _transform: Affine, _clip: &impl Shape) {
+    fn push_clip_layer(&mut self, transform: Affine, clip: &impl Shape) {
         // A pure clip never blends — push Normal/SrcOver so the stack stays
         // balanced with `pop_layer` (blitz-paint pops clip + blend layers the
         // same way).
         self.blend_stack.push(Mix::Normal.into());
+        self.layers
+            .push(LayerKind::Clip(transform, clip.to_path(FLATTEN_TOL)));
     }
 
     fn pop_layer(&mut self) {
         self.blend_stack.pop();
+        if let Some(LayerKind::Group(i)) = self.layers.pop() {
+            self.dl.push(WebDrawCmd::PopGroup);
+            self.last_group = Some(i);
+        }
     }
 
     fn stroke<'a>(
@@ -580,13 +717,13 @@ impl PaintScene for CapturingScene {
             match capture_gradient(grad, effective) {
                 Some(gradient) => {
                     let path = flatten_shape(shape, transform);
-                    self.dl.push(WebDrawCmd::StrokeGradient {
+                    self.emit(WebDrawCmd::StrokeGradient {
                         path,
                         gradient,
                         width,
                     });
                 }
-                None => self.dl.push(WebDrawCmd::NonSolidPaint {
+                None => self.emit(WebDrawCmd::NonSolidPaint {
                     what: UnsupportedKind::GradientStroke,
                 }),
             }
@@ -595,9 +732,9 @@ impl PaintScene for CapturingScene {
         match solid_paint(pr) {
             Some(paint) => {
                 let path = flatten_shape(shape, transform);
-                self.dl.push(WebDrawCmd::StrokePath { path, paint, width });
+                self.emit(WebDrawCmd::StrokePath { path, paint, width });
             }
-            None => self.dl.push(WebDrawCmd::NonSolidPaint {
+            None => self.emit(WebDrawCmd::NonSolidPaint {
                 what: UnsupportedKind::GradientStroke,
             }),
         }
@@ -620,8 +757,8 @@ impl PaintScene for CapturingScene {
         // C-1 image transform yet, so it stays an honest `ImageFill` drop.
         if let anyrender::Paint::Image(image_brush) = &pr {
             match self.capture_image(image_brush, transform, shape) {
-                Some(img) => self.dl.push(WebDrawCmd::DrawImage(img)),
-                None => self.dl.push(WebDrawCmd::NonSolidPaint {
+                Some(img) => self.emit(WebDrawCmd::DrawImage(img)),
+                None => self.emit(WebDrawCmd::NonSolidPaint {
                     what: UnsupportedKind::ImageFill,
                 }),
             }
@@ -642,16 +779,16 @@ impl PaintScene for CapturingScene {
                 Some(gradient) => {
                     let path = flatten_shape(shape, transform);
                     if let Some(blend) = web_blend_from_mix(self.active_blend()) {
-                        self.dl.push(WebDrawCmd::FillGradientBlend {
+                        self.emit(WebDrawCmd::FillGradientBlend {
                             path,
                             gradient,
                             blend,
                         });
                     } else {
-                        self.dl.push(WebDrawCmd::FillGradient { path, gradient });
+                        self.emit(WebDrawCmd::FillGradient { path, gradient });
                     }
                 }
-                None => self.dl.push(WebDrawCmd::NonSolidPaint {
+                None => self.emit(WebDrawCmd::NonSolidPaint {
                     what: UnsupportedKind::GradientFill,
                 }),
             }
@@ -680,20 +817,20 @@ impl PaintScene for CapturingScene {
                 // is path-based (no rect fast-path), so flatten the shape.
                 if let Some(blend) = web_blend_from_mix(self.active_blend()) {
                     let path = flatten_shape(shape, transform);
-                    self.dl.push(WebDrawCmd::FillBlend { path, paint, blend });
+                    self.emit(WebDrawCmd::FillBlend { path, paint, blend });
                 } else if let Some(rect) = as_axis_aligned_rect(shape, transform) {
-                    self.dl.push(WebDrawCmd::FillRect { rect, paint });
+                    self.emit(WebDrawCmd::FillRect { rect, paint });
                 } else {
                     // Zero-extent subpaths fill nothing (Blitz paints every
                     // border side, zero-width ones included); a fill left with
                     // no subpath is not recorded.
                     let path = drop_zero_extent_subpaths(flatten_shape(shape, transform));
                     if !path.is_empty() {
-                        self.dl.push(WebDrawCmd::FillPath { path, paint });
+                        self.emit(WebDrawCmd::FillPath { path, paint });
                     }
                 }
             }
-            None => self.dl.push(WebDrawCmd::NonSolidPaint {
+            None => self.emit(WebDrawCmd::NonSolidPaint {
                 what: kind.unwrap_or(UnsupportedKind::GradientFill),
             }),
         }
@@ -735,7 +872,7 @@ impl PaintScene for CapturingScene {
                 p
             }
             None => {
-                self.dl.push(WebDrawCmd::NonSolidPaint {
+                self.emit(WebDrawCmd::NonSolidPaint {
                     what: UnsupportedKind::GradientText,
                 });
                 return;
@@ -745,7 +882,7 @@ impl PaintScene for CapturingScene {
             return;
         };
         let baseline = transform * Point::new(first.x as f64, first.y as f64);
-        self.dl.push(WebDrawCmd::GlyphRun(WebGlyphRun {
+        self.emit(WebDrawCmd::GlyphRun(WebGlyphRun {
             face: RunFace::default(),
             baseline_x: CapturingScene::px_pt(baseline.x),
             baseline_y: CapturingScene::px_pt(baseline.y),
@@ -791,10 +928,10 @@ impl PaintScene for CapturingScene {
                 Some(colour) => {
                     let path = rounded_rect_path(rect, radius, transform);
                     if path.is_empty() {
-                        self.dl.push(WebDrawCmd::BoxShadow);
+                        self.emit(WebDrawCmd::BoxShadow);
                         return;
                     }
-                    self.dl.push(WebDrawCmd::DrawInsetShadow {
+                    self.emit(WebDrawCmd::DrawInsetShadow {
                         path,
                         colour,
                         blur: CapturingScene::px_pt(std_dev),
@@ -802,7 +939,7 @@ impl PaintScene for CapturingScene {
                 }
                 // No recoverable padding-box fill colour (an unexpected paint
                 // order) — stay an honest drop rather than fake WHITE.
-                None => self.dl.push(WebDrawCmd::BoxShadow),
+                None => self.emit(WebDrawCmd::BoxShadow),
             }
             return;
         }
@@ -814,13 +951,13 @@ impl PaintScene for CapturingScene {
         // is the Gaussian blur in CSS px → content points.
         let path = rounded_rect_path(rect, radius, transform);
         if path.is_empty() {
-            self.dl.push(WebDrawCmd::BoxShadow);
+            self.emit(WebDrawCmd::BoxShadow);
             return;
         }
         // peniko `Color` components are sRGB f32 [r,g,b,a] — the same straight
         // sRGB the C-1 colour fields carry (core linearises at lowering).
         let [r, g, b, a] = brush.components;
-        self.dl.push(WebDrawCmd::DrawShadow {
+        self.emit(WebDrawCmd::DrawShadow {
             path,
             colour: ScenePaint::rgba(r, g, b, a),
             blur: CapturingScene::px_pt(std_dev),
@@ -891,9 +1028,27 @@ pub fn render_html(html: &str, width_px: u32, height_px: u32) -> WebDisplayList 
 /// viewport set and be `resolve`d. `HtmlDocument` derefs to `BaseDocument`, so
 /// callers pass either.
 pub fn capture_resolved(doc: &mut BaseDocument, width_px: u32, height_px: u32) -> WebDisplayList {
-    let mut scene = CapturingScene::new();
+    // The elements whose CSS effects open a group (ADR 415), tagged so their
+    // layers can be told apart in the paint.
+    let (fx, fx_losses) = crate::fx_capture::collect_effect_elements(doc, height_px as f32);
+    crate::fx_capture::tag_effect_elements(doc, &fx);
+    let mut scene = CapturingScene::with_effects(fx);
     paint_scene(&mut scene, doc, 1.0, width_px, height_px, 0, 0);
+    let unpainted = scene.unpainted_effects();
     let mut dl = scene.into_display_list();
+    for key in fx_losses {
+        dl.push(WebDrawCmd::EffectLoss { key });
+    }
+    // An element with effects and a visible box whose layer never arrived
+    // (an author `!important` filter overrode the tag, say): its effects
+    // could not be attached — reported, never dropped silently.
+    for id in unpainted {
+        if crate::fx_capture::has_visible_box(doc, id, width_px as f32, height_px as f32) {
+            dl.push(WebDrawCmd::EffectLoss {
+                key: "cssEffect.unattributed".to_string(),
+            });
+        }
+    }
     perf::bump(Counter::PaintCaptures, 1);
     perf::bump(Counter::PaintedCommands, dl.commands.len() as u64);
     // Recover run text from the resolved document + attach it by baseline.
