@@ -27,7 +27,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use kurbo::Affine;
 use paged_model::{FrameRef, Group, PathAnchor, Polygon, Spread};
-use paged_mutate::{ItemSnippet, SnippetResources, SNIPPET_FORMAT};
+use paged_scene::snippet::{ItemSnippet, SnippetResources, SNIPPET_FORMAT};
 use paged_scene::ParsedStory;
 use serde::{Deserialize, Serialize};
 
