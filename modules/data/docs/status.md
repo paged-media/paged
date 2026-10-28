@@ -55,10 +55,13 @@ The Data panel and the bind popover (editor ADRs 291, 292) are built in the edit
 (`apps/canvas/src/panels/data-panel.tsx`, `packages/shell/src/catalog/bind-popover.tsx`) over
 the data door. The record templates library and the pagination inspector that editor ADR 291
 left to this module are built as its own panels (see Shipped). `paged data apply` writes every
-binding kind headless except record flows, remote image uris and document asset ids (core
-ADR 1014, amendment 3).
+binding kind headless except remote image uris and document asset ids (core ADR 1014,
+amendments 3 and 4). A record flow is paginated by the engine into one frame per page, on the
+pages it adds, and replaces the flow an earlier apply or the editor placed.
 
-Not built yet: record flows headless.
+Not built yet: remote image uris headless (the engine workspace has no HTTP client, so the
+command line never fetches). A document asset id is placed nowhere: no document keeps its
+bytes, and the editor skips it too.
 
 ## Shipped
 

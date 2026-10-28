@@ -397,9 +397,12 @@ pub enum DataCommand {
     /// document's queries are code it carries). Property bindings are
     /// written on the objects their selectors name, variable bindings on
     /// their text variables, as `paged set` writes; tables, local images,
-    /// barcodes and rules in their frames. Bindings the headless lane
-    /// cannot write (record flows, remote images, document asset ids) are
-    /// listed, not skipped.
+    /// barcodes and rules in their frames. A record flow is paginated into
+    /// one frame per page from the page of its bound frame, adding pages,
+    /// and replaces the flow an earlier apply placed; like a rule, it
+    /// places every record, so `--record` does not restrict it. Bindings
+    /// the headless lane cannot write (remote images, document asset ids)
+    /// are listed, not skipped.
     Apply {
         /// IDML or `.paged` document.
         doc: PathBuf,

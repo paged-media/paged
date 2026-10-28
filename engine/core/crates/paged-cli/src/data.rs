@@ -37,9 +37,12 @@
 //! file or inline bytes go into its frame with its fit; a barcode is one
 //! filled path per dark module inside its frame, replacing the previous
 //! symbol; a rule sets its cell or text style on what fired; a colour no
-//! swatch has is minted as one first. What stays with the module is
-//! reported per binding, never skipped silently: record flows, remote
-//! images and document asset ids (core ADR 1014, amendment 2026-10-28).
+//! swatch has is minted as one first; a record flow is paginated into one
+//! frame per page, on pages it adds, replacing the previous flow (core ADR
+//! 1014, amendments 3 and 4). What no headless lane can write is reported
+//! per binding, never skipped silently: remote images (the command line has
+//! no network client) and document asset ids (no document keeps their
+//! bytes).
 
 use std::path::{Path, PathBuf};
 
@@ -57,7 +60,7 @@ use paged_canvas::channel::{MainToWorkerKind, MintedElement, Mutation, WorkerToM
 use paged_mutate::{PropertyPath, Value as MutateValue};
 use paged_wire::{Address, ElementId};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::engine::Session;
 use crate::export::PdfOptions;
@@ -508,6 +511,58 @@ fn lowered_by(session: &mut Session, kind: &str, binding: &str) -> Result<Vec<St
         .collect())
 }
 
+/// The modules of an editor-drawn symbol that carry no label. The data
+/// module stamps only a symbol's LAST module, with the symbol's module count
+/// (`modules`), and draws the others just before it; this walks back from that
+/// stamp through the spread's paint order, taking unlabelled polygons until
+/// the count is met. A symbol this writer drew has every module stamped, so it
+/// adds nothing there.
+fn unstamped_modules(session: &Session, stamped: &[String]) -> Vec<String> {
+    let Ok(model) = session.model() else {
+        return Vec::new();
+    };
+    let scene = model.scene();
+    let mut found = Vec::new();
+    for id in stamped {
+        let Some(count) = label_of(session, id)
+            .as_deref()
+            .and_then(label_data)
+            .and_then(|d| d.get("modules").and_then(Value::as_u64))
+        else {
+            continue;
+        };
+        let want = (count as usize).saturating_sub(stamped.len());
+        if want == 0 {
+            continue;
+        }
+        for s in &scene.spreads {
+            let spread = &s.spread;
+            let polygon_id = |r: &paged_model::FrameRef| match r {
+                paged_model::FrameRef::Polygon(i) => spread.polygons.get(*i)?.self_id.clone(),
+                _ => None,
+            };
+            let Some(at) = spread
+                .frames_in_order
+                .iter()
+                .position(|r| polygon_id(r).as_deref() == Some(id.as_str()))
+            else {
+                continue;
+            };
+            for r in spread.frames_in_order[..at].iter().rev() {
+                if found.len() >= want {
+                    break;
+                }
+                let Some(pid) = polygon_id(r) else { break };
+                if label_of(session, &pid).is_some() {
+                    break;
+                }
+                found.push(pid);
+            }
+        }
+    }
+    found
+}
+
 /// A binding the user pinned or overrode keeps the document's content.
 fn kept_by_sync(data: &DataSession, id: &BindingId) -> Option<Applied> {
     data.sync_state(id)
@@ -723,12 +778,14 @@ fn apply_image(
     let (bytes, shown) = match &image.reference {
         ImageReference::Uri { uri } => {
             return Applied::new(binding, "notHeadless").because(format!(
-                "{uri}: remote images need the editor's consented fetch"
+                "{uri}: remote images need the editor's consented fetch (the command line \
+                 has no network client and never fetches)"
             ))
         }
         ImageReference::AssetId { id: asset } => {
             return Applied::new(binding, "notHeadless").because(format!(
-                "asset:{asset}: a document asset id is resolved by the editor's asset store"
+                "asset:{asset}: no asset store keeps an asset id's bytes — neither a \
+                 .paged container part nor the editor maps the id to a picture"
             ))
         }
         ImageReference::None => {
@@ -860,10 +917,11 @@ fn apply_barcode(
         Ok(b) => b,
         Err(e) => return failed(binding, e.to_string()),
     };
-    let old = match lowered_by(session, "barcode", binding) {
+    let mut old = match lowered_by(session, "barcode", binding) {
         Ok(o) => o,
         Err(e) => return failed(binding, e.to_string()),
     };
+    old.extend(unstamped_modules(session, &old));
     if symbol.modules.is_empty() && old.is_empty() {
         return Applied::new(binding, "kept")
             .because("the value is empty (its missing policy) — nothing drawn");
@@ -938,6 +996,418 @@ fn apply_barcode(
             "replaced {} module(s) of the previous symbol",
             old.len()
         ));
+    }
+    row
+}
+
+// ── Record flows (`flow-writer.ts` `commitRecordFlow`, `relower.ts`) ────────
+
+/// A paginated frame's text (`flowFrameText`): one paragraph per header,
+/// record field line and footer; a re-emitted header is marked continued.
+/// The blocks are the paginator's own JSON (`FlowBlock`), read as the
+/// module reads them.
+fn flow_frame_text(blocks: &[Value]) -> String {
+    let cells = |b: &Value| -> Vec<String> {
+        b["cells"]
+            .as_array()
+            .map_or(&[][..], Vec::as_slice)
+            .iter()
+            .map(|c| c.as_str().unwrap_or("").to_string())
+            .collect()
+    };
+    let mut lines: Vec<String> = Vec::new();
+    for b in blocks {
+        match b["block"].as_str() {
+            Some("groupHeader") => {
+                let text = b["text"].as_str().unwrap_or("");
+                lines.push(if b["continued"] == json!(true) {
+                    format!("{text} (continued)")
+                } else {
+                    text.to_string()
+                });
+            }
+            Some("record") => lines.extend(cells(b)),
+            Some("groupFooter") => lines.push(cells(b).join("\t")),
+            _ => {}
+        }
+    }
+    lines.join("\n")
+}
+
+/// The rows of the result a paginated frame shows (editor ADR 291's record
+/// markers), as its label carries them.
+fn flow_records(blocks: &[Value]) -> Vec<u64> {
+    blocks
+        .iter()
+        .filter(|b| b["block"] == "record")
+        .filter_map(|b| b["record"].as_u64())
+        .collect()
+}
+
+/// One frame of `height_pt` per entry of `frames`, as the paginator takes
+/// a chain (`FrameCapacity`).
+fn chain(frames: usize, height_pt: f64) -> Value {
+    Value::Array(
+        (0..frames)
+            .map(|i| json!({ "frame": format!("f{i}"), "page": format!("p{i}"), "heightPt": height_pt }))
+            .collect(),
+    )
+}
+
+/// Paginate a record flow the way the module places it
+/// (`paginateOverPages`): one frame of `height_pt` per page, as many as the
+/// flow needs — a chain long enough for every block to take a frame of its
+/// own, with the binding's own header options. The paginated flow comes
+/// back as its JSON (`PaginatedFlow`).
+fn paginate_over_pages(data: &mut DataSession, id: &BindingId, height_pt: f64) -> Result<Value> {
+    let opts = data.flow_layout(id).unwrap_or_default();
+    let mut lower = |chain: Value| -> Result<Value> {
+        let chain = serde_json::from_value(chain).context("shape the frame chain")?;
+        let flow = data
+            .lower_record_flow(id, chain, opts)
+            .map_err(|e| anyhow!("{e}"))?;
+        Ok(serde_json::to_value(flow)?)
+    };
+    let probe = lower(json!([{ "frame": "all", "page": "all", "heightPt": f64::from(u32::MAX) }]))?;
+    let blocks: usize = probe["frames"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .map(|f| f["blocks"].as_array().map_or(0, Vec::len))
+        .sum();
+    lower(chain(blocks.max(1), height_pt))
+}
+
+/// The document's pages in order: `(selfId, page-local margin box)`.
+fn pages(session: &mut Session) -> Result<Vec<(String, [f32; 4])>> {
+    let items = match session.send(MainToWorkerKind::RequestCollection {
+        name: paged_canvas::channel::CollectionName::Pages,
+    })? {
+        WorkerToMainKind::CollectionReply { items, .. } => items,
+        other => bail!("the engine answered {other:?}"),
+    };
+    let num = |p: &Value, k: &str| p.get(k).and_then(Value::as_f64).unwrap_or(0.0) as f32;
+    Ok(items
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter_map(|p| {
+            let id = p.get("selfId")?.as_str()?.to_string();
+            let size = p.get("sizePt")?.as_array()?;
+            let (w, h) = (
+                size.first()?.as_f64()? as f32,
+                size.get(1)?.as_f64()? as f32,
+            );
+            // A margin the page does not report counts as none (`marginBox`).
+            let margin_box = [
+                num(p, "marginTopPt"),
+                num(p, "marginLeftPt"),
+                h - num(p, "marginBottomPt"),
+                w - num(p, "marginRightPt"),
+            ];
+            Some((id, margin_box))
+        })
+        .collect())
+}
+
+/// The page each of `addresses` sits on (`None` on the pasteboard).
+fn pages_of(session: &mut Session, addresses: &[String]) -> Result<Vec<Option<String>>> {
+    let ids: Vec<ElementId> = addresses
+        .iter()
+        .filter_map(|a| ElementId::parse(a))
+        .collect();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    match session.send(MainToWorkerKind::RequestElementGeometry { ids })? {
+        WorkerToMainKind::ElementGeometry { items } => {
+            Ok(items.into_iter().map(|i| i.page_id.map(|p| p.0)).collect())
+        }
+        other => bail!("the engine answered {other:?}"),
+    }
+}
+
+/// The frames an earlier lowering of record flow `binding` placed, by the
+/// stamp on their labels (`{ kind: "recordFlow", binding, frame }`), with
+/// their label data. The first one also carries the binding itself
+/// (`bind`) once the editor has synced its labels.
+fn flow_frames(session: &mut Session, binding: &str) -> Result<Vec<(String, Map<String, Value>)>> {
+    let addresses = query(session, &format!("frame[label={DATA_LABEL_KEY}]"))?;
+    Ok(addresses
+        .into_iter()
+        .filter_map(|a| {
+            let data = label_of(session, a.split_once(':')?.1)
+                .as_deref()
+                .and_then(label_data)?;
+            (data.get("kind").and_then(Value::as_str) == Some("recordFlow")
+                && data.get("binding").and_then(Value::as_str) == Some(binding))
+            .then_some((a, data))
+        })
+        .collect())
+}
+
+/// A record flow: paginated by the engine over margin-box frames, one text
+/// frame per paginated frame, the first on the start page and the rest on
+/// pages added after it (`flow-writer.ts` `commitRecordFlow`). Each frame
+/// holds exactly the blocks the paginator put there, so its breaks are the
+/// engine's; the frames are not threaded (a thread would let the text
+/// re-break). Every frame is stamped `{ kind: "recordFlow", binding, frame,
+/// records }` (`createdPage` on the added pages' frames), so the next apply
+/// removes the previous frames, and the pages it added once nothing else is
+/// on them (`relower.ts` `planRelower`), in the batch that places the new
+/// ones. The start page is the page of the frame whose label carries the
+/// binding (the editor uses its active page), else the first page. A flow
+/// places every record, so `--record` does not apply to it.
+fn apply_record_flow(
+    session: &mut Session,
+    data: &mut DataSession,
+    id: &BindingId,
+    facts: &HostFacts,
+) -> Applied {
+    let binding = id.as_str();
+    let mut row = Applied::new(binding, "written");
+    row.path = Some("recordFlow".into());
+    let previous = match flow_frames(session, binding) {
+        Ok(p) => p,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let doc_pages = match pages(session) {
+        Ok(p) if !p.is_empty() => p,
+        Ok(_) => return failed(binding, "the document has no page"),
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let host = facts
+        .lowered
+        .get(binding)
+        .map(|e| format!("{}:{}", e.kind, e.id));
+    let start = host
+        .as_ref()
+        .and_then(|h| pages_of(session, std::slice::from_ref(h)).ok())
+        .and_then(|p| p.into_iter().next().flatten())
+        .filter(|p| doc_pages.iter().any(|(id, _)| id == p))
+        .unwrap_or_else(|| doc_pages[0].0.clone());
+    let margin_box = doc_pages
+        .iter()
+        .find(|(id, _)| *id == start)
+        .map_or(doc_pages[0].1, |(_, b)| *b);
+    let flow = match paginate_over_pages(data, id, f64::from(margin_box[2] - margin_box[0])) {
+        Ok(f) => f,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let frames_of = flow["frames"].as_array().cloned().unwrap_or_default();
+    let (placed, total) = (
+        flow["placed"].as_u64().unwrap_or(0),
+        flow["total"].as_u64().unwrap_or(0),
+    );
+    let overflow = flow["overflow"] == json!(true);
+    let mut notes = Vec::new();
+    if overflow {
+        notes.push(format!(
+            "{} record(s) did not fit",
+            total.saturating_sub(placed)
+        ));
+    }
+
+    // What the previous apply placed: its frames, and the pages it added
+    // that hold nothing else once those are gone.
+    let old: Vec<String> = previous.iter().map(|(a, _)| a.clone()).collect();
+    let old_pages = match pages_of(session, &old) {
+        Ok(p) => p,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let mut created: Vec<String> = Vec::new();
+    for ((_, d), page) in previous.iter().zip(&old_pages) {
+        if let Some(p) = page
+            .as_ref()
+            .filter(|_| d.get("createdPage") == Some(&json!(true)))
+        {
+            if !created.contains(p) && *p != start {
+                created.push(p.clone());
+            }
+        }
+    }
+    if !created.is_empty() {
+        let everything = match query(session, "frame") {
+            Ok(a) => a,
+            Err(e) => return failed(binding, e.to_string()),
+        };
+        let others: Vec<String> = everything
+            .into_iter()
+            .filter(|a| !old.contains(a))
+            .collect();
+        let theirs = match pages_of(session, &others) {
+            Ok(p) => p,
+            Err(e) => return failed(binding, e.to_string()),
+        };
+        created.retain(|p| !theirs.iter().any(|t| t.as_deref() == Some(p)));
+    }
+    let mut clear: Vec<Value> = old
+        .iter()
+        .filter_map(|a| a.split_once(':').map(|(_, raw)| raw.to_string()))
+        .map(|raw| json!({ "op": "deleteFrame", "args": { "frameId": raw } }))
+        .collect();
+    clear.extend(
+        created
+            .iter()
+            .map(|p| json!({ "op": "deletePage", "args": { "pageId": p } })),
+    );
+    // The binding's own copy rides the first frame: when the frame that
+    // carried it is one this apply removes, its persistence keys move to
+    // the new first frame, or the binding would leave the document with it.
+    let carried: Map<String, Value> = previous
+        .iter()
+        .find(|(a, d)| Some(a) == host.as_ref() && d.contains_key("bind"))
+        .map(|(_, d)| {
+            d.iter()
+                .filter(|(k, _)| {
+                    ["oid", "bind", "queries", "sources", "extra"].contains(&k.as_str())
+                })
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let used = frames_of.len();
+    row.value = Some(json!({
+        "frames": used,
+        "placed": placed,
+        "total": total,
+        "overflow": overflow,
+    }));
+    if used == 0 {
+        if !clear.is_empty() {
+            if let Err(e) = batch(session, clear) {
+                return failed(
+                    binding,
+                    format!("removing the previous flow was refused: {e}"),
+                );
+            }
+            row.message = Some(format!(
+                "no records: removed the previous {} frame(s)",
+                old.len()
+            ));
+            return row;
+        }
+        return Applied::new(binding, "kept").because("the flow has no records — nothing placed");
+    }
+
+    // Pages first (a page minted in a batch cannot be named in it), then the
+    // frames. The old frames and pages are removed after the new frames are
+    // placed, in the frames' batch: core refuses inserts that follow deletes
+    // of the same spread's items.
+    if used > 1 {
+        let ops = (1..used)
+            .map(|_| json!({ "op": "insertPage", "args": { "afterPageId": start, "masterId": null } }))
+            .collect();
+        if let Err(e) = batch(session, ops) {
+            return failed(binding, format!("adding pages was refused: {e}"));
+        }
+    }
+    let after = match pages(session) {
+        Ok(p) => p,
+        Err(e) => return failed(binding, e.to_string()),
+    };
+    let at = after.iter().position(|(p, _)| *p == start).unwrap_or(0);
+    let out: Vec<String> = after
+        .iter()
+        .skip(at)
+        .take(used)
+        .map(|(p, _)| p.clone())
+        .collect();
+    if out.len() != used {
+        return failed(binding, "the added pages are not where expected");
+    }
+    let mut ops = Vec::new();
+    for (i, f) in frames_of.iter().enumerate() {
+        let h = format!("flow{i}");
+        let blocks = f["blocks"].as_array().map_or(&[][..], Vec::as_slice);
+        let text = flow_frame_text(blocks);
+        ops.push(
+            json!({ "op": "insertTextFrame", "args": { "pageId": out[i], "bounds": margin_box } }),
+        );
+        ops.push(json!({ "op": "bindCreated", "args": { "handle": h } }));
+        if !text.is_empty() {
+            ops.push(json!({ "op": "insertText", "args": {
+                "storyId": format!("$h:{h}"), "offset": 0, "text": text,
+            }}));
+        }
+        let mut stamp = if i == 0 { carried.clone() } else { Map::new() };
+        stamp.insert("kind".into(), json!("recordFlow"));
+        stamp.insert("binding".into(), json!(binding));
+        stamp.insert("frame".into(), json!(i));
+        let records = flow_records(blocks);
+        if !records.is_empty() {
+            stamp.insert("records".into(), json!(records));
+        }
+        if i > 0 {
+            stamp.insert("createdPage".into(), json!(true));
+        }
+        ops.push(json!({ "op": "setPluginMetadata", "args": {
+            "elementId": { "kind": "textFrame", "id": format!("$h:{h}") },
+            "key": DATA_LABEL_KEY,
+            "value": envelope(Value::Object(stamp)),
+        }}));
+    }
+    ops.extend(clear);
+    let minted = match batch(session, ops) {
+        Ok(m) => m,
+        Err(e) => return failed(binding, format!("the frame batch was refused: {e}")),
+    };
+    let frames: Vec<&MintedElement> = minted
+        .iter()
+        .filter(|m| matches!(m.element, ElementId::TextFrame(_)))
+        .collect();
+    // The paginator measures with the template's line height; the engine's
+    // own layout says whether a frame's text really fits (the editor's
+    // overset issue over the same frames).
+    let mut overset = Vec::new();
+    for (i, m) in frames.iter().enumerate() {
+        let Some(story) = &m.story_id else { continue };
+        if let Ok(WorkerToMainKind::FrameChainResult { links }) =
+            session.send(MainToWorkerKind::RequestFrameChain {
+                story_id: story.clone(),
+            })
+        {
+            if links.iter().any(|l| l.overflow) {
+                overset.push(i);
+            }
+        }
+    }
+    if !overset.is_empty() {
+        notes.push(format!("{} frame(s) overset", overset.len()));
+    }
+    row.targets = frames
+        .iter()
+        .map(|m| match &m.element {
+            ElementId::TextFrame(raw) => format!("textFrame:{raw}"),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    row.value = Some(json!({
+        "frames": frames.len(),
+        "pages": out,
+        "addedPages": used - 1,
+        "placed": placed,
+        "total": total,
+        "overflow": overflow,
+        "overset": overset,
+    }));
+    if !old.is_empty() {
+        let pages = if created.is_empty() {
+            String::new()
+        } else {
+            format!(" and {} added page(s)", created.len())
+        };
+        notes.insert(
+            0,
+            format!(
+                "replaced {} frame(s){pages} of the previous flow",
+                old.len()
+            ),
+        );
+    }
+    if !notes.is_empty() {
+        row.message = Some(notes.join("; "));
     }
     row
 }
@@ -1231,6 +1701,7 @@ pub fn apply(
                 | Binding::Image { .. }
                 | Binding::Barcode { .. }
                 | Binding::Rule { .. }
+                | Binding::RecordFlow { .. }
         );
         if let Some(kept) = lowered.then(|| kept_by_sync(&data, id)).flatten() {
             applied.push(kept);
@@ -1257,11 +1728,9 @@ pub fn apply(
             // After everything else: a rule styles content (a table's cells)
             // that this apply may just have replaced.
             Binding::Rule { .. } => rules.push(id),
+            // Places every record, so `--record` does not restrict it.
             Binding::RecordFlow { .. } => {
-                applied.push(Applied::new(id.as_str(), "notHeadless").because(
-                    "a record flow paginates over the frame chain the editor reads and threads \
-                     (the data module's flow writer)",
-                ))
+                applied.push(apply_record_flow(&mut session, &mut data, id, facts))
             }
             Binding::Variable { .. } => match data.resolve_lowered_at(id, record) {
                 Ok(LoweredOutput::Variable(v)) => applied.push(apply_variable(
