@@ -75,7 +75,7 @@ pub(super) fn items(prims: Vec<Prim>, t: Affine, w: f64, h: f64, ctx: &Ctx) -> V
                     text,
                 },
                 opacity,
-                shadow: None,
+                effects: Effects::default(),
                 meta: ItemMeta::default(),
             }
         };

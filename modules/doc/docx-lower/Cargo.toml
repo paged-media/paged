@@ -11,6 +11,9 @@ description = "paged.doc Tier-0 lowering: pure docx-core -> a plugin-local Lower
 workspace = true
 
 [dependencies]
+# The OOXML units (and, for drawings, the DrawingML paint reader), without
+# the typed DOM.
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2"] }
 docx-core.workspace = true
 serde.workspace = true
 base64 = { workspace = true }

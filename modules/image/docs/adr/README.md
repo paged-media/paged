@@ -36,6 +36,7 @@ stood, for decisions made earlier; their status says so.
 | [470](470-selection-and-masking.md) | Selection and masking: a selection kernel, selections on the undo list, channels and paths in the session | Accepted 2026-10-24 (amends 463 and 465) |
 | [471](471-brush-engine.md) | The brush engine: Brush Settings as a seeded dab planner over the one accumulator | Accepted 2026-10-24 |
 | [472](472-layer-styles.md) | A layer style is a sequence of fold steps around the layer's pixels | Accepted 2026-10-25 (WP5.4) |
+| [473](473-filter-families-and-galleries.md) | Filter families as kernels and recipes; the galleries are workspaces over one chain | Accepted 2026-10-25 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

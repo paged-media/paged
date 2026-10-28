@@ -154,7 +154,9 @@ defaults:
     working-directory: apps/editor
 
 env:
-  SHARDS: 5
+  # Six since 2026-10-28: with five, shard 1 (gesture-matrix alone 17.5 min)
+  # reached Playwright's 55-minute --global-timeout and left 11 tests unrun.
+  SHARDS: 6
 
 jobs:
   # Static guards that need only the editor repo itself — no plugin
@@ -541,7 +543,7 @@ jobs:
           retention-days: 90
 
   playwright:
-    name: playwright (shard ${{ matrix.shard }}/5)
+    name: playwright (shard ${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
     # 50, not 30: the COLD (uncached) paged-gen fixture-generator build
     # consumed most of a 30-min budget, leaving no room for the sharded
@@ -563,7 +565,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       # The whole repository at the workspace root: the editor is
       # apps/editor, core's paged-gen is engine/core, and the doc/slide link

@@ -17,6 +17,7 @@ members = [
     "pptx-export",
     "slide-js",
     "slide-shaders",
+    "slide-output",
 ]
 
 [workspace.package]
@@ -32,7 +33,10 @@ publish = false
 # this workspace never compiles ooxmlsdk (slide reads parts as an element
 # tree, ADR 702). Its zip goes through flate2 (`deflate-flate2`), as this
 # workspace's does.
-paged-ooxml = { path = "../../platform/shared/ooxml", features = ["deflate-flate2"] }
+paged-ooxml = { path = "../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
+# The one DrawingML-to-engine mapper (slide ADR 722): paged-ooxml's
+# resolved paint onto paged-model, shared with doc.
+dml-native = { path = "../../platform/shared/dml-native" }
 # The DrawingML chart model and reader, shared with sheet (slide ADR 709);
 # PowerPoint's chart layout stays in slide-chart.
 dml-chart = { path = "../../platform/shared/dml-chart", features = ["serde"] }
@@ -69,6 +73,7 @@ slide-sheet = { path = "slide-sheet" }
 slide-resolve = { path = "slide-resolve" }
 slide-native = { path = "slide-native" }
 slide-js = { path = "slide-js" }
+slide-output = { path = "slide-output" }
 # WGSL front end and validator: slide-shaders' tests check every slide
 # transition shader (slide ADR 721), as the browser would compile it. The
 # version modules/image and the engine's wgpu use.

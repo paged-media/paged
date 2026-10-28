@@ -79,6 +79,27 @@ impl Colors<'_> {
         })
     }
 
+    /// A colour element for `rgb` and `alpha`: `a:schemeClr` when it is a
+    /// theme colour, else `a:srgbClr`.
+    pub fn rgb_color(&self, rgb: [u8; 3], alpha: f64) -> String {
+        let alpha_xml = if alpha < 0.999 {
+            format!(r#"<a:alpha val="{}"/>"#, (alpha * 100_000.0).round() as i64)
+        } else {
+            String::new()
+        };
+        match self.theme.iter().find(|(_, c)| *c == rgb) {
+            Some((n, _)) => {
+                let slot = self.logical.get(n).cloned().unwrap_or_else(|| n.clone());
+                if alpha_xml.is_empty() {
+                    format!(r#"<a:schemeClr val="{slot}"/>"#)
+                } else {
+                    format!(r#"<a:schemeClr val="{slot}">{alpha_xml}</a:schemeClr>"#)
+                }
+            }
+            None => paged_ooxml::drawingml::write::srgb(rgb, alpha),
+        }
+    }
+
     /// A fill for `swatch`: `a:noFill` for None, `a:solidFill`, or
     /// `a:gradFill` for a gradient swatch (`angle` in the engine's
     /// counter-clockwise degrees).

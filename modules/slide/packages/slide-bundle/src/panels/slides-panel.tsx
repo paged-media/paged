@@ -246,7 +246,7 @@ export function makeSlidesPanel(
                     e.stopPropagation();
                     if (slides.length < 2) return;
                     const next = slides[i + 1] ?? slides[i - 1];
-                    mutate(deleteMutation(slide.pageId));
+                    mutate(deleteMutation(slide.pageId, slides));
                     if (next) void host.viewport.goToPage(next.pageId);
                   }}
                   style={{
@@ -277,7 +277,7 @@ export function makeSlidesPanel(
                     style={small}
                     title={t(SLIDES.deleteTitle)}
                     disabled={slides.length < 2}
-                    onClick={() => mutate(deleteMutation(slide.pageId))}
+                    onClick={() => mutate(deleteMutation(slide.pageId, slides))}
                   >
                     {t(SLIDES.delete)}
                   </button>

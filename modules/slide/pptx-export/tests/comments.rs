@@ -199,6 +199,7 @@ fn as_is(bytes: &[u8]) -> ExportPlan {
                 ..SlidePlan::default()
             })
             .collect(),
+        ..ExportPlan::default()
     }
 }
 

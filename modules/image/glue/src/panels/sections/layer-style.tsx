@@ -83,7 +83,8 @@ const M = defineMessages("image.layerStyle", {
   colour: "Colour",
   opacity: "Opacity",
   angle: "Angle",
-  useGlobalLight: "Use global light",
+  // Not `use…`: the React Compiler reads a `use` member as a hook.
+  globalLightOn: "Use global light",
   distance: "Distance",
   spread: "Spread",
   choke: "Choke",
@@ -143,7 +144,7 @@ const M = defineMessages("image.layerStyle", {
   outside: "Outside",
   inside: "Inside",
   centerPosition: "Centre",
-  useDefinedPattern: "Use the defined pattern",
+  definedPattern: "Use the defined pattern",
   noPattern: "No pattern: use Edit ▸ Define pattern first",
   patternName: "Pattern: {name}",
   blendInterior: "Blend interior effects as group",
@@ -590,7 +591,7 @@ function PatternFields({
             if (p) onChange({ ...value, pattern: p });
           }}
         >
-          {t(M.useDefinedPattern)}
+          {t(M.definedPattern)}
         </button>
       </div>
       {missing ? <div style={note}>{t(M.noPattern)}</div> : null}
@@ -679,7 +680,7 @@ function AngleFields({
         />
       ) : null}
       <Check
-        label={t(M.useGlobalLight)}
+        label={t(M.globalLightOn)}
         value={useGlobal}
         disabled={disabled}
         field={`${field}.global`}

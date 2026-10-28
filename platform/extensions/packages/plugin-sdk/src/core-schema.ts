@@ -965,6 +965,7 @@ export const CORE_PATHS: Record<
   paragraphBorderColor: V71,
   paragraphBorderWeight: V71,
   documentShowHiddenText: V71,
+  documentShowFieldCodes: V71,
   frameDropShadowBlendMode: {
     scope: "frame",
     wire: "text",

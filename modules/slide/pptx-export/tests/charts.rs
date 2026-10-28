@@ -81,6 +81,7 @@ fn plan(doc: &Document, charts: Vec<ChartPlan>) -> ExportPlan {
             })
             .collect(),
         charts,
+        ..ExportPlan::default()
     }
 }
 

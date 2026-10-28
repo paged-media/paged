@@ -51,6 +51,7 @@ pub mod text;
 
 use color::{resolve as resolve_color, ColorCtx, Rgba};
 use model::*;
+use paged_ooxml::drawingml::resolved;
 
 // ─── transforms ─────────────────────────────────────────────────────
 
@@ -218,74 +219,7 @@ fn style_color(ctx: &Ctx, r: &Option<pptx_core::StyleRef>) -> Option<Rgba> {
 }
 
 fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Rgba>) -> Paint {
-    let colors = ctx.colors(ph);
-    match fill {
-        Fill::None | Fill::Group => Paint::None,
-        Fill::Solid(c) => {
-            let rgba = resolve_color(c, &colors);
-            let theme = match &c.base {
-                pptx_core::ColorBase::Scheme(s) if c.transforms.is_empty() => Some(s.clone()),
-                _ => None,
-            };
-            Paint::Solid {
-                rgb: rgba.bytes(),
-                alpha: rgba.a,
-                theme,
-            }
-        }
-        Fill::Gradient(g) => {
-            let mut stops: Vec<Stop> = g
-                .stops
-                .iter()
-                .map(|(pos, c)| {
-                    let rgba = resolve_color(c, &colors);
-                    Stop {
-                        pos: *pos as f64 / 1000.0,
-                        rgb: rgba.bytes(),
-                        alpha: rgba.a,
-                    }
-                })
-                .collect();
-            // `a:gsLst` need not be in position order; a gradient swatch's
-            // stops are.
-            stops.sort_by(|a, b| a.pos.total_cmp(&b.pos));
-            if stops.is_empty() {
-                return Paint::None;
-            }
-            if let Some((_, to)) = &g.path {
-                // `a:fillToRect` insets, in 1 000ths of a percent; the
-                // gradient is centred on the rectangle they leave.
-                let (l, t, r, b) = to.unwrap_or((0, 0, 0, 0));
-                let f = |v: i32| v as f64 / 100_000.0;
-                Paint::Radial {
-                    stops,
-                    center: ((f(l) + 1.0 - f(r)) / 2.0, (f(t) + 1.0 - f(b)) / 2.0),
-                }
-            } else {
-                Paint::Linear {
-                    stops,
-                    angle: g.linear.map(|(a, _)| a as f64 / 60_000.0).unwrap_or(0.0),
-                }
-            }
-        }
-        Fill::Blip(b) => match &b.part {
-            Some(p) => Paint::Image { part: p.clone() },
-            None => Paint::None,
-        },
-        Fill::Pattern { fg, .. } => {
-            ctx.note("pattern fill drawn as its foreground colour");
-            fg.as_ref()
-                .map(|c| {
-                    let rgba = resolve_color(c, &colors);
-                    Paint::Solid {
-                        rgb: rgba.bytes(),
-                        alpha: rgba.a,
-                        theme: None,
-                    }
-                })
-                .unwrap_or(Paint::None)
-        }
-    }
+    resolved::paint(fill, &ctx.colors(ph), &mut |n| ctx.note(n))
 }
 
 /// `a:grpFill` means "the enclosing group's fill": substitute it into the
@@ -363,60 +297,60 @@ fn shape_stroke(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Op
     if base.is_none() && own.is_none() {
         return None;
     }
-    let pick = |f: fn(&Line) -> Option<String>| own.and_then(f).or_else(|| base.and_then(f));
-    let fill = own
-        .and_then(|l| l.fill.clone())
-        .or_else(|| base.and_then(|l| l.fill.clone()));
-    let ph = style_color(ctx, &style.and_then(|s| s.line_ref.clone()));
-    let p = paint(fill.as_ref()?, ctx, ph);
-    if matches!(p, Paint::None) {
-        return None;
+    // The shape's own line over the theme's line style, field by field;
+    // the line ends are the shape's own.
+    fn pick<T: Clone>(
+        own: Option<&Line>,
+        base: Option<&Line>,
+        f: fn(&Line) -> Option<T>,
+    ) -> Option<T> {
+        own.and_then(f).or_else(|| base.and_then(f))
     }
-    let width = own
-        .and_then(|l| l.width)
-        .or_else(|| base.and_then(|l| l.width))
-        .unwrap_or(9525) as f64
-        / EMU_PER_PT;
-    Some(Stroke {
-        width,
-        paint: p,
-        dash: pick(|l| l.dash.clone()).filter(|d| d != "solid"),
-        compound: pick(|l| l.compound.clone()).filter(|c| c != "sng"),
-        cap: pick(|l| l.cap.clone()),
-        join: pick(|l| l.join.clone()),
-        head: own
-            .and_then(|l| l.head.as_ref())
-            .map(|e| e.kind.clone())
-            .filter(|k| k != "none"),
-        tail: own
-            .and_then(|l| l.tail.as_ref())
-            .map(|e| e.kind.clone())
-            .filter(|k| k != "none"),
-    })
+    let merged = Line {
+        width: pick(own, base, |l| l.width),
+        fill: pick(own, base, |l| l.fill.clone()),
+        dash: pick(own, base, |l| l.dash.clone()),
+        custom_dash: pick(own, base, |l| {
+            (!l.custom_dash.is_empty()).then(|| l.custom_dash.clone())
+        })
+        .unwrap_or_default(),
+        cap: pick(own, base, |l| l.cap.clone()),
+        join: pick(own, base, |l| l.join.clone()),
+        miter_limit: pick(own, base, |l| l.miter_limit),
+        compound: pick(own, base, |l| l.compound.clone()),
+        align: pick(own, base, |l| l.align.clone()),
+        head: own.and_then(|l| l.head.clone()),
+        tail: own.and_then(|l| l.tail.clone()),
+    };
+    let ph = style_color(ctx, &style.and_then(|s| s.line_ref.clone()));
+    resolved::stroke(&merged, &ctx.colors(ph), 9525, &mut |n| ctx.note(n))
 }
 
-fn shadow(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Option<Shadow> {
-    let fx = props.effects.clone().or_else(|| {
-        let r = style
-            .and_then(|s| s.effect_ref.as_ref())
-            .filter(|r| r.idx > 0)?;
-        ctx.theme?
-            .effect_styles
-            .get(r.idx as usize - 1)
-            .cloned()
-            .flatten()
-    })?;
-    let s = fx.outer_shadow?;
-    let dist = s.dist as f64 / EMU_PER_PT;
-    let dir = (s.dir as f64 / 60_000.0).to_radians();
-    let rgba = resolve_color(&s.color, &ctx.colors(None));
-    Some(Shadow {
-        dx: dist * dir.cos(),
-        dy: dist * dir.sin(),
-        blur: s.blur as f64 / EMU_PER_PT,
-        rgb: rgba.bytes(),
-        alpha: rgba.a,
-    })
+/// The effects a shape draws: its own `a:effectLst`, else the theme's
+/// effect style its `a:effectRef` names (whose `phClr` is the reference's
+/// colour).
+fn effects(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Effects {
+    let (fx, ph) = match &props.effects {
+        Some(fx) => (Some(fx.clone()), None),
+        None => {
+            let r = style
+                .and_then(|s| s.effect_ref.as_ref())
+                .filter(|r| r.idx > 0);
+            let fx = r.and_then(|r| {
+                ctx.theme?
+                    .effect_styles
+                    .get(r.idx as usize - 1)
+                    .cloned()
+                    .flatten()
+            });
+            (
+                fx,
+                style_color(ctx, &style.and_then(|s| s.effect_ref.clone())),
+            )
+        }
+    };
+    fx.map(|fx| resolved::effects(&fx, &ctx.colors(ph), &mut |n| ctx.note(n)))
+        .unwrap_or_default()
 }
 
 // ─── placeholders ───────────────────────────────────────────────────
@@ -735,7 +669,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     text,
                 },
                 opacity,
-                shadow: shadow(&sp.props, style, ctx),
+                effects: effects(&sp.props, style, ctx),
                 meta: ItemMeta {
                     shape_id: sp.nv.id,
                     order: 0,
@@ -807,6 +741,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     )
                 })
                 .unwrap_or((0.0, 0.0, 0.0, 0.0));
+            let look = resolved::picture(&p.blip, &ctx.colors(None));
             Some(Item {
                 id: ctx.id(),
                 name: p.nv.name.clone(),
@@ -818,9 +753,10 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     stroke: shape_stroke(line_props, p.style.as_ref(), ctx),
                     image_part: part,
                     crop,
+                    image_effects: look.effects,
                 },
-                opacity: p.blip.alpha.map(|a| a as f64 / 100_000.0).unwrap_or(1.0),
-                shadow: shadow(&p.props, p.style.as_ref(), ctx),
+                opacity: look.opacity,
+                effects: effects(&p.props, p.style.as_ref(), ctx),
                 meta: ItemMeta {
                     shape_id: p.nv.id,
                     link: p.nv.hyperlink.clone(),
@@ -848,7 +784,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 h,
                 kind: ItemKind::Group { children },
                 opacity: 1.0,
-                shadow: None,
+                effects: Effects::default(),
                 meta: ItemMeta {
                     shape_id: g.nv.id,
                     link: g.nv.hyperlink.clone(),
@@ -868,7 +804,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     h,
                     kind: ItemKind::Table(table::table(tbl, ctx)),
                     opacity: 1.0,
-                    shadow: None,
+                    effects: Effects::default(),
                     meta: ItemMeta {
                         shape_id: f.nv.id,
                         ..Default::default()
@@ -895,7 +831,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     h,
                     kind: ItemKind::Group { children },
                     opacity: 1.0,
-                    shadow: None,
+                    effects: Effects::default(),
                     meta: ItemMeta {
                         shape_id: f.nv.id,
                         frame: Some("chart".into()),
@@ -932,7 +868,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     h,
                     kind: ItemKind::Group { children },
                     opacity: 1.0,
-                    shadow: None,
+                    effects: Effects::default(),
                     meta: ItemMeta {
                         shape_id: f.nv.id,
                         frame: Some("diagram".into()),
@@ -1043,7 +979,7 @@ fn background(bg: &Background, ctx: &Ctx, w: f64, h: f64) -> Option<Item> {
             text: None,
         },
         opacity: 1.0,
-        shadow: None,
+        effects: Effects::default(),
         meta: ItemMeta::default(),
     })
 }
@@ -1199,8 +1135,31 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
                 .filter(|n| !n.trim().is_empty()),
             transition: s.transition.clone(),
             timing_xml: s.timing_xml.clone(),
+            section: deck
+                .sections
+                .iter()
+                .find(|sec| sec.slide_ids.first() == Some(&s.slide_id))
+                .map(|sec| SectionStart {
+                    id: sec.id.clone(),
+                    name: sec.name.clone(),
+                }),
         });
     }
+    // Custom shows name slide parts; the document knows pages.
+    out.custom_shows = deck
+        .custom_shows
+        .iter()
+        .map(|c| CustomShowPages {
+            id: c.id,
+            name: c.name.clone(),
+            pages: c
+                .slides
+                .iter()
+                .filter_map(|part| out.slides.iter().find(|p| &p.part == part))
+                .map(|p| p.id.clone())
+                .collect(),
+        })
+        .collect();
 
     let mut fonts = std::collections::BTreeSet::new();
     fn collect(items: &[Item], fonts: &mut std::collections::BTreeSet<String>) {

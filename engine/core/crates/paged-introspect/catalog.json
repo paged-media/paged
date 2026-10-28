@@ -807,10 +807,10 @@
     },
     {
       "name": "paged.setFlowGrowRule",
-      "params": "(storyId, grow, maxPages?, copyFrameOptions?)",
+      "params": "(storyId, grow, maxPages?, copyFrameOptions?, {master?, firstMaster?, evenMaster?, sectionStart?})",
       "returns": "bool",
       "kind": "write",
-      "summary": "Let a story's frame chain grow: generated pages are added after its last frame's page while it oversets (InDesign's Smart Text Reflow), and removed when empty. copyFrameOptions gives generated frames the chain's frame options (a Word section's mode) instead of InDesign's defaults. grow=false clears the rule."
+      "summary": "Let a story's frame chain grow: generated pages are added after its last frame's page while it oversets (InDesign's Smart Text Reflow), and removed when empty. copyFrameOptions gives generated frames the chain's frame options (a Word section's mode) instead of InDesign's defaults. The options pick a Word section's first / odd / even masters and an odd- or even-page start (a blank page goes in front when it lands wrong). grow=false clears the rule."
     },
     {
       "name": "paged.activateConditionSet",
@@ -1196,6 +1196,48 @@
       "returns": "bool",
       "kind": "author",
       "summary": "Re-parent a style; refused when it would inherit from itself. Undoable."
+    },
+    {
+      "name": "paged.updateFields",
+      "params": "({storyId?, offset?, now?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Word's F9: recompute the Word fields' results (every story's, one story's, or the one field at a story offset) over the current layout; DATE and TIME read now (YYYY-MM-DDTHH:MM:SS). One undo step; refused when nothing changes."
+    },
+    {
+      "name": "paged.insertTextAnchor",
+      "params": "(storyId, offset, name)",
+      "returns": "string|null",
+      "kind": "author",
+      "summary": "Word's Insert Bookmark: a named text destination at a story offset, which REF and PAGEREF fields and cross-references name. Returns its id."
+    },
+    {
+      "name": "paged.deleteTextAnchor",
+      "params": "(anchorId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Delete a bookmark (a text destination). Undoable."
+    },
+    {
+      "name": "paged.insertCrossReference",
+      "params": "(storyId, offset, {bookmark} | {storyId, paragraph}, {referTo?: text|pageNumber|aboveBelow, hyperlink?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Word's Insert Cross-reference: a REF or PAGEREF field with its result, to a bookmark or to a paragraph (which gets a hidden _Ref bookmark). One undo step."
+    },
+    {
+      "name": "paged.insertTableOfContents",
+      "params": "(storyId, offset, [{style, level}], {title?, tocStyleName?, pageNumbers?, leader?, tabPosition?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Word's Insert Table of Contents: the TOC style and TOC 1… entry styles (right tab with a leader) when missing, and the entries with their page numbers in paragraphs of their own at the caret. paged.updateTableOfContents rewrites them in place. One undo step."
+    },
+    {
+      "name": "paged.insertIndexMarker",
+      "params": "(storyId, offset, topic | [topic, subtopic…], {sortOrder?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Word's Mark Entry: an index marker for a topic path in the paragraph at a story offset; missing topics are created. paged.generateIndex lists it. Undoable."
     },
     {
       "name": "paged.convertNoteToText",
@@ -1927,6 +1969,12 @@
     "setListLevel",
     "restartNumbering",
     "findReplace",
+    "updateFields",
+    "insertTextAnchor",
+    "deleteTextAnchor",
+    "insertCrossReference",
+    "insertTableOfContents",
+    "insertIndexMarker",
     "insertOval",
     "insertGuide",
     "moveGuide",
@@ -9541,6 +9589,22 @@
       "bindable": true
     },
     {
+      "addressKind": "doc",
+      "path": "documentShowFieldCodes",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
       "addressKind": "textVariable",
       "path": "textVariableName",
       "type": {
@@ -15998,6 +16062,22 @@
       {
         "addressKind": "doc",
         "path": "documentShowHiddenText",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentShowFieldCodes",
         "type": {
           "kind": "bool"
         },

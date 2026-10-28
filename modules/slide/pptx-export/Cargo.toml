@@ -19,6 +19,8 @@ slide-native.workspace = true
 slide-geom.workspace = true
 # Live charts (ADR 715): the chart workbooks, read and written by paged.sheet.
 slide-sheet.workspace = true
+# The shared DrawingML mapper's inverse (slide ADR 722).
+dml-native.workspace = true
 paged-model.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true
@@ -26,6 +28,7 @@ quick-xml.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 base64.workspace = true
+slide-output.workspace = true
 
 [dev-dependencies]
 paged-test-resources.workspace = true

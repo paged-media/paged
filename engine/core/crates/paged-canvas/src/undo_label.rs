@@ -143,6 +143,9 @@ fn mutation_text(name: &str) -> Option<&'static str> {
         "PathPointSet" => "Edit path",
         "PathPointCurveType" => "Convert anchor point",
         "FindReplace" => "Replace",
+        "UpdateFields" => "Update fields",
+        "InsertTextAnchor" => "Insert bookmark",
+        "DeleteTextAnchor" => "Delete bookmark",
         _ => return None,
     })
 }
@@ -331,6 +334,12 @@ fn operation_name(op: &Operation) -> &'static str {
         Operation::RemoveFooterRow { .. } => "RemoveFooterRow",
         Operation::SetCellSpan { .. } => "SetCellSpan",
         Operation::SetStyleBasedOn { .. } => "SetStyleBasedOn",
+        Operation::InsertTextAnchor { .. } => "InsertTextAnchor",
+        Operation::DeleteTextAnchor { .. } => "DeleteTextAnchor",
+        Operation::SetStoryDestinations { .. } => "SetStoryDestinations",
+        Operation::InsertIndexMarker { .. } => "InsertIndexMarker",
+        Operation::RestoreIndexMarkers { .. } => "RestoreIndexMarkers",
+        Operation::SetTocStyle { .. } => "SetTocStyle",
         Operation::SetListLevel { .. } => "SetListLevel",
         Operation::RestartNumbering { .. } => "RestartNumbering",
         Operation::SetParagraphListState { .. } => "SetParagraphListState",

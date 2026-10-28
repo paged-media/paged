@@ -42,6 +42,8 @@ proptest = { workspace = true }
 image-js = { path = "../image-js", features = ["reference-fold"] }
 # Colour-conversion properties (prop_colour.rs) round-trip both CMS backends.
 image-cms = { path = "../image-cms" }
+# Match Color's twin converts with the engine's own CIELAB.
+paged-color = { workspace = true }
 criterion = { workspace = true }
 # D-4 bench (png_d4): zune-png is the chosen adapter; image/png is the
 # loser kept here ONLY as the bench comparison baseline (dev-dep, never

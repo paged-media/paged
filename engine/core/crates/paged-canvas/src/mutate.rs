@@ -204,7 +204,58 @@ pub fn apply(doc: &mut Document, op: &TextOp) -> Result<AppliedText, TextOpError
             }),
         _ => None,
     };
+    // Engine ADR 1022 — where the edit stands among the story's text
+    // destinations (Word's bookmarks), with the paragraphs it starts from.
+    let anchored = match op {
+        TextOp::InsertText {
+            story_id,
+            offset,
+            cell: None,
+            ..
+        }
+        | TextOp::DeleteRange {
+            story_id,
+            start: offset,
+            cell: None,
+            ..
+        } => doc
+            .stories
+            .iter()
+            .find(|s| &s.self_id == story_id && !s.story.destinations.is_empty())
+            .map(|s| {
+                (
+                    story_id.clone(),
+                    content_offset_to_char(&s.story.paragraphs, *offset),
+                    s.story.paragraphs.clone(),
+                    matches!(op, TextOp::DeleteRange { .. }),
+                )
+            }),
+        _ => None,
+    };
     let applied = apply_text_op(doc, op)?;
+    if let Some((story_id, at, before_paragraphs, deleted)) = anchored {
+        if let Some(s) = doc.stories.iter_mut().find(|s| s.self_id == story_id) {
+            let count = |ps: &[paged_model::Paragraph]| -> u32 {
+                ps.iter()
+                    .flat_map(|p| p.runs.iter())
+                    .map(|r| r.text.chars().count() as u32)
+                    .sum()
+            };
+            let (before, after) = (count(&before_paragraphs), count(&s.story.paragraphs));
+            let (removed, inserted) = if deleted {
+                (before.saturating_sub(after), 0)
+            } else {
+                (0, after.saturating_sub(before))
+            };
+            crate::model::word_structure::keep_destinations(
+                &mut s.story,
+                &before_paragraphs,
+                at,
+                removed,
+                inserted,
+            );
+        }
+    }
     if let Some((story_id, at, before, deleted)) = tagged {
         if let Some(s) = doc.stories.iter_mut().find(|s| s.self_id == story_id) {
             let after = s.story.flat_text().chars().count() as u32;

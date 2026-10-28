@@ -1653,6 +1653,11 @@ pub enum PropertyPath {
     /// Rectangle, Oval or Polygon. The IDML adapter reads and writes it.
     /// Paint-only (`frame_style`).
     FrameGradientFillStart,
+    /// Word's "show field codes" (Alt+F9), on `NodeId::Document`:
+    /// `Value::Bool`, default false. Every Word field sets its code in
+    /// braces instead of its result (engine ADR 1022). A whole-document
+    /// reflow.
+    DocumentShowFieldCodes,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -2045,6 +2050,7 @@ impl PropertyPath {
             PropertyPath::ParagraphBorderWeight => "paragraph.borderWeight",
             PropertyPath::DocumentShowHiddenText => "document.showHiddenText",
             PropertyPath::FrameGradientFillStart => "frame.gradientFillStart",
+            PropertyPath::DocumentShowFieldCodes => "document.showFieldCodes",
         }
     }
 }
@@ -2277,6 +2283,10 @@ export type TableLineRestoreJson = string;
 export interface FlowGrowRule {
     max_pages?: number | null;
     copy_frame_options?: boolean;
+    master?: string | null;
+    first_master?: string | null;
+    even_master?: string | null;
+    section_start?: "newPage" | "oddPage" | "evenPage";
 }
 "#;
 
@@ -4100,6 +4110,65 @@ pub enum Operation {
         story_id: String,
         entries: Vec<ParagraphListState>,
     },
+    /// Engine ADR 1022 — a Word bookmark: text destination `self_id`
+    /// (`HyperlinkTextDestination/<id>`) named `name`, standing at char
+    /// `offset` of paragraph `paragraph` of story `story_id`, at position
+    /// `index` of the story's destinations (the end when absent). `REF` and
+    /// `PAGEREF` fields and cross-references find it by name. Inverse:
+    /// `DeleteTextAnchor`. // rides v77.
+    InsertTextAnchor {
+        story_id: String,
+        paragraph: u32,
+        offset: u32,
+        self_id: String,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        index: Option<u32>,
+    },
+    /// Engine ADR 1022 — delete the text destination `anchor_id` from the
+    /// story that holds it, and the bookmarks going to it. Inverse:
+    /// `InsertTextAnchor` at its old position (restoring the bookmarks
+    /// through a batch). // rides v77.
+    DeleteTextAnchor {
+        anchor_id: String,
+    },
+    /// Engine ADR 1022 — inverse-only: story `story_id`'s destinations,
+    /// whole (a JSON `Vec<StoryDestination>`), as an edit that moved
+    /// paragraphs left them. Inverse: itself with the prior list.
+    SetStoryDestinations {
+        story_id: String,
+        destinations_json: String,
+    },
+    /// Engine ADR 1022 — an index marker in paragraph `paragraph` of story
+    /// `story_id` for the topic path `topic` (level 1 first, up to four
+    /// levels), sorted by `sort_order` when given. Topics the document
+    /// lacks are created, nested under their parents, as InDesign's New
+    /// Page Reference makes them. Inverse: `RestoreIndexMarkers`. // rides v77.
+    InsertIndexMarker {
+        story_id: String,
+        paragraph: u32,
+        topic: Vec<String>,
+        #[serde(default)]
+        sort_order: Option<String>,
+    },
+    /// Engine ADR 1022 — inverse-only: the index markers of one paragraph
+    /// and the document's topics and their nesting, whole, as they were.
+    RestoreIndexMarkers {
+        story_id: String,
+        paragraph: u32,
+        markers_json: String,
+        topics_json: String,
+        parents_json: String,
+    },
+    /// Engine ADR 1022 — create, replace (`def_json`: a JSON `TOCStyleDef`)
+    /// or delete (`None`) TOC style `toc_style_id`. Inverse: the same op
+    /// with the prior definition. // rides v77.
+    SetTocStyle {
+        toc_style_id: String,
+        #[serde(default)]
+        def_json: Option<String>,
+    },
     /// SDK Phase 5 (v1 sweep) — multi-target Bezier boolean op.
     /// `kept` is the survivor (its path is replaced with the
     /// result); `others` are the inputs that disappear. For
@@ -5218,6 +5287,15 @@ pub enum FieldKind {
     TextVariable {
         variable_id: String,
     },
+    /// Engine ADR 1022 — a Word field: its own run, tagged with the field
+    /// read out of `code` (Word's instruction, `PAGEREF _Ref1 \h`), whose
+    /// text is `result`. Without a result the canvas computes one before
+    /// it inserts (a bare model shows the code in braces). // rides v77.
+    Word {
+        code: String,
+        #[serde(default)]
+        result: Option<String>,
+    },
 }
 
 impl FieldKind {
@@ -5232,7 +5310,9 @@ impl FieldKind {
             FieldKind::PageNumber => Some('\u{E018}'),
             // U+E019 — IDML `<?ACE 19?>` next-page-number marker.
             FieldKind::NextPageNumber => Some('\u{E019}'),
-            FieldKind::Placeholder { .. } | FieldKind::TextVariable { .. } => None,
+            FieldKind::Placeholder { .. }
+            | FieldKind::TextVariable { .. }
+            | FieldKind::Word { .. } => None,
         }
     }
 }

@@ -22,10 +22,11 @@ next to the code you change. This file holds only what crosses components.
 - `platform/shared/*` — internal code of the built-ins and the editor (PM-0002):
   `ai`, `fmt`, `helpers`, `panel-kit`, `react-live`, `test-kit`, `test-resources`,
   `wasm-boot`, and the Rust crates `ooxml` (`paged-ooxml`, the OOXML foundation of
-  doc, slide and sheet), `dml-chart` (the DrawingML chart reader of sheet and
-  slide) and `dml-geom` (DrawingML preset geometry, handles and connection sites
-  of slide and doc's shapes), each its own Cargo workspace and a path dependency
-  of theirs.
+  doc, slide and sheet, with the DrawingML paint reader and the units), `dml-chart`
+  (the DrawingML chart reader of sheet and slide), `dml-geom` (DrawingML preset
+  geometry, handles and connection sites of slide and doc's shapes) and
+  `dml-native` (the DrawingML paint mapper onto the engine model), each its own
+  Cargo workspace and a path dependency of theirs.
 - `tooling/import` — how this repository was assembled; do not edit history-related files by hand.
 
 ## Tasks (Moon)
@@ -34,7 +35,7 @@ Moon (`.moon/`, version pinned in `.prototools`) runs every component's tasks
 from anywhere in the repository. One project per Cargo workspace and JS component root:
 `core`, `core-idml-viewer`, `publish`, `image`, `draw`, `sheet`, `data`, `doc`,
 `slide`, `web`, `web-render`, `extensions`, `editor`, `server`, `cli`, and the
-shared packages (`ai`, `dml-chart`, `dml-geom`, `fmt`, `helpers`, `ooxml`, `panel-kit`,
+shared packages (`ai`, `dml-chart`, `dml-geom`, `dml-native`, `fmt`, `helpers`, `ooxml`, `panel-kit`,
 `react-live`, `test-kit`, `test-resources`, `wasm-boot`).
 
 - `moon run <project>:test` — also `:fmt`, `:check`, `:lint`, `:build`, and

@@ -29,6 +29,9 @@
 /// ADR 132 — `Mutation::Set` resolution and the property read twin.
 #[path = "virtual_set.rs"]
 pub mod virtual_set;
+/// Engine ADR 1022 — Word's fields, cross-references, tables of contents.
+#[path = "word_structure.rs"]
+pub(crate) mod word_structure;
 
 use std::collections::HashMap;
 
@@ -3418,6 +3421,54 @@ impl CanvasModel {
             Mutation::ConvertNoteToText { note_id } => {
                 Some(self.lower_convert_note_to_text(note_id)?)
             }
+            // Engine ADR 1022 — these read the layout too.
+            Mutation::UpdateFields {
+                story_id,
+                offset,
+                now,
+            } => Some(self.lower_update_fields(story_id.as_deref(), *offset, now.as_deref())?),
+            Mutation::InsertField {
+                story_id,
+                offset,
+                field: paged_mutate::operation::FieldKind::Word { code, result: None },
+                content_offset,
+            } => Some(self.lower_insert_word_field(story_id, *offset, *content_offset, code)?),
+            Mutation::InsertCrossReference {
+                story_id,
+                offset,
+                content_offset,
+                target,
+                refer_to,
+                hyperlink,
+            } => Some(self.lower_insert_cross_reference(
+                story_id,
+                *offset,
+                *content_offset,
+                target,
+                *refer_to,
+                hyperlink.unwrap_or(true),
+            )?),
+            Mutation::InsertTableOfContents {
+                story_id,
+                offset,
+                content_offset,
+                levels,
+                title,
+                toc_style_name,
+                page_numbers,
+                leader,
+                tab_position,
+            } => Some(self.lower_insert_toc(
+                story_id,
+                *offset,
+                *content_offset,
+                levels,
+                title.as_deref(),
+                toc_style_name.as_deref(),
+                page_numbers.unwrap_or(true),
+                leader.as_deref(),
+                *tab_position,
+            )?),
             _ => self.try_translate_frame_mutation_to_operation(mutation, &mut 0),
         };
         if let Some(op) = lowered {
@@ -5368,6 +5419,42 @@ impl CanvasModel {
             Mutation::DeleteBookmark { bookmark_id } => Some(Operation::DeleteBookmark {
                 bookmark_id: bookmark_id.clone(),
             }),
+            // Engine ADR 1022 — Word's bookmarks and index markers.
+            Mutation::InsertTextAnchor {
+                story_id,
+                offset,
+                content_offset,
+                name,
+            } => {
+                let (paragraph, local) = self.paragraph_at(story_id, *offset, *content_offset)?;
+                let base = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::InsertTextAnchor {
+                    story_id: story_id.clone(),
+                    paragraph,
+                    offset: local,
+                    self_id: format!("HyperlinkTextDestination/{base}"),
+                    name: Some(name.clone()),
+                    index: None,
+                })
+            }
+            Mutation::DeleteTextAnchor { anchor_id } => Some(Operation::DeleteTextAnchor {
+                anchor_id: anchor_id.clone(),
+            }),
+            Mutation::InsertIndexMarker {
+                story_id,
+                offset,
+                content_offset,
+                topic,
+                sort_order,
+            } => {
+                let (paragraph, _) = self.paragraph_at(story_id, *offset, *content_offset)?;
+                Some(Operation::InsertIndexMarker {
+                    story_id: story_id.clone(),
+                    paragraph,
+                    topic: topic.clone(),
+                    sort_order: sort_order.clone(),
+                })
+            }
             Mutation::RenameBookmark { bookmark_id, name } => Some(Operation::RenameBookmark {
                 bookmark_id: bookmark_id.clone(),
                 name: name.clone(),
@@ -5557,11 +5644,25 @@ impl CanvasModel {
                 grow,
                 max_pages,
                 copy_frame_options,
+                master,
+                first_master,
+                even_master,
+                section_start,
             } => Some(Operation::SetFlowGrowRule {
                 story_id: story_id.clone(),
                 rule: grow.then(|| paged_model::FlowGrowRule {
                     max_pages: *max_pages,
                     copy_frame_options: copy_frame_options.unwrap_or(false),
+                    master: master.clone(),
+                    first_master: first_master.clone(),
+                    even_master: even_master.clone(),
+                    section_start: match section_start.unwrap_or_default() {
+                        paged_wire::SectionStartSpec::NewPage => paged_model::SectionStart::NewPage,
+                        paged_wire::SectionStartSpec::OddPage => paged_model::SectionStart::OddPage,
+                        paged_wire::SectionStartSpec::EvenPage => {
+                            paged_model::SectionStart::EvenPage
+                        }
+                    },
                 }),
             }),
             Mutation::ActivateConditionSet { set } => {
@@ -10334,6 +10435,8 @@ impl CanvasModel {
         // WP2.7 — page self id → (its index in the spread, is it a verso).
         let mut placement_of: std::collections::HashMap<&str, (u32, bool)> =
             std::collections::HashMap::new();
+        // Engine ADR 1022 — page self id → its applied master, as grown.
+        let mut master_of: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
         // Engine ADR 1011 — the pages placed on the canvas.
         let mut placed: std::collections::HashSet<&str> = std::collections::HashSet::new();
         let mut inner_bounds: std::collections::HashMap<&str, [f32; 4]> =
@@ -10349,6 +10452,9 @@ impl CanvasModel {
                 .unwrap_or_else(|| parsed.src.clone());
             for (pi, pg) in parsed.spread.pages.iter().enumerate() {
                 if let Some(id) = pg.self_id.as_deref() {
+                    if let Some(m) = pg.applied_master.as_deref() {
+                        master_of.insert(id, m);
+                    }
                     spread_of.insert(id, &parsed.spread);
                     spread_id_of.insert(id, spread_id.clone());
                     // WP2.7 — the renderer's binding rule
@@ -10416,6 +10522,7 @@ impl CanvasModel {
                     }),
                     margin_inside_pt: inside,
                     margin_outside_pt: outside,
+                    applied_master: master_of.get(p.id.as_str()).map(|m| m.to_string()),
                     canvas_origin_pt: Some([p.canvas_origin.0, p.canvas_origin.1]),
                     canvas_placed: placed.contains(p.id.as_str()),
                     bounds_pt: inner_bounds.get(p.id.as_str()).copied(),
@@ -11706,6 +11813,12 @@ impl CanvasModel {
                             grow: true,
                             max_pages: r.max_pages,
                             copy_frame_options: r.copy_frame_options,
+                            master: r.master.clone(),
+                            first_master: r.first_master.clone(),
+                            even_master: r.even_master.clone(),
+                            section_start: crate::model::virtual_set::section_start_spec(
+                                r.section_start,
+                            ),
                         }),
                 }
             })
@@ -13562,6 +13675,21 @@ impl CanvasModel {
         use crate::channel::WorkerError;
         self.settle_owed_build("updateTableOfContents")?;
         let refuse = |what: String| WorkerError::NotImplemented { what };
+        let parsed = self
+            .scene
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)
+            .ok_or_else(|| refuse(format!("updateTableOfContents: no story {story_id}")))?;
+        // Engine ADR 1022 — a table of contents standing in the text (Word's)
+        // is rewritten in place.
+        let in_text = parsed.story.applied_toc_style.is_none()
+            && parsed.story.paragraphs.iter().any(|p| p.toc.is_some());
+        if in_text {
+            if let Some(op) = self.lower_update_toc_in_text(story_id)? {
+                return Ok(op);
+            }
+        }
         let parsed = self
             .scene
             .stories

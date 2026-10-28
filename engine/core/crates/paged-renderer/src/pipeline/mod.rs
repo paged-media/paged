@@ -85,6 +85,7 @@ mod tables;
 mod text_frame;
 mod text_path;
 mod text_slots;
+pub mod word_fields;
 
 pub use anchored::AnchoredImageEmit;
 use anchored::{emit_anchored_frames_for_paragraph, emit_anchored_rect_image};
@@ -1608,7 +1609,10 @@ fn build_document_fixed(
         .text_variables
         .iter()
         .any(|v| v.variable_type.as_deref() == Some("XrefPageNumberType"));
-    let single = !has_running_header && !has_text_anchor_dest && !has_xref_page;
+    // Engine ADR 1022 — a PAGEREF or STYLEREF field reads the layout too.
+    let has_layout_fields = word_fields::document_needs_post_layout(document);
+    let single =
+        !has_running_header && !has_text_anchor_dest && !has_xref_page && !has_layout_fields;
     let first = build_document_inner(document, options, None, adopt && single)?;
     if single {
         return Ok(first);
@@ -1640,13 +1644,16 @@ fn build_post_layout_ctx(document: &Document, first: &BuiltDocument) -> PostLayo
     let mut running_headers = links::RunningHeaderIndex::default();
     let mut story_page: HashMap<String, u32> = HashMap::new();
 
-    // The styles the document's running headers match.
+    // The styles the document's running headers match, and those its Word
+    // STYLEREF fields name (engine ADR 1022).
+    let style_refs = word_fields::style_ref_styles(document);
     let styles: std::collections::BTreeSet<&str> = document
         .designmap
         .text_variables
         .iter()
         .filter(|v| links::is_running_header_type(v.variable_type.as_deref()))
         .filter_map(links::running_header_style)
+        .chain(style_refs.iter().map(String::as_str))
         .collect();
 
     // Story → style → its matches in story order: (paragraph, byte start,
@@ -1805,6 +1812,20 @@ fn build_post_layout_ctx(document: &Document, first: &BuiltDocument) -> PostLayo
 /// paragraph's first line was laid out on.
 fn xref_pages(document: &Document, first: &BuiltDocument) -> HashMap<String, usize> {
     let mut out: HashMap<String, usize> = HashMap::new();
+    // Engine ADR 1022 — each bookmark's page, for the PAGEREF fields.
+    if word_fields::document_needs_post_layout(document) {
+        let laid_out = first.paragraph_pages();
+        for s in &document.stories {
+            for d in &s.story.destinations {
+                if let Some(page) = laid_out
+                    .get(&s.self_id)
+                    .and_then(|m| m.get(&(d.paragraph as usize)).copied())
+                {
+                    out.insert(format!("{}{}", word_fields::BOOKMARK_KEY, d.self_id), page);
+                }
+            }
+        }
+    }
     let sources: Vec<&str> = document
         .stories
         .iter()
