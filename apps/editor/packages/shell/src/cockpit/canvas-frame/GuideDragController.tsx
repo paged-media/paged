@@ -262,7 +262,10 @@ export function GuideDragController() {
           previewPosition: null,
         };
       }
-      const rects = layoutPageRects(handle?.pageSizesPt ?? []);
+      const rects = layoutPageRects(
+        handle?.pageSizesPt ?? [],
+        handle?.pageOriginsPt,
+      );
       const pageIds = handle?.pageIds ?? [];
       const hit = pageForDoc(rects, pageIds, doc[0], doc[1]);
       if (orientation === "horizontal") {

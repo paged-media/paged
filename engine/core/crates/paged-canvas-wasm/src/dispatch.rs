@@ -144,13 +144,29 @@ impl Default for WorkerCore {
 /// Snapshot of the built page table (id + size), diffed across
 /// undo/redo so page-mutation reversals carry the same page-grid
 /// refresh fields as `MutationApplied`.
-pub fn page_table(model: &CanvasModel) -> Vec<(PageId, (f32, f32))> {
+/// The built page table the editor's page grid mirrors: each page's id,
+/// size and (engine ADR 1011) place on the canvas. A change in any of them
+/// is a `page_structure_changed`.
+/// One row of [`page_table`]: a page's id, size and canvas origin, pt.
+pub type PageRow = (PageId, (f32, f32), (f32, f32));
+
+pub fn page_table(model: &CanvasModel) -> Vec<PageRow> {
     model
         .built()
         .pages
         .iter()
-        .map(|p| (p.id.clone(), (p.width_pt, p.height_pt)))
+        .map(|p| (p.id.clone(), (p.width_pt, p.height_pt), p.canvas_origin))
         .collect()
+}
+
+/// The sizes and canvas origins of a page table, in its order.
+type PageGrid = (Vec<(f32, f32)>, Vec<(f32, f32)>);
+
+fn page_grid(table: Vec<PageRow>) -> PageGrid {
+    table
+        .into_iter()
+        .map(|(_, size, origin)| (size, origin))
+        .unzip()
 }
 
 /// Pluck the story id out of a `Mutation` so the caller can scope GPU
@@ -234,6 +250,7 @@ struct FontChangeReport {
     page_ids: Vec<PageId>,
     page_structure_changed: bool,
     page_sizes_pt: Option<Vec<(f32, f32)>>,
+    page_origins_pt: Option<Vec<(f32, f32)>>,
 }
 
 /// Run a registry change on the live model and report the pages it
@@ -256,11 +273,18 @@ fn font_change_report(
                 }
                 _ => CacheEffect::ClearAll,
             };
+            let (page_sizes_pt, page_origins_pt) = match page_structure_changed {
+                true => {
+                    let (sizes, origins) = page_grid(pages_after);
+                    (Some(sizes), Some(origins))
+                }
+                false => (None, None),
+            };
             let report = FontChangeReport {
                 page_ids: model.dirty_page_ids(),
                 page_structure_changed,
-                page_sizes_pt: page_structure_changed
-                    .then(|| pages_after.into_iter().map(|p| p.1).collect()),
+                page_sizes_pt,
+                page_origins_pt,
             };
             (report, effect)
         }
@@ -477,14 +501,14 @@ impl WorkerCore {
                         // page-list mutations carry the refreshed sizes
                         // so the editor can rebuild its page grid
                         // without a document reload.
-                        let page_sizes_pt = outcome.page_structure_changed.then(|| {
-                            model
-                                .built()
-                                .pages
-                                .iter()
-                                .map(|p| (p.width_pt, p.height_pt))
-                                .collect()
-                        });
+                        let (page_sizes_pt, page_origins_pt) = match outcome.page_structure_changed
+                        {
+                            true => {
+                                let (sizes, origins) = page_grid(page_table(model));
+                                (Some(sizes), Some(origins))
+                            }
+                            false => (None, None),
+                        };
                         WorkerToMainKind::MutationApplied {
                             client_seq: msg.seq,
                             applied_seq: outcome.applied_seq,
@@ -493,6 +517,7 @@ impl WorkerCore {
                             created_id: outcome.created_id,
                             page_structure_changed: outcome.page_structure_changed,
                             page_sizes_pt,
+                            page_origins_pt,
                             // v38 (Wave 2, C-2 / S-05) — content-box reflow,
                             // populated by the model ONLY for a ResizeFrame
                             // (§8.5 resize-vs-transform: never for a
@@ -580,6 +605,12 @@ impl WorkerCore {
                         stats = stats.with_rebuild_stats(&model.last_rebuild_stats());
                         let pages_after = page_table(model);
                         let page_structure_changed = pages_before != pages_after;
+                        let (page_sizes_pt, page_origins_pt) = if page_structure_changed {
+                            let (sizes, origins) = page_grid(pages_after);
+                            (Some(sizes), Some(origins))
+                        } else {
+                            (None, None)
+                        };
                         WorkerToMainKind::MutationApplied {
                             client_seq: msg.seq,
                             applied_seq: model.applied_log_back().map_or(0, |r| r.applied_seq),
@@ -589,8 +620,8 @@ impl WorkerCore {
                             minted: Vec::new(),
                             created_pages: Vec::new(),
                             page_structure_changed,
-                            page_sizes_pt: page_structure_changed
-                                .then(|| pages_after.into_iter().map(|p| p.1).collect()),
+                            page_sizes_pt,
+                            page_origins_pt,
                             reflow: None,
                         }
                     }
@@ -911,6 +942,7 @@ impl WorkerCore {
                         stats = stats.with_rebuild_stats(&model.last_rebuild_stats());
                         let pages_after = page_table(model);
                         let page_structure_changed = pages_before != pages_after;
+                        let grid = page_structure_changed.then(|| page_grid(pages_after));
                         WorkerToMainKind::UndoApplied {
                             undone_seq: outcome.undone_seq,
                             applied_seq: outcome.applied_seq,
@@ -918,8 +950,8 @@ impl WorkerCore {
                             cache_stats: stats,
                             steps: None,
                             page_structure_changed,
-                            page_sizes_pt: page_structure_changed
-                                .then(|| pages_after.into_iter().map(|p| p.1).collect()),
+                            page_sizes_pt: grid.as_ref().map(|g| g.0.clone()),
+                            page_origins_pt: grid.map(|g| g.1),
                         }
                     }
                     None => WorkerToMainKind::MutationFailed {
@@ -962,6 +994,7 @@ impl WorkerCore {
                     page_ids: report.page_ids,
                     page_structure_changed: report.page_structure_changed,
                     page_sizes_pt: report.page_sizes_pt,
+                    page_origins_pt: report.page_origins_pt,
                 }
             }
             MainToWorkerKind::ClearFontRegistry(payload) => {
@@ -983,6 +1016,7 @@ impl WorkerCore {
                     page_ids: report.page_ids,
                     page_structure_changed: report.page_structure_changed,
                     page_sizes_pt: report.page_sizes_pt,
+                    page_origins_pt: report.page_origins_pt,
                 }
             }
             MainToWorkerKind::RegisterColorProfile { name, bytes } => {
@@ -1949,6 +1983,7 @@ impl WorkerCore {
                         stats = stats.with_rebuild_stats(&model.last_rebuild_stats());
                         let pages_after = page_table(model);
                         let page_structure_changed = pages_before != pages_after;
+                        let grid = page_structure_changed.then(|| page_grid(pages_after));
                         WorkerToMainKind::RedoApplied {
                             redone_seq: outcome.undone_seq,
                             applied_seq: outcome.applied_seq,
@@ -1956,8 +1991,8 @@ impl WorkerCore {
                             cache_stats: stats,
                             steps: None,
                             page_structure_changed,
-                            page_sizes_pt: page_structure_changed
-                                .then(|| pages_after.into_iter().map(|p| p.1).collect()),
+                            page_sizes_pt: grid.as_ref().map(|g| g.0.clone()),
+                            page_origins_pt: grid.map(|g| g.1),
                         }
                     }
                     None => WorkerToMainKind::MutationFailed {
@@ -2025,8 +2060,12 @@ impl WorkerCore {
                 stats = stats.with_rebuild_stats(&model.last_rebuild_stats());
                 let pages_after = page_table(model);
                 let page_structure_changed = pages_before != pages_after;
-                let page_sizes_pt =
-                    page_structure_changed.then(|| pages_after.into_iter().map(|p| p.1).collect());
+                let (page_sizes_pt, page_origins_pt) = if page_structure_changed {
+                    let (sizes, origins) = page_grid(pages_after);
+                    (Some(sizes), Some(origins))
+                } else {
+                    (None, None)
+                };
                 let steps = Some(outcomes.len() as u32);
                 let kind = if redo {
                     WorkerToMainKind::RedoApplied {
@@ -2037,6 +2076,7 @@ impl WorkerCore {
                         steps,
                         page_structure_changed,
                         page_sizes_pt,
+                        page_origins_pt,
                     }
                 } else {
                     WorkerToMainKind::UndoApplied {
@@ -2047,6 +2087,7 @@ impl WorkerCore {
                         steps,
                         page_structure_changed,
                         page_sizes_pt,
+                        page_origins_pt,
                     }
                 };
                 (kind, effect)

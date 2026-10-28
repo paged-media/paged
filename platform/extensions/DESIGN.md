@@ -746,6 +746,16 @@ on an engine before 77, never a throw. paged.draw's SVG importer and
 exporter delegate to them and keep their own TypeScript reader as the
 fallback for a host without the flags.
 
+Free page placement (engine ADR 1011) needs no flag: `placePage { page,
+originPt? }` is a new wire op, so protocol 77's handshake proves the engine
+has it. It puts a page (an artboard) at `originPt` on the canvas, absent
+returns it to the default vertical stack; the page order stays
+`movePage`'s. The vendored wire carries where every page sits —
+`DocumentHandle.pageOriginsPt`, `pageOriginsPt` beside every `pageSizesPt`,
+and the pages collection's `canvasOriginPt` / `canvasPlaced` / `boundsPt` —
+and the catalog the `pageCanvasOrigin` page path. An artboard's name is the
+page metadata entry `x-paged:paged.artboard` (`{"v":1,"data":{"name"}}`).
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

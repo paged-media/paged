@@ -229,6 +229,7 @@ pub(super) fn apply_insert_page(
         override_list: Vec::new(),
         name: None,
         show_master_items: None,
+        canvas_origin: None,
     };
     // paged.data D-23 — a new page takes its master's margins, as in
     // InDesign (a page's `<MarginPreference>` follows its master's until

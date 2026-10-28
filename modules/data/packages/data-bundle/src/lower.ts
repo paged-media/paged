@@ -927,6 +927,9 @@ export async function commitLoweredImage(
   /** Data ADR 563: an asset column's pipeline (fetch, keep, act) maps the
    *  reference to what is placed, or says why there is nothing to place. */
   resolveUri?: (uri: string) => Promise<{ uri: string } | { reason: string }>,
+  /** Data ADR 563 (amended 2026-10-28): an `asset:<id>` reference is read
+   *  from the bytes the document carries; without this, it is not placed. */
+  resolveAsset?: (id: string) => Promise<{ uri: string } | { reason: string }>,
 ): Promise<boolean> {
   if (image.status !== "present") {
     host.log.info(
@@ -934,12 +937,38 @@ export async function commitLoweredImage(
     );
     return false;
   }
+  if (image.reference.ref === "assetId") {
+    const id = image.reference.id;
+    const r = resolveAsset
+      ? await resolveAsset(id)
+      : { reason: "no asset store is wired to resolve it" };
+    if ("reason" in r) {
+      host.log.warn(
+        `image "${image.target}": asset:${id}: ${r.reason} — nothing placed`,
+      );
+      return false;
+    }
+    const fit = fitOverride ?? idmlFit(image.fit);
+    const outcome = await host.document.mutate(
+      placeImageMutation(elementId, r.uri, fit),
+    );
+    if (!outcome.applied) {
+      host.log.warn(
+        `image "${image.target}": placeImage rejected on ${elementId}`,
+      );
+      return false;
+    }
+    host.log.info(
+      `image "${image.target}" placed on ${elementId} (asset:${id}, fit ${fit})`,
+    );
+    return true;
+  }
   const uri = placeableUri(image.reference);
   if (!uri) {
     host.log.info(
       `image "${image.target}" resolved to ${describeRef(image.reference)} — ` +
-        "not a URI-addressable reference (inline bytes / assetId need the asset-store " +
-        "door); placement skipped, never faked",
+        "not a URI-addressable reference (inline bytes need the asset-store door); " +
+        "placement skipped, never faked",
     );
     return false;
   }

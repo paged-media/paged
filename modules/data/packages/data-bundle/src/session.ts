@@ -78,9 +78,15 @@ import {
   type RecordTemplateMethods,
 } from "./record-templates";
 import {
+  ASSET_INDEX_PART,
   DATA_PART_DIR,
   SESSION_PART,
+  assetPartPath,
+  carriedHash,
   contentHash,
+  decodeAssetIndex,
+  storeAssets,
+  type AssetIndex,
   decodeSession,
   emptyTargets,
   encodeSession,
@@ -1178,6 +1184,12 @@ export function createSession(
   // Bumped when another document opens: a write queued for the previous
   // document checks it and is dropped instead of landing in the new one.
   let docEpoch = 0;
+  // Data ADR 563 (amended 2026-10-28): the open document's asset index, read
+  // when first needed (a reference no cache holds, or a save), never at open.
+  let assetIndexRead: {
+    epoch: number;
+    index: Promise<AssetIndex | null>;
+  } | null = null;
   const listeners = new Set<() => void>();
   const PERSIST_DEBOUNCE_MS = 250;
 
@@ -2383,6 +2395,7 @@ export function createSession(
     pendingDefs.length = 0;
     knownDataParts.clear();
     valuesCache.clear();
+    assetIndexRead = null;
     bootPayload = null;
     lastWritten = null;
     persistence.status = "empty";
@@ -2698,6 +2711,7 @@ export function createSession(
     host.document.onWillSave(async () => {
       await flushPersistInternal();
       await collectDataParts();
+      await persistAssets();
       // ADR 559: the recipe also lives in the elements' labels (the first
       // save of a session written before them adds them).
       await props.syncLabels().catch(() => ({ written: 0 }));
@@ -3205,9 +3219,115 @@ export function createSession(
   const assetColumns = new Map<string, AssetColumnDef>();
   const assets = createAssetPipeline(host, {
     consentedOrigins: () => consentedOriginsSafe(),
+    // A reference the open document carries is read from its part.
+    // An `asset:<id>` names it by the reference its column resolved or by
+    // its content hash.
+    fromDocument: async (reference) => {
+      const index = await documentAssetIndex();
+      if (!index) return null;
+      const hash = carriedHash(index, reference);
+      if (!hash) return null;
+      return {
+        hash,
+        mediaType: index.assets[hash]?.mediaType ?? "",
+        read: () => host.parts.read(assetPartPath(hash)),
+      };
+    },
   });
+
+  /** The open document's asset index (read once per document). */
+  function documentAssetIndex(): Promise<AssetIndex | null> {
+    if (!partsAvailable()) return Promise.resolve(null);
+    if (assetIndexRead?.epoch !== docEpoch)
+      assetIndexRead = {
+        epoch: docEpoch,
+        index: host.parts
+          .read(ASSET_INDEX_PART)
+          .then(decodeAssetIndex)
+          .catch(() => null),
+      };
+    return assetIndexRead.index;
+  }
+
+  /** Data ADR 563 (amended 2026-10-28): on save, the assets the asset
+   *  columns reference now go into the document as parts, with their index
+   *  (`persist.ts` `storeAssets`). A column whose query has no records yet
+   *  keeps what the document carried for it. */
+  async function persistAssets(): Promise<void> {
+    if (!partsAvailable()) return;
+    const epoch = docEpoch;
+    try {
+      const previous = await documentAssetIndex();
+      if (assetColumns.size === 0 && !previous) return;
+      const columns = new Map<string, string[] | null>();
+      for (const key of assetColumns.keys()) {
+        const dot = key.indexOf(".");
+        const query = key.slice(0, dot);
+        const field = key.slice(dot + 1);
+        const n = engine?.query_record_count?.(query) ?? 0;
+        if (!engine?.evaluate_at || n === 0) {
+          columns.set(key, null);
+          continue;
+        }
+        const refs: string[] = [];
+        let failed = 0;
+        for (let r = 0; r < n; r++) {
+          const v = engine.evaluate_at(query, field, r);
+          if (v.error) failed++;
+          else if (v.display?.trim()) refs.push(v.display.trim());
+        }
+        // A field that does not evaluate says nothing about its references.
+        columns.set(key, failed === n ? null : refs);
+      }
+      if (epoch !== docEpoch) return;
+      const cleans = host.supports("storage.parts@2");
+      const { index } = await storeAssets(
+        columns,
+        (reference) => assets.kept(reference),
+        previous,
+        {
+          write: (path, bytes) => host.parts.write(path, bytes),
+          ...(cleans
+            ? {
+                list: (prefix: string) => host.parts.list(prefix),
+                delete: (path: string) => host.parts.delete(path),
+              }
+            : {}),
+        },
+      );
+      assetIndexRead = {
+        epoch,
+        index: Promise.resolve(
+          Object.keys(index.assets).length > 0 ? index : null,
+        ),
+      };
+    } catch (err) {
+      report({
+        level: "warn",
+        source: "persist",
+        message: `the asset columns' pictures were not saved with the document: ${errText(err)}`,
+      });
+    }
+  }
   /** The asset resolver of an image binding over an asset column, if any. */
-  function assetResolverOf(bindingId: string) {
+  /** An `asset:<id>` image: the bytes the document carries (or this
+   *  session's cache), through the binding's column chain when it has one. */
+  function assetIdResolverOf(bindingId: string) {
+    return async (id: string) => {
+      const r = await assets.resolve(
+        `asset:${id}`,
+        assetColumnOf(bindingId) ?? {},
+      );
+      imageNotes.set(
+        bindingId,
+        r.ok ? (r.pixels ? { pixels: r.pixels } : {}) : { missing: r.reason },
+      );
+      return r.ok ? { uri: r.uri } : { reason: r.reason };
+    };
+  }
+
+  /** The asset column an image binding reads, if it reads one. */
+  function assetColumnOf(bindingId: string): AssetColumnDef | undefined {
     const b = (
       (
         engine?.payload() as
@@ -3222,10 +3342,13 @@ export function createSession(
           | undefined
       )?.bindings ?? []
     ).find((x) => x.id === bindingId);
-    const def =
-      b?.kind === "image" && b.query && b.expr
-        ? assetColumns.get(`${b.query}.${b.expr.trim()}`)
-        : undefined;
+    return b?.kind === "image" && b.query && b.expr
+      ? assetColumns.get(`${b.query}.${b.expr.trim()}`)
+      : undefined;
+  }
+
+  function assetResolverOf(bindingId: string) {
+    const def = assetColumnOf(bindingId);
     if (!def) return undefined;
     return async (uri: string) => {
       const r = await assets.resolve(uri, def);
@@ -4526,6 +4649,7 @@ export function createSession(
               tgt.elementId,
               tgt.fit,
               resolver,
+              assetIdResolverOf(id),
             );
             // A plain link: the host is asked the picture's pixel size.
             if (placed && !resolver) imageNotes.set(id, { linked: true });
@@ -4825,6 +4949,7 @@ export function createSession(
               tgt.elementId,
               tgt.fit,
               assetResolverOf(bindingId),
+              assetIdResolverOf(bindingId),
             );
           }
         }

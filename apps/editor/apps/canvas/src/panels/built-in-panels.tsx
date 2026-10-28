@@ -82,6 +82,7 @@ import { AnchoredPanel } from "./concept/anchored-panel";
 import { ObjectExportPanel } from "./concept/object-export-panel";
 import { ExportTaggingPanel } from "./concept/export-tagging-panel";
 import { MasterPagesPanel } from "./master-pages-panel";
+import { ArtboardsPanel } from "./artboards-panel";
 import { PagesListPanel } from "./pages-list-panel";
 import { SpreadsPanel } from "./spreads-panel";
 import { TableStylesPanel } from "./table-styles-panel";
@@ -170,6 +171,7 @@ const M = defineMessages("app.builtInPanels", {
   crossReferences: "Cross References",
   index: "Index",
   pagesList: "Pages list",
+  artboards: "Artboards",
   spreads: "Spreads",
   masterPages: "Master Pages",
   cellStyles: "Cell Styles",
@@ -688,6 +690,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: PagesListPanel,
     defaultDock: "left",
     defaultGroup: "structure",
+  },
+  // Engine ADR 1011 — pages as artboards placed on the canvas: list,
+  // rename, reorder, options, rearrange, export per artboard.
+  {
+    id: "paged.artboards",
+    get title() {
+      return t(M.artboards);
+    },
+    component: ArtboardsPanel,
+    defaultDock: "left",
+    defaultGroup: "structure",
+    icon: "tool-artboard",
   },
   {
     id: "paged.spreads",

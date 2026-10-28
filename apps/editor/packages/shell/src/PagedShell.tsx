@@ -1253,17 +1253,29 @@ function ShellChrome({
       }
       refreshingPagesRef.current = true;
       void client
-        .collection<{ selfId: string; sizePt: [number, number] }>("pages")
+        .collection<{
+          selfId: string;
+          sizePt: [number, number];
+          canvasOriginPt?: [number, number] | null;
+        }>("pages")
         .then((pages) => {
           const now = currentHandle();
           if (!now) return;
+          // Engine ADR 1011 — where each page sits on the canvas (an older
+          // worker sends none; the canvas then stacks the pages).
+          const origins = pages.every((p) => p.canvasOriginPt)
+            ? pages.map((p) => p.canvasOriginPt as [number, number])
+            : undefined;
           const same =
             pages.length === now.pageIds.length &&
             pages.every(
               (p, i) =>
                 p.selfId === now.pageIds[i] &&
                 p.sizePt[0] === now.pageSizesPt?.[i]?.[0] &&
-                p.sizePt[1] === now.pageSizesPt?.[i]?.[1],
+                p.sizePt[1] === now.pageSizesPt?.[i]?.[1] &&
+                (!origins ||
+                  (origins[i][0] === now.pageOriginsPt?.[i]?.[0] &&
+                    origins[i][1] === now.pageOriginsPt?.[i]?.[1])),
             );
           if (same) return;
           setHandle({
@@ -1271,6 +1283,7 @@ function ShellChrome({
             pageCount: pages.length,
             pageIds: pages.map((p) => p.selfId) as typeof now.pageIds,
             pageSizesPt: pages.map((p) => p.sizePt) as typeof now.pageSizesPt,
+            pageOriginsPt: (origins ?? []) as typeof now.pageOriginsPt,
           });
         })
         .catch(() => undefined)
@@ -1341,6 +1354,9 @@ function ShellChrome({
               pageCount: msg.payload.pageIds.length,
               pageIds: msg.payload.pageIds,
               pageSizesPt: msg.payload.pageSizesPt,
+              // Engine ADR 1011 — the page grid's places on the canvas (an
+              // older worker sends none: the canvas stacks the pages).
+              pageOriginsPt: msg.payload.pageOriginsPt ?? [],
             });
           }
         } else if (prev) {

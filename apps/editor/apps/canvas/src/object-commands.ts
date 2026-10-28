@@ -2160,17 +2160,26 @@ export const objectVerbApplies = (state: unknown): boolean => {
 /** The Page tool's id (`@paged-media/tools`), spelled here rather than
  *  imported: this module stays type-only so its pure half runs in Node. */
 const PAGE_TOOL_ID = "paged.tool.page";
+/** The Artboard tool's (engine ADR 1011): its Delete removes the
+ *  selected artboard. */
+const ARTBOARD_TOOL_ID = "paged.tool.artboard";
 
 /**
  * The Backspace/Delete KEYS, on top of `objectVerbApplies`: while the
- * Page tool is in hand those keys delete the armed PAGE (its `onKey`),
+ * Page tool (or the Artboard tool) is in hand those keys delete the armed
+ * PAGE (its `onKey`),
  * and one press must not take a page and the selected frames with it.
  * Keys only — choosing Object ▸ Delete from the menu with the Page tool
  * active is unambiguous and still runs.
  */
-export const deleteKeyApplies = (state: unknown): boolean =>
-  objectVerbApplies(state) &&
-  (state as KeyOwnerState | null)?.tool?.effectiveTool !== PAGE_TOOL_ID;
+export const deleteKeyApplies = (state: unknown): boolean => {
+  const tool = (state as KeyOwnerState | null)?.tool?.effectiveTool;
+  return (
+    objectVerbApplies(state) &&
+    tool !== PAGE_TOOL_ID &&
+    tool !== ARTBOARD_TOOL_ID
+  );
+};
 
 /**
  * The ARROW keys, on top of `objectVerbApplies`: while a tool is

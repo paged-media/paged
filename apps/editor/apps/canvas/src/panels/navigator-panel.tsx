@@ -82,6 +82,7 @@ export function NavigatorPanel(_props: PanelProps) {
       <PageNavigator
         pageIds={handle.pageIds}
         pageSizesPt={handle.pageSizesPt}
+        pageOriginsPt={handle.pageOriginsPt}
         snapshots={snapshots}
         viewportSize={viewportSize}
         onCameraChange={animateCamera}

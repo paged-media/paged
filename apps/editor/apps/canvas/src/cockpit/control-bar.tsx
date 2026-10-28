@@ -78,7 +78,7 @@ import {
 
 import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
 import { usePagePosition } from "../panels/page-position";
-import { layoutPages } from "../ui/layout";
+import { layoutPages, pageNearest } from "../ui/layout";
 import { Chip, Sep, ToolPill } from "./toolbars";
 import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
 
@@ -206,16 +206,16 @@ function DocumentControls() {
       </span>
     );
   }
-  // The page under the middle of the viewport (pages stack vertically —
-  // `layoutPages`, the same convention the navigator fits to).
-  const rects = layoutPages(sizes);
-  const [, cy] = viewportToDoc(
+  // The page under the middle of the viewport (each page at its place on
+  // the canvas — `layoutPages`, the same convention the navigator fits to).
+  const rects = layoutPages(sizes, handle.pageOriginsPt);
+  const [cx, cy] = viewportToDoc(
     camera,
     viewportSize[0] / 2,
     viewportSize[1] / 2,
   );
-  let current = 0;
-  for (let i = 0; i < rects.length; i++) if (cy >= rects[i].y - 12) current = i;
+  const nearest = pageNearest(rects, cx, cy);
+  const current = nearest < 0 ? 0 : nearest;
   const go = (i: number) =>
     navigateToPages([Math.max(0, Math.min(sizes.length - 1, i))]);
   const [w, h] = sizes[current];
