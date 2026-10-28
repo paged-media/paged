@@ -455,6 +455,11 @@ export const HOST_FEATURES: readonly string[] = [
   // Extensions ADR 346 — a page as layers (background + items), built on
   // the snapshot doors above; static for the same reason.
   "render.layers@1",
+  // Extensions ADR 346 amendment C4 (slide ADR 714) — `paragraphs`: a text
+  // frame's paragraphs as layers of their own, cut from the frame's image
+  // along its line geometry (`requestSelectionGeometry`). Static: built on
+  // doors every engine at this protocol answers.
+  "render.layers.paragraphs@1",
   // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
   // reason as storage.parts@1: the pinned engine is the server, and the worker
   // handshake refuses a protocol older than the pin — so a running bundle is
@@ -3742,13 +3747,14 @@ export function createBundleHost(
       checkDpi(dpi, "host.render.layers (scale × 72)");
       const items = Array.isArray(opts?.items) ? opts.items : [];
       const hide = Array.isArray(opts?.hideItems) ? opts.hideItems : [];
+      const paragraphs = Array.isArray(opts?.paragraphs) ? opts.paragraphs : [];
       const format =
         opts?.format ??
         (typeof createImageBitmap === "function" ? "bitmap" : "png");
       const wire = format === "rgba" ? "rgba" : "png";
       const bg = await render.snapshot(pageId, {
         dpi,
-        hideItems: [...hide, ...items],
+        hideItems: [...hide, ...items, ...paragraphs],
         ...(wire === "rgba" ? { format: "rgba" as const } : {}),
       });
       if (!bg) return null;
@@ -3769,15 +3775,108 @@ export function createBundleHost(
         if (!el || el.pageId !== pageId) continue;
         out.push(await toLayer(id, el, el.region, format));
       }
+      const paras: RenderedLayer[] = [];
+      for (const id of paragraphs) {
+        for (const band of await paragraphBands(pageId, id, opts?.marginPt ?? 72)) {
+          const shot = await render.snapshot(pageId, {
+            dpi,
+            only: [id],
+            clip: band.region,
+            ...(wire === "rgba" ? { format: "rgba" as const } : {}),
+            background: "transparent",
+            trim: true,
+          });
+          if (!shot?.region) continue;
+          paras.push({
+            ...(await toLayer(id, shot, shot.region, format)),
+            paragraph: band.paragraph,
+          });
+        }
+      }
       return {
         pageId,
         scale,
         layoutGeneration: bg.layoutGeneration,
         background,
         items: out,
+        ...(paragraphs.length > 0 ? { paragraphs: paras } : {}),
       };
     },
   };
+
+  /** C4 — the page bands of a text frame's paragraphs: from each
+   *  paragraph's first line to the next paragraph's first line (the first
+   *  band from the frame's top, the last to its bottom, both grown by
+   *  `marginPt`), across the frame's width grown by `marginPt`. The line
+   *  geometry is the engine's selection geometry of the paragraph's content
+   *  range, restricted to this frame. */
+  async function paragraphBands(
+    pageId: string,
+    id: ElementId,
+    marginPt: number,
+  ): Promise<Array<{ paragraph: number; region: RenderRect }>> {
+    let geometry;
+    try {
+      [geometry] = await getEditor().client.elementGeometry([id]);
+    } catch {
+      return [];
+    }
+    const storyId = (geometry as { storyId?: string | null } | undefined)
+      ?.storyId;
+    if (!geometry || geometry.pageId !== pageId || !storyId) return [];
+    const frameId = (id as { id: unknown }).id;
+    const content = await document.storyContent(storyId);
+    if (!content) return [];
+    const frame = regionAround([geometry], marginPt);
+    const lines: Array<{ paragraph: number; top: number; bottom: number }> =
+      [];
+    let offset = 0;
+    const utf8 = new TextEncoder();
+    for (const [i, p] of content.paragraphs.entries()) {
+      const text = p.runs.map((r) => r.text).join("");
+      const start = offset;
+      const end = start + utf8.encode(text).length;
+      offset = end + 1;
+      if (end === start) continue;
+      let reply: { kind: string; payload?: unknown };
+      try {
+        reply = (await getEditor().client.send({
+          kind: "requestSelectionGeometry",
+          payload: { selection: { storyId, start, end } },
+        } as never)) as { kind: string; payload?: unknown };
+      } catch {
+        continue;
+      }
+      if (reply.kind !== "selectionGeometry") continue;
+      const rects = (
+        reply.payload as {
+          rects: Array<{
+            pageId: string;
+            frameId: string | null;
+            topPt: number;
+            heightPt: number;
+          }>;
+        }
+      ).rects.filter((r) => r.pageId === pageId && r.frameId === frameId);
+      if (rects.length === 0) continue;
+      lines.push({
+        paragraph: i,
+        top: Math.min(...rects.map((r) => r.topPt)),
+        bottom: Math.max(...rects.map((r) => r.topPt + r.heightPt)),
+      });
+    }
+    return lines.map((l, k) => {
+      const top = k === 0 ? Math.min(frame.y, l.top) : l.top;
+      const next = lines[k + 1];
+      const bottom = next
+        ? Math.max(l.bottom, next.top)
+        : Math.max(frame.y + frame.height, l.bottom);
+      return {
+        paragraph: l.paragraph,
+        region: { x: frame.x, y: top, width: frame.width, height: bottom - top },
+      };
+    });
+  }
 
   /** A snapshot reply as a layer in the asked format. */
   async function toLayer(
