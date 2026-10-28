@@ -115,6 +115,8 @@ export const STACK_PATHS: Record<StackTarget, string> = {
 /** The entries of a read `Value::EffectStack` (`{ entries, prev }`), or
  *  `null` when the read is not one. */
 export function entriesOf(value: unknown): StackEntry[] | null {
+  // The object model reads the stack as its list of entries.
+  if (Array.isArray(value)) return value as StackEntry[];
   if (!value || typeof value !== "object") return null;
   const v = value as { type?: string; value?: unknown };
   const inner =
@@ -201,7 +203,13 @@ export interface ParamSpec {
 /** The parameter controls of each stack-only kind, in panel order. */
 export const PARAMS: Partial<Record<EffectKind, readonly ParamSpec[]>> = {
   gaussianBlur: [
-    { key: "radiusPt", label: "radius", control: "number", suffix: "pt", min: 0 },
+    {
+      key: "radiusPt",
+      label: "radius",
+      control: "number",
+      suffix: "pt",
+      min: 0,
+    },
   ],
   outlineStroke: [
     { key: "sizePt", label: "size", control: "number", suffix: "pt", min: 0 },
@@ -215,8 +223,21 @@ export const PARAMS: Partial<Record<EffectKind, readonly ParamSpec[]>> = {
     { key: "reverse", label: "reverse", control: "bool" },
   ],
   reflection: [
-    { key: "distancePt", label: "distance", control: "number", suffix: "pt", min: 0 },
-    { key: "sizePct", label: "size", control: "number", suffix: "%", min: 0, max: 100 },
+    {
+      key: "distancePt",
+      label: "distance",
+      control: "number",
+      suffix: "pt",
+      min: 0,
+    },
+    {
+      key: "sizePct",
+      label: "size",
+      control: "number",
+      suffix: "%",
+      min: 0,
+      max: 100,
+    },
     {
       key: "startOpacityPct",
       label: "startOpacity",
@@ -239,13 +260,45 @@ export const PARAMS: Partial<Record<EffectKind, readonly ParamSpec[]>> = {
     { key: "sizePt", label: "size", control: "number", suffix: "pt", min: 0 },
   ],
   noise: [
-    { key: "amountPct", label: "amount", control: "number", suffix: "%", min: 0, max: 100 },
+    {
+      key: "amountPct",
+      label: "amount",
+      control: "number",
+      suffix: "%",
+      min: 0,
+      max: 100,
+    },
     { key: "monochromatic", label: "monochromatic", control: "bool" },
   ],
   colorAdjust: [
-    { key: "brightness", label: "brightness", control: "number", min: -100, max: 100 },
-    { key: "contrast", label: "contrast", control: "number", min: -100, max: 100 },
-    { key: "saturation", label: "saturation", control: "number", min: -100, max: 100 },
-    { key: "hueDeg", label: "hue", control: "number", suffix: "°", min: -180, max: 180 },
+    {
+      key: "brightness",
+      label: "brightness",
+      control: "number",
+      min: -100,
+      max: 100,
+    },
+    {
+      key: "contrast",
+      label: "contrast",
+      control: "number",
+      min: -100,
+      max: 100,
+    },
+    {
+      key: "saturation",
+      label: "saturation",
+      control: "number",
+      min: -100,
+      max: 100,
+    },
+    {
+      key: "hueDeg",
+      label: "hue",
+      control: "number",
+      suffix: "°",
+      min: -180,
+      max: 180,
+    },
   ],
 };

@@ -83,12 +83,16 @@ test.describe("Effects ▸ effect stack (engine ADR 1008)", () => {
     const render0 = await pageRender(page, fx.pages[0]!);
 
     // Add a Gaussian blur, then an outline stroke.
-    await stack.locator("select[data-effect-stack-add]").selectOption("gaussianBlur");
+    await stack
+      .locator("select[data-effect-stack-add]")
+      .selectOption("gaussianBlur");
     await expect
       .poll(async () => kinds(await stackOf(page, ref)))
       .toEqual([...kinds(before), "gaussianBlur"]);
     await expectRenderChange(page, fx.pages[0]!, render0);
-    await stack.locator("select[data-effect-stack-add]").selectOption("outlineStroke");
+    await stack
+      .locator("select[data-effect-stack-add]")
+      .selectOption("outlineStroke");
     await expect
       .poll(async () => kinds(await stackOf(page, ref)))
       .toEqual([...kinds(before), "gaussianBlur", "outlineStroke"]);
@@ -119,22 +123,22 @@ test.describe("Effects ▸ effect stack (engine ADR 1008)", () => {
       .toEqual([...kinds(before), "outlineStroke", "gaussianBlur"]);
 
     // Switch the blur off: it stays on the stack.
-    await stack
-      .locator('[data-toggle-switch="stack:gaussianBlur"]')
-      .click();
+    await stack.locator('[data-toggle-switch="stack:gaussianBlur"]').click();
     await expect
-      .poll(async () =>
-        (await stackOf(page, ref)).find((e) => e.kind === "gaussianBlur")
-          ?.enabled,
+      .poll(
+        async () =>
+          (await stackOf(page, ref)).find((e) => e.kind === "gaussianBlur")
+            ?.enabled,
       )
       .toBe(false);
 
     // One undo per gesture: off, reorder, size, stroke, blur.
     await undoOnce(page);
     await expect
-      .poll(async () =>
-        (await stackOf(page, ref)).find((e) => e.kind === "gaussianBlur")
-          ?.enabled,
+      .poll(
+        async () =>
+          (await stackOf(page, ref)).find((e) => e.kind === "gaussianBlur")
+            ?.enabled,
       )
       .toBe(true);
     await undoOnce(page);
@@ -161,9 +165,11 @@ test.describe("Effects ▸ effect stack (engine ADR 1008)", () => {
       '[data-effect-stack="fill"] select[data-effect-stack-add]',
     );
     await expect(add).toBeVisible();
-    const offered = await add.locator("option").evaluateAll((os) =>
-      os.map((o) => (o as HTMLOptionElement).value).filter(Boolean),
-    );
+    const offered = await add
+      .locator("option")
+      .evaluateAll((os) =>
+        os.map((o) => (o as HTMLOptionElement).value).filter(Boolean),
+      );
     expect(offered).toContain("innerGlow");
     expect(offered).not.toContain("gaussianBlur");
   });

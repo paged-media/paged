@@ -24,6 +24,12 @@
 //! effect-stack.photoshop.json`) draws a black 32 px square on white in a
 //! 64 px document at 72 ppi and applies each effect; this replays the same
 //! square through the engine's stack at one pixel per pt and compares.
+//!
+//! Measured 2026-10-25: the overlay and the inside stroke agree exactly;
+//! the outside and centred strokes differ only in the antialiasing of the
+//! rounded outer corners (mean 0.11 and 0.02 levels); the blur at Photoshop
+//! radius 3 against σ = 3 pt differs by at most 3 levels (mean 0.29), so
+//! Photoshop's "Radius" is the Gaussian's σ. The thresholds hold those.
 
 use std::io::Write;
 
@@ -139,9 +145,24 @@ fn the_square_itself_agrees__feat__effects_transparency_effect_stack() {
 #[test]
 #[allow(non_snake_case)]
 fn the_layer_style_stroke_agrees_with_photoshop__feat__effects_transparency_effect_stack() {
-    check("stroke-outside", vec![stroke(StrokePosition::Outside)], 1.0, 8);
-    check("stroke-inside", vec![stroke(StrokePosition::Inside)], 1.0, 8);
-    check("stroke-center", vec![stroke(StrokePosition::Center)], 1.0, 8);
+    check(
+        "stroke-outside",
+        vec![stroke(StrokePosition::Outside)],
+        0.25,
+        0,
+    );
+    check(
+        "stroke-inside",
+        vec![stroke(StrokePosition::Inside)],
+        0.05,
+        0,
+    );
+    check(
+        "stroke-center",
+        vec![stroke(StrokePosition::Center)],
+        0.1,
+        0,
+    );
 }
 
 #[test]
@@ -165,7 +186,7 @@ fn the_gaussian_blur_agrees_with_photoshop__feat__effects_transparency_effect_st
         vec![EffectEntry::new(Effect::GaussianBlur(GaussianBlurParams {
             radius_pt: 3.0,
         }))],
-        1.0,
+        0.5,
         0,
     );
 }

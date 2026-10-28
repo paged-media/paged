@@ -77,7 +77,9 @@ describe("effect stack gestures [effects-transparency.effect-stack]", () => {
 
   test("reads and writes the wire shape", () => {
     expect(entriesOf({ entries: s, prev: null })).toEqual(s);
-    expect(entriesOf({ type: "effectStack", value: { entries: s } })).toEqual(s);
+    expect(entriesOf({ type: "effectStack", value: { entries: s } })).toEqual(
+      s,
+    );
     expect(entriesOf("nope")).toBeNull();
     expect(stackValue(s)).toEqual({
       type: "effectStack",

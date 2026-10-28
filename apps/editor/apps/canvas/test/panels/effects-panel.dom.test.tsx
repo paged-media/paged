@@ -288,9 +288,10 @@ describe("Effects panel: the effect stack [effects-transparency.effect-stack]", 
     expect(writes).toHaveLength(1);
     expect(writes[0]!.args.path).toBe("frameEffectStack");
     await h.choose(addMenu(h), "outlineStroke");
-    expect(kinds(await h.get(addr(h.scene.rect), "frameEffectStack"))).toEqual(
-      ["gaussianBlur", "outlineStroke"],
-    );
+    expect(kinds(await h.get(addr(h.scene.rect), "frameEffectStack"))).toEqual([
+      "gaussianBlur",
+      "outlineStroke",
+    ]);
     expect(rows(h)).toEqual(["gaussianBlur", "outlineStroke"]);
 
     await h.click(action(h, "outlineStroke", "up"));
@@ -298,9 +299,10 @@ describe("Effects panel: the effect stack [effects-transparency.effect-stack]", 
     from = h.mark();
     await h.click(pill(h, "stack:gaussianBlur"));
     expect(h.mutations(from)).toHaveLength(1);
-    expect(kinds(await h.get(addr(h.scene.rect), "frameEffectStack"))).toEqual(
-      ["outlineStroke", "gaussianBlur (off)"],
-    );
+    expect(kinds(await h.get(addr(h.scene.rect), "frameEffectStack"))).toEqual([
+      "outlineStroke",
+      "gaussianBlur (off)",
+    ]);
     await h.click(action(h, "gaussianBlur", "remove"));
     expect(rows(h)).toEqual(["outlineStroke"]);
     await h.act(() => h.client.undo());

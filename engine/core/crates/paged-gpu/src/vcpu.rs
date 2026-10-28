@@ -2560,7 +2560,7 @@ mod tests {
                     h: 1.0,
                 },
                 paged_compose::Transform([30.0, 0.0, 0.0, 20.0, 10.0, 10.0]),
-                red.clone(),
+                red,
                 &mut list,
             );
             list.commands.push(paged_compose::DisplayCommand::PopLayer(
@@ -2580,8 +2580,8 @@ mod tests {
                     }
                     let a = page.get_pixel(px as u32, py as u32).0;
                     let i = ((y * layer.w + x) * 4) as usize;
-                    for c in 0..4 {
-                        worst = worst.max(a[c].abs_diff(layer.rgba[i + c]));
+                    for (c, v) in a.iter().enumerate() {
+                        worst = worst.max(v.abs_diff(layer.rgba[i + c]));
                     }
                 }
             }

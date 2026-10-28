@@ -311,9 +311,13 @@ function EffectDisclosure({
  *  the engine's, not hand-kept here), labelled from the panel's
  *  messages; a mode without a label shows its IDML name. Without a row
  *  (no selection yet) the panel's own list stands in. */
-function schemaBlendModes(strings: Strings, row: ObjectField["row"]): BlendOption[] {
+function schemaBlendModes(
+  strings: Strings,
+  row: ObjectField["row"],
+): BlendOption[] {
   const labelled = blendModes(strings);
-  const type = row?.type as { kind?: string; members?: readonly string[] } | undefined;
+  const type = row?.type as
+    { kind?: string; members?: readonly string[] } | undefined;
   if (type?.kind !== "enum" || !type.members?.length) return labelled;
   return type.members.map((m) => ({
     value: m,

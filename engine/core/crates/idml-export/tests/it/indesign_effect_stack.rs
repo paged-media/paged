@@ -93,7 +93,11 @@ fn write_probe() {
         let r = boxed(&mut doc.spreads[0].spread);
         let read = r.effect_slots(EffectTarget::Object).resolved();
         let kinds: Vec<_> = read.iter().map(|e| e.effect.kind_name()).collect();
-        assert_eq!(kinds, ["dropShadow", "innerGlow", "satin"], "InDesign's base");
+        assert_eq!(
+            kinds,
+            ["dropShadow", "innerGlow", "satin"],
+            "InDesign's base"
+        );
         r.effect_slots_mut(EffectTarget::Object)
             .set_stack(the_stack())
             .expect("stack");
@@ -108,8 +112,8 @@ fn field<'a>(v: &'a serde_json::Value, phase: &str, key: &str) -> &'a serde_json
 
 #[test]
 #[allow(non_snake_case)]
-fn indesign_draws_its_enabled_effects_and_keeps_the_label__feat__effects_transparency_effect_stack(
-) {
+fn indesign_draws_its_enabled_effects_and_keeps_the_label__feat__effects_transparency_effect_stack()
+{
     let rec: serde_json::Value = serde_json::from_str(RECORDING).expect("recording");
     for phase in ["opened", "savedAndReopened"] {
         assert_eq!(field(&rec, phase, "dropShadow"), true, "{phase}");
@@ -146,7 +150,11 @@ fn indesign_draws_its_enabled_effects_and_keeps_the_label__feat__effects_transpa
 fn indesigns_own_export_restores_the_stack__feat__effects_transparency_effect_stack() {
     let mut doc = idml_import::import_idml_doc(RESAVED).expect("InDesign's export");
     let r = boxed(&mut doc.spreads[0].spread);
-    let kinds: Vec<_> = r.effect_stack.iter().map(|e| e.effect.kind_name()).collect();
+    let kinds: Vec<_> = r
+        .effect_stack
+        .iter()
+        .map(|e| e.effect.kind_name())
+        .collect();
     assert_eq!(
         kinds,
         [

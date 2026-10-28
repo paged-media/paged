@@ -70,7 +70,7 @@ pub fn apply_premul(
                 hue_deg,
             };
             if !adj.is_identity() {
-                for px in data.chunks_exact_mut(4) {
+                for px in data.as_chunks_mut::<4>().0 {
                     map_pixel(px, |rgb| adj.apply(rgb));
                 }
             }

@@ -386,7 +386,7 @@ impl Walker<'_, '_> {
             let n = (layer.w * layer.h) as usize;
             let mut rgb = Vec::with_capacity(n * 3);
             let mut alpha = Vec::with_capacity(n);
-            for px in layer.rgba.chunks_exact(4) {
+            for px in layer.rgba.as_chunks::<4>().0 {
                 let a = px[3];
                 alpha.push(a);
                 for c in &px[..3] {

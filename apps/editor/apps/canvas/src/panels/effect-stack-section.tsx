@@ -132,7 +132,9 @@ function ParamControl({
   onSet: (key: keyof StackEntry, value: unknown) => void;
   strings: Strings;
 }) {
-  const label = strings.t((M as Record<string, string>)[spec.label] ?? spec.label);
+  const label = strings.t(
+    (M as Record<string, string>)[spec.label] ?? spec.label,
+  );
   const current = entry[spec.key];
   let control;
   switch (spec.control) {
@@ -199,6 +201,35 @@ function ParamControl({
   );
 }
 
+function RowButton({
+  label,
+  glyph,
+  hook,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  glyph: string;
+  hook: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      data-effect-stack-action={hook}
+      disabled={disabled}
+      onClick={onClick}
+      className="h-[20px] w-[20px] rounded text-xs disabled:opacity-40"
+      style={{ color: "var(--pg-muted-fg)" }}
+    >
+      {glyph}
+    </button>
+  );
+}
+
 function StackRow({
   entry,
   index,
@@ -219,26 +250,6 @@ function StackRow({
   const [open, setOpen] = useState(false);
   const name = effectName(strings, entry.kind);
   const own = !isIndesign(entry.kind);
-  const button = (
-    label: string,
-    glyph: string,
-    hook: string,
-    onClick: () => void,
-    off = false,
-  ) => (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      data-effect-stack-action={hook}
-      disabled={disabled || off}
-      onClick={onClick}
-      className="h-[20px] w-[20px] rounded text-xs disabled:opacity-40"
-      style={{ color: "var(--pg-muted-fg)" }}
-    >
-      {glyph}
-    </button>
-  );
   return (
     <div
       data-effect-stack-row={entry.kind}
@@ -265,15 +276,27 @@ function StackRow({
         >
           {name}
         </button>
-        {button(strings.t(M.moveUp), "↑", "up", () =>
-          write((e) => move(e, index, -1)), index === 0,
-        )}
-        {button(strings.t(M.moveDown), "↓", "down", () =>
-          write((e) => move(e, index, 1)), index === count - 1,
-        )}
-        {button(strings.t(M.remove), "×", "remove", () =>
-          write((e) => remove(e, index)),
-        )}
+        <RowButton
+          label={strings.t(M.moveUp)}
+          glyph="↑"
+          hook="up"
+          disabled={disabled || index === 0}
+          onClick={() => write((e) => move(e, index, -1))}
+        />
+        <RowButton
+          label={strings.t(M.moveDown)}
+          glyph="↓"
+          hook="down"
+          disabled={disabled || index === count - 1}
+          onClick={() => write((e) => move(e, index, 1))}
+        />
+        <RowButton
+          label={strings.t(M.remove)}
+          glyph="×"
+          hook="remove"
+          disabled={disabled}
+          onClick={() => write((e) => remove(e, index))}
+        />
       </div>
       {open && (
         <div
@@ -284,7 +307,10 @@ function StackRow({
           {own ? (
             <>
               <div className="grid grid-cols-[84px_1fr] items-center gap-2">
-                <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
+                <span
+                  className="text-xs"
+                  style={{ color: "var(--pg-muted-fg)" }}
+                >
                   {strings.t(M.blend)}
                 </span>
                 <KitSelect
@@ -293,7 +319,9 @@ function StackRow({
                   disabled={disabled}
                   data-effect-param="blendMode"
                   onChange={(ev) =>
-                    write((e) => setParam(e, index, "blendMode", ev.target.value))
+                    write((e) =>
+                      setParam(e, index, "blendMode", ev.target.value),
+                    )
                   }
                 >
                   {blendModes.map((b) => (
@@ -314,7 +342,9 @@ function StackRow({
                 }}
                 entry={{ ...entry, opacityPct: entry.opacityPct ?? 100 }}
                 disabled={disabled}
-                onSet={(k, v) => write((e) => setParam(e, index, k, v as never))}
+                onSet={(k, v) =>
+                  write((e) => setParam(e, index, k, v as never))
+                }
                 strings={strings}
               />
               {(PARAMS[entry.kind] ?? []).map((spec) => (
@@ -323,7 +353,9 @@ function StackRow({
                   spec={spec}
                   entry={entry}
                   disabled={disabled}
-                  onSet={(k, v) => write((e) => setParam(e, index, k, v as never))}
+                  onSet={(k, v) =>
+                    write((e) => setParam(e, index, k, v as never))
+                  }
                   strings={strings}
                 />
               ))}
@@ -356,7 +388,7 @@ export function EffectStackSection({
   const disabled = field.commit == null || entries == null;
   const write = (next: (e: StackEntry[]) => StackEntry[]) => {
     if (!entries || !field.commit) return;
-    void field.commit({ entries: next([...entries]) });
+    void field.commit(next([...entries]));
   };
   if (field.state.state === "absent" || field.state.state === "none")
     return null;
