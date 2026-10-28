@@ -299,6 +299,13 @@ label(pic, "pd-0000a003", [{ id: "photo", kind: "image", target: "host", query: 
   { photo: { fit: "FillProportionally" } });
 label(bar, "pd-0000a004", [{ id: "ean", kind: "barcode", target: "host", query: "q", symbology: "ean13", expr: "ean" }]);
 label(web, "pd-0000a005", [{ id: "remote", kind: "image", target: "host", query: "q", expr: "remote" }]);
+const stock = paged.insertFrame(pid, [590, 72, 640, 200]);
+label(stock, "pd-0000a006", [{ id: "stock", kind: "image", target: "host", query: "q", expr: "stock" }]);
+// The record template the flow places, in the document label's recipe: two
+// lines of 300 pt, so each record takes a page of its own.
+paged.setDocumentMetadata("x-paged:media.paged.data", JSON.stringify({ v: 1, data: { recipe: {
+  templates: [{ id: "card", fields: [{ label: "", expr: "name" }, { label: "Price: ", expr: "price" }], lineHeightPt: 300 }],
+} } }));
 "#;
 
 /// A `w × h` solid red RGB PNG, stored (uncompressed) deflate: no encoder.
@@ -358,9 +365,9 @@ fn lowered_document(dir: &Path) -> PathBuf {
     ok(paged(&["script", s(&blank), s(&script), "-o", s(&doc)]));
     std::fs::write(
         dir.join("products.csv"),
-        "name,price,shown,colour,photo,ean,remote\n\
-         Ada,10,true,#ff0000,red.png,4006381333931,https://example.com/a.png\n\
-         Grace,20,false,#00ff00,red.png,5901234123457,https://example.com/g.png\n",
+        "name,price,shown,colour,photo,ean,remote,stock\n\
+         Ada,10,true,#ff0000,red.png,4006381333931,https://example.com/a.png,asset:logo-a\n\
+         Grace,20,false,#00ff00,red.png,5901234123457,https://example.com/g.png,asset:logo-g\n",
     )
     .unwrap();
     std::fs::write(dir.join("red.png"), red_png(3, 4)).unwrap();
@@ -541,6 +548,43 @@ fn data_apply_draws_a_barcode_and_replaces_its_symbol_on_the_next_apply__feat__d
 }
 
 #[test]
+fn data_apply_replaces_a_symbol_the_editor_drew_whole__feat__data_bind_labels_native() {
+    let d = dir("barcode-editor");
+    let doc = lowered_document(&d);
+    let first = d.join("first.paged");
+    let applied = apply_lowered(&d, &doc, "0", &first);
+    let modules = row(&applied, "ean")["value"]["modules"].as_u64().unwrap();
+    // The data module's own writer labels only the LAST module of a symbol,
+    // with the symbol's module count, and draws the rest just before it.
+    let editor = d.join("editor.paged");
+    let script = d.join("editor.js");
+    std::fs::write(
+        &script,
+        r#"const q = paged.query("polygon");
+for (let i = 0; i < q.length - 1; i++) paged.setPluginMetadata(String(q[i]), "x-paged:media.paged.data", null);
+paged.setPluginMetadata(String(q[q.length - 1]), "x-paged:media.paged.data",
+  JSON.stringify({ v: 1, data: { kind: "barcode", binding: "ean", modules: q.length } }));
+"#,
+    )
+    .unwrap();
+    ok(paged(&["script", s(&first), s(&script), "-o", s(&editor)]));
+
+    let second = d.join("second.paged");
+    let applied = apply_lowered(&d, &editor, "1", &second);
+    let ean = row(&applied, "ean");
+    assert_eq!(
+        ean["message"],
+        format!("replaced {modules} module(s) of the previous symbol"),
+        "{ean:#}"
+    );
+    let polygons = lines(&ok(paged(&["query", s(&second), "polygon"])));
+    assert_eq!(
+        polygons.len(),
+        ean["value"]["modules"].as_u64().unwrap() as usize
+    );
+}
+
+#[test]
 fn data_apply_mints_a_colour_no_swatch_has_once__feat__data_bind_labels_native() {
     let d = dir("colour");
     let doc = lowered_document(&d);
@@ -565,20 +609,364 @@ fn data_apply_mints_a_colour_no_swatch_has_once__feat__data_bind_labels_native()
 }
 
 #[test]
-fn data_apply_leaves_a_record_flow_to_the_module_and_says_why__feat__data_bind_labels_native() {
-    let d = dir("flow");
+fn data_apply_leaves_a_document_asset_id_unwritten_and_says_why__feat__data_bind_labels_native() {
+    let d = dir("asset");
     let doc = lowered_document(&d);
     let applied = apply_lowered(&d, &doc, "0", &d.join("out.paged"));
-    let flow = row(&applied, "flow");
-    assert_eq!(flow["outcome"], "notHeadless", "{flow:#}");
+    let stock = row(&applied, "stock");
+    assert_eq!(stock["outcome"], "notHeadless", "{stock:#}");
     assert!(
-        flow["message"].as_str().unwrap().contains("frame chain"),
+        stock["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("asset:logo-a: no asset store keeps an asset id's bytes"),
+        "{stock:#}"
+    );
+}
+
+/// The frames a record flow placed, by their stamp (`"frame": <n>`; the
+/// bound frame's own label names the binding's kind too).
+fn flow_frames(doc: &Path) -> Vec<String> {
+    lines(&ok(paged(&[
+        "query",
+        s(doc),
+        r#"textFrame[label.x-paged:media.paged.data*="\"frame\":"]"#,
+    ])))
+}
+
+#[test]
+fn data_apply_places_a_record_flow_over_added_pages_and_replaces_it_on_the_next_apply__feat__data_bind_labels_native(
+) {
+    let d = dir("flow");
+    let doc = lowered_document(&d);
+    let pages_before = lines(&ok(paged(&["query", s(&doc), "page"]))).len();
+    // Through IDML, as InDesign would carry the stamps between two runs.
+    let first = d.join("first.idml");
+    let applied = apply_lowered(&d, &doc, "1", &first);
+    let flow = row(&applied, "flow");
+    assert_eq!(flow["outcome"], "written", "{flow:#}");
+    // A flow places every record: `--record 1` does not restrict it. Each
+    // 600 pt record takes a margin box of its own, the second on a page
+    // the flow added after the start page.
+    assert_eq!(flow["value"]["placed"], 2, "{flow:#}");
+    assert_eq!(flow["value"]["total"], 2, "{flow:#}");
+    assert_eq!(flow["value"]["frames"], 2, "{flow:#}");
+    assert_eq!(flow["value"]["addedPages"], 1, "{flow:#}");
+    assert_eq!(flow["value"]["overset"], serde_json::json!([]), "{flow:#}");
+    assert_eq!(
+        lines(&ok(paged(&["query", s(&first), "page"]))).len(),
+        pages_before + 1
+    );
+    assert_eq!(flow_frames(&first).len(), 2);
+    let stories = idml_parts(&first, "Stories/");
+    for text in ["Ada", "Price: 10", "Grace", "Price: 20"] {
+        assert!(stories.contains(text), "{text}: {stories}");
+    }
+    let spreads = idml_parts(&first, "Spreads/");
+    assert!(spreads.contains("createdPage"), "{spreads}");
+
+    // Applied again, the previous frames and the page they added go, and
+    // the new flow takes their place: no second set of frames or pages.
+    let second = d.join("second.paged");
+    let applied = apply_lowered(&d, &first, "0", &second);
+    let flow = row(&applied, "flow");
+    assert_eq!(flow["outcome"], "written", "{flow:#}");
+    assert_eq!(
+        flow["message"], "replaced 2 frame(s) and 1 added page(s) of the previous flow",
         "{flow:#}"
     );
-    // Nothing else is left unwritten.
+    assert_eq!(
+        lines(&ok(paged(&["query", s(&second), "page"]))).len(),
+        pages_before + 1
+    );
+    let frames = flow_frames(&second);
+    assert_eq!(frames.len(), 2, "{frames:?}");
+    assert_eq!(
+        frames,
+        flow["targets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t.as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    );
+
+    // Nothing else is left unwritten but the two references no headless
+    // lane can resolve.
     let rest: Vec<&Value> = applied
         .iter()
-        .filter(|a| a["outcome"] != "written" && a["binding"] != "flow" && a["binding"] != "remote")
+        .filter(|a| {
+            a["outcome"] != "written" && a["binding"] != "remote" && a["binding"] != "stock"
+        })
         .collect();
     assert!(rest.is_empty(), "{rest:#?}");
+}
+
+/// A record flow the editor lowered and synced: its first frame carries the
+/// binding itself (`bind`) next to the flow's stamp.
+const AUTHOR_LOWERED_FLOW: &str = r#"
+const pid = JSON.parse(paged.pages())[0].selfId;
+const first = paged.insertTextFrame(pid, [36, 36, 400, 400]);
+paged.setPluginMetadata(String(first), "x-paged:media.paged.data", JSON.stringify({ v: 1, data: {
+  oid: "pd-0000f001",
+  bind: [{ id: "flow", kind: "recordFlow", chain: "host", query: "q", template: "card" }],
+  queries: [{ id: "q", sql: "SELECT * FROM products ORDER BY name", params: [], shape: { shape: "recordStream" } }],
+  sources: [{ id: "products", kind: { kind: "file", format: "csv", name: "products.csv" }, capability: "fs.read" }],
+  kind: "recordFlow", binding: "flow", frame: 0,
+} }));
+paged.setDocumentMetadata("x-paged:media.paged.data", JSON.stringify({ v: 1, data: { recipe: {
+  templates: [{ id: "card", fields: [{ label: "", expr: "name" }], lineHeightPt: 14 }],
+} } }));
+"#;
+
+#[test]
+fn data_apply_keeps_a_record_flow_s_binding_when_it_replaces_the_frame_that_carried_it__feat__data_bind_labels_native(
+) {
+    let d = dir("flow-carried");
+    let blank = d.join("blank.paged");
+    ok(paged(&["new", "--size", "a4", "--out", s(&blank)]));
+    let script = d.join("author.js");
+    std::fs::write(&script, AUTHOR_LOWERED_FLOW).unwrap();
+    let doc = d.join("lowered.paged");
+    ok(paged(&["script", s(&blank), s(&script), "-o", s(&doc)]));
+    std::fs::write(d.join("products.csv"), "name,price\nAda,10\nGrace,20\n").unwrap();
+
+    let first = d.join("first.paged");
+    let applied = apply_lowered(&d, &doc, "0", &first);
+    let flow = row(&applied, "flow");
+    assert_eq!(flow["outcome"], "written", "{flow:#}");
+    assert_eq!(flow["value"]["frames"], 1, "{flow:#}");
+    assert_eq!(flow["message"], "replaced 1 frame(s) of the previous flow");
+    assert_eq!(flow_frames(&first).len(), 1);
+    // The binding moved to the new frame with the stamp: it is still there
+    // to apply again, and it is hosted by the frame the flow placed.
+    let bindings: Value =
+        serde_json::from_str(&ok(paged(&["data", "bindings", s(&first), "--json"]))).unwrap();
+    assert_eq!(
+        bindings["bindings"][0]["host"], flow["targets"][0],
+        "{bindings:#}"
+    );
+    let second = d.join("second.paged");
+    let applied = apply_lowered(&d, &first, "0", &second);
+    let flow = row(&applied, "flow");
+    assert_eq!(flow["outcome"], "written", "{flow:#}");
+    assert_eq!(flow_frames(&second).len(), 1);
+}
+
+// ── Remote images on consent (core ADR 1014, amendment 5)
+
+type Requests = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+/// A tiny HTTP/1.1 server on 127.0.0.1 (an ephemeral port, no real
+/// network): each request's head is logged, and `route` answers its path
+/// with a status, extra header lines and a body.
+fn serve(route: impl Fn(&str) -> (u16, String, Vec<u8>) + Send + 'static) -> (u16, Requests) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let log: Requests = Default::default();
+    let seen = log.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut head = Vec::new();
+            let mut chunk = [0u8; 1024];
+            while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                match stream.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => head.extend_from_slice(&chunk[..n]),
+                }
+            }
+            let head = String::from_utf8_lossy(&head).to_string();
+            let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
+            seen.lock().unwrap().push(head);
+            let (status, extra, body) = route(&path);
+            let reply = format!(
+                "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n{extra}\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(reply.as_bytes());
+            let _ = stream.write_all(&body);
+        }
+    });
+    (port, log)
+}
+
+/// The lowered document with its `remote` column naming `url`, applied at
+/// record 0 to `out` with `extra` arguments and environment.
+fn apply_remote(
+    d: &Path,
+    url: &str,
+    extra: &[&str],
+    env: &[(&str, &str)],
+    out: &Path,
+) -> Vec<Value> {
+    let doc = lowered_document(d);
+    std::fs::write(
+        d.join("products.csv"),
+        format!(
+            "name,price,shown,colour,photo,ean,remote,stock\n\
+             Ada,10,true,#ff0000,red.png,4006381333931,{url},asset:logo-a\n"
+        ),
+    )
+    .unwrap();
+    let csv = format!("products={}", s(&d.join("products.csv")));
+    let mut args = vec!["data", "apply", s(&doc), "--source", &csv];
+    args.extend_from_slice(extra);
+    args.extend_from_slice(&["-o", s(out), "--json"]);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_paged"));
+    command.args(&args);
+    for (k, v) in env {
+        command.env(k, v);
+    }
+    let report: Value = serde_json::from_str(&ok(command.output().unwrap())).unwrap();
+    report["applied"].as_array().unwrap().clone()
+}
+
+#[test]
+fn data_apply_leaves_a_remote_image_unfetched_without_its_origin_and_names_the_flag__feat__data_bind_labels_native(
+) {
+    let d = dir("remote-unlisted");
+    let (port, log) = serve(|_| (200, String::new(), red_png(3, 4)));
+    let url = format!("http://127.0.0.1:{port}/a.png");
+    let applied = apply_remote(&d, &url, &[], &[], &d.join("out.paged"));
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "notHeadless", "{remote:#}");
+    let message = remote["message"].as_str().unwrap();
+    assert!(
+        message.contains(&format!("--allow-origin http://127.0.0.1:{port}")),
+        "{message}"
+    );
+    // An origin listed for another port is not this origin.
+    let other = format!("http://127.0.0.1:{}", port.wrapping_add(1));
+    let applied = apply_remote(
+        &d,
+        &url,
+        &["--allow-origin", &other],
+        &[],
+        &d.join("out.paged"),
+    );
+    assert_eq!(row(&applied, "remote")["outcome"], "notHeadless");
+    assert!(log.lock().unwrap().is_empty(), "the server was asked");
+}
+
+#[test]
+fn data_apply_places_a_remote_image_from_a_listed_origin__feat__data_bind_labels_native() {
+    let d = dir("remote-listed");
+    let (port, log) = serve(|path| match path {
+        "/a.png" => (200, "Content-Type: image/png\r\n".into(), red_png(3, 4)),
+        _ => (404, String::new(), Vec::new()),
+    });
+    let url = format!("http://127.0.0.1:{port}/a.png");
+    let origin = format!("HTTP://127.0.0.1:{port}/");
+    let saved = d.join("placed.idml");
+    let applied = apply_remote(&d, &url, &["--allow-origin", &origin], &[], &saved);
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "written", "{remote:#}");
+    assert_eq!(remote["value"]["image"], url.as_str(), "{remote:#}");
+    let frame = remote["targets"][0].as_str().unwrap();
+    let id = frame.split_once(':').unwrap().1;
+    let spreads = idml_parts(&saved, "Spreads/");
+    assert!(
+        spreads.contains(&format!("<Image Self=\"{id}Image\"")),
+        "{spreads}"
+    );
+    let log = log.lock().unwrap();
+    assert_eq!(log.len(), 1, "{log:#?}");
+    let head = log[0].to_ascii_lowercase();
+    assert!(
+        head.contains(&format!("user-agent: paged/{}", env!("CARGO_PKG_VERSION"))),
+        "{head}"
+    );
+    assert!(
+        !head.contains("cookie") && !head.contains("authorization"),
+        "{head}"
+    );
+}
+
+#[test]
+fn data_apply_refuses_a_redirect_to_an_unlisted_origin__feat__data_bind_labels_native() {
+    let d = dir("remote-redirect");
+    let (elsewhere, elsewhere_log) = serve(|_| (200, String::new(), red_png(3, 4)));
+    let (port, _) = serve(move |path| match path {
+        // Same origin first (followed), then away (refused).
+        "/a.png" => (302, "Location: /b.png\r\n".into(), Vec::new()),
+        _ => (
+            302,
+            format!("Location: http://127.0.0.1:{elsewhere}/b.png\r\n"),
+            Vec::new(),
+        ),
+    });
+    let url = format!("http://127.0.0.1:{port}/a.png");
+    let origin = format!("http://127.0.0.1:{port}");
+    let applied = apply_remote(
+        &d,
+        &url,
+        &["--allow-origin", &origin],
+        &[],
+        &d.join("out.paged"),
+    );
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "failed", "{remote:#}");
+    let message = remote["message"].as_str().unwrap();
+    assert!(
+        message.contains(&format!(
+            "the origin http://127.0.0.1:{elsewhere} is not listed"
+        )),
+        "{message}"
+    );
+    assert!(
+        elsewhere_log.lock().unwrap().is_empty(),
+        "the unlisted origin was asked"
+    );
+}
+
+#[test]
+fn data_apply_aborts_a_remote_image_past_the_size_cap__feat__data_bind_labels_native() {
+    let d = dir("remote-oversized");
+    let (port, _) = serve(|_| (200, String::new(), vec![0u8; 4096]));
+    let url = format!("http://127.0.0.1:{port}/big.png");
+    let origin = format!("http://127.0.0.1:{port}");
+    let applied = apply_remote(
+        &d,
+        &url,
+        &["--allow-origin", &origin],
+        &[("PAGED_FETCH_MAX_BYTES", "1000")],
+        &d.join("out.paged"),
+    );
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "failed", "{remote:#}");
+    assert!(
+        remote["message"]
+            .as_str()
+            .unwrap()
+            .contains("1000-byte cap"),
+        "{remote:#}"
+    );
+}
+
+#[test]
+fn data_apply_follows_at_most_three_redirects__feat__data_bind_labels_native() {
+    let d = dir("remote-redirect-loop");
+    let (port, log) = serve(|_| (302, "Location: /again.png\r\n".into(), Vec::new()));
+    let url = format!("http://127.0.0.1:{port}/a.png");
+    let origin = format!("http://127.0.0.1:{port}");
+    let applied = apply_remote(
+        &d,
+        &url,
+        &["--allow-origin", &origin],
+        &[],
+        &d.join("out.paged"),
+    );
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "failed", "{remote:#}");
+    assert!(
+        remote["message"]
+            .as_str()
+            .unwrap()
+            .contains("more than 3 redirects"),
+        "{remote:#}"
+    );
+    // The first request and three redirects followed.
+    assert_eq!(log.lock().unwrap().len(), 4);
 }
