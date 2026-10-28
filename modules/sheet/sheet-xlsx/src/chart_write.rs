@@ -1487,7 +1487,7 @@ fn carry_dml(
         None => frag("<c:spPr></c:spPr>")?,
     };
     if let Some(f) = old_fill {
-        match sp.children.iter().position(|c| is_fill(c)) {
+        match sp.children.iter().position(is_fill) {
             Some(i) => sp.children[i] = f.clone(),
             None => {
                 let at = sp
