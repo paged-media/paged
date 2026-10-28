@@ -181,7 +181,10 @@ fn assert_matches(expected: &[Painted], got: &[Painted], what: &str) {
         let hit = got.iter().find(|g| {
             g.filled == e.filled
                 && g.rgb == e.rgb
-                && g.bounds.iter().zip(e.bounds).all(|(a, b)| (a - b).abs() <= TOL)
+                && g.bounds
+                    .iter()
+                    .zip(e.bounds)
+                    .all(|(a, b)| (a - b).abs() <= TOL)
         });
         let Some(hit) = hit else {
             panic!("{what}: nothing drawn like {e:?}\ngot {got:#?}");

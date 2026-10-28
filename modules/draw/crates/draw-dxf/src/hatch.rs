@@ -257,10 +257,10 @@ fn edge_loop(c: &mut Codes, approximated: &mut bool) -> Option<Contour> {
     let join = |out: &mut Option<Contour>, start: Pt, segs: Vec<Seg>| {
         let contour = out.get_or_insert_with(|| Contour::new(start));
         let end = contour.end();
-        if (end[0] - start[0]).abs() > 1e-9 || (end[1] - start[1]).abs() > 1e-9 {
-            if !contour.segs.is_empty() || contour.start != start {
-                contour.segs.push(Seg::Line(start));
-            }
+        if ((end[0] - start[0]).abs() > 1e-9 || (end[1] - start[1]).abs() > 1e-9)
+            && (!contour.segs.is_empty() || contour.start != start)
+        {
+            contour.segs.push(Seg::Line(start));
         }
         contour.segs.extend(segs);
     };
