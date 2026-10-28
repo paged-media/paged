@@ -77,9 +77,45 @@ pub(crate) fn diff(scene: &Document, twin: &Document, ctx: &LossContext) -> Vec<
     diff_conditions(scene, twin, &mut out);
     diff_stories(scene, twin, &mut out);
     diff_page_items(scene, twin, ctx, &mut out);
+    diff_canvas_placement(scene, twin, &mut out);
     out.sort();
     out.dedup();
     out
+}
+
+// ---- canvas placement (engine ADR 1011) -----------------------------------
+
+/// A page placed on the canvas (an artboard moved off the default stack)
+/// has no IDML spelling: InDesign stacks its spreads and keeps a spread's
+/// pages side by side. The export keeps the page order and every spread
+/// as it is — an artboard alone in its spread stays its own spread, pages
+/// that share one stay adjacent — and the page opens in its default slot.
+fn diff_canvas_placement(scene: &Document, twin: &Document, out: &mut Vec<String>) {
+    let twin_origin: HashMap<&str, Option<[f32; 2]>> = twin
+        .spreads
+        .iter()
+        .flat_map(|p| p.spread.pages.iter())
+        .filter_map(|p| Some((p.self_id.as_deref()?, p.canvas_origin)))
+        .collect();
+    for parsed in &scene.spreads {
+        let pages = &parsed.spread.pages;
+        for page in pages {
+            let (Some(id), Some([x, y])) = (page.self_id.as_deref(), page.canvas_origin) else {
+                continue;
+            };
+            if twin_origin.get(id).copied().flatten() == page.canvas_origin {
+                continue;
+            }
+            let shared = if pages.len() > 1 {
+                " and stays beside the other pages of its spread"
+            } else {
+                ""
+            };
+            out.push(format!(
+                "page `{id}` is placed at [{x}, {y}] pt on the canvas (an artboard position) —                  IDML has no free page placement: InDesign stacks the spreads, so the page                  keeps its place in the page order{shared} and opens in its default slot",
+            ));
+        }
+    }
 }
 
 // ---- sections -------------------------------------------------------------

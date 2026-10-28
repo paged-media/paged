@@ -721,6 +721,12 @@ pub struct BuiltPage {
     /// `IDENTITY` (the common case) makes the composition byte-identical
     /// to the pre-W1.9 `translate(-spread_origin) ∘ item_transform`.
     pub spread_transform: Transform,
+    /// Engine ADR 1011 — the page's top-left on the canvas (the editor's
+    /// pasteboard), pt: its [`paged_model::Page::canvas_origin`], else its
+    /// default slot in [`paged_model::canvas_layout`]'s vertical stack.
+    /// Presentation only: the display list stays page-relative, and every
+    /// presenter (the canvas, the viewer session) places the page here.
+    pub canvas_origin: (f32, f32),
     pub list: DisplayList,
     /// Bumped whenever any frame on this page is re-laid-out. The
     /// canvas combines `(id, layout_generation, numbering_generation)`
@@ -1976,6 +1982,7 @@ pub fn build(document: &Document, options: &PipelineOptions) -> anyhow::Result<B
         height_pt: page_h,
         spread_origin: (0.0, 0.0),
         spread_transform: Transform::IDENTITY,
+        canvas_origin: (0.0, 0.0),
         list,
         layout_generation: 0,
         numbering_generation: 0,

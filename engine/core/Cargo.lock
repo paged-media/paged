@@ -3958,6 +3958,7 @@ dependencies = [
  "js-sys",
  "paged-compose",
  "paged-gpu",
+ "paged-model",
  "paged-renderer",
  "paged-test-resources",
  "serde",

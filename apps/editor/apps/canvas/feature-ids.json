@@ -6,8 +6,8 @@
     "command": 612,
     "keybinding": 154,
     "menu": 433,
-    "panel": 136,
-    "tool": 103
+    "panel": 137,
+    "tool": 104
   },
   "features": [
     {
@@ -6251,6 +6251,11 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.artboards",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.articles",
       "kind": "panel",
       "owner": "editor"
@@ -7079,6 +7084,11 @@
       "id": "tool:media.paged.image.tool.type",
       "kind": "tool",
       "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:paged.tool.artboard",
+      "kind": "tool",
+      "owner": "editor"
     },
     {
       "id": "tool:paged.tool.contentCollector",

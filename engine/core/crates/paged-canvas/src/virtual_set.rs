@@ -1324,6 +1324,13 @@ impl CanvasModel {
                     let b = &page.bounds;
                     return Ok(Value::Bounds([b.top, b.left, b.bottom, b.right]));
                 }
+                // Engine ADR 1011 — the place the page was put on the canvas
+                // (`[]`: its default slot).
+                if p == PropertyPath::PageCanvasOrigin {
+                    return Ok(Value::Lengths(
+                        page.canvas_origin.map(|o| o.to_vec()).unwrap_or_default(),
+                    ));
+                }
                 // A page with no margins of its own reads what the engine
                 // lays it out with: 0 pt margins in one column, the values
                 // the pages collection reports for it (PN-203). A first

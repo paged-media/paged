@@ -2210,6 +2210,15 @@ const GEOMETRY_PROBES: Probe[] = [
         : null,
   },
   {
+    op: "placePage",
+    // Engine ADR 1011 — the first page placed off the stack; the inverse
+    // returns it to its default slot.
+    build: async ({ fx }) => ({
+      op: "placePage",
+      args: { page: fx.pages[0].pageId, originPt: [900, 40] },
+    }),
+  },
+  {
     op: "setPageMetadata",
     // A page's plugin label — read back on the `pages` collection's
     // `pluginMetadata`; gated by key namespace like item metadata.

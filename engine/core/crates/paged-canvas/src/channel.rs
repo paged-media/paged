@@ -776,6 +776,15 @@ export type WorkerToMain = WorkerToMainKind & {
 //     rotate snaps to 0/45/90 and the neighbours' angles.
 //   - The camera SAB's spare slot (offset 12) carries the view rotation.
 //   A new message kind an older worker cannot answer, hence the bump.
+// v77 (rider) — free page placement (engine ADR 1011): the `placePage { page,
+//   originPt? }` mutation puts a page (an artboard) on the canvas. With it,
+//   additive: `DocumentHandle.pageOriginsPt`, `pageOriginsPt` beside every
+//   `pageSizesPt` (mutationApplied, undoApplied, redoApplied, fontRegistered,
+//   fontRegistryCleared), `PageSummary.canvasOriginPt` / `canvasPlaced` /
+//   `boundsPt`, the `pageInfo` tuple's `[x, y]`, and
+//   the viewer session's `PageRect.xPt`. A new Mutation kind an older worker
+//   cannot apply, hence the bump; it rides the unpublished v77 (added
+//   before first consumer sync, governance rule 4).
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -2219,6 +2228,12 @@ pub enum WorkerToMainKind {
         /// `page_ids`).
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
         /// v38 (Wave 2, C-2 / S-05) — content-box reflow, populated ONLY
         /// when the applied mutation was a `Mutation::ResizeFrame` (a
         /// content-box change). `None` for every other mutation kind —
@@ -2308,6 +2323,12 @@ pub enum WorkerToMainKind {
         page_structure_changed: bool,
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
     },
     /// v77 (engine ADR 1030) — `RequestUndoLog` reply: the named undo
     /// timeline. `undo` is oldest first (its last entry is what an undo
@@ -2344,6 +2365,12 @@ pub enum WorkerToMainKind {
         page_structure_changed: bool,
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
     },
     /// `RegisterFont` reply: the font is now part of the worker's
     /// asset resolver.
@@ -2363,6 +2390,12 @@ pub enum WorkerToMainKind {
         page_structure_changed: bool,
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
     },
     /// `ClearFontRegistry` reply. v65 — the same page report as
     /// `FontRegistered`, for the stories that lost a face.
@@ -2373,6 +2406,12 @@ pub enum WorkerToMainKind {
         page_structure_changed: bool,
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
     },
     /// Concept 2 — `RegisterColorProfile` reply.
     ColorProfileRegistered { name: String },
@@ -3745,6 +3784,22 @@ pub struct PageSummary {
     pub margin_inside_pt: f32,
     #[serde(default)]
     pub margin_outside_pt: f32,
+    /// v77 (engine ADR 1011) — the page's top-left on the canvas (its
+    /// artboard position), `[x, y]` pt: where it was placed, else its
+    /// slot in the default vertical stack. `DocumentHandle.pageOriginsPt`
+    /// carries the same values. Older workers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas_origin_pt: Option<[f32; 2]>,
+    /// v77 (engine ADR 1011) — whether the page was placed on the canvas
+    /// (`placePage`); `false` when it sits in its default slot. Additive.
+    #[serde(default)]
+    pub canvas_placed: bool,
+    /// v77 (engine ADR 1011) — the page's `GeometricBounds` in its own
+    /// coordinates, `[top, left, bottom, right]` pt: what `resizePage`
+    /// writes, so a host resizing an artboard from any edge moves the
+    /// edges it means. Absent for a generated page and from older workers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bounds_pt: Option<[f32; 4]>,
 }
 
 /// panels.md gaps 9/10/19 — one `<Section>` definition. Backs
@@ -4778,6 +4833,7 @@ mod tests {
             page_count: 2,
             page_ids: vec![PageId("p1".into()), PageId("p2".into())],
             page_sizes_pt: vec![(612.0, 792.0), (612.0, 792.0)],
+            page_origins_pt: vec![(0.0, 0.0), (0.0, 816.0)],
             stats: crate::model::DocumentStats {
                 spreads: 1,
                 pages: 2,

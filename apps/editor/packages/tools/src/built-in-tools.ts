@@ -51,6 +51,7 @@ import { createGradientFeatherHandler } from "./handlers/gradient-feather-tool";
 import { createGradientSwatchHandler } from "./handlers/gradient-tool";
 import { createLineHandler } from "./handlers/line-tool";
 import { createPolygonHandler } from "./handlers/polygon-tool";
+import { createArtboardHandler } from "./handlers/artboard-tool";
 import { createPageHandler } from "./handlers/page-tool";
 import {
   createPencilHandler,
@@ -117,6 +118,20 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     // Editor-ops — click arms, Alt+click inserts after, drag resizes,
     // Delete removes the armed page (engine ops landed, protocol v24).
     gesture: createPageHandler,
+  },
+  {
+    // Engine ADR 1011 — pages as artboards placed freely on the canvas.
+    // `shift+o` was the one free key (modules/draw/CLAUDE.md).
+    id: "paged.tool.artboard",
+    title: "Artboard",
+    description:
+      "Click an artboard to select it, drag to move it (snapping to the others), drag a handle to resize it; Alt-drag duplicates it.",
+    icon: "tool-artboard",
+    shortcut: "shift+o",
+    group: "page",
+    section: "selection",
+    cluster: "select",
+    gesture: createArtboardHandler,
   },
   // STUB — the Gap tool resizes the WHITESPACE between neighbouring
   // frames, which needs a neighbourhood solver on top of `resizeFrame`

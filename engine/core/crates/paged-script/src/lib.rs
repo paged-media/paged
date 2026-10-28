@@ -897,6 +897,7 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             2,
         )
         .function(guarded(paged_move_page), js_string!("movePage"), 2)
+        .function(guarded(paged_place_page), js_string!("placePage"), 2)
         .function(guarded(paged_on_master), js_string!("onMaster"), 2)
         .function(guarded(paged_create_master), js_string!("createMaster"), 2)
         .function(guarded(paged_delete_master), js_string!("deleteMaster"), 1)
@@ -2222,6 +2223,44 @@ fn paged_move_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRe
     Ok(apply_bool(&Mutation::MovePage {
         page: PageId(page),
         after,
+    }))
+}
+
+/// `paged.placePage(pageId, [x, y]?)` — put a page (an artboard) at
+/// `[x, y]` on the canvas, its top-left in pt; omitted/null returns it to
+/// its default slot (`Mutation::PlacePage`, v77, engine ADR 1011). A value
+/// that is not a pair of numbers refuses (`false`).
+fn paged_place_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let at = args.get_or_undefined(1);
+    let origin_pt = if at.is_null_or_undefined() {
+        None
+    } else {
+        let Some(obj) = at.as_object() else {
+            return Ok(JsValue::from(false));
+        };
+        let len = obj
+            .get(js_string!("length"), ctx)
+            .ok()
+            .and_then(|v| v.as_number());
+        if len != Some(2.0) {
+            return Ok(JsValue::from(false));
+        }
+        let mut xy = [0.0f32; 2];
+        for (i, slot) in xy.iter_mut().enumerate() {
+            match obj.get(i as u32, ctx).ok().and_then(|v| v.as_number()) {
+                Some(n) => *slot = n as f32,
+                None => return Ok(JsValue::from(false)),
+            }
+        }
+        Some((xy[0], xy[1]))
+    };
+    Ok(apply_bool(&Mutation::PlacePage {
+        page: PageId(page),
+        origin_pt,
     }))
 }
 

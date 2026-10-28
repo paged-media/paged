@@ -1359,6 +1359,39 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // ---- Engine ADR 1011 — a page's place on the canvas -------
+        (NodeId::Page(id), PropertyPath::PageCanvasOrigin) => {
+            let Value::Lengths(xy) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Lengths".to_string(),
+                });
+            };
+            let new_origin = match xy.as_slice() {
+                [] => None,
+                [x, y] if x.is_finite() && y.is_finite() => Some([*x, *y]),
+                _ => {
+                    return Err(OperationError::TypeMismatch {
+                        path,
+                        expected: "Lengths([x, y]) of finite pt, or []".to_string(),
+                    });
+                }
+            };
+            let page =
+                find_page_mut(doc, id).ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = page.canvas_origin;
+            page.canvas_origin = new_origin;
+            (
+                Value::Lengths(prev.map(|p| p.to_vec()).unwrap_or_default()),
+                // The page list's geometry changed (where each page sits);
+                // no display list does, but the presenters read the
+                // origins off the build.
+                InvalidationHint {
+                    structural: true,
+                    ..Default::default()
+                },
+            )
+        }
         // ---- Editor-ops — Gradient Feather (whole-struct) ---------
         // Lines carry no fill, so the effect is meaningless there
         // (falls through to UnsupportedProperty).

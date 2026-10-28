@@ -20,6 +20,7 @@ mod kernel_ops;
 mod line_effects;
 mod object_style_corners;
 mod oval_bounds;
+mod page_canvas_origin;
 mod pathfinder_oracle;
 mod place_image;
 mod placeholder_fields;

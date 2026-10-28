@@ -7809,6 +7809,7 @@ mod tests {
                 override_list: Vec::new(),
                 name: None,
                 show_master_items: None,
+                canvas_origin: None,
             }
         }
 

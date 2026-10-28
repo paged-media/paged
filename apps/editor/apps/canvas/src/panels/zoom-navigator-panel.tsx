@@ -143,7 +143,7 @@ export function ZoomNavigatorPanel(_props: PanelProps) {
     );
   }
 
-  const rects = layoutPages(handle.pageSizesPt);
+  const rects = layoutPages(handle.pageSizesPt, handle.pageOriginsPt);
   const index = pageInView(rects, camera, viewportSize);
   const page = rects[index]!;
   const pageId = handle.pageIds[index]!;

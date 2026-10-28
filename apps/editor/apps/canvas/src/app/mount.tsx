@@ -1036,6 +1036,7 @@ function CanvasAppIntegration() {
       const scale = Math.max(camera.scale, 0.6);
       const cam = cameraCentredOn(
         handle.pageSizesPt,
+        handle.pageOriginsPt,
         index,
         at.xPt,
         at.yPt,
@@ -1097,6 +1098,7 @@ function CanvasAppIntegration() {
       const [vw, vh] = viewportSize;
       const cam = cameraForPage(
         h.pageSizesPt,
+        h.pageOriginsPt,
         h.pageIds.indexOf(pageId as never),
         fit,
         vw,
@@ -1116,11 +1118,11 @@ function CanvasAppIntegration() {
     setCockpitPageNavigator(instance.scope, (pageIndices) => {
       const pageSizes = handle?.pageSizesPt ?? [];
       if (pageSizes.length === 0 || pageIndices.length === 0) return;
-      const rects = layoutPages(pageSizes);
-      // `layoutPages` stacks ALL pages vertically (spreads are not
+      const rects = layoutPages(pageSizes, handle?.pageOriginsPt);
+      // The default layout stacks ALL pages vertically (spreads are not
       // side-by-side), so fitting the union rect of a multi-page
       // spread lands the camera on the inter-page GAP. Fit the
-      // spread's FIRST page instead; a spread-aware `layoutPages`
+      // spread's FIRST page instead; a spread-aware default layout
       // (pages of one spread side by side) is the structural fix
       // (follow-up).
       const target = rects[pageIndices[0]];
@@ -1140,7 +1142,7 @@ function CanvasAppIntegration() {
   useEffect(() => {
     const [vw, vh] = viewportSize;
     const pageSizes = handle?.pageSizesPt ?? [];
-    const rects = layoutPages(pageSizes);
+    const rects = layoutPages(pageSizes, handle?.pageOriginsPt);
     // Editor ADR 287 — the fits keep the view's rotation.
     const rot = camera.rotation ?? 0;
     const commands = buildAppCommands({

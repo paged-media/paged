@@ -39,6 +39,7 @@ describe("the built-in tools, mounted from the registry", () => {
   it("the registry has the host tools the handler tests cover", () => {
     expect(WITH_HANDLER.map((t) => t.id).sort()).toEqual(
       [
+        "paged.tool.artboard",
         "paged.tool.ellipse",
         "paged.tool.ellipseFrame",
         "paged.tool.eyedropper",

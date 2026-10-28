@@ -188,6 +188,12 @@ pub struct DocumentHandle {
     /// The navigator needs these to size thumbnails before any
     /// rasterisation has happened.
     pub page_sizes_pt: Vec<(f32, f32)>,
+    /// v77 (engine ADR 1011) — each page's top-left on the canvas (its
+    /// artboard position), pt; same length as `page_ids`. A page nobody
+    /// placed has its slot in the default vertical stack. Additive: an
+    /// older worker omits it and the host stacks the pages itself.
+    #[serde(default)]
+    pub page_origins_pt: Vec<(f32, f32)>,
     /// Aggregate counts for debugging / UI badges.
     pub stats: DocumentStats,
     /// Plan-2 §8.3 — ruler guides per page. The overlay renders
@@ -430,6 +436,8 @@ fn changes_page_list(mutation: &Mutation) -> bool {
         Mutation::InsertPage { .. }
         | Mutation::DeletePage { .. }
         | Mutation::ResizePage { .. }
+        // Engine ADR 1011 — the grid's geometry: where each page sits.
+        | Mutation::PlacePage { .. }
         // W0.5 — DuplicatePage adds a spread; the others change page
         // labels/masters but keep the page count, so they don't force a
         // grid rebuild.
@@ -3002,9 +3010,16 @@ impl CanvasModel {
             page_count: self.built.pages.len(),
             page_ids,
             page_sizes_pt,
+            page_origins_pt: self.page_origins_pt(),
             stats,
             ruler_guides,
         }
+    }
+
+    /// Engine ADR 1011 — every page's top-left on the canvas, pt, in
+    /// document order (`BuiltPage::canvas_origin`).
+    pub fn page_origins_pt(&self) -> Vec<(f32, f32)> {
+        self.built.pages.iter().map(|p| p.canvas_origin).collect()
     }
 
     pub fn page_count(&self) -> usize {
@@ -5588,6 +5603,11 @@ impl CanvasModel {
             Mutation::MovePage { page, after } => Some(Operation::MovePage {
                 page_id: page.0.clone(),
                 after_page_id: after.as_ref().map(|a| a.0.clone()),
+            }),
+            Mutation::PlacePage { page, origin_pt } => Some(Operation::SetProperty {
+                node: NodeId::Page(page.0.clone()),
+                path: PropertyPath::PageCanvasOrigin,
+                value: Value::Lengths(origin_pt.map(|(x, y)| vec![x, y]).unwrap_or_default()),
             }),
             Mutation::DuplicatePage { page } => Some(Operation::DuplicatePage {
                 page: page.0.clone(),
@@ -10314,6 +10334,10 @@ impl CanvasModel {
         // WP2.7 — page self id → (its index in the spread, is it a verso).
         let mut placement_of: std::collections::HashMap<&str, (u32, bool)> =
             std::collections::HashMap::new();
+        // Engine ADR 1011 — the pages placed on the canvas.
+        let mut placed: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        let mut inner_bounds: std::collections::HashMap<&str, [f32; 4]> =
+            std::collections::HashMap::new();
         for parsed in &scene.spreads {
             for (pid, m) in &parsed.spread.page_margins {
                 margins.insert(pid.as_str(), m);
@@ -10334,6 +10358,18 @@ impl CanvasModel {
                     let b = crate::hit::transform_bbox(pg.bounds, pg.item_transform);
                     let verso = (b.left + b.right) * 0.5 < -0.5;
                     placement_of.insert(id, (pi as u32, verso));
+                    if pg.canvas_origin.is_some() {
+                        placed.insert(id);
+                    }
+                    inner_bounds.insert(
+                        id,
+                        [
+                            pg.bounds.top,
+                            pg.bounds.left,
+                            pg.bounds.bottom,
+                            pg.bounds.right,
+                        ],
+                    );
                 }
             }
         }
@@ -10380,6 +10416,9 @@ impl CanvasModel {
                     }),
                     margin_inside_pt: inside,
                     margin_outside_pt: outside,
+                    canvas_origin_pt: Some([p.canvas_origin.0, p.canvas_origin.1]),
+                    canvas_placed: placed.contains(p.id.as_str()),
+                    bounds_pt: inner_bounds.get(p.id.as_str()).copied(),
                 }
             })
             .collect()

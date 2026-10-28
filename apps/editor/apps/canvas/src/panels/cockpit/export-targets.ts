@@ -35,6 +35,11 @@
 // HONEST outputs (web / social / package) carry the "soon" pill and
 // stay disabled until the multi-format publishing pipeline lands.
 
+import {
+  artboardFileName,
+  artboardNameOf,
+  type PageSummaryLike,
+} from "@paged-media/tools";
 import { useSyncExternalStore } from "react";
 import type { CanvasClient } from "@paged-media/client";
 import {
@@ -351,13 +356,17 @@ async function activePageIndexOf(
 
 export async function runImageExport(
   client: Pick<CanvasClient, "requestSnapshot"> &
-    Partial<Pick<CanvasClient, "documentMeta">>,
+    Partial<Pick<CanvasClient, "documentMeta" | "collection">>,
   args: {
     pageIds: string[];
     pageSizesPt: ReadonlyArray<readonly [number, number]>;
     settings: ImageSettings;
     activePageIndex?: number;
     baseName?: string;
+    /** Engine ADR 1011 — per page, its artboard's own name (null: none).
+     *  A named board's file is named after it (unique, file-safe); the
+     *  rest keep `<base>-pNN`. */
+    pageNames?: ReadonlyArray<string | null>;
   },
   triggerDownload: (
     bytes: Uint8Array,
@@ -388,6 +397,10 @@ export async function runImageExport(
   const base = (args.baseName || "document").replace(/\.idml$/i, "");
   const pad = String(pageIds.length).length;
   let files = 0;
+  const taken = new Set<string>();
+  // Each artboard a file named after it (engine ADR 1011): the names come
+  // from the pages' metadata unless the caller gave them.
+  const names = args.pageNames ?? (await artboardNamesFor(client, pageIds));
 
   for (const i of indices) {
     const pageId = pageIds[i];
@@ -406,8 +419,10 @@ export async function runImageExport(
     const isJpeg = settings.format === "jpeg" && encoded !== null;
     const bytes = encoded ?? png;
     const ext = isJpeg ? "jpg" : "png";
-    const label =
-      indices.length === 1
+    const own = names?.[i] ?? null;
+    const label = own
+      ? artboardFileName(own, ext, taken)
+      : indices.length === 1
         ? `${base}.${ext}`
         : `${base}-p${String(i + 1).padStart(pad, "0")}.${ext}`;
     triggerDownload(bytes, label);
@@ -415,6 +430,21 @@ export async function runImageExport(
   }
 
   return { files };
+}
+
+/** Per page id in `pageIds`, its artboard's own name (null: none); null
+ *  when the client cannot read the pages. */
+export async function artboardNamesFor(
+  client: Partial<Pick<CanvasClient, "collection">>,
+  pageIds: readonly string[],
+): Promise<Array<string | null> | null> {
+  if (!client.collection) return null;
+  const pages = await client
+    .collection<PageSummaryLike>("pages")
+    .catch(() => null);
+  if (!pages) return null;
+  const byId = new Map(pages.map((p) => [p.selfId, artboardNameOf(p)]));
+  return pageIds.map((id) => byId.get(id) ?? null);
 }
 
 function defaultDownload(bytes: Uint8Array, filename: string): void {

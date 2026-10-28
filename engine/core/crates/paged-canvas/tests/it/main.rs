@@ -6,6 +6,7 @@
 mod address_grammar;
 mod amend_mutation;
 mod apply_style_caret;
+mod artboards;
 mod batch_composition;
 mod batch_delete_then_insert;
 mod batch_minting;
