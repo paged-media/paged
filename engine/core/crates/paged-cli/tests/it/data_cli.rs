@@ -752,3 +752,221 @@ fn data_apply_keeps_a_record_flow_s_binding_when_it_replaces_the_frame_that_carr
     assert_eq!(flow["outcome"], "written", "{flow:#}");
     assert_eq!(flow_frames(&second).len(), 1);
 }
+
+// ── Remote images on consent (core ADR 1014, amendment 5)
+
+type Requests = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+/// A tiny HTTP/1.1 server on 127.0.0.1 (an ephemeral port, no real
+/// network): each request's head is logged, and `route` answers its path
+/// with a status, extra header lines and a body.
+fn serve(route: impl Fn(&str) -> (u16, String, Vec<u8>) + Send + 'static) -> (u16, Requests) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let log: Requests = Default::default();
+    let seen = log.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut head = Vec::new();
+            let mut chunk = [0u8; 1024];
+            while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                match stream.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => head.extend_from_slice(&chunk[..n]),
+                }
+            }
+            let head = String::from_utf8_lossy(&head).to_string();
+            let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
+            seen.lock().unwrap().push(head);
+            let (status, extra, body) = route(&path);
+            let reply = format!(
+                "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n{extra}\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(reply.as_bytes());
+            let _ = stream.write_all(&body);
+        }
+    });
+    (port, log)
+}
+
+/// The lowered document with its `remote` column naming `url`, applied at
+/// record 0 to `out` with `extra` arguments and environment.
+fn apply_remote(
+    d: &Path,
+    url: &str,
+    extra: &[&str],
+    env: &[(&str, &str)],
+    out: &Path,
+) -> Vec<Value> {
+    let doc = lowered_document(d);
+    std::fs::write(
+        d.join("products.csv"),
+        format!(
+            "name,price,shown,colour,photo,ean,remote,stock\n\
+             Ada,10,true,#ff0000,red.png,4006381333931,{url},asset:logo-a\n"
+        ),
+    )
+    .unwrap();
+    let csv = format!("products={}", s(&d.join("products.csv")));
+    let mut args = vec!["data", "apply", s(&doc), "--source", &csv];
+    args.extend_from_slice(extra);
+    args.extend_from_slice(&["-o", s(out), "--json"]);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_paged"));
+    command.args(&args);
+    for (k, v) in env {
+        command.env(k, v);
+    }
+    let report: Value = serde_json::from_str(&ok(command.output().unwrap())).unwrap();
+    report["applied"].as_array().unwrap().clone()
+}
+
+#[test]
+fn data_apply_leaves_a_remote_image_unfetched_without_its_origin_and_names_the_flag__feat__data_bind_labels_native(
+) {
+    let d = dir("remote-unlisted");
+    let (port, log) = serve(|_| (200, String::new(), red_png(3, 4)));
+    let url = format!("http://127.0.0.1:{port}/a.png");
+    let applied = apply_remote(&d, &url, &[], &[], &d.join("out.paged"));
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "notHeadless", "{remote:#}");
+    let message = remote["message"].as_str().unwrap();
+    assert!(
+        message.contains(&format!("--allow-origin http://127.0.0.1:{port}")),
+        "{message}"
+    );
+    // An origin listed for another port is not this origin.
+    let other = format!("http://127.0.0.1:{}", port.wrapping_add(1));
+    let applied = apply_remote(
+        &d,
+        &url,
+        &["--allow-origin", &other],
+        &[],
+        &d.join("out.paged"),
+    );
+    assert_eq!(row(&applied, "remote")["outcome"], "notHeadless");
+    assert!(log.lock().unwrap().is_empty(), "the server was asked");
+}
+
+#[test]
+fn data_apply_places_a_remote_image_from_a_listed_origin__feat__data_bind_labels_native() {
+    let d = dir("remote-listed");
+    let (port, log) = serve(|path| match path {
+        "/a.png" => (200, "Content-Type: image/png\r\n".into(), red_png(3, 4)),
+        _ => (404, String::new(), Vec::new()),
+    });
+    let url = format!("http://127.0.0.1:{port}/a.png");
+    let origin = format!("HTTP://127.0.0.1:{port}/");
+    let saved = d.join("placed.idml");
+    let applied = apply_remote(&d, &url, &["--allow-origin", &origin], &[], &saved);
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "written", "{remote:#}");
+    assert_eq!(remote["value"]["image"], url.as_str(), "{remote:#}");
+    let frame = remote["targets"][0].as_str().unwrap();
+    let id = frame.split_once(':').unwrap().1;
+    let spreads = idml_parts(&saved, "Spreads/");
+    assert!(
+        spreads.contains(&format!("<Image Self=\"{id}Image\"")),
+        "{spreads}"
+    );
+    let log = log.lock().unwrap();
+    assert_eq!(log.len(), 1, "{log:#?}");
+    let head = log[0].to_ascii_lowercase();
+    assert!(
+        head.contains(&format!("user-agent: paged/{}", env!("CARGO_PKG_VERSION"))),
+        "{head}"
+    );
+    assert!(
+        !head.contains("cookie") && !head.contains("authorization"),
+        "{head}"
+    );
+}
+
+#[test]
+fn data_apply_refuses_a_redirect_to_an_unlisted_origin__feat__data_bind_labels_native() {
+    let d = dir("remote-redirect");
+    let (elsewhere, elsewhere_log) = serve(|_| (200, String::new(), red_png(3, 4)));
+    let (port, _) = serve(move |path| match path {
+        // Same origin first (followed), then away (refused).
+        "/a.png" => (302, "Location: /b.png\r\n".into(), Vec::new()),
+        _ => (
+            302,
+            format!("Location: http://127.0.0.1:{elsewhere}/b.png\r\n"),
+            Vec::new(),
+        ),
+    });
+    let url = format!("http://127.0.0.1:{port}/a.png");
+    let origin = format!("http://127.0.0.1:{port}");
+    let applied = apply_remote(
+        &d,
+        &url,
+        &["--allow-origin", &origin],
+        &[],
+        &d.join("out.paged"),
+    );
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "failed", "{remote:#}");
+    let message = remote["message"].as_str().unwrap();
+    assert!(
+        message.contains(&format!(
+            "the origin http://127.0.0.1:{elsewhere} is not listed"
+        )),
+        "{message}"
+    );
+    assert!(
+        elsewhere_log.lock().unwrap().is_empty(),
+        "the unlisted origin was asked"
+    );
+}
+
+#[test]
+fn data_apply_aborts_a_remote_image_past_the_size_cap__feat__data_bind_labels_native() {
+    let d = dir("remote-oversized");
+    let (port, _) = serve(|_| (200, String::new(), vec![0u8; 4096]));
+    let url = format!("http://127.0.0.1:{port}/big.png");
+    let origin = format!("http://127.0.0.1:{port}");
+    let applied = apply_remote(
+        &d,
+        &url,
+        &["--allow-origin", &origin],
+        &[("PAGED_FETCH_MAX_BYTES", "1000")],
+        &d.join("out.paged"),
+    );
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "failed", "{remote:#}");
+    assert!(
+        remote["message"]
+            .as_str()
+            .unwrap()
+            .contains("1000-byte cap"),
+        "{remote:#}"
+    );
+}
+
+#[test]
+fn data_apply_follows_at_most_three_redirects__feat__data_bind_labels_native() {
+    let d = dir("remote-redirect-loop");
+    let (port, log) = serve(|_| (302, "Location: /again.png\r\n".into(), Vec::new()));
+    let url = format!("http://127.0.0.1:{port}/a.png");
+    let origin = format!("http://127.0.0.1:{port}");
+    let applied = apply_remote(
+        &d,
+        &url,
+        &["--allow-origin", &origin],
+        &[],
+        &d.join("out.paged"),
+    );
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "failed", "{remote:#}");
+    assert!(
+        remote["message"]
+            .as_str()
+            .unwrap()
+            .contains("more than 3 redirects"),
+        "{remote:#}"
+    );
+    // The first request and three redirects followed.
+    assert_eq!(log.lock().unwrap().len(), 4);
+}
