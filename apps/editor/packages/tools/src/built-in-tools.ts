@@ -63,6 +63,7 @@ import { createRectangleHandler } from "./handlers/rectangle-tool";
 import { createTypeHandler } from "./handlers/type-tool";
 import { createScissorsHandler } from "./handlers/scissors-tool";
 import { createShearHandler } from "./handlers/shear-tool";
+import { createFreeTransformHandler } from "./handlers/free-transform-tool";
 import { createSmoothHandler } from "./handlers/smooth-tool";
 import {
   createRotateHandler,
@@ -437,17 +438,17 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     // Editor-ops — anchor click → `pathOpenAt` (protocol v24).
     gesture: createScissorsHandler,
   },
-  // STUB — Free Transform is a MODE with its own unified handle box
-  // (translate + resize + rotate + shear from one frame), not another
-  // gesture arm. Every arm it would compose already exists engine-side;
-  // what is missing is the overlay + handle hit-testing, which is a
-  // feature, not a wiring. Until then the Selection tool's own handles
-  // (resize, the rotate handle, Cmd+drag to scale) are the real path.
-  // `e` is reserved, not bound.
+  // Free Transform (editor ADR 295) — one handle box that moves,
+  // scales, rotates and shears (each one engine gesture arm, the same
+  // ones the selection chrome and the Rotate / Scale / Shear tools
+  // drive) and distorts or puts in perspective (Cmd / Cmd+Alt+Shift on
+  // a corner, or the Control bar's modes). The Control bar carries the
+  // reference-point grid, the modes and a numeric shear while it is on.
   {
     id: "paged.tool.freeTransform",
     title: "Free Transform",
-    description: "Move, scale and rotate with one tool.",
+    description:
+      "Move, scale, rotate, shear and distort the selection from one box.",
     icon: "tool-freeTransform",
     shortcut: "e",
     group: "transform",
@@ -455,7 +456,9 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     cluster: "transform",
     order: 0,
     isGroupDefault: true,
-    status: "planned",
+    // Cmd is the distort / shear modifier here, not Direct Selection.
+    cmdIsModifier: true,
+    gesture: createFreeTransformHandler,
   },
   // Rotate / Scale drive the engine's `{kind:"rotate"}` / `{kind:"scale"}`
   // gesture arms — the same arms the selection chrome's rotate handle and

@@ -173,6 +173,12 @@ import {
   type ActionBackend,
   type DataBackend,
 } from "./doors-data-actions.js";
+import {
+  createHandleSets,
+  createTransformBoxes,
+  hostDrawsHandles,
+  wrapToolGesture,
+} from "./overlay-handles.js";
 import { documentChangeOf } from "./document-change.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
@@ -1830,6 +1836,24 @@ export function createBundleHost(
   const lists = (arr: readonly string[] | undefined, id: string): boolean =>
     arr?.includes(id) ?? false;
 
+  // Extensions ADR 339 — the pointer-answering overlay doors: handle sets
+  // and the transform box. Created up front because the TOOL door wraps
+  // every contributed gesture handler with their router.
+  const overlayDoorDeps = {
+    getEditor,
+    manifestId: manifest.id,
+    requireOverlay: (door: string) =>
+      requireDeclared(
+        hasRendering("overlay"),
+        door,
+        'capabilities.rendering must include "overlay"',
+      ),
+    warn: (message: string) => log.warn(message),
+  };
+  const handleSets = createHandleSets(overlayDoorDeps);
+  const transformBoxes = createTransformBoxes(overlayDoorDeps);
+  store.add(toDisposable(() => transformBoxes.disposeAll()));
+
   /** W3.2 — an edit-context / object-type `type` is DECLARED when the
    *  manifest's `contributes.editContexts[]` / `contributes.objectTypes[]`
    *  lists an entry with that `type`. (These are object arrays keyed by
@@ -1994,7 +2018,20 @@ export function createBundleHost(
         "contribute.tool",
         `contributes.tools[] must include "${c.id}"`,
       );
-      return store.add(getEditor().registries.tools.register(c));
+      // ADR 339 — the bundle's own tools hear the handle sets and the
+      // transform box: the router wraps each handler the factory makes.
+      const gesture = c.gesture;
+      return store.add(
+        getEditor().registries.tools.register(
+          gesture
+            ? {
+                ...c,
+                gesture: () =>
+                  wrapToolGesture(gesture(), handleSets, transformBoxes),
+              }
+            : c,
+        ),
+      );
     },
     panel(c) {
       assertNamespaced(c.id, "panel");
@@ -2201,6 +2238,10 @@ export function createBundleHost(
       const stamped: EditContextContribution = {
         ...c,
         metadataKey: metadataKey(manifest),
+        // ADR 339 — an open transform box is a sub-edit: Esc and Enter
+        // end the BOX (through the bundle's tool), not the context.
+        isDirty: () =>
+          transformBoxes.surface.active() !== null || (c.isDirty?.() ?? false),
         ...(bindingRegistry
           ? {
               onEnter: (ctx) => {
@@ -4291,6 +4332,10 @@ export function createBundleHost(
       store.add(handle);
       return handle;
     },
+    // ADR 339 — retained handle sets the host draws and hit-tests.
+    handles(id?: string) {
+      return store.add(handleSets.handles(id));
+    },
   };
 
   // ------------------------------------------------------- storage
@@ -5751,6 +5796,13 @@ export function createBundleHost(
     // `historySteps` (see the option).
     featureSet.add("editContext.historySteps@1");
   }
+  if (hostDrawsHandles(getEditor())) {
+    // ADR 339 — the host draws the handle primitive on the same layer
+    // sink, so handle sets and transform boxes are visible. Without it
+    // both still answer hits and route (pure geometry) but draw nothing.
+    featureSet.add("overlay.handles@1");
+    featureSet.add("host.transformBox@1");
+  }
   if (options?.editContextEnterPoint === true) {
     // W-19 — the host shell vouches that a pointer entry carries the
     // entering point (see the option).
@@ -6058,6 +6110,7 @@ export function createBundleHost(
     render,
     text,
     overlay,
+    transformBox: transformBoxes.surface,
     shell,
     storage,
     blob,

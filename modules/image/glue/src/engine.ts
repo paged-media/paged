@@ -1886,6 +1886,15 @@ export interface ImageEngine
     amount: number,
     frequency?: number,
   ): Promise<DecodedInfo>;
+  /** FREE TRANSFORM of the active layer (`geom.warp_projective`): the
+   *  FORWARD 3×3 map in image px (row-major), bilinear or bicubic,
+   *  transparent outside; with a selection only its pixels move. One
+   *  journaled edit. */
+  applyProjective(
+    handle: number,
+    matrix: readonly number[],
+    interp: "bilinear" | "bicubic",
+  ): Promise<DecodedInfo>;
   /** STYLIZE — directional relief. `height === 0` is the identity. */
   applyEmboss(
     handle: number,
@@ -2807,6 +2816,11 @@ export interface ImageWasmModule
     kind: number,
     amount: number,
     frequency: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_projective(
+    handle: number,
+    matrix: Float32Array,
+    interp: number,
   ): Promise<DecodedHandleWasm>;
   apply_emboss(
     handle: number,
@@ -3826,6 +3840,15 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         display: displayTreatmentOf(h.display),
         depthReduced: h.depth_reduced === true,
       };
+    },
+    async applyProjective(handle, matrix, interp) {
+      return decodedInfoOf(
+        await wasm.apply_projective(
+          handle,
+          Float32Array.from(matrix),
+          interp === "bicubic" ? 1 : 0,
+        ),
+      );
     },
     // ONE decoder for all six: the return shape is identical, and six
     // hand-written copies of it is six chances to forget a field.

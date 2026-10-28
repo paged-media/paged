@@ -1505,6 +1505,199 @@ struct Params {
     min_weight: f32,
     _abi_pad: u32,
 }
+";
+
+// ─────────────────────── warp_projective ──────────────────────────
+//
+// FREE TRANSFORM of a layer (WP5.6 / I-36; editor ADR 295, extensions
+// ADR 339): scale, rotate, skew, distort and perspective are all one map,
+// a 3×3 HOMOGRAPHY. The host's transform box reports the forward matrix
+// (where each source pixel goes); the caller passes its INVERSE here, and
+// for every OUTPUT texel the kernel asks where it came from:
+//
+//   (sx, sy, sw) = H⁻¹ · (x + 0.5, y + 0.5, 1),   src = (sx/sw, sy/sw) − 0.5
+//
+// Backward, not forward: a forward map scatters and leaves holes; a
+// backward map is total by construction (Wolberg, *Digital Image
+// Warping*, IEEE CS Press 1990, §3 — inverse mapping; Heckbert, "Fundamentals
+// of Texture Mapping and Image Warping", UC Berkeley 1989, §2.2 — the
+// projective mapping and its inverse). A texel whose source homogeneous
+// weight is not positive lies behind the horizon and is TRANSPARENT.
+//
+// Reconstruction, `interp`:
+//   0  bilinear — the 2×2 footprint `geom.rotate_bilinear` uses, the same
+//      fixed `mix` order;
+//   1  bicubic — Catmull-Rom (a = −0.5), the 4×4 footprint, separable:
+//      four row sums in x, then one in y (Keys, "Cubic convolution
+//      interpolation for digital image processing", IEEE TASSP 29(6), 1981).
+// Both read TRANSPARENT outside the source (a tap off the image is
+// (0,0,0,0)), so the edge of a transformed layer is antialiased against
+// nothing instead of smearing its border pixels — and what the layer no
+// longer covers is empty. The caller hands the kernel ASSOCIATED alpha, so
+// interpolating against transparent black is exact (no dark fringe).
+// Catmull-Rom overshoots: the result is clamped to [0, a] per channel, which
+// keeps it a valid premultiplied colour.
+//
+// Selection (`masked == 1`): the pixels UNDER the selection float and
+// transform; the rest stay. Each source tap is weighted by the mask at that
+// tap (the selection travels with its pixels), the place they left is
+// emptied by `(1 − mask(xy))`, and the transformed pixels land OVER what
+// stays: `out = moved + stay · (1 − moved.a)`. With no selection the layer
+// itself is the float: `out = moved`.
+//
+// `mip_exact: false` — like every coordinate remap it runs at level 0.
+
+/// Projective-warp params: the INVERSE homography (destination px →
+/// source px), row-major, plus the reconstruction and the mask switch.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct WarpProjectiveParams {
+    pub h0: f32,
+    pub h1: f32,
+    pub h2: f32,
+    pub h3: f32,
+    pub h4: f32,
+    pub h5: f32,
+    pub h6: f32,
+    pub h7: f32,
+    pub h8: f32,
+    /// 0 bilinear, 1 bicubic (Catmull-Rom).
+    pub interp: u32,
+    /// 1: transform only the selection's pixels (see the module note).
+    pub masked: u32,
+    pub _abi_pad: u32,
+}
+
+/// The reconstruction filter of [`GEOM_WARP_PROJECTIVE`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WarpInterp {
+    Bilinear = 0,
+    Bicubic = 1,
+}
+
+impl WarpProjectiveParams {
+    /// From the FORWARD matrix (source px → destination px, row-major on
+    /// column vectors), inverted here in f64. `None` for a singular map.
+    pub fn from_forward(m: [f64; 9], interp: WarpInterp, masked: bool) -> Option<Self> {
+        // One homography for every consumer (paged-warp, PM-0014 L2).
+        let inv = paged_warp::invert(m)?;
+        Some(Self::from_inverse(inv, interp, masked))
+    }
+
+    /// From the INVERSE matrix (destination px → source px).
+    pub fn from_inverse(inv: [f64; 9], interp: WarpInterp, masked: bool) -> Self {
+        let f = |i: usize| inv[i] as f32;
+        Self {
+            h0: f(0),
+            h1: f(1),
+            h2: f(2),
+            h3: f(3),
+            h4: f(4),
+            h5: f(5),
+            h6: f(6),
+            h7: f(7),
+            h8: f(8),
+            interp: interp as u32,
+            masked: u32::from(masked),
+            _abi_pad: 0,
+        }
+    }
+
+    /// The identity map (every texel reads itself).
+    pub fn identity(interp: WarpInterp) -> Self {
+        Self::from_inverse([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0], interp, false)
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const WARP_PROJECTIVE_FIELDS: &[ParamField] = &[
+    ParamField {
+        name: "h0",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "h1",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "h2",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "h3",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "h4",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "h5",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "h6",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "h7",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "h8",
+        wgsl_ty: "f32",
+    },
+    ParamField {
+        name: "interp",
+        wgsl_ty: "u32",
+    },
+    ParamField {
+        name: "masked",
+        wgsl_ty: "u32",
+    },
+];
+
+/// Backward-mapped projective warp (a homography), bilinear or bicubic,
+/// transparent outside the source. The bicubic footprint is 4×4 ⇒
+/// `Resample { support: 2.0 }`. The f32 homogeneous divide and the
+/// Catmull-Rom weights round differently on the two lanes in the last
+/// ulp, which the f16 output absorbs — `ChannelEpsF16(4)`, as the
+/// rotation's.
+pub static GEOM_WARP_PROJECTIVE: KernelDef = KernelDef {
+    id: "geom.warp_projective",
+    class: KernelClass::Resample { support: 2.0 },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<WarpProjectiveParams>(),
+        fields: WARP_PROJECTIVE_FIELDS,
+    },
+    wgsl: GEOM_WARP_PROJECTIVE_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
+};
+
+const GEOM_WARP_PROJECTIVE_WGSL: &str = "\
+// paged.image kernel `geom.warp_projective` — handwritten under ABI v1.1.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    h0: f32,
+    h1: f32,
+    h2: f32,
+    h3: f32,
+    h4: f32,
+    h5: f32,
+    h6: f32,
+    h7: f32,
+    h8: f32,
+    interp: u32,
+    masked: u32,
+    _abi_pad: u32,
+}
 
 @group(0) @binding(0) var in0 : texture_2d<f32>;
 @group(0) @binding(1) var in1 : texture_2d<f32>;
@@ -1568,6 +1761,92 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let m = textureLoad(mask, xy, 0).r;
     textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
 }
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+// A source tap: transparent outside the image; under a selection, the
+// pixel weighted by its coverage (only the selected part floats).
+fn tap(p: vec2<i32>, dims: vec2<i32>) -> vec4<f32> {
+    if (p.x < 0 || p.y < 0 || p.x >= dims.x || p.y >= dims.y) {
+        return vec4<f32>(0.0);
+    }
+    let v = textureLoad(in0, p, 0);
+    if (params.masked == 1u) {
+        return v * textureLoad(mask, p, 0).r;
+    }
+    return v;
+}
+
+// Catmull-Rom weights (a = -0.5) for the four taps at offsets -1, 0, 1, 2.
+fn cr_weights(t: f32) -> vec4<f32> {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    return vec4<f32>(
+        -0.5 * t3 + t2 - 0.5 * t,
+        1.5 * t3 - 2.5 * t2 + 1.0,
+        -1.5 * t3 + 2.0 * t2 + 0.5 * t,
+        0.5 * t3 - 0.5 * t2,
+    );
+}
+
+fn cr_row(i0: vec2<i32>, dy: i32, wx: vec4<f32>, dims: vec2<i32>) -> vec4<f32> {
+    let y = i0.y + dy;
+    var s = tap(vec2<i32>(i0.x - 1, y), dims) * wx.x;
+    s = s + tap(vec2<i32>(i0.x, y), dims) * wx.y;
+    s = s + tap(vec2<i32>(i0.x + 1, y), dims) * wx.z;
+    s = s + tap(vec2<i32>(i0.x + 2, y), dims) * wx.w;
+    return s;
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wdims = vec2<i32>(textureDimensions(in0));
+
+    let px = f32(xy.x) + 0.5;
+    let py = f32(xy.y) + 0.5;
+    let hw = params.h6 * px + params.h7 * py + params.h8;
+    var moved = vec4<f32>(0.0);
+    if (hw > 0.0) {
+        let sx = (params.h0 * px + params.h1 * py + params.h2) / hw - 0.5;
+        let sy = (params.h3 * px + params.h4 * py + params.h5) / hw - 0.5;
+        let x0 = floor(sx);
+        let y0 = floor(sy);
+        let fx = sx - x0;
+        let fy = sy - y0;
+        let i0 = vec2<i32>(i32(x0), i32(y0));
+        if (params.interp == 1u) {
+            let wx = cr_weights(fx);
+            let wy = cr_weights(fy);
+            var acc = cr_row(i0, -1, wx, wdims) * wy.x;
+            acc = acc + cr_row(i0, 0, wx, wdims) * wy.y;
+            acc = acc + cr_row(i0, 1, wx, wdims) * wy.z;
+            acc = acc + cr_row(i0, 2, wx, wdims) * wy.w;
+            let a = clamp(acc.a, 0.0, 1.0);
+            moved = vec4<f32>(clamp(acc.rgb, vec3<f32>(0.0), vec3<f32>(a)), a);
+        } else {
+            let p00 = tap(i0, wdims);
+            let p10 = tap(i0 + vec2<i32>(1, 0), wdims);
+            let p01 = tap(i0 + vec2<i32>(0, 1), wdims);
+            let p11 = tap(i0 + vec2<i32>(1, 1), wdims);
+            let top = mix(p00, p10, fx);
+            let bot = mix(p01, p11, fx);
+            moved = mix(top, bot, fy);
+        }
+    }
+    if (params.masked == 1u) {
+        let here = clamp(xy, vec2<i32>(0, 0), wdims - vec2<i32>(1, 1));
+        let stay = textureLoad(in0, here, 0) * (1.0 - textureLoad(mask, xy, 0).r);
+        textureStore(outp, xy, moved + stay * (1.0 - moved.a));
+        return;
+    }
+    textureStore(outp, xy, moved);
+}
 ";
 
 pub static FAMILY: &[&KernelDef] = &[
@@ -1579,6 +1858,7 @@ pub static FAMILY: &[&KernelDef] = &[
     &GEOM_CROP,
     &GEOM_ROTATE_BILINEAR,
     &GEOM_WARP_BACKWARD,
+    &GEOM_WARP_PROJECTIVE,
     &GEOM_MOSAIC,
     &GEOM_OFFSET,
     &GEOM_PATCH_VOTE,

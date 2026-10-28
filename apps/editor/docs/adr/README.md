@@ -97,6 +97,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [292](292-the-bind-popover.md) | The bind popover: field, rules, map or expression on any property field | Accepted 2026-10-24 |
 | [293](293-a-template-opened-as-a-document-says-so.md) | A template opened as a document says so, and offers "Edit template" | Accepted 2026-10-24 |
 | [294](294-the-fill-presets-on-phones-and-tablets.md) | The fill presets on phones and tablets | Accepted 2026-10-24 |
+| [295](295-free-transform.md) | Free Transform: one box, the engine's arms, a destructive distort until envelopes | Accepted 2026-10-24 |
 | [298](298-control-bar-groups-per-edit-context.md) | Control-bar groups and status items follow the edit context | Accepted 2026-10-24 |
 | [299](299-scoped-keybindings-over-text-input.md) | Keybindings scoped to an edit context win over the text input | Accepted 2026-10-24 |
 | [303](303-find-and-replace.md) | Find & Replace | Accepted 2026-10-25 |

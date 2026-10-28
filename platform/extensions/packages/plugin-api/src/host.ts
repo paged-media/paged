@@ -56,6 +56,7 @@ import type {
   CommandContribution,
   ControlBarGroupContribution,
   StatusItemContribution,
+  CursorSpec,
   ExporterContribution,
   FrameSurfaceContribution,
   ImporterContribution,
@@ -2291,6 +2292,203 @@ export interface OverlaySurface {
    * draws nothing.
    */
   layer(id?: string): OverlayLayer;
+  /**
+   * Extensions ADR 339 — a RETAINED HANDLE SET of this bundle's own:
+   * handles the HOST draws (at a constant screen size, like its selection
+   * handles) and HIT-TESTS, so a bundle's crop box, gradient endpoints or
+   * transform box behave like the host's own chrome without each bundle
+   * re-deriving the pixel metrics from the camera.
+   *
+   * Hit answers come two ways: every pointer event of this bundle's own
+   * tools carries `hitHandle` (`{ set, id }`) when the pointer is over a
+   * handle of a live set, and `set.hitTest` answers a point directly. A
+   * handle's `cursor` becomes the tool's cursor over it, unless the tool's
+   * own `cursorAt` answers first.
+   *
+   * Sets draw on the overlay-layer channel (they stack with the bundle's
+   * layers in creation order, below the tool-preview slot) and are
+   * disposed with the bundle. `id` names the set (generated when
+   * omitted); an id already live throws.
+   *
+   * Same `capabilities.rendering` ∋ `"overlay"` gate as the other overlay
+   * doors. Probe `supports("overlay.handles@1")`: true only when the host
+   * renders the handle primitive (`ToolPreviewHandle`) and retained
+   * layers. Without it the set still answers `hitTest` and stamps
+   * `hitHandle` (that is pure geometry), but draws nothing.
+   */
+  handles(id?: string): OverlayHandleSet;
+}
+
+/** Extensions ADR 339 — the space a handle set's positions are in. */
+export type OverlayHandleSpace =
+  /** Page-local pt of `pageId` (the tool-preview space). */
+  | { pageId: PageId }
+  /** The frame-content space of `element`: origin at the frame's
+   *  geometric box top-left, x right, y down, through the frame's item
+   *  transform (so the handles follow a moved, scaled or turned frame).
+   *  The host resolves the frame's geometry when the set is `set`. */
+  | { element: ElementId };
+
+/** Extensions ADR 339 — one handle of a set. */
+export interface OverlayHandleSpec {
+  /** The handle's id within the set (echoed in `hitHandle`). */
+  id: string;
+  /** Centre, in the set's space. */
+  at: [number, number];
+  /** What it looks like and how it hits: `square` / `round` / `centre`
+   *  draw as `ToolPreviewHandle`; `rotateZone` draws nothing and hits a
+   *  larger round area (a rotate band outside a corner). */
+  kind: "square" | "round" | "centre" | "rotateZone";
+  /** The cursor over it (a `rotateZone` defaults to the host's rotate
+   *  cursor). */
+  cursor?: CursorSpec;
+  /** Hit radius in screen px. Defaults: 6 (square/round/centre), 28
+   *  (rotateZone). Handles listed EARLIER win an overlap. */
+  hitPx?: number;
+  /** Draw it as the handle being dragged. */
+  active?: boolean;
+}
+
+/** Extensions ADR 339 — a retained handle set (`host.overlay.handles`). */
+export interface OverlayHandleSet extends Disposable {
+  /** The set's id within the bundle (the `set` of `hitHandle`). */
+  readonly id: string;
+  /** REPLACE the set's handles. An empty list clears it. */
+  set(space: OverlayHandleSpace, handles: readonly OverlayHandleSpec[]): void;
+  /** Remove every handle; the set keeps its place in the stack. */
+  clear(): void;
+  /** The handle under a PAGE-LOCAL point of `pageId` (the space of
+   *  `CanvasPointerEvent.pagePoint`), or null. Uses the camera's current
+   *  scale for the screen-px radii. */
+  hitTest(pageId: string, pagePoint: [number, number]): string | null;
+}
+
+// --------------------------------------------------------- transformBox
+
+/** Extensions ADR 339 — a 3×3 projective matrix, ROW-MAJOR on column
+ *  vectors: (x, y) ↦ ((m0·x + m1·y + m2)/w, (m3·x + m4·y + m5)/w) with
+ *  w = m6·x + m7·y + m8. Affine when the last row is [0, 0, 1]. */
+export type ProjectiveMatrix = [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+];
+
+/** Extensions ADR 339 — a quad's corners: NW, NE, SE, SW. */
+export type TransformQuad = [
+  [number, number],
+  [number, number],
+  [number, number],
+  [number, number],
+];
+
+/** The box's mode (Illustrator's touch widget). `freeTransform` reads
+ *  the modifiers: a handle scales (Shift proportional, Alt from the
+ *  centre), outside a corner rotates (Shift 15°), Cmd/Ctrl on a side
+ *  shears, Cmd/Ctrl on a corner distorts, Cmd/Ctrl+Alt+Shift on a corner
+ *  is perspective. `constrain` scales proportionally without Shift;
+ *  `freeDistort` and `perspective` make a corner drag that. */
+export type TransformBoxMode =
+  "freeTransform" | "constrain" | "freeDistort" | "perspective";
+
+/** What a drag did. `reference` moved the reference point. */
+export type TransformBoxOperation =
+  | "move"
+  | "scale"
+  | "rotate"
+  | "shear"
+  | "distort"
+  | "perspective"
+  | "reference";
+
+/** One report of a transform box. */
+export interface TransformBoxUpdate {
+  /** The map from the box as OPENED to the box now (page-local pt on
+   *  both sides). Projective after a distort or perspective drag, affine
+   *  otherwise. Apply it to what the box stands for. */
+  matrix: ProjectiveMatrix;
+  /** The box's corners now (NW, NE, SE, SW), page-local pt. */
+  quad: TransformQuad;
+  /** The reference point now (the rotation pivot), page-local pt. */
+  reference: [number, number];
+  mode: TransformBoxMode;
+  /** The drag this report comes from; null for a commit or a mode change
+   *  with no drag. */
+  operation: TransformBoxOperation | null;
+}
+
+/** Options of `host.transformBox.open`. */
+export interface TransformBoxOptions {
+  /** The page the box is on; `quad` is in its page-local pt. */
+  pageId: PageId;
+  /** The box's corners (NW, NE, SE, SW) — the bounds of what the bundle
+   *  transforms (a layer, a selection, a placed item). */
+  quad: TransformQuad;
+  /** Starting mode (default `freeTransform`). */
+  mode?: TransformBoxMode;
+  /** Starting reference point (default the box's centre). */
+  reference?: [number, number];
+  /** One of this bundle's tools to make the active tool while the box is
+   *  open, so a command can open a box whatever tool is in hand (the box
+   *  hears only the bundle's own tools). */
+  toolId?: string;
+  /** Every drag step (live preview). */
+  onChange?(update: TransformBoxUpdate): void;
+  /** The box was committed (Enter, `commit()`, or a double-click
+   *  inside it): apply `update.matrix` — once, as ONE undo step. The box
+   *  closes. */
+  onCommit(update: TransformBoxUpdate): void;
+  /** The box was cancelled (Escape, `cancel()`, the bundle disposed):
+   *  drop the preview. The box closes. */
+  onCancel?(): void;
+}
+
+/** A live transform box (`host.transformBox.open`). */
+export interface TransformBoxSession extends Disposable {
+  /** The current mode. */
+  readonly mode: TransformBoxMode;
+  /** Switch mode (the widget); reports through `onChange`. */
+  setMode(mode: TransformBoxMode): void;
+  /** The current report. */
+  current(): TransformBoxUpdate;
+  /** Commit now (as Enter does). */
+  commit(): void;
+  /** Cancel now (as Escape does). */
+  cancel(): void;
+  /** True until commit, cancel or dispose. */
+  readonly open: boolean;
+}
+
+/**
+ * Extensions ADR 339 — a HOST-DRAWN TRANSFORM BOX over a quad the bundle
+ * owns. The host draws the box (its eight handles, the rotate zones
+ * outside the corners and the reference point), routes the pointer to it,
+ * does the gesture math — the same as the host's own Free Transform tool —
+ * and reports a 3×3 projective matrix with the mode on every move and on
+ * commit. The bundle applies the matrix to its own content (an image
+ * layer's pixels, a selection) — the host never touches it.
+ *
+ * Pointer routing: while a box is open, the pointer events and keys of
+ * this bundle's own tools go to the box first (Enter commits, Escape
+ * cancels); a press OUTSIDE the box, beyond the rotate zones, reaches the
+ * tool as usual. One box per bundle at a time: opening a second cancels
+ * the first.
+ *
+ * Gated on `capabilities.rendering` ∋ `"overlay"` (the box draws on the
+ * overlay). Probe `supports("host.transformBox@1")`: true when the host
+ * renders the handle primitive; without it the box still routes and
+ * reports (the geometry is the SDK's) but nothing is drawn.
+ */
+export interface TransformBoxSurface {
+  open(options: TransformBoxOptions): TransformBoxSession;
+  /** The open box, or null. */
+  active(): TransformBoxSession | null;
 }
 
 /** W-20 — one retained overlay layer (`host.overlay.layer`). */
@@ -3344,6 +3542,9 @@ export interface BundleHost {
    *  no measurement backend — the headless harness returns an estimate). */
   readonly text: TextSurface;
   readonly overlay: OverlaySurface;
+  /** Extensions ADR 339 — the host-drawn transform box over a quad the
+   *  bundle owns (`supports("host.transformBox@1")`). */
+  readonly transformBox: TransformBoxSurface;
   readonly shell: ShellSurface;
   readonly storage: StorageSurface;
   /** The capability-gated BINARY blob store (K-4 / S-08): OPFS-backed,

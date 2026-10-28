@@ -3534,6 +3534,47 @@ mod wasm {
         apply_point_kernel(handle, &GEOM_WARP_BACKWARD, params.as_bytes()).await
     }
 
+    /// FREE TRANSFORM of the active layer (`geom.warp_projective`; WP5.6,
+    /// editor ADR 295). `matrix` is the FORWARD 3×3 map in image px
+    /// (row-major: where each source pixel goes), as the host's transform
+    /// box reports it seen through the frame's fit; it is inverted here in
+    /// f64. `interp` 0 bilinear, 1 bicubic. What the layer no longer covers
+    /// is transparent. With a selection only the selected pixels move (the
+    /// rest stay), as one journaled edit — one undo step either way. The
+    /// kernel reads ASSOCIATED alpha, so the upload associates even an
+    /// opaque layer: its new edges are interpolated against transparent
+    /// black, which is exact only premultiplied.
+    #[wasm_bindgen]
+    pub async fn apply_projective(
+        handle: u32,
+        matrix: Vec<f32>,
+        interp: u32,
+    ) -> Result<DecodedHandle, JsValue> {
+        use image_kernels::families::geom::{
+            WarpInterp, WarpProjectiveParams, GEOM_WARP_PROJECTIVE,
+        };
+        if matrix.len() != 9 {
+            return Err(JsValue::from_str(
+                "a projective matrix is 9 numbers (3×3, row-major)",
+            ));
+        }
+        let interp = match interp {
+            0 => WarpInterp::Bilinear,
+            1 => WarpInterp::Bicubic,
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown interpolation {other} (0 bilinear | 1 bicubic)"
+                )))
+            }
+        };
+        let m: [f64; 9] = std::array::from_fn(|i| f64::from(matrix[i]));
+        let masked = SELECTION.with(|s| s.borrow().mask_for(handle)).is_some();
+        let params = WarpProjectiveParams::from_forward(m, interp, masked).ok_or_else(|| {
+            JsValue::from_str("the transform is singular (it folds the layer flat)")
+        })?;
+        apply_point_kernel_inner(handle, &GEOM_WARP_PROJECTIVE, params.as_bytes(), None, true).await
+    }
+
     /// STYLIZE — emboss. `angle_deg` is the light direction, `height`
     /// the relief strength; height 0 is the identity (flat mid-grey
     /// plus nothing).
@@ -4389,6 +4430,21 @@ mod wasm {
         params: &[u8],
         mask_override: Option<Arc<SelectionCoverage>>,
     ) -> Result<DecodedHandle, JsValue> {
+        apply_point_kernel_inner(handle, def, params, mask_override, false).await
+    }
+
+    /// [`apply_point_kernel_masked`], optionally ASSOCIATING alpha even
+    /// for an opaque image (`force_associate`): a kernel that reads outside
+    /// the image as transparent (the projective warp) makes new partial
+    /// alpha at the edges, which only premultiplied interpolation keeps
+    /// free of a dark fringe, and whose result must then be unassociated.
+    async fn apply_point_kernel_inner(
+        handle: u32,
+        def: &'static image_kernels::KernelDef,
+        params: &[u8],
+        mask_override: Option<Arc<SelectionCoverage>>,
+        force_associate: bool,
+    ) -> Result<DecodedHandle, JsValue> {
         use half::f16;
         let (img, ctx, sel, layered) = fill_prelude(handle)?;
         let sel = mask_override.or(sel);
@@ -4421,7 +4477,7 @@ mod wasm {
         // Alpha association is a question about the ALPHA, so ask the
         // buffer at its own depth rather than a narrowed copy.
         let n_px = img.rgba.pixel_count();
-        let associate = (0..n_px).any(|i| img.rgba.sample16(i, 3) != u16::MAX);
+        let associate = force_associate || (0..n_px).any(|i| img.rgba.sample16(i, 3) != u16::MAX);
         // DEPTH-AGNOSTIC upload. `sample16` widens an 8-bit sample as
         // `(v << 8) | v`, which maps 255 to 65535 exactly, so an 8-bit
         // image produces byte-identical f16 to the old `/ 255.0` path
