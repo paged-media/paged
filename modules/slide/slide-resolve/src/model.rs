@@ -80,7 +80,9 @@ pub struct Item {
     pub kind: ItemKind,
     /// 0–1; 1 is opaque.
     pub opacity: f64,
-    pub shadow: Option<Shadow>,
+    /// The item's DrawingML effects (shadows, glow, soft edge, …).
+    #[serde(default)]
+    pub effects: Effects,
     /// What export and editing need to know about where it came from.
     pub meta: ItemMeta,
 }
@@ -101,6 +103,9 @@ pub enum ItemKind {
         image_part: String,
         /// Crop in fractions of the image: l, t, r, b.
         crop: (f64, f64, f64, f64),
+        /// The blip's picture effects (`a:duotone`, `a:lum`, …).
+        #[serde(default)]
+        image_effects: Vec<ImageEffect>,
     },
     Group {
         children: Vec<Item>,
@@ -109,116 +114,12 @@ pub enum ItemKind {
     Table(Table),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Paint {
-    None,
-    Solid {
-        rgb: Rgb,
-        alpha: f64,
-        theme: Option<String>,
-    },
-    Linear {
-        stops: Vec<Stop>,
-        angle: f64,
-    },
-    Radial {
-        stops: Vec<Stop>,
-        /// The centre, as fractions of the box: the centre of
-        /// `a:fillToRect` (the box's centre when absent). The gradient
-        /// reaches its last stop at the farthest corner.
-        center: (f64, f64),
-    },
-    Image {
-        part: String,
-    },
-}
-
-/// One gradient stop: position (0–100 %), colour, alpha (0–1).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Stop {
-    pub pos: f64,
-    pub rgb: Rgb,
-    pub alpha: f64,
-}
-
-impl Paint {
-    /// The colour of a gradient at position `t` (0–1) along its axis, or of
-    /// a solid paint anywhere; stops interpolate in sRGB.
-    pub fn color_at(&self, t: f64) -> Option<(Rgb, f64)> {
-        match self {
-            Paint::Solid { rgb, alpha, .. } => Some((*rgb, *alpha)),
-            Paint::Linear { stops, .. } | Paint::Radial { stops, .. } => {
-                let t = t.clamp(0.0, 1.0) * 100.0;
-                let first = stops.first()?;
-                if t <= first.pos {
-                    return Some((first.rgb, first.alpha));
-                }
-                for w in stops.windows(2) {
-                    let (a, b) = (w[0], w[1]);
-                    if t <= b.pos {
-                        let k = if b.pos > a.pos {
-                            (t - a.pos) / (b.pos - a.pos)
-                        } else {
-                            1.0
-                        };
-                        let mix =
-                            |x: u8, y: u8| (x as f64 + (y as f64 - x as f64) * k).round() as u8;
-                        return Some((
-                            [
-                                mix(a.rgb[0], b.rgb[0]),
-                                mix(a.rgb[1], b.rgb[1]),
-                                mix(a.rgb[2], b.rgb[2]),
-                            ],
-                            a.alpha + (b.alpha - a.alpha) * k,
-                        ));
-                    }
-                }
-                let last = stops.last()?;
-                Some((last.rgb, last.alpha))
-            }
-            Paint::None | Paint::Image { .. } => None,
-        }
-    }
-
-    /// The paint's alpha when it is the same everywhere (a solid colour, or
-    /// a gradient whose stops share one), else `None`.
-    pub fn uniform_alpha(&self) -> Option<f64> {
-        match self {
-            Paint::Solid { alpha, .. } => Some(*alpha),
-            Paint::Linear { stops, .. } | Paint::Radial { stops, .. } => {
-                let first = stops.first()?.alpha;
-                stops
-                    .iter()
-                    .all(|s| (s.alpha - first).abs() < 1e-3)
-                    .then_some(first)
-            }
-            Paint::None | Paint::Image { .. } => Some(1.0),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Stroke {
-    pub width: f64,
-    pub paint: Paint,
-    pub dash: Option<String>,
-    /// `cmpd` other than a single line (`dbl`, `thickThin`, …).
-    #[serde(default)]
-    pub compound: Option<String>,
-    pub cap: Option<String>,
-    pub join: Option<String>,
-    pub head: Option<String>,
-    pub tail: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Shadow {
-    pub dx: f64,
-    pub dy: f64,
-    pub blur: f64,
-    pub rgb: Rgb,
-    pub alpha: f64,
-}
+// The resolved paint is the shared neutral IR (`paged_ooxml::drawingml::
+// resolved`, slide ADR 722): what doc lowers from too, and what the shared
+// mapper (`dml-native`) turns into the engine's model.
+pub use paged_ooxml::drawingml::resolved::{
+    radial_reach, Effects, ImageEffect, Paint, PatternPaint, Shadow, Stop, Stroke,
+};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ItemMeta {
@@ -425,12 +326,4 @@ pub struct Cell {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParagraphStyle {
     pub name: String,
-}
-
-/// How far a radial gradient centred at `center` (fractions of a `w` × `h`
-/// box) runs before its last stop: to the farthest corner.
-pub fn radial_reach(center: (f64, f64), w: f64, h: f64) -> f64 {
-    let dx = center.0.max(1.0 - center.0) * w;
-    let dy = center.1.max(1.0 - center.1) * h;
-    (dx * dx + dy * dy).sqrt()
 }

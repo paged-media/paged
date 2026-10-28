@@ -43,6 +43,13 @@
 //! - **DrawingML colour** ([`colour`]): the HSL arithmetic, SpreadsheetML's
 //!   `tint` (in HSL) and DrawingML's `tint`/`shade` (in linear RGB), kept
 //!   apart because they are different operations.
+//! - **DrawingML paint and effects** ([`drawingml`]): colours with their
+//!   transform chains, fills (solid, gradient, pattern, picture with its
+//!   effects), lines and effect lists, read once for the three formats,
+//!   resolved into a neutral IR (points, degrees, fractions) and written
+//!   back. The engine mapping is `platform/shared/dml-native`'s.
+//! - **Units** ([`units`]): EMU, twips, half-points, DrawingML angles and
+//!   percentages.
 //! - **The typed part DOM** (`dom`, feature `dom`) via the [`ooxmlsdk`]
 //!   crate — used only for the *semantic* read of the parts paged.doc
 //!   understands (`word/document.xml`, `word/styles.xml`, …). `ooxmlsdk`'s
@@ -65,6 +72,7 @@ pub mod colour;
 pub mod content_types;
 #[cfg(feature = "dom")]
 pub mod dom;
+pub mod drawingml;
 pub mod error;
 pub mod opc;
 pub mod rels;
@@ -72,6 +80,7 @@ pub mod splice;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod tree;
+pub mod units;
 pub mod xml;
 
 pub use content_types::{ContentTypes, CONTENT_TYPES_PART};

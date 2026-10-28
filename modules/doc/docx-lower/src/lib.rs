@@ -55,6 +55,8 @@ use ir::{
     StyleCollection, StyleProp,
 };
 
+use paged_ooxml::units::{EMU_PER_PT, TWIPS_PER_PT};
+
 const PARA_PREFIX: &str = "ParagraphStyle/docx-";
 
 /// The break-before rule's property path (thoughts ADR 028; settable from core
@@ -118,7 +120,7 @@ const CHAR_PREFIX: &str = "CharacterStyle/docx-";
 
 /// Twips (1/1440 inch) -> points (1/72 inch). 20 twips per point.
 fn twip_to_pt(twips: i32) -> f32 {
-    twips as f32 / 20.0
+    twips as f32 / TWIPS_PER_PT as f32
 }
 
 /// Half-points -> points.
@@ -126,10 +128,10 @@ fn half_pt_to_pt(half: u32) -> f32 {
     half as f32 / 2.0
 }
 
-/// EMU (English Metric Units) -> points. 914400 EMU/inch, 72 pt/inch ⇒ 12700
-/// EMU/pt.
+/// EMU (English Metric Units) -> points (`paged_ooxml::units`: 914 400
+/// EMU/inch, 12 700 EMU/pt).
 fn emu_to_pt(emu: i64) -> f32 {
-    emu as f32 / 12700.0
+    emu as f32 / EMU_PER_PT as f32
 }
 
 /// Lower an image to an anchored-frame placement, embedding the media bytes as a

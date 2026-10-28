@@ -38,8 +38,8 @@ use crate::xtree::XNode;
 use crate::XlsxDocument;
 use sheet_core::SheetId;
 
-/// EMUs per point.
-pub const EMU_PER_PT: f64 = 12_700.0;
+/// EMUs per point (`paged_ooxml::units`).
+pub use paged_ooxml::units::EMU_PER_PT;
 
 /// A cell corner plus an offset into it (EMU).
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
