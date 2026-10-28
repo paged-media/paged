@@ -87,6 +87,13 @@ export type {
   ViewContribution,
   ViewProps,
   ViewRegistry,
+  // Sub-contexts: headers, footers and notes edited in place (ADR 349).
+  SubContextKind,
+  SubContextSpec,
+  SubContextState,
+  SubContextHit,
+  SubContextProviderContribution,
+  SubContextRegistry,
   // Document IO — importers + exporters (K-2 / S-06).
   ImporterContribution,
   ImportRequest,

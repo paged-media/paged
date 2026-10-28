@@ -103,6 +103,11 @@ import type {
   PresentationState,
   ViewContribution,
   ViewRegistry,
+  SubContextHit,
+  SubContextProviderContribution,
+  SubContextRegistry,
+  SubContextSpec,
+  SubContextState,
   SchemaPanelContribution,
   SelectionMode,
   ToolContribution,
@@ -436,6 +441,21 @@ export interface HeadlessHost {
   presentationsContributed(): PresentationContribution[];
   /** Module views registered through `contribute.view`. */
   viewsContributed(): ViewContribution[];
+  /** Extensions ADR 349 (C6) — play the editor's double-click on a page:
+   *  the sub-context providers of `editContext` (default: the document
+   *  context a bundle holds) are asked, and the first answer is entered.
+   *  Resolves what was entered, or `null`. The harness wires the
+   *  registry, so `supports("shell.subContext@1")` is true. */
+  doubleClickPage(
+    pageId: string,
+    pagePoint: [number, number],
+    editContext?: string,
+  ): Promise<SubContextState | null>;
+  /** The sub-context shown (`host.shell.enterSubContext` or a provider's
+   *  answer), or `null`. */
+  subContext(): SubContextState | null;
+  /** Play Esc: leave the sub-context shown. */
+  exitSubContext(): boolean;
   /** Extensions ADR 348 (C4) — play the editor's caret: the text
    *  selection `host.text.selection()` answers (content offsets), or
    *  `null`. Notifies `onDidChangeSelection` listeners. The harness wires
@@ -854,6 +874,8 @@ function makeEngineEditor(
       views: recordingViews(
         recordingRegistry<ViewContribution, "view">("view"),
       ),
+      // Extensions ADR 349 — the editor's sub-context state, headlessly.
+      subContexts: createHeadlessSubContexts(),
     },
     selection: {
       get elementSelection() {
@@ -972,6 +994,8 @@ export async function createHeadlessHost(
     options.engineShaper === true,
   );
 
+  const subContexts =
+    editor.registries.subContexts ?? createHeadlessSubContexts();
   /** Load bytes into the engine; the raw reply (documentLoaded or not). */
   const loadDirect = (bytes: Uint8Array): WorkerToMain => {
     const dropped = loads.begin();
@@ -1375,6 +1399,17 @@ export async function createHeadlessHost(
       return contributions
         .filter((c) => c.kind === "view")
         .map((c) => c.value as ViewContribution);
+    },
+    async doubleClickPage(pageId, pagePoint, editContext) {
+      const type = editContext ?? docContext?.type;
+      if (!type) return null;
+      return subContexts.resolve({ editContext: type, pageId, pagePoint });
+    },
+    subContext() {
+      return subContexts.current();
+    },
+    exitSubContext() {
+      return subContexts.exit();
     },
     setTextSelection(sel) {
       textSel = sel ? { ...sel } : null;
@@ -1906,6 +1941,65 @@ function recordingPresenter(registry: {
 }
 
 /** Extensions ADR 345 (C5) — the harness view registry. */
+/**
+ * Extensions ADR 349 (C6) — the sub-context registry as the editor keeps
+ * it, without the chrome: providers per edit context in registration
+ * order, and the one sub-context shown.
+ */
+function createHeadlessSubContexts(): SubContextRegistry {
+  const providers: Array<{
+    pluginId: string;
+    c: SubContextProviderContribution;
+  }> = [];
+  let shown: SubContextState | null = null;
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const l of [...listeners]) l();
+  };
+  const enter = (pluginId: string, spec: SubContextSpec): boolean => {
+    shown = { ...spec, pluginId };
+    emit();
+    return true;
+  };
+  return {
+    register(pluginId, c) {
+      const entry = { pluginId, c };
+      providers.push(entry);
+      return {
+        dispose() {
+          const i = providers.indexOf(entry);
+          if (i >= 0) providers.splice(i, 1);
+        },
+      };
+    },
+    async resolve(hit: SubContextHit) {
+      for (const p of providers.filter(
+        (e) => e.c.editContext === hit.editContext,
+      )) {
+        const spec = await p.c.resolve({ ...hit });
+        if (spec) {
+          enter(p.pluginId, spec);
+          return shown;
+        }
+      }
+      return null;
+    },
+    enter,
+    exit(pluginId) {
+      if (!shown || (pluginId !== undefined && shown.pluginId !== pluginId))
+        return false;
+      shown = null;
+      emit();
+      return true;
+    },
+    current: () => shown,
+    onChange(handler) {
+      listeners.add(handler);
+      return { dispose: () => void listeners.delete(handler) };
+    },
+  };
+}
+
 function recordingViews(registry: {
   register(c: ViewContribution): Disposable;
 }): ViewRegistry {

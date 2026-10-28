@@ -64,6 +64,7 @@ and each one names the plugins that follow it and those that do not.
 | [345](345-presentations-and-module-views.md) | Presentations and module views: a bundle's surface on the screen, a second window, in place of the canvas | Accepted 2026-10-25 |
 | [346](346-page-layers.md) | A page as layers: the background and each item alone, at one scale | Accepted 2026-10-25 |
 | [348](348-editing-doors.md) | The editing doors: control-bar groups, scoped keys, status items, the text selection | Accepted 2026-10-24 |
+| [349](349-review-and-structure-doors.md) | The structure doors: headers, footers and notes edited in place (C6) | Accepted 2026-10-28 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).
