@@ -1283,7 +1283,8 @@ export interface FilterMask {
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
  *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`. */
 export interface ImageEngine
-  extends MaskingEngine,
+  extends
+    MaskingEngine,
     RetouchEngine<DecodedInfo>,
     FilterEngine,
     VectorEngine<DecodedInfo> {
@@ -2292,10 +2293,7 @@ interface DecodedHandleWasm {
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
 export interface ImageWasmModule
-  extends MaskingWasm,
-    RetouchWasm,
-    FilterWasm,
-    VectorWasm {
+  extends MaskingWasm, RetouchWasm, FilterWasm, VectorWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
