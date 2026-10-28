@@ -815,9 +815,8 @@ version = "0.0.0"
 dependencies = [
  "lcms2",
  "lcms2-sys",
- "moxcms",
+ "paged-color",
  "paged-pixel",
- "qcms",
  "thiserror",
 ]
 
@@ -1576,6 +1575,7 @@ name = "paged-color"
 version = "0.0.0"
 dependencies = [
  "lcms2",
+ "moxcms",
  "qcms",
  "thiserror",
  "tracing",

@@ -462,6 +462,7 @@ impl<'a> Device<'a> for ListDevice<'_> {
             encoded: bytes::Bytes::new(),
             rgba: bytes::Bytes::from(rgba),
             icc: None,
+            rendering: None,
         });
         // hayro's transform maps the image's pixels (top row first); the
         // list's image command maps the unit square.

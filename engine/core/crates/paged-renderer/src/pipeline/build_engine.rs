@@ -1492,6 +1492,12 @@ pub(super) fn build_document_inner(
                                     palette,
                                     color_ctx,
                                 ),
+                                image_rendering(
+                                    options,
+                                    copy.self_id
+                                        .as_deref()
+                                        .and_then(|id| master.spread.image_metadata.get(id)),
+                                ),
                             )
                         },
                     );
@@ -1906,6 +1912,12 @@ pub(super) fn build_document_inner(
                                         palette,
                                         color_ctx,
                                     ),
+                                    image_rendering(
+                                        options,
+                                        rect.self_id
+                                            .as_deref()
+                                            .and_then(|id| spread.image_metadata.get(id)),
+                                    ),
                                 )
                             },
                         );
@@ -2002,6 +2014,12 @@ pub(super) fn build_document_inner(
                                     options,
                                     image_cache,
                                     decoded_image_cache,
+                                    image_rendering(
+                                        options,
+                                        oval.self_id
+                                            .as_deref()
+                                            .and_then(|id| spread.image_metadata.get(id)),
+                                    ),
                                 )
                             },
                         );
@@ -2164,6 +2182,12 @@ pub(super) fn build_document_inner(
                                     options,
                                     image_cache,
                                     decoded_image_cache,
+                                    image_rendering(
+                                        options,
+                                        poly.self_id
+                                            .as_deref()
+                                            .and_then(|id| spread.image_metadata.get(id)),
+                                    ),
                                 )
                             },
                         );

@@ -55,7 +55,7 @@ pub enum WorkingColor {
 /// RelativeColorimetric-centric — Saturation/Absolute degrade to
 /// the nearest supported behaviour there (documented limitation,
 /// measured by `tests/parity.rs`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Intent {
     Perceptual,
     RelativeColorimetric,
@@ -402,15 +402,9 @@ impl GamutProbe {
 /// avoid flagging quantisation noise on 8-bit transform paths.
 const GAMUT_DELTA_E_THRESHOLD: f32 = 3.0;
 
-/// CIE76 ΔE*ab — sufficient for a warning triangle (CIEDE2000 is
-/// overkill for a boolean gate; the fidelity harness uses ΔE2000
-/// where it matters).
-fn delta_e_76(a: [f32; 3], b: [f32; 3]) -> f32 {
-    let dl = a[0] - b[0];
-    let da = a[1] - b[1];
-    let db = a[2] - b[2];
-    (dl * dl + da * da + db * db).sqrt()
-}
+// CIE76 ΔE*ab — sufficient for a warning triangle (CIEDE2000 is
+// overkill for a boolean gate): the crate's one definition.
+use crate::cms::delta_e76 as delta_e_76;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native_export {

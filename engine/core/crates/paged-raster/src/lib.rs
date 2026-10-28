@@ -29,7 +29,8 @@
 //! - [`decode`] returns the samples in the file's own colour model and
 //!   depth ([`RasterImage`]); [`to_rgba8`] turns them into straight-alpha
 //!   sRGB bytes, converting CMYK and Lab through a [`ColourConvert`].
-//! - [`decode_rgba8`] is the one call the render paths make.
+//! - [`decode_rgba8`] (and [`decode_rgba8_with`], which takes the colour
+//!   conversion) is the one call the render paths make.
 //! - [`encode`] writes PNG, JPEG, WebP (lossless) and TIFF with the ICC
 //!   profile, EXIF, XMP, IPTC and resolution of an [`EncodeOptions`];
 //!   [`encode_tiff`] is the TIFF half (Gray, RGB and CMYK at 8 or 16 bits,
@@ -100,11 +101,13 @@
 //! the image module's CMS) supplies it. The crate depends on `paged-color`
 //! all the same and ships [`PagedColour`], the conversion the render paths
 //! use: paged-color is the engine's one CMS, it is wasm-safe (lcms2 on
-//! native, qcms on wasm32) and it is already in every tree that renders,
+//! native, moxcms on wasm32) and it is already in every tree that renders,
 //! so the dependency costs nothing and lets native and wasm call one
-//! function. Without a usable profile CMYK falls back to the naive
-//! conversion `image` applies to TIFF, so a profile-less CMYK TIFF renders
-//! as it did before.
+//! function. A [`PagedColour`] carries a [`Rendering`] (the intent and
+//! black-point compensation; the renderer passes the frame's), and
+//! [`decode_rgba8_with`] takes one. Without a usable profile CMYK falls
+//! back to the naive conversion `image` applies to TIFF, so a profile-less
+//! CMYK TIFF renders as it did before.
 //!
 //! ## Not here yet
 //!
@@ -139,8 +142,9 @@ pub use encode::{encode, resize, rgb_to_cmyk, srgb_icc, EncodeFormat, EncodeOpti
 pub use icc::extract_icc;
 pub use jpeg::{jpeg_header, JpegHeader};
 pub use meta::{extract_icc_any, read_metadata, Metadata};
-/// The rendering intent of [`rgb_to_cmyk`] (paged-color's).
-pub use paged_color::Intent;
+/// The rendering intent of [`rgb_to_cmyk`] and of a placed raster's
+/// conversion, with its black-point compensation ([`Rendering`]).
+pub use paged_color::cms::{Intent, Rendering};
 pub use paged_sniff::{sniff, Format};
 pub use shrink::shrunk_dimensions;
 pub use tif::encode::{encode_tiff, encode_tiff_pages, TiffCompression, TiffEncodeOptions};
@@ -397,9 +401,16 @@ pub(crate) fn shrink_image(img: RasterImage, max_dim: Option<u32>) -> RasterImag
     }
 }
 
-/// Decode page 0 to straight-alpha sRGB bytes, converting colour with
-/// [`PagedColour`]: the call the render paths make, so native and wasm
-/// decode a picture the same way.
+/// Decode page 0 to straight-alpha sRGB bytes, converting colour with a
+/// default [`PagedColour`] (relative colorimetric with BPC): the call the
+/// render paths make, so native and wasm decode a picture the same way.
+/// [`decode_rgba8_with`] takes the conversion.
+pub fn decode_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Result<Rgba8> {
+    decode_rgba8_with(bytes, max_dim, &PagedColour::default())
+}
+
+/// [`decode_rgba8`] with the colour conversion given: a placed raster's
+/// frame passes its rendering intent this way.
 ///
 /// A TIFF decodes through this crate (shrunk to `max_dim` when given);
 /// one it cannot read is handed to `image`, the decoder TIFFs used before.
@@ -407,10 +418,14 @@ pub(crate) fn shrink_image(img: RasterImage, max_dim: Option<u32>) -> RasterImag
 /// AVIF, JPEG XL, HDR and EXR through this crate (shrunk to `max_dim`).
 /// Every other format is `image::load_from_memory(bytes)?.to_rgba8()`,
 /// unchanged, at full size.
-pub fn decode_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Result<Rgba8> {
+pub fn decode_rgba8_with(
+    bytes: &[u8],
+    max_dim: Option<u32>,
+    conv: &dyn ColourConvert,
+) -> Result<Rgba8> {
     match sniff(bytes) {
         Some(Format::Tiff) => tif::decode(bytes, DecodeOptions { page: 0, max_dim })
-            .and_then(|img| to_rgba8(&img, &PagedColour))
+            .and_then(|img| to_rgba8(&img, conv))
             .or_else(|err| {
                 tracing::warn!(error = %err, "TIFF decode failed; trying the image crate");
                 other::decode_rgba8(bytes).map_err(|_| err)
@@ -423,8 +438,7 @@ pub fn decode_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Result<Rgba8> {
             | Format::Jxl
             | Format::Hdr
             | Format::Exr,
-        ) => decode(bytes, DecodeOptions { page: 0, max_dim })
-            .and_then(|img| to_rgba8(&img, &PagedColour)),
+        ) => decode(bytes, DecodeOptions { page: 0, max_dim }).and_then(|img| to_rgba8(&img, conv)),
         _ => other::decode_rgba8(bytes),
     }
 }
@@ -434,7 +448,18 @@ pub fn decode_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Result<Rgba8> {
 /// resampled (triangle filter) when the result is another size. The call
 /// paged-gpu's raster-time decode makes, on both of its lanes.
 pub fn decode_rgba8_at(bytes: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
-    let decoded = decode_rgba8(bytes, Some(width.max(height))).ok()?;
+    decode_rgba8_at_with(bytes, width, height, &PagedColour::default())
+}
+
+/// [`decode_rgba8_at`] with the colour conversion given (the frame's
+/// rendering intent, recorded on the lazy image).
+pub fn decode_rgba8_at_with(
+    bytes: &[u8],
+    width: u32,
+    height: u32,
+    conv: &dyn ColourConvert,
+) -> Option<Vec<u8>> {
+    let decoded = decode_rgba8_with(bytes, Some(width.max(height)), conv).ok()?;
     if decoded.width == width && decoded.height == height {
         return Some(decoded.data);
     }

@@ -67,7 +67,6 @@ console_error_panic_hook = "0.1"
 getrandom = { version = "0.4", features = ["wasm_js"] }
 proptest = "1"
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
-qcms = { version = "0.3", default-features = false, features = ["cmyk", "iccv4-enabled"] }
 # PNG codec bench crates (D-4, re-run 2026-10-25: `png` through
 # paged-raster now beats zune-png on decode and writes files a third the
 # size, so zune-png is a bench comparison and a fixture builder only).

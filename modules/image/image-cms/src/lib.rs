@@ -17,10 +17,12 @@
  */
 
 //! Color management (spec §10.1) behind the swappable [`CmsEngine`]
-//! trait — the D-11 seam (A-0 audit ruling: HYBRID). The qcms backend
-//! serves the display-consistency path with core's exact build; the
-//! moxcms print lane (CMYK ingest / soft-proof with intent+BPC /
-//! export) is an additive M1 backend behind the same trait.
+//! trait — the D-11 seam (A-0 audit ruling: HYBRID). Both backends are
+//! now thin adapters over the engine's one CMS, `paged_color::cms`
+//! (ADR 457, amendment of 2026-10-24; PM-0014): the qcms backend serves
+//! the display-consistency path with the engine's exact build, the
+//! moxcms print lane (CMYK ingest, every intent, black-point
+//! compensation) the rest. The trait and its handles are unchanged.
 //!
 //! **Compile on CPU, apply on GPU** stands whatever the backend: the
 //! engine builds the transform; the GPU path bakes it into a 3D LUT
@@ -42,15 +44,13 @@ use image_core::IccHash;
 
 /// The canonical sRGB profile as a ready-to-use [`Profile`] — the working
 /// RGB destination for the ingest casts (CMYK→RGBA8) when no document
-/// working-space profile is supplied. Synthesised by the moxcms backend
-/// (`ColorProfile::new_srgb`), so no external ICC asset is bundled. The
-/// returned profile's `hash` is the content hash of the synthesised bytes
-/// (stable across calls within a build). Errors only if moxcms cannot
-/// encode its own canonical sRGB profile (a should-never-happen).
+/// working-space profile is supplied. moxcms's canonical sRGB, encoded by
+/// the engine (`paged_color::cms::moxcms_srgb_icc`), so no external ICC
+/// asset is bundled. The returned profile's `hash` is the content hash of
+/// the encoded bytes (stable across calls within a build). Errors only if
+/// the profile cannot be encoded (a should-never-happen).
 pub fn working_srgb_profile() -> Result<Profile, CmsError> {
-    let bytes = moxcms::ColorProfile::new_srgb()
-        .encode()
-        .map_err(|e| CmsError::BadProfile(format!("could not synthesise sRGB profile: {e:?}")))?;
+    let bytes = paged_color::cms::moxcms_srgb_icc().map_err(adapt_err)?;
     let bytes: std::sync::Arc<[u8]> = bytes.into();
     let hash = IccHash(image_core::ContentHash::of(&bytes).0);
     Ok(Profile { hash, bytes })
@@ -66,7 +66,7 @@ pub enum CmsError {
 
 /// Rendering intent (ICC). The qcms backend accepts all four tags but
 /// is Perceptual/RelativeColorimetric-centric (A-0 audit §A) — the
-/// print lane's intent fidelity is the moxcms backend's job (M1).
+/// print lane's intent fidelity is the moxcms backend's job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Intent {
     Perceptual,
@@ -129,6 +129,41 @@ pub(crate) trait CmykTransform {
     /// the same `n`; the caller guarantees this (see
     /// [`CompiledCmykTransform::apply_cmyk_to_rgba8`]).
     fn apply(&self, cmyk: &[u8], rgba: &mut [u8]);
+}
+
+/// The engine's intent for ours.
+pub(crate) fn map_intent(i: Intent) -> paged_color::cms::Intent {
+    match i {
+        Intent::Perceptual => paged_color::cms::Intent::Perceptual,
+        Intent::RelativeColorimetric => paged_color::cms::Intent::RelativeColorimetric,
+        Intent::Saturation => paged_color::cms::Intent::Saturation,
+        Intent::AbsoluteColorimetric => paged_color::cms::Intent::AbsoluteColorimetric,
+    }
+}
+
+/// The engine's error as this crate's.
+pub(crate) fn adapt_err(e: paged_color::cms::CmsError) -> CmsError {
+    match e {
+        paged_color::cms::CmsError::BadProfile(m) => CmsError::BadProfile(m),
+        other => CmsError::Unsupported(other.to_string()),
+    }
+}
+
+/// An engine transform behind this crate's application contracts.
+pub(crate) struct Adapted(pub(crate) paged_color::cms::Transform);
+
+impl ExactTransform for Adapted {
+    fn apply_rgba8(&self, pixels: &mut [u8]) {
+        // The engine converts src → dst; the in-place contract copies once.
+        let src = pixels.to_vec();
+        self.0.apply_u8(&src, pixels);
+    }
+}
+
+impl CmykTransform for Adapted {
+    fn apply(&self, cmyk: &[u8], rgba: &mut [u8]) {
+        self.0.apply_u8(cmyk, rgba);
+    }
 }
 
 impl CompiledTransform {
