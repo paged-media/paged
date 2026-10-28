@@ -129,9 +129,11 @@ const typed = <A, R>(
 
 /** A text value as a page id: a slide or page address, or a bare id. */
 function pageIdOf(ref: string): string {
-  const a = parseAddress(ref) as
-    | { kind: string; id?: string; objectKind?: string }
-    | null;
+  const a = parseAddress(ref) as {
+    kind: string;
+    id?: string;
+    objectKind?: string;
+  } | null;
   if (a && (a.kind === "page" || a.kind === "plugin") && a.id) return a.id;
   return ref;
 }
@@ -171,8 +173,7 @@ async function placePicture(
   if (!pageId) throw new Error("failed: no slide is active");
   const engine = await deps.engine();
   const info = engine.picture(bytes);
-  if (!info)
-    throw new Error("failed: not a picture format the engine reads");
+  if (!info) throw new Error("failed: not a picture format the engine reads");
   if (svgOnly && info.format !== "svg")
     throw new Error("failed: an icon is an SVG");
   const size = await pageSize(host, pageId);
@@ -384,15 +385,10 @@ export function contributeContentCommands(
       if (clipboard.copied) await pasteFormat(host, clipboard.copied);
     },
   );
-  add(
-    CONTENT_CMD.smartArtText,
-    t(CONTENT.smartArtText),
-    gates.deckOpen,
-    () => {
-      if (!deps.openTextPane())
-        host.log.info("paged.slide smartArtText: this host cannot raise a panel");
-    },
-  );
+  add(CONTENT_CMD.smartArtText, t(CONTENT.smartArtText), gates.deckOpen, () => {
+    if (!deps.openTextPane())
+      host.log.info("paged.slide smartArtText: this host cannot raise a panel");
+  });
   for (const [path, command, group, order] of CONTENT_MENU) {
     if (ids.has(command))
       handles.push(host.contribute.menu({ path, command, group, order }));

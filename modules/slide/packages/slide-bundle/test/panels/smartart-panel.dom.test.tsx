@@ -39,15 +39,18 @@ afterEach(() => {
   d.dispose();
 });
 
-const fields = (c: HTMLElement) =>
-  [...c.querySelectorAll<HTMLTextAreaElement>("[data-smartart-point]")];
+const fields = (c: HTMLElement) => [
+  ...c.querySelectorAll<HTMLTextAreaElement>("[data-smartart-point]"),
+];
 
 describe("the SmartArt text pane", () => {
   it("shows the selected diagram's points and writes an edit", async () => {
     covers("panel:media.paged.slide.panel.smartart");
     const view = mount(d.panel(SMARTART_PANEL_ID));
     await settle();
-    expect(view.container.querySelector('[data-smartart-panel="empty"]')).not.toBeNull();
+    expect(
+      view.container.querySelector('[data-smartart-panel="empty"]'),
+    ).not.toBeNull();
     await d.host.selection.set([{ kind: "group", id: "u7" }]);
     await waitFor(() => expect(fields(view.container).length).toBe(5));
     expect(fields(view.container).map((f) => f.value)).toEqual([
@@ -61,7 +64,9 @@ describe("the SmartArt text pane", () => {
     fireEvent.change(gamma, { target: { value: "Omega" } });
     fireEvent.keyDown(gamma, { key: "Enter" });
     await waitFor(async () => {
-      const stories = await d.host.document.collection<{ selfId: string }>("stories");
+      const stories = await d.host.document.collection<{ selfId: string }>(
+        "stories",
+      );
       const texts = await Promise.all(
         stories.map(async (s) =>
           (await d.host.document.storyContent(s.selfId))!.paragraphs

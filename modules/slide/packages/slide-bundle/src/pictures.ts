@@ -104,7 +104,9 @@ export async function insertPicture(
 ): Promise<ElementId | null> {
   const info = engine.picture(args.bytes);
   if (!info) {
-    host.log.warn("paged.slide insert picture: not a picture format the engine reads");
+    host.log.warn(
+      "paged.slide insert picture: not a picture format the engine reads",
+    );
     return null;
   }
   const [w, h] = pictureSize(info, args.pageSize, args.w, args.h);

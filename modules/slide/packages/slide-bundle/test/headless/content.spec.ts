@@ -64,7 +64,10 @@ afterEach(() => {
 function fixture(name: string): Uint8Array {
   return new Uint8Array(
     readFileSync(
-      new URL(`../../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url),
+      new URL(
+        `../../../../slide-conformance/fixtures/${name}.pptx`,
+        import.meta.url,
+      ),
     ),
   );
 }
@@ -101,7 +104,8 @@ function zipText(bytes: Uint8Array, name: string): string {
     const comment = b.readUInt16LE(p + 32);
     const local = b.readUInt32LE(p + 42);
     if (b.toString("utf8", p + 46, p + 46 + nameLen) === name) {
-      const start = local + 30 + b.readUInt16LE(local + 26) + b.readUInt16LE(local + 28);
+      const start =
+        local + 30 + b.readUInt16LE(local + 26) + b.readUInt16LE(local + 28);
       const data = b.subarray(start, start + size);
       return (method === 8 ? inflateRawSync(data) : data).toString("utf8");
     }
@@ -130,21 +134,48 @@ describe("the format painter (slide W4)", () => {
     const { host } = await open(fixture("geometry"), "geometry");
     // The source: a rectangle with text, given a line and a text size of
     // its own; the target: another such shape.
-    const [srcOutline, srcText] = [el("polygon", "u3p"), el("textFrame", "u3t")];
-    const [dstOutline, dstText] = [el("polygon", "u5p"), el("textFrame", "u5t")];
-    const swatches = await host.document.collection<{ selfId: string }>("swatches");
-    const other = swatches.map((s) => s.selfId).find((s) => /Color\/(accent2|accent4|Black)/.test(s))!;
+    const [srcOutline, srcText] = [
+      el("polygon", "u3p"),
+      el("textFrame", "u3t"),
+    ];
+    const [dstOutline, dstText] = [
+      el("polygon", "u5p"),
+      el("textFrame", "u5t"),
+    ];
+    const swatches = await host.document.collection<{ selfId: string }>(
+      "swatches",
+    );
+    const other = swatches
+      .map((s) => s.selfId)
+      .find((s) => /Color\/(accent2|accent4|Black)/.test(s))!;
     const st = (await storiesOf(host, [srcText])).get("u3t")!;
     await host.document.mutate({
       op: "batch",
       args: {
         ops: [
-          { op: "setElementProperty", args: { elementId: srcOutline, path: "frameFillColor", value: { type: "colorRef", value: other } } },
-          { op: "setElementProperty", args: { elementId: srcOutline, path: "frameStrokeWeight", value: { type: "length", value: 4 } } },
           {
             op: "setElementProperty",
             args: {
-              elementId: { kind: "storyRange", id: { story_id: st.story, start: 0, end: st.length } },
+              elementId: srcOutline,
+              path: "frameFillColor",
+              value: { type: "colorRef", value: other },
+            },
+          },
+          {
+            op: "setElementProperty",
+            args: {
+              elementId: srcOutline,
+              path: "frameStrokeWeight",
+              value: { type: "length", value: 4 },
+            },
+          },
+          {
+            op: "setElementProperty",
+            args: {
+              elementId: {
+                kind: "storyRange",
+                id: { story_id: st.story, start: 0, end: st.length },
+              },
               path: "characterFontSize",
               value: { type: "length", value: 30 },
             },
@@ -158,10 +189,14 @@ describe("the format painter (slide W4)", () => {
     expect(sizeBefore.every((s) => s !== 30)).toBe(true);
 
     expect(
-      await host.objects.invoke(CONTENT_CMD.copyFormat, { element: fromElementId(srcOutline) }),
+      await host.objects.invoke(CONTENT_CMD.copyFormat, {
+        element: fromElementId(srcOutline),
+      }),
     ).toEqual({ applied: true });
     expect(
-      await host.objects.invoke(CONTENT_CMD.pasteFormat, { element: fromElementId(dstText) }),
+      await host.objects.invoke(CONTENT_CMD.pasteFormat, {
+        element: fromElementId(dstText),
+      }),
     ).toEqual({ applied: true });
     // Selecting the shape's text frame paints its outline too: they are one shape.
     expect(await prop(host, dstOutline, "frameFillColor")).toBe(other);
@@ -178,12 +213,18 @@ describe("the format painter (slide W4)", () => {
   it("paste without a copy is refused, and the palette's copy follows the selection", async () => {
     const { host } = await open(fixture("geometry"), "geometry");
     await expect(
-      host.objects.invoke(CONTENT_CMD.pasteFormat, { element: fromElementId(el("polygon", "u5p")) }),
+      host.objects.invoke(CONTENT_CMD.pasteFormat, {
+        element: fromElementId(el("polygon", "u5p")),
+      }),
     ).rejects.toThrow(/no formatting was copied/);
     await host.selection.set([el("polygon", "u3p")]);
-    expect(await host.objects.invoke(CONTENT_CMD.copyFormat, {})).toEqual({ applied: true });
+    expect(await host.objects.invoke(CONTENT_CMD.copyFormat, {})).toEqual({
+      applied: true,
+    });
     await host.selection.set([el("polygon", "u5p")]);
-    expect(await host.objects.invoke(CONTENT_CMD.pasteFormat, {})).toEqual({ applied: true });
+    expect(await host.objects.invoke(CONTENT_CMD.pasteFormat, {})).toEqual({
+      applied: true,
+    });
   }, 120_000);
 });
 
@@ -195,11 +236,21 @@ describe("the SmartArt text pane (slide W4)", () => {
     const { host, exporter } = await open(bytes, "smartart");
     const diagram = fromElementId(el("group", "u7"));
     const read = async () =>
-      ((await host.objects.invoke(CONTENT_TYPED.smartArtPoints, { diagram })) as {
-        points: SmartArtPoint[];
-      }).points;
+      (
+        (await host.objects.invoke(CONTENT_TYPED.smartArtPoints, {
+          diagram,
+        })) as {
+          points: SmartArtPoint[];
+        }
+      ).points;
     const points = await read();
-    expect(points.map((p) => p.text)).toEqual(["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]);
+    expect(points.map((p) => p.text)).toEqual([
+      "Alpha",
+      "Beta",
+      "Gamma",
+      "Delta",
+      "Epsilon",
+    ]);
     expect(points.every((p) => p.shown && p.depth === 0)).toBe(true);
     // A member shape's address names the diagram too.
     const viaMember = (await host.objects.invoke(CONTENT_TYPED.smartArtPoints, {
@@ -214,7 +265,13 @@ describe("the SmartArt text pane (slide W4)", () => {
         text: "Omega",
       }),
     ).toEqual({ applied: true });
-    expect((await read()).map((p) => p.text)).toEqual(["Alpha", "Beta", "Omega", "Delta", "Epsilon"]);
+    expect((await read()).map((p) => p.text)).toEqual([
+      "Alpha",
+      "Beta",
+      "Omega",
+      "Delta",
+      "Epsilon",
+    ]);
     // The new text keeps the size PowerPoint drew the old one at.
     const sizes = await fontSize(host, el("textFrame", "u4t"));
     expect(sizes.length).toBeGreaterThan(0);
@@ -224,10 +281,16 @@ describe("the SmartArt text pane (slide W4)", () => {
     keep(out!.bytes, "smartart-pane");
     const rels = zipText(out!.bytes, "ppt/slides/_rels/slide1.xml.rels");
     const data = /Target="\.\.\/diagrams\/(data\d+\.xml)"/.exec(rels)![1]!;
-    const drawing = /Target="\.\.\/diagrams\/(drawing\d+\.xml)"/.exec(rels)![1]!;
+    const drawing = /Target="\.\.\/diagrams\/(drawing\d+\.xml)"/.exec(
+      rels,
+    )![1]!;
     expect(data).not.toBe("data1.xml");
-    expect(zipText(out!.bytes, `ppt/diagrams/${data}`)).toContain("<a:t>Omega</a:t>");
-    expect(zipText(out!.bytes, `ppt/diagrams/${drawing}`)).toContain("<a:t>Omega</a:t>");
+    expect(zipText(out!.bytes, `ppt/diagrams/${data}`)).toContain(
+      "<a:t>Omega</a:t>",
+    );
+    expect(zipText(out!.bytes, `ppt/diagrams/${drawing}`)).toContain(
+      "<a:t>Omega</a:t>",
+    );
     expect((out as { notExported?: string[] }).notExported ?? []).toEqual([]);
 
     await host.document.undo();
@@ -241,21 +304,31 @@ describe("the SmartArt text pane (slide W4)", () => {
     const tree = (await host.document.tree()) as {
       children?: { children?: { id?: ElementId; kind: string }[] }[];
     }[];
-    const group = tree[3]!.children![0]!.children!.find((n) => n.kind === "Group")!.id!;
+    const group = tree[3]!.children![0]!.children!.find(
+      (n) => n.kind === "Group",
+    )!.id!;
     expect(pages.length).toBeGreaterThan(3);
     const diagram = fromElementId(group);
-    const before = ((await host.objects.invoke(CONTENT_TYPED.smartArtPoints, { diagram })) as {
-      points: SmartArtPoint[];
-    }).points;
+    const before = (
+      (await host.objects.invoke(CONTENT_TYPED.smartArtPoints, {
+        diagram,
+      })) as {
+        points: SmartArtPoint[];
+      }
+    ).points;
     const fonts = before.find((p) => p.text === "Fonts")!;
     await host.objects.invoke(CONTENT_TYPED.setSmartArtText, {
       diagram,
       point: fonts.id,
       text: "Type\nfaces",
     });
-    const after = ((await host.objects.invoke(CONTENT_TYPED.smartArtPoints, { diagram })) as {
-      points: SmartArtPoint[];
-    }).points;
+    const after = (
+      (await host.objects.invoke(CONTENT_TYPED.smartArtPoints, {
+        diagram,
+      })) as {
+        points: SmartArtPoint[];
+      }
+    ).points;
     expect(after.find((p) => p.id === fonts.id)!.text).toBe("Type faces");
     expect(after.filter((p) => p.id !== fonts.id).map((p) => p.text)).toEqual(
       before.filter((p) => p.id !== fonts.id).map((p) => p.text),

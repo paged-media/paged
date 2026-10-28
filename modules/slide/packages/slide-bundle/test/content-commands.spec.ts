@@ -43,7 +43,12 @@ type Cmd = { id: string; when?: () => boolean; handler: () => Promise<void> };
 function fakeHost(opts: { selection?: ElementId[] } = {}) {
   const commands = new Map<string, Cmd>();
   const menus: { path: string; command: string }[] = [];
-  const keys: { key: string; command: string; scope?: unknown; when?: () => boolean }[] = [];
+  const keys: {
+    key: string;
+    command: string;
+    scope?: unknown;
+    when?: () => boolean;
+  }[] = [];
   const mutations: unknown[] = [];
   const host = {
     supports: () => true,
@@ -72,7 +77,13 @@ function fakeHost(opts: { selection?: ElementId[] } = {}) {
           applied: true,
           createdId: null,
           pageIds: [],
-          minted: [{ handle: "pic", element: { kind: "rectangle", id: "r1" }, storyId: null }],
+          minted: [
+            {
+              handle: "pic",
+              element: { kind: "rectangle", id: "r1" },
+              storyId: null,
+            },
+          ],
         };
       },
     },
@@ -83,9 +94,21 @@ function fakeHost(opts: { selection?: ElementId[] } = {}) {
 const engine = {
   picture: (b: Uint8Array) =>
     b[0] === 0x3c
-      ? { format: "svg", mime: "image/svg+xml", inDeck: false, width: 64, height: 32 }
+      ? {
+          format: "svg",
+          mime: "image/svg+xml",
+          inDeck: false,
+          width: 64,
+          height: 32,
+        }
       : b[0] === 0x89
-        ? { format: "png", mime: "image/png", inDeck: true, width: 400, height: 200 }
+        ? {
+            format: "png",
+            mime: "image/png",
+            inDeck: true,
+            width: 400,
+            height: 200,
+          }
         : null,
 } as unknown as SlideEngine;
 
@@ -104,20 +127,28 @@ describe("slide W4 content commands", () => {
       "keybinding:cmd+shift+v→media.paged.slide.command.pasteFormat",
       "keybinding:ctrl+shift+v→media.paged.slide.command.pasteFormat",
     );
-    const f = fakeHost({ selection: [{ kind: "polygon", id: "a" } as ElementId] });
+    const f = fakeHost({
+      selection: [{ kind: "polygon", id: "a" } as ElementId],
+    });
     const clip = new FormatClipboard();
     const h = contributeContentCommands(f.host, deps(), clip, {
       deckOpen: () => true,
       scopedKeys: true,
       deckContext: "slideDeck",
     });
-    expect([...f.commands.keys()].sort()).toEqual(Object.values(CONTENT_CMD).sort());
+    expect([...f.commands.keys()].sort()).toEqual(
+      Object.values(CONTENT_CMD).sort(),
+    );
     expect(f.menus.map((m) => m.path)).toEqual(CONTENT_MENU.map(([p]) => p));
     expect(f.keys.map((k) => `${k.key}→${k.command}`)).toEqual(
       FORMAT_KEYS.map(([k, c]) => `${k}→${c}`),
     );
     // The keys live in the deck's context; paste waits for a copy.
-    expect(f.keys.every((k) => (k.scope as { editContext: string }).editContext === "slideDeck")).toBe(true);
+    expect(
+      f.keys.every(
+        (k) => (k.scope as { editContext: string }).editContext === "slideDeck",
+      ),
+    ).toBe(true);
     expect(f.commands.get(CONTENT_CMD.copyFormat)!.when!()).toBe(true);
     expect(f.commands.get(CONTENT_CMD.pasteFormat)!.when!()).toBe(false);
     clip.copied = { shape: [], text: [] };
@@ -138,13 +169,19 @@ describe("slide W4 content commands", () => {
     );
     const f = fakeHost();
     const cmds = new Map(
-      contentTypedCommands(f.host, deps(), new FormatClipboard()).map((c) => [c.id, c]),
+      contentTypedCommands(f.host, deps(), new FormatClipboard()).map((c) => [
+        c.id,
+        c,
+      ]),
     );
     expect([...cmds.keys()].sort()).toEqual(
       [...Object.values(CONTENT_CMD), ...Object.values(CONTENT_TYPED)].sort(),
     );
     const run = (id: string, a: unknown) =>
-      (cmds.get(id)!.handler as (c: unknown, a: unknown) => Promise<unknown>)(null, a);
+      (cmds.get(id)!.handler as (c: unknown, a: unknown) => Promise<unknown>)(
+        null,
+        a,
+      );
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
     expect(await run(CONTENT_CMD.insertPicture, { data: png })).toEqual({
       picture: expect.stringContaining("r1"),
@@ -159,15 +196,31 @@ describe("slide W4 content commands", () => {
       "bindCreated",
       "replaceImageBytes",
     ]);
-    await expect(run(CONTENT_CMD.insertIcon, { data: png })).rejects.toThrow(/an icon is an SVG/);
+    await expect(run(CONTENT_CMD.insertIcon, { data: png })).rejects.toThrow(
+      /an icon is an SVG/,
+    );
     const svg = Buffer.from("<svg/>").toString("base64");
-    expect(await run(CONTENT_CMD.insertIcon, { data: svg })).toHaveProperty("picture");
-    await expect(run(CONTENT_CMD.insertPicture, { data: "AAAA" })).rejects.toThrow(/not a picture/);
-    expect(await run(CONTENT_CMD.smartArtText, {})).toEqual({ presented: true });
-    await expect(run(CONTENT_CMD.pasteFormat, {})).rejects.toThrow(/no formatting was copied/);
-    await expect(run(CONTENT_TYPED.smartArtPoints, { diagram: "nonsense" })).rejects.toThrow();
+    expect(await run(CONTENT_CMD.insertIcon, { data: svg })).toHaveProperty(
+      "picture",
+    );
     await expect(
-      run(CONTENT_TYPED.setSmartArtText, { diagram: "nonsense", point: "x", text: "y" }),
+      run(CONTENT_CMD.insertPicture, { data: "AAAA" }),
+    ).rejects.toThrow(/not a picture/);
+    expect(await run(CONTENT_CMD.smartArtText, {})).toEqual({
+      presented: true,
+    });
+    await expect(run(CONTENT_CMD.pasteFormat, {})).rejects.toThrow(
+      /no formatting was copied/,
+    );
+    await expect(
+      run(CONTENT_TYPED.smartArtPoints, { diagram: "nonsense" }),
+    ).rejects.toThrow();
+    await expect(
+      run(CONTENT_TYPED.setSmartArtText, {
+        diagram: "nonsense",
+        point: "x",
+        text: "y",
+      }),
     ).rejects.toThrow();
   });
 
@@ -176,8 +229,14 @@ describe("slide W4 content commands", () => {
     expect(isShapeFormatPath("frameOuterGlowSize")).toBe(true);
     expect(isShapeFormatPath("frameFillRule")).toBe(false);
     expect(isShapeFormatPath("frameBounds")).toBe(false);
-    const fill = { path: "frameFillColor", value: { type: "colorRef", value: "Color/x" } } as const;
-    const size = { path: "characterFontSize", value: { type: "length", value: 30 } } as const;
+    const fill = {
+      path: "frameFillColor",
+      value: { type: "colorRef", value: "Color/x" },
+    } as const;
+    const size = {
+      path: "characterFontSize",
+      value: { type: "length", value: 30 },
+    } as const;
     const ops = pasteOps(
       { shape: [fill], text: [size] },
       {
@@ -188,7 +247,10 @@ describe("slide W4 content commands", () => {
     ) as { args: { elementId: unknown; path: string } }[];
     expect(ops.map((o) => [o.args.elementId, o.args.path])).toEqual([
       [{ kind: "polygon", id: "p" }, "frameFillColor"],
-      [{ kind: "storyRange", id: { story_id: "s", start: 0, end: 12 } }, "characterFontSize"],
+      [
+        { kind: "storyRange", id: { story_id: "s", start: 0, end: 12 } },
+        "characterFontSize",
+      ],
     ]);
     // A text box with no outline takes the look on its frame.
     const box = pasteOps(

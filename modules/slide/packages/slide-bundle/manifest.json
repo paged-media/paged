@@ -374,49 +374,49 @@
         },
         {
           "id": "media.paged.slide.addAnimation",
-          "title": "Add an animation",
+          "title": "Add animation",
           "args": "schema/add-animation.args.json",
           "result": "schema/add-animation.result.json"
         },
         {
           "id": "media.paged.slide.removeAnimation",
-          "title": "Remove an animation",
+          "title": "Remove animation",
           "args": "schema/remove-animation.args.json",
           "result": "schema/empty.json"
         },
         {
           "id": "media.paged.slide.setAnimationTiming",
-          "title": "Set an animation's timing",
+          "title": "Set animation timing",
           "args": "schema/set-animation-timing.args.json",
           "result": "schema/empty.json"
         },
         {
           "id": "media.paged.slide.moveAnimation",
-          "title": "Move an animation",
+          "title": "Move animation",
           "args": "schema/move-animation.args.json",
           "result": "schema/empty.json"
         },
         {
           "id": "media.paged.slide.listAnimations",
-          "title": "List a slide's animations",
+          "title": "List animations",
           "args": "schema/list-animations.args.json",
           "result": "schema/list-animations.result.json"
         },
         {
           "id": "media.paged.slide.previewAnimations",
-          "title": "Preview a slide's animations",
+          "title": "Preview animations",
           "args": "schema/preview-animations.args.json",
           "result": "schema/empty.json"
         },
         {
           "id": "media.paged.slide.command.insertPicture",
-          "title": "Insert a picture",
+          "title": "Insert picture…",
           "args": "schema/insert-picture.args.json",
           "result": "schema/insert-picture.result.json"
         },
         {
           "id": "media.paged.slide.command.insertIcon",
-          "title": "Insert an icon (SVG)",
+          "title": "Insert icon…",
           "args": "schema/insert-picture.args.json",
           "result": "schema/insert-picture.result.json"
         },

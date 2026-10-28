@@ -61,7 +61,10 @@ afterEach(() => {
 function fixture(name: string): Uint8Array {
   return new Uint8Array(
     readFileSync(
-      new URL(`../../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url),
+      new URL(
+        `../../../../slide-conformance/fixtures/${name}.pptx`,
+        import.meta.url,
+      ),
     ),
   );
 }
@@ -100,7 +103,8 @@ function zipParts(bytes: Uint8Array): Map<string, Buffer> {
     const comment = b.readUInt16LE(p + 32);
     const local = b.readUInt32LE(p + 42);
     const name = b.toString("utf8", p + 46, p + 46 + nameLen);
-    const start = local + 30 + b.readUInt16LE(local + 26) + b.readUInt16LE(local + 28);
+    const start =
+      local + 30 + b.readUInt16LE(local + 26) + b.readUInt16LE(local + 28);
     const data = b.subarray(start, start + size);
     out.set(name, method === 8 ? inflateRawSync(data) : Buffer.from(data));
     p += 46 + nameLen + extra + comment;
@@ -175,7 +179,8 @@ function tga(): Uint8Array {
   b.writeUInt16LE(W, 12);
   b.writeUInt16LE(H, 14);
   b[16] = 24;
-  for (let i = 0; i < W * H; i++) b.set([pixel[2]!, pixel[1]!, pixel[0]!], 18 + i * 3);
+  for (let i = 0; i < W * H; i++)
+    b.set([pixel[2]!, pixel[1]!, pixel[0]!], 18 + i * 3);
   return new Uint8Array(b);
 }
 function qoi(): Uint8Array {
@@ -188,7 +193,11 @@ function qoi(): Uint8Array {
   // The rest repeat the first: one run op covers up to 62 pixels.
   ops.push(0xc0 | (W * H - 2));
   return new Uint8Array(
-    Buffer.concat([head, Buffer.from(ops), Buffer.from([0, 0, 0, 0, 0, 0, 0, 1])]),
+    Buffer.concat([
+      head,
+      Buffer.from(ops),
+      Buffer.from([0, 0, 0, 0, 0, 0, 0, 1]),
+    ]),
   );
 }
 function psd(): Uint8Array {
@@ -224,20 +233,20 @@ const WEBP = b64("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==");
 /** An 8 × 4 baseline JPEG (macOS `sips` from the PNG above). */
 const JPEG = b64(
   "/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAA" +
-  "AAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAACKADAAQAAAABAAAABAAAAAD/7QA4UGhvdG9z" +
-  "aG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgA" +
-  "BAAIAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIB" +
-  "AwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYX" +
-  "GBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeI" +
-  "iYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn" +
-  "6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIB" +
-  "AgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDTh" +
-  "JfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWG" +
-  "h4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm" +
-  "5+jp6vLz9PX29/j5+v/bAEMABgYGBgYGCgYGCg4KCgoOEg4ODg4SFxISEhISFxwXFxcXFxcc" +
-  "HBwcHBwcHCIiIiIiIicnJycnLCwsLCwsLCwsLP/bAEMBBwcHCwoLEwoKEy4fGh8uLi4uLi4u" +
-  "Li4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLv/dAAQAAf/aAAwD" +
-  "AQACEQMRAD8Ax6KKK+4PnT//2Q==",
+    "AAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAACKADAAQAAAABAAAABAAAAAD/7QA4UGhvdG9z" +
+    "aG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgA" +
+    "BAAIAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIB" +
+    "AwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYX" +
+    "GBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeI" +
+    "iYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn" +
+    "6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIB" +
+    "AgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDTh" +
+    "JfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWG" +
+    "h4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm" +
+    "5+jp6vLz9PX29/j5+v/bAEMABgYGBgYGCgYGCg4KCgoOEg4ODg4SFxISEhISFxwXFxcXFxcc" +
+    "HBwcHBwcHCIiIiIiIicnJycnLCwsLCwsLCwsLP/bAEMBBwcHCwoLEwoKEy4fGh8uLi4uLi4u" +
+    "Li4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLv/dAAQAAf/aAAwD" +
+    "AQACEQMRAD8Ax6KKK+4PnT//2Q==",
 );
 function tiff(): Uint8Array {
   // Little-endian, one strip of 8-bit RGB.
@@ -277,7 +286,12 @@ async function insert(host: BundleHost, bytes: Uint8Array, icon = false) {
   const pages = await host.document.collection<{ selfId: string }>("pages");
   return (await host.objects.invoke(
     icon ? CONTENT_CMD.insertIcon : CONTENT_CMD.insertPicture,
-    { data: bytesToBase64(bytes), slide: slideAddress(pages[0]!.selfId), x: 300, y: 200 },
+    {
+      data: bytesToBase64(bytes),
+      slide: slideAddress(pages[0]!.selfId),
+      x: 300,
+      y: 200,
+    },
   )) as { picture: string };
 }
 
@@ -291,7 +305,8 @@ function lastPicture(parts: Map<string, Buffer>) {
   const pic = slide.slice(slide.lastIndexOf("<p:pic>"));
   const rels = parts.get("ppt/slides/_rels/slide1.xml.rels")!.toString("utf8");
   const target = (rid: string) => {
-    const m = new RegExp(`Id="${rid}"[^>]*Target="\\.\\./media/([^"]+)"`).exec(rels) ??
+    const m =
+      new RegExp(`Id="${rid}"[^>]*Target="\\.\\./media/([^"]+)"`).exec(rels) ??
       new RegExp(`Target="\\.\\./media/([^"]+)"[^>]*Id="${rid}"`).exec(rels);
     return m ? `ppt/media/${m[1]}` : null;
   };
@@ -307,11 +322,21 @@ function lastPicture(parts: Map<string, Buffer>) {
 
 describe("pictures in every format (slide W4)", () => {
   it("a picture is placed at its own size, fitted to the slide", () => {
-    expect(pictureSize({ format: "png", width: 400, height: 200 }, [960, 540])).toEqual([300, 150]);
-    expect(pictureSize({ format: "png", width: 4000, height: 2000 }, [960, 540])).toEqual([960, 480]);
-    expect(pictureSize({ format: "eps", width: 72, height: 36 }, [960, 540])).toEqual([72, 36]);
-    expect(pictureSize({ format: "webp", width: null, height: null }, [960, 540])).toEqual([288, 216]);
-    expect(pictureSize({ format: "png", width: 400, height: 200 }, [960, 540], 100)).toEqual([100, 50]);
+    expect(
+      pictureSize({ format: "png", width: 400, height: 200 }, [960, 540]),
+    ).toEqual([300, 150]);
+    expect(
+      pictureSize({ format: "png", width: 4000, height: 2000 }, [960, 540]),
+    ).toEqual([960, 480]);
+    expect(
+      pictureSize({ format: "eps", width: 72, height: 36 }, [960, 540]),
+    ).toEqual([72, 36]);
+    expect(
+      pictureSize({ format: "webp", width: null, height: null }, [960, 540]),
+    ).toEqual([288, 216]);
+    expect(
+      pictureSize({ format: "png", width: 400, height: 200 }, [960, 540], 100),
+    ).toEqual([100, 50]);
   });
 
   for (const [name, make, ext, ct] of [
@@ -333,9 +358,13 @@ describe("pictures in every format (slide W4)", () => {
       const parts = zipParts(out!.bytes);
       const p = lastPicture(parts);
       expect(p.blip).toMatch(new RegExp(`\\.${ext}$`));
-      expect(Buffer.from(parts.get(p.blip!)!).equals(Buffer.from(pic))).toBe(true);
+      expect(Buffer.from(parts.get(p.blip!)!).equals(Buffer.from(pic))).toBe(
+        true,
+      );
       expect(p.svg).toBeNull();
-      expect(p.types.toLowerCase()).toContain(`extension="${ext}" contenttype="${ct}"`);
+      expect(p.types.toLowerCase()).toContain(
+        `extension="${ext}" contenttype="${ct}"`,
+      );
       // It reads back as a picture.
       const back = (await slideEngine()).importPptx(out!.bytes, "back");
       expect(back.report.diagnostics.join("\n")).not.toContain("not placed");
@@ -349,7 +378,7 @@ describe("pictures in every format (slide W4)", () => {
     await insert(host, SVG, true);
     // Its natural size: 64 × 32 px at 96 dpi.
     const pics = await host.document.elementGeometry([
-      { kind: "rectangle", id: (await insertedId(host)) } as ElementId,
+      { kind: "rectangle", id: await insertedId(host) } as ElementId,
     ]);
     const bnd = (pics[0] as { bounds: number[] }).bounds;
     expect(Math.abs(bnd[3]! - bnd[1]!)).toBeCloseTo(48, 1);
@@ -358,7 +387,9 @@ describe("pictures in every format (slide W4)", () => {
     keep(out!.bytes, "picture-svg");
     const parts = zipParts(out!.bytes);
     const p = lastPicture(parts);
-    expect(p.pic).toContain('<a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}">');
+    expect(p.pic).toContain(
+      '<a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}">',
+    );
     expect(p.svg).toMatch(/\.svg$/);
     expect(Buffer.from(parts.get(p.svg!)!).equals(Buffer.from(SVG))).toBe(true);
     expect(p.blip).toMatch(/\.png$/);

@@ -116,6 +116,7 @@ const COMMENTS_PANEL = "media.paged.slide.panel.comments";
 const SHAPES_PANEL = "media.paged.slide.panel.shapes";
 const CUSTOM_SHOWS_PANEL = "media.paged.slide.panel.customShows";
 const SMARTART_PANEL = "media.paged.slide.panel.smartart";
+const ANIMATIONS_PANEL = "media.paged.slide.panel.animations";
 const IMPORTER = "media.paged.slide.importer.pptx";
 const EXPORTER = "media.paged.slide.exporter.pptx";
 /** Save as template's exporter (slide ADR 720). */
@@ -211,6 +212,34 @@ const OUTPUT = {
   "media.paged.slide.command.addSection": ["Add section", "Slide/Add Section"],
 } as const;
 
+/** The Animations tab (slide ADR 714, `src/anim/contribute.ts`): its
+ *  titles and menu entries. The pane needs a deck with a slide; Preview a
+ *  slide with animations; the painter a selected shape. */
+const ANIM = {
+  "media.paged.slide.command.animationPane": [
+    "Animation pane",
+    "Animations/Animation Pane",
+  ],
+  "media.paged.slide.command.previewAnimations": [
+    "Preview animations",
+    "Animations/Preview Animations",
+  ],
+  "media.paged.slide.command.animationPainter": [
+    "Animation Painter",
+    "Animations/Animation Painter",
+  ],
+} as const;
+
+/** The animations' typed commands, for scripts (slide ADR 714). */
+const ANIM_TYPED = [
+  "media.paged.slide.addAnimation",
+  "media.paged.slide.removeAnimation",
+  "media.paged.slide.setAnimationTiming",
+  "media.paged.slide.moveAnimation",
+  "media.paged.slide.listAnimations",
+  "media.paged.slide.previewAnimations",
+];
+
 const KIND = (k: string) => `plugin:media.paged.slide/${k}`;
 
 /** THE IDS, SPELLED OUT. Comparing the manifest to the registries proves
@@ -230,6 +259,7 @@ const DECLARED = {
     SHAPES_PANEL,
     CUSTOM_SHOWS_PANEL,
     SMARTART_PANEL,
+    ANIMATIONS_PANEL,
   ],
   importers: [IMPORTER],
   exporters: [EXPORTER, TEMPLATE_EXPORTER],
@@ -262,6 +292,8 @@ const DECLARED = {
     RENAME_SECTION,
     MOVE_SECTION,
     DELETE_SECTION,
+    // The animations' (ADR 714).
+    ...ANIM_TYPED,
     // Slide W4's palette twins and SmartArt's text, for scripts.
     "media.paged.slide.command.insertPicture",
     "media.paged.slide.command.insertIcon",
@@ -283,6 +315,7 @@ const DECLARED = {
     ...Object.keys(PALETTE),
     ...Object.keys(SHOW),
     ...Object.keys(OUTPUT),
+    ...Object.keys(ANIM),
   ],
 } as const;
 
@@ -300,6 +333,7 @@ const PANEL_TITLES: Record<string, string> = {
   [SHAPES_PANEL]: "Shapes",
   [CUSTOM_SHOWS_PANEL]: "Custom shows",
   [SMARTART_PANEL]: "Text Pane",
+  [ANIMATIONS_PANEL]: "Animations",
 };
 const SCHEMA_PANELS = [
   SLIDE_PANEL,
@@ -617,7 +651,7 @@ test.describe("plugin surface · paged.slide", () => {
 
   // ── 2. PANELS ────────────────────────────────────────────────────
 
-  test("all nine panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
+  test("all eleven panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
     page,
   }) => {
     await bootBlank(page);
@@ -721,7 +755,7 @@ test.describe("plugin surface · paged.slide", () => {
       { timeout: 15_000 },
     );
 
-    // The real menu bar: Plugins ▸ Slide lists all nine, none greyed
+    // The real menu bar: Plugins ▸ Slide lists all eleven, none greyed
     // (paged.slide has no edit context, so no context withholds them),
     // and picking one opens it.
     await page.keyboard.press("Escape");
@@ -1276,8 +1310,16 @@ test.describe("plugin surface · paged.slide", () => {
       ...Object.fromEntries(
         Object.entries(SHOW).map(([id, [title]]) => [id, title]),
       ),
+      "media.paged.slide.command.insertPicture": "Insert picture…",
+      "media.paged.slide.command.insertIcon": "Insert icon…",
+      "media.paged.slide.command.copyFormat": "Copy formatting",
+      "media.paged.slide.command.pasteFormat": "Paste formatting",
+      "media.paged.slide.command.smartArtText": "SmartArt text pane",
       ...Object.fromEntries(
         Object.entries(OUTPUT).map(([id, [title]]) => [id, title]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(ANIM).map(([id, [title]]) => [id, title]),
       ),
     });
     for (const x of blank.commands)
@@ -1292,6 +1334,9 @@ test.describe("plugin surface · paged.slide", () => {
       ),
       ...Object.fromEntries(
         Object.entries(OUTPUT).map(([id, [, path]]) => [id, path]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(ANIM).map(([id, [, path]]) => [id, path]),
       ),
     });
     // Outside a deck only Open is offered.
@@ -1342,6 +1387,11 @@ test.describe("plugin surface · paged.slide", () => {
         "ctrl+d@slideDeck→media.paged.slide.command.duplicateSlide",
         "pageup@slideDeck→media.paged.slide.command.previousSlide",
         "pagedown@slideDeck→media.paged.slide.command.nextSlide",
+        // The format painter (slide W4).
+        "cmd+shift+c@slideDeck→media.paged.slide.command.copyFormat",
+        "ctrl+shift+c@slideDeck→media.paged.slide.command.copyFormat",
+        "cmd+shift+v@slideDeck→media.paged.slide.command.pasteFormat",
+        "ctrl+shift+v@slideDeck→media.paged.slide.command.pasteFormat",
       ].sort(),
     );
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
@@ -1387,11 +1437,22 @@ test.describe("plugin surface · paged.slide", () => {
         { timeout: 15_000 },
       )
       .toEqual(
-        [...Object.keys(PALETTE), ...Object.keys(SHOW), ...Object.keys(OUTPUT)]
+        [
+          ...Object.keys(PALETTE),
+          ...Object.keys(SHOW),
+          ...Object.keys(OUTPUT),
+          ...Object.keys(ANIM),
+        ]
           .filter(
             (id) =>
               id !== "media.paged.slide.command.moveSlideUp" &&
-              id !== "media.paged.slide.command.previousSlide",
+              id !== "media.paged.slide.command.previousSlide" &&
+              // No slide of the fixture is animated, and nothing is selected
+              // (the painters copy from a selection).
+              id !== "media.paged.slide.command.previewAnimations" &&
+              id !== "media.paged.slide.command.animationPainter" &&
+              id !== "media.paged.slide.command.copyFormat" &&
+              id !== "media.paged.slide.command.pasteFormat",
           )
           .sort(),
       );

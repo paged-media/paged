@@ -171,9 +171,7 @@ export async function storiesOf(
   const want = new Set(frames.map((f) => String(f.id)));
   const out = new Map<string, { story: string; length: number }>();
   if (want.size === 0) return out;
-  const stories = await host.document.collection<{ selfId: string }>(
-    "stories",
-  );
+  const stories = await host.document.collection<{ selfId: string }>("stories");
   for (const s of stories) {
     for (const link of await host.document.frameChain(s.selfId)) {
       if (want.has(link.frameId))
@@ -215,7 +213,10 @@ async function entries(
 ): Promise<FormatEntry[]> {
   const p = await host.document.elementProperties(id);
   return (p?.entries ?? []).flatMap((e) =>
-    keep(e.path) && e.value && e.value.value !== null && e.value.value !== undefined
+    keep(e.path) &&
+    e.value &&
+    e.value.value !== null &&
+    e.value.value !== undefined
       ? [{ path: e.path, value: e.value as Value }]
       : [],
   );
@@ -271,7 +272,8 @@ export function pasteOps(
       op: "setElementProperty",
       args: { elementId, path: e.path, value: e.value },
     } as MutationInput);
-  const shapeTargets = parts.outlines.length > 0 ? parts.outlines : parts.frames;
+  const shapeTargets =
+    parts.outlines.length > 0 ? parts.outlines : parts.frames;
   for (const t of shapeTargets) for (const e of copied.shape) set(t, e);
   for (const f of parts.frames) {
     const st = stories.get(String(f.id));
@@ -291,7 +293,8 @@ export async function pasteFormat(
 ): Promise<boolean> {
   const sel = targets ? null : textSelection(host);
   if (sel) {
-    if (copied.text.length === 0 || !host.supports("text.format@1")) return false;
+    if (copied.text.length === 0 || !host.supports("text.format@1"))
+      return false;
     const r = await host.text.format(copied.text);
     return r.applied;
   }

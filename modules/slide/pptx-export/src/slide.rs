@@ -1165,13 +1165,12 @@ impl<'a> Writer<'a, '_> {
             new_data.into_bytes(),
             Some(crate::smartart::CT_DATA),
         )];
-        let copy_rels =
-            |from: &str, to: &str, out: &mut Vec<NewPart>| {
-                let rp = paged_ooxml::rels::rels_part_name(from);
-                if let Some(b) = self.sh.pkg.part(&rp) {
-                    out.push((paged_ooxml::rels::rels_part_name(to), b.to_vec(), None));
-                }
-            };
+        let copy_rels = |from: &str, to: &str, out: &mut Vec<NewPart>| {
+            let rp = paged_ooxml::rels::rels_part_name(from);
+            if let Some(b) = self.sh.pkg.part(&rp) {
+                out.push((paged_ooxml::rels::rels_part_name(to), b.to_vec(), None));
+            }
+        };
         copy_rels(&data_part, &new_data_part, &mut written);
         let mut retarget = vec![(rid_dm.clone(), new_data_part.clone())];
         if let Some((rid, part)) = &drawing {

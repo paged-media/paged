@@ -99,7 +99,8 @@ function findDiagram(
     diagram: TreeNode | null,
   ): TreeNode | null => {
     for (const n of nodes) {
-      const here = label(n)?.frame === "diagram" && label(n)?.smartart ? n : diagram;
+      const here =
+        label(n)?.frame === "diagram" && label(n)?.smartart ? n : diagram;
       if (n.id && String(n.id.id) === target) return here;
       const hit = n.children?.length ? walk(n.children, here) : null;
       if (hit) return hit;
@@ -148,8 +149,7 @@ export async function smartArtAt(
     const paras = await paragraphs(host, st.story);
     let at = 0;
     for (const [pt, n] of pts) {
-      const mine =
-        pts.length === 1 ? paras : paras.slice(at, at + n);
+      const mine = pts.length === 1 ? paras : paras.slice(at, at + n);
       at += n;
       if (!text.has(pt)) text.set(pt, mine.join("\n"));
     }

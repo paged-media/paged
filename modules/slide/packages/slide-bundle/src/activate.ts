@@ -631,11 +631,16 @@ export function activate(host: BundleHost): BundleHandle {
       shapesPanel: richPanels ? SHAPES_PANEL_ID : undefined,
     });
     const menu = contributeMenu(host, (id) => commands.ids.has(id));
-    const contentCommands = contributeContentCommands(host, content, clipboard, {
-      deckOpen: () => (store ? store.isDeck() : false),
-      scopedKeys: deckContext,
-      deckContext: DECK_CONTEXT,
-    });
+    const contentCommands = contributeContentCommands(
+      host,
+      content,
+      clipboard,
+      {
+        deckOpen: () => (store ? store.isDeck() : false),
+        scopedKeys: deckContext,
+        deckContext: DECK_CONTEXT,
+      },
+    );
     disposers.push(
       () => commands.dispose(),
       () => menu.dispose(),
