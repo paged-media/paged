@@ -1,7 +1,7 @@
 {
   "catalog": {
-    "hostFunctions": 195,
-    "operations": 162
+    "hostFunctions": 201,
+    "operations": 168
   },
   "environment": {
     "cli": true
@@ -8288,6 +8288,258 @@
       "op": "findReplace"
     },
     {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "updateFields"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "insertTextAnchor"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "deleteTextAnchor"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "insertCrossReference"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "insertTableOfContents"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "insertIndexMarker"
+    },
+    {
       "cases": [
         "insertOval",
         "insertOval/command"
@@ -10091,17 +10343,17 @@
       "generic": 7,
       "named": 9,
       "none": 1,
-      "not-run": 20,
+      "not-run": 26,
       "parity": 139,
-      "typed": 145
+      "typed": 151
     },
     "boa": {
       "differs": 0,
       "gap": 1,
       "generic": 1,
-      "named": 159,
+      "named": 165,
       "none": 1,
-      "not-run": 20,
+      "not-run": 26,
       "parity": 141,
       "typed": 1
     },
@@ -10109,9 +10361,9 @@
       "differs": 0,
       "gap": 1,
       "generic": 0,
-      "named": 159,
+      "named": 165,
       "none": 1,
-      "not-run": 20,
+      "not-run": 26,
       "parity": 141,
       "typed": 2
     },
@@ -10121,17 +10373,17 @@
       "generic": 0,
       "named": 9,
       "none": 8,
-      "not-run": 20,
+      "not-run": 26,
       "parity": 132,
-      "typed": 145
+      "typed": 151
     },
     "mcp": {
       "differs": 0,
       "gap": 1,
       "generic": 2,
-      "named": 159,
+      "named": 165,
       "none": 1,
-      "not-run": 22,
+      "not-run": 28,
       "parity": 139,
       "typed": 0
     },
@@ -10141,16 +10393,16 @@
       "generic": 7,
       "named": 0,
       "none": 1,
-      "not-run": 20,
+      "not-run": 26,
       "parity": 141,
-      "typed": 154
+      "typed": 160
     },
     "viewer-sdk": {
       "differs": 0,
-      "gap": 162,
+      "gap": 168,
       "generic": 0,
       "named": 0,
-      "none": 162,
+      "none": 168,
       "not-run": 0,
       "parity": 0,
       "typed": 0
