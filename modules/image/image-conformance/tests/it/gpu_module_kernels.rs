@@ -198,6 +198,162 @@ fn gradient_map_teal_orange() -> Vec<u8> {
     .to_vec()
 }
 
+// The WP5.2 adjust_ext / develop blocks, via their real constructors.
+
+fn wp52a_shear_identity() -> Vec<u8> {
+    use image_kernels::families::distort::DistortShearParams;
+    DistortShearParams::new([0.0; 16], true).as_bytes().to_vec()
+}
+
+fn wp52a_shear_stress() -> Vec<u8> {
+    use image_kernels::families::distort::DistortShearParams;
+    let mut c = [0.0f32; 16];
+    for (i, v) in c.iter_mut().enumerate() {
+        *v = 6.0 * (i as f32 * 0.6).sin();
+    }
+    DistortShearParams::new(c, true).as_bytes().to_vec()
+}
+
+fn wp52a_lighting_stress() -> Vec<u8> {
+    use image_kernels::families::render::RenderLightingParams;
+    let s = [
+        0.0, 0.3, 0.35, 0.5, 30.0, 35.0, 20.0, 1.0, 0.95, 0.85, 0.0, -50.0, 0.0, 8.0, 5.0, 50.0,
+        1.0, 40.0, 45.0,
+    ];
+    RenderLightingParams::from_settings(&s, OUT, OUT)
+        .as_bytes()
+        .to_vec()
+}
+
+fn wp52c_none() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::DesaturateParams;
+    bytemuck::bytes_of(&DesaturateParams::new()).to_vec()
+}
+
+fn wp52c_sh_identity() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::ShadowsHighlightsParams;
+    bytemuck::bytes_of(&ShadowsHighlightsParams::from_values([
+        0.0, 0.5, 4.0, 0.0, 0.5, 4.0, 0.2, 0.0,
+    ]))
+    .to_vec()
+}
+
+fn wp52c_sh_stress() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::ShadowsHighlightsParams;
+    bytemuck::bytes_of(&ShadowsHighlightsParams::from_values([
+        0.6, 0.6, 4.0, 0.4, 0.5, 3.0, 0.3, 0.2,
+    ]))
+    .to_vec()
+}
+
+fn wp52c_hdr_identity() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::HdrToningParams;
+    bytemuck::bytes_of(&HdrToningParams::from_values([
+        6.0, 0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    ]))
+    .to_vec()
+}
+
+fn wp52c_hdr_stress() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::HdrToningParams;
+    bytemuck::bytes_of(&HdrToningParams::from_values([
+        6.0, 0.5, 0.8, 0.3, 0.5, 0.3, -0.2, 0.3, 0.1,
+    ]))
+    .to_vec()
+}
+
+const WP52C_STATS_A: [f32; 6] = [55.0, 8.0, 12.0, 18.0, 9.0, 11.0];
+const WP52C_STATS_B: [f32; 6] = [48.0, -4.0, 20.0, 22.0, 12.0, 8.0];
+
+fn wp52c_match_identity() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::MatchColorParams;
+    bytemuck::bytes_of(&MatchColorParams::new(
+        WP52C_STATS_A,
+        WP52C_STATS_B,
+        1.2,
+        0.8,
+        1.0,
+    ))
+    .to_vec()
+}
+
+fn wp52c_match_stress() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::MatchColorParams;
+    bytemuck::bytes_of(&MatchColorParams::new(
+        WP52C_STATS_A,
+        WP52C_STATS_B,
+        1.0,
+        1.0,
+        0.0,
+    ))
+    .to_vec()
+}
+
+fn wp52c_replace_identity() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::ReplaceColorParams;
+    bytemuck::bytes_of(&ReplaceColorParams::new(
+        [0.75, 0.375, 0.125],
+        80.0,
+        0.0,
+        0.0,
+        0.0,
+    ))
+    .to_vec()
+}
+
+fn wp52c_replace_stress() -> Vec<u8> {
+    use image_kernels::families::adjust_ext::ReplaceColorParams;
+    bytemuck::bytes_of(&ReplaceColorParams::new(
+        [0.75, 0.375, 0.125],
+        200.0,
+        60.0,
+        0.3,
+        -0.1,
+    ))
+    .to_vec()
+}
+
+fn wp52c_develop(stress: bool) -> image_kernels::families::develop::DevelopSettings {
+    let mut s = image_kernels::families::develop::DevelopSettings::identity();
+    if stress {
+        for (i, v) in [
+            (0, 20.0),
+            (2, 0.4),
+            (3, 25.0),
+            (5, 30.0),
+            (12, 15.0),
+            (14, 30.0),
+            (38, 40.0),
+            (37, 200.0),
+            (8, 30.0),
+            (9, 40.0),
+            (10, 25.0),
+            (55, 60.0),
+            (59, 30.0),
+            (60, 40.0),
+        ] {
+            s.0[i] = v;
+        }
+    }
+    s
+}
+
+fn wp52c_develop_tone_identity() -> Vec<u8> {
+    bytemuck::bytes_of(&wp52c_develop(false).tone_params()).to_vec()
+}
+
+fn wp52c_develop_tone_stress() -> Vec<u8> {
+    bytemuck::bytes_of(&wp52c_develop(true).tone_params()).to_vec()
+}
+
+fn wp52c_develop_detail_identity() -> Vec<u8> {
+    bytemuck::bytes_of(&wp52c_develop(false).detail_params()).to_vec()
+}
+
+fn wp52c_develop_detail_stress() -> Vec<u8> {
+    bytemuck::bytes_of(&wp52c_develop(true).detail_params()).to_vec()
+}
+
 /// Every compose kernel folds `opacity` into the source FIRST, so a zero
 /// opacity makes the premultiplied source `vec4(0)` and source-over
 /// collapses to `term3 = (1−0)·αb·cb`, i.e. the backdrop.
@@ -535,6 +691,73 @@ const TABLE: &[Row] = &[
               ("seed", V::U(7)), ("kind", V::U(0)), ("scale_px", V::F(8.0)),
               ("relief", V::F(1.0)), ("angle_deg", V::F(0.0)), ("amount", V::F(1.0))]),
           note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "gallery.strokes",
+          identity: Identity::Params(P::Fields(&[
+              ("seed", V::U(7)), ("angle_deg", V::F(30.0)), ("length_px", V::F(8.0)),
+              ("mode", V::U(1)), ("darkness", V::F(0.5)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("seed", V::U(7)), ("angle_deg", V::F(30.0)), ("length_px", V::F(8.0)),
+              ("mode", V::U(1)), ("darkness", V::F(0.5)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "gallery.chrome",
+          identity: Identity::Params(P::Fields(&[
+              ("detail", V::F(4.0)), ("smoothness", V::F(3.0)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("detail", V::F(4.0)), ("smoothness", V::F(3.0)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "gallery.plastic_wrap",
+          identity: Identity::Params(P::Fields(&[
+              ("strength", V::F(15.0)), ("detail", V::F(9.0)), ("smoothness", V::F(7.0)),
+              ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("strength", V::F(15.0)), ("detail", V::F(9.0)), ("smoothness", V::F(7.0)),
+              ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+
+    // ── blur gallery (spatially varying; support under ½ px returns the pixel) ──
+    Row { id: "blur.field",
+          identity: Identity::Params(P::Fields(&[
+              ("count", V::U(1)), ("p0x", V::F(HALF_OUT)), ("p0y", V::F(HALF_OUT)), ("p0b", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("count", V::U(2)), ("light_bokeh", V::F(0.5)),
+              ("p0x", V::F(8.0)), ("p0y", V::F(8.0)), ("p0b", V::F(0.0)),
+              ("p1x", V::F(56.0)), ("p1y", V::F(56.0)), ("p1b", V::F(6.0))]),
+          note: "every pin at 0 px ⇒ radius 0 ⇒ the explicit early return" },
+    Row { id: "blur.iris",
+          identity: Identity::Params(P::Fields(&[
+              ("cx", V::F(HALF_OUT)), ("cy", V::F(HALF_OUT)), ("rx", V::F(16.0)), ("ry", V::F(12.0)),
+              ("blur_px", V::F(0.0)), ("feather", V::F(0.5))])),
+          stress: P::Fields(&[
+              ("cx", V::F(HALF_OUT)), ("cy", V::F(HALF_OUT)), ("rx", V::F(16.0)), ("ry", V::F(12.0)),
+              ("rotation_deg", V::F(20.0)), ("blur_px", V::F(6.0)), ("feather", V::F(0.5)),
+              ("light_bokeh", V::F(0.5))]),
+          note: "blur 0 ⇒ radius 0 everywhere ⇒ the early return" },
+    Row { id: "blur.tilt_shift",
+          identity: Identity::Params(P::Fields(&[
+              ("cx", V::F(HALF_OUT)), ("cy", V::F(HALF_OUT)), ("sharp_px", V::F(4.0)),
+              ("feather_px", V::F(8.0)), ("blur_px", V::F(0.0)), ("symmetric", V::U(1))])),
+          stress: P::Fields(&[
+              ("cx", V::F(HALF_OUT)), ("cy", V::F(HALF_OUT)), ("angle_deg", V::F(15.0)),
+              ("sharp_px", V::F(4.0)), ("feather_px", V::F(8.0)), ("blur_px", V::F(6.0)),
+              ("symmetric", V::U(1)), ("light_bokeh", V::F(0.3))]),
+          note: "blur 0 ⇒ radius 0 everywhere ⇒ the early return" },
+    Row { id: "blur.path",
+          identity: Identity::Params(P::Fields(&[
+              ("count", V::U(2)), ("speed_px", V::F(0.0)),
+              ("q0x", V::F(4.0)), ("q0y", V::F(4.0)), ("q1x", V::F(60.0)), ("q1y", V::F(40.0))])),
+          stress: P::Fields(&[
+              ("count", V::U(3)), ("speed_px", V::F(12.0)), ("taper", V::F(0.4)), ("centered", V::U(1)),
+              ("q0x", V::F(4.0)), ("q0y", V::F(50.0)), ("q1x", V::F(30.0)), ("q1y", V::F(10.0)),
+              ("q2x", V::F(60.0)), ("q2y", V::F(30.0))]),
+          note: "speed 0 ⇒ length under ½ px ⇒ the early return" },
+    Row { id: "blur.spin",
+          identity: Identity::Params(P::Fields(&[
+              ("cx", V::F(HALF_OUT)), ("cy", V::F(HALF_OUT)), ("rx", V::F(24.0)), ("ry", V::F(20.0)),
+              ("angle_deg", V::F(0.0)), ("feather", V::F(0.2))])),
+          stress: P::Fields(&[
+              ("cx", V::F(HALF_OUT)), ("cy", V::F(HALF_OUT)), ("rx", V::F(24.0)), ("ry", V::F(20.0)),
+              ("rotation_deg", V::F(10.0)), ("angle_deg", V::F(40.0)), ("feather", V::F(0.2))]),
+          note: "arc 0 ⇒ the early return; outside the ellipse untouched by construction" },
 
     // ── gen (8 generators + the binary pattern fill) ────────────────────
     Row { id: "gen.solid",
@@ -650,6 +873,56 @@ const TABLE: &[Row] = &[
           stress: P::Fields(&[("cell_px", V::F(8.0))]),
           note: "cell 1 ⇒ the cell centre is the pixel itself (and cell 0 is \
                  clamped to 1 rather than dividing by zero)" },
+
+    // ── stylize + pixelate (WP5.2): amount 0 ⇒ mix(a, styled, 0) ────────
+    Row { id: "stylize.solarize",
+          identity: Identity::Params(P::Fields(&[("amount", V::F(0.0))])),
+          stress: P::Fields(&[("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "stylize.trace_contour",
+          identity: Identity::Params(P::Fields(&[("level", V::F(0.5)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[("level", V::F(0.5)), ("upper", V::U(1)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "stylize.wind",
+          identity: Identity::Params(P::Fields(&[("seed", V::U(7)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[("seed", V::U(7)), ("method", V::U(1)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "stylize.tiles",
+          identity: Identity::Params(P::Fields(&[
+              ("seed", V::U(7)), ("tiles", V::U(6)), ("max_offset", V::F(0.2)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("seed", V::U(7)), ("tiles", V::U(6)), ("max_offset", V::F(0.2)),
+              ("fill", V::U(2)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "stylize.extrude",
+          identity: Identity::Params(P::Fields(&[
+              ("seed", V::U(7)), ("size_px", V::F(8.0)), ("depth", V::F(30.0)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("seed", V::U(7)), ("size_px", V::F(8.0)), ("depth", V::F(30.0)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "pixelate.crystallize",
+          identity: Identity::Params(P::Fields(&[
+              ("seed", V::U(7)), ("cell_px", V::F(8.0)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[("seed", V::U(7)), ("cell_px", V::F(8.0)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "pixelate.pointillize",
+          identity: Identity::Params(P::Fields(&[
+              ("seed", V::U(7)), ("cell_px", V::F(8.0)), ("bg_r", V::F(1.0)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("seed", V::U(7)), ("cell_px", V::F(8.0)), ("bg_r", V::F(1.0)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "pixelate.mezzotint",
+          identity: Identity::Params(P::Fields(&[("seed", V::U(7)), ("kind", V::U(5)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[("seed", V::U(7)), ("kind", V::U(5)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
+    Row { id: "pixelate.color_halftone",
+          identity: Identity::Params(P::Fields(&[
+              ("max_radius", V::F(4.0)), ("angle1", V::F(108.0)), ("angle2", V::F(162.0)),
+              ("angle3", V::F(90.0)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[
+              ("max_radius", V::F(4.0)), ("angle1", V::F(108.0)), ("angle2", V::F(162.0)),
+              ("angle3", V::F(90.0)), ("amount", V::F(1.0))]),
+          note: "amount 0 ⇒ mix(a, styled, 0)" },
     Row { id: "geom.offset",
           identity: Identity::Params(P::Fields(&[("dx", V::F(0.0)), ("dy", V::F(0.0)), ("edge", V::U(0))])),
           stress: P::Fields(&[("dx", V::F(5.5)), ("dy", V::F(-3.25)), ("edge", V::U(0))]),
@@ -730,7 +1003,166 @@ const TABLE: &[Row] = &[
           stress: P::Fields(&[("inv_scale_x", V::F(2.0)), ("inv_scale_y", V::F(2.0))]),
           note: "sinc is INTERPOLATING — zero at every non-zero integer — so \
                  unit scale really is a pass-through, unlike mitchell" },
+
+    // ── style (layer styles, WP5.4) ─────────────────────────────────────
+    Row { id: "style.shift",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("dx", V::F(3.5)), ("dy", V::F(-2.0)), ("channel", V::U(3)), ("invert", V::U(1))]),
+          note: "EXCLUDED from identity: returns ONE channel splatted (a coverage), \
+                 never the input colour" },
+    Row { id: "style.blur_h",
+          identity: Identity::Params(P::Fields(&[("sigma", V::F(2.0)), ("radius", V::U(0))])),
+          stress: P::Fields(&[("sigma", V::F(3.0)), ("radius", V::U(9)), ("outside", V::F(0.5))]),
+          note: "radius 0 ⇒ the pass copies its input" },
+    Row { id: "style.blur_v",
+          identity: Identity::Params(P::Fields(&[("sigma", V::F(2.0)), ("radius", V::U(0))])),
+          stress: P::Fields(&[("sigma", V::F(4.5)), ("radius", V::U(5)), ("kind", V::U(1))]),
+          note: "radius 0 ⇒ the pass copies its input; kind 1 is the box" },
+    Row { id: "style.jfa_seed",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("threshold", V::F(0.5))]),
+          note: "EXCLUDED from identity: encodes two seed fields, not a colour" },
+    Row { id: "style.jfa_step",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("step", V::I(4))]),
+          note: "EXCLUDED from identity: a flood step reads neighbour VECTORS; on a \
+                 colour image it computes some field, which is what is asserted \
+                 finite and deterministic" },
+    Row { id: "style.distance",
+          identity: Identity::NotDefined,
+          stress: NO_PARAMS,
+          note: "EXCLUDED from identity: binary (the field, the coverage) → a \
+                 signed distance" },
+    Row { id: "style.ramp",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("lo", V::F(-0.5)), ("hi", V::F(0.5)), ("mode", V::U(1))]),
+          note: "EXCLUDED from identity: a distance → a splatted coverage" },
+    Row { id: "style.contour",
+          identity: Identity::NotDefined,
+          stress: P::Raw(style_contour_cone),
+          note: "EXCLUDED from identity: splats one channel through the curve" },
+    Row { id: "style.colorize",
+          identity: Identity::NotDefined,
+          stress: P::Raw(style_colorize_noisy),
+          note: "EXCLUDED from identity: a coverage → a premultiplied colour" },
+    Row { id: "style.bevel",
+          identity: Identity::NotDefined,
+          stress: P::Raw(style_bevel_light),
+          note: "EXCLUDED from identity: a height → a Lambert shade" },
+    Row { id: "style.split",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("flat", V::F(0.5))]),
+          note: "EXCLUDED from identity: a shade → highlight and shadow" },
+    Row { id: "style.absdiff",
+          identity: Identity::NotDefined,
+          stress: NO_PARAMS,
+          note: "EXCLUDED from identity: binary |a.r − b.r|, splatted" },
+    // ── adjust_ext / develop (WP5.2) ──────────────────────────────────
+    Row { id: "adjust.desaturate",
+          identity: Identity::NotDefined,
+          stress: P::Raw(wp52c_none),
+          note: "EXCLUDED from identity: no params — every pixel to its HSL lightness" },
+    Row { id: "adjust.shadows_highlights",
+          identity: Identity::Params(P::Raw(wp52c_sh_identity)),
+          stress: P::Raw(wp52c_sh_stress),
+          note: "both amounts and the midtone contrast 0 ⇒ the tone path is skipped" },
+    Row { id: "adjust.hdr_toning",
+          identity: Identity::Params(P::Raw(wp52c_hdr_identity)),
+          stress: P::Raw(wp52c_hdr_stress),
+          note: "gamma 1, every other control 0 ⇒ every stage is skipped" },
+    Row { id: "adjust.match_color",
+          identity: Identity::Params(P::Raw(wp52c_match_identity)),
+          stress: P::Raw(wp52c_match_stress),
+          note: "fade 1 ⇒ mix(moved, rgb, 1) = rgb" },
+    Row { id: "adjust.replace_color",
+          identity: Identity::Params(P::Raw(wp52c_replace_identity)),
+          stress: P::Raw(wp52c_replace_stress),
+          note: "hue, saturation and lightness 0 ⇒ the shift is skipped" },
+    Row { id: "develop.tone",
+          identity: Identity::Params(P::Raw(wp52c_develop_tone_identity)),
+          stress: P::Raw(wp52c_develop_tone_stress),
+          note: "every control at its default ⇒ every stage is skipped" },
+    Row { id: "develop.detail",
+          identity: Identity::Params(P::Raw(wp52c_develop_detail_identity)),
+          stress: P::Raw(wp52c_develop_detail_stress),
+          note: "texture, clarity, dehaze, sharpening and noise reduction 0 ⇒ early return" },
+
+    // ── distort + render (WP5.2) ────────────────────────────────────────
+    Row { id: "distort.displace",
+          identity: Identity::Params(P::Fields(&[
+              ("map_w", V::U(OUT)), ("map_h", V::U(OUT)), ("scale_x", V::F(0.0)),
+              ("scale_y", V::F(0.0)), ("edge", V::U(0))])),
+          stress: P::Fields(&[
+              ("map_w", V::U(OUT)), ("map_h", V::U(OUT)), ("scale_x", V::F(6.0)),
+              ("scale_y", V::F(-4.0)), ("edge", V::U(1))]),
+          note: "both scales 0 ⇒ zero offset ⇒ the sampler lands on texel centres" },
+    Row { id: "distort.polar",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("mode", V::U(0))]),
+          note: "EXCLUDED from identity: a coordinate change in either direction; \
+                 no setting maps the canvas onto itself" },
+    Row { id: "distort.ripple",
+          identity: Identity::Params(P::Fields(&[("amount", V::F(0.0)), ("wavelength", V::F(16.0))])),
+          stress: P::Fields(&[("amount", V::F(250.0)), ("wavelength", V::F(16.0))]),
+          note: "amount 0 ⇒ zero displacement ⇒ texel centres" },
+    Row { id: "distort.shear",
+          identity: Identity::Params(P::Raw(wp52a_shear_identity)),
+          stress: P::Raw(wp52a_shear_stress),
+          note: "an all-zero curve ⇒ every row stays put" },
+    Row { id: "distort.zigzag",
+          identity: Identity::Params(P::Fields(&[("amount", V::F(0.0)), ("ridges", V::F(5.0)), ("style", V::U(2))])),
+          stress: P::Fields(&[("amount", V::F(80.0)), ("ridges", V::F(5.0)), ("style", V::U(2))]),
+          note: "amount 0 ⇒ the displacement is skipped (guarded)" },
+    Row { id: "render.clouds",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[
+              ("seed", V::U(3)), ("difference", V::U(1)), ("fg_r", V::F(0.1)), ("fg_g", V::F(0.2)),
+              ("fg_b", V::F(0.3)), ("scale_px", V::F(32.0)), ("bg_r", V::F(0.9)),
+              ("bg_g", V::F(0.8)), ("bg_b", V::F(0.7))]),
+          note: "EXCLUDED from identity: a generator — Clouds replaces the pixels, \
+                 Difference Clouds is |input − clouds|; neither has a pass-through" },
+    Row { id: "render.fibers",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[
+              ("seed", V::U(3)), ("variance", V::F(16.0)), ("strength", V::F(4.0)),
+              ("fg_r", V::F(0.1)), ("fg_g", V::F(0.1)), ("fg_b", V::F(0.1)),
+              ("bg_r", V::F(0.9)), ("bg_g", V::F(0.9)), ("bg_b", V::F(0.9))]),
+          note: "EXCLUDED from identity: a generator that replaces the pixels" },
+    Row { id: "render.lens_flare",
+          identity: Identity::Params(P::Fields(&[
+              ("cx", V::F(20.0)), ("cy", V::F(20.0)), ("brightness", V::F(0.0)), ("kind", V::U(0))])),
+          stress: P::Fields(&[
+              ("cx", V::F(20.0)), ("cy", V::F(20.0)), ("brightness", V::F(1.0)), ("kind", V::U(0))]),
+          note: "brightness 0 ⇒ the screened flare is 0 ⇒ 1 − (1 − c)·1 = c" },
+    Row { id: "render.lighting",
+          identity: Identity::NotDefined,
+          stress: P::Raw(wp52a_lighting_stress),
+          note: "EXCLUDED from identity: a shading model — ambience, diffuse and \
+                 the highlight always re-light the surface" },
 ];
+
+fn style_contour_cone() -> Vec<u8> {
+    let cone: [f32; 256] = std::array::from_fn(|i| 1.0 - (i as f32 / 127.5 - 1.0).abs());
+    image_kernels::families::style::StyleContourParams::new(&cone, 0.1, 0.9, false, 1)
+        .as_bytes()
+        .to_vec()
+}
+
+fn style_colorize_noisy() -> Vec<u8> {
+    let lut: [[f32; 4]; 256] = std::array::from_fn(|i| {
+        let t = i as f32 / 255.0;
+        [t, 0.5, 1.0 - t, 1.0]
+    });
+    image_kernels::families::style::StyleColorizeParams::new(lut, 0, 3, 0.3, 0.2, 7)
+        .as_bytes()
+        .to_vec()
+}
+
+fn style_bevel_light() -> Vec<u8> {
+    image_kernels::families::style::StyleBevelParams::new(4.0, 120.0, 30.0)
+        .as_bytes()
+        .to_vec()
+}
 
 /// Kernels exempt from the HALF-mask property, with the reason. The
 /// all-zero-mask property still applies to them.

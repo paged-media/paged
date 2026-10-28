@@ -105,6 +105,23 @@ pub struct SlidePlan {
 #[serde(rename_all = "camelCase")]
 pub struct ExportPlan {
     pub slides: Vec<SlidePlan>,
+    /// The charts whose data the document changed (ADR 715); every other
+    /// chart part keeps its bytes.
+    #[serde(default)]
+    pub charts: Vec<ChartPlan>,
+}
+
+/// A chart whose workbook the document edited.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartPlan {
+    /// The chart part (`ppt/charts/chart1.xml`).
+    pub part: String,
+    /// Where the workbook came from: the chart's embedded one, or one made
+    /// from its cached values.
+    pub origin: slide_sheet::Origin,
+    /// The workbook as the document holds it (`.xlsx`, base64).
+    pub workbook: String,
 }
 
 /// The written package and what it could not carry.
@@ -366,6 +383,7 @@ fn add_defaults(xml: &str, parts: &[String]) -> String {
             "png" => "image/png",
             "jpeg" | "jpg" => "image/jpeg",
             "gif" => "image/gif",
+            "xlsx" => slide_sheet::CT_XLSX,
             _ => continue,
         };
         let has = out
@@ -544,7 +562,10 @@ pub fn export_with(
     let images = |part: &str| pkg.part(part).map(|b| b.to_vec());
     let (deck, base) = match &model {
         Some(_) => {
-            let deck = slide_resolve::resolve(&ir);
+            // Charts are drawn as import drew them: a live chart that
+            // slide-chart does not lay out by paged.sheet (ADR 715).
+            let (charts, _) = slide_sheet::DeckCharts::open(&pkg, &ir);
+            let deck = slide_resolve::resolve_with(&ir, &|p, w, h| charts.draw(p, w, h));
             let base = slide_native::build(&deck, &images, "deck").document;
             (Some(deck), Some(base))
         }
@@ -603,7 +624,11 @@ pub fn export_with(
                     deck.as_ref() == Some(&t) || (deck.is_none() && t.nodes.is_empty())
                 })
         });
-    if same_plan && model.is_none() && !slides.iter().any(|s| s.content_edited) {
+    if same_plan
+        && model.is_none()
+        && plan.charts.is_empty()
+        && !slides.iter().any(|s| s.content_edited)
+    {
         return Ok(Exported {
             bytes: original.to_vec(),
             diagnostics,
@@ -720,6 +745,7 @@ pub fn export_with(
             .map(|(s, t)| (s.source_part.clone(), t.part.clone()))
             .collect(),
         media: std::cell::RefCell::new((BTreeMap::new(), next_media)),
+        live_charts: plan.charts.iter().map(|c| c.part.clone()).collect(),
     });
 
     let mut out_parts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
@@ -1219,6 +1245,24 @@ pub fn export_with(
         pres = rewrite_sections(&pres, &orig, &written);
     }
 
+    // Charts whose data changed (ADR 715): the chart part with its caches
+    // written from the workbook, and the workbook itself; a made workbook
+    // becomes the chart's embedded one.
+    for c in &plan.charts {
+        if pkg.part(&c.part).is_none() {
+            diagnostics.push(format!("chart {}: not in this deck; not exported", c.part));
+            continue;
+        }
+        match write_chart(&pkg, c, &mut out_parts) {
+            Ok(Some(new_part)) => media_parts.push(new_part),
+            Ok(None) => {}
+            Err(e) => not_exported.push(format!(
+                "chart {}: its data is written as the deck had it ({e})",
+                c.part
+            )),
+        }
+    }
+
     let mut ct = text(&pkg, "[Content_Types].xml")?;
     let removed_parts: BTreeSet<String> = removed
         .iter()
@@ -1273,6 +1317,59 @@ pub fn export_with(
         diagnostics,
         not_exported,
     })
+}
+
+/// Write an edited chart (ADR 715) into `out`: its part with the caches
+/// from the workbook, the workbook (an embedded one in place; a made one as
+/// a new embedding with its relationship). Answers the new workbook part.
+fn write_chart(
+    pkg: &OpcPackage,
+    c: &ChartPlan,
+    out: &mut BTreeMap<String, Vec<u8>>,
+) -> Result<Option<String>, String> {
+    use base64::Engine as _;
+    let xlsx = base64::engine::general_purpose::STANDARD
+        .decode(&c.workbook)
+        .map_err(|e| format!("workbook: {e}"))?;
+    let chart_xml = pkg
+        .part(&c.part)
+        .ok_or_else(|| format!("no part {}", c.part))?;
+    let book = slide_sheet::ChartBook::reopen(&xlsx, chart_xml, c.origin)?;
+    match slide_sheet::embedded_part(pkg, &c.part) {
+        Some((embedding, _)) => {
+            out.insert(c.part.clone(), book.chart_part(None)?);
+            out.insert(embedding, xlsx);
+            Ok(None)
+        }
+        None => {
+            let n = (1..)
+                .find(|n| {
+                    let p = format!("ppt/embeddings/Microsoft_Excel_Worksheet{n}.xlsx");
+                    pkg.part(&p).is_none() && !out.contains_key(&p)
+                })
+                .unwrap_or(1);
+            let embedding = format!("ppt/embeddings/Microsoft_Excel_Worksheet{n}.xlsx");
+            let rp = rels_part_name(&c.part);
+            let mut r = out
+                .get(&rp)
+                .map(|b| Relationships::parse(b))
+                .unwrap_or_else(|| rels(pkg, &c.part));
+            let rid = (1..)
+                .map(|i| format!("rId{i}"))
+                .find(|id| r.by_id(id).is_none())
+                .unwrap_or_else(|| "rId1".into());
+            r.items.push(paged_ooxml::Relationship {
+                id: rid.clone(),
+                rel_type: slide_sheet::REL_PACKAGE.into(),
+                target: format!("../embeddings/Microsoft_Excel_Worksheet{n}.xlsx"),
+                target_mode: None,
+            });
+            out.insert(c.part.clone(), book.chart_part(Some(&rid))?);
+            out.insert(rp, write_rels(&r));
+            out.insert(embedding.clone(), xlsx);
+            Ok(Some(embedding))
+        }
+    }
 }
 
 fn set_slide_count(xml: &str, n: usize) -> String {

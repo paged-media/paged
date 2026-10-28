@@ -44,6 +44,7 @@
 //! (image-conformance / `image-kernels` feature `reference`) is
 //! reachable from this crate (cargo-tree guard, spec §4 dep rule 2).
 
+pub mod adjust_readouts;
 pub mod brushes;
 pub mod channels;
 pub mod clone_source;
@@ -117,6 +118,15 @@ mod wasm {
     use crate::selection::SessionSelection;
     use crate::stroke::{blend_kernel, blend_names, StrokeParams, StrokeSession, StrokeTool};
     use image_gpu::dab::PressureTarget;
+
+    // WP5.2 filter doors: one child module per family group (`src/wasm/`).
+    // Each reaches this module's private helpers (`apply_point_kernel`,
+    // `fill_prelude`, the landing) as a descendant.
+    mod filters_adjust;
+    mod filters_blur;
+    mod filters_chain;
+    mod filters_distort;
+    mod filters_stylize;
 
     thread_local! {
         /// The bundle-realm GPU device (I-07: created HERE, where
@@ -5094,6 +5104,109 @@ mod wasm {
         })
     }
 
+    /// The layer's STYLE as JSON (`paged-psd`'s model; `null` for none).
+    #[wasm_bindgen]
+    pub fn layers_style(index: usize) -> Result<String, JsValue> {
+        with_stack(|d| {
+            let l = d
+                .stack
+                .layers()
+                .get(index)
+                .ok_or_else(|| JsValue::from_str(&format!("no layer {index}")))?;
+            Ok(crate::layers::style_to_json(l.ext.style.as_deref()))
+        })
+    }
+
+    /// Set the layer's style from JSON (`null` clears it). The dialog's
+    /// edits merge into one undo step per layer.
+    #[wasm_bindgen]
+    pub fn layers_set_style(index: usize, json: &str) -> Result<(), JsValue> {
+        let style = crate::layers::style_from_json(json).map_err(ingest_err)?;
+        let label = if style.is_some() {
+            "Layer Style"
+        } else {
+            "Clear Layer Style"
+        };
+        let key = style.is_some().then(|| format!("layer-style:{index}"));
+        recorded_edit(label, key, |st| st.set_style(index, style))
+    }
+
+    /// Paste Layer Style onto several layers (one undo step).
+    #[wasm_bindgen]
+    pub fn layers_paste_style(indices: &[u32], json: &str) -> Result<(), JsValue> {
+        let style = crate::layers::style_from_json(json)
+            .map_err(ingest_err)?
+            .ok_or_else(|| JsValue::from_str("nothing to paste: no layer style"))?;
+        let idx: Vec<usize> = indices.iter().map(|&i| i as usize).collect();
+        recorded_edit("Paste Layer Style", None, |st| st.paste_style(&idx, &style))
+    }
+
+    /// The style switches of Blending Options (`StyleOptions::bits`).
+    #[wasm_bindgen]
+    pub fn layers_set_style_options(index: usize, bits: u8) -> Result<(), JsValue> {
+        recorded_edit("Blending Options", None, |st| {
+            st.set_style_options(index, crate::layers::StyleOptions::from_bits(bits))
+        })
+    }
+
+    /// The document's Global Light: `[angle, altitude]` in degrees.
+    #[wasm_bindgen]
+    pub fn layers_global_light() -> Result<Vec<f32>, JsValue> {
+        with_stack(|d| {
+            let g = d.stack.style_doc().global_light;
+            Ok(vec![g.angle, g.altitude])
+        })
+    }
+
+    /// Layer ▸ Layer Style ▸ Global Light (a drag is one undo step).
+    #[wasm_bindgen]
+    pub fn layers_set_global_light(angle: f32, altitude: f32) -> Result<(), JsValue> {
+        recorded_edit("Global Light", Some("global-light".into()), |st| {
+            st.set_global_light(image_psd::effects::GlobalLight { angle, altitude })
+        })
+    }
+
+    /// Layer ▸ Layer Style ▸ Scale Effects.
+    #[wasm_bindgen]
+    pub fn layers_scale_effects(index: usize, percent: f32) -> Result<(), JsValue> {
+        recorded_edit("Scale Effects", None, |st| st.scale_effects(index, percent))
+    }
+
+    /// Layer ▸ Layer Style ▸ Hide / Show All Effects.
+    #[wasm_bindgen]
+    pub fn layers_set_effects_visible(index: usize, on: bool) -> Result<(), JsValue> {
+        let label = if on {
+            "Show All Effects"
+        } else {
+            "Hide All Effects"
+        };
+        recorded_edit(label, None, |st| st.set_effects_visible(index, on))
+    }
+
+    /// Add (or replace, by `name`) a pattern the styles can draw (Pattern
+    /// Overlay, a pattern Stroke, a bevel's Texture): `rgba` is `width ×
+    /// height` straight RGBA8.
+    #[wasm_bindgen]
+    pub fn layers_define_style_pattern(
+        name: &str,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<(), JsValue> {
+        let p = crate::layers::PatternFill {
+            name: name.to_string(),
+            tile: std::sync::Arc::from(rgba.to_vec().into_boxed_slice()),
+            width,
+            height,
+            scale: 100.0,
+            angle: 0.0,
+        };
+        // Document state, but not an edit of its own: the pattern is
+        // defined by Edit ▸ Define Pattern, which has no undo step either;
+        // the effect that draws it is the undoable edit.
+        with_stack(|d| d.stack.define_style_pattern(p).map_err(ingest_err))
+    }
+
     /// Knockout: "none", "shallow" or "deep".
     #[wasm_bindgen]
     pub fn layers_set_knockout(index: usize, knockout: &str) -> Result<(), JsValue> {
@@ -7052,7 +7165,19 @@ mod wasm {
             },
         );
         format!(
-            ",\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{}}}",
+            ",\"style\":[{}],\"styleOn\":{},\"styleOptions\":{},\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{}}}",
+            l.ext
+                .style
+                .as_ref()
+                .map(|s| s
+                    .enabled_keys()
+                    .iter()
+                    .map(|k| format!("\"{k}\""))
+                    .collect::<Vec<_>>()
+                    .join(","))
+                .unwrap_or_default(),
+            l.ext.style.as_ref().is_some_and(|s| s.enabled),
+            l.ext.style_options.bits(),
             l.ext.fill_opacity,
             l.ext.knockout.as_wire(),
             l.ext.locks.transparency,

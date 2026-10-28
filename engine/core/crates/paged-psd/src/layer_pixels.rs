@@ -118,7 +118,7 @@
 
 use crate::adjustment::Adjustment;
 use crate::composite::MergedData;
-use crate::effects::{ColorOverlay, Effects};
+use crate::effects::{Effects, LayerStyle};
 use crate::model::ColorMode;
 use crate::model::{LayerMaskData, LayerRecord, PsdFile, SectionKind};
 use crate::vector_mask::VectorMask;
@@ -162,9 +162,8 @@ pub struct LayerPlate {
     /// Photoshop's cached render of the vector mask (see
     /// [`LayerPlate::vector_mask`]).
     pub mask: Option<MaskPlate>,
-    /// A COLOR OVERLAY effect on the layer: the stack draws it as a
-    /// solid layer clipped to this one, in the overlay's mode and opacity.
-    pub color_overlay: Option<ColorOverlay>,
+    /// The layer's STYLE (its effects), when it draws any.
+    pub style: Option<LayerStyle>,
     /// The layer is an ADJUSTMENT: no pixels of its own (`rgba` is
     /// empty), the adjustment transforms what is below it.
     pub adjustment: Option<Adjustment>,
@@ -417,6 +416,9 @@ pub struct LayerImport {
     /// in RGB from here on. Reported like `depth_reduced`: the session's
     /// working space is no longer the file's.
     pub converted_from_cmyk: bool,
+    /// The document's GLOBAL LIGHT (resources 1037 / 1049), which every
+    /// effect with Use Global Light is lit by.
+    pub global_light: crate::effects::GlobalLight,
     /// BOTTOM-first, the order PSD stores them in and the order the
     /// layer stack composites in.
     pub layers: Vec<LayerPlate>,
@@ -530,7 +532,14 @@ fn addl_payload(a: &crate::model::AdditionalLayerInfo) -> &[u8] {
 /// off). A legacy `lrFX` block without its `lfx2` twin is not read and
 /// counts as drawn (an `Err`).
 fn effects_of(layer: &LayerRecord) -> Result<Option<Effects>> {
-    if let Some(a) = layer.addl.iter().find(|a| &a.key == b"lfx2") {
+    // `lmfx` holds the whole style when an effect has several instances
+    // (Photoshop writes no `lfx2` beside it then) [OBS].
+    if let Some(a) = layer
+        .addl
+        .iter()
+        .find(|a| &a.key == b"lmfx")
+        .or_else(|| layer.addl.iter().find(|a| &a.key == b"lfx2"))
+    {
         let fx = Effects::parse_lfx2(addl_payload(a))?;
         return Ok((!fx.enabled.is_empty()).then_some(fx));
     }
@@ -542,19 +551,15 @@ fn effects_of(layer: &LayerRecord) -> Result<Option<Effects>> {
     Ok(None)
 }
 
-/// Knockout (`knko`) off and "blend interior effects as group" (`infx`)
-/// off — the defaults, under which an overlay is drawn on the layer's
-/// content before the layer blends.
-fn default_effect_blending(layer: &LayerRecord) -> bool {
-    let byte = |k: &[u8; 4]| {
-        layer
-            .addl
-            .iter()
-            .find(|a| &a.key == k)
-            .and_then(|a| addl_payload(a).first().copied())
-            .unwrap_or(0)
-    };
-    byte(b"knko") == 0 && byte(b"infx") == 0
+/// The first byte of a one-flag block (`knko`, `clbl`, `tsly`, …), or
+/// `default` when the record has none.
+fn flag_byte(layer: &LayerRecord, k: &[u8; 4], default: u8) -> u8 {
+    layer
+        .addl
+        .iter()
+        .find(|a| &a.key == k)
+        .and_then(|a| addl_payload(a).first().copied())
+        .unwrap_or(default)
 }
 
 /// The record's adjustment, when it is an adjustment layer this module
@@ -766,11 +771,7 @@ impl PsdFile {
             if has_mask {
                 total = total.saturating_add(rect_bytes(l) / 4);
             }
-            let overlay = effects_of(l)
-                .ok()
-                .flatten()
-                .is_some_and(|fx| matches!(fx.color_overlay, Some(Ok(_))));
-            total = total.saturating_add(rect_bytes(l) * if overlay { 2 } else { 1 });
+            total = total.saturating_add(rect_bytes(l));
         }
         if total > MAX_IMPORT_BYTES {
             return Err(PsdError::Unsupported(format!(
@@ -808,20 +809,24 @@ impl PsdFile {
                     None => (r, px),
                 }
             };
-            // The walk refused every overlay it does not model.
-            let color_overlay = effects_of(layer)
+            // The walk refused every style it does not model.
+            let style = effects_of(layer)
                 .ok()
                 .flatten()
-                .and_then(|fx| fx.color_overlay)
-                .and_then(|o| o.ok())
-                .and_then(|mut o| {
+                .filter(|fx| !fx.enabled.is_empty())
+                .map(|fx| {
+                    let mut style = fx.style;
                     // A colour given as ink goes through the document's
                     // own ink transform, as its layers do.
-                    if let Some(ink) = o.cmyk {
-                        let rgba = ink_to_rgba8?(&ink);
-                        o.rgb = [*rgba.first()?, *rgba.get(1)?, *rgba.get(2)?];
+                    for o in &mut style.color_overlays {
+                        if let (Some(ink), Some(convert)) = (o.cmyk, ink_to_rgba8) {
+                            let rgba = convert(&ink);
+                            if rgba.len() >= 3 {
+                                o.color = [rgba[0], rgba[1], rgba[2]];
+                            }
+                        }
                     }
-                    Some(o)
+                    style
                 });
             // Fill opacity folds into opacity (see the refusals above).
             let opacity =
@@ -857,6 +862,9 @@ impl PsdFile {
                     }),
                     (true, None, m) => m,
                     (false, _, Some(m)) if mask_params.is_some() => Some(m),
+                    // A layer's STYLE draws beyond its rectangle, and its
+                    // mask (which shapes or hides the effects) with it.
+                    (false, _, Some(m)) if style.is_some() => Some(m),
                     (false, _, Some(m)) => Some(m.crop(cw, rect)),
                     (false, _, None) => None,
                 },
@@ -869,7 +877,7 @@ impl PsdFile {
                     .iter()
                     .any(|a| &a.key == b"TySh" || &a.key == b"tySh"),
                 adjustment,
-                color_overlay,
+                style,
                 record: self
                     .layer_mask
                     .layers
@@ -888,6 +896,7 @@ impl PsdFile {
             height: ch,
             depth_reduced: h.depth == 16,
             converted_from_cmyk: h.color_mode == ColorMode::Cmyk,
+            global_light: crate::effects::GlobalLight::of(self),
             layers,
             groups,
         })
@@ -973,62 +982,68 @@ impl PsdFile {
             match effects_of(layer) {
                 Ok(None) => {}
                 Ok(Some(fx)) => {
-                    let others: Vec<&str> = fx
-                        .enabled
-                        .iter()
-                        .map(String::as_str)
-                        .filter(|k| *k != "SoFi")
-                        .collect();
-                    if !others.is_empty() {
-                        block(
-                            "effects",
-                            format!(
-                                "layer import of a PSD with layer effects {} (\"{}\"): not \
-                                 modelled, so the merged composite is kept instead",
-                                others.join(", "),
-                                layer.name()
-                            ),
-                        );
-                    }
-                    if let Some(overlay) = &fx.color_overlay {
-                        let why = match overlay {
-                            Err(why) => Some(why.clone()),
-                            Ok(_) if is_folder => Some("a Color Overlay on a group".into()),
-                            Ok(_) if layer.clipping != 0 => {
-                                Some("a Color Overlay on a clipped layer".into())
-                            }
-                            Ok(_) if fill_opacity(layer) < 255 => {
-                                Some("a Color Overlay under fill opacity".into())
-                            }
-                            Ok(_) if adjustment_of(layer).ok().flatten().is_some() => {
-                                Some("a Color Overlay on an adjustment layer".into())
-                            }
-                            Ok(_) if !default_effect_blending(layer) => Some(
-                                "a Color Overlay with knockout or blend-interior-effects set"
-                                    .into(),
-                            ),
-                            Ok(o) if o.cmyk.is_some() && !cmyk => {
-                                Some("a Color Overlay given in CMYK in an RGB document".into())
-                            }
-                            Ok(o) if cmyk && !CMYK_RGB_SAFE_BLENDS.contains(&&o.blend_key) => {
+                    // The whole style is modelled; what is refused is
+                    // where the stack cannot draw it as Photoshop does.
+                    let why: Option<String> = if is_folder {
+                        Some("a layer style on a group".into())
+                    } else if adjustment_of(layer).ok().flatten().is_some() {
+                        Some("a layer style on an adjustment layer".into())
+                    } else if fx.style.uses_patterns() {
+                        Some(
+                            "a pattern in a layer style (the document's patterns are not \
+                             read)"
+                                .into(),
+                        )
+                    } else if flag_byte(layer, b"knko", 0) != 0 {
+                        Some("knockout on a layer with a style".into())
+                    } else if flag_byte(layer, b"clbl", 1) == 0 {
+                        Some("a layer style with Blend Clipped Layers as Group off".into())
+                    } else if flag_byte(layer, b"tsly", 1) == 0 {
+                        Some("a layer style with Transparency Shapes Layer off".into())
+                    } else if cmyk {
+                        // Photoshop draws a style in the document's inks;
+                        // only an overlay the RGB stack matches is taken.
+                        let others: Vec<&str> = fx
+                            .enabled
+                            .iter()
+                            .map(String::as_str)
+                            .filter(|k| *k != "SoFi")
+                            .collect();
+                        match &fx.color_overlay {
+                            _ if !others.is_empty() => Some(format!(
+                                "layer effects {} in a CMYK document (Photoshop draws them \
+                                 in its inks)",
+                                others.join(", ")
+                            )),
+                            Some(Err(why)) => Some(why.clone()),
+                            Some(Ok(o)) if !CMYK_RGB_SAFE_BLENDS.contains(&&o.blend_key) => {
                                 Some(format!(
                                     "a Color Overlay in {} in a CMYK document (Photoshop blends \
                                      it in CMYK)",
                                     blend_name(&o.blend_key)
                                 ))
                             }
-                            Ok(_) => None,
-                        };
-                        if let Some(why) = why {
-                            block(
-                                "effects",
-                                format!(
-                                    "layer import of {why} (\"{}\"): not modelled, so the \
-                                     merged composite is kept instead",
-                                    layer.name()
-                                ),
-                            );
+                            _ => None,
                         }
+                    } else if fx
+                        .style
+                        .color_overlays
+                        .iter()
+                        .any(|o| o.enabled && o.cmyk.is_some())
+                    {
+                        Some("a Color Overlay given in CMYK in an RGB document".into())
+                    } else {
+                        None
+                    };
+                    if let Some(why) = why {
+                        block(
+                            "effects",
+                            format!(
+                                "layer import of {why} (\"{}\"): not modelled, so the merged \
+                                 composite is kept instead",
+                                layer.name()
+                            ),
+                        );
                     }
                 }
                 Err(e) => block(

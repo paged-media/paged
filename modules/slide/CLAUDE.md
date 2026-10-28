@@ -13,11 +13,17 @@ Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/arch
 - **The engine at runtime only through the host contract.** Two crates build on the engine's
   model (`paged-model`, `paged-scene`, `paged-store`, path dependencies on `engine/core/crates`
   at the same commit): `slide-native` writes the deck (ADR 708), `pptx-export` reads the
-  document back (ADR 711). No other engine crate, no other module,
-  no git dependency; `deny.toml` denies git sources.
+  document back (ADR 711). No other engine crate, no git dependency; `deny.toml` denies git
+  sources. The one other module reached is paged.sheet, by path, in Rust only: its number
+  formats for chart labels (ADR 710) and its workbook engine for live charts (`slide-sheet`,
+  ADR 715).
 - **The OOXML foundation is shared** (`platform/shared/ooxml`, doc ADR 607): the package
   read and its memory budget, rels, the XML helpers and DrawingML colour. Change it there;
   doc and sheet build and test against the same crate.
+- **DrawingML paint is read and mapped once** (ADR 722): `paged_ooxml::drawingml` reads and
+  resolves fills, lines and effects; `platform/shared/dml-native` lowers them onto the engine
+  model and reports what it cannot hold. A new paint or effect mapping goes there, not into
+  `slide-native`. (`slide-native` and `pptx-export` therefore also build on `dml-native`.)
 - **PowerPoint is the oracle** (ADR 705). Fixtures are authored and recorded through PowerPoint;
   do not hand-write expected answers.
 - Every source file carries the licence header; copy it from any `.rs` file.

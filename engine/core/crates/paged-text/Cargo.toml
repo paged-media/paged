@@ -26,3 +26,7 @@ unicode-segmentation = "1"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 blake3 = "1"
+
+[dev-dependencies]
+# Reads Word's answer to the first-fit probe (tests/fixtures/first-fit.word.json).
+serde_json = { workspace = true }

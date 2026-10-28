@@ -133,12 +133,28 @@ export interface EmbeddedFaceReport {
 }
 
 /** What an import produced beside the package (slide-js `Report`). */
+/** A chart part of the deck and its workbook (slide ADR 715). */
+export interface ChartReport {
+  part: string;
+  origin: "embedded" | "synthesized";
+  /** The embedded workbook's part, when the chart has one. */
+  embeddedPart: string | null;
+  /** `slide`: PowerPoint's layout from the values; `sheet`: paged.sheet's
+   *  chart engine. */
+  drawnBy: "slide" | "sheet";
+  /** Where the workbook sits in `Imported.workbooks`. */
+  offset: number;
+  length: number;
+}
+
 export interface ImportReport {
   width: number;
   height: number;
   slides: SlideReport[];
   fonts: string[];
   embeddedFonts: EmbeddedFaceReport[];
+  /** Absent in a report kept by an older version. */
+  charts?: ChartReport[];
   diagnostics: string[];
 }
 
@@ -149,6 +165,8 @@ export interface Imported {
   /** The decoded embedded faces, one after the other (see
    *  `EmbeddedFaceReport.offset`). */
   fonts: Uint8Array;
+  /** The chart workbooks, one after the other (see `ChartReport.offset`). */
+  workbooks: Uint8Array;
 }
 
 /** A deck's embedded faces, decoded without importing it. */
@@ -162,6 +180,43 @@ interface WasmImported {
   readonly paged: Uint8Array;
   readonly report: string;
   readonly fonts: Uint8Array;
+  readonly workbooks?: Uint8Array;
+  free(): void;
+}
+
+/** The live charts of a deck document (slide ADR 715): its chart
+ *  workbooks, opened in paged.sheet's engine, and a chart frame redrawn
+ *  from its workbook as the engine's page-item snippet. */
+export interface LiveCharts {
+  /** Open a chart's workbook from the document's copy (or the deck's);
+   *  answers its grid as JSON. */
+  open(
+    part: string,
+    workbook: Uint8Array | undefined,
+    origin: "embedded" | "synthesized",
+  ): string;
+  grid(part: string): string;
+  /** Enter a cell (`=…` a formula); answers the grid. Throws when the
+   *  workbook refuses the input. */
+  enter(
+    part: string,
+    sheet: string,
+    row: number,
+    col: number,
+    input: string,
+  ): string;
+  /** The workbook as an `.xlsx`. */
+  workbook(part: string): Uint8Array;
+  /** The frame `shapeId` of `slidePart` redrawn in the box x, y, w, h (pt). */
+  snippet(
+    part: string,
+    slidePart: string,
+    shapeId: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): string;
   free(): void;
 }
 
@@ -185,6 +240,14 @@ export interface ExportedDeck {
   diagnostics: string[];
   /** What is on the slides that could not round-trip, one line each. */
   notExported: string[];
+}
+
+/** A chart whose workbook the document edited (pptx-export `ChartPlan`). */
+export interface ChartPlan {
+  part: string;
+  origin: "embedded" | "synthesized";
+  /** The workbook (`.xlsx`), base64. */
+  workbook: string;
 }
 
 /** One page of the document, as export sees it (pptx-export `SlidePlan`). */
@@ -263,6 +326,7 @@ interface WasmAnimPlayer {
 }
 
 interface SlideWasmModule extends WasmBindgenGlue {
+  LiveCharts: new (pptx: Uint8Array) => LiveCharts;
   importPptx(bytes: Uint8Array, name: string): WasmImported;
   live(request: string): string;
   anim(request: string): string;
@@ -277,6 +341,12 @@ interface SlideWasmModule extends WasmBindgenGlue {
 
 /** The engine, booted once per realm (a failed boot is retried by the next
  *  call). */
+/** The live charts of the deck `pptx` (the source deck a document keeps). */
+export async function liveCharts(pptx: Uint8Array): Promise<LiveCharts> {
+  const mod = await loadModule();
+  return new mod.LiveCharts(pptx);
+}
+
 export async function slideEngine(): Promise<SlideEngine> {
   return new SlideEngine(await loadModule());
 }
@@ -293,6 +363,7 @@ export class SlideEngine {
         paged: out.paged,
         report: JSON.parse(out.report) as ImportReport,
         fonts: out.fonts,
+        workbooks: out.workbooks ?? new Uint8Array(),
       };
     } finally {
       out.free();
@@ -382,15 +453,17 @@ export class SlideEngine {
   /** Write a `.pptx` from the deck the document was imported from and its
    *  slides in page order. With the document's `.paged` serialization,
    *  what is on the slides is written from it (edited and new slides
-   *  regenerated, untouched ones kept byte for byte, ADR 711). */
+   *  regenerated, untouched ones kept byte for byte, ADR 711). `charts`
+   *  are the charts whose data the document edited (ADR 715). */
   exportPptx(
     original: Uint8Array,
     slides: readonly SlidePlan[],
     document?: Uint8Array | null,
+    charts: readonly ChartPlan[] = [],
   ): ExportedDeck {
     const out = this.mod.exportPptx(
       original,
-      JSON.stringify({ slides }),
+      JSON.stringify({ slides, charts }),
       document ?? undefined,
     );
     try {

@@ -51,7 +51,7 @@ import {
   settleStableNew,
   spreadOffset,
   units,
-  unshiftSeam,
+  correctSeam,
 } from "./00-support";
 
 /** Page-space (x0, y0, x1, y1) exhibit slots on the 25/12 grid. */
@@ -209,16 +209,14 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     });
     const off = await spreadOffset(ctx, pageId);
     // The seam correction — see unshiftSeam: on this verso (stored at
-    // −540) the lowering's stored-geometry origin is re-based a second
-    // time by the wire and the symbols land on the pasteboard.
-    if (
-      await unshiftSeam(
-        doc,
-        "polygon",
-        fresh.map((r) => r.id),
-        off,
-      )
-    ) {
+    // −540) a lowering that feeds its stored-geometry origin to the wire
+    // lands the symbols one page width off, on the pasteboard; one that
+    // lands them in their slots is left alone (correctSeam).
+    const seam = await correctSeam(page, doc, "polygon", fresh, off, [
+      C128_SLOT,
+      QR_SLOT,
+    ]);
+    if (seam.shifted) {
       notes.push(
         "SEAM FINDING — the barcode lowering feeds the bound rectangle's " +
           "STORED geometry to the page-local insertPath wire, so on this " +
@@ -227,12 +225,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           "fresh modules back by the measured offset in one batch.",
       );
     }
-    // Geometry `bounds` report the item's UNTRANSFORMED anchors and the
-    // corrective translate lives in the transform, so module bounds sit
-    // at slot + 2×offset always: the plugin fed STORED rect geometry
-    // (local + offset) and the wire re-based it by the offset again.
-    // On a spread-origin page 2×0 = 0 and the same formula holds.
-    const boff: [number, number] = [off[0] * 2, off[1] * 2];
+    // Geometry `bounds` report the item's UNTRANSFORMED anchors and a
+    // corrective translate lives in the transform, so the modules' bounds
+    // sit at slot + 2×offset when the seam was corrected, at slot +
+    // offset when they landed in place.
+    const boff = seam.boff;
     const inSlot = (
       b: [number, number, number, number],
       slot: [number, number, number, number],

@@ -907,6 +907,10 @@ pub fn psd_write_stack(
             "layered PSD save: composite is mis-sized".into(),
         ));
     }
+    // The styles' Global Light lives in the document's resources.
+    if stack.layers().iter().any(|l| l.ext.style.is_some()) {
+        stack.style_doc().global_light.store(file);
+    }
     let container = file.container;
     let group = |id: u32| stack.groups().iter().find(|g| g.id == id);
     let mut records: Vec<LayerRecord> = Vec::new();
@@ -1008,6 +1012,8 @@ pub fn psd_write_stack(
         // The parity properties (fill opacity, knockout, locks, label),
         // a fill layer's content and an adjustment's block.
         addl.extend(crate::psd_layer_ext::ext_blocks(&layer.ext, layer.locked));
+        // The layer's style and its blending options.
+        addl.extend(crate::psd_layer_ext::style_blocks(&layer.ext));
         if let Some(f) = layer.fill() {
             // A pattern fill's pixels belong in the document's pattern
             // block, which is not written: it is saved as its render.
@@ -1369,6 +1375,13 @@ mod tests {
                 .contains("not written as a PSD adjustment layer"),
             "{err}"
         );
+        // Develop (WP5.2) has no Photoshop adjustment layer either (its
+        // Camera Raw Filter is a smart filter): the same flatten fallback.
+        let mut s = layered_stack();
+        s.add_adjustment_layer("", Adjustment::default_for("develop").expect("kind"), None);
+        let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+        let err = psd_write_stack(&mut f, &s, &[0u8; 32]).expect_err("refused");
+        assert!(err.to_string().contains("is a Develop layer"), "{err}");
     }
 
     /// Fill layers, the five readable adjustment kinds and the parity

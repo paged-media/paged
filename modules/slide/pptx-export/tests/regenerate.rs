@@ -38,6 +38,7 @@ const FIXTURES: &[&str] = &[
     "motion",
     "smartart",
     "tablestyles",
+    "effects",
 ];
 
 fn fixture(name: &str) -> Vec<u8> {
@@ -62,6 +63,7 @@ fn resolved(bytes: &[u8]) -> Deck {
 /// The plan the bundle sends: every page, in order, with its state.
 fn plan_of(doc: &Document) -> ExportPlan {
     ExportPlan {
+        charts: Vec::new(),
         slides: doc
             .spreads
             .iter()
@@ -926,4 +928,81 @@ fn deleting_a_shapes_outline_keeps_its_text() {
     };
     assert!(matches!(fill, slide_resolve::model::Paint::None));
     assert!(stroke.is_none());
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn shadows_glow_soft_edge_and_dashes_set_in_the_editor_read_back__feat__plugin_slide_native_effects(
+) {
+    let bytes = fixture("geometry");
+    let base = imported(&bytes);
+    let before = resolved(&bytes);
+    let key = top_keys(&base, 0)
+        .into_iter()
+        .find(|k| {
+            elements(&base, 0, k)
+                .iter()
+                .any(|r| matches!(r, FrameRef::Polygon(_)))
+        })
+        .expect("a shape with an outline");
+    let mut doc = base.clone();
+    let sp = &mut doc.spreads[0].spread;
+    let FrameRef::Polygon(i) = elements(&base, 0, &key)
+        .into_iter()
+        .find(|r| matches!(r, FrameRef::Polygon(_)))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let p = &mut sp.polygons[i];
+    let color = p
+        .stroke_color
+        .clone()
+        .filter(|c| c != "Swatch/None")
+        .or(p.fill_color.clone())
+        .unwrap();
+    p.stroke_weight = Some(2.0);
+    p.stroke_dash = vec![6.0, 2.0];
+    p.drop_shadow = Some(paged_model::DropShadowSetting {
+        mode: "Drop".into(),
+        x_offset: 3.0,
+        y_offset: 4.0,
+        size: 2.0,
+        opacity_pct: 40.0,
+        effect_color: Some(color.clone()),
+        ..Default::default()
+    });
+    p.effects = Some(paged_model::FrameEffects {
+        outer_glow: Some(paged_model::OuterGlowParams {
+            size: Some(8.0),
+            opacity_pct: Some(60.0),
+            effect_color: Some(color),
+            ..Default::default()
+        }),
+        feather: Some(paged_model::FeatherParams {
+            width: Some(2.5),
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+    let out = export_doc(&bytes, &doc);
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    let part = before.slides[0].part.clone();
+    assert_eq!(changed_parts(&bytes, &out.bytes), vec![part]);
+    let after = resolved(&out.bytes);
+    let it = item(&after, 0, shape_id(&key));
+    let s = it.effects.outer_shadow.as_ref().expect("outer shadow");
+    assert!(
+        (s.dx - 3.0).abs() < 0.01 && (s.dy - 4.0).abs() < 0.01,
+        "{s:?}"
+    );
+    assert!((s.blur - 4.0).abs() < 0.01 && (s.alpha - 0.4).abs() < 1e-3);
+    let g = it.effects.glow.as_ref().expect("glow");
+    assert!((g.radius - 8.0).abs() < 0.01 && (g.alpha - 0.6).abs() < 1e-3);
+    assert_eq!(it.effects.soft_edge, Some(2.5));
+    let ItemKind::Shape { stroke, .. } = &it.kind else {
+        panic!("not a shape")
+    };
+    assert_eq!(stroke.as_ref().unwrap().dash.as_deref(), Some("sysDash"));
+    keep(&out.bytes, "effects-edited");
 }

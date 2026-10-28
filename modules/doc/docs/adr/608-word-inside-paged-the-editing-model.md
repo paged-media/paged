@@ -63,8 +63,8 @@ Engine ADRs 1018 and 1021 landed, so the targets ADR 608 left out now have one:
   (`host.text.characterRange`). Restart / Continue numbering (`restartNumbering`); a multilevel
   menu applies three Word presets (`1. a. i.`, `1. 1.1. 1.1.1.`, `• ◦ ▪`), each a
   `NumberingListDef` with nine levels made once per document.
-- **Keys**: Cmd+Shift+D double underline, Cmd+Shift+H hidden text; Cmd+F, Cmd+H and Cmd+G name the
-  host's Find, Replace and Go To (editor ADR 303) — Find & Replace is the host's, for every text
+- **Keys**: Cmd+Shift+D double underline, Cmd+Shift+H hidden text; Cmd+H and Cmd+G name the
+  host's Replace and Go To (editor ADR 303; Cmd+F is the host's own Find key) — Find & Replace is the host's, for every text
   document, not this bundle's. Cmd+G takes the key from the host's Group inside a Word document.
 - Still left out: clearing a paragraph's own shading, border or list (a boolean has no inherit
   write), Word's per-side paragraph borders, the Font dialog, the structure keys, fields, notes,

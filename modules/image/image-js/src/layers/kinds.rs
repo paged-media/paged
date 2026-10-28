@@ -32,7 +32,7 @@
 //! * most kinds lower onto the adjust chain ([`Adjustment::to_chain`]) —
 //!   the same `AdjustParams`, and so the same kernels and tables, the
 //!   layered PSD import has always composited them with;
-//! * Gradient Map, Selective Color and Color Lookup have no chain stage:
+//! * Gradient Map, Selective Color, Color Lookup and Develop have no chain stage:
 //!   they are point kernels the fold dispatches directly on the resident
 //!   accumulator ([`Adjustment::direct_ops`]).
 //!
@@ -54,6 +54,7 @@
 
 use std::sync::Arc;
 
+use image_kernels::families::develop::{DevelopSettings, DEVELOP_LEN};
 use image_kernels::KernelDef;
 
 use crate::fill::GradientKind;
@@ -158,11 +159,18 @@ pub enum Adjustment {
         name: String,
         cube: Arc<[f32]>,
     },
+    /// The Camera Raw-class Develop adjustment (WP5.2): the 61 settings
+    /// of `image_kernels::families::develop` in Lightroom / Camera Raw
+    /// units. Photoshop has no Develop adjustment layer (its Camera Raw
+    /// Filter is a smart filter), so a PSD save takes the flatten path.
+    Develop {
+        settings: [f32; DEVELOP_LEN],
+    },
 }
 
 /// Every typed kind's wire name, in the Layer ▸ New Adjustment Layer
 /// order (Photoshop's menu order).
-pub const ADJUSTMENT_KINDS: [&str; 16] = [
+pub const ADJUSTMENT_KINDS: [&str; 17] = [
     "brightnessContrast",
     "levels",
     "curves",
@@ -179,6 +187,7 @@ pub const ADJUSTMENT_KINDS: [&str; 16] = [
     "threshold",
     "gradientMap",
     "selectiveColor",
+    "develop",
 ];
 
 /// A colour stop of a gradient: where (0–1) and which colour.
@@ -300,6 +309,7 @@ impl Adjustment {
             Adjustment::GradientMap { .. } => "gradientMap",
             Adjustment::SelectiveColor { .. } => "selectiveColor",
             Adjustment::ColorLookup { .. } => "colorLookup",
+            Adjustment::Develop { .. } => "develop",
         }
     }
 
@@ -323,6 +333,7 @@ impl Adjustment {
             Adjustment::GradientMap { .. } => "Gradient Map",
             Adjustment::SelectiveColor { .. } => "Selective Color",
             Adjustment::ColorLookup { .. } => "Color Lookup",
+            Adjustment::Develop { .. } => "Develop",
         }
     }
 
@@ -402,6 +413,9 @@ impl Adjustment {
                 name: String::new(),
                 cube: identity_cube(),
             },
+            "develop" => Adjustment::Develop {
+                settings: DevelopSettings::identity().0,
+            },
             _ => return None,
         })
     }
@@ -425,6 +439,7 @@ impl Adjustment {
     /// gradientMap         reverse, n, n × (at, r, g, b)
     /// selectiveColor      absolute, 9 × (c, m, y, k)
     /// colorLookup         — (the cube is the blob, the name the label)
+    /// develop             the 61 Develop settings (families::develop order)
     /// chain               AdjustParams::to_wire
     /// ```
     pub fn values(&self) -> Vec<f32> {
@@ -511,6 +526,7 @@ impl Adjustment {
                 v
             }
             Adjustment::ColorLookup { .. } => Vec::new(),
+            Adjustment::Develop { settings } => settings.to_vec(),
         }
     }
 
@@ -739,6 +755,14 @@ impl Adjustment {
                     cube: Arc::from(blob.iter().map(|&v| c(v, 0.0, 1.0)).collect::<Vec<_>>()),
                 }
             }
+            "develop" => {
+                want(DEVELOP_LEN)?;
+                Adjustment::Develop {
+                    settings: DevelopSettings::from_values(values)
+                        .ok_or_else(|| bad(kind, "a Develop block of the wrong length"))?
+                        .0,
+                }
+            }
             other => {
                 return Err(IngestError::Unsupported(format!(
                     "unknown adjustment kind \"{other}\" (one of {})",
@@ -917,7 +941,8 @@ impl Adjustment {
             Adjustment::Threshold { level } => p.threshold = Some(level / 255.0),
             Adjustment::GradientMap { .. }
             | Adjustment::SelectiveColor { .. }
-            | Adjustment::ColorLookup { .. } => return None,
+            | Adjustment::ColorLookup { .. }
+            | Adjustment::Develop { .. } => return None,
         }
         Some(p)
     }
@@ -964,6 +989,8 @@ impl Adjustment {
                 }
                 vec![(&ADJUST_LUT3D, p.as_bytes().to_vec())]
             }
+            // Tone, then detail; an identity half is skipped.
+            Adjustment::Develop { settings } => DevelopSettings(*settings).ops(),
             _ => Vec::new(),
         }
     }
@@ -977,6 +1004,7 @@ impl Adjustment {
                     ranges.iter().all(|r| r.iter().all(|v| *v == 0.0))
                 }
                 Adjustment::ColorLookup { cube, .. } => cube[..] == identity_cube()[..],
+                Adjustment::Develop { settings } => DevelopSettings(*settings).is_identity(),
                 _ => false,
             },
         }
@@ -1405,6 +1433,72 @@ pub struct LayerExt {
     pub color: u8,
     /// The LINK this layer belongs to: linked layers move together.
     pub link: Option<u32>,
+    /// The layer's STYLE (Photoshop's layer effects, `paged-psd`'s model);
+    /// `None` for none. Shared: a snapshot copies the pointer.
+    pub style: Option<Arc<image_psd::effects::LayerStyle>>,
+    /// The blending options that change how a style composites.
+    pub style_options: StyleOptions,
+}
+
+/// Blending Options ▸ Advanced Blending: the switches that change how a
+/// layer's STYLE composites (Photoshop's `infx`, `clbl`, `tsly`, `lmgm`
+/// and `vmgm` blocks).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StyleOptions {
+    /// Blend Interior Effects as Group: the overlays, satin and inner glow
+    /// join the layer before its mode and fill opacity apply.
+    pub blend_interior: bool,
+    /// Blend Clipped Layers as Group (the default, and the only way the
+    /// stack draws a clipping group).
+    pub blend_clipped: bool,
+    /// Transparency Shapes Layer (the default; effects follow the layer's
+    /// transparency).
+    pub transparency_shapes: bool,
+    /// Layer Mask Hides Effects: the mask hides the drawn effects instead
+    /// of shaping them.
+    pub mask_hides_effects: bool,
+    /// Vector Mask Hides Effects (the stack keeps the vector mask in the
+    /// layer's one mask, so either switch hides through it).
+    pub vector_mask_hides_effects: bool,
+}
+
+impl Default for StyleOptions {
+    fn default() -> Self {
+        StyleOptions {
+            blend_interior: false,
+            blend_clipped: true,
+            transparency_shapes: true,
+            mask_hides_effects: false,
+            vector_mask_hides_effects: false,
+        }
+    }
+}
+
+impl StyleOptions {
+    /// Does the mask hide the effects (rather than shape them)?
+    pub fn hides(&self) -> bool {
+        self.mask_hides_effects || self.vector_mask_hides_effects
+    }
+
+    /// The five switches as bits (persistence): 1 interior, 2 clipped,
+    /// 4 transparency shapes, 8 mask hides, 16 vector mask hides.
+    pub fn bits(&self) -> u8 {
+        u8::from(self.blend_interior)
+            | u8::from(self.blend_clipped) << 1
+            | u8::from(self.transparency_shapes) << 2
+            | u8::from(self.mask_hides_effects) << 3
+            | u8::from(self.vector_mask_hides_effects) << 4
+    }
+
+    pub fn from_bits(b: u8) -> StyleOptions {
+        StyleOptions {
+            blend_interior: b & 1 != 0,
+            blend_clipped: b & 2 != 0,
+            transparency_shapes: b & 4 != 0,
+            mask_hides_effects: b & 8 != 0,
+            vector_mask_hides_effects: b & 16 != 0,
+        }
+    }
 }
 
 impl Default for LayerExt {
@@ -1416,6 +1510,8 @@ impl Default for LayerExt {
             locks: LayerLocks::default(),
             color: 0,
             link: None,
+            style: None,
+            style_options: StyleOptions::default(),
         }
     }
 }
@@ -1486,7 +1582,10 @@ mod tests {
             // Every chain kind lowers; the three direct kinds dispatch.
             assert_eq!(
                 a.to_chain().is_none(),
-                matches!(kind, "gradientMap" | "selectiveColor" | "colorLookup"),
+                matches!(
+                    kind,
+                    "gradientMap" | "selectiveColor" | "colorLookup" | "develop"
+                ),
                 "{kind}"
             );
         }
@@ -1508,6 +1607,7 @@ mod tests {
             "channelMixer",
             "selectiveColor",
             "colorLookup",
+            "develop",
         ] {
             assert!(
                 Adjustment::default_for(kind).expect("kind").is_identity(),
@@ -1526,6 +1626,37 @@ mod tests {
                 "{kind}"
             );
         }
+    }
+
+    /// The Develop layer (WP5.2): its wire block is the 61 settings in
+    /// `families::develop`'s order, values clamp to their ranges, the
+    /// wrong length is refused, and it dispatches the develop kernels —
+    /// tone then detail, an identity half skipped.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_develop_layer_carries_its_61_settings_and_dispatches_the_develop_kernels__feat__image_editor_filters(
+    ) {
+        use image_kernels::families::develop::{DevelopSettings, DEVELOP_LEN};
+        let d = Adjustment::default_for("develop").expect("develop");
+        assert_eq!(d.kind_name(), "develop");
+        assert_eq!(d.default_layer_name(), "Develop");
+        assert_eq!(d.values(), DevelopSettings::identity().0.to_vec());
+        assert!(d.is_identity() && d.direct_ops().is_empty());
+        let mut v = DevelopSettings::identity().0.to_vec();
+        v[2] = 1.5; // exposure
+        v[9] = 250.0; // clarity, past its range
+        let a = Adjustment::from_wire("develop", &v, &[], "").expect("wire");
+        assert_eq!(a.values()[2], 1.5);
+        assert_eq!(a.values()[9], 100.0, "clamped to the range");
+        assert!(!a.is_identity());
+        let ids: Vec<&str> = a.direct_ops().iter().map(|(k, _)| k.id).collect();
+        assert_eq!(ids, ["develop.tone", "develop.detail"]);
+        v[9] = 0.0;
+        let tone_only = Adjustment::from_wire("develop", &v, &[], "").expect("wire");
+        let ids: Vec<&str> = tone_only.direct_ops().iter().map(|(k, _)| k.id).collect();
+        assert_eq!(ids, ["develop.tone"]);
+        assert!(Adjustment::from_wire("develop", &[0.0; DEVELOP_LEN - 1], &[], "").is_err());
+        assert_eq!(ADJUSTMENT_KINDS.last(), Some(&"develop"));
     }
 
     /// A one-stage chain opens as its typed layer; a two-stage chain stays

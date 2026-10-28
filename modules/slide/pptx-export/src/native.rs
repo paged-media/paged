@@ -82,6 +82,8 @@ pub struct Label {
     /// A stroke-only element of a preset made in the editor: its preset is
     /// written by the shape's outline element.
     pub detail: bool,
+    /// The chart part a chart frame draws (ADR 715).
+    pub chart: Option<String>,
 }
 
 fn s(v: &Value, k: &str) -> Option<String> {
@@ -133,6 +135,7 @@ pub fn parse_label(json: &str) -> Label {
             .and_then(Value::as_array)
             .and_then(|b| Some((b.first()?.as_f64()?, b.get(1)?.as_f64()?))),
         detail: s(&d, "part").as_deref() == Some("detail"),
+        chart: s(&d, "chart"),
     }
 }
 

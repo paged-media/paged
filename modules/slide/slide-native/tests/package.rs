@@ -183,9 +183,10 @@ fn a_picture_travels_as_a_blob_stretched_over_its_crop() {
             image_part: "ppt/media/image1.png".into(),
             // The left half of the image shows.
             crop: (0.0, 0.0, 0.5, 0.0),
+            image_effects: Vec::new(),
         },
         opacity: 1.0,
-        shadow: None,
+        effects: Default::default(),
         meta: ItemMeta::default(),
     };
     let deck = Deck {

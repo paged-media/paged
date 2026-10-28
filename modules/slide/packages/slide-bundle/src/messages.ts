@@ -211,7 +211,8 @@ export const ANIM = defineMessages("slide.anim", {
   remove: "Remove",
   preview: "Preview",
   painter: "Animation Painter",
-  painterArmed: "Click a shape to give it these animations (Esc cancels).",
+  painterArmed:
+    "Click a shape to give it these animations (the command again cancels).",
   timeline: "Animation Pane",
   seconds: "{s} s",
   readOnly: "This effect is kept as the deck wrote it; its timing cannot be changed here.",
@@ -276,6 +277,14 @@ export const DECK = defineMessages("slide.deck", {
   fontRefused:
     "The embedded font “{family}” ({style}" +
     ") was not loaded: {reason}. Text set in it is drawn in a substitute.",
+});
+
+export const CHARTS = defineMessages("slide.charts", {
+  title: "Chart data",
+  done: "Done",
+  fullScreen: "Full screen",
+  backToSlide: "Back to slide",
+  refused: "The workbook did not take that entry.",
 });
 
 export const TEMPLATE = defineMessages("slide.template", {

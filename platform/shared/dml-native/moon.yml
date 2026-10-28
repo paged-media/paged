@@ -1,0 +1,47 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# dml-native: the one DrawingML-to-engine mapper (slide ADR 722). It lowers
+# paged-ooxml's neutral resolved paint onto paged-model. A path dependency
+# of modules/slide and modules/doc, which list its sources in their own
+# rust-sources file group.
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "shared"]
+
+project:
+  title: "platform/shared/dml-native"
+  description: "Shared DrawingML paint and effect mapper of slide and doc onto the engine model."
+
+dependsOn:
+  - id: "ooxml"
+    scope: "production"
+  - id: "core"
+    scope: "production"
+
+fileGroups:
+  rust-sources:
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "/platform/shared/ooxml/src/**/*.rs"
+    - "/platform/shared/ooxml/Cargo.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/paged-model/**/*.rs"
+    - "/engine/core/crates/paged-model/Cargo.toml"
+
+tasks:
+  # The standalone build takes every feature (paged-ooxml needs a zip
+  # backend, which `standalone` supplies here and the modules supply there).
+  rust-check:
+    command: "cargo check --workspace --all-targets --all-features"
+  rust-build:
+    command: "cargo build --workspace --all-features"
+  rust-lint:
+    command: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+  rust-test:
+    script: >-
+      cargo nextest run --workspace --all-features
+      && cargo test --doc --workspace --all-features

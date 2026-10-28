@@ -34,6 +34,11 @@
 //! * `no-counterpart` — Photoshop recorded, nothing in the engine to
 //!   compare (kept so the gap is visible, not forgotten).
 //!
+//! RANDOM filters (Clouds, Fibers, Crystallize, Mezzotint, …) are recorded
+//! with `params.compare = "stats"`: Photoshop's generator is not ours, so
+//! such a case is measured by [`stat_dist`] (per-channel mean and standard
+//! deviation, in 8-bit levels) instead of pixel by pixel.
+//!
 //! The always-on test re-measures every case and holds it to its ledger
 //! row: a classification may not be missing, an agreement may not
 //! drift, and no case may get WORSE than its recorded distance (an
@@ -405,6 +410,412 @@ fn filter_case(id: &str) -> Ours {
     }
 }
 
+// ─────────────────── WP5.2 families (distort … adjust-ext) ─────────────────
+//
+// The engine side of `filters-distort`, `filters-render`, `filters-stylize`,
+// `filters-pixelate` and `adjustments-ext`: each case runs its kernel the
+// way the wasm door does (`kernel`), over the sweep — quantised to 8 bits
+// first where Photoshop could only run the filter on an 8-bit document
+// (`params.eight_bit`). Random filters are compared by statistics
+// (`params.compare = "stats"`, see `stat_dist`).
+
+/// Cases the REPLAY compares by statistics although Photoshop's recording
+/// is deterministic: a halftone screen's phase and cell origin are a
+/// convention (where the lattice starts), so pixel-by-pixel distance
+/// measures the lattice offset, not the screen. Their regional tone is
+/// what has to agree.
+const STATS_BY_REPLAY: &[&str] = &["filters-pixelate/color-halftone-8"];
+
+/// The 8-bit RGBA view of an image (what the CPU readouts take).
+fn rgba8(img: &Img) -> Vec<u8> {
+    img.px
+        .iter()
+        .flat_map(|p| [p[0], p[1], p[2], 1.0])
+        .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
+        .collect()
+}
+
+/// The sweep quantised to 8-bit levels (what an 8-bit-only Photoshop
+/// filter and the 8-bit Displace map saw).
+fn sweep8() -> Img {
+    let mut img = sweep();
+    for p in &mut img.px {
+        for v in p.iter_mut() {
+            *v = (*v * 255.0).round() / 255.0;
+        }
+    }
+    img
+}
+
+/// One registered kernel over `img` (see [`kernel`], which runs it over
+/// the sweep).
+fn kernel_on(img: &Img, def: &'static image_kernels::KernelDef, params: &[u8]) -> Ours {
+    let ctx = image_conformance::device::test_device()?;
+    let (w, h) = (img.w as u32, img.h as u32);
+    let src = f16_of(img);
+    let out = match def.class {
+        image_kernels::KernelClass::Windowed { radius: (rx, ry) } => {
+            let (rx, ry) = (u32::from(rx), u32::from(ry));
+            let (ww, wh) = (w + 2 * rx, h + 2 * ry);
+            let mut win = Vec::with_capacity((ww * wh * 8) as usize);
+            for wy in 0..wh {
+                let sy = (wy as i64 - ry as i64).clamp(0, h as i64 - 1) as usize;
+                for wx in 0..ww {
+                    let sx = (wx as i64 - rx as i64).clamp(0, w as i64 - 1) as usize;
+                    let i = (sy * w as usize + sx) * 8;
+                    win.extend_from_slice(&src[i..i + 8]);
+                }
+            }
+            image_gpu::execute_windowed_once(ctx, def, &win, ww, wh, params, None, w, h)
+        }
+        _ => image_gpu::execute_tile_once(
+            ctx,
+            def,
+            &[image_gpu::TileInput { f16_bytes: &src }],
+            params,
+            None,
+            w,
+            h,
+        ),
+    }
+    .expect("kernel dispatch");
+    Some(from_f16(&out))
+}
+
+/// A two-input kernel (`distort.displace`: the map as `in1`, same size).
+fn kernel2_on(img: &Img, map: &Img, def: &'static image_kernels::KernelDef, params: &[u8]) -> Ours {
+    let ctx = image_conformance::device::test_device()?;
+    let (a, b) = (f16_of(img), f16_of(map));
+    let out = image_gpu::execute_tile_once(
+        ctx,
+        def,
+        &[
+            image_gpu::TileInput { f16_bytes: &a },
+            image_gpu::TileInput { f16_bytes: &b },
+        ],
+        params,
+        None,
+        img.w as u32,
+        img.h as u32,
+    )
+    .expect("kernel dispatch");
+    Some(from_f16(&out))
+}
+
+/// Photoshop's Shear curve (dialog grid 0..255 both ways: x the offset,
+/// y the height) as the kernel's 16 px offsets — a Catmull-Rom through the
+/// points, evaluated at 16 even heights, one grid unit = width/256 px.
+fn shear_offsets(points: &[(f64, f64)], width: f64) -> [f32; 16] {
+    let at = |t: f64| -> f64 {
+        let y = t * 255.0;
+        let k = points
+            .windows(2)
+            .position(|p| y <= p[1].1)
+            .unwrap_or(points.len() - 2);
+        let p = |i: isize| points[(i.clamp(0, points.len() as isize - 1)) as usize];
+        let (p0, p1, p2, p3) = (
+            p(k as isize - 1),
+            p(k as isize),
+            p(k as isize + 1),
+            p(k as isize + 2),
+        );
+        let u = ((y - p1.1) / (p2.1 - p1.1)).clamp(0.0, 1.0);
+        let (u2, u3) = (u * u, u * u * u);
+        0.5 * (2.0 * p1.0
+            + (-p0.0 + p2.0) * u
+            + (2.0 * p0.0 - 5.0 * p1.0 + 4.0 * p2.0 - p3.0) * u2
+            + (-p0.0 + 3.0 * p1.0 - 3.0 * p2.0 + p3.0) * u3)
+    };
+    std::array::from_fn(|i| (at(i as f64 / 15.0) * width / 256.0) as f32)
+}
+
+fn distort_case(id: &str) -> Ours {
+    use image_kernels::families::distort::*;
+    let img = sweep();
+    match id {
+        "identity" => Some(img.px),
+        "polar-rect-to-polar" => kernel_on(
+            &img,
+            &DISTORT_POLAR,
+            DistortPolarParams::new(true).as_bytes(),
+        ),
+        "polar-polar-to-rect" => kernel_on(
+            &img,
+            &DISTORT_POLAR,
+            DistortPolarParams::new(false).as_bytes(),
+        ),
+        "ripple-100-medium" => kernel_on(
+            &img,
+            &DISTORT_RIPPLE,
+            DistortRippleParams::new(100.0, 1).as_bytes(),
+        ),
+        "ripple-300-large" => kernel_on(
+            &img,
+            &DISTORT_RIPPLE,
+            DistortRippleParams::new(300.0, 2).as_bytes(),
+        ),
+        "zigzag-30-5-around" => kernel_on(
+            &img,
+            &DISTORT_ZIGZAG,
+            DistortZigzagParams::new(30.0, 5.0, ZIGZAG_AROUND_CENTER).as_bytes(),
+        ),
+        "zigzag-30-5-out" => kernel_on(
+            &img,
+            &DISTORT_ZIGZAG,
+            DistortZigzagParams::new(30.0, 5.0, ZIGZAG_OUT_FROM_CENTER).as_bytes(),
+        ),
+        "zigzag-30-5-pond" => kernel_on(
+            &img,
+            &DISTORT_ZIGZAG,
+            DistortZigzagParams::new(30.0, 5.0, ZIGZAG_POND_RIPPLES).as_bytes(),
+        ),
+        "shear-bow-wrap" => {
+            let off = shear_offsets(&[(0.0, 0.0), (32.0, 128.0), (0.0, 255.0)], img.w as f64);
+            kernel_on(
+                &img,
+                &DISTORT_SHEAR,
+                DistortShearParams::new(off, true).as_bytes(),
+            )
+        }
+        "displace-10-10-stretch-repeat" => {
+            // 10 % of Photoshop's 128 px full deflection; the map is the
+            // 8-bit sweep Photoshop read (same size, so stretch = tile).
+            let s = 0.10 * 128.0;
+            let p = DistortDisplaceParams::new(img.w as u32, img.h as u32, s, s, EDGE_REPEAT);
+            kernel2_on(&img, &sweep8(), &DISTORT_DISPLACE, p.as_bytes())
+        }
+        _ => panic!("filters-distort: unknown case {id}"),
+    }
+}
+
+fn stylize_case(id: &str) -> Ours {
+    use image_kernels::families::stylize::*;
+    let (img, img8) = (sweep(), sweep8());
+    let (k, white, black) = (&kernel_on, [1.0f32; 3], [0.0f32; 3]);
+    match id {
+        "identity" => Some(img.px),
+        "solarize" => k(
+            &img,
+            &STYLIZE_SOLARIZE,
+            StylizeSolarizeParams::new(1.0).as_bytes(),
+        ),
+        "trace-contour-128-lower" => k(
+            &img,
+            &STYLIZE_TRACE_CONTOUR,
+            StylizeTraceContourParams::new(128.0 / 255.0, false, 1.0).as_bytes(),
+        ),
+        "trace-contour-128-upper" => k(
+            &img,
+            &STYLIZE_TRACE_CONTOUR,
+            StylizeTraceContourParams::new(128.0 / 255.0, true, 1.0).as_bytes(),
+        ),
+        "wind-right" => k(
+            &img8,
+            &STYLIZE_WIND,
+            StylizeWindParams::new(0, 0, 1, 0, false, 1.0).as_bytes(),
+        ),
+        "wind-blast-left" => k(
+            &img8,
+            &STYLIZE_WIND,
+            StylizeWindParams::new(0, 0, 1, 1, true, 1.0).as_bytes(),
+        ),
+        // 8 tiles across the 128 px side, 10 % offset, background fill
+        // (white — the probe's background colour).
+        "tiles-8-10-bg" => k(
+            &img8,
+            &STYLIZE_TILES,
+            StylizeTilesParams::new(0, 0, 1, 8, 0.10, 0, black, white, 1.0).as_bytes(),
+        ),
+        "extrude-blocks-16-20-level" => k(
+            &img8,
+            &STYLIZE_EXTRUDE,
+            StylizeExtrudeParams::new(0, 0, 1, false, 16.0, 20.0, true, true, false, 1.0)
+                .as_bytes(),
+        ),
+        "extrude-pyramids-16-20-level" => k(
+            &img8,
+            &STYLIZE_EXTRUDE,
+            StylizeExtrudeParams::new(0, 0, 1, true, 16.0, 20.0, true, false, false, 1.0)
+                .as_bytes(),
+        ),
+        _ => panic!("filters-stylize: unknown case {id}"),
+    }
+}
+
+fn render_case(id: &str) -> Ours {
+    use image_kernels::families::render::*;
+    let img = sweep();
+    let (black, white) = ([0.0f32; 3], [1.0f32; 3]);
+    let scale = RenderCloudsParams::scale_for(img.w as u32, img.h as u32);
+    match id {
+        "identity" => Some(img.px),
+        // Black foreground, white background, as the probe set them.
+        "clouds" => kernel_on(
+            &img,
+            &RENDER_CLOUDS,
+            RenderCloudsParams::new(1, black, white, false, scale).as_bytes(),
+        ),
+        "difference-clouds" => kernel_on(
+            &img,
+            &RENDER_CLOUDS,
+            RenderCloudsParams::new(1, black, white, true, scale).as_bytes(),
+        ),
+        "fibers-16-4" => kernel_on(
+            &img,
+            &RENDER_FIBERS,
+            RenderFibersParams::new(1, 16.0, 4.0, black, white).as_bytes(),
+        ),
+        "lens-flare-100-zoom" => kernel_on(
+            &img,
+            &RENDER_LENS_FLARE,
+            RenderLensFlareParams::new(64.0, 64.0, 1.0, FLARE_ZOOM).as_bytes(),
+        ),
+        "lens-flare-150-movie" => kernel_on(
+            &img,
+            &RENDER_LENS_FLARE,
+            RenderLensFlareParams::new(40.0, 50.0, 1.5, FLARE_MOVIE).as_bytes(),
+        ),
+        _ => panic!("filters-render: unknown case {id}"),
+    }
+}
+
+fn pixelate_case(id: &str) -> Ours {
+    use image_kernels::families::gallery::{GalleryKuwaharaParams, GALLERY_KUWAHARA};
+    use image_kernels::families::pixelate::*;
+    let img = sweep();
+    match id {
+        "identity" => Some(img.px),
+        // Facet has no kernel of its own: the glue runs Kuwahara at r = 2.
+        "facet" => kernel_on(
+            &img,
+            &GALLERY_KUWAHARA,
+            GalleryKuwaharaParams::new(2.0, 1.0).as_bytes(),
+        ),
+        "crystallize-10" => kernel_on(
+            &img,
+            &PIXELATE_CRYSTALLIZE,
+            PixelateCrystallizeParams::new(0, 0, 1, 10.0, 1.0).as_bytes(),
+        ),
+        "pointillize-6" => kernel_on(
+            &img,
+            &PIXELATE_POINTILLIZE,
+            PixelatePointillizeParams::new(0, 0, 1, 6.0, [1.0; 3], 1.0).as_bytes(),
+        ),
+        "mezzotint-fine-dots" => kernel_on(
+            &img,
+            &PIXELATE_MEZZOTINT,
+            PixelateMezzotintParams::new(0, 0, 1, 0, 1.0).as_bytes(),
+        ),
+        "mezzotint-long-lines" => kernel_on(
+            &img,
+            &PIXELATE_MEZZOTINT,
+            PixelateMezzotintParams::new(0, 0, 1, 6, 1.0).as_bytes(),
+        ),
+        "color-halftone-8" => kernel_on(
+            &img,
+            &PIXELATE_COLOR_HALFTONE,
+            PixelateColorHalftoneParams::new(0, 0, 8.0, [108.0, 162.0, 90.0, 45.0], 1.0).as_bytes(),
+        ),
+        _ => panic!("filters-pixelate: unknown case {id}"),
+    }
+}
+
+fn adjust_ext_case(id: &str) -> Ours {
+    use image_kernels::families::adjust_ext::*;
+    let img = sweep();
+    match id {
+        "identity" => Some(img.px),
+        "desaturate" => kernel_on(&img, &ADJUST_DESATURATE, DesaturateParams::new().as_bytes()),
+        // Photoshop's percentages and px, as the dialog's eight values.
+        "shadows-highlights-defaults" => kernel_on(
+            &img,
+            &ADJUST_SHADOWS_HIGHLIGHTS,
+            ShadowsHighlightsParams::from_values([0.35, 0.5, 30.0, 0.0, 0.5, 30.0, 0.2, 0.0])
+                .as_bytes(),
+        ),
+        "shadows-highlights-strong" => kernel_on(
+            &img,
+            &ADJUST_SHADOWS_HIGHLIGHTS,
+            ShadowsHighlightsParams::from_values([0.8, 0.7, 10.0, 0.6, 0.4, 10.0, 0.0, 0.3])
+                .as_bytes(),
+        ),
+        // Lab (54, 81, 70) is sRGB red.
+        "replace-color-red-hue60" => kernel_on(
+            &img,
+            &ADJUST_REPLACE_COLOR,
+            ReplaceColorParams::new([1.0, 0.0, 0.0], 40.0, 60.0, 0.0, 0.0).as_bytes(),
+        ),
+        // The door's path: the CPU table over the 8-bit view, then
+        // adjust.lut1d on the full-depth image.
+        "equalize" => {
+            let lut = image_js::adjust_readouts::equalize_lut(
+                &rgba8(&img),
+                img.w as u32,
+                img.h as u32,
+                None,
+            )
+            .expect("an equalizable image");
+            kernel_on(
+                &img,
+                &image_kernels::families::adjust::ADJUST_LUT1D,
+                image_kernels::families::adjust::AdjustLut1dParams::new(&lut).as_bytes(),
+            )
+        }
+        // Match Color of the image against itself with Neutralize: the
+        // source statistics are the image's own with the colour cast (the
+        // a/b means) taken out.
+        "match-color-self-neutralize" => {
+            let dst = image_js::adjust_readouts::color_stats(
+                &rgba8(&img),
+                img.w as u32,
+                img.h as u32,
+                None,
+            )
+            .expect("statistics");
+            let mut src = dst;
+            src[1] = 0.0;
+            src[2] = 0.0;
+            kernel_on(
+                &img,
+                &ADJUST_MATCH_COLOR,
+                MatchColorParams::new(src, dst, 1.0, 1.0, 0.0).as_bytes(),
+            )
+        }
+        _ => panic!("adjustments-ext: unknown case {id}"),
+    }
+}
+
+/// The STATISTICS distance of a random filter: per channel, the larger of
+/// the mean and the standard-deviation differences, in 8-bit levels.
+/// `max` is the worst channel, `mean` the average over channels; the ΔE
+/// fields stay 0 (a pixel-wise colour distance means nothing here).
+fn stat_dist(ours: &[[f64; 3]], theirs: &[[f64; 3]]) -> Dist {
+    let stats = |px: &[[f64; 3]], c: usize| {
+        let n = px.len() as f64;
+        let m = px.iter().map(|p| p[c].clamp(0.0, 1.0)).sum::<f64>() / n;
+        let v = px
+            .iter()
+            .map(|p| (p[c].clamp(0.0, 1.0) - m).powi(2))
+            .sum::<f64>()
+            / n;
+        (m * 255.0, v.sqrt() * 255.0)
+    };
+    let per: Vec<f64> = (0..3)
+        .map(|c| {
+            let (a, b) = (stats(ours, c), stats(theirs, c));
+            (a.0 - b.0).abs().max((a.1 - b.1).abs())
+        })
+        .collect();
+    let max = per.iter().copied().fold(0.0, f64::max);
+    Dist {
+        max,
+        mean: per.iter().sum::<f64>() / 3.0,
+        p99: max,
+        de_p95: 0.0,
+        de_max: 0.0,
+    }
+}
+
 // ─────────────────────────────── replay ──────────────────────────────
 
 /// Every probe this file replays, with its engine side.
@@ -413,6 +824,11 @@ fn probes() -> Vec<(&'static str, Engine)> {
         ("blend-modes", blend_case as Engine),
         ("adjustments", adjust_case),
         ("filters", filter_case),
+        ("filters-distort", distort_case),
+        ("filters-render", render_case),
+        ("filters-stylize", stylize_case),
+        ("filters-pixelate", pixelate_case),
+        ("adjustments-ext", adjust_ext_case),
     ]
 }
 
@@ -433,9 +849,19 @@ fn measure_all() -> Vec<Measured> {
                 continue;
             };
             let theirs = read_png16(&dir().join(output));
+            let stats = case
+                .get("params")
+                .and_then(|p| p.get("compare"))
+                .and_then(Json::as_str)
+                == Some("stats")
+                || STATS_BY_REPLAY.contains(&format!("{probe}/{id}").as_str());
             let dist = engine(id).map(|ours| {
                 assert_eq!(ours.len(), theirs.w * theirs.h, "{probe}/{id}: extent");
-                dist(&ours, &theirs.px)
+                if stats {
+                    stat_dist(&ours, &theirs.px)
+                } else {
+                    dist(&ours, &theirs.px)
+                }
             });
             out.push(Measured {
                 key: format!("{probe}/{id}"),

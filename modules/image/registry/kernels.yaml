@@ -2072,3 +2072,575 @@
     - "CPU twin `color_range_rgba8` ships under feature `cpu` for the no-GPU realm (ADR 465 as amended by ADR 470)"
   tests:
     rust: ["image-kernels/src/families/select.rs", "image-conformance/tests/it/oracle_photoshop_selection.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+- id: style.shift
+  rust_path: families::style::STYLE_SHIFT
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "one channel moved by a sub-pixel offset with bilinear reconstruction (Wolberg, Digital Image Warping, 1990), optionally inverted; the offset of a drop/inner shadow and a satin (Photoshop User Guide, Layer style options: Angle, Distance)"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.blur_h
+  rust_path: families::style::STYLE_BLUR_H
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "horizontal Gaussian pass with a runtime radius up to 1024 and an explicit value beyond the canvas; the Size of shadows, glows, satin and a smooth bevel"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.blur_v
+  rust_path: families::style::STYLE_BLUR_V
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "vertical Gaussian pass, as style.blur_h"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.jfa_seed
+  rust_path: families::style::STYLE_JFA_SEED
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "jump-flood seeding of two fields at once (Rong & Tan, Jump flooding in GPU with applications to Voronoi diagram and distance transform, I3D 2006): outside field seeded by inside texels, inside field by outside texels"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.jfa_step
+  rust_path: families::style::STYLE_JFA_STEP
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "one jump-flood pass at a step size (Rong & Tan 2006); strict-less tie rule in a fixed neighbour order, so the scalar twin is exact"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.distance
+  rust_path: families::style::STYLE_DISTANCE
+  state_row: image.kernel.family-t3
+# ── WP5.2 filter families (distort, render) ─────────────────────────
+# (rows for families::distort and families::render go below this line)
+- id: distort.displace
+  rust_path: families::distort::DISTORT_DISPLACE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "backward displacement mapping from an offset image (map 0.5 = no shift, ±scale at 0/1; red drives x, green y), bilinear reconstruction (Wolberg, Digital Image Warping, 1990); the map tiles, a stretched map is resampled by the door; no reference reading"
+    - "identity: a 0.5-grey map, or both scales 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_distort.rs"]
+- id: distort.polar
+  rust_path: families::distort::DISTORT_POLAR
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "the rectangular/polar coordinate change on the ellipse fitted to the canvas, top edge to the centre, angle counter-clockwise from 12 o'clock (the direction the recorded Photoshop probe shows) with x wrapping; both directions are exact inverse maps; bilinear reconstruction; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/filters_distort.rs"]
+- id: distort.ripple
+  rust_path: families::distort::DISTORT_RIPPLE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "sinusoidal displacement: rows shift in x by a sinusoid of y and columns in y by one of x, a second harmonic at 1.7x the wavelength breaks the grid; amplitude amount/100 x wavelength/4, wavelength 8/16/32 px by size; no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_distort.rs"]
+- id: distort.shear
+  rust_path: families::distort::DISTORT_SHEAR
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "each row shifts by a Catmull-Rom spline (Catmull & Rom, 1974) through 16 control offsets spanning the canvas height; wrap or repeat-edge; no reference reading"
+    - "identity: an all-zero curve"
+  tests:
+    rust: ["image-conformance/tests/it/filters_distort.rs"]
+- id: distort.zigzag
+  rust_path: families::distort::DISTORT_ZIGZAG
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "concentric sinusoidal ridges inside the inscribed circle, fading linearly to its rim: angular (around centre), radial (out from centre) or both (pond ripples) displacement; no reference reading"
+    - "identity: amount 0; outside the circle untouched"
+  tests:
+    rust: ["image-conformance/tests/it/filters_distort.rs"]
+- id: render.clouds
+  rust_path: families::render::RENDER_CLOUDS
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "8-octave fractional Brownian motion of value noise with a Hermite fade (Perlin, SIGGRAPH 1985; Ebert et al., Texturing & Modeling) over the PCG hash (Jarzynski & Olano, JCGT 2020), stretched about its mean, mapped foreground to background; difference mode |input - clouds|; deterministic per seed; random-seeded, so the Photoshop oracle compares statistics, not pixels; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/filters_render.rs"]
+- id: render.fibers
+  rust_path: families::render::RENDER_FIBERS
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "three octaves of value noise on an anisotropic lattice (64/variance px wide, 8 x strength px tall) so the noise streaks vertically, mapped foreground to background; deterministic per seed; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/filters_render.rs"]
+- id: render.lens_flare
+  rust_path: families::render::RENDER_LENS_FLARE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 16 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "an additive flare screened onto the image: exponential core and glow, a lens-dependent ring, six-fold rays, a horizontal streak for the movie prime, and five tinted ghost discs along the line through the canvas centre — a description of camera-lens flare optics, sizes in canvas diagonals; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/filters_render.rs"]
+- id: render.lighting
+  rust_path: families::render::RENDER_LIGHTING
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 16 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Lambertian diffuse plus Blinn-Phong specular shading (Blinn, SIGGRAPH 1977) with a bump-mapped normal from a texture channel read as a heightfield (Blinn, SIGGRAPH 1978); spot (smooth cone falloff), point and infinite lights; gloss = specular exponent and weight, metallic = specular colour toward the surface, ambience and exposure; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/filters_render.rs"]
+
+# ── WP5.2 filter families (stylize, pixelate) ───────────────────────
+# (rows for families::stylize and families::pixelate go below this line)
+
+- id: stylize.solarize
+  rust_path: families::stylize::STYLIZE_SOLARIZE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "Photoshop user guide, Filter > Stylize > Solarize: blends a negative and a positive image; straight channels above one half are inverted, alpha kept; no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_stylize.rs"]
+
+- id: stylize.trace_contour
+  rust_path: families::stylize::STYLIZE_TRACE_CONTOUR
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "signed distance to the layer's edge from the flooded fields, an anti-aliased edge texel taking 0.5 - coverage: the spread, choke, stroke, precise glow and chisel bevel read it"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.ramp
+  rust_path: families::style::STYLE_RAMP
+  state_row: image.kernel.family-t3
+    - "Photoshop user guide, Trace Contour (level, upper/lower edge): per channel, a pixel on the chosen side of the level beside a 4-neighbour across it is a contour pixel (0), all else 1 — iso-level edge detection, textbook; no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_stylize.rs"]
+
+- id: stylize.wind
+  rust_path: families::stylize::STYLIZE_WIND
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "Photoshop user guide, Wind (wind/blast/stagger, from the right/left): a directional smear in which lighter upwind samples pull a pixel with a linearly (blast: quadratically) decaying weight over a hashed per-row length; PCG hash (Jarzynski & Olano, JCGT 2020); no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_stylize.rs"]
+
+- id: stylize.tiles
+  rust_path: families::stylize::STYLIZE_TILES
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "coverage from a signed distance: an anti-aliased band between two offsets (stroke, dilation) or a linear falloff (precise glow, chisel height)"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.contour
+  rust_path: families::style::STYLE_CONTOUR
+  state_row: image.kernel.family-t3
+    - "Photoshop user guide, Tiles (number of tiles, maximum offset, fill empty area with background/foreground/inverse/unaltered): square tiles shifted by hashed offsets, overlaps by hashed priority; no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_stylize.rs"]
+
+- id: stylize.extrude
+  rust_path: families::stylize::STYLIZE_EXTRUDE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "a layer-style CONTOUR: 256-entry curve (the Curves dialog's natural spline, split at corners, built in paged-psd) after a range remap, optionally inverted"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.colorize
+  rust_path: families::style::STYLE_COLORIZE
+  state_row: image.kernel.family-t3
+    - "Photoshop user guide, Extrude (blocks/pyramids, size, random or level-based depth, solid front faces, mask incomplete blocks): blocks as squares swept along a parallel projection away from the canvas centre (the projection of a box), pyramids as four orientation-shaded faces; no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_stylize.rs"]
+
+- id: pixelate.crystallize
+  rust_path: families::pixelate::PIXELATE_CRYSTALLIZE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "Voronoi cells over a jittered grid (Worley, SIGGRAPH 1996), each filled with the image's colour at its site; Photoshop user guide, Crystallize (cell size); no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_pixelate.rs"]
+
+- id: pixelate.pointillize
+  rust_path: families::pixelate::PIXELATE_POINTILLIZE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "coverage to a premultiplied colour through a 256-entry RGBA lookup (one colour, or a gradient across the falloff or along its parameter) with noise on alpha and jitter on the gradient position from an integer hash (Photoshop User Guide: Noise, Jitter)"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.bevel
+  rust_path: families::style::STYLE_BEVEL
+  state_row: image.kernel.family-t3
+  class: resample
+    - "jittered-grid sites (Worley, SIGGRAPH 1996) drawn as antialiased dots of hashed radius on the background colour; Photoshop user guide, Pointillize (cell size, background colour); no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_pixelate.rs"]
+
+- id: pixelate.mezzotint
+  rust_path: families::pixelate::PIXELATE_MEZZOTINT
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "random-threshold dithering per channel (Ulichney, Digital Halftoning, 1987) with dot, line and stroke screens; Photoshop user guide, Mezzotint's ten types; no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_pixelate.rs"]
+
+- id: pixelate.color_halftone
+  rust_path: families::pixelate::PIXELATE_COLOR_HALFTONE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "Lambert shading of a height field lit from an azimuth and altitude, normals from central differences (textbook); Bevel and Emboss's Angle, Altitude and Depth"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.split
+  rust_path: families::style::STYLE_SPLIT
+  state_row: image.kernel.family-t3
+    - "rotated per-channel dot screens with area-proportional INK dots (dark on white, dot area following 1 − v, the polarity the Photoshop probe records) from print practice; Photoshop user guide, Color Halftone (max radius 4-127 px, screen angles 108/162/90/45 by default); no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_pixelate.rs"]
+
+# ── WP5.2 Blur Gallery and Filter Gallery breadth ───────────────────
+# (rows for families::blurgal and families::gallery_ext go below this line)
+- id: blur.field
+  rust_path: families::blurgal::BLUR_FIELD
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Field Blur: a per-pixel radius interpolated between up to 8 pins by inverse squared distance (Shepard, ACM national conference 1968), integrated over a golden-angle Vogel disc (Mathematical Biosciences 1979) of clamp(ceil(3r), 8, 192) bilinear taps; behaviour from Photoshop's public Blur Gallery documentation; no reference reading"
+    - "light bokeh: the highlight up-weight conv.lens uses (standard real-time bokeh approximation)"
+    - "identity: every pin at 0 px (a support under half a pixel returns the pixel)"
+  tests:
+    rust: ["image-conformance/tests/it/filters_blurgal.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+- id: blur.iris
+  rust_path: families::blurgal::BLUR_IRIS
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Iris Blur: sharp inside a rotated ellipse, the radius rising by smoothstep from the sharp core (feather, a fraction of the ellipse) to the rim; the Vogel disc of blur.field; no reference reading"
+    - "identity: blur 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_blurgal.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+- id: blur.tilt_shift
+  rust_path: families::blurgal::BLUR_TILT_SHIFT
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Tilt-Shift: the radius a smoothstep of the signed distance from a line beyond the sharp half-band, both sides or the normal's side only; the Vogel disc of blur.field; no reference reading"
+    - "identity: blur 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_blurgal.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+- id: blur.path
+  rust_path: families::blurgal::BLUR_PATH
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Path Blur: line integration (textbook motion blur) along the inverse-squared-distance-weighted tangent of a polyline's segments, the length tapered by the arc position of the nearest point; centred or trailing; no reference reading"
+    - "identity: speed 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_blurgal.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+- id: blur.spin
+  rust_path: families::blurgal::BLUR_SPIN
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Spin Blur: arc integration about a centre inside a rotated ellipse, the arc span faded across the rim band; no reference reading"
+    - "identity: angle 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_blurgal.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+- id: gallery.strokes
+  rust_path: families::gallery_ext::GALLERY_STROKES
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "line integral convolution along one direction (Cabral & Leedom, SIGGRAPH 1993): a fixed angle, along edges (perpendicular to the Sobel gradient) or alternating with tone; the length jittered by the PCG hash (Jarzynski & Olano, JCGT 2020); serves Angled/Dark/Sprayed Strokes, Sumi-e, Colored Pencil, Rough Pastels, Charcoal, Conte Crayon, Graphic Pen, Water Paper, Accented Edges; no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_gallery_ext.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+- id: gallery.chrome
+  rust_path: families::gallery_ext::GALLERY_CHROME
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "a raised-cosine periodic remap of box-smoothed luminance (the polished-metal banding Chrome shows); no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_gallery_ext.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+- id: gallery.plastic_wrap
+  rust_path: families::gallery_ext::GALLERY_PLASTIC_WRAP
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Blinn-Phong highlight (Blinn 1977/1978 bump mapping) off the box-smoothed luminance heightfield with slope darkening; no reference reading"
+    - "identity: amount 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_gallery_ext.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+
+# ── WP5.2 adjustments and Develop ───────────────────────────────────
+# (rows for families::adjust_ext and families::develop go below this line)
+
+- id: adjust.desaturate
+  rust_path: families::adjust_ext::ADJUST_DESATURATE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "HSL lightness (max + min) / 2 per pixel (Smith, SIGGRAPH 1978) — the published description of Image > Adjustments > Desaturate; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/filters_adjust_ext.rs"]
+
+- id: adjust.shadows_highlights
+  rust_path: families::adjust_ext::ADJUST_SHADOWS_HIGHLIGHTS
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "a shade split into highlight (above the flat surface's shade) and shadow (below it): Bevel and Emboss's two lights"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+- id: style.absdiff
+  rust_path: families::style::STYLE_ABSDIFF
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "absolute difference of two coverages: satin's two shifted copies"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
+    - "local-mean shadow/highlight recovery: the correction is driven by the mean luminance of a Vogel sunflower disc (integer CPU-made taps) and ADDED, so detail inside a region survives; the tone-width and radius semantics are the dialog's published ones; no reference reading"
+    - "identity: both amounts and the midtone contrast 0 (the tone path is skipped)"
+  tests:
+    rust: ["image-conformance/tests/it/filters_adjust_ext.rs"]
+
+- id: adjust.hdr_toning
+  rust_path: families::adjust_ext::ADJUST_HDR_TONING
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "local adaptation as a base/detail split (Durand & Dorsey, SIGGRAPH 2002; Reinhard et al., SIGGRAPH 2002) with an edge-aware disc mean 1/(1 + 8·strength·|Δl|); no reference reading"
+    - "identity: gamma 1, exposure, detail, shadow, highlight, vibrance and saturation 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_adjust_ext.rs"]
+
+- id: adjust.match_color
+  rust_path: families::adjust_ext::ADJUST_MATCH_COLOR
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "colour transfer by per-channel mean and standard deviation (Reinhard, Ashikhmin, Gooch & Shirley, IEEE CG&A 2001) in CIELAB(D50) with paged-color::lab's constants; statistics measured on the CPU by the door; no reference reading"
+    - "identity: fade 1"
+  tests:
+    rust: ["image-conformance/tests/it/filters_adjust_ext.rs"]
+
+- id: adjust.replace_color
+  rust_path: families::adjust_ext::ADJUST_REPLACE_COLOR
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "a fuzziness-weighted RGB-distance selection of a sampled colour, recoloured with the Hue/Saturation rules adjust.hue_saturation measured on Photoshop; HSL per Smith (1978); no reference reading"
+    - "identity: hue, saturation and lightness 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_adjust_ext.rs"]
+
+- id: develop.tone
+  rust_path: families::develop::DEVELOP_TONE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "Camera Raw-class point stages (white balance and exposure in linear light, contrast, highlights/shadows/whites/blacks, parametric curve, HSL per range, vibrance/saturation, colour grading) with this kernel's own smooth weightings over the published controls; no Adobe code or reference read"
+    - "identity: every control at its default (each stage is skipped)"
+  tests:
+    rust: ["image-conformance/tests/it/filters_develop.rs"]
+
+- id: develop.detail
+  rust_path: families::develop::DEVELOP_DETAIL
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "Camera Raw-class neighbourhood stages: 5x5 range-weighted luminance and box chroma noise reduction, dark-channel dehaze (He, Sun & Tang, CVPR 2009) with white airlight, texture/clarity as local contrast against 3 px / 20 px disc means, unsharp-mask sharpening with radius, detail and masking; no reference reading"
+    - "identity: texture, clarity, dehaze, sharpen amount and both noise reductions 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_develop.rs"]

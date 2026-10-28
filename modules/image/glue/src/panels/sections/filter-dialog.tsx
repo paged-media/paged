@@ -8,10 +8,13 @@
 
 import type { FilterDef, FilterValue, ParamSpec } from "../../filters";
 import type { FilterDialogState } from "../../session";
+import { GalleryWorkspace } from "./filter-gallery-workspace";
 import { defineMessages, t } from "@paged-media/strings";
 import { color, font, space } from "@paged-media/panel-kit";
 
-import { mono, note, row } from "./styles";
+import type { ReactNode } from "react";
+
+import { kicker, mono, note, row } from "./styles";
 
 const M = defineMessages("image.filterDialog", {
   ok: "OK",
@@ -26,7 +29,27 @@ const M = defineMessages("image.filterDialog", {
     "one undo step, in the active layer and inside the selection; Cancel " +
     "leaves the image as it was.",
   gpuOnly: "Filters run on the GPU; without WebGPU the dialog cannot apply.",
+  thisImage: "This image (composite)",
+  aFile: "A file…",
+  pinBlur: "Pin {n}",
+  removePin: "Remove pin {n}",
+  points: "{count, plural, one {# point} other {# points}}",
+  addPoint: "Add point",
+  removePoint: "Remove last point",
+  onCanvas:
+    "Drag the pins and handles on the canvas; with Field blur on, a click " +
+    "on the image adds a pin and Alt-click removes one.",
 });
+
+/** Is `p` shown at these values (its `showIf` condition)? */
+export function paramShown(
+  p: ParamSpec,
+  values: Readonly<Record<string, FilterValue>>,
+): boolean {
+  if (!p.showIf) return true;
+  const v = values[p.showIf.key];
+  return v === p.showIf.equals;
+}
 
 /** Hex `#rrggbb` ↔ straight RGB in [0, 1]. */
 const toHex = (c: readonly [number, number, number]) =>
@@ -203,9 +226,10 @@ function Param({
         </div>
       );
     case "color": {
-      const c = Array.isArray(value)
-        ? (value as readonly [number, number, number])
-        : p.default;
+      const c: readonly [number, number, number] =
+        Array.isArray(value) && value.length === 3
+          ? [value[0]!, value[1]!, value[2]!]
+          : p.default;
       return (
         <div style={row}>
           {label}
@@ -220,7 +244,216 @@ function Param({
         </div>
       );
     }
+    case "points":
+      return (
+        <PointsParam
+          id={id}
+          p={p}
+          value={Array.isArray(value) ? value : p.default}
+          label={label}
+          onChange={onChange}
+        />
+      );
+    case "image":
+      return null;
   }
+}
+
+/** On-canvas points: the count, and for value-carrying points (Field
+ *  Blur's pins) a slider and a remove button per point. Their positions
+ *  are edited on the canvas. */
+function PointsParam({
+  id,
+  p,
+  value,
+  label,
+  onChange,
+}: {
+  id: string;
+  p: Extract<ParamSpec, { kind: "points" }>;
+  value: readonly number[];
+  label: ReactNode;
+  onChange: (v: FilterValue) => void;
+}) {
+  const count = Math.floor(value.length / p.stride);
+  const rows =
+    p.stride === 3
+      ? Array.from({ length: count }, (_, i) => {
+          const at = i * 3 + 2;
+          return (
+            <div key={i} style={row}>
+              <label htmlFor={`${id}-${i}`}>{t(M.pinBlur, { n: i + 1 })}</label>
+              <input
+                id={`${id}-${i}`}
+                type="range"
+                data-filter-point={`${p.key}:${i}`}
+                min={p.min}
+                max={p.max}
+                step={1}
+                value={value[at] ?? 0}
+                onChange={(e) => {
+                  const next = [...value];
+                  next[at] = Number(e.target.value);
+                  onChange(next);
+                }}
+              />
+              <span style={{ ...mono, minWidth: "4.5em", textAlign: "right" }}>
+                {Math.round(value[at] ?? 0)} px
+              </span>
+              <button
+                type="button"
+                aria-label={t(M.removePin, { n: i + 1 })}
+                data-filter-point-remove={`${p.key}:${i}`}
+                disabled={count <= 1}
+                onClick={() => {
+                  const next = [...value];
+                  next.splice(i * 3, 3);
+                  onChange(next);
+                }}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })
+      : [];
+  return (
+    <>
+      <div style={row}>
+        {label}
+        <span data-filter-points={p.key} style={mono}>
+          {t(M.points, { count })}
+        </span>
+        {p.stride === 2 && (
+          <span>
+            <button
+              type="button"
+              data-filter-point-add={p.key}
+              onClick={() => {
+                // A new point beyond the last, toward the centre.
+                const last = value.slice(-2);
+                const x = Math.min(1, (last[0] ?? 0.5) + 0.1);
+                onChange([...value, x, last[1] ?? 0.5]);
+              }}
+            >
+              {t(M.addPoint)}
+            </button>{" "}
+            <button
+              type="button"
+              data-filter-point-drop={p.key}
+              disabled={count <= 2}
+              onClick={() => onChange(value.slice(0, -2))}
+            >
+              {t(M.removePoint)}
+            </button>
+          </span>
+        )}
+      </div>
+      {rows}
+    </>
+  );
+}
+
+/** An `image` parameter: this image's composite, or a chosen file. */
+function ImageParam({
+  filterId,
+  p,
+  value,
+  file,
+  onChoose,
+}: {
+  filterId: string;
+  p: ParamSpec;
+  value: FilterValue;
+  file: string | undefined;
+  onChoose: (choice: 0 | 1) => void;
+}) {
+  const id = `pg-filter-${filterId}-${p.key}`;
+  return (
+    <div style={row}>
+      <label htmlFor={id}>{t(p.label)}</label>
+      <select
+        id={id}
+        data-filter-param={p.key}
+        value={value === 1 ? 1 : 0}
+        onChange={(e) => onChoose(Number(e.target.value) === 1 ? 1 : 0)}
+      >
+        <option value={0}>{t(M.thisImage)}</option>
+        <option value={1}>{file ?? t(M.aFile)}</option>
+      </select>
+    </div>
+  );
+}
+
+/** The parameters, under their section headings and sub-groups, those
+ *  whose condition is off left out. */
+function Params({
+  def,
+  dialog,
+  onChange,
+  onChooseImage,
+}: {
+  def: FilterDef;
+  dialog: FilterDialogState;
+  onChange: (patch: Record<string, FilterValue>) => void;
+  onChooseImage: (key: string, choice: 0 | 1) => void;
+}) {
+  const out: ReactNode[] = [];
+  let section: string | undefined;
+  let group: string | undefined;
+  for (const p of def.params) {
+    if (!paramShown(p, dialog.values)) continue;
+    if (p.section !== section) {
+      section = p.section;
+      group = undefined;
+      if (section)
+        out.push(
+          <div
+            key={`s:${section}:${p.key}`}
+            data-filter-section={section}
+            style={{ ...kicker, marginTop: space[2] }}
+          >
+            {t(section)}
+          </div>,
+        );
+    }
+    if (p.group !== group) {
+      group = p.group;
+      if (group)
+        out.push(
+          <div
+            key={`g:${group}:${p.key}`}
+            style={{ fontWeight: 600, marginTop: space[1] }}
+          >
+            {t(group)}
+          </div>,
+        );
+    }
+    out.push(
+      p.kind === "image" ? (
+        <ImageParam
+          key={p.key}
+          filterId={def.id}
+          p={p}
+          value={dialog.values[p.key] ?? p.default}
+          file={dialog.files[p.key]}
+          onChoose={(c) => onChooseImage(p.key, c)}
+        />
+      ) : (
+        <Param
+          key={p.key}
+          filterId={def.id}
+          p={p}
+          value={dialog.values[p.key] ?? p.default}
+          // Never while a pass runs: a drag must not be cut off by the
+          // preview it causes (the session coalesces, latest wins).
+          disabled={false}
+          onChange={(v) => onChange({ [p.key]: v })}
+        />
+      ),
+    );
+  }
+  return <>{out}</>;
 }
 
 export function FilterDialog({
@@ -233,6 +466,8 @@ export function FilterDialog({
   onBefore,
   onOk,
   onCancel,
+  onChooseImage = () => {},
+  effects = [],
 }: {
   def: FilterDef;
   dialog: FilterDialogState;
@@ -243,6 +478,10 @@ export function FilterDialog({
   onBefore: (before: boolean) => void;
   onOk: () => void;
   onCancel: () => void;
+  /** An `image` parameter's source changed (0 composite, 1 a file). */
+  onChooseImage?: (key: string, choice: 0 | 1) => void;
+  /** The Filter Gallery workspace's effects (its stack's choices). */
+  effects?: readonly FilterDef[];
 }) {
   return (
     <section
@@ -259,18 +498,29 @@ export function FilterDialog({
       <div style={{ fontWeight: 600, marginBottom: space[1] }}>
         {t(def.label)}
       </div>
-      {def.params.map((p) => (
-        <Param
-          key={p.key}
-          filterId={def.id}
-          p={p}
-          value={dialog.values[p.key] ?? p.default}
-          // Never while a pass runs: a drag must not be cut off by the
-          // preview it causes (the session coalesces, latest wins).
-          disabled={false}
-          onChange={(v) => onChange({ [p.key]: v })}
+      {def.id === "filterGallery" ? (
+        <GalleryWorkspace
+          effects={effects}
+          values={dialog.values}
+          onValues={onChange}
+          renderParams={(layerDef, values, set) => (
+            <Params
+              def={layerDef}
+              dialog={{ ...dialog, values }}
+              onChange={set}
+              onChooseImage={onChooseImage}
+            />
+          )}
         />
-      ))}
+      ) : (
+        <Params
+          def={def}
+          dialog={dialog}
+          onChange={onChange}
+          onChooseImage={onChooseImage}
+        />
+      )}
+      {def.id === "blurGallery" && <div style={note}>{t(M.onCanvas)}</div>}
       <div style={{ ...row, borderBottom: "none", flexWrap: "wrap" }}>
         <label style={{ font: `12px ${font.sans}` }}>
           <input

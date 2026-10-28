@@ -28,6 +28,7 @@ projects:
   fmt: "platform/shared/fmt"
   dml-chart: "platform/shared/dml-chart"
   dml-geom: "platform/shared/dml-geom"
+  dml-native: "platform/shared/dml-native"
   helpers: "platform/shared/helpers"
   ooxml: "platform/shared/ooxml"
   panel-kit: "platform/shared/panel-kit"

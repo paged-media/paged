@@ -44,6 +44,7 @@ pub struct Imported {
     paged: Vec<u8>,
     report: String,
     fonts: Vec<u8>,
+    workbooks: Vec<u8>,
 }
 
 #[wasm_bindgen]
@@ -62,6 +63,12 @@ impl Imported {
 
     /// The decoded embedded faces, one after the other; each
     /// [`FaceReport`] in the report says where its bytes are.
+    /// The chart workbooks, one after the other (see `ChartReport`).
+    #[wasm_bindgen(getter)]
+    pub fn workbooks(&self) -> Vec<u8> {
+        self.workbooks.clone()
+    }
+
     #[wasm_bindgen(getter)]
     pub fn fonts(&self) -> Vec<u8> {
         self.fonts.clone()
@@ -80,6 +87,8 @@ pub struct Report {
     pub fonts: Vec<String>,
     /// The faces the deck embeds, and which of them the document may use.
     pub embedded_fonts: Vec<FaceReport>,
+    /// The deck's charts and their workbooks (ADR 715).
+    pub charts: Vec<ChartReport>,
     pub diagnostics: Vec<String>,
 }
 
@@ -213,9 +222,11 @@ pub struct ItemReport {
 /// Read a `.pptx` into the `.paged` package of its native slides.
 #[wasm_bindgen(js_name = importPptx)]
 pub fn import_pptx(bytes: &[u8], name: &str) -> Result<Imported, JsError> {
-    let (paged, report, fonts) = import(bytes, name).map_err(|e| JsError::new(&e))?;
+    let (paged, report, fonts, workbooks) =
+        import_all(bytes, name).map_err(|e| JsError::new(&e))?;
     Ok(Imported {
         paged,
+        workbooks,
         report: serde_json::to_string(&report).map_err(|e| JsError::new(&e.to_string()))?,
         fonts,
     })
@@ -224,9 +235,44 @@ pub fn import_pptx(bytes: &[u8], name: &str) -> Result<Imported, JsError> {
 /// [`import_pptx`] without the wasm types (native tests use this): the
 /// package, the report and the embedded faces' bytes.
 pub fn import(bytes: &[u8], name: &str) -> Result<(Vec<u8>, Report, Vec<u8>), String> {
+    import_all(bytes, name).map(|(p, r, f, _)| (p, r, f))
+}
+
+/// An import: the package, the report, the embedded faces' bytes and the
+/// chart workbooks' bytes.
+pub type ImportedParts = (Vec<u8>, Report, Vec<u8>, Vec<u8>);
+
+/// [`import`] with the chart workbooks' bytes (`ChartReport` offsets).
+pub fn import_all(bytes: &[u8], name: &str) -> Result<ImportedParts, String> {
     let deck = pptx_import::import_pptx(bytes).map_err(|e| e.to_string())?;
-    let resolved = slide_resolve::resolve(&deck);
     let pkg = paged_ooxml::OpcPackage::read(bytes).map_err(|e| e.to_string())?;
+    // Live charts (ADR 715): every chart's workbook; a chart slide-chart
+    // does not lay out is drawn by paged.sheet from its cells.
+    let (mut charts, chart_diagnostics) = slide_sheet::DeckCharts::open(&pkg, &deck);
+    let resolved = slide_resolve::resolve_with(&deck, &|p, w, h| charts.draw(p, w, h));
+    let mut workbooks = Vec::new();
+    let mut chart_reports = Vec::new();
+    for (part, book) in charts.books.iter_mut() {
+        let embedded = slide_sheet::embedded_part(&pkg, part);
+        let xlsx = match (&embedded, book.origin()) {
+            (Some((_, b)), slide_sheet::Origin::Embedded) => b.clone(),
+            _ => book.save_xlsx()?,
+        };
+        let offset = workbooks.len();
+        workbooks.extend_from_slice(&xlsx);
+        chart_reports.push(ChartReport {
+            part: part.clone(),
+            origin: book.origin(),
+            embedded_part: embedded.map(|(p, _)| p),
+            drawn_by: if charts.slide_drawn.contains(part) {
+                "slide"
+            } else {
+                "sheet"
+            },
+            offset,
+            length: xlsx.len(),
+        });
+    }
     let (embedded_fonts, fonts, font_diagnostics) =
         face_reports(pptx_import::fonts::faces(&pkg, &deck.embedded_fonts));
     let images = |part: &str| pkg.part(part).map(|b| b.to_vec());
@@ -269,16 +315,18 @@ pub fn import(bytes: &[u8], name: &str) -> Result<(Vec<u8>, Report, Vec<u8>), St
             .collect(),
         fonts: resolved.fonts.clone(),
         embedded_fonts,
+        charts: chart_reports,
         diagnostics: deck
             .diagnostics
             .iter()
             .chain(&font_diagnostics)
             .chain(&resolved.diagnostics)
             .chain(&written.diagnostics)
+            .chain(&chart_diagnostics)
             .cloned()
             .collect(),
     };
-    Ok((written.paged, report, fonts))
+    Ok((written.paged, report, fonts, workbooks))
 }
 
 /// Page-space bounds of an item's drawn outline (a group: its members').
@@ -373,6 +421,187 @@ pub fn export_pptx(
     })
 }
 
+// ── live charts (ADR 715) ───────────────────────────────────────────────────
+
+/// One chart part of an imported deck: its workbook, kept by the bundle as
+/// a container part, and the frames that draw it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartReport {
+    pub part: String,
+    pub origin: slide_sheet::Origin,
+    /// The embedded workbook's part, when the chart has one.
+    pub embedded_part: Option<String>,
+    /// `slide` (PowerPoint's layout from the values) or `sheet` (paged.sheet's
+    /// chart engine).
+    pub drawn_by: &'static str,
+    /// Where the workbook sits in the workbooks bytes.
+    pub offset: usize,
+    pub length: usize,
+}
+
+/// The live charts of a deck document (ADR 715): its chart workbooks,
+/// opened as the user edits them, and the redrawing of a chart frame from
+/// its workbook as a page-item snippet.
+#[wasm_bindgen]
+pub struct LiveCharts {
+    deck: pptx_core::Presentation,
+    charts: slide_sheet::DeckCharts,
+}
+
+#[wasm_bindgen]
+impl LiveCharts {
+    /// The deck's charts, from the source deck the document keeps.
+    #[wasm_bindgen(constructor)]
+    pub fn new(pptx: &[u8]) -> Result<LiveCharts, JsError> {
+        let deck = pptx_import::import_pptx(pptx).map_err(|e| JsError::new(&e.to_string()))?;
+        let pkg = paged_ooxml::OpcPackage::read(pptx).map_err(|e| JsError::new(&e.to_string()))?;
+        let (charts, _) = slide_sheet::DeckCharts::open(&pkg, &deck);
+        Ok(LiveCharts { deck, charts })
+    }
+
+    /// Open a chart's workbook from the document's copy (`origin`:
+    /// `embedded` or `synthesized`); without one, the deck's. Answers its
+    /// grid (JSON).
+    pub fn open(
+        &mut self,
+        part: &str,
+        workbook: Option<Vec<u8>>,
+        origin: &str,
+    ) -> Result<String, JsError> {
+        if let Some(bytes) = workbook {
+            let origin = match origin {
+                "synthesized" => slide_sheet::Origin::Synthesized,
+                _ => slide_sheet::Origin::Embedded,
+            };
+            let xml = self
+                .chart_xml(part)
+                .ok_or_else(|| JsError::new(&format!("no chart part {part}")))?;
+            let book = slide_sheet::ChartBook::reopen(&bytes, &xml, origin)
+                .map_err(|e| JsError::new(&e))?;
+            self.charts.books.insert(part.to_string(), book);
+        }
+        self.grid(part)
+    }
+
+    fn chart_xml(&self, part: &str) -> Option<Vec<u8>> {
+        // The chart part as the deck has it, which every book keeps.
+        self.charts
+            .books
+            .get(part)
+            .map(|b| b.original_xml().to_vec())
+    }
+
+    fn book(&mut self, part: &str) -> Result<&mut slide_sheet::ChartBook, JsError> {
+        self.charts
+            .books
+            .get_mut(part)
+            .ok_or_else(|| JsError::new(&format!("chart {part} is not live")))
+    }
+
+    /// The chart's workbook as the data grid shows it (JSON
+    /// `{ sheets: GridSheet[], origin }`).
+    pub fn grid(&mut self, part: &str) -> Result<String, JsError> {
+        let book = self.book(part)?;
+        let v = serde_json::json!({ "sheets": book.grid(), "origin": book.origin() });
+        Ok(v.to_string())
+    }
+
+    /// Enter `input` into a cell of the chart's workbook (`=…` a formula).
+    /// Answers the grid.
+    pub fn enter(
+        &mut self,
+        part: &str,
+        sheet: &str,
+        row: u32,
+        col: u32,
+        input: &str,
+    ) -> Result<String, JsError> {
+        self.book(part)?
+            .enter(sheet, row, col, input)
+            .map_err(|e| JsError::new(&e))?;
+        self.grid(part)
+    }
+
+    /// The chart's workbook as an `.xlsx`.
+    pub fn workbook(&mut self, part: &str) -> Result<Vec<u8>, JsError> {
+        self.book(part)?.save_xlsx().map_err(|e| JsError::new(&e))
+    }
+
+    /// The chart frame `shapeId` of `slidePart` redrawn from its workbook,
+    /// in the box `x, y, w, h` (pt, page space), as a page-item snippet
+    /// for the engine's `pasteElements`.
+    #[allow(clippy::too_many_arguments)] // a flat wasm signature
+    pub fn snippet(
+        &self,
+        part: &str,
+        slide_part: &str,
+        shape_id: u32,
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    ) -> Result<String, JsError> {
+        live_snippet(
+            &self.deck,
+            &self.charts,
+            part,
+            slide_part,
+            shape_id,
+            (x, y, w, h),
+        )
+        .map_err(|e| JsError::new(&e))
+    }
+}
+
+/// [`LiveCharts::snippet`] without the wasm types.
+pub fn live_snippet(
+    deck: &pptx_core::Presentation,
+    charts: &slide_sheet::DeckCharts,
+    part: &str,
+    slide_part: &str,
+    shape_id: u32,
+    frame: (f64, f64, f64, f64),
+) -> Result<String, String> {
+    let mut deck = deck.clone();
+    if let (Some(book), Some(chart)) = (charts.books.get(part), deck.charts.get_mut(part)) {
+        book.apply(chart);
+    }
+    let si = deck
+        .slides
+        .iter()
+        .position(|s| s.part == slide_part)
+        .ok_or_else(|| format!("no slide {slide_part}"))?;
+    // The frame where the document has it now.
+    const EMU: f64 = 12700.0;
+    let found = deck.slides[si].shapes.iter_mut().find_map(|s| match s {
+        pptx_core::Shape::Frame(f) if f.nv.id == shape_id => Some(f),
+        _ => None,
+    });
+    let f = found.ok_or_else(|| format!("no chart frame {shape_id} on {slide_part}"))?;
+    if let Some(x) = f.xfrm.as_mut() {
+        x.off = (
+            (frame.0 * EMU).round() as i64,
+            (frame.1 * EMU).round() as i64,
+        );
+        x.ext = (
+            (frame.2 * EMU).round() as i64,
+            (frame.3 * EMU).round() as i64,
+        );
+    }
+    let resolved = slide_resolve::resolve_with(&deck, &|p, w, h| charts.draw(p, w, h));
+    let slide = resolved
+        .slides
+        .iter()
+        .position(|s| s.part == slide_part)
+        .ok_or_else(|| format!("{slide_part} did not resolve"))?;
+    let item = resolved.slides[slide]
+        .items
+        .iter()
+        .find(|i| i.meta.shape_id == shape_id && i.meta.chart.as_deref() == Some(part))
+        .ok_or_else(|| format!("chart frame {shape_id} did not resolve"))?;
+    slide_native::snippet(&resolved, slide, item)
+}
 /// Live presets and connectors (slide ADR 717): one JSON request, one JSON
 /// answer. `op` is
 /// - `follow` (`elements`): what an edit to those page elements asks of

@@ -40,6 +40,7 @@ import {
   type MaskingEngine,
   type MaskingWasm,
 } from "./masking-engine";
+import type { GlobalLight, LayerStyle } from "./layer-style";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
 
@@ -48,6 +49,11 @@ import {
   type RetouchEngine,
   type RetouchWasm,
 } from "./retouch-engine";
+import {
+  filterEngineOf,
+  type FilterEngine,
+  type FilterWasm,
+} from "./engine-filters";
 
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
@@ -925,6 +931,13 @@ export interface LayerInfo {
   clipped: boolean;
   /** The GROUP this layer belongs to, or null. */
   group: number | null;
+  /** The descriptor keys of the layer STYLE's enabled effects (`DrSh`,
+   *  `ebbl`, …, the Layer Style dialog's order); empty without a style. */
+  style: string[];
+  /** The style's master switch (Hide / Show All Effects). */
+  styleOn: boolean;
+  /** Blending Options' style switches (`styleOptionsFromBits`). */
+  styleOptions: number;
   /** FILL opacity 0–1: the layer's own pixels, apart from its opacity.
    *  On the eight special modes it acts inside the blend. */
   fillOpacity: number;
@@ -947,6 +960,9 @@ export interface LayerInfo {
 /** A plain layer's parity fields (Photoshop's defaults) — for a reader
  *  that builds a row by hand, such as a test. */
 export const PLAIN_LAYER_PARITY = {
+  style: [] as string[],
+  styleOn: false,
+  styleOptions: 6,
   fillOpacity: 1,
   knockout: "none",
   locks: { transparency: false, position: false, all: false },
@@ -957,6 +973,9 @@ export const PLAIN_LAYER_PARITY = {
   fillKind: null,
 } as const satisfies Pick<
   LayerInfo,
+  | "style"
+  | "styleOn"
+  | "styleOptions"
   | "fillOpacity"
   | "knockout"
   | "locks"
@@ -967,7 +986,8 @@ export const PLAIN_LAYER_PARITY = {
   | "fillKind"
 >;
 
-/** Photoshop's sixteen adjustment-layer kinds, in its menu order. */
+/** Photoshop's sixteen adjustment-layer kinds, in its menu order, and
+ *  Develop. */
 export const ADJUSTMENT_KINDS = [
   "brightnessContrast",
   "levels",
@@ -985,6 +1005,9 @@ export const ADJUSTMENT_KINDS = [
   "threshold",
   "gradientMap",
   "selectiveColor",
+  // Not one of Photoshop's sixteen: the Camera Raw-class Develop
+  // adjustment (WP5.2), a layer kind of the engine's own.
+  "develop",
 ] as const;
 export type AdjustmentKind = (typeof ADJUSTMENT_KINDS)[number];
 
@@ -1244,8 +1267,10 @@ export interface FilterMask {
   feather?: number;
 }
 
-/** WP5.8 — the retouching doors live in `retouch-engine.ts`. */
-export interface ImageEngine extends MaskingEngine, RetouchEngine<DecodedInfo> {
+/** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
+ *  doors in `engine-filters.ts`. */
+export interface ImageEngine
+  extends MaskingEngine, RetouchEngine<DecodedInfo>, FilterEngine {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2147,6 +2172,29 @@ export interface ImageEngine extends MaskingEngine, RetouchEngine<DecodedInfo> {
   /** A fill layer's or smart object's render becomes pixels. */
   layerRasterize(index: number): void;
   layerSetFillOpacity(index: number, fill: number): void;
+  /** The layer's STYLE (null: none). */
+  layerStyle(index: number): LayerStyle | null;
+  /** Set (null: clear) the layer's style; the dialog's edits to one layer
+   *  merge into one undo step. */
+  layerSetStyle(index: number, style: LayerStyle | null): void;
+  /** Paste Layer Style onto several layers (one undo step). */
+  layersPasteStyle(indices: readonly number[], style: LayerStyle): void;
+  /** Blending Options' style switches (`styleOptionsBits`). */
+  layerSetStyleOptions(index: number, bits: number): void;
+  /** The document's Global Light. */
+  globalLight(): GlobalLight;
+  setGlobalLight(angle: number, altitude: number): void;
+  /** Layer ▸ Layer Style ▸ Scale Effects (percent). */
+  layerScaleEffects(index: number, percent: number): void;
+  /** Hide / Show All Effects. */
+  layerSetEffectsVisible(index: number, on: boolean): void;
+  /** A pattern the styles can draw, by name (straight RGBA8). */
+  defineStylePattern(
+    name: string,
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+  ): void;
   /** Blend If's 32 sliders, or null to clear. */
   layerSetBlendIf(index: number, sliders: readonly number[] | null): void;
   layerSetKnockout(index: number, knockout: Knockout): void;
@@ -2227,7 +2275,7 @@ interface DecodedHandleWasm {
 
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
-export interface ImageWasmModule extends MaskingWasm, RetouchWasm {
+export interface ImageWasmModule extends MaskingWasm, RetouchWasm, FilterWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -2926,6 +2974,20 @@ export interface ImageWasmModule extends MaskingWasm, RetouchWasm {
   ): Promise<void>;
   layers_rasterize(index: number): void;
   layers_set_fill_opacity(index: number, fill: number): void;
+  layers_style(index: number): string;
+  layers_set_style(index: number, json: string): void;
+  layers_paste_style(indices: Uint32Array, json: string): void;
+  layers_set_style_options(index: number, bits: number): void;
+  layers_global_light(): Float32Array | number[];
+  layers_set_global_light(angle: number, altitude: number): void;
+  layers_scale_effects(index: number, percent: number): void;
+  layers_set_effects_visible(index: number, on: boolean): void;
+  layers_define_style_pattern(
+    name: string,
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+  ): void;
   layers_set_blend_if(index: number, sliders: Uint8Array): void;
   layers_set_knockout(index: number, knockout: string): void;
   layers_set_locks(
@@ -3000,6 +3062,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
   return {
     ...maskingEngine(wasm),
     ...wrapRetouch(wasm, decodedInfoOf),
+    ...filterEngineOf(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,
@@ -4040,6 +4103,28 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     layerRasterize: (index) => wasm.layers_rasterize(index),
     layerSetFillOpacity: (index, fill) =>
       wasm.layers_set_fill_opacity(index, fill),
+    layerStyle: (index) =>
+      JSON.parse(wasm.layers_style(index)) as LayerStyle | null,
+    layerSetStyle: (index, style) =>
+      wasm.layers_set_style(index, JSON.stringify(style)),
+    layersPasteStyle: (indices, style) =>
+      wasm.layers_paste_style(Uint32Array.from(indices), JSON.stringify(style)),
+    layerSetStyleOptions: (index, bits) =>
+      wasm.layers_set_style_options(index, bits),
+    globalLight: () => {
+      const [angle = 120, altitude = 30] = Array.from(
+        wasm.layers_global_light(),
+      );
+      return { angle, altitude };
+    },
+    setGlobalLight: (angle, altitude) =>
+      wasm.layers_set_global_light(angle, altitude),
+    layerScaleEffects: (index, percent) =>
+      wasm.layers_scale_effects(index, percent),
+    layerSetEffectsVisible: (index, on) =>
+      wasm.layers_set_effects_visible(index, on),
+    defineStylePattern: (name, rgba, width, height) =>
+      wasm.layers_define_style_pattern(name, rgba, width, height),
     layerSetBlendIf: (index, sliders) =>
       wasm.layers_set_blend_if(index, Uint8Array.from(sliders ?? [])),
     layerSetKnockout: (index, k) => wasm.layers_set_knockout(index, k),

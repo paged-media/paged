@@ -28,6 +28,20 @@
 // the layers go into the document's parts and their composite replaces
 // the frame's placed image, as one document undo step.
 
+import {
+  builtInPresets,
+  cloneStyle,
+  effectEnabled,
+  emptyStyle,
+  setEffectEnabled,
+  styleOptionsBits,
+  type EffectKind,
+  type GlobalLight,
+  type LayerStyle,
+  type PatternRef,
+  type StyleOptions,
+  type StylePreset,
+} from "./layer-style";
 import type {
   BundleHost,
   ColorPickerProps,
@@ -49,9 +63,16 @@ import {
   filterDef,
   filterDefaults,
   scaledForProxy,
+  type FilterContext,
   type FilterId,
   type FilterValue,
 } from "./filters";
+import { blurPreset, type BlurKind } from "./filters-blur-gallery";
+import {
+  blurGalleryHit,
+  blurGalleryShapes,
+  type BlurDrag,
+} from "./blur-gallery-pins";
 import { parseCube, toKernelCube } from "./cube";
 import {
   readSession,
@@ -283,7 +304,13 @@ export interface FilterDialogState {
    *  filter while the dialog stays open. */
   before: boolean;
   applied: boolean;
+  /** The file each `image` parameter resolved to (its name), when one
+   *  was chosen (`chooseFilterImage`). */
+  files: Record<string, string>;
 }
+
+/** The filters that apply at once (Photoshop gives them no dialog). */
+export type OneShotFilter = "solarize" | "facet" | "desaturate" | "equalize";
 
 /** Which dialog the panel shows on top (one at a time, as a modal). */
 export type ImageDialog =
@@ -293,7 +320,13 @@ export type ImageDialog =
   | { kind: "trim" }
   | { kind: "rotate" }
   | { kind: "exportAs" }
-  | { kind: "blendingOptions"; index: number };
+  | { kind: "blendingOptions"; index: number }
+  | { kind: "layerStyle"; index: number; pane: LayerStylePane }
+  | { kind: "globalLight" }
+  | { kind: "scaleEffects"; index: number };
+
+/** The pane the Layer Style dialog shows: an effect, or Blending Options. */
+export type LayerStylePane = EffectKind | "blending";
 
 /** The Layers list's search and filter (Photoshop's filter bar): rows
  *  whose name contains `query`, of `kind`, with colour label `color`. */
@@ -498,6 +531,15 @@ export interface ImageSessionState {
   brushPresetActive: string | null;
   /** The dialog on top of the panel, or null. */
   dialog: ImageDialog | null;
+  /** Copy Layer Style's clipboard (null: nothing copied). */
+  styleClipboard: LayerStyle | null;
+  /** The Styles panel's presets (built-in, then saved). */
+  stylePresets: StylePreset[];
+  /** The document's Global Light. */
+  globalLight: GlobalLight;
+  /** The style of the layer the Layer Style dialog edits (else the active
+   *  layer's), read with the layers — what the panel renders. */
+  layerStyle: LayerStyle | null;
   /** The Layers list's search and filter. */
   layerFilter: LayerFilter;
   /** The resolution the image declares, in pixels per inch (read from a
@@ -523,6 +565,13 @@ export interface ImageSessionState {
    *  last set — a new object each time, so the panel's curve editor can
    *  follow it. Null until they are used on this image. */
   channelCurves: ChannelCurves | null;
+  /** Curves' TARGETED ADJUSTMENT (I-55): armed on one curve, the image
+   *  click-drag moves the point for the tone under the pointer. A new
+   *  object after each move, so the curve editor follows `points`. */
+  curvesTarget: {
+    channel: CurveChannel;
+    points: Array<[number, number]>;
+  } | null;
 }
 
 /** WP5.8 — the retouching verbs are `RetouchApi` (retouch.ts). */
@@ -714,7 +763,29 @@ export interface ImageSession extends RetouchApi {
    *  defaults the first time) and, with preview on, show the result on
    *  the canvas. Refuses without an image. Replaces an open dialog
    *  (cancelling an open filter first). */
-  openFilterDialog(id: FilterId): Promise<boolean>;
+  openFilterDialog(
+    id: FilterId,
+    preset?: Record<string, FilterValue>,
+  ): Promise<boolean>;
+  /** FILTER ▸ BLUR GALLERY ▸ Field / Iris / Tilt-Shift / Path / Spin: the
+   *  Blur Gallery workspace with that blur switched on (its last settings
+   *  kept), the geometry on the canvas. */
+  openBlurGallery(kind: BlurKind): Promise<boolean>;
+  /** An `image` parameter's source: 0 this image's composite, 1 a file
+   *  the host's picker returns (decoded engine-side; refused when the
+   *  host has no picker or the user cancels). The preview follows. */
+  chooseFilterImage(key: string, choice: 0 | 1): Promise<boolean>;
+  /** The filters with no dialog (Solarize, Facet, Desaturate, Equalize):
+   *  one undo step in the active layer, inside the selection. */
+  applyOneShot(kind: OneShotFilter): Promise<boolean>;
+  /** A pointer on the canvas while the open dialog draws there (the Blur
+   *  Gallery's pins, Curves' targeted adjustment). True when it took the
+   *  event, so the active tool leaves it alone. `at` in image px. */
+  canvasPointer(
+    phase: "down" | "move" | "up",
+    at: [number, number],
+    modifiers?: { alt?: boolean; shift?: boolean },
+  ): boolean;
   /** Change the open filter dialog's values; the preview follows (on a
    *  resampled proxy at once where it can, at full resolution when the
    *  values rest). */
@@ -741,6 +812,46 @@ export interface ImageSession extends RetouchApi {
   /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
    *  active one by default): fill opacity, knockout and Blend If. */
   openBlendingOptions(index?: number): boolean;
+  /** Layer ▸ Layer Style ▸ <effect>… / Blending Options: the Layer Style
+   *  dialog on `pane` for layer `index` (the active one). Opening it on an
+   *  effect the layer does not have adds it with Photoshop's defaults
+   *  (one undo step), as Photoshop's menu does. */
+  openLayerStyle(pane?: LayerStylePane, index?: number): Promise<boolean>;
+  /** Show another pane of the open Layer Style dialog. */
+  setLayerStylePane(pane: LayerStylePane): void;
+  /** Layer ▸ Layer Style ▸ Global Light… / Scale Effects… (the active
+   *  layer's): their small dialogs. */
+  openStyleDialog(kind: "globalLight" | "scaleEffects"): boolean;
+  /** The layer's style (null: none). */
+  layerStyle(index: number): LayerStyle | null;
+  /** Set (null: clear) a layer's style; a dialog's edits to one layer are
+   *  one undo step. */
+  setLayerStyle(index: number, style: LayerStyle | null): Promise<boolean>;
+  /** Blending Options' style switches. */
+  setLayerStyleOptions(index: number, opts: StyleOptions): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Copy Layer Style (the active layer's). */
+  copyLayerStyle(): boolean;
+  /** Layer ▸ Layer Style ▸ Paste Layer Style onto the active layer and the
+   *  layers linked with it (one undo step). */
+  pasteLayerStyle(): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Clear Layer Style (the active layer's). */
+  clearLayerStyle(): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Global Light. */
+  setGlobalLight(angle: number, altitude: number): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Scale Effects (percent) on the active layer. */
+  scaleEffects(percent: number): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Hide / Show All Effects (toggles when `on` is
+   *  not given). */
+  setEffectsVisible(on?: boolean): Promise<boolean>;
+  /** Styles panel: apply the preset `name` to the active layer. */
+  applyStylePreset(name: string): Promise<boolean>;
+  /** Styles panel: New Style… — the active layer's style saved as `name`. */
+  saveStylePreset(name: string): boolean;
+  /** Styles panel: delete a saved preset (a built-in one stays). */
+  deleteStylePreset(name: string): boolean;
+  /** The defined pattern (Edit ▸ Define Pattern) made available to the
+   *  styles, returned as the reference an effect stores; null without one. */
+  stylePattern(): PatternRef | null;
   /** Close the Image dialog (a filter dialog is cancelled). */
   closeDialog(): Promise<void>;
   /** IMAGE ▸ Trim away `by` (transparent pixels, or the top-left or
@@ -769,6 +880,15 @@ export interface ImageSession extends RetouchApi {
   /** Called by the image tools on pointer-down: when a Curves eyedropper
    *  is armed, it takes the click (and is disarmed). */
   takeCurvesPick(at: [number, number]): boolean;
+  /** Arm (or, with null, disarm) Curves' targeted adjustment on
+   *  `channel`'s curve, starting from the editor's `points`. While armed,
+   *  a drag on the image (any image tool) moves the curve point for the
+   *  tone under the pointer up or down — one curve change per drag, like
+   *  a drag of the point itself. */
+  armCurvesTarget(
+    channel: CurveChannel | null,
+    points?: Array<[number, number]>,
+  ): void;
   /** ADJUST ▸ Color Lookup from a .cube file's text. */
   applyColorLookup(cubeText: string, name?: string): Promise<boolean>;
   /** The GRADIENT TOOL: foreground → background along the dragged line
@@ -1332,6 +1452,11 @@ export function elementIdOf(value: unknown): string | null {
  *  and refusal a session action reports, in the editor's language when
  *  the action runs. */
 const S = defineMessages("image.status", {
+  noLayerStyleToCopy: "The active layer has no layer style",
+  layerStyleCopied: "Layer style copied",
+  noLayerStyleToPaste: "No layer style copied yet: use Copy layer style",
+  noLayerStyleToClear: "The active layer has no layer style to clear",
+  noSuchStylePreset: 'No style called "{name}"',
   nothingIngestedIngestAPlacedImage:
     "Nothing ingested — ingest a placed image first.",
   frameDeselectedInFramePreviewCleared:
@@ -1642,6 +1767,19 @@ const S = defineMessages("image.status", {
   autoCurvesFlat: "Auto found no contrast to stretch.",
   curvesPickArmed: "Click the image to set the {kind} point.",
   curvesPicked: "Curves {kind} point set from {colour} at {x}, {y}.",
+  curvesTargetArmed:
+    "Drag up or down on the image to move the curve for the tone under the pointer.",
+  curvesTargeted: "Curve point {input} moved to {output}.",
+  noFilterImageChosen: "No image was chosen; the filter keeps its source.",
+});
+
+/** The filters with no dialog, as the status line and the undo step
+ *  name them. */
+const ONE_SHOT = defineMessages("image.effect", {
+  solarize: "Solarize",
+  facet: "Facet",
+  desaturate: "Desaturate",
+  equalize: "Equalize",
 });
 
 /** The Curves eyedroppers' names, as the status line says them. */
@@ -1733,7 +1871,18 @@ const E = defineMessages("image.effect", {
 
 /** The Photoshop-parity layer verbs (WP5.3): their names, as the
  *  status line reports them, and their outcomes. */
+/** The name the defined pattern goes by in a style. */
+const STYLE_PATTERN_NAME = "Pattern";
+
 const L = defineMessages("image.layerOps", {
+  layerStyle: "Layer style",
+  clearLayerStyle: "Clear layer style",
+  pasteLayerStyle: "Paste layer style",
+  blendingOptions: "Blending options",
+  globalLight: "Global light",
+  scaleEffects: "Scale effects",
+  showEffects: "Show all effects",
+  hideEffects: "Hide all effects",
   newAdjustmentLayer: "New adjustment layer",
   adjustment: "Adjustment",
   newFillLayer: "New fill layer",
@@ -1902,10 +2051,15 @@ export function createImageSession(host: BundleHost): ImageSession {
     brushPresets: defaultPresets(),
     brushPresetActive: null,
     dialog: null,
+    styleClipboard: null,
+    stylePresets: builtInPresets(),
+    globalLight: { angle: 120, altitude: 30 },
+    layerStyle: null,
     layerFilter: NO_LAYER_FILTER,
     ppi: null,
     curvesPicker: null,
     channelCurves: null,
+    curvesTarget: null,
   };
   /** The retained PSD parse handle (wasm-side), when state.psd is set. */
   let psdHandle: number | null = null;
@@ -2210,6 +2364,12 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       state.layers = engine.layers();
       state.history = engine.layersHistory();
+      state.globalLight = engine.globalLight();
+      const styled =
+        state.dialog?.kind === "layerStyle"
+          ? state.dialog.index
+          : state.layers.active;
+      state.layerStyle = engine.layerStyle(styled);
     } catch (err) {
       host.log.debug("layer readout failed", err);
       state.layers = EMPTY_LAYER_STACK;
@@ -3334,6 +3494,28 @@ export function createImageSession(host: BundleHost): ImageSession {
 
   /** The last values each filter's dialog was closed with. */
   const lastFilterValues = new Map<FilterId, Record<string, FilterValue>>();
+  /** The files the open dialog's `image` parameters decoded (owned:
+   *  freed with the dialog). */
+  const filterFiles = new Map<string, number>();
+  const freeFilterFiles = () => {
+    for (const h of filterFiles.values()) engine?.freeImage(h);
+    filterFiles.clear();
+  };
+  /** What a filter's run needs beyond its values (filters-schema.ts). */
+  const filterCtx = (
+    width: number,
+    height: number,
+    values: Readonly<Record<string, FilterValue>>,
+  ): FilterContext => ({
+    width,
+    height,
+    fg: [state.colors.fg[0], state.colors.fg[1], state.colors.fg[2]],
+    bg: [state.colors.bg[0], state.colors.bg[1], state.colors.bg[2]],
+    resource: (key) =>
+      values[key] === 1
+        ? (filterFiles.get(key) ?? null)
+        : (state.source?.handle ?? null),
+  });
   /** The image the dialog's proxy preview runs on (taken at open). */
   let filterProxy: {
     handle: number;
@@ -3360,7 +3542,29 @@ export function createImageSession(host: BundleHost): ImageSession {
     if (filterSettle) clearTimeout(filterSettle);
     filterSettle = null;
     freeFilterProxy();
+    freeFilterFiles();
+    blurDrag = null;
+    drawBlurGallery(null);
     appliedKey = null;
+  };
+
+  // ── the Blur Gallery's geometry on the canvas ───────────────────────
+  let blurDrag: BlurDrag | null = null;
+  let blurLayer: ReturnType<typeof host.overlay.layer> | null = null;
+  /** Draw (or clear) the open Blur Gallery's pins over the image. */
+  const drawBlurGallery = (d: FilterDialogState | null) => {
+    const src = state.source;
+    if (!d || d.id !== "blurGallery" || !src?.elementId) {
+      blurLayer?.clear();
+      return;
+    }
+    void resolveFrameFit(host, src, "blur gallery").then((fit) => {
+      if (openFilter() !== d) return;
+      blurLayer ??= host.overlay.layer("blur-gallery");
+      if (!fit) blurLayer.clear();
+      else
+        blurLayer.set(blurGalleryShapes(d.values, src.width, src.height, fit));
+    });
   };
 
   /** Take the preview step back off the image (it is the newest step:
@@ -3384,7 +3588,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     const def = filterDef(d.id);
     const values = { ...d.values };
     const eng = engine;
-    const ok = await api.applyEffect(def.label, (h) => def.run(eng, h, values));
+    const ctx = filterCtx(state.source.width, state.source.height, values);
+    const ok = await api.applyEffect(def.label, (h) =>
+      def.run(eng, h, values, ctx),
+    );
     // The dialog may have closed (or moved on) while the pass ran.
     if (openFilter() !== d) {
       if (ok) await historyStep(true);
@@ -3410,7 +3617,12 @@ export function createImageSession(host: BundleHost): ImageSession {
     const def = filterDef(d.id);
     const values = scaledForProxy(def, d.values, filterProxy.factor);
     try {
-      const out = await def.run(engine, filterProxy.handle, values);
+      const out = await def.run(
+        engine,
+        filterProxy.handle,
+        values,
+        filterCtx(filterProxy.width, filterProxy.height, d.values),
+      );
       let rgba: Uint8Array;
       try {
         rgba = await engine.adjust(out.handle, state.params);
@@ -3596,6 +3808,85 @@ export function createImageSession(host: BundleHost): ImageSession {
     wand: () => state.wand,
   });
   const masking = maskingRef;
+  // ── CURVES ▸ TARGETED ADJUSTMENT (I-55) ─────────────────────────────
+  const curvesTarget: {
+    armed: boolean;
+    /** The drag: the point index it moves, where it started, its output. */
+    drag: { index: number; y0: number; out0: number } | null;
+  } = { armed: false, drag: null };
+  /** The tone (0..1) of the image under `at` on `channel`'s curve: the
+   *  channel's value, or Rec. 709 luminance for the composite. */
+  const toneAt = (
+    at: [number, number],
+    channel: CurveChannel,
+  ): number | null => {
+    const src = state.source;
+    if (!src || !engine) return null;
+    const [x, y] = [Math.floor(at[0]), Math.floor(at[1])];
+    if (x < 0 || y < 0 || x >= src.width || y >= src.height) return null;
+    let c: Rgba01 | null;
+    try {
+      c = averageRgba8(engine.tile(src.handle, x, y, 1, 1));
+    } catch (err) {
+      host.log.debug("targeted adjustment sample failed", err);
+      return null;
+    }
+    if (!c) return null;
+    if (channel === "r") return c[0];
+    if (channel === "g") return c[1];
+    if (channel === "b") return c[2];
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  /** The curve through `pts` at `x`, as the engine's LUT draws it. */
+  const curveAt = (pts: Array<[number, number]>, x: number): number => {
+    if (!engine) return x;
+    const lut = engine.curveLut(pts);
+    return (lut[Math.round(Math.min(1, Math.max(0, x)) * 255)] ?? 0) / 255;
+  };
+  const curvesTargetPointer = (
+    phase: "down" | "move" | "up",
+    at: [number, number],
+  ): boolean => {
+    const target = state.curvesTarget;
+    if (!target) return false;
+    if (phase === "down") {
+      const tone = toneAt(at, target.channel);
+      if (tone === null) return false;
+      const pts = target.points.map((q) => [q[0], q[1]] as [number, number]);
+      // The point within 4 levels of the tone moves; otherwise a new one
+      // is placed ON the curve there, so the press alone changes nothing.
+      let index = pts.findIndex((q) => Math.abs(q[0] - tone) <= 4 / 255);
+      if (index < 0) {
+        pts.push([tone, curveAt(pts, tone)]);
+        pts.sort((a, b) => a[0] - b[0]);
+        index = pts.findIndex((q) => q[0] === tone);
+      }
+      curvesTarget.drag = { index, y0: at[1], out0: pts[index]![1] };
+      state.curvesTarget = { channel: target.channel, points: pts };
+      emit();
+      return true;
+    }
+    const drag = curvesTarget.drag;
+    if (!drag) return false;
+    // Up the image raises the output; a full image height is the range.
+    const span = Math.max(64, state.source?.height ?? 256);
+    const out = Math.min(1, Math.max(0, drag.out0 + (drag.y0 - at[1]) / span));
+    const pts = target.points.map((q, i) =>
+      i === drag.index ? ([q[0], out] as [number, number]) : q,
+    );
+    state.curvesTarget = { channel: target.channel, points: pts };
+    api.setCurvePoints(pts, target.channel);
+    if (phase === "up") {
+      curvesTarget.drag = null;
+      setStatus(
+        t(S.curvesTargeted, {
+          input: Math.round(pts[drag.index]![0] * 255),
+          output: Math.round(out * 255),
+        }),
+      );
+    }
+    return true;
+  };
 
   const api: ImageSession = {
     ...retouch,
@@ -3811,7 +4102,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
 
-    async openFilterDialog(id) {
+    async openFilterDialog(id, preset) {
       const def = filterDef(id);
       if (openFilter()) await cancelFilter();
       if (!state.source || !engine) {
@@ -3821,13 +4112,19 @@ export function createImageSession(host: BundleHost): ImageSession {
       discardStroke();
       const filter: FilterDialogState = {
         id,
-        values: { ...filterDefaults(def), ...lastFilterValues.get(id) },
+        values: {
+          ...filterDefaults(def),
+          ...lastFilterValues.get(id),
+          ...preset,
+        },
         preview: true,
         before: false,
         applied: false,
+        files: {},
       };
       state.dialog = { kind: "filter", filter };
       emit();
+      drawBlurGallery(filter);
       await takeFilterProxy();
       if (openFilter() !== filter) {
         freeFilterProxy();
@@ -3845,7 +4142,107 @@ export function createImageSession(host: BundleHost): ImageSession {
       // A new dialog record, so a render memoised on it sees the change.
       state.dialog = { kind: "filter", filter: d };
       emit();
+      drawBlurGallery(d);
       scheduleFilterPreview();
+    },
+
+    openBlurGallery(kind) {
+      const last = lastFilterValues.get("blurGallery") ?? {};
+      return api.openFilterDialog(
+        "blurGallery",
+        blurPreset(last, kind) as Record<string, FilterValue>,
+      );
+    },
+
+    async chooseFilterImage(key, choice) {
+      const d = openFilter();
+      if (!d || !engine) return false;
+      if (choice === 0) {
+        const own = filterFiles.get(key);
+        if (own !== undefined) engine.freeImage(own);
+        filterFiles.delete(key);
+        const { [key]: _gone, ...files } = d.files;
+        d.files = files;
+        api.setFilterValues({ [key]: 0 });
+        return true;
+      }
+      if (!host.supports("shell.pickFile@1")) {
+        setStatus(t(S.thisHostWiresNoFilePicker));
+        return false;
+      }
+      const picked = await host.shell.pickFile({
+        accept: [".png", ".jpg", ".jpeg", ".webp", ".psd", ".tif", ".tiff"],
+      });
+      const file = picked[0];
+      if (!file || openFilter() !== d) {
+        setStatus(t(S.noFilterImageChosen));
+        return false;
+      }
+      let h: number;
+      try {
+        h = engine.decode(file.bytes).handle;
+      } catch (err) {
+        setStatus(t(S.whatFailed, { what: file.name, error: errText(err) }));
+        return false;
+      }
+      const own = filterFiles.get(key);
+      if (own !== undefined) engine.freeImage(own);
+      filterFiles.set(key, h);
+      d.files = { ...d.files, [key]: file.name };
+      api.setFilterValues({ [key]: 1 });
+      return true;
+    },
+
+    async applyOneShot(kind) {
+      const eng = engine;
+      if (!eng || !state.source) {
+        setStatus(t(S.filterNeedsAnImage, { label: t(ONE_SHOT[kind]) }));
+        return false;
+      }
+      return api.applyEffect(ONE_SHOT[kind], (h) => {
+        switch (kind) {
+          case "solarize":
+            return eng.applySolarize(h);
+          case "facet":
+            // Facet clumps similar neighbours into flat facets: the
+            // gallery's Kuwahara regions at their smallest radius.
+            return eng.galleryKuwahara(h, 2, 1);
+          case "desaturate":
+            return eng.applyDesaturate(h);
+          case "equalize":
+            return eng.applyEqualize(h, state.selection !== null);
+        }
+      });
+    },
+
+    canvasPointer(phase, at, modifiers = {}) {
+      // A drag cut off (the tool deactivated, the pointer left the frame)
+      // ends where it last was.
+      if (!Number.isFinite(at[0]) || !Number.isFinite(at[1])) {
+        const had = blurDrag !== null || curvesTarget.drag !== null;
+        blurDrag = null;
+        curvesTarget.drag = null;
+        return had;
+      }
+      const d = openFilter();
+      const src = state.source;
+      if (curvesTarget.armed && src) return curvesTargetPointer(phase, at);
+      if (!d || d.id !== "blurGallery" || !src) return false;
+      if (phase === "down") {
+        blurDrag = blurGalleryHit(
+          d.values,
+          src.width,
+          src.height,
+          at,
+          modifiers.alt === true,
+        );
+        if (!blurDrag) return false;
+      }
+      if (!blurDrag) return false;
+      const patch = blurDrag.move(at, src.width, src.height);
+      if (patch) api.setFilterValues(patch);
+      if (phase === "up") blurDrag = null;
+      return true;
     },
 
     async setFilterPreview(on) {
@@ -3901,7 +4298,9 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.filterNeedsAnImage, { label: t(def.label) }));
         return false;
       }
-      return api.applyEffect(def.label, (h) => def.run(eng, h, v));
+      const src = state.source;
+      const ctx = filterCtx(src?.width ?? 1, src?.height ?? 1, v);
+      return api.applyEffect(def.label, (h) => def.run(eng, h, v, ctx));
     },
 
     async applyAverage() {
@@ -4065,6 +4464,24 @@ export function createImageSession(host: BundleHost): ImageSession {
         }),
       );
       return curves;
+    },
+
+    armCurvesTarget(channel, points) {
+      curvesTarget.armed = channel !== null;
+      curvesTarget.drag = null;
+      state.curvesTarget = channel
+        ? {
+            channel,
+            points: points
+              ? [...points]
+              : [
+                  [0, 0],
+                  [1, 1],
+                ],
+          }
+        : null;
+      if (channel) setStatus(t(S.curvesTargetArmed));
+      else emit();
     },
 
     takeCurvesPick(at) {
@@ -5099,6 +5516,10 @@ export function createImageSession(host: BundleHost): ImageSession {
         rgb[{ r: 0, g: 1, b: 2 }[channel]] = table;
         state.params = { ...state.params, curveLutRgb: rgb };
       }
+      // An armed targeted adjustment moves THIS curve next time.
+      const target = state.curvesTarget;
+      if (target && target.channel === channel && target.points !== points)
+        state.curvesTarget = { channel, points: [...points] };
       emit();
       schedulePreview();
     },
@@ -6551,6 +6972,197 @@ export function createImageSession(host: BundleHost): ImageSession {
     setLayerFilter(patch) {
       state.layerFilter = { ...state.layerFilter, ...patch };
       emit();
+    },
+
+    async openLayerStyle(pane = "blending", index) {
+      if (!engine || !state.source || state.layers.layers.length === 0) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      const at = index ?? state.layers.active;
+      if (pane !== "blending") {
+        const style = api.layerStyle(at) ?? emptyStyle();
+        if (!effectEnabled(style, pane)) {
+          const pattern =
+            pane === "patternOverlay"
+              ? (api.stylePattern() ?? undefined)
+              : undefined;
+          // The effect is added whether or not the composite can be
+          // redrawn here (a realm without WebGPU still edits the style).
+          try {
+            engine.layerSetStyle(
+              at,
+              setEffectEnabled(style, pane, true, pattern),
+            );
+          } catch (err) {
+            setStatus(
+              t(S.whatFailed, { what: t(L.layerStyle), error: errText(err) }),
+            );
+            refreshLayers();
+            emit();
+            return false;
+          }
+          await recomposite();
+        }
+      }
+      state.dialog = { kind: "layerStyle", index: at, pane };
+      refreshLayers();
+      emit();
+      return true;
+    },
+
+    setLayerStylePane(pane) {
+      if (state.dialog?.kind !== "layerStyle") return;
+      state.dialog = { ...state.dialog, pane };
+      emit();
+    },
+
+    openStyleDialog(kind) {
+      if (!engine || !state.source || state.layers.layers.length === 0) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      state.dialog =
+        kind === "globalLight"
+          ? { kind }
+          : { kind, index: state.layers.active };
+      emit();
+      return true;
+    },
+
+    layerStyle(index) {
+      if (!engine || !state.source) return null;
+      try {
+        return engine.layerStyle(index);
+      } catch {
+        return null;
+      }
+    },
+
+    setLayerStyle(index, style) {
+      return layerOp(style ? L.layerStyle : L.clearLayerStyle, () =>
+        engine!.layerSetStyle(index, style),
+      );
+    },
+
+    setLayerStyleOptions(index, opts) {
+      return layerOp(L.blendingOptions, () =>
+        engine!.layerSetStyleOptions(index, styleOptionsBits(opts)),
+      );
+    },
+
+    copyLayerStyle() {
+      const style = api.layerStyle(state.layers.active);
+      if (!style) {
+        setStatus(t(S.noLayerStyleToCopy));
+        emit();
+        return false;
+      }
+      state.styleClipboard = style;
+      setStatus(t(S.layerStyleCopied));
+      emit();
+      return true;
+    },
+
+    pasteLayerStyle() {
+      const style = state.styleClipboard;
+      if (!style) {
+        setStatus(t(S.noLayerStyleToPaste));
+        emit();
+        return Promise.resolve(false);
+      }
+      const active = state.layers.active;
+      const link = state.layers.layers[active]?.link ?? null;
+      const targets = state.layers.layers
+        .map((l, i) =>
+          i === active || (link !== null && l.link === link) ? i : -1,
+        )
+        .filter((i) => i >= 0);
+      return layerOp(L.pasteLayerStyle, () =>
+        engine!.layersPasteStyle(targets, style),
+      );
+    },
+
+    clearLayerStyle() {
+      const at = state.layers.active;
+      if (!api.layerStyle(at)) {
+        setStatus(t(S.noLayerStyleToClear));
+        emit();
+        return Promise.resolve(false);
+      }
+      return api.setLayerStyle(at, null);
+    },
+
+    setGlobalLight(angle, altitude) {
+      return layerOp(L.globalLight, () =>
+        engine!.setGlobalLight(angle, altitude),
+      );
+    },
+
+    scaleEffects(percent) {
+      const at = state.layers.active;
+      return layerOp(L.scaleEffects, () =>
+        engine!.layerScaleEffects(at, percent),
+      );
+    },
+
+    setEffectsVisible(on) {
+      const at = state.layers.active;
+      const row = state.layers.layers[at];
+      const next = on ?? !(row?.styleOn ?? false);
+      return layerOp(next ? L.showEffects : L.hideEffects, () =>
+        engine!.layerSetEffectsVisible(at, next),
+      );
+    },
+
+    applyStylePreset(name) {
+      const preset = state.stylePresets.find((p) => p.name === name);
+      if (!preset) {
+        setStatus(t(S.noSuchStylePreset, { name }));
+        emit();
+        return Promise.resolve(false);
+      }
+      return api.setLayerStyle(state.layers.active, cloneStyle(preset.style));
+    },
+
+    saveStylePreset(name) {
+      const style = api.layerStyle(state.layers.active);
+      const trimmed = name.trim();
+      if (!style || trimmed === "") {
+        setStatus(t(S.noLayerStyleToCopy));
+        emit();
+        return false;
+      }
+      state.stylePresets = [
+        ...state.stylePresets.filter((p) => p.name !== trimmed || p.builtIn),
+        { name: trimmed, style: cloneStyle(style) },
+      ];
+      emit();
+      return true;
+    },
+
+    deleteStylePreset(name) {
+      const before = state.stylePresets.length;
+      state.stylePresets = state.stylePresets.filter(
+        (p) => p.builtIn || p.name !== name,
+      );
+      emit();
+      return state.stylePresets.length !== before;
+    },
+
+    stylePattern() {
+      if (!engine || patternHandle === null || !state.pattern) return null;
+      const { width, height } = state.pattern;
+      try {
+        const rgba = engine.tile(patternHandle, 0, 0, width, height);
+        engine.defineStylePattern(STYLE_PATTERN_NAME, rgba, width, height);
+        return { name: STYLE_PATTERN_NAME, id: STYLE_PATTERN_NAME };
+      } catch (err) {
+        host.log.debug("style pattern failed", err);
+        return null;
+      }
     },
 
     openBlendingOptions(index) {

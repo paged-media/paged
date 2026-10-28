@@ -47,7 +47,7 @@ const NS_A: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 const NS_R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 /// The slide extension that names the slide's comment part.
 const EXT_COMMENT_REL: &str = "{6950BFC3-D8DA-4A85-94F7-54DA5524770B}";
-const EMU_PER_PT: f64 = 12_700.0;
+use paged_ooxml::units::EMU_PER_PT;
 /// What a comment without a creation time is written with (the attribute
 /// is required).
 const NO_DATE: &str = "1970-01-01T00:00:00.000";
