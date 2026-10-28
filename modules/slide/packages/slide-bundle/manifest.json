@@ -56,7 +56,12 @@
       "media.paged.slide.command.addSection",
       "media.paged.slide.command.animationPane",
       "media.paged.slide.command.previewAnimations",
-      "media.paged.slide.command.animationPainter"
+      "media.paged.slide.command.animationPainter",
+      "media.paged.slide.command.insertPicture",
+      "media.paged.slide.command.insertIcon",
+      "media.paged.slide.command.copyFormat",
+      "media.paged.slide.command.pasteFormat",
+      "media.paged.slide.command.smartArtText"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
     "exporters": [
@@ -91,7 +96,8 @@
       "media.paged.slide.panel.comments",
       "media.paged.slide.panel.shapes",
       "media.paged.slide.panel.customShows",
-      "media.paged.slide.panel.animations"
+      "media.paged.slide.panel.animations",
+      "media.paged.slide.panel.smartart"
     ],
     "partTypes": [
       {
@@ -401,6 +407,48 @@
           "title": "Preview a slide's animations",
           "args": "schema/preview-animations.args.json",
           "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.insertPicture",
+          "title": "Insert a picture",
+          "args": "schema/insert-picture.args.json",
+          "result": "schema/insert-picture.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.insertIcon",
+          "title": "Insert an icon (SVG)",
+          "args": "schema/insert-picture.args.json",
+          "result": "schema/insert-picture.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.copyFormat",
+          "title": "Copy formatting",
+          "args": "schema/format.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.pasteFormat",
+          "title": "Paste formatting",
+          "args": "schema/format.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.smartArtText",
+          "title": "SmartArt text pane",
+          "args": "schema/empty.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.smartArtPoints",
+          "title": "Read a SmartArt diagram's text",
+          "args": "schema/smartart.args.json",
+          "result": "schema/smartart.result.json"
+        },
+        {
+          "id": "media.paged.slide.setSmartArtText",
+          "title": "Set a SmartArt point's text",
+          "args": "schema/set-smartart-text.args.json",
+          "result": "schema/applied.result.json"
         }
       ],
       "templateFields": [

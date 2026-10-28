@@ -84,6 +84,9 @@ pub struct Label {
     pub detail: bool,
     /// The chart part a chart frame draws (ADR 715).
     pub chart: Option<String>,
+    /// A SmartArt drawing shape (slide W4): its `modelId` and the data
+    /// points whose text it shows, with their paragraph counts.
+    pub dgm: Option<(String, Vec<(String, u32)>)>,
 }
 
 fn s(v: &Value, k: &str) -> Option<String> {
@@ -136,6 +139,18 @@ pub fn parse_label(json: &str) -> Label {
             .and_then(|b| Some((b.first()?.as_f64()?, b.get(1)?.as_f64()?))),
         detail: s(&d, "part").as_deref() == Some("detail"),
         chart: s(&d, "chart"),
+        dgm: d.get("dgm").and_then(|g| {
+            let points = g
+                .get("points")?
+                .as_array()?
+                .iter()
+                .filter_map(|p| {
+                    let p = p.as_array()?;
+                    Some((p.first()?.as_str()?.to_string(), p.get(1)?.as_u64()? as u32))
+                })
+                .collect();
+            Some((s(g, "shape")?, points))
+        }),
     }
 }
 

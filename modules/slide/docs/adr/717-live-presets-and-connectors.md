@@ -90,3 +90,72 @@ when they move. The editor had no adjust handles and no way to insert a preset.
   moved by hand stays glued (PowerPoint detaches it). There is no connector tool, no reconnecting,
   and no rerouting choice beyond the start site's direction. Elbow and curved connectors with
   more than one bend keep their adjust values when re-routed. Groups are not followed as targets.
+
+## Amendment (2026-10-28): pictures, the format painter and SmartArt text
+
+The rest of W4's live content that needs no engine change. Video and audio (engine ADR 1027),
+effects parity (engine 1007/1008) and motion-path handles are not part of it.
+
+- **Pictures in every format the engine reads.** `pptx-core::media` sniffs a picture's format
+  by the signatures `paged-sniff` uses and reads its pixel size from the header. The slide
+  crates may not build on the engine's raster crates, so the sniffing is written again here
+  rather than shared. Insert ▸ Pictures… (`media.paged.slide.command.insertPicture`) places any of them on
+  the active slide as a picture frame, at 96 pixels an inch and scaled down to fit the slide,
+  in one undo step (`insertFrame`, `bindCreated` and `replaceImageBytes` through
+  `mutateWithBytes`). Export writes PNG, JPEG, GIF, BMP and TIFF as they are, with a `Default`
+  content type for each extension. **Every other format is written as a PNG of the frame**,
+  because PowerPoint does not open WebP, PSD, TGA, QOI, ICO, AVIF, JPEG XL, HDR, EXR, DNG or EPS
+  parts. The slide wasm decodes no pixels, so the host renders the frame: export reports the
+  pictures it needs (`rastersNeeded`, an element id and a resolution: the image's own pixel
+  density, at most 4096 px on the long side), the bundle renders them with
+  `host.render.element` (`render.snapshot@2`) and the deck is written again with them. The
+  PNG holds the frame's visible part, so no `a:srcRect` is written for it.
+- **SVG and icons.** An SVG stays vector in the document: the engine draws placed SVG as paths
+  (engine ADR 190). Export writes it as PowerPoint does: an `a:blip` holding a PNG fallback,
+  with an `asvg:svgBlip` extension (`{96DAC541-7B7A-43D3-8B79-37D633B846F1}`) naming the SVG
+  part. The fallback is rendered by the host at 192 dpi. Import reads `asvg:svgBlip` (the
+  shared `paged_ooxml` blip reader gains `Blip::svg`) and draws the SVG, not its fallback.
+  Insert ▸ Icons… (`insertIcon`) takes SVG files only. There is no online icon library.
+- **The format painter.** Copy formatting (`copyFormat`) takes the first selected shape's fill,
+  line, transparency and effects (every `frameFill*`, `frameStroke*`, `frameGradient*` and
+  effect path the engine reports) and its text's character and paragraph formatting (font,
+  size, style, colour, underline, strikethrough, tracking, case, position, leading, alignment,
+  indents, spacing), read from the first character. While text is selected, it takes the
+  selected text's formatting instead. Paste formatting (`pasteFormat`) writes them in one
+  batch, so one undo step, to every selected shape: the look goes on its outline, and the text
+  formatting goes over its whole story. A slide shape is the elements that share its label key,
+  so selecting its text frame paints its outline too. With text selected, the formatting goes
+  to that text (`host.text.format`). The keys are Ctrl+Shift+C and Ctrl+Shift+V with their
+  Cmd twins, scoped to the deck's document context. Geometry and size stay the target's.
+- **The SmartArt text pane.** A diagram still imports as the drawing PowerPoint laid out, and
+  there is no layout engine. `pptx-import` reads each data part's text points (a depth-first
+  walk of the `parOf` connections) and what each drawing shape shows (its `presOf` sources, in
+  `destOrd` order, with their paragraph counts). The importer labels the frame with the
+  outline (`smartart`), and each drawing shape whose paragraphs match its points with those
+  points (`dgm`). The Text Pane panel (`media.paged.slide.panel.smartart`, Slide ▸ SmartArt
+  text pane) lists the selected diagram's points by level. An edit replaces the point's
+  paragraphs in every shape that shows it, in one undo step. The new text goes in after the
+  first old character and the old text is then removed, so the text keeps its formatting. The
+  typed commands `media.paged.slide.smartArtPoints` and `setSmartArtText` do the same from a
+  script. Export writes a diagram whose shapes changed only in their text to new data and
+  drawing parts (`dataN.xml`, `drawingN.xml`; a duplicated slide may share the old ones),
+  points the slide's relationships at them and keeps the relationship ids. In the data part,
+  the edited points' `dgm:t` and, in the drawing part, the shapes' `dsp:txBody` paragraphs get
+  the new text with the first old paragraph's `a:pPr` and `a:rPr`. A point that was an empty
+  placeholder loses `phldr`.
+
+Consequences and limits:
+
+- Points are edited, not added, removed or moved between levels. A point no drawing shape
+  shows is listed read-only. In a shape that shows several points, each point keeps its
+  paragraph count: extra lines are joined with a space, and missing ones stay empty. Runs
+  inside an edited point are written with its first run's properties. A formatting change to
+  diagram text, or any other change inside a diagram, is still reported as not exported.
+- An SVG's fallback for a cropped frame is its visible part, cropped again by the blip's
+  `a:srcRect` in readers that show only the fallback. Before the host renders it, an SVG's
+  fallback is a transparent pixel. A host without `render.snapshot@2` cannot export a picture
+  in a format PowerPoint does not open, and the export names it.
+- The format painter paints shapes, not table cells, and does not copy geometry, text-frame
+  insets or autofit. Export writes the painted fill, line and text as it writes any such
+  edit: effect changes the exporter does not yet write stay reported.
+- The slide wasm grew by 95 KB (5.24 → 5.33 MiB).

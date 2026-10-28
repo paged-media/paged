@@ -361,6 +361,19 @@ pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
     if let Some(f) = &it.meta.frame {
         data.insert("frame".into(), f.clone().into());
     }
+    // SmartArt (slide W4, the text pane): a drawing shape's points, and the
+    // frame's outline of them with their text as the deck had it.
+    if let (Some(d), Some(m)) = (&it.meta.dgm, &it.meta.model_id) {
+        data.insert("dgm".into(), serde_json::json!({ "shape": m, "points": d }));
+    }
+    if let Some(m) = &it.meta.smartart {
+        let points: Vec<serde_json::Value> = m
+            .points
+            .iter()
+            .map(|p| serde_json::json!({ "id": p.id, "depth": p.depth, "text": p.paragraphs.join("\n") }))
+            .collect();
+        data.insert("smartart".into(), serde_json::json!({ "points": points }));
+    }
     if let Some(c) = &it.meta.chart {
         data.insert("chart".into(), c.clone().into());
         // The frame's box on the page (x, y, w, h), where a redraw of the
@@ -426,37 +439,10 @@ fn clean_value(s: &str) -> String {
         .to_string()
 }
 
-/// Pixel size of a PNG, JPEG or GIF.
+/// Pixel size of a picture (pptx-core's `media`: every format the engine
+/// decodes, an SVG in CSS pixels).
 fn image_size(b: &[u8]) -> Option<(u32, u32)> {
-    if b.len() > 24 && b.starts_with(b"\x89PNG") {
-        let w = u32::from_be_bytes(b[16..20].try_into().ok()?);
-        let h = u32::from_be_bytes(b[20..24].try_into().ok()?);
-        return Some((w, h));
-    }
-    if b.len() > 10 && (b.starts_with(b"GIF87a") || b.starts_with(b"GIF89a")) {
-        return Some((
-            u16::from_le_bytes([b[6], b[7]]) as u32,
-            u16::from_le_bytes([b[8], b[9]]) as u32,
-        ));
-    }
-    if b.len() > 4 && b[0] == 0xff && b[1] == 0xd8 {
-        let mut i = 2;
-        while i + 9 < b.len() {
-            if b[i] != 0xff {
-                i += 1;
-                continue;
-            }
-            let marker = b[i + 1];
-            let len = u16::from_be_bytes([b[i + 2], b[i + 3]]) as usize;
-            if (0xc0..=0xcf).contains(&marker) && !matches!(marker, 0xc4 | 0xc8 | 0xcc) {
-                let h = u16::from_be_bytes([b[i + 5], b[i + 6]]) as u32;
-                let w = u16::from_be_bytes([b[i + 7], b[i + 8]]) as u32;
-                return Some((w, h));
-            }
-            i += 2 + len;
-        }
-    }
-    None
+    pptx_core::media::pixel_size(b)
 }
 
 const NO_CHAR_STYLE: &str = "CharacterStyle/$ID/[No character style]";
@@ -811,8 +797,9 @@ impl Builder<'_> {
                     return;
                 };
                 let Some((pw, ph)) = image_size(&bytes) else {
-                    self.diagnostics
-                        .push(format!("{image_part}: not PNG / JPEG / GIF, not placed"));
+                    self.diagnostics.push(format!(
+                        "{image_part}: not a picture format the engine reads, not placed"
+                    ));
                     return;
                 };
                 let sf = self.stroke(stroke.as_ref());

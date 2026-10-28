@@ -119,6 +119,99 @@ pub struct Shared<'a> {
     /// The chart parts whose data the document changed (ADR 715): their
     /// frames are redrawn, and the chart part is written from the workbook.
     pub live_charts: std::collections::BTreeSet<String>,
+    /// PNGs of pictures PowerPoint cannot hold as they are (an SVG's
+    /// fallback, a WebP, a PSD, …), by element id: the host rendered them
+    /// at the resolution [`Shared::needs`] asked for.
+    pub rasters: &'a BTreeMap<String, Vec<u8>>,
+    /// The original package (a SmartArt edit reads its diagram parts).
+    pub pkg: &'a paged_ooxml::opc::OpcPackage,
+    /// The last number given to a diagram part (`dataN.xml`, `drawingN.xml`).
+    pub diagram_no: RefCell<u32>,
+    /// The pictures written without the PNG they needed: (element id,
+    /// resolution in dpi). The caller renders them and exports again.
+    pub needs: RefCell<Vec<(String, f64)>>,
+}
+
+/// The `asvg:svgBlip` extension of an `a:blip` (Office 2016).
+const SVG_EXT: &str = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}";
+const NS_ASVG: &str = "http://schemas.microsoft.com/office/drawing/2016/SVG/main";
+
+/// A transparent 1 × 1 PNG: an SVG's fallback before the host rendered it.
+const BLANK_PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+    0x42, 0x60, 0x82,
+];
+
+/// A picture's `a:blip` as written: its relationships and whether the
+/// raster is a PNG of the frame's visible part (the crop is in it).
+struct BlipOut {
+    /// The raster part's relationship id.
+    rid: String,
+    /// The SVG part's, for an SVG picture.
+    svg: Option<String>,
+    baked: bool,
+}
+
+impl BlipOut {
+    /// The `a:extLst` entry naming the SVG part, when there is one.
+    fn svg_ext(&self) -> String {
+        self.svg
+            .as_ref()
+            .map(|r| {
+                format!(
+                    r#"<a:ext uri="{SVG_EXT}"><asvg:svgBlip xmlns:asvg="{NS_ASVG}" r:embed="{r}"/></a:ext>"#
+                )
+            })
+            .unwrap_or_default()
+    }
+
+    /// A whole new `a:blip`.
+    fn xml(&self) -> String {
+        let ext = self.svg_ext();
+        if ext.is_empty() {
+            format!(r#"<a:blip r:embed="{}"/>"#, self.rid)
+        } else {
+            format!(
+                r#"<a:blip r:embed="{}"><a:extLst>{ext}</a:extLst></a:blip>"#,
+                self.rid
+            )
+        }
+    }
+
+    /// `old` (an `a:blip` element) pointing at this picture: its effects
+    /// and other extensions kept, an SVG extension replaced.
+    fn patch(&self, old: &str) -> String {
+        let Some(el) = xml::root(old) else {
+            return self.xml();
+        };
+        let open = xml::set_attr(el.open(old), "r:embed", Some(&self.rid));
+        let open = open
+            .trim_end_matches("/>")
+            .trim_end_matches('>')
+            .to_string()
+            + ">";
+        let mut inner = String::new();
+        let mut exts = String::new();
+        for c in el.children(old) {
+            if c.name == "a:extLst" {
+                for e in c.children(old) {
+                    if e.attr(old, "uri").as_deref() != Some(SVG_EXT) {
+                        exts.push_str(e.text(old));
+                    }
+                }
+            } else {
+                inner.push_str(c.text(old));
+            }
+        }
+        exts.push_str(&self.svg_ext());
+        if !exts.is_empty() {
+            inner.push_str(&format!("<a:extLst>{exts}</a:extLst>"));
+        }
+        format!("{open}{inner}</a:blip>")
+    }
 }
 
 /// One slide to write.
@@ -142,11 +235,18 @@ pub struct Job<'a> {
     pub layout: Option<String>,
 }
 
+/// A new part a slide's write adds: its name, bytes and content type (none
+/// for a relationship part).
+pub type NewPart = (String, Vec<u8>, Option<&'static str>);
+
 /// A written slide.
 pub struct Out {
     pub xml: String,
     /// New image parts: (part, bytes).
     pub media: Vec<(String, Vec<u8>)>,
+    /// Other new parts: (part, bytes, content type), their relationship
+    /// parts with no content type.
+    pub parts: Vec<NewPart>,
     pub lost: Vec<String>,
     /// The `cNvPr id` each shape written under a new id got (a shape made
     /// in the editor, a copy on the same slide), by its elements' `Self`
@@ -233,6 +333,19 @@ fn index_items<'a>(
         }
         out.entry(format!("{prefix}{k}")).or_insert(it);
     }
+}
+
+/// Every element of a shape and its members, in order, with its label.
+fn flat(s: &NShape) -> Vec<(&Elem, &native::Label)> {
+    let mut out: Vec<(&Elem, &native::Label)> = s.elems.iter().map(|e| (e, &s.label)).collect();
+    for c in &s.children {
+        out.extend(flat(c));
+    }
+    out
+}
+
+fn name_of(s: &NShape) -> &str {
+    s.name.as_deref().unwrap_or("")
 }
 
 /// A shape's signature: its items' model values without ids, with their
@@ -405,6 +518,7 @@ struct Writer<'a, 'j> {
     rels: RefCell<&'j mut Rels>,
     lost: RefCell<Vec<String>>,
     media: RefCell<Vec<(String, Vec<u8>)>>,
+    parts: RefCell<Vec<NewPart>>,
     orig: BTreeMap<String, Orig<'a>>,
     base_by_key: BTreeMap<String, NShape>,
     probed: Probed,
@@ -565,6 +679,7 @@ pub fn write<'a>(
         rels: RefCell::new(rels),
         lost: RefCell::new(Vec::new()),
         media: RefCell::new(Vec::new()),
+        parts: RefCell::new(Vec::new()),
         orig,
         base_by_key,
         probed,
@@ -599,9 +714,11 @@ pub fn write<'a>(
     let lost = w.lost.into_inner();
     let media = w.media.into_inner();
     let ids = w.ids.into_inner();
+    let parts = w.parts.into_inner();
     Ok(Some(Out {
         xml: out,
         media,
+        parts,
         lost,
         ids,
     }))
@@ -878,17 +995,218 @@ impl<'a> Writer<'a, '_> {
             .chart
             .as_ref()
             .is_some_and(|p| self.sh.live_charts.contains(p));
-        if !inner_same && !redrawn {
+        let smartart_text = !inner_same && !redrawn && c.label.frame.as_deref() == Some("diagram");
+        if !inner_same && !redrawn && !smartart_text {
             return Err(format!(
                 "edits inside the {} are not exported",
                 c.label.frame.as_deref().unwrap_or("frame")
             ));
         }
         let mut x = x.to_string();
+        if smartart_text {
+            self.write_smartart_text(&x, b, c, name_of(c))?;
+        }
         if let Some((_, nx)) = self.new_place(o, &d, ctx, false)? {
             x = set_frame_xfrm(&x, &nx)?;
         }
         Ok(x)
+    }
+
+    /// A SmartArt frame whose members changed only in their text (slide
+    /// W4, the text pane): its data and drawing parts written again with
+    /// the new text, as new parts this slide's relationships point at (a
+    /// duplicated slide may share the old ones).
+    fn write_smartart_text(
+        &self,
+        x: &str,
+        b: &NShape,
+        c: &NShape,
+        name: &str,
+    ) -> Result<(), String> {
+        let not = |why: &str| format!("edits inside the diagram are not exported ({why})");
+        // The members: the same elements, the same values, but for text.
+        let (bl, cl) = (flat(b), flat(c));
+        if bl.len() != cl.len() {
+            return Err(not("its shapes changed"));
+        }
+        let mut shapes: BTreeMap<String, crate::smartart::ShapeText> = BTreeMap::new();
+        let mut data_edits: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (eb, ec) in bl.iter().zip(&cl) {
+            let strip = |v: &Value| {
+                let mut v = v.clone();
+                if let Some(m) = v.as_object_mut() {
+                    for k in ["self_id", "parent_story", "item_transform"] {
+                        m.remove(k);
+                    }
+                }
+                v
+            };
+            if eb.0.kind != ec.0.kind || strip(&eb.0.v) != strip(&ec.0.v) {
+                return Err(not("a shape's look or place changed"));
+            }
+            let (pb, pc) = (
+                eb.0.story()
+                    .and_then(|s| native::story(self.job.base_doc, &s)),
+                ec.0.story().and_then(|s| native::story(self.sh.cur, &s)),
+            );
+            let text = |ps: Option<&[paged_model::Paragraph]>| -> Vec<String> {
+                ps.unwrap_or_default()
+                    .iter()
+                    .map(|p| {
+                        p.runs
+                            .iter()
+                            .map(|r| r.text.as_str())
+                            .collect::<String>()
+                            .trim_end_matches(['\r', '\n'])
+                            .to_string()
+                    })
+                    .collect()
+            };
+            let (tb, tc) = (text(pb), text(pc));
+            if tb == tc {
+                if serde_json::to_value(pb).ok() != serde_json::to_value(pc).ok() {
+                    self.note(
+                        name,
+                        "a text format change inside the SmartArt is not exported",
+                    );
+                }
+                continue;
+            }
+            let Some((shape, points)) = &ec.1.dgm else {
+                return Err(not("text the diagram's data does not hold"));
+            };
+            // The new paragraphs, point by point: a shape that shows one
+            // point gives it all of them; otherwise each keeps its count.
+            let mut edits = BTreeMap::new();
+            if points.len() == 1 {
+                edits.insert(points[0].0.clone(), tc.clone());
+            } else {
+                let want: u32 = points.iter().map(|(_, n)| n).sum();
+                if tc.len() != want as usize || tb.len() != want as usize {
+                    return Err(not(
+                        "paragraphs added or removed in a shape of several points",
+                    ));
+                }
+                let mut at = 0usize;
+                for (pt, n) in points {
+                    let range = at..at + *n as usize;
+                    at = range.end;
+                    if tb[range.clone()] != tc[range.clone()] {
+                        edits.insert(pt.clone(), tc[range].to_vec());
+                    }
+                }
+            }
+            for (pt, paras) in &edits {
+                data_edits
+                    .entry(pt.clone())
+                    .or_insert_with(|| paras.clone());
+            }
+            shapes.insert(
+                shape.clone(),
+                crate::smartart::ShapeText {
+                    points: points.clone(),
+                    edits,
+                },
+            );
+        }
+        if shapes.is_empty() {
+            return Ok(());
+        }
+        // The frame's parts, through this slide's relationships.
+        let rid_dm = x
+            .find("relIds")
+            .and_then(|i| {
+                let s = x[..i].rfind('<')?;
+                let e = s + x[s..].find('>')?;
+                xml::attr(&x[s..=e], "r:dm")
+            })
+            .ok_or_else(|| not("the frame names no data part"))?;
+        let (dir, rels) = {
+            let r = self.rels.borrow();
+            (r.dir.clone(), r.rels.clone())
+        };
+        let resolve = |t: &str| paged_ooxml::rels::resolve_target(&dir, t);
+        let data_part = rels
+            .by_id(&rid_dm)
+            .map(|r| resolve(&r.target))
+            .ok_or_else(|| not("its data part is missing"))?;
+        let data_xml = self
+            .sh
+            .pkg
+            .part(&data_part)
+            .and_then(|b| String::from_utf8(b.to_vec()).ok())
+            .ok_or_else(|| not("its data part is missing"))?;
+        let rid_dr = data_xml.find("relId=\"").and_then(|i| {
+            let v = &data_xml[i + 7..];
+            v.find('"').map(|e| v[..e].to_string())
+        });
+        let drawing = rid_dr
+            .as_deref()
+            .and_then(|id| rels.by_id(id))
+            .or_else(|| {
+                rels.items
+                    .iter()
+                    .find(|r| r.rel_type.ends_with("/diagramDrawing"))
+            })
+            .map(|r| (r.id.clone(), resolve(&r.target)));
+        let new_data = crate::smartart::rewrite_data(&data_xml, &data_edits)?;
+        let n = {
+            let mut k = self.sh.diagram_no.borrow_mut();
+            *k += 1;
+            *k
+        };
+        let folder = data_part
+            .rsplit_once('/')
+            .map(|(d, _)| d.to_string())
+            .unwrap_or_default();
+        let new_data_part = format!("{folder}/data{n}.xml");
+        let mut written: Vec<NewPart> = vec![(
+            new_data_part.clone(),
+            new_data.into_bytes(),
+            Some(crate::smartart::CT_DATA),
+        )];
+        let copy_rels =
+            |from: &str, to: &str, out: &mut Vec<NewPart>| {
+                let rp = paged_ooxml::rels::rels_part_name(from);
+                if let Some(b) = self.sh.pkg.part(&rp) {
+                    out.push((paged_ooxml::rels::rels_part_name(to), b.to_vec(), None));
+                }
+            };
+        copy_rels(&data_part, &new_data_part, &mut written);
+        let mut retarget = vec![(rid_dm.clone(), new_data_part.clone())];
+        if let Some((rid, part)) = &drawing {
+            if let Some(dx) = self
+                .sh
+                .pkg
+                .part(part)
+                .and_then(|b| String::from_utf8(b.to_vec()).ok())
+            {
+                let new_drawing = crate::smartart::rewrite_drawing(&dx, &shapes)?;
+                let pf = part
+                    .rsplit_once('/')
+                    .map(|(d, _)| d.to_string())
+                    .unwrap_or_default();
+                let np = format!("{pf}/drawing{n}.xml");
+                written.push((
+                    np.clone(),
+                    new_drawing.into_bytes(),
+                    Some(crate::smartart::CT_DRAWING),
+                ));
+                copy_rels(part, &np, &mut written);
+                retarget.push((rid.clone(), np));
+            }
+        }
+        {
+            let mut r = self.rels.borrow_mut();
+            for (rid, part) in retarget {
+                if let Some(rel) = r.rels.items.iter_mut().find(|x| x.id == rid) {
+                    rel.target = relative(&dir, &part);
+                }
+            }
+            r.changed = true;
+        }
+        self.parts.borrow_mut().extend(written);
+        Ok(())
     }
 
     fn patch_sp(
@@ -1426,19 +1744,25 @@ impl<'a> Writer<'a, '_> {
             return Ok(x);
         };
         let keys = changed_keys(&eb.v, &ec.v);
+        let mut baked = false;
         if keys.contains("image_bytes") {
             if let Some(bytes) = image_bytes(ec) {
-                let rid = self.add_image(&bytes)?;
+                let out = self.add_image(ec, &bytes)?;
+                baked = out.baked;
                 let root = xml::root(&x).ok_or("unreadable picture")?;
                 let blip = root.path(&x, &["p:blipFill", "a:blip"]).ok_or("no blip")?;
-                let tag = xml::set_attr(blip.open(&x), "r:embed", Some(&rid));
-                let end = blip.start + blip.open(&x).len();
-                x = xml::splice(&x, blip.start, end, &tag);
+                let tag = out.patch(blip.text(&x));
+                x = xml::splice(&x, blip.start, blip.end, &tag);
+                if baked {
+                    // The PNG is the frame's visible part: no crop.
+                    x = set_child(&x, &["p:blipFill"], &["a:srcRect"], None, &["a:blip"])?;
+                }
             }
         }
-        if keys.contains("image_item_transform")
-            || keys.contains("bounds")
-            || keys.contains("image_bytes")
+        if !baked
+            && (keys.contains("image_item_transform")
+                || keys.contains("bounds")
+                || keys.contains("image_bytes"))
         {
             let (cb, cc) = (crop_of(eb), crop_of(ec));
             if let (Some(cb), Some(cc)) = (cb, cc) {
@@ -1477,8 +1801,7 @@ impl<'a> Writer<'a, '_> {
     }
 
     /// A new image part and the slide's relationship to it.
-    fn add_image(&self, bytes: &[u8]) -> Result<String, String> {
-        let ext = image_ext(bytes).ok_or("the image is not PNG, JPEG or GIF")?;
+    fn add_part(&self, bytes: &[u8], ext: &str) -> String {
         let h = hash_bytes(bytes);
         let part = {
             let mut m = self.sh.media.borrow_mut();
@@ -1493,10 +1816,53 @@ impl<'a> Writer<'a, '_> {
             }
         };
         let dir = self.rels.borrow().dir.clone();
-        Ok(self
-            .rels
+        self.rels
             .borrow_mut()
-            .add(REL_IMAGE, &relative(&dir, &part), false))
+            .add(REL_IMAGE, &relative(&dir, &part), false)
+    }
+
+    /// The picture element `e`'s image as parts of the deck. PNG, JPEG,
+    /// GIF, BMP and TIFF go as they are. An SVG goes as an `asvg:svgBlip`
+    /// beside a PNG fallback. Any other format goes as a PNG of the frame,
+    /// so its crop is in the image. A PNG the host has not rendered yet is
+    /// asked for in [`Shared::needs`].
+    fn add_image(&self, e: &Elem, bytes: &[u8]) -> Result<BlipOut, String> {
+        use pptx_core::media::{sniff, PicFormat};
+        let fmt = sniff(bytes).ok_or("the image is in no format the engine reads")?;
+        if fmt.in_deck() {
+            return Ok(BlipOut {
+                rid: self.add_part(bytes, fmt.extension()),
+                svg: None,
+                baked: false,
+            });
+        }
+        let png = self.sh.rasters.get(&e.id);
+        if png.is_none() {
+            self.sh
+                .needs
+                .borrow_mut()
+                .push((e.id.clone(), raster_dpi(e, bytes, fmt)));
+        }
+        if fmt == PicFormat::Svg {
+            let svg = self.add_part(bytes, "svg");
+            let rid = self.add_part(png.map(Vec::as_slice).unwrap_or(BLANK_PNG), "png");
+            return Ok(BlipOut {
+                rid,
+                svg: Some(svg),
+                baked: false,
+            });
+        }
+        let png = png.ok_or_else(|| {
+            format!(
+                "a {} picture PowerPoint cannot open, and no PNG of it was rendered",
+                fmt.extension().to_uppercase()
+            )
+        })?;
+        Ok(BlipOut {
+            rid: self.add_part(png, "png"),
+            svg: None,
+            baked: true,
+        })
     }
 
     fn patch_group(
@@ -1895,8 +2261,9 @@ impl<'a> Writer<'a, '_> {
         match e.kind {
             Kind::Rectangle if image_bytes(e).is_some() => {
                 let bytes = image_bytes(e).unwrap_or_default();
-                let rid = self.add_image(&bytes)?;
+                let blip = self.add_image(e, &bytes)?;
                 let crop = crop_of(e)
+                    .filter(|_| !blip.baked)
                     .filter(|c| c.iter().any(|v| v.abs() > 0.001))
                     .map(|c| {
                         format!(
@@ -1909,7 +2276,8 @@ impl<'a> Writer<'a, '_> {
                     })
                     .unwrap_or_default();
                 Ok(format!(
-                    r#"<p:pic><p:nvPicPr>{cnv}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="{rid}"/>{crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>{xfrm}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>{}</p:spPr></p:pic>"#,
+                    r#"<p:pic><p:nvPicPr>{cnv}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>{}{crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>{xfrm}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>{}</p:spPr></p:pic>"#,
+                    blip.xml(),
                     self.line_of(e)
                 ))
             }
@@ -2089,49 +2457,29 @@ fn image_bytes(e: &Elem) -> Option<Vec<u8>> {
     .filter(|b: &Vec<u8>| !b.is_empty())
 }
 
-fn image_ext(b: &[u8]) -> Option<&'static str> {
-    if b.starts_with(b"\x89PNG") {
-        Some("png")
-    } else if b.starts_with(&[0xff, 0xd8]) {
-        Some("jpeg")
-    } else if b.starts_with(b"GIF8") {
-        Some("gif")
-    } else {
-        None
-    }
+/// Pixel size of a picture (pptx-core's `media`).
+fn image_size(b: &[u8]) -> Option<(u32, u32)> {
+    pptx_core::media::pixel_size(b)
 }
 
-/// Pixel size of a PNG, JPEG or GIF.
-fn image_size(b: &[u8]) -> Option<(u32, u32)> {
-    if b.len() > 24 && b.starts_with(b"\x89PNG") {
-        let w = u32::from_be_bytes(b[16..20].try_into().ok()?);
-        let h = u32::from_be_bytes(b[20..24].try_into().ok()?);
-        return Some((w, h));
-    }
-    if b.len() > 10 && b.starts_with(b"GIF8") {
-        return Some((
-            u16::from_le_bytes([b[6], b[7]]) as u32,
-            u16::from_le_bytes([b[8], b[9]]) as u32,
-        ));
-    }
-    if b.len() > 4 && b[0] == 0xff && b[1] == 0xd8 {
-        let mut i = 2;
-        while i + 9 < b.len() {
-            if b[i] != 0xff {
-                i += 1;
-                continue;
-            }
-            let marker = b[i + 1];
-            let len = u16::from_be_bytes([b[i + 2], b[i + 3]]) as usize;
-            if (0xc0..=0xcf).contains(&marker) && !matches!(marker, 0xc4 | 0xc8 | 0xcc) {
-                let h = u16::from_be_bytes([b[i + 5], b[i + 6]]) as u32;
-                let w = u16::from_be_bytes([b[i + 7], b[i + 8]]) as u32;
-                return Some((w, h));
-            }
-            i += 2 + len;
+/// The resolution a picture's PNG is rendered at: an SVG's at 2 × 96 dpi,
+/// another format's at its own pixel density, at most 4096 pixels on the
+/// frame's long side.
+fn raster_dpi(e: &Elem, bytes: &[u8], fmt: pptx_core::media::PicFormat) -> f64 {
+    let (l, t, r, b) = e.bounds();
+    let long = (r - l).abs().max((b - t).abs()).max(1.0);
+    let want = match (fmt, image_size(bytes)) {
+        (pptx_core::media::PicFormat::Svg, _) | (_, None) => 192.0,
+        (_, Some((pw, _))) => {
+            // Pixels per point of the image as the frame shows it.
+            let shown = native::arr6(e.v.get("image_item_transform"))
+                .map(|m| m[0].abs() * pw as f64)
+                .unwrap_or((r - l).abs())
+                .max(1e-6);
+            72.0 * pw as f64 / shown
         }
-    }
-    None
+    };
+    want.min(72.0 * 4096.0 / long).clamp(1.0, 2400.0)
 }
 
 /// A picture frame's crop (l, t, r, b as fractions of the image).

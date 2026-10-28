@@ -51,6 +51,7 @@ import { contributeMenu, MENU_ENTRIES } from "../src/menu";
 import { ANIM_CMD, ANIM_MENU } from "../src/anim/contribute";
 import { SHOW_CMD, SHOW_MENU } from "../src/show/contribute";
 import { OUTPUT_CMD, OUTPUT_MENU } from "../src/output/commands";
+import { CONTENT_CMD, CONTENT_MENU } from "../src/content-commands";
 import { SHAPES_PANEL_ID } from "../src/shapes";
 import {
   DUPLICATE_SLIDE_COMMAND,
@@ -246,12 +247,14 @@ describe("paged.slide palette commands", () => {
     const s = setup();
     // The slide show's commands are the show's (show/contribute.ts, its
     // own suite); these are the deck verbs.
-    // The outputs' and the animations' commands are their own suites'
-    // (output/commands.ts, anim/contribute.ts).
+    // The outputs', the animations' and the content verbs' commands are
+    // their own suites' (output/commands.ts, anim/contribute.ts,
+    // test/content-commands).
     const show = new Set<string>([
       ...Object.values(SHOW_CMD),
       ...Object.values(OUTPUT_CMD),
       ...Object.values(ANIM_CMD),
+      ...Object.values(CONTENT_CMD),
     ]);
     const verbs = MANIFEST.contributes.commands.filter((c) => !show.has(c));
     expect([...s.commands.keys()].sort()).toEqual([...verbs].sort());
@@ -621,7 +624,8 @@ describe("paged.slide palette commands", () => {
       MENU_ENTRIES.length +
         SHOW_MENU.length +
         OUTPUT_MENU.length +
-        ANIM_MENU.length -
+        ANIM_MENU.length +
+        CONTENT_MENU.length -
         2,
     );
     h.dispose();
