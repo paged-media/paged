@@ -55,7 +55,7 @@ test.describe.serial("plugin menus — paged.doc", () => {
     await close();
   });
 
-  test("Object/Insert Word document… — Insert ▸ Word document… asks for a .docx / .dotx file", async () => {
+  test("Object/Insert Word document… — Insert ▸ Word document… asks for a Word or RTF file", async () => {
     covers("menu:Object/Insert Word document…");
     await expectGreyedAndInert(bare, "Object/Insert Word document…");
     const out = await clickEntry(
@@ -64,7 +64,12 @@ test.describe.serial("plugin menus — paged.doc", () => {
       "media.paged.doc.command.placeDoc",
     );
     expect(out.shell).toEqual([
-      { door: "pickFile", arg: '{"accept":[".docx",".dotx"]}' },
+      // Every Word file the importer reads (doc ADR 616): the macro-enabled
+      // document and template, and RTF.
+      {
+        door: "pickFile",
+        arg: '{"accept":[".docx",".dotx",".docm",".dotm",".rtf"]}',
+      },
     ]);
     expect(out.after, "a cancelled pick leaves the document alone").toBe(
       out.before,
