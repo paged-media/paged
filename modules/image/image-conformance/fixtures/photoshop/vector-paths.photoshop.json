@@ -1,0 +1,434 @@
+{
+  "fixture": "vector-paths",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/vector-paths.jsx",
+    "script_sha256": "dedf99560914dd89cc2f2c72cb4b3461947eaeb6ab270775a3385d98eb675690",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-28T12:53:07.386Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "paths",
+      "params": {
+        "what": "two saved paths and a work path"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "vector-paths/paths.psd",
+        "vector-paths/paths.png"
+      ],
+      "values": {
+        "paths": [
+          {
+            "name": "Outline",
+            "kind": "PathKind.NORMALPATH",
+            "subpaths": [
+              {
+                "closed": true,
+                "operation": "ShapeOperation.SHAPEADD",
+                "points": [
+                  [
+                    8,
+                    8,
+                    8,
+                    8,
+                    8,
+                    8
+                  ],
+                  [
+                    56,
+                    8,
+                    56,
+                    8,
+                    56,
+                    8
+                  ],
+                  [
+                    56,
+                    40,
+                    56,
+                    40,
+                    56,
+                    40
+                  ],
+                  [
+                    8,
+                    40,
+                    8,
+                    40,
+                    8,
+                    40
+                  ]
+                ]
+              },
+              {
+                "closed": true,
+                "operation": "ShapeOperation.SHAPESUBTRACT",
+                "points": [
+                  [
+                    43,
+                    24.25,
+                    43,
+                    18.4510101271,
+                    43,
+                    30.0489898729
+                  ],
+                  [
+                    32.5,
+                    34.75,
+                    38.2989898729,
+                    34.75,
+                    26.7010101271,
+                    34.75
+                  ],
+                  [
+                    22,
+                    24.25,
+                    22,
+                    30.0489898729,
+                    22,
+                    18.4510101271
+                  ],
+                  [
+                    32.5,
+                    13.75,
+                    26.7010101271,
+                    13.75,
+                    38.2989898729,
+                    13.75
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Open",
+            "kind": "PathKind.NORMALPATH",
+            "subpaths": [
+              {
+                "closed": false,
+                "operation": "ShapeOperation.SHAPEADD",
+                "points": [
+                  [
+                    6,
+                    58,
+                    6,
+                    58,
+                    20,
+                    44
+                  ],
+                  [
+                    40,
+                    50,
+                    30,
+                    60,
+                    50,
+                    40
+                  ],
+                  [
+                    60,
+                    58,
+                    60,
+                    58,
+                    60,
+                    58
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Arbeitspfad",
+            "kind": "PathKind.WORKPATH",
+            "subpaths": [
+              {
+                "closed": true,
+                "operation": "ShapeOperation.SHAPEADD",
+                "points": [
+                  [
+                    10,
+                    44,
+                    10,
+                    44,
+                    10,
+                    44
+                  ],
+                  [
+                    30,
+                    44,
+                    30,
+                    44,
+                    30,
+                    44
+                  ],
+                  [
+                    30,
+                    60,
+                    30,
+                    60,
+                    30,
+                    60
+                  ],
+                  [
+                    10,
+                    60,
+                    10,
+                    60,
+                    10,
+                    60
+                  ]
+                ]
+              }
+            ]
+          }
+        ],
+        "layers": [
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "shape-subtract",
+      "params": {
+        "what": "a shape layer: a rectangle minus a rectangle"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "vector-paths/shape-subtract.psd",
+        "vector-paths/shape-subtract.png"
+      ],
+      "values": {
+        "paths": [
+          {
+            "name": "Farbfüllung 1 Formpfad",
+            "kind": "PathKind.VECTORMASK",
+            "subpaths": [
+              {
+                "closed": true,
+                "operation": "ShapeOperation.SHAPEADD",
+                "points": [
+                  [
+                    6.5,
+                    8.25,
+                    6.5,
+                    8.25,
+                    6.5,
+                    8.25
+                  ],
+                  [
+                    57.5,
+                    8.25,
+                    57.5,
+                    8.25,
+                    57.5,
+                    8.25
+                  ],
+                  [
+                    57.5,
+                    55.75,
+                    57.5,
+                    55.75,
+                    57.5,
+                    55.75
+                  ],
+                  [
+                    6.5,
+                    55.75,
+                    6.5,
+                    55.75,
+                    6.5,
+                    55.75
+                  ]
+                ]
+              },
+              {
+                "closed": true,
+                "operation": "ShapeOperation.SHAPESUBTRACT",
+                "points": [
+                  [
+                    20,
+                    20,
+                    20,
+                    20,
+                    20,
+                    20
+                  ],
+                  [
+                    44.5,
+                    20,
+                    44.5,
+                    20,
+                    44.5,
+                    20
+                  ],
+                  [
+                    44.5,
+                    40.5,
+                    44.5,
+                    40.5,
+                    44.5,
+                    40.5
+                  ],
+                  [
+                    20,
+                    40.5,
+                    20,
+                    40.5,
+                    20,
+                    40.5
+                  ]
+                ]
+              }
+            ]
+          }
+        ],
+        "layers": [
+          {
+            "name": "Farbfüllung 1",
+            "kind": "LayerKind.SOLIDFILL",
+            "visible": true
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "roundtrip",
+      "params": {
+        "what": "Photoshop opens the PSD paged wrote"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "vector-paths/roundtrip.psd",
+        "vector-paths/roundtrip.png"
+      ],
+      "values": {
+        "paths": [
+          {
+            "name": "Saved A",
+            "kind": "PathKind.NORMALPATH",
+            "subpaths": [
+              {
+                "closed": true,
+                "operation": "ShapeOperation.SHAPEADD",
+                "points": [
+                  [
+                    29,
+                    20,
+                    29,
+                    15.0294380187988,
+                    29,
+                    24.9705619812012
+                  ],
+                  [
+                    20,
+                    29,
+                    24.9705619812012,
+                    29,
+                    15.0294380187988,
+                    29
+                  ],
+                  [
+                    11,
+                    20,
+                    11,
+                    24.9705619812012,
+                    11,
+                    15.0294380187988
+                  ],
+                  [
+                    20,
+                    11,
+                    15.0294380187988,
+                    11,
+                    24.9705619812012,
+                    11
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Arbeitspfad",
+            "kind": "PathKind.WORKPATH",
+            "subpaths": [
+              {
+                "closed": true,
+                "operation": "ShapeOperation.SHAPEADD",
+                "points": [
+                  [
+                    4,
+                    44,
+                    4,
+                    44,
+                    4,
+                    44
+                  ],
+                  [
+                    20.5,
+                    44,
+                    20.5,
+                    44,
+                    20.5,
+                    44
+                  ],
+                  [
+                    20.5,
+                    60,
+                    20.5,
+                    60,
+                    20.5,
+                    60
+                  ],
+                  [
+                    4,
+                    60,
+                    4,
+                    60,
+                    4,
+                    60
+                  ]
+                ]
+              }
+            ]
+          }
+        ],
+        "layers": [
+          {
+            "name": "Disc",
+            "kind": "LayerKind.NORMAL",
+            "visible": true
+          },
+          {
+            "name": "Triangle",
+            "kind": "LayerKind.SOLIDFILL",
+            "visible": true
+          },
+          {
+            "name": "Background",
+            "kind": "LayerKind.NORMAL",
+            "visible": true
+          }
+        ]
+      }
+    }
+  ]
+}

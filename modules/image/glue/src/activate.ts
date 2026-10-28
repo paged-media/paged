@@ -56,6 +56,12 @@ import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
 import { contributeMasking } from "./masking-contrib";
 import { BG, type BlurKind } from "./filters-blur-gallery";
+import {
+  contributeVectors,
+  PATH_SELECT_TOOL_ID,
+  PEN_TOOL_ID,
+  RECT_SHAPE_TOOL_ID,
+} from "./vector-contrib";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { adjustmentKindLabel } from "./panels/sections/layer-parity";
@@ -1769,6 +1775,9 @@ export function activate(host: BundleHost): BundleHandle {
   // Mask, Quick Mask, Grow / Similar, Focus Area, channels and paths,
   // the Magnetic Lasso and the Refine Edge brush.
   const maskingSub = contributeMasking(host, session, command, PANEL_ID);
+  // Vectors inside the image (ADR 476): the pen and shape tools, the
+  // Paths panel's verbs, Layer ▸ Vector Mask.
+  const vectorsSub = contributeVectors(host, session, command, PANEL_ID);
 
   // K-2 — the raster importer: opening/dropping a raster file routes
   // its bytes HERE (decode into the session, raise the panel; it does
@@ -1968,6 +1977,9 @@ export function activate(host: BundleHost): BundleHandle {
         CA_MOVE_TOOL_ID,
         REMOVE_TOOL_ID,
         CAF_SAMPLING_TOOL_ID,
+        PEN_TOOL_ID,
+        PATH_SELECT_TOOL_ID,
+        RECT_SHAPE_TOOL_ID,
       ],
       // The context's OWN panel. Deliberately NOT the host panels it
       // serves (Layers, Character) — naming those here would put host
@@ -2119,6 +2131,7 @@ export function activate(host: BundleHost): BundleHandle {
       retouchSettingsSub?.dispose();
       menuSub.dispose();
       maskingSub.dispose();
+      vectorsSub.dispose();
       providerInvalidate = null;
       for (const h of providerHandles.splice(0)) h.dispose();
       session.dispose();

@@ -1438,6 +1438,10 @@ pub struct LayerExt {
     pub style: Option<Arc<image_psd::effects::LayerStyle>>,
     /// The blending options that change how a style composites.
     pub style_options: StyleOptions,
+    /// The layer's VECTOR MASK (image ADR 476): paths drawn as coverage
+    /// and multiplied with its user mask. On a fill layer it makes a
+    /// SHAPE LAYER.
+    pub vector_mask: Option<std::sync::Arc<crate::vectors::LayerVectorMask>>,
 }
 
 /// Blending Options ▸ Advanced Blending: the switches that change how a
@@ -1512,6 +1516,7 @@ impl Default for LayerExt {
             link: None,
             style: None,
             style_options: StyleOptions::default(),
+            vector_mask: None,
         }
     }
 }

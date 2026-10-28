@@ -41,6 +41,11 @@ import {
   type MaskingWasm,
 } from "./masking-engine";
 import type { GlobalLight, LayerStyle } from "./layer-style";
+import {
+  wrapVectors,
+  type VectorEngine,
+  type VectorWasm,
+} from "./vector-engine";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
 
@@ -955,6 +960,14 @@ export interface LayerInfo {
   adjustKind: AdjustmentKind | "chain" | null;
   /** A fill layer's kind. */
   fillKind: FillKind | null;
+  /** The layer's VECTOR MASK (image ADR 476) — on a fill layer it makes
+   *  a shape layer — or null. Absent on a row built by hand. */
+  vectorMask?: {
+    enabled: boolean;
+    invert: boolean;
+    subpaths: number;
+    anchors: number;
+  } | null;
 }
 
 /** A plain layer's parity fields (Photoshop's defaults) — for a reader
@@ -1268,9 +1281,12 @@ export interface FilterMask {
 }
 
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
- *  doors in `engine-filters.ts`. */
+ *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`. */
 export interface ImageEngine
-  extends MaskingEngine, RetouchEngine<DecodedInfo>, FilterEngine {
+  extends MaskingEngine,
+    RetouchEngine<DecodedInfo>,
+    FilterEngine,
+    VectorEngine<DecodedInfo> {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2275,7 +2291,11 @@ interface DecodedHandleWasm {
 
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
-export interface ImageWasmModule extends MaskingWasm, RetouchWasm, FilterWasm {
+export interface ImageWasmModule
+  extends MaskingWasm,
+    RetouchWasm,
+    FilterWasm,
+    VectorWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -3063,6 +3083,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     ...maskingEngine(wasm),
     ...wrapRetouch(wasm, decodedInfoOf),
     ...filterEngineOf(wasm, decodedInfoOf),
+    ...wrapVectors(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,
