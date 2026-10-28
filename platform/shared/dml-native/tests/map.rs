@@ -23,7 +23,7 @@
 #![allow(non_snake_case)]
 
 use dml_native::*;
-use paged_model::{ArrowheadType, GradientKind};
+use paged_model::{ArrowheadType, GradientKind, RasterOp};
 use paged_ooxml::drawingml::{self, resolved, Rgba};
 use paged_ooxml::tree::{parse, El};
 
@@ -265,13 +265,51 @@ fn what_the_engine_cannot_hold_is_reported_never_dropped__feat__plugin_slide_nat
 
 #[test]
 fn picture_opacity_is_kept_and_other_picture_effects_reported__feat__plugin_slide_native_effects() {
-    let el = parse(format!(r#"<a:blipFill {NS}><a:blip r:embed="r1"><a:alphaModFix amt="70000"/><a:grayscl/><a:duotone><a:srgbClr val="000000"/><a:srgbClr val="FFFFFF"/></a:duotone><a:extLst><a:ext uri="x"><a14:imgProps xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><a14:imgLayer><a14:imgEffect><a14:artisticBlur radius="20"/></a14:imgEffect></a14:imgLayer></a14:imgProps></a:ext></a:extLst></a:blip></a:blipFill>"#).as_bytes()).unwrap();
+    let el = parse(format!(r#"<a:blipFill {NS}><a:blip r:embed="r1"><a:alphaModFix amt="70000"/><a:clrChange><a:clrFrom><a:srgbClr val="FFFFFF"/></a:clrFrom><a:clrTo><a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr></a:clrTo></a:clrChange><a:extLst><a:ext uri="x"><a14:imgProps xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><a14:imgLayer><a14:imgEffect><a14:artisticBlur radius="20"/></a14:imgEffect></a14:imgLayer></a14:imgProps></a:ext></a:extLst></a:blip></a:blipFill>"#).as_bytes()).unwrap();
     let pic = resolved::picture(&drawingml::blip(&el, &|_| None), &());
     let mut m = Mapper::default();
-    assert_eq!(m.picture(&pic), 0.7);
+    let mapped = m.picture(&pic);
+    assert_eq!(mapped.opacity, 0.7);
+    assert!(mapped.adjustments.is_empty());
     let l = m.losses();
-    assert_eq!(l.len(), 2, "{l:?}");
-    assert!(l[0].contains("a:grayscl") && l[1].contains("a:duotone"));
+    assert_eq!(l.len(), 1, "{l:?}");
+    assert!(l[0].contains("a:clrChange"), "{l:?}");
+}
+
+#[test]
+fn picture_effects_become_the_filter_stack__feat__images_graphics_image_filter_stack() {
+    let el = parse(format!(r#"<a:blipFill {NS}><a:blip r:embed="r1"><a:grayscl/><a:lum bright="20000" contrast="-50000"/><a:duotone><a:srgbClr val="000000"/><a:srgbClr val="FFFFFF"/></a:duotone><a:biLevel thresh="40000"/><a:hsl hue="1200000" sat="-25000" lum="10000"/></a:blip></a:blipFill>"#).as_bytes()).unwrap();
+    let pic = resolved::picture(&drawingml::blip(&el, &|_| None), &());
+    let mut m = Mapper::default();
+    let mapped = m.picture(&pic);
+    assert!(m.losses().is_empty(), "{:?}", m.losses());
+    let names: Vec<&str> = mapped.adjustments.iter().map(|op| op.name()).collect();
+    assert_eq!(
+        names,
+        [
+            "blackWhite",
+            "brightnessContrast",
+            "duotone",
+            "threshold",
+            "hueSaturation"
+        ]
+    );
+    assert_eq!(
+        mapped.adjustments[1],
+        RasterOp::BrightnessContrast {
+            brightness: 0.2,
+            contrast: 0.5
+        }
+    );
+    assert_eq!(
+        mapped.adjustments[2],
+        RasterOp::Duotone {
+            shadow: [0.0; 3],
+            highlight: [1.0; 3]
+        }
+    );
+    assert_eq!(mapped.adjustments[3], RasterOp::Threshold { level: 0.4 });
+    assert!(mapped.adjustments.iter().all(RasterOp::is_valid));
 }
 
 #[test]

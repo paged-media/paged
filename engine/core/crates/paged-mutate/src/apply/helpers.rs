@@ -429,6 +429,20 @@ pub(super) fn find_fill_rule_mut<'a>(
     }
 }
 
+/// Engine ADR 1037 — locate the `image_adjustments` stack on a kind that
+/// places a picture.
+pub(super) fn find_image_adjustments_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut Vec<paged_model::RasterOp>> {
+    match node {
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.image_adjustments),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.image_adjustments),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.image_adjustments),
+        _ => None,
+    }
+}
+
 /// W1.1 — locate the `stroke_dash: Vec<f32>` field (per-frame
 /// `StrokeDashAndGap` override) on any stroked page-item kind.
 pub(super) fn find_stroke_dash_mut<'a>(

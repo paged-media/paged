@@ -131,6 +131,8 @@ impl From<Value> for AuthoredValue {
             // length list, so it collapses to `None` here.
             | Value::Lengths(_)
             | Value::GradientStops(_)
+            // Engine ADR 1037 — the filter stack, a whole list.
+            | Value::ImageAdjustments(_)
             | Value::SwatchColor(_) => AuthoredValue::None,
         }
     }

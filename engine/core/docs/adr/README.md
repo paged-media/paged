@@ -158,6 +158,7 @@ is not written yet.
 | [1031](1031-svg-in-and-out-through-paged-svg.md) | SVG in and out through `paged-svg` | Accepted 2026-10-24 |
 | [1032](1032-one-cms-with-intents-and-bpc.md) | One colour API with explicit intents and black-point compensation on every backend | Accepted 2026-10-24 |
 | [1033](1033-an-eps-is-drawn-from-its-postscript.md) | An EPS is drawn from its PostScript, by `paged-ps` | Accepted 2026-10-24 |
+| [1037](1037-an-image-frame-has-a-filter-stack.md) | An image frame has a filter stack, evaluated by the kernel twins `paged-kernels` shares with paged.image | Accepted 2026-10-28 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

@@ -36,6 +36,7 @@ mod forced_line_break_pipeline;
 mod glyph_runs_follow_commands;
 mod guides_non_export;
 mod hard_hyphen_pipeline;
+mod image_adjustments;
 mod image_frame_clip;
 mod inline_objects_pipeline;
 mod invisible_rect_paths;

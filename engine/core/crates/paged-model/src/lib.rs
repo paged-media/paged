@@ -31,12 +31,15 @@
 //! compile unchanged.
 
 pub mod fitting;
+pub mod image_adjust;
 pub mod image_bytes;
 pub mod winding;
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+
+pub use image_adjust::RasterOp;
 
 /// An axis-aligned bounding box in points: `top`, `left`, `bottom`, `right`.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -2057,6 +2060,12 @@ pub struct Rectangle {
     /// and re-wound or reported as lost on IDML export.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1037 — the picture's filter stack, applied in order when
+    /// it is drawn and exported. Empty (the default, and every imported
+    /// frame without the label) draws the picture as it is; an empty stack
+    /// writes no key, so the `.paged` bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
 }
 
 impl Rectangle {
@@ -2146,6 +2155,7 @@ impl Rectangle {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
+            image_adjustments: Vec::new(),
         }
     }
 }
@@ -2546,6 +2556,12 @@ pub struct Oval {
     /// field is here so every frame kind takes the same write.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1037 — the picture's filter stack, applied in order when
+    /// it is drawn and exported. Empty (the default, and every imported
+    /// frame without the label) draws the picture as it is; an empty stack
+    /// writes no key, so the `.paged` bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
 }
 
 impl Oval {
@@ -2603,6 +2619,7 @@ impl Oval {
             corners: Default::default(),
             end_cap: None,
             fill_rule: FillRule::NonZero,
+            image_adjustments: Vec::new(),
         }
     }
 }
@@ -3124,6 +3141,12 @@ pub struct Polygon {
     /// and re-wound or reported as lost on IDML export.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1037 — the picture's filter stack, applied in order when
+    /// it is drawn and exported. Empty (the default, and every imported
+    /// frame without the label) draws the picture as it is; an empty stack
+    /// writes no key, so the `.paged` bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
     /// `<TextWrapPreference>` parsed off the polygon, if any.
     /// `None` ⇒ the polygon does not exclude text.
     pub text_wrap: Option<TextWrap>,
@@ -3294,6 +3317,7 @@ impl Polygon {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
+            image_adjustments: Vec::new(),
             text_wrap: None,
             item_layer: None,
             effects: None,

@@ -775,6 +775,9 @@ property_paths! {
         FramePdfPage => "framePdfPage" : count().min(1.0).default_num(1.0).idml(idml![attr(PDFAttribute, PageNumber)]),
         // Engine ADR 1006 — the outline's fill rule; IDML has no attribute.
         FrameFillRule => "frameFillRule" : enum_(FILL_RULES).default_text("NonZero"),
+        // Engine ADR 1037 — the placed picture's filter stack; IDML has none
+        // (the export keeps it in a label and reports it).
+        FrameImageAdjustments => "frameImageAdjustments" : list_of("RasterOp", Wire::ImageAdjustments),
         // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
@@ -1445,7 +1448,9 @@ mod tests {
         // paragraph's own shading and border (six).
         //
         // 257 -> 258: ADR 1031 — where a frame's gradient fill starts.
-        assert_eq!(cat.settable_paths.len(), 258, "settable path count drifted");
+        //
+        // 258 -> 259: ADR 1037 — an image frame's filter stack.
+        assert_eq!(cat.settable_paths.len(), 259, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

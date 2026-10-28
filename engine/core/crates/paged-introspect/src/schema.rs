@@ -124,6 +124,8 @@ pub enum Wire {
     Transform,
     Lengths,
     TabStops,
+    /// Engine ADR 1037 — an image frame's filter stack.
+    ImageAdjustments,
     ParagraphRule,
     GradientFeather,
     GradientStops,
@@ -850,6 +852,7 @@ pub fn coerce(schema: &PropertySchema, input: Input<'_>) -> Result<Value, String
                 Wire::Text => Value::Text(String::new()),
                 Wire::Lengths => Value::Lengths(Vec::new()),
                 Wire::TabStops => Value::TabStops(Vec::new()),
+                Wire::ImageAdjustments => Value::ImageAdjustments(Vec::new()),
                 Wire::ParagraphRule => Value::ParagraphRule(None),
                 Wire::GradientFeather => Value::GradientFeather(None),
                 // A tri-state bool clears with `Text("")`.
@@ -981,6 +984,9 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
                 Wire::TabStops => Value::TabStops(
                     serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
                 ),
+                Wire::ImageAdjustments => Value::ImageAdjustments(
+                    serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
+                ),
                 Wire::Text => Value::Text(
                     items
                         .iter()
@@ -1052,6 +1058,7 @@ pub fn wire_of(value: &Value) -> Option<Wire> {
         Value::Transform(_) => Wire::Transform,
         Value::Lengths(_) => Wire::Lengths,
         Value::TabStops(_) => Wire::TabStops,
+        Value::ImageAdjustments(_) => Wire::ImageAdjustments,
         Value::ParagraphRule(_) => Wire::ParagraphRule,
         Value::GradientFeather(_) => Wire::GradientFeather,
         Value::GradientStops(_) => Wire::GradientStops,
