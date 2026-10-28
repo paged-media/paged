@@ -206,50 +206,19 @@ export function ArtboardsPanel() {
     if (m) void write(m);
   };
 
-  const exportBoards = async (list: readonly Artboard[]) => {
+  // The export runs outside the component (editor ADR 229: a `try` with
+  // conditionals keeps the component uncompiled); the outcome comes back.
+  const exportBoards = (list: readonly Artboard[]) => {
     setStatus(null);
-    const taken = new Set<string>();
-    let files = 0;
-    try {
-      if (format === "png") {
-        const ids = boards.map((b) => b.pageId);
-        const r = await runImageExport(client, {
-          pageIds: ids,
-          pageSizesPt: boards.map((b): [number, number] => [b.w, b.h]),
-          settings: {
-            format: "png",
-            dpi: 150,
-            quality: 0.92,
-            scope: "range",
-            range: list.map((b) => String(boards.indexOf(b) + 1)).join(","),
-          },
-          pageNames: boards.map((b) => b.name),
-        });
-        files = r.files;
-      } else {
-        for (const b of list) {
-          const i = boards.indexOf(b);
-          const { bytes } = await client.exportPdf({
-            pageFrom: i,
-            pageTo: i,
-            title: b.name,
-          });
-          downloadBytes(
-            bytes,
-            artboardFileName(b.name, "pdf", taken),
-            "application/pdf",
-          );
-          files += 1;
-        }
-      }
-      setStatus(strings.t(M.exported, { n: files }));
-    } catch (err) {
-      setStatus(
-        strings.t(M.exportFailed, {
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
-    }
+    void exportArtboards(client, boards, list, format).then(
+      (files) => setStatus(strings.t(M.exported, { n: files })),
+      (err: unknown) =>
+        setStatus(
+          strings.t(M.exportFailed, {
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        ),
+    );
   };
 
   const label = (action: string, enabled: boolean) =>
@@ -512,6 +481,48 @@ export function ArtboardsPanel() {
       </section>
     </div>
   );
+}
+
+/** Export `list` of `boards` as PNG (one file each, through the image
+ *  export) or PDF (one page each); the number of files written. */
+async function exportArtboards(
+  client: ReturnType<typeof useCanvasClient>,
+  boards: readonly Artboard[],
+  list: readonly Artboard[],
+  format: "png" | "pdf",
+): Promise<number> {
+  if (format === "png") {
+    const r = await runImageExport(client, {
+      pageIds: boards.map((b) => b.pageId),
+      pageSizesPt: boards.map((b): [number, number] => [b.w, b.h]),
+      settings: {
+        format: "png",
+        dpi: 150,
+        quality: 0.92,
+        scope: "range",
+        range: list.map((b) => String(boards.indexOf(b) + 1)).join(","),
+      },
+      pageNames: boards.map((b) => b.name),
+    });
+    return r.files;
+  }
+  const taken = new Set<string>();
+  let files = 0;
+  for (const b of list) {
+    const i = boards.indexOf(b);
+    const { bytes } = await client.exportPdf({
+      pageFrom: i,
+      pageTo: i,
+      title: b.name,
+    });
+    downloadBytes(
+      bytes,
+      artboardFileName(b.name, "pdf", taken),
+      "application/pdf",
+    );
+    files += 1;
+  }
+  return files;
 }
 
 function near(a: number, b: number): boolean {
