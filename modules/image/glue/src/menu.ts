@@ -31,6 +31,11 @@ import { defineMessages } from "@paged-media/strings";
 // under "menu", which the shell shows through its menu labels.
 defineMessages("menu", {
   Image: "Image",
+  History: "History",
+  "New snapshot": "New snapshot",
+  "History options…": "History options…",
+  Presets: "Presets",
+  "Preset manager…": "Preset manager…",
   "Open image panel": "Open image panel",
   "Adjust…": "Adjust…",
   "Auto-enhance": "Auto-enhance",
@@ -889,6 +894,11 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
     "toggleLockTransparent",
     "brush-lock",
   ],
+
+  // Image ADR 477 — Photoshop's History panel menu and Edit ▸ Presets.
+  ["Image/History/New snapshot", "newSnapshot", "history"],
+  ["Image/History/History options…", "historyOptions", "history"],
+  ["Image/Presets/Preset manager…", "presetManager", "presets"],
 
   ["Image/Commit edits to the document", "commitImage", "commit"],
 

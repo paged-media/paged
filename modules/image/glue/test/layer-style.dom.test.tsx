@@ -276,7 +276,7 @@ describe("the Styles section [image.layers.styles]", () => {
   it("applies, saves, deletes; copies, pastes and clears", () => {
     const presets = [
       ...builtInPresets(),
-      { name: "Mine", style: emptyStyle() },
+      { id: "style-mine", name: "Mine", style: emptyStyle() },
     ];
     const calls: string[] = [];
     const view = render(

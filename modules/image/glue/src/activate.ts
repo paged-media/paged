@@ -86,6 +86,7 @@ import {
   BRUSH_SETTINGS_PANEL_ID,
   makeBrushSettingsPanel,
 } from "./panels/brush-settings-panel";
+import { contextHistory } from "./context-history";
 import {
   BRUSH_PRESETS_PANEL_ID,
   makeBrushPresetsPanel,
@@ -197,6 +198,9 @@ const CMD = defineMessages("image.command", {
   exportBrushPresetsAbr: "Export brush presets (.abr)…",
   exportBrushPresetsJson: "Export brush presets (.json)…",
   lockTransparentPixels: "Lock transparent pixels",
+  newSnapshot: "New snapshot",
+  historyOptions: "History options…",
+  presetManager: "Preset manager…",
   contentAwareFillWorkspace: "Content-aware fill… (workspace)",
   openCloneSource: "Clone source panel",
   cloneSource: "Clone Source",
@@ -1607,6 +1611,35 @@ export function activate(host: BundleHost): BundleHandle {
       await session.exportBrushPresets("json");
     },
   });
+  // HISTORY and PRESETS in the image context (image ADR 477): snapshots
+  // (named states, restored as one undo step), History Options (the
+  // journal's depth and memory), and the Preset Manager.
+  command({
+    id: "media.paged.image.command.newSnapshot",
+    title: t(CMD.newSnapshot),
+    category: "Image",
+    handler: () => {
+      session.takeSnapshot();
+    },
+  });
+  command({
+    id: "media.paged.image.command.historyOptions",
+    title: t(CMD.historyOptions),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      session.openHistoryOptions();
+    },
+  });
+  command({
+    id: "media.paged.image.command.presetManager",
+    title: t(CMD.presetManager),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      session.openPresetManager();
+    },
+  });
   command({
     id: "media.paged.image.command.toggleLockTransparent",
     title: t(CMD.lockTransparentPixels),
@@ -1898,16 +1931,7 @@ export function activate(host: BundleHost): BundleHandle {
       // Editor ADR 285 — the host's History panel lists the image's own
       // journal while the context is active (pixel steps, which the
       // document's timeline does not see), and a click walks it.
-      historySteps: () => {
-        const h = session.state().history;
-        if (!h) return null;
-        return {
-          undo: h.undoSteps,
-          redo: h.redoSteps,
-          step: (delta: number) =>
-            delta < 0 ? session.undoSteps(-delta) : session.redoSteps(delta),
-        };
-      },
+      historySteps: () => contextHistory(session),
       onDidChangeHistory: (listener: () => void) => {
         const sub = session.onDidChange(listener);
         return () => sub.dispose();

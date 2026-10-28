@@ -269,6 +269,9 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.importBrushPresets",
       "media.paged.image.command.exportBrushPresetsAbr",
       "media.paged.image.command.exportBrushPresetsJson",
+      "media.paged.image.command.newSnapshot",
+      "media.paged.image.command.historyOptions",
+      "media.paged.image.command.presetManager",
       "media.paged.image.command.toggleLockTransparent",
       // The raster↔vector bridge + the luminosity mask.
       "media.paged.image.command.selectionToPath",
