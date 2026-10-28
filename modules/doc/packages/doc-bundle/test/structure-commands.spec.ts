@@ -250,6 +250,31 @@ describe("the structure commands write one mutation at the caret", () => {
     });
   });
 
+  it("Word's dialogs open their section of the References panel", async () => {
+    covers("command:media.paged.doc.command.word.crossReference");
+    covers("command:media.paged.doc.command.word.field");
+    covers("command:media.paged.doc.command.word.bookmark");
+    covers("command:media.paged.doc.command.word.indexEntry");
+    covers("command:media.paged.doc.command.word.pageSetup");
+    for (const name of [
+      "crossReference",
+      "field",
+      "bookmark",
+      "indexEntry",
+      "pageSetup",
+    ] as const) {
+      const opened: unknown[] = [];
+      const { host } = recordingHost();
+      (host.shell as unknown as { openPanel: unknown }).openPanel = (
+        ...a: unknown[]
+      ) => void opened.push(a);
+      await runWordCommand(host, name, { copied: null });
+      expect(opened).toEqual([
+        ["media.paged.doc.panel.references", { target: name }],
+      ]);
+    }
+  });
+
   it("the structure keys are Word's", () => {
     const key = (k: string) => WORD_KEYS.find((x) => x.key === k)?.command;
     expect(key("cmd+enter")).toBe(WORD_COMMAND.pageBreak);

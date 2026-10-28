@@ -207,5 +207,64 @@ describe.skipIf(!docxPresent)(
       expect(Math.round(after.widthPt)).toBe(288);
       expect(after.marginLeftPt).toBe(36);
     });
+
+    it("every structure command runs on the open document", async () => {
+      const names = [
+        "sectionNextPage",
+        "sectionOddPage",
+        "sectionEvenPage",
+        "sectionContinuous",
+        "endnote",
+        "updateToc",
+        "editHeader",
+        "differentFirstPage",
+        "differentOddEven",
+        "linkToPrevious",
+        "closeHeaderFooter",
+        "editFooter",
+        "closeHeaderFooter",
+        "crossReference",
+        "field",
+        "bookmark",
+        "indexEntry",
+        "pageSetup",
+      ] as const;
+      covers("command:media.paged.doc.command.word.sectionNextPage");
+      covers("command:media.paged.doc.command.word.sectionOddPage");
+      covers("command:media.paged.doc.command.word.sectionEvenPage");
+      covers("command:media.paged.doc.command.word.sectionContinuous");
+      covers("command:media.paged.doc.command.word.endnote");
+      covers("command:media.paged.doc.command.word.updateToc");
+      covers("command:media.paged.doc.command.word.editHeader");
+      covers("command:media.paged.doc.command.word.differentFirstPage");
+      covers("command:media.paged.doc.command.word.differentOddEven");
+      covers("command:media.paged.doc.command.word.linkToPrevious");
+      covers("command:media.paged.doc.command.word.closeHeaderFooter");
+      covers("command:media.paged.doc.command.word.editFooter");
+      covers("command:media.paged.doc.command.word.crossReference");
+      covers("command:media.paged.doc.command.word.field");
+      covers("command:media.paged.doc.command.word.bookmark");
+      covers("command:media.paged.doc.command.word.indexEntry");
+      covers("command:media.paged.doc.command.word.pageSetup");
+      covers("command:media.paged.doc.command.word.pageBreak");
+      covers("command:media.paged.doc.command.word.footnote");
+      covers("command:media.paged.doc.command.word.updateFields");
+      covers("command:media.paged.doc.command.word.toggleFieldCodes");
+      covers("command:media.paged.doc.command.word.insertToc");
+      covers("command:media.paged.doc.command.word.insertPageNumber");
+      covers("command:media.paged.doc.command.word.insertPageCount");
+      covers("command:media.paged.doc.command.word.insertDate");
+      for (const name of names) {
+        await run(name, await at("A closing"));
+      }
+      // The header bar's toggles rewrote the first story's rule.
+      const stories = await h.host.document.collection<{
+        selfId: string;
+        growRule?: { evenMaster?: string } | null;
+      }>("stories");
+      expect(
+        stories.find((s) => s.selfId === STORY)?.growRule?.evenMaster,
+      ).toBeTruthy();
+    });
   },
 );
