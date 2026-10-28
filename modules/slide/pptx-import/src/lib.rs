@@ -221,11 +221,20 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
         owners.push((m.part.clone(), &mut m.shapes));
     }
     let mut diagrams = BTreeMap::new();
+    let mut models = BTreeMap::new();
     for (part, shapes) in owners {
         let owner = Ctx::new(&pkg, &part, &diagnostics);
-        link_diagrams(&pkg, &owner, shapes, &mut diagrams, &diagnostics);
+        link_diagrams(
+            &pkg,
+            &owner,
+            shapes,
+            &mut diagrams,
+            &mut models,
+            &diagnostics,
+        );
     }
     deck.diagrams = diagrams;
+    deck.diagram_models = models;
 
     // Charts, once per part.
     let mut chart_parts = Vec::new();
@@ -260,11 +269,12 @@ fn link_diagrams(
     owner: &Ctx,
     shapes: &mut [Shape],
     out: &mut BTreeMap<String, Vec<Shape>>,
+    models: &mut BTreeMap<String, pptx_core::DiagramModel>,
     diagnostics: &RefCell<Vec<String>>,
 ) {
     for s in shapes {
         match s {
-            Shape::Group(g) => link_diagrams(pkg, owner, &mut g.children, out, diagnostics),
+            Shape::Group(g) => link_diagrams(pkg, owner, &mut g.children, out, models, diagnostics),
             Shape::Frame(GraphicFrame {
                 content:
                     FrameContent::Diagram {
@@ -273,8 +283,9 @@ fn link_diagrams(
                     },
                 ..
             }) => {
-                let rel = read_part(pkg, data).ok().and_then(|el| {
-                    find_local(&el, "dataModelExt")
+                let data_el = read_part(pkg, data).ok();
+                let rel = data_el.as_ref().and_then(|el| {
+                    find_local(el, "dataModelExt")
                         .and_then(|e| e.attr("relId"))
                         .map(str::to_string)
                 });
@@ -287,6 +298,9 @@ fn link_diagrams(
                 };
                 if out.contains_key(&part) {
                     continue;
+                }
+                if let Some(el) = &data_el {
+                    models.insert(part.clone(), diagram_model(el, data));
                 }
                 match read_part(pkg, &part) {
                     Ok(el) => {
@@ -306,6 +320,129 @@ fn link_diagrams(
 }
 
 /// The first descendant with this local name.
+/// A SmartArt data part's text points and which drawing shape shows them
+/// (`dgm:ptLst`, `dgm:cxnLst`).
+fn diagram_model(el: &El, data_part: &str) -> pptx_core::DiagramModel {
+    let list = |name: &str| -> Vec<&El> {
+        find_local(el, name)
+            .map(|l| l.children.iter().collect())
+            .unwrap_or_default()
+    };
+    // Every point's type and text.
+    let mut kind: BTreeMap<String, String> = BTreeMap::new();
+    let mut text: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut doc = None;
+    for p in list("ptLst").into_iter().filter(|p| p.local == "pt") {
+        let Some(id) = p.attr("modelId") else {
+            continue;
+        };
+        let ty = p.attr("type").unwrap_or("node").to_string();
+        if ty == "doc" {
+            doc = Some(id.to_string());
+        }
+        let paras: Vec<String> = p
+            .children
+            .iter()
+            .find(|c| c.local == "t")
+            .map(|t| {
+                t.children
+                    .iter()
+                    .filter(|c| c.local == "p")
+                    .map(paragraph_text)
+                    .collect()
+            })
+            .unwrap_or_default();
+        kind.insert(id.to_string(), ty);
+        text.insert(id.to_string(), paras);
+    }
+    // parOf: the outline; presOf: what each drawing shape shows.
+    let mut children: BTreeMap<String, Vec<(i64, String)>> = BTreeMap::new();
+    let mut shows: BTreeMap<String, Vec<(i64, String)>> = BTreeMap::new();
+    for c in list("cxnLst").into_iter().filter(|c| c.local == "cxn") {
+        let (Some(src), Some(dest)) = (c.attr("srcId"), c.attr("destId")) else {
+            continue;
+        };
+        let ord = |a: &str| c.attr(a).and_then(|v| v.parse().ok()).unwrap_or(0i64);
+        match c.attr("type").unwrap_or("parOf") {
+            "parOf" => children
+                .entry(src.to_string())
+                .or_default()
+                .push((ord("srcOrd"), dest.to_string())),
+            "presOf" => shows
+                .entry(dest.to_string())
+                .or_default()
+                .push((ord("destOrd"), src.to_string())),
+            _ => {}
+        }
+    }
+    let is_text = |id: &str| matches!(kind.get(id).map(String::as_str), Some("node" | "asst"));
+    let mut points = Vec::new();
+    fn walk(
+        id: &str,
+        depth: u32,
+        children: &mut BTreeMap<String, Vec<(i64, String)>>,
+        is_text: &dyn Fn(&str) -> bool,
+        text: &BTreeMap<String, Vec<String>>,
+        out: &mut Vec<pptx_core::DiagramPoint>,
+    ) {
+        let Some(mut kids) = children.remove(id) else {
+            return;
+        };
+        kids.sort();
+        for (_, k) in kids {
+            if !is_text(&k) {
+                continue;
+            }
+            out.push(pptx_core::DiagramPoint {
+                id: k.clone(),
+                depth,
+                paragraphs: text.get(&k).cloned().unwrap_or_default(),
+            });
+            walk(&k, depth + 1, children, is_text, text, out);
+        }
+    }
+    if let Some(d) = &doc {
+        walk(d, 0, &mut children, &is_text, &text, &mut points);
+    }
+    let shapes = shows
+        .into_iter()
+        .map(|(shape, mut srcs)| {
+            srcs.sort();
+            let list = srcs
+                .into_iter()
+                .filter(|(_, s)| is_text(s))
+                .map(|(_, s)| {
+                    let n = text.get(&s).map(Vec::len).unwrap_or(0).max(1) as u32;
+                    (s, n)
+                })
+                .collect();
+            (shape, list)
+        })
+        .collect();
+    pptx_core::DiagramModel {
+        data_part: data_part.to_string(),
+        points,
+        shapes,
+    }
+}
+
+/// A DrawingML paragraph's text: its runs and fields, a line break as `\u{b}`.
+fn paragraph_text(p: &El) -> String {
+    let mut out = String::new();
+    for c in &p.children {
+        match c.local.as_str() {
+            "r" | "fld" => {
+                if let Some(t) = c.children.iter().find(|t| t.local == "t") {
+                    out.push_str(&t.text);
+                }
+            }
+            "br" => out.push('\u{b}'),
+            _ => {}
+        }
+    }
+    out
+}
+
 fn find_local<'a>(el: &'a El, local: &str) -> Option<&'a El> {
     el.children.iter().find_map(|c| {
         if c.local == local {

@@ -375,6 +375,7 @@ pub struct ExportedDeck {
     bytes: Vec<u8>,
     diagnostics: Vec<String>,
     not_exported: Vec<String>,
+    rasters_needed: Vec<(String, f64)>,
 }
 
 #[wasm_bindgen]
@@ -396,6 +397,19 @@ impl ExportedDeck {
     pub fn not_exported(&self) -> String {
         serde_json::to_string(&self.not_exported).unwrap_or_else(|_| "[]".into())
     }
+
+    /// The pictures that need a PNG the host renders (an SVG's fallback, a
+    /// format PowerPoint does not open), as JSON `[{id, dpi}]`. Export again
+    /// with them in the plan's `rasters`.
+    #[wasm_bindgen(getter, js_name = rastersNeeded)]
+    pub fn rasters_needed(&self) -> String {
+        let v: Vec<serde_json::Value> = self
+            .rasters_needed
+            .iter()
+            .map(|(id, dpi)| serde_json::json!({ "id": id, "dpi": dpi }))
+            .collect();
+        serde_json::to_string(&v).unwrap_or_else(|_| "[]".into())
+    }
 }
 
 /// Write a `.pptx` from the deck the document was imported from, the
@@ -416,6 +430,7 @@ pub fn export_pptx(
         bytes: out.bytes,
         diagnostics: out.diagnostics,
         not_exported: out.not_exported,
+        rasters_needed: out.rasters_needed,
     })
 }
 
@@ -707,7 +722,9 @@ impl PdfOut {
 /// - `adjust` (`elements`, `target`, `index`, `point`): the writes a drag of
 ///   that handle to that page point makes,
 /// - `newShape` (`prst`, `w`, `h`, `key`): a preset drawn as new elements,
-/// - `gallery`: every preset by Insert ▸ Shapes category with a thumbnail.
+/// - `gallery`: every preset by Insert ▸ Shapes category with a thumbnail,
+/// - `picture` (`head`, base64): a picture's format and pixel size,
+/// - `pictureFormats`: every picture format the engine reads.
 #[wasm_bindgen(js_name = live)]
 pub fn live(request: &str) -> Result<String, JsError> {
     live_json(request).map_err(|e| JsError::new(&e))
@@ -743,6 +760,32 @@ pub fn live_json(request: &str) -> Result<String, String> {
             serde_json::to_value(l::new_shape(prst, num("w"), num("h"), key))
         }
         "gallery" => serde_json::to_value(l::gallery()),
+        "picture" => {
+            // A picture's format and pixel size from its first bytes
+            // (base64; the header is enough, an SVG's root tag included).
+            use base64::Engine;
+            let head = v.get("head").and_then(|h| h.as_str()).unwrap_or("");
+            let b = base64::engine::general_purpose::STANDARD
+                .decode(head)
+                .map_err(|e| format!("head: {e}"))?;
+            Ok(match pptx_core::media::sniff(&b) {
+                Some(f) => {
+                    let size = pptx_core::media::pixel_size(&b);
+                    serde_json::json!({
+                        "format": f.extension(),
+                        "mime": f.mime(),
+                        "inDeck": f.in_deck(),
+                        "width": size.map(|s| s.0),
+                        "height": size.map(|s| s.1),
+                    })
+                }
+                None => serde_json::Value::Null,
+            })
+        }
+        "pictureFormats" => Ok(serde_json::json!(pptx_core::media::PicFormat::ALL
+            .iter()
+            .map(|f| serde_json::json!({ "format": f.extension(), "mime": f.mime() }))
+            .collect::<Vec<_>>())),
         other => return Err(format!("unknown live op {other:?}")),
     }
     .map_err(|e| e.to_string())?;

@@ -170,6 +170,16 @@ pub struct ItemMeta {
     /// A connector's glued ends (slide ADR 717).
     #[serde(default)]
     pub connector: Option<Connector>,
+    /// A SmartArt drawing shape's `modelId` (its presentation point).
+    #[serde(default)]
+    pub model_id: Option<String>,
+    /// A SmartArt drawing shape: the data points whose text it shows, in
+    /// order, and how many paragraphs of its text each one is.
+    #[serde(default)]
+    pub dgm: Option<Vec<(String, u32)>>,
+    /// A SmartArt frame: its data model's text outline (the text pane).
+    #[serde(default)]
+    pub smartart: Option<pptx_core::DiagramModel>,
 }
 
 /// A connector's glued ends.

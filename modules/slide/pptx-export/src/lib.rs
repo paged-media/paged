@@ -52,6 +52,7 @@ pub mod outline;
 pub mod presentation;
 pub mod probe;
 pub mod slide;
+pub mod smartart;
 pub mod text;
 pub mod xml;
 
@@ -115,6 +116,11 @@ pub struct ExportPlan {
     /// chart part keeps its bytes.
     #[serde(default)]
     pub charts: Vec<ChartPlan>,
+    /// PNGs of pictures PowerPoint cannot hold as they are, by element id
+    /// (base64): what an export asked for in [`Exported::rasters_needed`],
+    /// rendered by the host.
+    #[serde(default)]
+    pub rasters: BTreeMap<String, String>,
 }
 
 /// A chart whose workbook the document edited.
@@ -140,6 +146,10 @@ pub struct Exported {
     /// What is on the slides that could not round-trip, one line each
     /// (`slide 3: Title 1: …`).
     pub not_exported: Vec<String>,
+    /// Pictures written without the PNG they need (an SVG's fallback, a
+    /// format PowerPoint does not open): element id and resolution in dpi.
+    /// Render them and export again with [`ExportPlan::rasters`].
+    pub rasters_needed: Vec<(String, f64)>,
 }
 
 struct Original {
@@ -382,11 +392,11 @@ fn add_defaults(xml: &str, parts: &[String]) -> String {
             continue;
         };
         let ct = match ext {
-            "png" => "image/png",
-            "jpeg" | "jpg" => "image/jpeg",
-            "gif" => "image/gif",
             "xlsx" => slide_sheet::CT_XLSX,
-            _ => continue,
+            e => match pptx_core::media::content_type_of_extension(e) {
+                Some(ct) => ct,
+                None => continue,
+            },
         };
         let has = out
             .to_ascii_lowercase()
@@ -638,6 +648,7 @@ pub fn export_with(
             bytes: original.to_vec(),
             diagnostics,
             not_exported,
+            rasters_needed: Vec::new(),
         });
     }
 
@@ -734,6 +745,16 @@ pub fn export_with(
         .as_ref()
         .map(|d| d.theme_colors.clone())
         .unwrap_or_default();
+    let rasters: BTreeMap<String, Vec<u8>> = {
+        use base64::Engine;
+        plan.rasters
+            .iter()
+            .filter_map(|(id, b)| {
+                let png = base64::engine::general_purpose::STANDARD.decode(b).ok()?;
+                Some((id.clone(), png))
+            })
+            .collect()
+    };
     let shared = model.as_ref().map(|cur| slide::Shared {
         ir: &ir,
         cur,
@@ -751,6 +772,21 @@ pub fn export_with(
             .collect(),
         media: std::cell::RefCell::new((BTreeMap::new(), next_media)),
         live_charts: plan.charts.iter().map(|c| c.part.clone()).collect(),
+        rasters: &rasters,
+        needs: std::cell::RefCell::new(Vec::new()),
+        pkg: &pkg,
+        diagram_no: std::cell::RefCell::new(
+            pkg.file_names()
+                .filter_map(|n| {
+                    let f = n.strip_prefix("ppt/diagrams/")?;
+                    let f = f
+                        .strip_prefix("data")
+                        .or_else(|| f.strip_prefix("drawing"))?;
+                    f.strip_suffix(".xml")?.parse::<u32>().ok()
+                })
+                .max()
+                .unwrap_or(0),
+        ),
     });
 
     let mut out_parts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
@@ -816,11 +852,18 @@ pub fn export_with(
                                     let out = out.unwrap_or(slide::Out {
                                         xml: ns.xml.clone(),
                                         media: Vec::new(),
+                                        parts: Vec::new(),
                                         lost: Vec::new(),
                                     });
                                     slide_xml = set_hidden(&out.xml, s.hidden);
                                     for (p, b) in out.media {
                                         media_parts.push(p.clone());
+                                        out_parts.insert(p, b);
+                                    }
+                                    for (p, b, ct) in out.parts {
+                                        if let Some(ct) = ct {
+                                            added_types.push((p.clone(), ct));
+                                        }
                                         out_parts.insert(p, b);
                                     }
                                     not_exported.extend(out.lost);
@@ -866,6 +909,12 @@ pub fn export_with(
                                 slide_xml = out.xml;
                                 for (p, b) in out.media {
                                     media_parts.push(p.clone());
+                                    out_parts.insert(p, b);
+                                }
+                                for (p, b, ct) in out.parts {
+                                    if let Some(ct) = ct {
+                                        added_types.push((p.clone(), ct));
+                                    }
                                     out_parts.insert(p, b);
                                 }
                                 not_exported.extend(out.lost);
@@ -1292,6 +1341,13 @@ pub fn export_with(
     ct = patch_content_types(&ct, &removed_parts, &added_types);
     ct = add_defaults(&ct, &media_parts);
 
+    let mut rasters_needed = shared
+        .as_ref()
+        .map(|sh| sh.needs.take())
+        .unwrap_or_default();
+    rasters_needed.sort_by(|a, b| a.0.cmp(&b.0));
+    rasters_needed.dedup_by(|a, b| a.0 == b.0);
+
     // Nothing changed at all: the original bytes.
     if same_list
         && pres == pres_orig
@@ -1308,6 +1364,7 @@ pub fn export_with(
                 bytes: original.to_vec(),
                 diagnostics,
                 not_exported,
+                rasters_needed,
             });
         }
     }
@@ -1342,6 +1399,7 @@ pub fn export_with(
         bytes,
         diagnostics,
         not_exported,
+        rasters_needed,
     })
 }
 

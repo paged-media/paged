@@ -699,6 +699,8 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                             end: sp.end_cxn.as_ref().map(end),
                         }
                     }),
+                    model_id: sp.model_id.clone(),
+                    ..Default::default()
                 },
             })
         }
@@ -706,7 +708,10 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             if p.nv.hidden {
                 return None;
             }
-            let Some(part) = p.blip.part.clone() else {
+            // An SVG picture (Office 2016's `asvg:svgBlip`) is drawn from
+            // its SVG, as vectors; the raster beside it is PowerPoint's
+            // fallback for readers without SVG.
+            let Some(part) = p.blip.svg.clone().or_else(|| p.blip.part.clone()) else {
                 ctx.note(format!("picture {:?} has no embedded image", p.nv.name));
                 return None;
             };
@@ -858,7 +863,15 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     ch_ext: Some(x.ext),
                     ..x.clone()
                 });
-                let children = ordered(shapes, &inner, ctx);
+                let mut children = ordered(shapes, &inner, ctx);
+                // The text pane (slide W4): each drawing shape names the
+                // points it shows, when its paragraphs are theirs.
+                let model = drawing_part
+                    .as_ref()
+                    .and_then(|p| ctx.deck.diagram_models.get(p));
+                if let Some(m) = model {
+                    label_diagram_text(&mut children, m);
+                }
                 let (t, w, h) = space.place(&x);
                 Some(Item {
                     id: ctx.id(),
@@ -873,6 +886,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                         shape_id: f.nv.id,
                         frame: Some("diagram".into()),
                         link: f.nv.hyperlink.clone(),
+                        smartart: model.cloned(),
                         ..Default::default()
                     },
                 })
@@ -885,6 +899,27 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
         Shape::Unknown { name, .. } => {
             ctx.note(format!("p:{name} not drawn"));
             None
+        }
+    }
+}
+
+/// Name on each SmartArt drawing shape the data points it shows (slide
+/// W4): the `presOf` sources of its presentation point, when their
+/// paragraphs add up to the shape's.
+fn label_diagram_text(items: &mut [Item], model: &pptx_core::DiagramModel) {
+    for it in items {
+        match &mut it.kind {
+            ItemKind::Group { children } => label_diagram_text(children, model),
+            ItemKind::Shape { text: Some(tf), .. } => {
+                let Some(srcs) = it.meta.model_id.as_ref().and_then(|m| model.shapes.get(m)) else {
+                    continue;
+                };
+                let n: u32 = srcs.iter().map(|(_, n)| n).sum();
+                if !srcs.is_empty() && n as usize == tf.paragraphs.len() {
+                    it.meta.dgm = Some(srcs.clone());
+                }
+            }
+            _ => {}
         }
     }
 }
