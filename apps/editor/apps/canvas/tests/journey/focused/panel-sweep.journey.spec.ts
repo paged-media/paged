@@ -77,7 +77,7 @@ const PANELS: Array<[string, string]> = [
   ["paged.comments", "editor-shell.panels.comments"],
   ["paged.data-source", "editor-shell.panels.data-suite"],
   ["paged.component-library", "editor-shell.panels.component-library"],
-  ["paged.object-export", "editor-shell.panels.object-export"],
+  ["paged.object-export", "editor-shell.panels.asset-export"],
   ["paged.export-tagging", "editor-shell.panels.export-tagging"],
   ["paged.anchored", "editor-shell.panels.anchored"],
   ["paged.problems", "editor-shell.panels.problems"],

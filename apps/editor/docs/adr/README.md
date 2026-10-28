@@ -104,6 +104,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [305](305-the-audience-gets-a-window-of-its-own.md) | The audience gets a window of its own | Accepted 2026-10-25 |
 | [306](306-module-views-replace-the-canvas.md) | Module views replace the canvas | Accepted 2026-10-25 |
 | [307](307-the-slide-profile.md) | The slide profile: PowerPoint's Normal view and its keys | Accepted 2026-10-25 |
+| [2XX](2XX-asset-export.md) | Asset Export | Accepted 2026-10-28 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

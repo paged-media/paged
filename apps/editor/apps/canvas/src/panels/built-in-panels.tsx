@@ -79,7 +79,7 @@ import { TabsPanel } from "./concept/tabs-panel";
 import { GlyphsPanel } from "./concept/glyphs-panel";
 import { BulletsPanel } from "./concept/bullets-panel";
 import { AnchoredPanel } from "./concept/anchored-panel";
-import { ObjectExportPanel } from "./concept/object-export-panel";
+import { AssetExportPanel } from "./asset-export-panel";
 import { ExportTaggingPanel } from "./concept/export-tagging-panel";
 import { MasterPagesPanel } from "./master-pages-panel";
 import { PagesListPanel } from "./pages-list-panel";
@@ -219,7 +219,7 @@ const M = defineMessages("app.builtInPanels", {
   glyphs: "Glyphs",
   bulletsNumbering: "Bullets & Numbering",
   anchored: "Anchored Object",
-  objectExport: "Object Export Options",
+  assetExport: "Asset Export",
   exportTagging: "Export Tagging",
 });
 
@@ -1274,16 +1274,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     icon: "ui-pin",
   },
   {
-    // Per-object alt text / tagged-PDF role / EPUB conversion —
-    // the accessible-output surface (in scope per the parity doc).
+    // Editor ADR 2XX — Asset Export: page items, artboards and pages
+    // at several scales as PNG, JPEG, WebP, TIFF, SVG and PDF. The id is
+    // the dock slot of the former Object Export Options concept.
     id: "paged.object-export",
     get title() {
-      return t(M.objectExport);
+      return t(M.assetExport);
     },
-    component: ObjectExportPanel,
+    component: AssetExportPanel,
     defaultDock: "right",
     defaultGroup: "output",
-    icon: "ui-accessibility",
+    icon: "ui-export",
   },
   {
     // Style → HTML tag/CSS class/PDF tag mapping for EPUB + tagged
