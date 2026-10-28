@@ -101,18 +101,12 @@ export class SlideAnimation {
   draws(): { states: DrawState[]; running: boolean } {
     const f = this.frame();
     const states = this.scene.layers.map((l) =>
-      drawState(
-        f.layers,
-        l.target,
-        l.part,
-        this.scene.boxes,
-        {
-          x: l.region.x,
-          y: l.region.y,
-          w: l.region.width,
-          h: l.region.height,
-        },
-      ),
+      drawState(f.layers, l.target, l.part, this.scene.boxes, {
+        x: l.region.x,
+        y: l.region.y,
+        w: l.region.width,
+        h: l.region.height,
+      }),
     );
     return { states, running: f.running };
   }

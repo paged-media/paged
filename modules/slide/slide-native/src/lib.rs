@@ -211,6 +211,14 @@ pub fn slide_label_with(
             data.insert("timing".into(), v);
         }
     }
+    // The section that starts here (slide ADR 720): it moves, duplicates
+    // and undoes with its first slide.
+    if let Some(sec) = &s.section {
+        data.insert(
+            "section".into(),
+            serde_json::json!({ "id": sec.id, "name": sec.name }),
+        );
+    }
     if data.is_empty() {
         return None;
     }
@@ -225,21 +233,31 @@ pub fn slide_label_with(
 /// no edit (UX audit F-08). Non-ASCII characters are `\uXXXX` escapes, as
 /// the bundle's envelope writes them (labels travel through InDesign as
 /// XML attribute text).
-pub fn deck_label(name: &str, width: f64, height: f64, fonts: &[String]) -> String {
-    ascii(
-        &serde_json::json!({
-            "v": 1,
-            "data": {
-                "deck": {
-                    "name": name,
-                    "width": width,
-                    "height": height,
-                    "fonts": fonts,
-                },
-            },
-        })
-        .to_string(),
-    )
+///
+/// The deck's custom shows (slide ADR 720) ride the same label, by page id,
+/// so editing one is an undoable write of the document label.
+pub fn deck_label(
+    name: &str,
+    width: f64,
+    height: f64,
+    fonts: &[String],
+    custom_shows: &[slide_resolve::model::CustomShowPages],
+) -> String {
+    let mut data = serde_json::json!({
+        "deck": {
+            "name": name,
+            "width": width,
+            "height": height,
+            "fonts": fonts,
+        },
+    });
+    if !custom_shows.is_empty() {
+        data["customShows"] = custom_shows
+            .iter()
+            .map(|c| serde_json::json!({ "id": c.id, "name": c.name, "pages": c.pages }))
+            .collect();
+    }
+    ascii(&serde_json::json!({ "v": 1, "data": data }).to_string())
 }
 
 /// JSON text with every non-ASCII character as a `\uXXXX` escape.
@@ -1673,7 +1691,13 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         document_name: Some(name.to_string()),
         labels: vec![(
             SLIDE_LABEL_KEY.to_string(),
-            deck_label(name, deck.width, deck.height, &deck.fonts),
+            deck_label(
+                name,
+                deck.width,
+                deck.height,
+                &deck.fonts,
+                &deck.custom_shows,
+            ),
         )],
         document_preference: DocumentPreference {
             page_width: Some(n(deck.width)),
@@ -1816,7 +1840,7 @@ mod tests {
 
     #[test]
     fn the_deck_label_is_an_ascii_envelope_of_the_deck() {
-        let label = deck_label("Präsentation 🎉", 960.0, 540.0, &["Calibri".into()]);
+        let label = deck_label("Präsentation 🎉", 960.0, 540.0, &["Calibri".into()], &[]);
         assert!(label.is_ascii(), "{label}");
         assert!(
             label.contains("Pr\\u00e4sentation \\ud83c\\udf89"),

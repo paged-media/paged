@@ -115,6 +115,10 @@ pub fn highest_u_hex_id(doc: &Document) -> u64 {
                 scan_u_hex_id(&mut max, Some(&note.id));
             }
         }
+        // Engine ADR 1022 — the text destinations (Word's bookmarks).
+        for dest in &story.story.destinations {
+            scan_u_hex_id(&mut max, Some(&dest.self_id));
+        }
     }
     let dm = &doc.designmap;
     for layer in &dm.layers {

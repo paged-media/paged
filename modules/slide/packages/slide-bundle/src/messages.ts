@@ -215,7 +215,8 @@ export const ANIM = defineMessages("slide.anim", {
     "Click a shape to give it these animations (the command again cancels).",
   timeline: "Animation Pane",
   seconds: "{s} s",
-  readOnly: "This effect is kept as the deck wrote it; its timing cannot be changed here.",
+  readOnly:
+    "This effect is kept as the deck wrote it; its timing cannot be changed here.",
   shape: "Shape {name}",
   paragraph: "paragraph {n}",
   addAnimation: "Add animation",
@@ -253,6 +254,10 @@ defineMessages("menu", {
   "Animation Pane": "Animation Pane",
   "Preview Animations": "Preview Animations",
   "Animation Painter": "Animation Painter",
+  "Export…": "Export…",
+  "Save as template…": "Save as template…",
+  "Custom Shows…": "Custom Shows…",
+  "Add Section": "Add Section",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled
@@ -263,6 +268,10 @@ defineMessages("commandCategory", {
 
 export const DECK = defineMessages("slide.deck", {
   format: "PowerPoint presentation (.pptx)",
+  templateFormat: "PowerPoint template (.potx)",
+  untitled: "Presentation",
+  fromTemplate:
+    "Opened the template “{name}” as a new presentation. Export it as a deck, or save it as a template again with File ▸ Save as template.",
   cannotOpen:
     "This host cannot open a native document, so a PowerPoint deck cannot be opened.",
   notFromDeck:
@@ -285,6 +294,61 @@ export const CHARTS = defineMessages("slide.charts", {
   fullScreen: "Full screen",
   backToSlide: "Back to slide",
   refused: "The workbook did not take that entry.",
+});
+
+/** File ▸ Export, custom shows and sections (output/, slide ADR 720). */
+export const OUTPUT = defineMessages("slide.output", {
+  title: "Export",
+  export: "Export…",
+  saveAsTemplate: "Save as template…",
+  customShows: "Custom shows…",
+  addSection: "Add section",
+  untitledSection: "Untitled Section",
+  pdf: "Create PDF",
+  pdfLayout: "Layout",
+  layoutSlides: "Full page slides",
+  layoutHandouts: "Handouts",
+  layoutNotes: "Notes pages",
+  perPage: "Slides per page",
+  paper: "Paper",
+  includeHidden: "Include hidden slides",
+  exportPdf: "Export PDF",
+  outline: "Outline",
+  outlineRtf: "Outline (.rtf)",
+  outlineTxt: "Outline (.txt)",
+  template: "PowerPoint template (.potx)",
+  templateHint:
+    "A template opens as a new, untitled presentation built on this one.",
+  video: "Create a video",
+  resolution: "Resolution",
+  fps: "Frames per second",
+  secondsPerSlide: "Seconds on each slide",
+  useTimings: "Use recorded timings",
+  exportVideo: "Create video",
+  cancel: "Cancel",
+  running: "{done} of {total}",
+  saved: "Saved {file}",
+  failed: "The export failed: {reason}",
+  replaced:
+    "{count} characters of the notes are not in the PDF's standard font and print as “?”.",
+  busy: "An export is running.",
+  noGpu: "Without WebGPU the video's transitions are cuts.",
+  showsTitle: "Custom shows",
+  showsEmpty: "No custom shows. Name one and pick its slides.",
+  showName: "Name",
+  newShow: "New show",
+  play: "Show",
+  rename: "Rename",
+  delete: "Delete",
+  inShow: "In the show",
+  moveUp: "Move up",
+  moveDown: "Move down",
+  section: "Section",
+  renameSection: "Rename section",
+  removeSection: "Remove section",
+  sectionUp: "Move section up",
+  sectionDown: "Move section down",
+  sectionSlides: "{count} slides",
 });
 
 export const TEMPLATE = defineMessages("slide.template", {

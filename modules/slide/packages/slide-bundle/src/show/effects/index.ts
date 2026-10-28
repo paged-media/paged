@@ -51,20 +51,19 @@ export const FILTER_CODES: Readonly<Record<string, number>> = {
 
 /** Each filter's options (the parenthesised part of `wipe(down)`) as the
  *  shader's `sub` code. */
-const SUB_CODES: Readonly<Record<string, Readonly<Record<string, number>>>> =
-  {
-    wipe: { left: 1, right: 2, up: 3, down: 4 },
-    barn: { inVertical: 1, inHorizontal: 2, outVertical: 3, outHorizontal: 4 },
-    blinds: { horizontal: 1, vertical: 2 },
-    randombar: { horizontal: 1, vertical: 2 },
-    checkerboard: { across: 1, down: 2 },
-    box: { in: 1, out: 2 },
-    circle: { in: 1, out: 2 },
-    diamond: { in: 1, out: 2 },
-    plus: { in: 1, out: 2 },
-    slide: { fromTop: 1, fromBottom: 2, fromLeft: 3, fromRight: 4 },
-    strips: { downLeft: 1, upLeft: 2, downRight: 3, upRight: 4 },
-  };
+const SUB_CODES: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  wipe: { left: 1, right: 2, up: 3, down: 4 },
+  barn: { inVertical: 1, inHorizontal: 2, outVertical: 3, outHorizontal: 4 },
+  blinds: { horizontal: 1, vertical: 2 },
+  randombar: { horizontal: 1, vertical: 2 },
+  checkerboard: { across: 1, down: 2 },
+  box: { in: 1, out: 2 },
+  circle: { in: 1, out: 2 },
+  diamond: { in: 1, out: 2 },
+  plus: { in: 1, out: 2 },
+  slide: { fromTop: 1, fromBottom: 2, fromLeft: 3, fromRight: 4 },
+  strips: { downLeft: 1, upLeft: 2, downRight: 3, upRight: 4 },
+};
 
 /** A filter as the shader's (kind, sub): unknown filters fade (a filter
  *  this library does not draw still brings its target in and out). */
@@ -93,7 +92,11 @@ const rgb = (hex: string | null): [number, number, number] | null => {
 };
 
 const maskVec = (m: MaskState | undefined): [number[], number[]] => {
-  if (!m) return [[0, 0, 0, 0], [0, 0, 1, 1]];
+  if (!m)
+    return [
+      [0, 0, 0, 0],
+      [0, 0, 1, 1],
+    ];
   const c = filterCode(m.filter, m.sub);
   return [
     [c.kind, c.sub, m.progress, m.out ? 1 : 0],
@@ -113,14 +116,32 @@ export function layerUniforms(
   const [f0, b0] = maskVec(state.masks[0]);
   const [f1, b1] = maskVec(state.masks[1]);
   return new Float32Array([
-    a, b, c, d,
-    e, f, 0, 0,
-    region.x, region.y, region.width, region.height,
-    slide[0], slide[1], 0, 0,
-    state.visible ? state.opacity : 0, tint ? 1 : 0, 0, seed,
-    ...(tint ?? [0, 0, 0]), 1,
-    ...f0, ...b0,
-    ...f1, ...b1,
+    a,
+    b,
+    c,
+    d,
+    e,
+    f,
+    0,
+    0,
+    region.x,
+    region.y,
+    region.width,
+    region.height,
+    slide[0],
+    slide[1],
+    0,
+    0,
+    state.visible ? state.opacity : 0,
+    tint ? 1 : 0,
+    0,
+    seed,
+    ...(tint ?? [0, 0, 0]),
+    1,
+    ...f0,
+    ...b0,
+    ...f1,
+    ...b1,
   ]);
 }
 

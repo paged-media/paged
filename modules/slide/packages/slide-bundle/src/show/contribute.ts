@@ -88,6 +88,21 @@ export interface ShowOptions {
   presenter?: boolean;
   rehearse?: boolean;
   loop?: boolean;
+  /** Play this custom show's slides, in its order (slide ADR 720). */
+  customShow?: string;
+}
+
+/** A custom show's slides as the show plays them: the deck's slides by
+ *  page, in the show's order (a page that is gone is left out). */
+export function customShowSlides(
+  all: readonly ShowSlide[],
+  pages: readonly string[],
+): ShowSlide[] {
+  const byPage = new Map(all.map((s) => [s.pageId, s]));
+  return pages.flatMap((p) => {
+    const s = byPage.get(p);
+    return s ? [s] : [];
+  });
 }
 
 /** The deck's slides as the show plays them: hidden flags, notes, the
@@ -162,11 +177,15 @@ export async function attachAnimations(
   slides: ShowSlide[],
   timings: ReadonlyMap<string, unknown>,
 ): Promise<void> {
-  const animated = slides.filter((s) => hasAnimations(timings.get(s.pageId) as never));
+  const animated = slides.filter((s) =>
+    hasAnimations(timings.get(s.pageId) as never),
+  );
   if (animated.length === 0) return;
   const pages = await pageShapes(host);
   for (const s of animated) {
-    const timing = timings.get(s.pageId) as Parameters<SlideEngine["effects"]>[0];
+    const timing = timings.get(s.pageId) as Parameters<
+      SlideEngine["effects"]
+    >[0];
     try {
       const list = engine.effects(timing);
       s.clicks = list.clicks;
@@ -208,6 +227,9 @@ export interface ShowDeps {
   store: SlidesStore;
   /** The import report (the deck's own timings), if the deck kept one. */
   readReport(): Promise<ImportReport | null>;
+  /** A custom show's pages by name, or null when the deck has none so
+   *  named (slide ADR 720). */
+  customShowPages?(name: string): Promise<string[] | null>;
 }
 
 const NO_ARGS: ValueType = { kind: "struct", fields: {} } as ValueType;
@@ -259,7 +281,11 @@ export function contributeShow(
   host: BundleHost,
   deps: ShowDeps,
   sorter: (() => Disposable | null) | null,
-): ShowHandle & { run(id: string): Promise<boolean> } {
+): ShowHandle & {
+  run(id: string): Promise<boolean>;
+  /** Play a custom show from its first slide. */
+  playCustomShow(name: string): Promise<boolean>;
+} {
   const handles: Disposable[] = [];
   const ids = new Set<string>();
   const store = deps.store;
@@ -354,6 +380,18 @@ export function contributeShow(
       return false;
     }
     slides = showSlides(store.list(), await deps.readReport());
+    if (opts.customShow !== undefined) {
+      const pages = await deps.customShowPages?.(opts.customShow);
+      if (!pages) {
+        log(`the deck has no custom show "${opts.customShow}"`);
+        return false;
+      }
+      slides = customShowSlides(slides, pages);
+      if (slides.length === 0) {
+        log(`the custom show "${opts.customShow}" has no slides`);
+        return false;
+      }
+    }
     if (deps.engine) {
       try {
         await attachAnimations(
@@ -466,6 +504,7 @@ export function contributeShow(
     ids,
     typedCommands: showTypedCommands(run),
     run,
+    playCustomShow: (name) => start({ customShow: name }, "screen"),
     dispose() {
       for (const h of handles.splice(0).reverse()) h.dispose();
       ids.clear();

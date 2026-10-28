@@ -244,6 +244,17 @@ template fields | fill | check` run the same messages headlessly.
   `^p` `^t` `^l` `^m` `^?` `^#`, style filters; hits in caret and character offsets with
   context (`RequestFindText`, `paged.find`); `findReplace` replaces one hit or all of them as
   one undo step.
+- **Word document structure** ([ADR 1022](adr/1022-word-document-structure.md)). A growing
+  story's rule names a Word section's first / odd / even masters (parity by page number) and an
+  odd- or even-page start, which puts a blank page in front when it lands wrong;
+  `PageSummary.appliedMaster` says which master a page shows. Runs may be Word fields (`DATE`,
+  `TIME`, `NUMPAGES`, `SECTIONPAGES`, `PAGE`, `REF`, `PAGEREF`, `SEQ`, `STYLEREF`, and opaque
+  ones shown as their result): the page-dependent kinds print the current layout's answer,
+  `updateFields` is Word's F9 (one undo step), `documentShowFieldCodes` prints the codes.
+  `insertTextAnchor` / `deleteTextAnchor` (Word's bookmarks; text edits keep them in place),
+  `insertCrossReference`, `insertTableOfContents` (a table inside the text, updated in place by
+  `updateTableOfContents`) and `insertIndexMarker`. IDML writes fields as InDesign's variables
+  where one exists, else as their result.
 - **Fidelity tooling.** The fixture generator (67 samples), the image-diff tool, 66
   reference PDFs with thresholds (`docx-pagination` has none and is not gated), and the
   scripts that drive InDesign to export them.
@@ -267,7 +278,9 @@ template fields | fill | check` run the same messages headlessly.
 - **Word additions not yet everywhere** (ADRs 1018, 1021). Level-2+ list counts do not continue
   across stories; tables and notes draw no underline kinds or highlight; a changed `BasedOn` of
   a style from the source package is not re-spelt in its IDML `<Properties>`; find does not
-  search table cells or notes.
+  search table cells or notes. Word fields other than the nine kinds are opaque; a bookmark is
+  a point; a TOC style made by `insertTableOfContents`, new text destinations and index topics
+  reach the `.paged` model, not IDML; no continuous section breaks (ADR 1022).
 - **A commit rebuilds the whole document.** Caches make unchanged paragraphs and stories
   cheap, and only a build of text edits in one story reuses previous pages.
 - **Two mutation lanes.** Text edits have no `Operation` form; they use `TextOp` in

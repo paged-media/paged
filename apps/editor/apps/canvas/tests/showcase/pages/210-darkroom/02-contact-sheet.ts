@@ -187,7 +187,20 @@ function splitRoster(
 ): { first: string[]; second: string[] } {
   const para = (f: { name: string; ids: string[] }) =>
     `${f.name} (${f.ids.length})  ${f.ids.join(" ")}`;
-  const lines = (s: string): number => Math.max(1, Math.ceil(s.length / 84));
+  // Count lines the way the frame breaks them: whole words, so an id that
+  // does not fit starts the next line (length / 84 undercounts).
+  const lines = (s: string): number => {
+    let n = 1;
+    let col = 0;
+    for (const word of s.split(" ")) {
+      const need = col === 0 ? word.length : col + 1 + word.length;
+      if (need > 84 && col > 0) {
+        n++;
+        col = word.length;
+      } else col = need;
+    }
+    return n;
+  };
   const first: string[] = [];
   const second: string[] = [];
   let used = 0;
@@ -203,22 +216,23 @@ function splitRoster(
   const rest = families.slice(i);
   const total = rest.reduce((n, f) => n + lines(para(f)), 0);
   if (total <= budgetSecond) return { first, second: rest.map(para) };
+  const closing = (from: number): string =>
+    "+ " +
+    rest
+      .slice(from)
+      .map((f) => `${f.name} (${f.ids.length})`)
+      .join(", ") +
+    " — the ids are in registry/kernels.yaml";
+  // Keep families while they and the closing line for the rest still fit.
   used = 0;
   let j = 0;
   for (; j < rest.length; j++) {
     const text = para(rest[j]!);
-    if (used + lines(text) > budgetSecond - 1) break;
+    if (used + lines(text) + lines(closing(j + 1)) > budgetSecond) break;
     second.push(text);
     used += lines(text);
   }
-  second.push(
-    "+ " +
-      rest
-        .slice(j)
-        .map((f) => `${f.name} (${f.ids.length})`)
-        .join(", ") +
-      " — the ids are in registry/kernels.yaml",
-  );
+  second.push(closing(j));
   return { first, second };
 }
 

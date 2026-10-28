@@ -3559,7 +3559,7 @@ pub(super) fn apply_insert_field(
     // text + identity), not a single marker char; separate lane.
     if matches!(
         field,
-        FieldKind::Placeholder { .. } | FieldKind::TextVariable { .. }
+        FieldKind::Placeholder { .. } | FieldKind::TextVariable { .. } | FieldKind::Word { .. }
     ) {
         return insert_tagged_run(doc, story_idx, story_id, offset, field);
     }
@@ -3674,6 +3674,7 @@ fn insert_tagged_run(
     offset: u32,
     field: &FieldKind,
 ) -> Result<AppliedOperation, OperationError> {
+    let mut word: Option<paged_model::WordField> = None;
     let (display, tag, variable) = match field {
         FieldKind::Placeholder { plugin, key, value } => {
             let tag = paged_model::PlaceholderField {
@@ -3682,6 +3683,14 @@ fn insert_tagged_run(
                 value: value.clone(),
             };
             (tag.display_text(), Some(tag), None)
+        }
+        // Engine ADR 1022 — a Word field shows its result; without one,
+        // its code in braces (what Word shows before a first update).
+        FieldKind::Word { code, result } => {
+            let parsed = paged_model::WordField::parse(code);
+            let display = result.clone().unwrap_or_else(|| parsed.code_display());
+            word = Some(parsed);
+            (display, None, None)
         }
         FieldKind::TextVariable { variable_id } => {
             let var = doc
@@ -3741,6 +3750,7 @@ fn insert_tagged_run(
             ph_run.text = display;
             ph_run.text_variable = variable;
             ph_run.placeholder = tag;
+            ph_run.field = word;
             let host_len = runs[ri].text.chars().count();
             if local == 0 {
                 runs.insert(ri, ph_run);
@@ -3772,6 +3782,7 @@ fn insert_tagged_run(
                 text: display,
                 placeholder: tag,
                 text_variable: variable,
+                field: word,
                 ..Default::default()
             });
         }
@@ -3818,6 +3829,9 @@ pub(super) fn apply_delete_field(
     }
     if let FieldKind::TextVariable { variable_id } = field {
         return delete_variable_run(doc, story_idx, story_id, offset, variable_id);
+    }
+    if let FieldKind::Word { code, .. } = field {
+        return delete_word_field_run(doc, story_idx, story_id, offset, code);
     }
     let marker = field
         .marker_char()
@@ -4011,6 +4025,68 @@ fn delete_variable_run(
             story_id: story_id.to_string(),
             offset,
             field,
+            content_offset: None,
+        },
+        invalidation,
+    })
+}
+
+/// Engine ADR 1022 — remove the Word field run whose code is `code` that
+/// starts at story char `offset`. The inverse inserts it again with the
+/// result it showed.
+fn delete_word_field_run(
+    doc: &mut Document,
+    story_idx: usize,
+    story_id: &str,
+    offset: u32,
+    code: &str,
+) -> Result<AppliedOperation, OperationError> {
+    let story = &mut doc.stories[story_idx].story;
+    let mut char_cursor: u32 = 0;
+    let mut removed: Option<paged_model::CharacterRun> = None;
+    'outer: for para in story.paragraphs.iter_mut() {
+        let mut ri = 0;
+        while ri < para.runs.len() {
+            let run = &para.runs[ri];
+            if char_cursor == offset && run.field.as_ref().is_some_and(|f| f.code == code.trim()) {
+                removed = Some(para.runs.remove(ri));
+                break 'outer;
+            }
+            if char_cursor > offset {
+                break 'outer;
+            }
+            char_cursor += run.text.chars().count() as u32;
+            ri += 1;
+        }
+    }
+    let Some(run) = removed else {
+        return Err(OperationError::InvalidValue {
+            node: NodeId::StoryRange {
+                story_id: story_id.to_string(),
+                start: offset,
+                end: offset,
+            },
+            path: PropertyPath::AppliedCharacterStyle,
+            reason: format!("no Word field {code:?} at offset {offset}"),
+        });
+    };
+    let invalidation = reflow_hint_for_story(doc, story_id);
+    Ok(AppliedOperation {
+        op: Operation::DeleteField {
+            story_id: story_id.to_string(),
+            offset,
+            field: FieldKind::Word {
+                code: code.to_string(),
+                result: None,
+            },
+        },
+        inverse: Operation::InsertField {
+            story_id: story_id.to_string(),
+            offset,
+            field: FieldKind::Word {
+                code: code.to_string(),
+                result: Some(run.text),
+            },
             content_offset: None,
         },
         invalidation,

@@ -2878,6 +2878,10 @@ fn structure_cases(c: &mut Vec<Case>) {
             grow: true,
             max_pages: None,
             copy_frame_options: None,
+            master: None,
+            first_master: None,
+            even_master: None,
+            section_start: None,
         }
     }));
     c.push(paints("ActivateConditionSet", "conditions", |m| {
@@ -3510,6 +3514,103 @@ fn style_cases(c: &mut Vec<Case>) {
             continue_numbering: false,
         },
     ));
+    // Engine ADR 1022 — a bookmark and an index marker print nothing; a
+    // cross-reference, a table of contents and F9 write text.
+    c.push(inert(
+        "InsertTextAnchor",
+        "styles-cascade",
+        "a text destination is a place in the text, not a character",
+        |m| Mutation::InsertTextAnchor {
+            story_id: m.scene().stories[0].self_id.clone(),
+            offset: 0,
+            content_offset: None,
+            name: "SweepMark".into(),
+        },
+    ));
+    c.push(inert(
+        "DeleteTextAnchor",
+        "styles-cascade",
+        "removing a text destination removes no character",
+        |m| {
+            let story_id = m.scene().stories[0].self_id.clone();
+            m.apply_mutation(&Mutation::InsertTextAnchor {
+                story_id: story_id.clone(),
+                offset: 0,
+                content_offset: None,
+                name: "SweepMark".into(),
+            })
+            .expect("seed a bookmark");
+            let id = m.scene().stories[0].story.destinations[0].self_id.clone();
+            Mutation::DeleteTextAnchor { anchor_id: id }
+        },
+    ));
+    c.push(inert(
+        "InsertIndexMarker",
+        "styles-cascade",
+        "an index marker is read by Generate Index, not printed",
+        |m| Mutation::InsertIndexMarker {
+            story_id: m.scene().stories[0].self_id.clone(),
+            offset: 0,
+            content_offset: None,
+            topic: vec!["Sweep".into()],
+            sort_order: None,
+        },
+    ));
+    c.push(paints("InsertCrossReference", "styles-cascade", |m| {
+        let story_id = m.scene().stories[0].self_id.clone();
+        Mutation::InsertCrossReference {
+            story_id: story_id.clone(),
+            offset: 0,
+            content_offset: None,
+            target: paged_wire::CrossReferenceTarget {
+                bookmark: None,
+                story_id: Some(story_id),
+                paragraph: Some(0),
+            },
+            refer_to: paged_wire::CrossReferenceKind::Text,
+            hyperlink: None,
+        }
+    }));
+    c.push(paints("InsertTableOfContents", "styles-cascade", |m| {
+        let scene = m.scene();
+        let story = &scene.stories[0];
+        let style = story
+            .story
+            .paragraphs
+            .iter()
+            .filter_map(|p| p.paragraph_style.clone())
+            .find(|s| scene.styles.paragraph_styles.contains_key(s))
+            .expect("fixture has a styled paragraph");
+        Mutation::InsertTableOfContents {
+            story_id: story.self_id.clone(),
+            offset: 0,
+            content_offset: None,
+            levels: vec![paged_wire::TocLevelSpec { style, level: 1 }],
+            title: Some("Contents".into()),
+            toc_style_name: None,
+            page_numbers: None,
+            leader: None,
+            tab_position: None,
+        }
+    }));
+    c.push(paints("UpdateFields", "styles-cascade", |m| {
+        let story_id = m.scene().stories[0].self_id.clone();
+        m.apply_mutation(&Mutation::InsertField {
+            story_id: story_id.clone(),
+            offset: 0,
+            field: paged_mutate::operation::FieldKind::Word {
+                code: "DATE".into(),
+                result: None,
+            },
+            content_offset: None,
+        })
+        .expect("seed a date field");
+        Mutation::UpdateFields {
+            story_id: Some(story_id),
+            offset: None,
+            now: Some("2026-10-25T09:30:00".into()),
+        }
+    }));
     // Engine ADR 1021 — the story's first word replaced by a wider one.
     c.push(paints("FindReplace", "styles-cascade", |m| {
         let word: String = m

@@ -59,6 +59,7 @@ next, with PowerPoint's keys.
 ## Consequences
 
 - The solo slide profile binds the same commands; the show needs nothing from it.
-- Custom shows, sections in the sorter and saving ink as annotations are later work (wave 6).
+- Custom shows and sections in the sorter came with wave 6 (ADR 720); saving ink as annotations
+  is later work.
 - The audience window is drawn by the editor window's code; a standalone audience page can join
   the same channel later (editor ADR 305).

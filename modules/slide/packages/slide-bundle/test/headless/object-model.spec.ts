@@ -26,6 +26,7 @@
 // proves they travel in the document.
 
 import { ANIM_TYPED } from "../../src/anim/contribute";
+import { OUTPUT_CMD, OUTPUT_TYPED } from "../../src/output/commands";
 import { SHOW_CMD } from "../../src/show/contribute";
 import { readFileSync } from "node:fs";
 
@@ -134,6 +135,9 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
         ...Object.values(SHOW_CMD),
         // The animations' typed commands (slide ADR 714).
         ...Object.values(ANIM_TYPED),
+        // File ▸ Export, custom shows and sections (slide ADR 720).
+        ...Object.values(OUTPUT_CMD),
+        ...Object.values(OUTPUT_TYPED),
       ].sort(),
     );
   });

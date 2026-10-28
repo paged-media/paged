@@ -1,0 +1,39 @@
+{
+  "kind": "struct",
+  "fields": {
+    "height": {
+      "kind": "number",
+      "integer": true,
+      "optional": true,
+      "summary": "720, 1080 or 2160 (default 1080)."
+    },
+    "fps": {
+      "kind": "number",
+      "integer": true,
+      "optional": true,
+      "summary": "24, 30 or 60 (default 30)."
+    },
+    "secondsPerSlide": {
+      "kind": "number",
+      "optional": true,
+      "summary": "Seconds on a slide without a recorded time (default 5)."
+    },
+    "useTimings": {
+      "kind": "bool",
+      "optional": true
+    },
+    "codec": {
+      "kind": "enum",
+      "members": ["auto", "avc", "vp9"],
+      "optional": true
+    },
+    "slides": {
+      "kind": "list",
+      "of": {
+        "kind": "number",
+        "integer": true
+      },
+      "optional": true
+    }
+  }
+}

@@ -74,6 +74,17 @@ pub fn generated_spread_id(story: &str, k: u32) -> String {
     format!("{story}_grow{k}_spread")
 }
 
+/// The id of the blank page an odd/even section start of `story` put in
+/// front of the story's first page (engine ADR 1022).
+pub fn generated_blank_page_id(story: &str) -> String {
+    format!("{story}_blank_page")
+}
+
+/// The id of the spread holding [`generated_blank_page_id`].
+pub fn generated_blank_spread_id(story: &str) -> String {
+    format!("{story}_blank_spread")
+}
+
 impl Document {
     /// Stories whose chain grows (they carry a grow rule and have at least
     /// one frame), in document order.
@@ -111,10 +122,185 @@ impl Document {
                 .unwrap_or_default();
             doc.append_generated_pages(story, n, &rule);
         }
+        // Engine ADR 1022 — Word's section rules: an odd/even start gets a
+        // blank page in front, and the chain's pages take the rule's
+        // first/odd/even masters.
+        doc.apply_section_rules();
         // The stories are untouched, so the clone's story-derived indexes
         // (the heading-anchor table) are already right; each append left
         // the frame indexes current.
         doc
+    }
+
+    /// The pages a story's chain stands on, in chain order (each once).
+    pub fn chain_page_ids(&self, story: &str) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for frame in self.frame_chain(story) {
+            let Some(&(si, _)) = frame
+                .self_id
+                .as_ref()
+                .and_then(|id| self.text_frame_index.get(id))
+            else {
+                continue;
+            };
+            let spread = &self.spreads[si].spread;
+            let pi =
+                crate::page_index_for_bounds(&spread.pages, frame.bounds, frame.item_transform)
+                    .unwrap_or(0);
+            if let Some(id) = spread.pages.get(pi).and_then(|p| p.self_id.clone()) {
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        out
+    }
+
+    /// Every page's number by the section rules (Word decides odd and even
+    /// by it), in document order, keyed by the page's `Self`.
+    pub fn page_numbers(&self) -> Vec<(String, u32)> {
+        let mut walk = paged_model::SectionWalk::new(&self.designmap.sections);
+        let mut out = Vec::new();
+        for parsed in &self.spreads {
+            for page in &parsed.spread.pages {
+                walk.derived_label(page.self_id.as_deref());
+                if let Some(id) = &page.self_id {
+                    out.push((id.clone(), walk.current_number()));
+                }
+            }
+        }
+        out
+    }
+
+    /// Engine ADR 1022 — apply the section rules of every story whose grow
+    /// rule names masters or an odd/even start. Stories go in the order of
+    /// their first pages, so a blank page put before one section moves the
+    /// numbers of the sections after it before they are read.
+    fn apply_section_rules(&mut self) {
+        let mut ruled: Vec<(String, paged_model::FlowGrowRule)> = self
+            .stories
+            .iter()
+            .filter_map(|s| s.story.grow.clone().map(|g| (s.self_id.clone(), g)))
+            .filter(|(_, g)| g.names_masters() || !g.section_start.is_new_page())
+            .collect();
+        if ruled.is_empty() {
+            return;
+        }
+        let order: HashMap<String, usize> = self
+            .page_numbers()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (id, _))| (id, i))
+            .collect();
+        ruled.sort_by_key(|(story, _)| {
+            self.chain_page_ids(story)
+                .first()
+                .and_then(|p| order.get(p).copied())
+                .unwrap_or(usize::MAX)
+        });
+
+        // Blank pages: (the story it stands before, its page id).
+        let mut blanks: Vec<(String, String)> = Vec::new();
+        for (story, rule) in &ruled {
+            if rule.section_start.is_new_page() {
+                continue;
+            }
+            let Some(first) = self.chain_page_ids(story).into_iter().next() else {
+                continue;
+            };
+            let numbers = self.page_numbers();
+            let Some(at) = numbers.iter().position(|(id, _)| *id == first) else {
+                continue;
+            };
+            // The document's first page has nothing to stand behind.
+            if at == 0 || rule.section_start.accepts(numbers[at].1) {
+                continue;
+            }
+            if let Some(id) = self.insert_blank_page_before(story, &first) {
+                blanks.push((story.clone(), id));
+            }
+        }
+
+        let numbers: HashMap<String, u32> = self.page_numbers().into_iter().collect();
+        let mut assign: Vec<(String, String)> = Vec::new();
+        let mut owner: HashMap<String, &paged_model::FlowGrowRule> = HashMap::new();
+        for (story, rule) in &ruled {
+            for (i, page) in self.chain_page_ids(story).into_iter().enumerate() {
+                if let Some(m) = rule.master_for(i == 0, numbers.get(&page).copied().unwrap_or(1)) {
+                    assign.push((page.clone(), m.to_string()));
+                }
+                owner.insert(page, rule);
+            }
+        }
+        // A blank page shows the section before it, as the next page of
+        // that section would (Word prints its header and footer there).
+        let order: Vec<String> = self.page_numbers().into_iter().map(|(id, _)| id).collect();
+        for (_, blank) in &blanks {
+            let Some(at) = order.iter().position(|id| id == blank) else {
+                continue;
+            };
+            let prev_rule = order[..at].iter().rev().find_map(|id| owner.get(id));
+            if let Some(m) = prev_rule
+                .and_then(|r| r.master_for(false, numbers.get(blank).copied().unwrap_or(1)))
+            {
+                assign.push((blank.clone(), m.to_string()));
+            }
+        }
+        for (page_id, master) in assign {
+            if let Some(page) = self
+                .spreads
+                .iter_mut()
+                .flat_map(|s| s.spread.pages.iter_mut())
+                .find(|p| p.self_id.as_deref() == Some(page_id.as_str()))
+            {
+                page.applied_master = Some(master);
+            }
+        }
+    }
+
+    /// Insert a blank page (a page of the size, margins and master of the
+    /// page before it, with nothing on it) in a spread of its own before the
+    /// spread holding `page_id`. Its id is stable: [`generated_blank_page_id`].
+    fn insert_blank_page_before(&mut self, story: &str, page_id: &str) -> Option<String> {
+        let si = self.spreads.iter().position(|s| {
+            s.spread
+                .pages
+                .iter()
+                .any(|p| p.self_id.as_deref() == Some(page_id))
+        })?;
+        let prev_spread = &self.spreads[si.checked_sub(1)?].spread;
+        let template = prev_spread.pages.last()?.clone();
+        let margins = template
+            .self_id
+            .as_ref()
+            .and_then(|id| prev_spread.page_margins.get(id))
+            .cloned();
+        let item_transform = prev_spread.item_transform;
+        let id = generated_blank_page_id(story);
+        let mut page = template;
+        page.self_id = Some(id.clone());
+        page.name = None;
+        page.override_list = Vec::new();
+        let mut page_margins = HashMap::new();
+        if let Some(m) = margins {
+            page_margins.insert(id.clone(), m);
+        }
+        let spread = Spread {
+            self_id: Some(generated_blank_spread_id(story)),
+            item_transform,
+            pages: vec![page],
+            page_margins,
+            ..Default::default()
+        };
+        self.spreads.insert(
+            si,
+            crate::ParsedSpread {
+                src: format!("Spreads/Spread_{}.xml", generated_blank_spread_id(story)),
+                spread,
+            },
+        );
+        self.rebuild_frame_indexes();
+        Some(id)
     }
 
     fn append_generated_pages(&mut self, story: &str, n: u32, rule: &paged_model::FlowGrowRule) {

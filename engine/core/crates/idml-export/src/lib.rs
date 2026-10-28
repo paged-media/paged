@@ -113,6 +113,7 @@ pub mod text_frame_prefs;
 mod text_variables;
 pub mod text_wrap;
 pub mod transparency;
+mod word_fields;
 pub mod xml_structure;
 pub mod zip_layout;
 
@@ -385,6 +386,10 @@ pub(crate) fn write_package(
     // paste-into that paints the same.
     let lowered = clip_groups::lower(doc);
     let doc = lowered.as_ref().unwrap_or(doc);
+    // Engine ADR 1022: IDML has no Word fields; each is written as the text
+    // variable that does the same, or as its result.
+    let fields_lowered = word_fields::lower(doc);
+    let doc = fields_lowered.as_ref().unwrap_or(doc);
     let mut src = zip::ZipArchive::new(Cursor::new(original))?;
     // The files every placed image's `<Link>` will point at (empty
     // without a link base — see `images`).

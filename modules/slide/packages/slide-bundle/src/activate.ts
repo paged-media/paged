@@ -62,6 +62,7 @@ import { contributeCommentMarkers } from "./comment-markers.js";
 import { CommentsStore, fileFromReport } from "./comments-model.js";
 import { contributeSlideCommands, DECK_CONTEXT } from "./commands.js";
 import {
+  deckPlan,
   documentBytes,
   exportDiagnostics,
   exportPlan,
@@ -92,6 +93,17 @@ import { adjustHandlesOverlay, HandlesModel } from "./adjust-handles.js";
 import { LiveFollower } from "./live-presets.js";
 import { makeShapesPanel } from "./panels/shapes-panel.js";
 import { insertShape, SHAPES_PANEL_ID } from "./shapes.js";
+import {
+  contributeOutputCommands,
+  CUSTOM_SHOWS_PANEL,
+  EXPORT_VIEW,
+  outputTypedCommands,
+  type OutputUi,
+} from "./output/commands.js";
+import { makeExportView } from "./output/export-view.js";
+import { Output } from "./output/output.js";
+import { makeCustomShowsPanel } from "./panels/custom-shows-panel.js";
+import { OUTPUT } from "./messages.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
 export const SLIDES_PANEL_ID = "media.paged.slide.panel.slides";
@@ -111,12 +123,20 @@ export const REPORT_PART = "import/report.json";
 export const FINGERPRINTS_PART = "import/fingerprints.json";
 export const EXPORTER_ID = "media.paged.slide.exporter.pptx";
 export const EXPORT_DIAGNOSTICS = "media.paged.slide/export";
+export const TEMPLATE_EXPORTER_ID = "media.paged.slide.exporter.potx";
+export const POTX_MIME =
+  "application/vnd.openxmlformats-officedocument.presentationml.template";
 
 /** The file name without its extension: the document's name. */
 export function documentName(fileName: string): string {
   const base = fileName.split(/[\\/]/).pop() ?? fileName;
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(0, dot) : base;
+}
+
+/** A PowerPoint template (`.potx`): it opens as a new presentation. */
+export function isTemplate(fileName: string): boolean {
+  return /\.potx$/i.test(fileName.trim());
 }
 
 /** The import report as diagnostics: what was not drawn, and the fonts the
@@ -248,14 +268,18 @@ export function activate(host: BundleHost): BundleHandle {
       return null;
     }
     const engine = await slideEngine();
+    // A template opens as a new, untitled presentation built on it (slide
+    // ADR 720; editor ADR 293's "a template says so").
+    const template = isTemplate(name);
+    const docName = template ? t(DECK.untitled) : documentName(name);
     const { paged, report, fonts, workbooks } = engine.importPptx(
       bytes,
-      documentName(name),
+      docName,
     );
     importing = true;
     let fontDiagnostics: Diagnostic[] = [];
     try {
-      await open(paged, documentName(name));
+      await open(paged, docName);
       // The faces once the deck's document is open: a face belongs to the
       // document open when it is given and is dropped when that document
       // closes (plugin-sdk ADR 330), so one given before the open would go
@@ -274,7 +298,19 @@ export function activate(host: BundleHost): BundleHandle {
     // label, each placeholder's, and the deck label on the document, ADR
     // 703), so the open makes no edit: the deck opens clean, with nothing
     // to undo (UX audit F-08).
-    const diagnostics = [...reportDiagnostics(report), ...fontDiagnostics];
+    const diagnostics = [
+      ...(template
+        ? [
+            {
+              severity: "info" as const,
+              message: t(DECK.fromTemplate, { name: documentName(name) }),
+              source: "pptx",
+            },
+          ]
+        : []),
+      ...reportDiagnostics(report),
+      ...fontDiagnostics,
+    ];
     host.diagnostics.set(IMPORT_DIAGNOSTICS, diagnostics);
     host.log.info(
       `paged.slide: opened ${name}: ${report.slides.length} slide(s), ` +
@@ -297,6 +333,19 @@ export function activate(host: BundleHost): BundleHandle {
       : { refused: `the preset ${args.prst} could not be inserted` };
   }
 
+  /** The import report the deck kept (its own timings), or null. */
+  async function readReport(): Promise<ImportReport | null> {
+    if (!host.supports("storage.parts@1")) return null;
+    try {
+      const bytes = await host.parts.read(REPORT_PART);
+      return bytes
+        ? (JSON.parse(new TextDecoder().decode(bytes)) as ImportReport)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
   // The slides store is made below (it needs the page doors); the object
   // model's navigation reads it when a command runs.
   let store: SlidesStore | null = null;
@@ -310,6 +359,11 @@ export function activate(host: BundleHost): BundleHandle {
   // comes first; they run the show once it is contributed below.
   let runShow: ((id: string) => Promise<boolean>) | null = null;
   let animBinding: AnimBinding | null = null;
+  let playCustom: ((name: string) => Promise<boolean>) | null = null;
+  // The deck's outputs (slide ADR 720): PDF, outline, template, video,
+  // custom shows and sections; made once the store exists.
+  let output: Output | null = null;
+  let outputUi: OutputUi | null = null;
   const model = contributeSlideObjectModel(host, {
     openDeck,
     exportDeck,
@@ -319,6 +373,10 @@ export function activate(host: BundleHost): BundleHandle {
       ),
       // Slide ADR 714 — the animations' typed twins, bound below.
       ...animationTypedCommands(() => animBinding),
+      ...outputTypedCommands(
+        () => output,
+        () => outputUi,
+      ),
     ],
     comments: () => comments,
     step,
@@ -373,7 +431,7 @@ export function activate(host: BundleHost): BundleHandle {
   // PPTX export: the deck the document was imported from, rewritten for
   // the document's slides (order, duplicates, deletions, hidden, notes) and
   // what is on them (ADR 704, ADR 711).
-  async function exportDeck() {
+  async function exportDeck(format: "pptx" | "potx" = "pptx") {
     if (!host.supports("storage.parts@1")) return null;
     const original = await host.parts.read(SOURCE_PART);
     if (!original) {
@@ -396,12 +454,10 @@ export function activate(host: BundleHost): BundleHandle {
     const plan = await exportPlan(host, prints, comments?.current() ?? null);
     const document = await documentBytes(host);
     const engine = await slideEngine();
-    const out = engine.exportPptx(
-      original,
-      plan,
-      document,
-      await chartPlans(host),
-    );
+    const out = engine.exportPptx(original, plan, document, {
+      ...(await deckPlan(host, format)),
+      charts: await chartPlans(host),
+    });
     host.diagnostics.set(EXPORT_DIAGNOSTICS, exportDiagnostics(out));
     const meta = await host.document.meta();
     const name =
@@ -410,7 +466,7 @@ export function activate(host: BundleHost): BundleHandle {
       "presentation";
     return {
       bytes: out.bytes,
-      fileName: `${name}.pptx`,
+      fileName: `${name}.${format}`,
       diagnostics: [...out.diagnostics, ...out.notExported],
       notExported: out.notExported,
     };
@@ -426,7 +482,15 @@ export function activate(host: BundleHost): BundleHandle {
         title: t(DECK.format),
         extension: ".pptx",
         mimeType: PPTX_MIME,
-        export: exportDeck,
+        export: () => exportDeck("pptx"),
+      }).dispose,
+      // File ▸ Save as template (slide ADR 720).
+      host.contribute.exporter({
+        id: TEMPLATE_EXPORTER_ID,
+        title: t(DECK.templateFormat),
+        extension: ".potx",
+        mimeType: POTX_MIME,
+        export: () => exportDeck("potx"),
       }).dispose,
     );
   }
@@ -439,6 +503,17 @@ export function activate(host: BundleHost): BundleHandle {
     const s = store;
     disposers.push(() => s.dispose());
   }
+  output = new Output(host, {
+    store: () => store,
+    engine: slideEngine,
+    exportTemplate: () => exportDeck("potx"),
+    readReport,
+    deckName: async () => {
+      const meta = (await host.document.meta()) as { documentName?: string };
+      return meta.documentName?.trim() || (await deckName()) || "presentation";
+    },
+    playCustomShow: () => playCustom,
+  });
 
   // The deck's document context (editor ADR 307): a deck is slide content
   // on every page, so its Normal-view keys apply wherever the user is in
@@ -534,16 +609,10 @@ export function activate(host: BundleHost): BundleHandle {
       {
         store,
         engine: slideEngine,
-        readReport: async () => {
-          if (!host.supports("storage.parts@1")) return null;
-          try {
-            const bytes = await host.parts.read(REPORT_PART);
-            return bytes
-              ? (JSON.parse(new TextDecoder().decode(bytes)) as ImportReport)
-              : null;
-          } catch {
-            return null;
-          }
+        readReport,
+        customShowPages: async (name) => {
+          const shows = (await output?.shows.list()) ?? [];
+          return shows.find((c) => c.name === name)?.pages ?? null;
         },
       },
       host.supports("contribute.view@1") && host.supports("render.snapshot@1")
@@ -556,9 +625,62 @@ export function activate(host: BundleHost): BundleHandle {
         : null,
     );
     runShow = show.run;
+    playCustom = show.playCustomShow;
     disposers.push(() => {
       runShow = null;
+      playCustom = null;
       show.dispose();
+    });
+  }
+
+  // File ▸ Export… (a module view), Save as template, Custom Shows… and
+  // Add Section (slide ADR 720).
+  if (store && output && host.supports("contribute.command@1")) {
+    const s = store;
+    const o = output;
+    const views =
+      host.supports("contribute.view@1") && host.supports("shell.views@1");
+    if (views) {
+      disposers.push(
+        host.contribute.view({
+          id: EXPORT_VIEW,
+          title: t(OUTPUT.title),
+          render: makeExportView(host, o),
+        }).dispose,
+      );
+    }
+    const panels = host.supports("contribute.panel@1");
+    if (panels) {
+      disposers.push(
+        host.contribute.panel({
+          id: CUSTOM_SHOWS_PANEL,
+          title: t(OUTPUT.showsTitle),
+          component: makeCustomShowsPanel(host, s, o),
+          defaultDock: "right",
+          rail: false,
+          // A play triangle over a list.
+          iconSvg:
+            '<path d="M4 6h9M4 10h9M4 14h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' +
+            '<path d="M14 13l6 3.5-6 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+        }).dispose,
+      );
+    }
+    outputUi = {
+      openExport: () => (views ? host.shell.showView(EXPORT_VIEW) : false),
+      openCustomShows: () => {
+        if (panels && host.supports("shell.openPanel@1"))
+          host.shell.openPanel(CUSTOM_SHOWS_PANEL);
+      },
+    };
+    const cmds = contributeOutputCommands(
+      host,
+      o,
+      outputUi,
+      () => s.isDeck() && s.list().length > 0,
+    );
+    disposers.push(() => {
+      outputUi = null;
+      cmds.dispose();
     });
   }
 

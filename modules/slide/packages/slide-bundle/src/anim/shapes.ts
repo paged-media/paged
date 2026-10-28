@@ -177,7 +177,9 @@ export function resolveTarget(
 ): PageShape | null {
   if (!page) return null;
   if (t.item) {
-    const s = page.shapes.find((x) => x.items.some((i) => idOf(i.id) === t.item));
+    const s = page.shapes.find((x) =>
+      x.items.some((i) => idOf(i.id) === t.item),
+    );
     if (s) return s;
   }
   if (t.key) {
@@ -189,11 +191,17 @@ export function resolveTarget(
 
 /** The target an effect added to `item` names: the item, its shape key
  *  and, for a shape from the deck, its spid (the key's last id). */
-export function targetOf(page: PageShapes | undefined, item: ElementId): TargetRef {
+export function targetOf(
+  page: PageShapes | undefined,
+  item: ElementId,
+): TargetRef {
   const id = idOf(item);
-  const shape = page?.shapes.find((s) => s.items.some((i) => idOf(i.id) === id));
+  const shape = page?.shapes.find((s) =>
+    s.items.some((i) => idOf(i.id) === id),
+  );
   const key = shape?.key ?? null;
-  const spid = key && !key.startsWith("new:") ? (key.split(/[#/]/).pop() ?? "") : "";
+  const spid =
+    key && !key.startsWith("new:") ? (key.split(/[#/]/).pop() ?? "") : "";
   // The item a timing names is the shape's first non-text item (what the
   // importer names), else its text frame.
   const named = shape ? (shape.art[0] ?? shape.text ?? null) : null;

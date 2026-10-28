@@ -35,7 +35,8 @@ import type {
 } from "./model.js";
 import { idOf, pageShapes, targetOf, type PageShapes } from "./shapes.js";
 
-export type EditOutcome = { ok: true; timing: Timing } | { ok: false; reason: string };
+export type EditOutcome =
+  { ok: true; timing: Timing } | { ok: false; reason: string };
 
 export class AnimationAuthoring {
   private gallery: GalleryPreset[] | null = null;
@@ -69,7 +70,10 @@ export class AnimationAuthoring {
     if (!slide) return { ok: false, reason: `no slide ${pageId}` };
     let timing: Timing | null;
     try {
-      timing = (await this.engine()).editTiming(slide.state.timing ?? null, edit);
+      timing = (await this.engine()).editTiming(
+        slide.state.timing ?? null,
+        edit,
+      );
     } catch (err) {
       return {
         ok: false,
@@ -137,7 +141,9 @@ export class AnimationAuthoring {
         ? { presetSubtype: preset.presetSubtype }
         : {}),
       ...(preset.start ? { start: preset.start } : {}),
-      ...(preset.durationMs !== undefined ? { durationMs: preset.durationMs } : {}),
+      ...(preset.durationMs !== undefined
+        ? { durationMs: preset.durationMs }
+        : {}),
       ...(preset.delayMs !== undefined ? { delayMs: preset.delayMs } : {}),
       ...(preset.byParagraph && paragraphs > 1 ? { paragraphs } : {}),
       ...(hasText ? { hasText } : {}),
@@ -146,7 +152,11 @@ export class AnimationAuthoring {
   }
 
   /** The Animation Painter: `to` gets `from`'s effects. */
-  async paint(pageId: string, from: ElementId, to: ElementId): Promise<EditOutcome> {
+  async paint(
+    pageId: string,
+    from: ElementId,
+    to: ElementId,
+  ): Promise<EditOutcome> {
     const page = await this.shapes(pageId);
     return this.edit(pageId, {
       kind: "paint",

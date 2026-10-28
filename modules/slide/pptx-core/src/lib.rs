@@ -63,6 +63,8 @@ pub struct Presentation {
     pub embedded_fonts: Vec<EmbeddedFont>,
     /// Sections from the `p14:sectionLst` extension.
     pub sections: Vec<Section>,
+    /// Custom shows (`p:custShowLst`), each a named list of slides.
+    pub custom_shows: Vec<CustomShow>,
     /// Every SmartArt drawing (the shapes PowerPoint drew for a diagram,
     /// in the diagram frame's own coordinates), keyed by part name.
     pub diagrams: std::collections::BTreeMap<String, Vec<Shape>>,
@@ -332,7 +334,20 @@ pub struct Transition {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Section {
     pub name: String,
+    /// The section's `{GUID}`.
+    pub id: String,
     pub slide_ids: Vec<u32>,
+}
+
+/// `p:custShow`: a named subset of the deck's slides, in its own order
+/// (Slide Show ▸ Custom Slide Show).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CustomShow {
+    pub name: String,
+    /// `id`, unique among the deck's custom shows.
+    pub id: u32,
+    /// The slide parts it plays, in order (a slide may appear twice).
+    pub slides: Vec<String>,
 }
 
 /// `p:embeddedFont`: one family and the font parts of its faces.

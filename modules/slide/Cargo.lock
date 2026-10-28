@@ -558,6 +558,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slide-native",
+ "slide-output",
  "slide-resolve",
  "slide-sheet",
 ]
@@ -890,6 +891,7 @@ dependencies = [
  "slide-anim",
  "slide-chart",
  "slide-native",
+ "slide-output",
  "slide-resolve",
  "slide-sheet",
  "wasm-bindgen",
@@ -912,6 +914,14 @@ dependencies = [
  "serde_json",
  "slide-resolve",
  "zip",
+]
+
+[[package]]
+name = "slide-output"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "serde",
 ]
 
 [[package]]

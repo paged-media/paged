@@ -118,7 +118,17 @@ function fakePlayer(clicks: number) {
         // The click's effect fades in over 1 s.
         const p = last ? Math.min(1, (now - last.at) / 1000) : 0;
         return {
-          layers: { u1: { visible: nexts.length > 0, opacity: p, dx: 0, dy: 0, sx: 1, sy: 1, rot: 0 } },
+          layers: {
+            u1: {
+              visible: nexts.length > 0,
+              opacity: p,
+              dx: 0,
+              dy: 0,
+              sx: 1,
+              sy: 1,
+              rot: 0,
+            },
+          },
           running: last !== undefined && p < 1,
           nextChange: null,
           commands: [],
@@ -168,13 +178,20 @@ describe("an animated slide's runtime (slide ADR 714) [plugin-slide.animations]"
     d = a.draws();
     expect(d.running).toBe(true);
     expect(d.states[0].opacity).toBeCloseTo(0.5);
-    expect(f.asked.at(-1)).toEqual({ events: [{ kind: "next", at: 200 }], now: 700 });
+    expect(f.asked.at(-1)).toEqual({
+      events: [{ kind: "next", at: 200 }],
+      now: 700,
+    });
     now += 1000;
     expect(a.draws().running).toBe(false);
     a.click("u9");
     expect(a.frame()).toBeDefined();
     expect(f.asked.length).toBe(4);
-    expect(f.asked.at(-1)!.events.at(-1)).toEqual({ kind: "click", at: 1700, target: "u9" });
+    expect(f.asked.at(-1)!.events.at(-1)).toEqual({
+      kind: "click",
+      at: 1700,
+      target: "u9",
+    });
     a.dispose();
     expect(f.freed()).toBe(true);
   });
@@ -200,7 +217,12 @@ describe("an animated slide's runtime (slide ADR 714) [plugin-slide.animations]"
 
 describe("animation filters (slide ADR 714) [plugin-slide.animations]", () => {
   const box = { x: 0, y: 0, w: 100, h: 50 };
-  const m = (filter: string, sub: string | null, progress: number, out = false) => ({
+  const m = (
+    filter: string,
+    sub: string | null,
+    progress: number,
+    out = false,
+  ) => ({
     filter,
     sub,
     progress,
@@ -215,11 +237,23 @@ describe("animation filters (slide ADR 714) [plugin-slide.animations]", () => {
   });
 
   it("maps PowerPoint's filters to the shader's codes", () => {
-    expect(filterCode("wipe", "down")).toEqual({ kind: FILTER_CODES.wipe, sub: 4 });
-    expect(filterCode("wheel", "4")).toEqual({ kind: FILTER_CODES.wheel, sub: 4 });
-    expect(filterCode("barn", "outHorizontal")).toEqual({ kind: FILTER_CODES.barn, sub: 4 });
+    expect(filterCode("wipe", "down")).toEqual({
+      kind: FILTER_CODES.wipe,
+      sub: 4,
+    });
+    expect(filterCode("wheel", "4")).toEqual({
+      kind: FILTER_CODES.wheel,
+      sub: 4,
+    });
+    expect(filterCode("barn", "outHorizontal")).toEqual({
+      kind: FILTER_CODES.barn,
+      sub: 4,
+    });
     // An unknown filter still brings its target in, as a fade.
-    expect(filterCode("pixelate", null)).toEqual({ kind: FILTER_CODES.fade, sub: 0 });
+    expect(filterCode("pixelate", null)).toEqual({
+      kind: FILTER_CODES.fade,
+      sub: 0,
+    });
     // Every code is a filter the shader knows.
     for (const name of Object.keys(FILTER_CODES))
       expect(EFFECT_SOURCES.layer).toContain(`// ${name}`);
@@ -247,7 +281,19 @@ describe("animation filters (slide ADR 714) [plugin-slide.animations]", () => {
     expect([...u.slice(24, 28)]).toEqual([FILTER_CODES.wipe, 1, 0.25, 0]);
     expect([...u.slice(32, 36)]).toEqual([0, 0, 0, 0]);
     // Not shown: drawn at no opacity.
-    expect(layerUniforms({ x: 0, y: 0, width: 1, height: 1 }, { visible: false, opacity: 1, matrix: [1, 0, 0, 1, 0, 0], masks: [], tint: null }, [1, 1])[16]).toBe(0);
+    expect(
+      layerUniforms(
+        { x: 0, y: 0, width: 1, height: 1 },
+        {
+          visible: false,
+          opacity: 1,
+          matrix: [1, 0, 0, 1, 0, 0],
+          masks: [],
+          tint: null,
+        },
+        [1, 1],
+      )[16],
+    ).toBe(0);
   });
 
   it("cuts the same areas on Canvas2D", () => {
@@ -266,7 +312,9 @@ describe("animation filters (slide ADR 714) [plugin-slide.animations]", () => {
     expect(filterClip(m("fade", null, 0.3)).alpha).toBeCloseTo(0.3);
     expect(filterClip(m("fade", null, 0.3, true)).alpha).toBeCloseTo(0.7);
     // Split vertical out: a centre band; in: two edge bands.
-    expect(filterClip(m("barn", "outVertical", 0.5)).polys![0][0]).toEqual([25, 0]);
+    expect(filterClip(m("barn", "outVertical", 0.5)).polys![0][0]).toEqual([
+      25, 0,
+    ]);
     expect(filterClip(m("barn", "inVertical", 0.5)).polys!.length).toBe(2);
     // Blinds: six slats; wheel(4): four pies; dissolve: about half the cells.
     expect(filterClip(m("blinds", "horizontal", 0.5)).polys!.length).toBe(6);

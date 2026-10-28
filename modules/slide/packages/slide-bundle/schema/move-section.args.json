@@ -1,0 +1,12 @@
+{
+  "kind": "struct",
+  "fields": {
+    "name": {
+      "kind": "text"
+    },
+    "by": {
+      "kind": "enum",
+      "members": ["up", "down"]
+    }
+  }
+}

@@ -41,7 +41,11 @@ import {
   contributeAnimations,
   type AnimBinding,
 } from "../../src/anim/contribute";
-import type { EffectInfo, GalleryPreset, TimingEdit } from "../../src/anim/model";
+import type {
+  EffectInfo,
+  GalleryPreset,
+  TimingEdit,
+} from "../../src/anim/model";
 import type { SlidesStore } from "../../src/slides-model";
 
 const GALLERY: GalleryPreset[] = [
@@ -74,8 +78,20 @@ const effect = (name: string, index: number): EffectInfo =>
 function fakes() {
   const calls: unknown[] = [];
   const store = {
-    list: () => [{ pageId: "p1", number: 1, sizePt: [960, 540], state: { timing: { nodes: [{}] } } }],
-    activeSlide: () => ({ pageId: "p1", number: 1, sizePt: [960, 540], state: { timing: { nodes: [{}] } } }),
+    list: () => [
+      {
+        pageId: "p1",
+        number: 1,
+        sizePt: [960, 540],
+        state: { timing: { nodes: [{}] } },
+      },
+    ],
+    activeSlide: () => ({
+      pageId: "p1",
+      number: 1,
+      sizePt: [960, 540],
+      state: { timing: { nodes: [{}] } },
+    }),
     isDeck: () => true,
   } as unknown as SlidesStore;
   const authoring = {
@@ -89,7 +105,11 @@ function fakes() {
       return { ok: true, timing: { nodes: [] } };
     },
     effects: async () => ({ effects: [effect("Fly In", 0)], clicks: 1 }),
-    target: async () => ({ target: { spid: "7", item: "u7" }, paragraphs: 1, hasText: false }),
+    target: async () => ({
+      target: { spid: "7", item: "u7" },
+      paragraphs: 1,
+      hasText: false,
+    }),
     paint: async (pageId: string, from: ElementId, to: ElementId) => {
       calls.push(["paint", pageId, from, to]);
       return { ok: true, timing: { nodes: [] } };
@@ -110,7 +130,10 @@ const run = async (
   args: Record<string, unknown>,
 ) => {
   const c = cmds.find((x) => x.id === id)!;
-  return (c.handler as (ctx: unknown, a: unknown) => Promise<unknown>)({}, args);
+  return (c.handler as (ctx: unknown, a: unknown) => Promise<unknown>)(
+    {},
+    args,
+  );
 };
 
 describe("the animations' typed commands (slide ADR 714) [plugin-slide.animations]", () => {
@@ -149,12 +172,18 @@ describe("the animations' typed commands (slide ADR 714) [plugin-slide.animation
       },
     ]);
     await expect(
-      run(cmds, ANIM_TYPED.add, { shape: "u4", effect: "Fly In", direction: "Sideways" }),
+      run(cmds, ANIM_TYPED.add, {
+        shape: "u4",
+        effect: "Fly In",
+        direction: "Sideways",
+      }),
     ).rejects.toThrow(/no direction Sideways/);
-    await expect(run(cmds, ANIM_TYPED.add, { shape: "u4", effect: "Nope" })).rejects.toThrow(
-      /no effect Nope/,
+    await expect(
+      run(cmds, ANIM_TYPED.add, { shape: "u4", effect: "Nope" }),
+    ).rejects.toThrow(/no effect Nope/);
+    await expect(run(cmds, ANIM_TYPED.list, { slide: "p9" })).rejects.toThrow(
+      /no slide p9/,
     );
-    await expect(run(cmds, ANIM_TYPED.list, { slide: "p9" })).rejects.toThrow(/no slide p9/);
   });
 
   it("retime, move, remove, list and preview", async () => {
@@ -181,11 +210,22 @@ describe("the animations' typed commands (slide ADR 714) [plugin-slide.animation
       },
     ]);
     await run(cmds, ANIM_TYPED.timing, { index: 0, trigger: "" });
-    expect((f.calls.at(-1) as unknown[])[2]).toEqual({ kind: "timing", index: 0, trigger: null });
+    expect((f.calls.at(-1) as unknown[])[2]).toEqual({
+      kind: "timing",
+      index: 0,
+      trigger: null,
+    });
     await run(cmds, ANIM_TYPED.move, { from: 1, to: 0 });
-    expect((f.calls.at(-1) as unknown[])[2]).toEqual({ kind: "move", from: 1, to: 0 });
+    expect((f.calls.at(-1) as unknown[])[2]).toEqual({
+      kind: "move",
+      from: 1,
+      to: 0,
+    });
     await run(cmds, ANIM_TYPED.remove, { index: 0 });
-    expect((f.calls.at(-1) as unknown[])[2]).toEqual({ kind: "remove", index: 0 });
+    expect((f.calls.at(-1) as unknown[])[2]).toEqual({
+      kind: "remove",
+      index: 0,
+    });
     expect(await run(cmds, ANIM_TYPED.list, {})).toEqual({
       clicks: 1,
       effects: [
@@ -217,13 +257,17 @@ describe("the animations' palette commands (slide ADR 714) [plugin-slide.animati
       "command:media.paged.slide.command.previewAnimations",
       "command:media.paged.slide.command.animationPainter",
     );
-    const commands = new Map<string, { handler: () => unknown; when?: () => boolean }>();
+    const commands = new Map<
+      string,
+      { handler: () => unknown; when?: () => boolean }
+    >();
     const menus: { path: string; command: string }[] = [];
     const opened: string[] = [];
     let selection: ElementId[] = [{ kind: "polygon", id: "u4" } as ElementId];
     const listeners = new Set<(ids: ElementId[]) => void>();
     const host = {
-      supports: (f: string) => f === "contribute.command@1" || f === "shell.openPanel@1",
+      supports: (f: string) =>
+        f === "contribute.command@1" || f === "shell.openPanel@1",
       log: { info() {}, warn() {} },
       selection: {
         get: () => selection,
@@ -234,7 +278,11 @@ describe("the animations' palette commands (slide ADR 714) [plugin-slide.animati
       },
       shell: { openPanel: (id: string) => opened.push(id) },
       contribute: {
-        command: (c: { id: string; handler: () => unknown; when?: () => boolean }) => {
+        command: (c: {
+          id: string;
+          handler: () => unknown;
+          when?: () => boolean;
+        }) => {
           commands.set(c.id, c);
           return { dispose: () => commands.delete(c.id) };
         },
@@ -249,7 +297,10 @@ describe("the animations' palette commands (slide ADR 714) [plugin-slide.animati
     const engine = async () => {
       throw new Error("no engine here");
     };
-    const h = contributeAnimations(host, f.store, engine, { panel: false, overlay: false });
+    const h = contributeAnimations(host, f.store, engine, {
+      panel: false,
+      overlay: false,
+    });
     expect([...commands.keys()]).toEqual(Object.values(ANIM_CMD));
     expect(menus.map((m) => m.path)).toEqual(ANIM_MENU.map(([p]) => p));
     commands.get(ANIM_CMD.pane)!.handler();
@@ -269,7 +320,9 @@ describe("the animations' palette commands (slide ADR 714) [plugin-slide.animati
     selection = [{ kind: "polygon", id: "u9" } as ElementId];
     for (const l of listeners) l(selection);
     await Promise.resolve();
-    expect(painted).toEqual([["p1", { kind: "polygon", id: "u4" }, { kind: "polygon", id: "u9" }]]);
+    expect(painted).toEqual([
+      ["p1", { kind: "polygon", id: "u4" }, { kind: "polygon", id: "u9" }],
+    ]);
     h.dispose();
     expect(commands.size).toBe(0);
     expect(menus).toEqual([]);

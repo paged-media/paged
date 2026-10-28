@@ -55,7 +55,10 @@ afterEach(() => {
 const fixture = (name: string) =>
   new Uint8Array(
     readFileSync(
-      new URL(`../../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url),
+      new URL(
+        `../../../../slide-conformance/fixtures/${name}.pptx`,
+        import.meta.url,
+      ),
     ),
   );
 
@@ -85,7 +88,10 @@ async function open(name: string) {
     },
   });
   const exporter = h.exportersContributed()[0] as ExporterContribution;
-  const { paged, report } = (await slideEngine()).importPptx(bytes, `${name}.pptx`);
+  const { paged, report } = (await slideEngine()).importPptx(
+    bytes,
+    `${name}.pptx`,
+  );
   await h.load(paged);
   await keepSource(host, bytes, report);
   const pages = async () =>
@@ -107,7 +113,12 @@ describe("animations on the real engine (slide ADR 714) [plugin-slide.animations
     const timing = builds.state.timing!;
     expect(timing.nodes.length).toBe(1);
     const list = (await slideEngine()).effects(timing);
-    expect(list.effects.map((e) => e.name)).toEqual(["Appear", "Fade", "Fade", "Appear"]);
+    expect(list.effects.map((e) => e.name)).toEqual([
+      "Appear",
+      "Fade",
+      "Fade",
+      "Appear",
+    ]);
     expect(list.clicks).toBe(2);
     const shapes = (await pageShapes(host)).get(builds.selfId)!;
     for (const e of list.effects) {
@@ -137,8 +148,17 @@ describe("animations on the real engine (slide ADR 714) [plugin-slide.animations
       direction: "From Left",
     })) as { index: number };
     expect(add.index).toBe(0);
-    await h.objects.invoke(ANIM_TYPED.add, { slide, shape, effect: "Spin", start: "after" });
-    await h.objects.invoke(ANIM_TYPED.timing, { slide, index: 0, durationMs: 1500 });
+    await h.objects.invoke(ANIM_TYPED.add, {
+      slide,
+      shape,
+      effect: "Spin",
+      start: "after",
+    });
+    await h.objects.invoke(ANIM_TYPED.timing, {
+      slide,
+      index: 0,
+      durationMs: 1500,
+    });
     let list = (await h.objects.invoke(ANIM_TYPED.list, { slide })) as {
       clicks: number;
       effects: { name: string; start: string; durationMs: number }[];
@@ -159,7 +179,11 @@ describe("animations on the real engine (slide ADR 714) [plugin-slide.animations
     // Preview needs the canvas's overlay; headless it starts and says so.
     await h.objects.invoke(ANIM_TYPED.preview, { slide });
     await expect(
-      h.objects.invoke(ANIM_TYPED.add, { slide, shape, effect: "No Such Effect" }),
+      h.objects.invoke(ANIM_TYPED.add, {
+        slide,
+        shape,
+        effect: "No Such Effect",
+      }),
     ).rejects.toThrow(/no effect/);
   });
 
@@ -176,7 +200,12 @@ describe("animations on the real engine (slide ADR 714) [plugin-slide.animations
       null,
     );
     const engine = await slideEngine();
-    await attachAnimations(host, engine, slides, new Map(all.map((p) => [p.selfId, p.state.timing])));
+    await attachAnimations(
+      host,
+      engine,
+      slides,
+      new Map(all.map((p) => [p.selfId, p.state.timing])),
+    );
     const builds = slides[4];
     expect(builds.clicks).toBe(2);
     expect(slides[0].anim).toBeUndefined();
@@ -204,7 +233,9 @@ describe("animations on the real engine (slide ADR 714) [plugin-slide.animations
     const hidden = Object.values(before.layers).filter((l) => !l.visible);
     expect(hidden.length).toBe(4);
     const after = player.evaluate([{ kind: "next", at: 0 }], 5000);
-    expect(Object.values(after.layers).filter((l) => !l.visible).length).toBe(1);
+    expect(Object.values(after.layers).filter((l) => !l.visible).length).toBe(
+      1,
+    );
     player.free();
   });
 

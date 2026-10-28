@@ -219,9 +219,10 @@ export function targetId(t: TargetRef): string {
 
 /** A layer key split into its target and the part of it: the whole shape,
  *  its background (the shape without its text), or one paragraph. */
-export function splitLayerKey(
-  key: string,
-): { target: string; part: "whole" | "bg" | number } {
+export function splitLayerKey(key: string): {
+  target: string;
+  part: "whole" | "bg" | number;
+} {
   const hash = key.lastIndexOf("#");
   if (hash < 0) return { target: key, part: "whole" };
   const target = key.slice(0, hash);

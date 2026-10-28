@@ -39,12 +39,7 @@ import {
   type PageItem,
   type PageShapes,
 } from "../../src/anim/shapes";
-import {
-  apply,
-  drawState,
-  planScene,
-  stateMatrix,
-} from "../../src/show/scene";
+import { apply, drawState, planScene, stateMatrix } from "../../src/show/scene";
 
 const item = (
   kind: string,
@@ -94,20 +89,32 @@ const effect = (
 describe("an animated slide's layers (slide ADR 714) [plugin-slide.animations]", () => {
   it("groups items into shapes by key and resolves a target by item, then key", () => {
     const p = page();
-    expect(p.shapes.map((s) => s.key)).toEqual(["s#2", "s#4", "s#5", "s#6", "s#7"]);
+    expect(p.shapes.map((s) => s.key)).toEqual([
+      "s#2",
+      "s#4",
+      "s#5",
+      "s#6",
+      "s#7",
+    ]);
     const four = p.shapes[1];
     expect(four.text?.id.id).toBe("txt4");
     expect(four.art.map((a) => a.id.id)).toEqual(["art4"]);
     expect(resolveTarget({ spid: "4", item: "art4" }, p)).toBe(four);
     // A duplicated slide: the item id is stale, the key still finds it.
-    expect(resolveTarget({ spid: "4", item: "gone", key: "s#4" }, p)).toBe(four);
-    expect(resolveTarget({ spid: "9", item: "gone", key: "s#9" }, p)).toBeNull();
+    expect(resolveTarget({ spid: "4", item: "gone", key: "s#4" }, p)).toBe(
+      four,
+    );
+    expect(
+      resolveTarget({ spid: "9", item: "gone", key: "s#9" }, p),
+    ).toBeNull();
     // An effect added to the text frame names the shape's art.
-    expect(targetOf(p, { kind: "textFrame", id: "txt4" } as ElementId)).toEqual({
-      spid: "4",
-      item: "art4",
-      key: "s#4",
-    });
+    expect(targetOf(p, { kind: "textFrame", id: "txt4" } as ElementId)).toEqual(
+      {
+        spid: "4",
+        item: "art4",
+        key: "s#4",
+      },
+    );
   });
 
   it("puts what lies below the lowest animated item in the background and keeps the order above it", () => {
@@ -120,7 +127,13 @@ describe("an animated slide's layers (slide ADR 714) [plugin-slide.animations]",
         index: 1,
       }),
     ]);
-    expect(plan.hide.map((i) => i.id)).toEqual(["art4", "txt4", "box5", "txt6", "title"]);
+    expect(plan.hide.map((i) => i.id)).toEqual([
+      "art4",
+      "txt4",
+      "box5",
+      "txt6",
+      "title",
+    ]);
     expect(
       plan.entries.map((e) =>
         e.kind === "static"
@@ -167,7 +180,10 @@ describe("an animated slide's layers (slide ADR 714) [plugin-slide.animations]",
 
 describe("a layer's draw state (slide ADR 714) [plugin-slide.animations]", () => {
   const box = { x: 100, y: 100, w: 200, h: 100 };
-  const st = (s: Partial<LayerState>): LayerState => ({ ...IDENTITY_STATE, ...s });
+  const st = (s: Partial<LayerState>): LayerState => ({
+    ...IDENTITY_STATE,
+    ...s,
+  });
 
   it("turns, scales and moves about the box's centre", () => {
     const m = stateMatrix(st({ rot: 90 }), box);
@@ -181,11 +197,25 @@ describe("a layer's draw state (slide ADR 714) [plugin-slide.animations]", () =>
 
   it("applies the shape's whole state over its part's, and lists both filters", () => {
     const layers: Record<string, LayerState> = {
-      u1: st({ dx: 50, opacity: 0.5, mask: { filter: "wipe", sub: "left", progress: 0.3, out: false } }),
-      "u1#p0": st({ dy: 20, opacity: 0.5, mask: { filter: "fade", sub: null, progress: 1, out: false } }),
+      u1: st({
+        dx: 50,
+        opacity: 0.5,
+        mask: { filter: "wipe", sub: "left", progress: 0.3, out: false },
+      }),
+      "u1#p0": st({
+        dy: 20,
+        opacity: 0.5,
+        mask: { filter: "fade", sub: null, progress: 1, out: false },
+      }),
     };
     const para = { x: 100, y: 100, w: 200, h: 20 };
-    const d = drawState(layers, "u1", { paragraph: 0 }, { u1: box, "u1#p0": para }, para);
+    const d = drawState(
+      layers,
+      "u1",
+      { paragraph: 0 },
+      { u1: box, "u1#p0": para },
+      para,
+    );
     expect(d.opacity).toBeCloseTo(0.25);
     expect(apply(d.matrix, 0, 0)).toEqual([50, 20]);
     expect(d.masks.map((m) => [m.filter, m.box])).toEqual([
@@ -193,14 +223,26 @@ describe("a layer's draw state (slide ADR 714) [plugin-slide.animations]", () =>
       ["wipe", box],
     ]);
     // A part not shown hides the layer; a static layer is drawn as is.
-    const hidden = drawState({ "u1#p0": st({ visible: false }) }, "u1", { paragraph: 0 }, { u1: box }, para);
+    const hidden = drawState(
+      { "u1#p0": st({ visible: false }) },
+      "u1",
+      { paragraph: 0 },
+      { u1: box },
+      para,
+    );
     expect(hidden.visible).toBe(false);
-    expect(drawState({}, null, null, {}, null).matrix).toEqual([1, 0, 0, 1, 0, 0]);
+    expect(drawState({}, null, null, {}, null).matrix).toEqual([
+      1, 0, 0, 1, 0, 0,
+    ]);
   });
 
   it("recolours art with a fill change and text with a text colour change", () => {
     const layers = { u1: st({ fill: "#ff0000", text: "#00ff00" }) };
-    expect(drawState(layers, "u1", "art", { u1: box }, box).tint).toBe("#ff0000");
-    expect(drawState(layers, "u1", "text", { u1: box }, box).tint).toBe("#00ff00");
+    expect(drawState(layers, "u1", "art", { u1: box }, box).tint).toBe(
+      "#ff0000",
+    );
+    expect(drawState(layers, "u1", "text", { u1: box }, box).tint).toBe(
+      "#00ff00",
+    );
   });
 });

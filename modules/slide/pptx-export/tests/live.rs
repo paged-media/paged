@@ -67,7 +67,7 @@ fn plan_of(doc: &Document) -> ExportPlan {
                 })
             })
             .collect(),
-        charts: Vec::new(),
+        ..ExportPlan::default()
     }
 }
 

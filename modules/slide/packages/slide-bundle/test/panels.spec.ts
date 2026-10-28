@@ -24,6 +24,7 @@
 // (`<selected item> > kind`), a set lands through host.objects and undoes
 // in ONE step.
 
+import { CUSTOM_SHOWS_PANEL } from "../src/output/commands";
 import { readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -116,6 +117,7 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
         COMMENTS_PANEL_ID,
         SHAPES_PANEL_ID,
         ANIMATIONS_PANEL_ID,
+        CUSTOM_SHOWS_PANEL,
       ].sort(),
     );
   });

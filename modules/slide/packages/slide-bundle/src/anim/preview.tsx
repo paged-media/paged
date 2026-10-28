@@ -151,7 +151,8 @@ export function previewOverlay(
     const s = React.useSyncExternalStore(model.subscribe, model.snapshot);
     const ref = React.useRef<HTMLCanvasElement | null>(null);
     const rect = s ? pageRects.get(s.pageId) : undefined;
-    const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+    const dpr =
+      typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
     const px = rect ? Math.max(1, Math.round(rect.w * camera.scale * dpr)) : 1;
     React.useEffect(() => {
       if (!s || !ref.current) return;

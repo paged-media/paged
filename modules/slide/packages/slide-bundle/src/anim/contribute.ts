@@ -66,8 +66,14 @@ export const ANIM_MENU: [string, string, string, number][] = [
 ];
 
 const SLIDE_REF = { kind: "ref", to: "plugin:media.paged.slide/slide" };
-const num = (optional = false) => ({ kind: "number", ...(optional ? { optional } : {}) });
-const text = (optional = false) => ({ kind: "text", ...(optional ? { optional } : {}) });
+const num = (optional = false) => ({
+  kind: "number",
+  ...(optional ? { optional } : {}),
+});
+const text = (optional = false) => ({
+  kind: "text",
+  ...(optional ? { optional } : {}),
+});
 const struct = (fields: Record<string, unknown>) =>
   ({ kind: "struct", fields }) as unknown as ValueType;
 const EMPTY = struct({});
@@ -80,7 +86,11 @@ function pageOf(ref: string | undefined, store: SlidesStore): string {
     if (!a) throw new Error("unavailable: no slide is active");
     return a.pageId;
   }
-  const a = parseAddress(ref) as { kind?: string; id?: string; objectKind?: string } | null;
+  const a = parseAddress(ref) as {
+    kind?: string;
+    id?: string;
+    objectKind?: string;
+  } | null;
   const id = a && "id" in a && typeof a.id === "string" ? a.id : ref;
   if (!store.list().some((s) => s.pageId === id))
     throw new Error(`unknownAddress: no slide ${ref}`);
@@ -164,7 +174,9 @@ export function animationTypedCommands(
         ? preset.subtypes.find((s) => s.label.toLowerCase() === dir)?.subtype
         : preset.defaultSubtype;
       if (dir && subtype === undefined)
-        throw new Error(`failed: ${preset.name} has no direction ${args.direction}`);
+        throw new Error(
+          `failed: ${preset.name} has no direction ${args.direction}`,
+        );
       const out = await b.authoring.add(pageId, elementOf(args.shape), {
         presetClass: preset.class,
         presetId: preset.presetId,
@@ -178,14 +190,22 @@ export function animationTypedCommands(
       return { index: out.index ?? 0 };
     },
   };
-  const remove: TypedCommandContribution<{ slide?: string; index: number }, Record<string, never>> = {
+  const remove: TypedCommandContribution<
+    { slide?: string; index: number },
+    Record<string, never>
+  > = {
     id: ANIM_TYPED.remove,
     title: t(ANIM.removeAnimation),
     args: struct({ slide: { ...SLIDE_REF, optional: true }, index: num() }),
     result: EMPTY,
     async handler(_ctx, args) {
       const b = need();
-      await ok(b.authoring.edit(pageOf(args.slide, b.store), { kind: "remove", index: args.index }));
+      await ok(
+        b.authoring.edit(pageOf(args.slide, b.store), {
+          kind: "remove",
+          index: args.index,
+        }),
+      );
       return {};
     },
   };
@@ -223,14 +243,17 @@ export function animationTypedCommands(
         trigger =
           args.trigger === ""
             ? null
-            : (await b.authoring.target(pageId, elementOf(args.trigger))).target;
+            : (await b.authoring.target(pageId, elementOf(args.trigger)))
+                .target;
       }
       await ok(
         b.authoring.edit(pageId, {
           kind: "timing",
           index: args.index,
           ...(args.start ? { start: args.start as EffectStart } : {}),
-          ...(args.durationMs !== undefined ? { durationMs: args.durationMs } : {}),
+          ...(args.durationMs !== undefined
+            ? { durationMs: args.durationMs }
+            : {}),
           ...(args.delayMs !== undefined ? { delayMs: args.delayMs } : {}),
           ...(args.repeat !== undefined
             ? {
@@ -250,10 +273,17 @@ export function animationTypedCommands(
       return {};
     },
   };
-  const move: TypedCommandContribution<{ slide?: string; from: number; to: number }, Record<string, never>> = {
+  const move: TypedCommandContribution<
+    { slide?: string; from: number; to: number },
+    Record<string, never>
+  > = {
     id: ANIM_TYPED.move,
     title: t(ANIM.moveAnimation),
-    args: struct({ slide: { ...SLIDE_REF, optional: true }, from: num(), to: num() }),
+    args: struct({
+      slide: { ...SLIDE_REF, optional: true },
+      from: num(),
+      to: num(),
+    }),
     result: EMPTY,
     async handler(_ctx, args) {
       const b = need();
@@ -323,7 +353,10 @@ export function animationTypedCommands(
       };
     },
   };
-  const preview: TypedCommandContribution<{ slide?: string }, Record<string, never>> = {
+  const preview: TypedCommandContribution<
+    { slide?: string },
+    Record<string, never>
+  > = {
     id: ANIM_TYPED.preview,
     title: t(ANIM.previewAnimations),
     args: struct({ slide: { ...SLIDE_REF, optional: true } }),
@@ -334,7 +367,14 @@ export function animationTypedCommands(
       return {};
     },
   };
-  return [add, remove, timing, move, list, preview] as unknown as TypedCommandContribution[];
+  return [
+    add,
+    remove,
+    timing,
+    move,
+    list,
+    preview,
+  ] as unknown as TypedCommandContribution[];
 }
 
 export interface AnimHandle extends Disposable {
@@ -366,21 +406,21 @@ export function contributeAnimations(
   };
   if (typeof host.selection?.onDidChange === "function")
     handles.push(
-    host.selection.onDidChange((sel) => {
-      const p = painter;
-      if (!p) return;
-      // An empty selection on the way to the next one (a click selects by
-      // clearing first) keeps the painter armed; the command again or a
-      // painted shape disarms it.
-      const to = sel[0];
-      if (!to) return;
-      if (idOf(to) === idOf(p.from)) return;
-      painter = null;
-      void authoring.paint(p.pageId, p.from, to).then((out) => {
-        if (!out.ok) log(`the painter could not paint (${out.reason})`);
-      });
-    }),
-  );
+      host.selection.onDidChange((sel) => {
+        const p = painter;
+        if (!p) return;
+        // An empty selection on the way to the next one (a click selects by
+        // clearing first) keeps the painter armed; the command again or a
+        // painted shape disarms it.
+        const to = sel[0];
+        if (!to) return;
+        if (idOf(to) === idOf(p.from)) return;
+        painter = null;
+        void authoring.paint(p.pageId, p.from, to).then((out) => {
+          if (!out.ok) log(`the painter could not paint (${out.reason})`);
+        });
+      }),
+    );
 
   const startPreview = (pageId: string) => {
     if (!opts.overlay) {
@@ -409,7 +449,9 @@ export function contributeAnimations(
     );
   }
   if (opts.overlay) {
-    handles.push(host.contribute.overlay(previewOverlay(host, engine, store, preview)));
+    handles.push(
+      host.contribute.overlay(previewOverlay(host, engine, store, preview)),
+    );
   }
 
   if (host.supports("contribute.command@1")) {
@@ -421,7 +463,8 @@ export function contributeAnimations(
     };
     const run: Record<string, () => void> = {
       [ANIM_CMD.pane]: () => {
-        if (host.supports("shell.openPanel@1")) host.shell.openPanel(ANIMATIONS_PANEL_ID);
+        if (host.supports("shell.openPanel@1"))
+          host.shell.openPanel(ANIMATIONS_PANEL_ID);
       },
       [ANIM_CMD.preview]: () => {
         const s = deckSlide();
@@ -438,7 +481,8 @@ export function contributeAnimations(
     const when: Record<string, () => boolean> = {
       [ANIM_CMD.pane]: () => !!deckSlide() && opts.panel,
       [ANIM_CMD.preview]: () => !!deckSlide()?.state.timing && opts.overlay,
-      [ANIM_CMD.painter]: () => !!deckSlide() && host.selection.get().length > 0,
+      [ANIM_CMD.painter]: () =>
+        !!deckSlide() && host.selection.get().length > 0,
     };
     for (const id of Object.values(ANIM_CMD)) {
       ids.add(id);
@@ -465,4 +509,3 @@ export function contributeAnimations(
     },
   };
 }
-

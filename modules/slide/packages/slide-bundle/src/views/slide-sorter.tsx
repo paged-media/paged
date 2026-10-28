@@ -21,7 +21,9 @@
 // Click selects, Shift+click selects a run, Cmd/Ctrl+click adds or
 // removes one; dragging moves the selection; the bar hides or shows the
 // selected slides and sets their transition, each one undo step; a
-// double-click opens the slide in the normal view.
+// double-click opens the slide in the normal view. Sections (slide ADR
+// 720) head their slides: add one at the selection, rename it in place,
+// move it with its slides, remove it (its slides join the one before).
 
 import type {
   BundleHost,
@@ -34,7 +36,15 @@ import * as React from "react";
 
 import { color } from "@paged-media/panel-kit";
 
-import { SHOW } from "../messages.js";
+import { OUTPUT, SHOW } from "../messages.js";
+import {
+  addSectionMutation,
+  moveSectionMutation,
+  removeSectionMutation,
+  renameSectionMutation,
+  sectionsOf,
+  type Section,
+} from "../sections.js";
 import {
   setStateMutation,
   type Slide,
@@ -183,6 +193,75 @@ export function makeSlideSorter(
     );
   };
 
+  const SectionHeader: React.FC<{
+    section: Section;
+    slides: readonly Slide[];
+    first: boolean;
+    last: boolean;
+  }> = ({ section: sec, slides, first, last }) => {
+    const { t } = useStrings();
+    return (
+      <div
+        data-sorter-section={sec.name}
+        data-section-id={sec.id}
+        style={{
+          gridColumn: "1 / -1",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 12,
+          borderBottom: `1px solid ${color.border}`,
+          paddingBottom: 4,
+        }}
+      >
+        <input
+          key={`${sec.id}:${sec.name}`}
+          aria-label={t(OUTPUT.renameSection)}
+          data-section-name
+          defaultValue={sec.name}
+          style={{ fontWeight: 600, border: "none", background: "transparent" }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          onBlur={(e) => {
+            const name = e.target.value.trim();
+            if (name) mutate(renameSectionMutation(slides, sec.id, name));
+          }}
+        />
+        <span style={{ opacity: 0.6 }}>
+          {t(OUTPUT.sectionSlides, { count: sec.pageIds.length })}
+        </span>
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          data-section-up
+          title={t(OUTPUT.sectionUp)}
+          disabled={first}
+          onClick={() => mutate(moveSectionMutation(slides, sec.id, -1))}
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          data-section-down
+          title={t(OUTPUT.sectionDown)}
+          disabled={last}
+          onClick={() => mutate(moveSectionMutation(slides, sec.id, 1))}
+        >
+          ↓
+        </button>
+        <button
+          type="button"
+          data-section-remove
+          title={t(OUTPUT.removeSection)}
+          onClick={() => mutate(removeSectionMutation(slides, sec.id))}
+        >
+          ×
+        </button>
+      </div>
+    );
+  };
+
   const Sorter: React.FC<ViewProps> = ({ close }) => {
     const { t } = useStrings();
     const live = useLive(store, subscribeOf);
@@ -196,6 +275,8 @@ export function makeSlideSorter(
     const allHidden = chosen.length > 0 && chosen.every((s) => s.state.hidden);
     const kinds = new Set(chosen.map((s) => s.state.transition?.kind ?? ""));
     const kind = kinds.size === 1 ? [...kinds][0] : "";
+    const sections = sectionsOf(slides);
+    const startsAt = new Map(sections.map((sec, k) => [sec.start, k]));
 
     if (slides.length === 0) {
       return (
@@ -221,6 +302,21 @@ export function makeSlideSorter(
               ? t(SHOW.selected, { count: chosen.length })
               : ""}
           </span>
+          <button
+            type="button"
+            data-sorter="add-section"
+            onClick={() =>
+              mutate(
+                addSectionMutation(
+                  slides,
+                  chosen[0]?.pageId ?? slides[0]!.pageId,
+                  t(OUTPUT.untitledSection),
+                ),
+              )
+            }
+          >
+            {t(OUTPUT.addSection)}
+          </button>
           <button
             type="button"
             data-sorter="hide"
@@ -277,86 +373,96 @@ export function makeSlideSorter(
         >
           {slides.map((slide, i) => {
             const isSelected = selected.includes(slide.pageId);
+            const k = startsAt.get(i);
             return (
-              <div
-                key={slide.pageId}
-                role="option"
-                aria-selected={isSelected}
-                data-sorter-slide={slide.pageId}
-                data-number={slide.number}
-                draggable
-                onClick={(e) => {
-                  setSelected(
-                    nextSelection(order, selected, anchor, slide.pageId, {
-                      shift: e.shiftKey,
-                      toggle: e.metaKey || e.ctrlKey,
-                    }),
-                  );
-                  if (!e.shiftKey) setAnchor(slide.pageId);
-                }}
-                onDoubleClick={() => open(slide.pageId)}
-                onDragStart={(e) => {
-                  if (!isSelected) {
-                    setSelected([slide.pageId]);
-                    setAnchor(slide.pageId);
-                  }
-                  setDragging(true);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onDragOver={(e) => {
-                  if (!dragging) return;
-                  e.preventDefault();
-                  setOver(i);
-                }}
-                onDragEnd={() => {
-                  setDragging(false);
-                  setOver(null);
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const moving =
-                    selected.length > 0 ? selected : [slide.pageId];
-                  mutate(moveManyMutation(order, moving, i));
-                  setDragging(false);
-                  setOver(null);
-                }}
-                style={{
-                  cursor: "pointer",
-                  outline: isSelected
-                    ? "3px solid var(--overlay-selection, #e0218a)"
-                    : `1px solid ${color.border}`,
-                  borderLeft:
-                    over === i && dragging
-                      ? "4px solid var(--overlay-selection, #e0218a)"
-                      : "4px solid transparent",
-                }}
-              >
-                <Thumb slide={slide} />
+              <React.Fragment key={slide.pageId}>
+                {k !== undefined && (
+                  <SectionHeader
+                    section={sections[k]!}
+                    slides={slides}
+                    first={k === 0}
+                    last={k === sections.length - 1}
+                  />
+                )}
                 <div
+                  role="option"
+                  aria-selected={isSelected}
+                  data-sorter-slide={slide.pageId}
+                  data-number={slide.number}
+                  draggable
+                  onClick={(e) => {
+                    setSelected(
+                      nextSelection(order, selected, anchor, slide.pageId, {
+                        shift: e.shiftKey,
+                        toggle: e.metaKey || e.ctrlKey,
+                      }),
+                    );
+                    if (!e.shiftKey) setAnchor(slide.pageId);
+                  }}
+                  onDoubleClick={() => open(slide.pageId)}
+                  onDragStart={(e) => {
+                    if (!isSelected) {
+                      setSelected([slide.pageId]);
+                      setAnchor(slide.pageId);
+                    }
+                    setDragging(true);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragOver={(e) => {
+                    if (!dragging) return;
+                    e.preventDefault();
+                    setOver(i);
+                  }}
+                  onDragEnd={() => {
+                    setDragging(false);
+                    setOver(null);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const moving =
+                      selected.length > 0 ? selected : [slide.pageId];
+                    mutate(moveManyMutation(order, moving, i));
+                    setDragging(false);
+                    setOver(null);
+                  }}
                   style={{
-                    display: "flex",
-                    gap: 6,
-                    fontSize: 12,
-                    padding: "4px 2px",
+                    cursor: "pointer",
+                    outline: isSelected
+                      ? "3px solid var(--overlay-selection, #e0218a)"
+                      : `1px solid ${color.border}`,
+                    borderLeft:
+                      over === i && dragging
+                        ? "4px solid var(--overlay-selection, #e0218a)"
+                        : "4px solid transparent",
                   }}
                 >
-                  <span>{slide.number}</span>
-                  {slide.state.hidden && (
-                    <span data-sorter-hidden style={{ opacity: 0.7 }}>
-                      {t(SHOW.hidden)}
-                    </span>
-                  )}
-                  {slide.state.transition?.kind && (
-                    <span
-                      data-sorter-transition
-                      title={slide.state.transition.kind}
-                      style={{ marginLeft: "auto" }}
-                    >
-                      ★
-                    </span>
-                  )}
+                  <Thumb slide={slide} />
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      fontSize: 12,
+                      padding: "4px 2px",
+                    }}
+                  >
+                    <span>{slide.number}</span>
+                    {slide.state.hidden && (
+                      <span data-sorter-hidden style={{ opacity: 0.7 }}>
+                        {t(SHOW.hidden)}
+                      </span>
+                    )}
+                    {slide.state.transition?.kind && (
+                      <span
+                        data-sorter-transition
+                        title={slide.state.transition.kind}
+                        style={{ marginLeft: "auto" }}
+                      >
+                        ★
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </React.Fragment>
             );
           })}
         </div>

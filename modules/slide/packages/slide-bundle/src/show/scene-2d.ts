@@ -104,7 +104,9 @@ export function filterClip(m: MaskState, seed = 1): FilterClip {
       const h = p / 2;
       if (out)
         return area([
-          vertical ? rect(b, 0.5 - h, 0, 0.5 + h, 1) : rect(b, 0, 0.5 - h, 1, 0.5 + h),
+          vertical
+            ? rect(b, 0.5 - h, 0, 0.5 + h, 1)
+            : rect(b, 0, 0.5 - h, 1, 0.5 + h),
         ]);
       return area(
         vertical
@@ -163,7 +165,9 @@ export function filterClip(m: MaskState, seed = 1): FilterClip {
           shift: [0, 0],
         };
       }
-      return area([rect(b, 0.5 - p / 2, 0.5 - p / 2, 0.5 + p / 2, 0.5 + p / 2)]);
+      return area([
+        rect(b, 0.5 - p / 2, 0.5 - p / 2, 0.5 + p / 2, 0.5 + p / 2),
+      ]);
     case "circle":
       if (sub === "in")
         return {
@@ -181,13 +185,22 @@ export function filterClip(m: MaskState, seed = 1): FilterClip {
         [b.x + b.w / 2 - k * b.w, b.y + b.h / 2],
       ];
       if (sub === "in")
-        return { polys: [d(1 - p)], complement: !m.out, alpha: 1, shift: [0, 0] };
+        return {
+          polys: [d(1 - p)],
+          complement: !m.out,
+          alpha: 1,
+          shift: [0, 0],
+        };
       return area([d(p)]);
     }
     case "plus": {
       const k = (sub === "in" ? 1 - p : p) / 2;
-      const cross = [rect(b, 0.5 - k, 0, 0.5 + k, 1), rect(b, 0, 0.5 - k, 1, 0.5 + k)];
-      if (sub === "in") return { polys: cross, complement: !m.out, alpha: 1, shift: [0, 0] };
+      const cross = [
+        rect(b, 0.5 - k, 0, 0.5 + k, 1),
+        rect(b, 0, 0.5 - k, 1, 0.5 + k),
+      ];
+      if (sub === "in")
+        return { polys: cross, complement: !m.out, alpha: 1, shift: [0, 0] };
       return area(cross);
     }
     case "dissolve": {
@@ -262,7 +275,9 @@ function clipTo(g: Ctx, c: FilterClip): void {
   const path = new Path2D();
   if (c.complement) path.rect(-1e5, -1e5, 2e5, 2e5);
   for (const poly of c.polys) {
-    poly.forEach(([x, y], i) => (i === 0 ? path.moveTo(x, y) : path.lineTo(x, y)));
+    poly.forEach(([x, y], i) =>
+      i === 0 ? path.moveTo(x, y) : path.lineTo(x, y),
+    );
     path.closePath();
   }
   g.clip(path, c.complement ? "evenodd" : "nonzero");

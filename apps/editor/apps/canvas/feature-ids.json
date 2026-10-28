@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 710,
+    "command": 724,
     "keybinding": 154,
-    "menu": 522,
-    "panel": 137,
+    "menu": 526,
+    "panel": 138,
     "tool": 103
   },
   "features": [
@@ -2606,12 +2606,22 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.addSection",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.animationPainter",
       "kind": "command",
       "owner": "media.paged.slide"
     },
     {
       "id": "command:media.paged.slide.command.animationPane",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.customShows",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2627,6 +2637,11 @@
     },
     {
       "id": "command:media.paged.slide.command.duplicateSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.export",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2696,6 +2711,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.saveAsTemplate",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.slideShowFromBeginning",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2711,12 +2731,37 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.deleteCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.deleteSection",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.duplicateSlide",
       "kind": "command",
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.exportOutline",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.exportPdf",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.exportPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.exportVideo",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2741,7 +2786,17 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.moveSection",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.newSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.playCustomShow",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2756,7 +2811,22 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.renameSection",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.sections",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.setAnimationTiming",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setCustomShow",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -5066,6 +5136,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:File/Export…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:File/Import/SVG…",
       "kind": "menu",
       "owner": "editor"
@@ -5129,6 +5204,11 @@
       "id": "menu:File/Save As IDML…",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:File/Save as template…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:Help/About",
@@ -6661,6 +6741,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "menu:Slide Show/Custom Shows…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide Show/From Beginning",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -6677,6 +6762,11 @@
     },
     {
       "id": "menu:Slide Show/Rehearse Timings",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/Add Section",
       "kind": "menu",
       "owner": "media.paged.slide"
     },
@@ -7122,6 +7212,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.comments",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.customShows",
       "kind": "panel",
       "owner": "media.paged.slide"
     },

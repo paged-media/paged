@@ -39,6 +39,9 @@ pub struct Deck {
     pub paragraph_styles: Vec<ParagraphStyle>,
     /// Font families the text names, for the host to register.
     pub fonts: Vec<String>,
+    /// The deck's custom shows, by page id.
+    #[serde(default)]
+    pub custom_shows: Vec<CustomShowPages>,
     pub diagnostics: Vec<String>,
 }
 
@@ -68,6 +71,27 @@ pub struct SlidePage {
     /// `p:timing` as a tree (slide ADR 714).
     #[serde(default)]
     pub timing: Option<pptx_core::anim::Timing>,
+    /// The section that starts at this slide (`p14:section`): its id and
+    /// name. A slide inside a section has none; its section is the last one
+    /// started before it.
+    #[serde(default)]
+    pub section: Option<SectionStart>,
+}
+
+/// A section's start (slide ADR 720).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SectionStart {
+    /// The section's `{GUID}`.
+    pub id: String,
+    pub name: String,
+}
+
+/// A custom show by the page ids of its slides (slide ADR 720).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CustomShowPages {
+    pub id: u32,
+    pub name: String,
+    pub pages: Vec<String>,
 }
 
 /// A page item, positioned by `transform` (its local box `(0,0)`–`(w,h)` →

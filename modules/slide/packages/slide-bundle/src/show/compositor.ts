@@ -287,9 +287,10 @@ export function createCompositor(
   const texturesOf = (device: GPUDevice, scene: SlideScene): GPUTexture[] => {
     if (sceneTextures?.scene === scene) return sceneTextures.textures;
     dropTextures();
-    const textures = [scene.background, ...scene.layers.map((l) => l.image)].map(
-      (img) => texture(device, img),
-    );
+    const textures = [
+      scene.background,
+      ...scene.layers.map((l) => l.image),
+    ].map((img) => texture(device, img));
     sceneTextures = { scene, textures };
     return textures;
   };
@@ -359,7 +360,8 @@ export function createCompositor(
       container.dataset.animation = "gpu";
     } else if (g) {
       const { w, h, dpr } = size();
-      if (canvas.width !== Math.round(w * dpr)) canvas.width = Math.round(w * dpr);
+      if (canvas.width !== Math.round(w * dpr))
+        canvas.width = Math.round(w * dpr);
       if (canvas.height !== Math.round(h * dpr))
         canvas.height = Math.round(h * dpr);
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -375,8 +377,9 @@ export function createCompositor(
     container.dataset.animationRunning = running ? "true" : "false";
     // What the frame shows of the animated layers (tests, diagnostics).
     container.dataset.visibleLayers = String(
-      scene.layers.filter((l, i) => l.target && states[i]?.visible && states[i].opacity > 0)
-        .length,
+      scene.layers.filter(
+        (l, i) => l.target && states[i]?.visible && states[i].opacity > 0,
+      ).length,
     );
     return running;
   };
@@ -418,7 +421,14 @@ export function createCompositor(
       };
       if (from && to && resolved && durationMs > 0 && !blankColor) {
         if (
-          gpuTransition(from, to, resolved.kind, durationMs, resolved.params, start)
+          gpuTransition(
+            from,
+            to,
+            resolved.kind,
+            durationMs,
+            resolved.params,
+            start,
+          )
         ) {
           container.dataset.transition = `gpu:${resolved.kind}`;
           paint(null, from, 1);

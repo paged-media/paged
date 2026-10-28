@@ -34,7 +34,11 @@
 // Each change is one edit of the slide's timing through the engine and one
 // undo step (authoring.ts).
 
-import type { BundleHost, ElementId, PanelProps } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  PanelProps,
+} from "@paged-media/plugin-api";
 import { subscribeOf, useLive } from "@paged-media/react-live";
 import { useStrings } from "@paged-media/strings";
 import * as React from "react";
@@ -89,10 +93,7 @@ export function barGeometry(
   e: EffectInfo,
   all: readonly EffectInfo[],
 ): { left: number; width: number } {
-  const span = Math.max(
-    1,
-    ...all.map((x) => x.endMs),
-  );
+  const span = Math.max(1, ...all.map((x) => x.endMs));
   return {
     left: Math.max(0, e.beginMs) / span,
     width: Math.max(0.01, (e.endMs - e.beginMs) / span),
@@ -112,7 +113,10 @@ export function makeAnimationsPanel(
     const slide = slides.activeSlide();
     const pageId = slide?.pageId ?? null;
     const timing = slide?.state.timing ?? null;
-    const [list, setList] = React.useState<EffectList>({ effects: [], clicks: 0 });
+    const [list, setList] = React.useState<EffectList>({
+      effects: [],
+      clicks: 0,
+    });
     const [gallery, setGallery] = React.useState<GalleryPreset[]>([]);
     const [page, setPage] = React.useState<PageShapes | undefined>(undefined);
     const [cls, setCls] = React.useState<string>("entr");
@@ -150,7 +154,10 @@ export function makeAnimationsPanel(
 
     if (!slide || !pageId) {
       return (
-        <div data-animations-panel="empty" style={{ padding: 12, fontSize: 13, opacity: 0.7 }}>
+        <div
+          data-animations-panel="empty"
+          style={{ padding: 12, fontSize: 13, opacity: 0.7 }}
+        >
           {t(ANIM.empty)}
         </div>
       );
@@ -179,10 +186,23 @@ export function makeAnimationsPanel(
       );
 
     return (
-      <div data-animations-panel="" style={{ padding: 8, fontSize: 12, overflowY: "auto" }}>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+      <div
+        data-animations-panel=""
+        style={{ padding: 8, fontSize: 12, overflowY: "auto" }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            alignItems: "center",
+            marginBottom: 6,
+          }}
+        >
           <strong data-animations-heading="" style={{ flex: 1 }}>
-            {t(ANIM.heading, { number: slide.number, count: list.effects.length })}
+            {t(ANIM.heading, {
+              number: slide.number,
+              count: list.effects.length,
+            })}
           </strong>
           <button
             type="button"
@@ -204,8 +224,13 @@ export function makeAnimationsPanel(
         </div>
 
         <section data-animations-gallery="">
-          <h3 style={{ fontSize: 11, margin: "6px 0", opacity: 0.7 }}>{t(ANIM.add)}</h3>
-          <div role="tablist" style={{ display: "flex", gap: 2, marginBottom: 4 }}>
+          <h3 style={{ fontSize: 11, margin: "6px 0", opacity: 0.7 }}>
+            {t(ANIM.add)}
+          </h3>
+          <div
+            role="tablist"
+            style={{ display: "flex", gap: 2, marginBottom: 4 }}
+          >
             {CLASSES.map(([c, label, colour]) => (
               <button
                 key={c}
@@ -243,11 +268,22 @@ export function makeAnimationsPanel(
             {t(ANIM.byParagraph)}
           </label>
           {!target ? (
-            <div data-animations-hint="" style={{ opacity: 0.7, margin: "4px 0" }}>
+            <div
+              data-animations-hint=""
+              style={{ opacity: 0.7, margin: "4px 0" }}
+            >
               {t(ANIM.selectShape)}
             </div>
           ) : null}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 2, maxHeight: 160, overflowY: "auto" }}>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 2,
+              maxHeight: 160,
+              overflowY: "auto",
+            }}
+          >
             {presets.map((g) => (
               <button
                 key={`${g.class}:${g.presetId}`}
@@ -278,9 +314,13 @@ export function makeAnimationsPanel(
         </section>
 
         <section data-animations-list="" style={{ marginTop: 8 }}>
-          <h3 style={{ fontSize: 11, margin: "6px 0", opacity: 0.7 }}>{t(ANIM.timeline)}</h3>
+          <h3 style={{ fontSize: 11, margin: "6px 0", opacity: 0.7 }}>
+            {t(ANIM.timeline)}
+          </h3>
           {list.effects.length === 0 ? (
-            <div data-animations-none="" style={{ opacity: 0.7 }}>{t(ANIM.none)}</div>
+            <div data-animations-none="" style={{ opacity: 0.7 }}>
+              {t(ANIM.none)}
+            </div>
           ) : null}
           <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {list.effects.map((e, i) => (
@@ -293,7 +333,9 @@ export function makeAnimationsPanel(
                 onPick={() => setPicked(i)}
                 onDrop={(from) =>
                   from !== i &&
-                  void run(deps.authoring.edit(pageId, { kind: "move", from, to: i }))
+                  void run(
+                    deps.authoring.edit(pageId, { kind: "move", from, to: i }),
+                  )
                 }
                 onRetime={(patch) =>
                   void run(
@@ -313,7 +355,9 @@ export function makeAnimationsPanel(
           <EffectOptions
             effect={effect}
             preset={gallery.find(
-              (g) => g.class === effect.presetClass && g.presetId === effect.presetId,
+              (g) =>
+                g.class === effect.presetClass &&
+                g.presetId === effect.presetId,
             )}
             page={page}
             count={list.effects.length}
@@ -329,18 +373,29 @@ export function makeAnimationsPanel(
             }
             onMove={(to) =>
               void run(
-                deps.authoring.edit(pageId, { kind: "move", from: effect.index, to }),
+                deps.authoring.edit(pageId, {
+                  kind: "move",
+                  from: effect.index,
+                  to,
+                }),
               ).then((ok) => ok && setPicked(to))
             }
             onRemove={() =>
-              void run(deps.authoring.edit(pageId, { kind: "remove", index: effect.index })).then(
-                (ok) => ok && setPicked(null),
-              )
+              void run(
+                deps.authoring.edit(pageId, {
+                  kind: "remove",
+                  index: effect.index,
+                }),
+              ).then((ok) => ok && setPicked(null))
             }
           />
         ) : null}
         {error ? (
-          <div data-animations-error="" role="alert" style={{ color: "#c8402f", marginTop: 6 }}>
+          <div
+            data-animations-error=""
+            role="alert"
+            style={{ color: "#c8402f", marginTop: 6 }}
+          >
             {error}
           </div>
         ) : null}
@@ -375,19 +430,26 @@ function EffectRow(props: {
       window.removeEventListener("pointerup", up);
       const dMs = ((u.clientX - x0) / width) * span;
       if (Math.abs(dMs) < 10) return;
-      if (edge) props.onRetime({ durationMs: Math.max(10, Math.round(e.durationMs + dMs)) });
-      else props.onRetime({ delayMs: Math.max(0, Math.round(e.delayMs + dMs)) });
+      if (edge)
+        props.onRetime({
+          durationMs: Math.max(10, Math.round(e.durationMs + dMs)),
+        });
+      else
+        props.onRetime({ delayMs: Math.max(0, Math.round(e.delayMs + dMs)) });
     };
     window.addEventListener("pointerup", up);
   };
-  const first = props.all.findIndex((x) => x.clickGroup === e.clickGroup) === e.index;
+  const first =
+    props.all.findIndex((x) => x.clickGroup === e.clickGroup) === e.index;
   return (
     <li
       data-animation-row={e.index}
       data-animation-class={e.presetClass}
       aria-selected={props.selected}
       draggable
-      onDragStart={(ev) => ev.dataTransfer?.setData("text/plain", String(e.index))}
+      onDragStart={(ev) =>
+        ev.dataTransfer?.setData("text/plain", String(e.index))
+      }
       onDragOver={(ev) => ev.preventDefault()}
       onDrop={(ev) => {
         ev.preventDefault();
@@ -405,10 +467,19 @@ function EffectRow(props: {
         cursor: "default",
       }}
     >
-      <span data-animation-click={e.clickGroup} style={{ opacity: 0.7, textAlign: "right" }}>
+      <span
+        data-animation-click={e.clickGroup}
+        style={{ opacity: 0.7, textAlign: "right" }}
+      >
         {first && e.start === "click" ? e.clickGroup : ""}
       </span>
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
         <span
           aria-hidden="true"
           style={{
@@ -421,10 +492,20 @@ function EffectRow(props: {
           }}
         />
         {e.name} · {props.label}
-        {e.paragraph !== null ? ` (${t(ANIM.paragraph, { n: e.paragraph + 1 })})` : ""}
+        {e.paragraph !== null
+          ? ` (${t(ANIM.paragraph, { n: e.paragraph + 1 })})`
+          : ""}
         {e.trigger ? " ⚡" : ""}
       </span>
-      <div ref={track} data-animation-track="" style={{ position: "relative", height: 10, background: "rgba(128,128,128,.15)" }}>
+      <div
+        ref={track}
+        data-animation-track=""
+        style={{
+          position: "relative",
+          height: 10,
+          background: "rgba(128,128,128,.15)",
+        }}
+      >
         <div
           data-animation-bar=""
           onPointerDown={e.editable ? drag(false) : undefined}
@@ -441,7 +522,14 @@ function EffectRow(props: {
           <div
             data-animation-bar-end=""
             onPointerDown={e.editable ? drag(true) : undefined}
-            style={{ position: "absolute", right: -2, top: 0, bottom: 0, width: 5, cursor: "ew-resize" }}
+            style={{
+              position: "absolute",
+              right: -2,
+              top: 0,
+              bottom: 0,
+              width: 5,
+              cursor: "ew-resize",
+            }}
           />
         </div>
       </div>
@@ -464,7 +552,15 @@ function EffectOptions(props: {
   const { effect: e } = props;
   const disabled = !e.editable;
   const row = (label: string, control: React.ReactNode) => (
-    <label style={{ display: "grid", gridTemplateColumns: "90px 1fr", gap: 4, alignItems: "center", margin: "2px 0" }}>
+    <label
+      style={{
+        display: "grid",
+        gridTemplateColumns: "90px 1fr",
+        gap: 4,
+        alignItems: "center",
+        margin: "2px 0",
+      }}
+    >
       <span>{label}</span>
       {control}
     </label>
@@ -499,7 +595,9 @@ function EffectOptions(props: {
           data-animation-start=""
           disabled={disabled}
           value={e.start}
-          onChange={(ev) => props.onTiming({ start: ev.target.value as EffectStart })}
+          onChange={(ev) =>
+            props.onTiming({ start: ev.target.value as EffectStart })
+          }
         >
           <option value="click">{t(ANIM.onClick)}</option>
           <option value="with">{t(ANIM.withPrevious)}</option>
@@ -518,7 +616,11 @@ function EffectOptions(props: {
           key={`d${e.index}:${e.durationMs}`}
           onBlur={(ev) => {
             const v = Number(ev.target.value);
-            if (Number.isFinite(v) && v > 0 && Math.round(v * 1000) !== e.durationMs)
+            if (
+              Number.isFinite(v) &&
+              v > 0 &&
+              Math.round(v * 1000) !== e.durationMs
+            )
               props.onTiming({ durationMs: Math.round(v * 1000) });
           }}
         />,
@@ -535,7 +637,11 @@ function EffectOptions(props: {
           key={`l${e.index}:${e.delayMs}`}
           onBlur={(ev) => {
             const v = Number(ev.target.value);
-            if (Number.isFinite(v) && v >= 0 && Math.round(v * 1000) !== e.delayMs)
+            if (
+              Number.isFinite(v) &&
+              v >= 0 &&
+              Math.round(v * 1000) !== e.delayMs
+            )
               props.onTiming({ delayMs: Math.round(v * 1000) });
           }}
         />,
@@ -549,7 +655,8 @@ function EffectOptions(props: {
           onChange={(ev) => {
             const v = ev.target.value;
             props.onTiming({
-              repeat: v === "" ? null : v === "indefinite" ? "indefinite" : Number(v),
+              repeat:
+                v === "" ? null : v === "indefinite" ? "indefinite" : Number(v),
             });
           }}
         >
@@ -562,13 +669,22 @@ function EffectOptions(props: {
           <option value="indefinite">{t(ANIM.repeatUntilClick)}</option>
         </select>,
       )}
-      <label style={{ display: "flex", gap: 4, alignItems: "center", margin: "2px 0" }}>
+      <label
+        style={{
+          display: "flex",
+          gap: 4,
+          alignItems: "center",
+          margin: "2px 0",
+        }}
+      >
         <input
           type="checkbox"
           data-animation-rewind=""
           disabled={disabled}
           checked={e.rewindWhenDone === true}
-          onChange={(ev) => props.onTiming({ rewindWhenDone: ev.target.checked })}
+          onChange={(ev) =>
+            props.onTiming({ rewindWhenDone: ev.target.checked })
+          }
         />
         {t(ANIM.rewind)}
       </label>
