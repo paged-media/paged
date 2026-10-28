@@ -48,6 +48,11 @@ paged-color = { path = "../paged-color", features = ["moxcms"] }
 paged-psd = { path = "../paged-psd" }
 # Format sniffing (the leaf crate the IDML writer shares).
 paged-sniff = { path = "../paged-sniff" }
+# The LZW and DCT decode filters (`filters`): weezl is the LZW of tiff and
+# gif, jpeg-decoder the renderer's JPEG decoder (it hands CMYK samples over
+# as stored, which a PostScript image's Decode array expects).
+weezl = "0.1"
+jpeg-decoder = "0.3"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

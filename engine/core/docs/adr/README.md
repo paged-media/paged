@@ -157,6 +157,7 @@ is not written yet.
 | [1030](1030-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
 | [1031](1031-svg-in-and-out-through-paged-svg.md) | SVG in and out through `paged-svg` | Accepted 2026-10-24 |
 | [1032](1032-one-cms-with-intents-and-bpc.md) | One colour API with explicit intents and black-point compensation on every backend | Accepted 2026-10-24 |
+| [1033](1033-an-eps-is-drawn-from-its-postscript.md) | An EPS is drawn from its PostScript, by `paged-ps` | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

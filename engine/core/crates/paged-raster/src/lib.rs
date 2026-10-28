@@ -125,6 +125,7 @@ mod dng;
 mod encode;
 mod eps;
 pub mod exif;
+pub mod filters;
 mod icc;
 mod jpeg;
 mod jxl;

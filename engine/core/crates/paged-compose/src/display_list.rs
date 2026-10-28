@@ -341,6 +341,66 @@ impl std::fmt::Debug for PathData {
 }
 
 impl PathData {
+    /// kurbo's path as a `NonZero` path (the one conversion; PM-0014,
+    /// shared capability C8).
+    pub fn from_bez(p: &kurbo::BezPath) -> Self {
+        let f = |pt: kurbo::Point| (pt.x as f32, pt.y as f32);
+        let segments = p
+            .elements()
+            .iter()
+            .map(|el| match *el {
+                kurbo::PathEl::MoveTo(a) => {
+                    let (x, y) = f(a);
+                    PathSegment::MoveTo { x, y }
+                }
+                kurbo::PathEl::LineTo(a) => {
+                    let (x, y) = f(a);
+                    PathSegment::LineTo { x, y }
+                }
+                kurbo::PathEl::QuadTo(c, a) => {
+                    let ((cx, cy), (x, y)) = (f(c), f(a));
+                    PathSegment::QuadTo { cx, cy, x, y }
+                }
+                kurbo::PathEl::CurveTo(c1, c2, a) => {
+                    let ((cx1, cy1), (cx2, cy2), (x, y)) = (f(c1), f(c2), f(a));
+                    PathSegment::CubicTo {
+                        cx1,
+                        cy1,
+                        cx2,
+                        cy2,
+                        x,
+                        y,
+                    }
+                }
+                kurbo::PathEl::ClosePath => PathSegment::Close,
+            })
+            .collect();
+        PathData::new(segments)
+    }
+
+    /// This path as kurbo's (the fill rule is not carried).
+    pub fn to_bez(&self) -> kurbo::BezPath {
+        let p = |x: f32, y: f32| kurbo::Point::new(f64::from(x), f64::from(y));
+        let mut out = kurbo::BezPath::new();
+        for seg in &self.segments {
+            match *seg {
+                PathSegment::MoveTo { x, y } => out.move_to(p(x, y)),
+                PathSegment::LineTo { x, y } => out.line_to(p(x, y)),
+                PathSegment::QuadTo { cx, cy, x, y } => out.quad_to(p(cx, cy), p(x, y)),
+                PathSegment::CubicTo {
+                    cx1,
+                    cy1,
+                    cx2,
+                    cy2,
+                    x,
+                    y,
+                } => out.curve_to(p(cx1, cy1), p(cx2, cy2), p(x, y)),
+                PathSegment::Close => out.close_path(),
+            }
+        }
+        out
+    }
+
     /// A `NonZero` path of `segments`.
     pub fn new(segments: Vec<PathSegment>) -> Self {
         Self {

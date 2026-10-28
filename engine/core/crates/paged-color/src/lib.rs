@@ -41,6 +41,7 @@ pub mod cmm;
 /// intents, black-point compensation, soft proof and gamut check.
 pub mod cms;
 pub mod lab;
+pub mod math;
 /// Shared CMYK-profile discovery for TESTS across the workspace. Lives in
 /// the library (not a dev-dependency) so `paged-canvas`'s tests can use
 /// the same resolver `paged-color`'s do — three divergent copies is how
