@@ -50,6 +50,7 @@ import {
 } from "../src/object-model";
 import { SLIDE_PANEL_FIELDS } from "../src/panel-fields";
 import { slidePanels } from "../src/panels";
+import { SMARTART_PANEL_ID } from "../src/smartart";
 import { fileURLToPath } from "node:url";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
@@ -116,6 +117,7 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
         COMMENTS_PANEL_ID,
         SHAPES_PANEL_ID,
         CUSTOM_SHOWS_PANEL,
+        SMARTART_PANEL_ID,
       ].sort(),
     );
   });

@@ -27,6 +27,7 @@
 // realm, browser or Node; until it is built the dynamic import rejects and
 // boot says so.
 
+import { bytesToBase64 } from "@paged-media/helpers";
 import {
   wasmBindgenModule,
   type WasmBindgenGlue,
@@ -220,7 +221,28 @@ interface WasmExported {
   readonly bytes: Uint8Array;
   readonly diagnostics: string;
   readonly notExported: string;
+  readonly rastersNeeded?: string;
   free(): void;
+}
+
+/** A picture the export needs a PNG of (an SVG's fallback, a format
+ *  PowerPoint does not open): the element and the resolution to render it
+ *  at. */
+export interface RasterNeed {
+  id: string;
+  dpi: number;
+}
+
+/** What a picture file is (pptx-core `media`). */
+export interface PictureInfo {
+  /** The format's extension (`png`, `jpeg`, `svg`, `webp`, …). */
+  format: string;
+  mime: string;
+  /** PowerPoint holds it as it is (PNG, JPEG, GIF, BMP, TIFF). */
+  inDeck: boolean;
+  /** Pixels (an SVG's in CSS pixels); null when the header does not say. */
+  width: number | null;
+  height: number | null;
 }
 
 /** A written deck and what it could not carry (slide-js `ExportedDeck`). */
@@ -230,6 +252,9 @@ export interface ExportedDeck {
   diagnostics: string[];
   /** What is on the slides that could not round-trip, one line each. */
   notExported: string[];
+  /** Pictures written without the PNG they need; render them and export
+   *  again with them in `DeckPlan.rasters`. */
+  rastersNeeded: RasterNeed[];
 }
 
 /** A chart whose workbook the document edited (pptx-export `ChartPlan`). */
@@ -315,6 +340,9 @@ export interface DeckPlan {
   customShows?: { id?: number; name: string; pages: string[] }[];
   /** The charts whose data the document changed (slide ADR 715). */
   charts?: readonly ChartPlan[];
+  /** PNGs of pictures PowerPoint cannot hold as they are, by element id,
+   *  base64 (what `ExportedDeck.rastersNeeded` asked for). */
+  rasters?: Readonly<Record<string, string>>;
 }
 
 /** What a PDF is asked to be (slide-output `pdf::Options`). */
@@ -473,6 +501,18 @@ export class SlideEngine {
     return this.live({ op: "gallery" });
   }
 
+  /** What a picture file is, from its first bytes; null for a format the
+   *  engine does not read. */
+  picture(bytes: Uint8Array): PictureInfo | null {
+    const head = bytes.subarray(0, 64 * 1024);
+    return this.live({ op: "picture", head: bytesToBase64(head) });
+  }
+
+  /** Every picture format the engine reads (the picker's types). */
+  pictureFormats(): { format: string; mime: string }[] {
+    return this.live({ op: "pictureFormats" });
+  }
+
   /** Write a `.pptx` from the deck the document was imported from and its
    *  slides in page order. With the document's `.paged` serialization,
    *  what is on the slides is written from it (edited and new slides
@@ -496,6 +536,7 @@ export class SlideEngine {
         bytes: out.bytes,
         diagnostics: JSON.parse(out.diagnostics) as string[],
         notExported: JSON.parse(out.notExported) as string[],
+        rastersNeeded: JSON.parse(out.rastersNeeded ?? "[]") as RasterNeed[],
       };
     } finally {
       out.free();

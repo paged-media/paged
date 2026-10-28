@@ -109,6 +109,7 @@ const PLACEHOLDER_PANEL = "media.paged.slide.panel.placeholder";
 const DECK_PANEL = "media.paged.slide.panel.deck";
 const COMMENTS_PANEL = "media.paged.slide.panel.comments";
 const SHAPES_PANEL = "media.paged.slide.panel.shapes";
+const SMARTART_PANEL = "media.paged.slide.panel.smartart";
 const IMPORTER = "media.paged.slide.importer.pptx";
 const EXPORTER = "media.paged.slide.exporter.pptx";
 const NEW_SLIDE = "media.paged.slide.newSlide";
@@ -122,6 +123,8 @@ const DELETE_COMMENT = "media.paged.slide.command.deleteComment";
 const PREVIOUS_SLIDE = "media.paged.slide.command.previousSlide";
 const NEXT_SLIDE = "media.paged.slide.command.nextSlide";
 const INSERT_SHAPE = "media.paged.slide.insertShape";
+const SMARTART_POINTS = "media.paged.slide.smartArtPoints";
+const SET_SMARTART_TEXT = "media.paged.slide.setSmartArtText";
 
 /** The palette commands and the menu entry onto each (the bundle's
  *  `src/menu.ts`, restated). */
@@ -138,6 +141,12 @@ const PALETTE = {
   "media.paged.slide.command.addComment": "Slide/New comment",
   // Insert is the host's menu; the entry opens the Shapes panel (ADR 717).
   "media.paged.slide.command.insertShapes": "Insert/Shapes…",
+  // Slide W4: pictures and icons, the format painter, the SmartArt text pane.
+  "media.paged.slide.command.insertPicture": "Insert/Pictures…",
+  "media.paged.slide.command.insertIcon": "Insert/Icons…",
+  "media.paged.slide.command.copyFormat": "Slide/Copy formatting",
+  "media.paged.slide.command.pasteFormat": "Slide/Paste formatting",
+  "media.paged.slide.command.smartArtText": "Slide/SmartArt text pane",
 } as const;
 
 /** The slide show's commands (slide ADR 716, `src/show/contribute.ts`):
@@ -182,6 +191,7 @@ const DECLARED = {
     DECK_PANEL,
     COMMENTS_PANEL,
     SHAPES_PANEL,
+    SMARTART_PANEL,
   ],
   importers: [IMPORTER],
   exporters: [EXPORTER],
@@ -202,6 +212,14 @@ const DECLARED = {
     ...Object.keys(SHOW),
     // Insert ▸ Shapes' typed twin, for scripts and the CLI (ADR 717).
     INSERT_SHAPE,
+    // Slide W4's palette twins and SmartArt's text, for scripts.
+    "media.paged.slide.command.insertPicture",
+    "media.paged.slide.command.insertIcon",
+    "media.paged.slide.command.copyFormat",
+    "media.paged.slide.command.pasteFormat",
+    "media.paged.slide.command.smartArtText",
+    SMARTART_POINTS,
+    SET_SMARTART_TEXT,
   ],
   /** The deck's document context (editor ADR 307): no frame is entered;
    *  and a chart frame's data (slide ADR 715), entered by double-click. */
@@ -226,6 +244,7 @@ const PANEL_TITLES: Record<string, string> = {
   [DECK_PANEL]: "Deck",
   [COMMENTS_PANEL]: "Comments",
   [SHAPES_PANEL]: "Shapes",
+  [SMARTART_PANEL]: "Text Pane",
 };
 const SCHEMA_PANELS = [
   SLIDE_PANEL,

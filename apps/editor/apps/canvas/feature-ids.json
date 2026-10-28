@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 730,
-    "keybinding": 154,
-    "menu": 535,
-    "panel": 137,
+    "command": 737,
+    "keybinding": 158,
+    "menu": 540,
+    "panel": 138,
     "tool": 112
   },
   "features": [
@@ -2676,6 +2676,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.copyFormat",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.customShows",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2711,6 +2716,16 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.insertIcon",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.insertPicture",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.insertShapes",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2732,6 +2747,11 @@
     },
     {
       "id": "command:media.paged.slide.command.nextSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.pasteFormat",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2777,6 +2797,11 @@
     },
     {
       "id": "command:media.paged.slide.command.slideSorter",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.smartArtText",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2852,6 +2877,16 @@
     },
     {
       "id": "command:media.paged.slide.setCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setSmartArtText",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.smartArtPoints",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -4031,6 +4066,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+shift+c→media.paged.slide.command.copyFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:cmd+shift+d→media.paged.doc.command.word.doubleUnderline",
       "kind": "keybinding",
       "owner": "media.paged.doc"
@@ -4069,6 +4109,11 @@
       "id": "keybinding:cmd+shift+s→paged.file.saveAsIdml",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+shift+v→media.paged.slide.command.pasteFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:cmd+shift+{→paged.object.sendToBack",
@@ -4266,6 +4311,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:ctrl+shift+c→media.paged.slide.command.copyFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:ctrl+shift+g→paged.object.ungroup",
       "kind": "keybinding",
       "owner": "editor"
@@ -4279,6 +4329,11 @@
       "id": "keybinding:ctrl+shift+s→paged.file.saveAsIdml",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+shift+v→media.paged.slide.command.pasteFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:ctrl+shift+{→paged.object.sendToBack",
@@ -6356,6 +6411,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Insert/Icons…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Insert/Pictures…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Insert/Shapes…",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -6846,6 +6911,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Copy formatting",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Delete slide",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -6881,7 +6951,17 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Paste formatting",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Previous slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/SmartArt text pane",
       "kind": "menu",
       "owner": "media.paged.slide"
     },
@@ -7317,6 +7397,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.slides",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.smartart",
       "kind": "panel",
       "owner": "media.paged.slide"
     },

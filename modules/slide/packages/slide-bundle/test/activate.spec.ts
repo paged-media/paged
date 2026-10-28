@@ -47,6 +47,7 @@ import {
 } from "../src/activate";
 import type { ImportReport } from "../src/engine";
 import { SHAPES_PANEL_ID } from "../src/shapes";
+import { SMARTART_PANEL_ID } from "../src/smartart";
 import { SLIDE_KEY } from "../src/slides-model";
 
 const FIXTURE = new URL(
@@ -215,16 +216,19 @@ describe("paged.slide importer", () => {
       },
     } as unknown as BundleHost;
     const handle = activate(host);
-    // The Shapes panel (Insert ▸ Shapes, ADR 717) beside them.
+    // The Shapes panel (Insert ▸ Shapes, ADR 717) and the SmartArt text
+    // pane (slide W4) beside them.
     expect(panels.map((p) => p.id)).toEqual([
       SLIDES_PANEL_ID,
       SHAPES_PANEL_ID,
+      SMARTART_PANEL_ID,
       NOTES_PANEL_ID,
     ]);
     // A document that is not a deck keeps them out of the panel rail.
     expect(panels.map((p) => (p as { rail?: boolean }).rail)).toEqual([
       false,
       undefined,
+      false,
       false,
     ]);
     handle.dispose();
