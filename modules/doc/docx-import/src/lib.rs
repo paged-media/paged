@@ -425,7 +425,7 @@ fn map_notes(pkg: &OpcPackage, main_part: &str, ctx: &ImportCtx) -> Vec<Note> {
                 out.push(Note {
                     id: f.id,
                     endnote: false,
-                    paragraphs: note_paragraphs(&f.footnote_choice, ctx),
+                    paragraphs: numbered(note_paragraphs(&f.footnote_choice, ctx)),
                 });
             }
         }
@@ -442,7 +442,7 @@ fn map_notes(pkg: &OpcPackage, main_part: &str, ctx: &ImportCtx) -> Vec<Note> {
                 out.push(Note {
                     id: e.id,
                     endnote: true,
-                    paragraphs: endnote_paragraphs(&e.endnote_choice, ctx),
+                    paragraphs: numbered(endnote_paragraphs(&e.endnote_choice, ctx)),
                 });
             }
         }
@@ -450,8 +450,17 @@ fn map_notes(pkg: &OpcPackage, main_part: &str, ctx: &ImportCtx) -> Vec<Note> {
     out
 }
 
-/// A footnote's body paragraphs. Cell provenance is `None` and the body ordinal
-/// is 0: note content lives in its own part, so it is not save-back patchable.
+/// Number a part's (or a note's) paragraphs in order: their ordinal among
+/// the `<w:p>` children of the part's root (or of the note), the address
+/// save-back patches a header, footer or note paragraph by (doc ADR 611).
+fn numbered(mut paragraphs: Vec<Paragraph>) -> Vec<Paragraph> {
+    for (i, p) in paragraphs.iter_mut().enumerate() {
+        p.source_para_ord = i as u32;
+    }
+    paragraphs
+}
+
+/// A footnote's body paragraphs, numbered within the note ([`numbered`]).
 fn note_paragraphs(choices: &[wml::FootnoteChoice], ctx: &ImportCtx) -> Vec<Paragraph> {
     choices
         .iter()
@@ -556,7 +565,7 @@ fn map_headers_footers(
                         ),
                         part: name.clone(),
                         section: k,
-                        paragraphs: header_footer_paragraphs(*footer, &name, bytes, ctx),
+                        paragraphs: numbered(header_footer_paragraphs(*footer, &name, bytes, ctx)),
                     });
                     out.len() - 1
                 }
@@ -579,8 +588,8 @@ fn map_headers_footers(
     out
 }
 
-/// A header (`w:hdr`) or footer (`w:ftr`) part's paragraphs. Not save-back
-/// patchable yet (the body ordinal is 0, no cell provenance).
+/// A header (`w:hdr`) or footer (`w:ftr`) part's paragraphs, numbered by
+/// the caller ([`numbered`]).
 fn header_footer_paragraphs(
     footer: bool,
     name: &str,

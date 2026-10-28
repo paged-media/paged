@@ -70,6 +70,10 @@ pub struct ResolvedTarget {
     /// two of its texts) go, in order. `None`: where the edit leaves them
     /// ([`inside_offsets`]).
     pub inside_at: Option<Vec<usize>>,
+    /// Pre-rendered `<w:r>` fragments to emit after split piece `i` (doc
+    /// ADR 611: a note reference or a field written between the two
+    /// halves of the run it was put into). Only with [`Self::split`].
+    pub between: Vec<(usize, Vec<u8>)>,
 }
 
 /// One piece of a split run ([`ResolvedTarget::split`]): its text and, when
@@ -95,6 +99,7 @@ impl ResolvedTarget {
             rpr_merge: None,
             split: Vec::new(),
             inside_at: None,
+            between: Vec::new(),
         }
     }
 }
@@ -176,6 +181,18 @@ pub struct CellParaAction {
     /// Pre-rendered `<w:r>…</w:r>` fragments to emit at the end of its
     /// content (just before `</w:p>`).
     pub append_runs: Vec<Vec<u8>>,
+}
+
+/// How an element's local name goes on the patcher's stack: the root of a
+/// header or footer part (`w:hdr` / `w:ftr`) and a note (`w:footnote` /
+/// `w:endnote`) hold paragraphs as `w:body` does, so the patcher addresses
+/// their paragraphs as body paragraphs (doc ADR 611). None of these names
+/// occurs in the main document part.
+fn stack_name(ln: Vec<u8>) -> Vec<u8> {
+    match ln.as_slice() {
+        b"hdr" | b"ftr" | b"footnote" | b"endnote" => b"body".to_vec(),
+        _ => ln,
+    }
 }
 
 /// Whether the open elements end in `names` (the last one being the parent
@@ -584,6 +601,7 @@ pub fn patch_document_xml_cols(
                             rpr_merge: ct.rpr_merge.clone(),
                             split: ct.split.clone(),
                             inside_at: None,
+                            between: Vec::new(),
                         };
                         if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
                         {
@@ -628,6 +646,7 @@ pub fn patch_document_xml_cols(
                             rpr_merge: ct.rpr_merge.clone(),
                             split: ct.split.clone(),
                             inside_at: None,
+                            between: Vec::new(),
                         };
                         if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
                         {
@@ -711,7 +730,7 @@ pub fn patch_document_xml_cols(
                         continue; // run fully consumed — do not push onto the stack
                     }
                 }
-                stack.push(ln);
+                stack.push(stack_name(ln));
             }
             Ok(Event::Empty(e)) => {
                 let ln = local_name(e.name().as_ref()).to_vec();
@@ -935,7 +954,7 @@ pub fn clone_paragraph(src: &[u8], para_ord: u32, text: &str) -> Option<Vec<u8>>
                     }
                     break;
                 }
-                stack.push(ln);
+                stack.push(stack_name(ln));
             }
             Event::Empty(e) => {
                 let ln = local_name(e.name().as_ref()).to_vec();
@@ -1018,7 +1037,7 @@ fn cell_paragraph_range(src: &[u8], path: docx_core::CellPath) -> Option<(usize,
                         return Some((start, reader.buffer_position() as usize));
                     }
                 }
-                stack.push(ln);
+                stack.push(stack_name(ln));
             }
             Event::Empty(e) => {
                 let ln = local_name(e.name().as_ref()).to_vec();
@@ -1568,6 +1587,7 @@ fn split_run(
             rpr_merge: piece.rpr_merge.clone(),
             split: Vec::new(),
             inside_at: Some(mine),
+            between: Vec::new(),
             ..t.clone()
         };
         let mut c = 0usize;
@@ -1581,6 +1601,11 @@ fn split_run(
             &mut refused,
         );
         pieces.extend_from_slice(&copy[c..]);
+        for (k, frag) in &t.between {
+            if *k == i {
+                pieces.extend_from_slice(frag);
+            }
+        }
     }
     if !refused.is_empty() {
         refusals.extend(refused);
