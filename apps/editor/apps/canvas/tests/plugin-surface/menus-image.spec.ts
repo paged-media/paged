@@ -19,7 +19,7 @@
 
 // PLUGIN MENUS — paged.image (modules/image/glue/src/menu.ts).
 //
-// Two hundred and two entries: a hundred and ninety-nine under the Image menu (folded into
+// Two hundred and fifteen entries: two hundred and twelve under the Image menu (folded into
 // Plugins ▸ Image; shown as a context menu inside a raster frame) and three
 // under the host's Edit menu (Edit ▸ Selection to path, Edit ▸ Path to
 // selection, Edit ▸ Content-aware fill…).
@@ -2039,6 +2039,47 @@ test.describe.serial("plugin menus — paged.image", () => {
     expect(out.shell).toEqual([
       { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
       { door: "pickFile", arg: '{"accept":[".abr"]}' },
+    ]);
+    expect(out.after).toBe(out.before);
+  });
+
+  // Image ADR 477 — snapshots, History Options and the Preset Manager.
+  test("Image/History/New snapshot — with no image open, takes none and leaves the document alone", async () => {
+    covers("menu:Image/History/New snapshot");
+    await expectGreyedAndInert(bare, "Image/History/New snapshot");
+    const out = await clickEntry(
+      live,
+      "Image/History/New snapshot",
+      "media.paged.image.command.newSnapshot",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after).toBe(out.before);
+  });
+
+  test("Image/History/History options… — raises the Image panel, where the dialog opens", async () => {
+    covers("menu:Image/History/History options…");
+    await expectGreyedAndInert(bare, "Image/History/History options…");
+    const out = await clickEntry(
+      live,
+      "Image/History/History options…",
+      "media.paged.image.command.historyOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after).toBe(out.before);
+  });
+
+  test("Image/Presets/Preset manager… — raises the Image panel, where the dialog opens", async () => {
+    covers("menu:Image/Presets/Preset manager…");
+    await expectGreyedAndInert(bare, "Image/Presets/Preset manager…");
+    const out = await clickEntry(
+      live,
+      "Image/Presets/Preset manager…",
+      "media.paged.image.command.presetManager",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
     ]);
     expect(out.after).toBe(out.before);
   });

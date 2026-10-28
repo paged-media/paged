@@ -152,7 +152,8 @@ const MODULES = [
     name: "image",
     dir: "modules/image/glue",
     own: ["@paged-media/image-manifest"],
-    extra: [],
+    // draw's geometry and tool machines (image ADR 476).
+    extra: ["@paged-media/draw-geometry", "@paged-media/draw-tools"],
   },
   {
     name: "publish",
@@ -213,6 +214,13 @@ for (const m of MODULES) {
   ]) {
     add(`${m.name}: imports ${spec}`, src, importOf(spec), true);
   }
+  if (m.name === "image")
+    add(
+      "image: imports the draw bundle @paged-media/draw (only its geometry and machines)",
+      src,
+      importOf("@paged-media/draw"),
+      true,
+    );
   if (m.name !== "publish")
     add(
       `${m.name}: imports jszip (only publish may)`,

@@ -303,6 +303,11 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
   ] },
 ]
 
+# paged.image also imports paged.draw's two host-agnostic packages — the
+# geometry and the tool machines (Pen, Direct Selection, Pencil) — for its
+# paths, vector masks and shape tools (image ADR 476), exactly as the
+# editor's own path tools do. Never the draw bundle itself. When Phase 11
+# (C15) moves them to platform/shared, this exception becomes that entry.
 [[lint.overrides]]
 files = ["modules/image/{glue,manifest}/**/src/**/*.{ts,tsx}"]
 excludeFiles = ["**/*.spec.*", "**/*.test.*"]
@@ -310,7 +315,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot)|react|react-dom)(/|$)|@paged-media/image-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot|draw-geometry|draw-tools)|react|react-dom)(/|$)|@paged-media/image-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react (paged.image: also draw's geometry and tool machines, image ADR 476). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
   ] },
 ]
 

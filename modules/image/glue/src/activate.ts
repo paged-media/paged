@@ -56,6 +56,12 @@ import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
 import { contributeMasking } from "./masking-contrib";
 import { BG, type BlurKind } from "./filters-blur-gallery";
+import {
+  contributeVectors,
+  PATH_SELECT_TOOL_ID,
+  PEN_TOOL_ID,
+  RECT_SHAPE_TOOL_ID,
+} from "./vector-contrib";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { adjustmentKindLabel } from "./panels/sections/layer-parity";
@@ -86,6 +92,7 @@ import {
   BRUSH_SETTINGS_PANEL_ID,
   makeBrushSettingsPanel,
 } from "./panels/brush-settings-panel";
+import { contextHistory } from "./context-history";
 import {
   BRUSH_PRESETS_PANEL_ID,
   makeBrushPresetsPanel,
@@ -197,6 +204,9 @@ const CMD = defineMessages("image.command", {
   exportBrushPresetsAbr: "Export brush presets (.abr)…",
   exportBrushPresetsJson: "Export brush presets (.json)…",
   lockTransparentPixels: "Lock transparent pixels",
+  newSnapshot: "New snapshot",
+  historyOptions: "History options…",
+  presetManager: "Preset manager…",
   contentAwareFillWorkspace: "Content-aware fill… (workspace)",
   openCloneSource: "Clone source panel",
   cloneSource: "Clone Source",
@@ -1607,6 +1617,35 @@ export function activate(host: BundleHost): BundleHandle {
       await session.exportBrushPresets("json");
     },
   });
+  // HISTORY and PRESETS in the image context (image ADR 477): snapshots
+  // (named states, restored as one undo step), History Options (the
+  // journal's depth and memory), and the Preset Manager.
+  command({
+    id: "media.paged.image.command.newSnapshot",
+    title: t(CMD.newSnapshot),
+    category: "Image",
+    handler: () => {
+      session.takeSnapshot();
+    },
+  });
+  command({
+    id: "media.paged.image.command.historyOptions",
+    title: t(CMD.historyOptions),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      session.openHistoryOptions();
+    },
+  });
+  command({
+    id: "media.paged.image.command.presetManager",
+    title: t(CMD.presetManager),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      session.openPresetManager();
+    },
+  });
   command({
     id: "media.paged.image.command.toggleLockTransparent",
     title: t(CMD.lockTransparentPixels),
@@ -1769,6 +1808,9 @@ export function activate(host: BundleHost): BundleHandle {
   // Mask, Quick Mask, Grow / Similar, Focus Area, channels and paths,
   // the Magnetic Lasso and the Refine Edge brush.
   const maskingSub = contributeMasking(host, session, command, PANEL_ID);
+  // Vectors inside the image (ADR 476): the pen and shape tools, the
+  // Paths panel's verbs, Layer ▸ Vector Mask.
+  const vectorsSub = contributeVectors(host, session, command, PANEL_ID);
 
   // K-2 — the raster importer: opening/dropping a raster file routes
   // its bytes HERE (decode into the session, raise the panel; it does
@@ -1898,16 +1940,7 @@ export function activate(host: BundleHost): BundleHandle {
       // Editor ADR 285 — the host's History panel lists the image's own
       // journal while the context is active (pixel steps, which the
       // document's timeline does not see), and a click walks it.
-      historySteps: () => {
-        const h = session.state().history;
-        if (!h) return null;
-        return {
-          undo: h.undoSteps,
-          redo: h.redoSteps,
-          step: (delta: number) =>
-            delta < 0 ? session.undoSteps(-delta) : session.redoSteps(delta),
-        };
-      },
+      historySteps: () => contextHistory(session),
       onDidChangeHistory: (listener: () => void) => {
         const sub = session.onDidChange(listener);
         return () => sub.dispose();
@@ -1968,6 +2001,9 @@ export function activate(host: BundleHost): BundleHandle {
         CA_MOVE_TOOL_ID,
         REMOVE_TOOL_ID,
         CAF_SAMPLING_TOOL_ID,
+        PEN_TOOL_ID,
+        PATH_SELECT_TOOL_ID,
+        RECT_SHAPE_TOOL_ID,
       ],
       // The context's OWN panel. Deliberately NOT the host panels it
       // serves (Layers, Character) — naming those here would put host
@@ -2119,6 +2155,7 @@ export function activate(host: BundleHost): BundleHandle {
       retouchSettingsSub?.dispose();
       menuSub.dispose();
       maskingSub.dispose();
+      vectorsSub.dispose();
       providerInvalidate = null;
       for (const h of providerHandles.splice(0)) h.dispose();
       session.dispose();

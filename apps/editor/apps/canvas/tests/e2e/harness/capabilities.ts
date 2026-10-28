@@ -151,12 +151,11 @@
 // re-parented, a list level and a numbering restart on the first story's
 // first character, and a find and replace of a word the probe types first.
 
-// 2026-10-28: Word document structure (engine ADR 1022, protocol 77) named
-// six new Mutation ops — updateFields, insertTextAnchor, deleteTextAnchor,
-// insertCrossReference, insertTableOfContents and insertIndexMarker. Five
-// got real-args probes on the `text` fixture's first story (the update on
-// a Word DATE field the probe inserts first); deleteTextAnchor is listed
-// unsupported until a wire read names the anchor ids it takes.
+// 2026-10-28: Word's document structure (engine ADR 1022) named six new
+// Mutation ops — insertTextAnchor, deleteTextAnchor, insertIndexMarker,
+// insertCrossReference, insertTableOfContents and updateFields. Each got a
+// real-args probe on the first story; deleteTextAnchor learns the id the
+// next mint takes from a scratch bookmark it undoes.
 
 export type CapabilityStatus = "supported" | "unsupported";
 
@@ -611,36 +610,36 @@ export const CAPABILITIES: Capability[] = [
     status: "supported",
     note: "proto 76, ADR 1021; {spec, replace, replaceAll?, paragraphStyle?, characterStyle?}; probed on a word typed into the first story",
   },
-  // Word document structure (protocol 77, engine ADR 1022).
-  {
-    op: "updateFields",
-    status: "supported",
-    note: "proto 77, ADR 1022; {storyId?, offset?, now?}; probed on a Word DATE field the probe inserts, updated on a set clock",
-  },
+  // Word's document structure (protocol 77, engine ADR 1022).
   {
     op: "insertTextAnchor",
     status: "supported",
-    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, name}; probed at the first story's start",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, name}; a Word bookmark; probed at the first story's start",
   },
   {
     op: "deleteTextAnchor",
-    status: "unsupported",
-    note: "proto 77, ADR 1022; {anchorId}. The engine supports it (paged-canvas word_structure tests), but no wire read lists a story's text anchors, so a probe cannot learn the id insertTextAnchor mints (createdId is null); supported once a read names them",
-  },
-  {
-    op: "insertCrossReference",
     status: "supported",
-    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, target, referTo?, hyperlink?}; probed referring to the first story's first paragraph",
-  },
-  {
-    op: "insertTableOfContents",
-    status: "supported",
-    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, levels, title?, tocStyleName?, pageNumbers?, leader?, tabPosition?}; probed with one level from a scratch paragraph style",
+    note: "proto 77, ADR 1022; {anchorId}; probed on an anchor the probe inserts",
   },
   {
     op: "insertIndexMarker",
     status: "supported",
     note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, topic, sortOrder?}; probed at the first story's start",
+  },
+  {
+    op: "insertCrossReference",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, target, referTo, hyperlink?}; probed referring to the story's first paragraph",
+  },
+  {
+    op: "insertTableOfContents",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, levels, title?, tocStyleName?, pageNumbers?, leader?, tabPosition?}; probed with one scratch paragraph style",
+  },
+  {
+    op: "updateFields",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId?, offset?, now?}; probed on a DATE field the probe inserts",
   },
 ];
 

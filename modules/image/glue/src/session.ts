@@ -167,6 +167,10 @@ import {
   type MaskingController,
 } from "./masking-session";
 import {
+  createVectorController,
+  type VectorController,
+} from "./vector-session";
+import {
   createBrushMachine,
   type BrushMachine,
   type BrushSample,
@@ -201,6 +205,22 @@ import {
   untitledName,
   type UserBrushPreset,
 } from "./brush-presets";
+import {
+  builtInGradients,
+  freshId,
+  type AdjustmentPreset,
+  type GradientPreset,
+  type PatternPreset,
+  type PresetKind,
+  type ToolPreset,
+} from "./preset-library";
+import type { HistoryPrefs } from "./preset-store";
+import {
+  createHistoryOps,
+  createPresetOps,
+  type HistoryOps,
+  type PresetOps,
+} from "./session-presets";
 
 /** The fixed v0 feather sigma (px) the `featherSelection` command uses
  *  when the caller passes none (a slider is a follow-up). */
@@ -323,7 +343,11 @@ export type ImageDialog =
   | { kind: "blendingOptions"; index: number }
   | { kind: "layerStyle"; index: number; pane: LayerStylePane }
   | { kind: "globalLight" }
-  | { kind: "scaleEffects"; index: number };
+  | { kind: "scaleEffects"; index: number }
+  /** Edit ▸ Presets ▸ Preset Manager (image ADR 477), on a kind's tab. */
+  | { kind: "presetManager"; tab: PresetKind }
+  /** History Options (image ADR 477). */
+  | { kind: "historyOptions" };
 
 /** The pane the Layer Style dialog shows: an effect, or Blending Options. */
 export type LayerStylePane = EffectKind | "blending";
@@ -535,6 +559,17 @@ export interface ImageSessionState {
   styleClipboard: LayerStyle | null;
   /** The Styles panel's presets (built-in, then saved). */
   stylePresets: StylePreset[];
+  /** The Preset Manager's other libraries (image ADR 477): tool presets,
+   *  adjustment presets, gradients and patterns. Kept across sessions in
+   *  the bundle's storage (`preset-store.ts`), as are the brushes and
+   *  the styles. */
+  toolPresets: readonly ToolPreset[];
+  adjustmentPresets: readonly AdjustmentPreset[];
+  gradientPresets: readonly GradientPreset[];
+  patternPresets: readonly PatternPreset[];
+  /** History Options: the journal's depth and memory, the automatic
+   *  snapshot (image ADR 477). */
+  historyPrefs: HistoryPrefs;
   /** The document's Global Light. */
   globalLight: GlobalLight;
   /** The style of the layer the Layer Style dialog edits (else the active
@@ -575,11 +610,14 @@ export interface ImageSessionState {
 }
 
 /** WP5.8 — the retouching verbs are `RetouchApi` (retouch.ts). */
-export interface ImageSession extends RetouchApi {
+export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   /** Selection and masking: Color Range, Grow / Similar, Focus Area,
    *  Select and Mask, Quick Mask, channels, paths, the display view
    *  (image ADR 470). */
   masking(): MaskingController;
+  /** Vectors inside the image: the paths the Pen and the shape tools
+   *  draw, vector masks and shape layers (image ADR 476). */
+  vectors(): VectorController;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -1976,6 +2014,7 @@ export function createImageSession(host: BundleHost): ImageSession {
   let selectionMachineRef: SelectionMachine | null = null;
   // Selection and masking (created below, once `api` helpers exist).
   let maskingRef: MaskingController | null = null;
+  let vectorsRef: VectorController | null = null;
   // The paint interaction machine (pointer sampling only — the stroke's
   // base snapshot + coverage live engine-side).
   let brushMachineRef: BrushMachine | null = null;
@@ -2053,6 +2092,11 @@ export function createImageSession(host: BundleHost): ImageSession {
     dialog: null,
     styleClipboard: null,
     stylePresets: builtInPresets(),
+    toolPresets: [],
+    adjustmentPresets: [],
+    gradientPresets: builtInGradients(),
+    patternPresets: [],
+    historyPrefs: { depth: 32, memoryMb: 256, autoSnapshot: true },
     globalLight: { angle: 120, altitude: 30 },
     layerStyle: null,
     layerFilter: NO_LAYER_FILTER,
@@ -2154,6 +2198,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.layersNote = t(S.storedUnrestorable, { error: errText(err) });
       return;
     }
+    historyOps.resetAutoSnapshot();
     state.uncommitted = false;
     // A revision written through the OBJECT MODEL in a realm without a
     // GPU (object-model/image-objects.ts): smart objects whose source was
@@ -2263,6 +2308,7 @@ export function createImageSession(host: BundleHost): ImageSession {
           engine = e;
           state.engine = "ready";
           state.gpu = gpu;
+          historyOps.applyHistoryPrefs(e);
           try {
             // The blend picker's options come from the kernel registry,
             // never from a list this side could let drift.
@@ -2364,6 +2410,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       state.layers = engine.layers();
       state.history = engine.layersHistory();
+      historyOps.afterLayersRead();
       state.globalLight = engine.globalLight();
       const styled =
         state.dialog?.kind === "layerStyle"
@@ -2584,6 +2631,16 @@ export function createImageSession(host: BundleHost): ImageSession {
       emit();
       return false;
     }
+    await followHistoryMove();
+    const ok = await recomposite();
+    if (ok) setStatus(t(undo ? S.undid : S.redid, { label }));
+    return ok;
+  };
+
+  /** After the stack moved through its history (an undo, a redo, a
+   *  snapshot restore): follow the extent and the restored selection. */
+  const followHistoryMove = async (): Promise<void> => {
+    if (!engine || !state.source) return;
     // Finding IMG-1: a step across a canvas operation changes the extent
     // (the engine re-sized the bound image); follow it here, as
     // `canvasOp` does, so readouts and Commit see the restored canvas.
@@ -2601,9 +2658,6 @@ export function createImageSession(host: BundleHost): ImageSession {
     // The step may have restored a selection, a channel or a path.
     api.refreshSelection();
     maskingRef?.refresh();
-    const ok = await recomposite();
-    if (ok) setStatus(t(undo ? S.undid : S.redid, { label }));
-    return ok;
   };
 
   /** Drop an in-flight stroke engine-side (the base pixels were never
@@ -3020,6 +3074,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     if (!engine || !state.source || psdHandle === null) return;
     try {
       const n = await engine.layersOpenFromPsd(state.source.handle, psdHandle);
+      // The document's paths come with it (ADR 476).
+      vectorsRef?.importPsdPaths(psdHandle);
+      historyOps.resetAutoSnapshot();
       // Our composite of the layer tree, not the file's merged one.
       await engine.layersComposite();
       state.layersNote = t(S.psdLayersOpened, { count: n });
@@ -3887,10 +3944,83 @@ export function createImageSession(host: BundleHost): ImageSession {
     }
     return true;
   };
+  const vectors = (vectorsRef = createVectorController({
+    engine: () => engine,
+    source: () => state.source,
+    layers: () => state.layers,
+    foreground: () => state.colors.fg,
+    gpu: () => state.gpu,
+    setStatus,
+    emit,
+    markEdited: () => {
+      state.uncommitted = true;
+    },
+    refreshLayers,
+    refreshPaths: () => masking.refresh(),
+    recomposite: () => recomposite(),
+    applyEffect: (label, run) => api.applyEffect(label, run),
+    stroke: {
+      begin: (tool) => api.brushBegin(tool),
+      extend: (x, y) => api.brushExtend({ x, y, pressure: 1 }),
+      commit: () => api.brushCommit(),
+      cancel: () => api.brushCancel(),
+    },
+  }));
+
+  const presetCtx = {
+    host,
+    state,
+    emit,
+    setStatus,
+    engine: () => engine,
+    ensureEngine,
+    api: () => api,
+    usePattern(width: number, height: number, rgba: Uint8Array) {
+      if (!engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      try {
+        const info = engine.ingestRgba8(width, height, rgba);
+        if (patternHandle !== null) engine.freeImage(patternHandle);
+        patternHandle = info.handle;
+        state.pattern = { width, height };
+        emit();
+        return true;
+      } catch (err) {
+        setStatus(t(S.definePatternFailed, { error: errText(err) }));
+        return false;
+      }
+    },
+    definedPattern() {
+      if (!engine || patternHandle === null || !state.pattern) return null;
+      const { width, height } = state.pattern;
+      try {
+        const rgba = engine.tile(patternHandle, 0, 0, width, height);
+        return { width, height, rgba: new Uint8Array(rgba) };
+      } catch {
+        return null;
+      }
+    },
+    importAbr: (name: string, bytes: Uint8Array) =>
+      importAbrPresets(name, bytes),
+    exportAbr,
+    refresh: refreshLayers,
+    async afterHistoryMove() {
+      discardStroke();
+      await followHistoryMove();
+      await recomposite();
+    },
+  };
+  const historyOps = createHistoryOps(presetCtx);
+  const presetOps = createPresetOps(presetCtx);
 
   const api: ImageSession = {
+    ...historyOps,
+    ...presetOps,
     ...retouch,
     masking: () => masking,
+    vectors: () => vectors,
     state: () => state,
 
     onDidChange(listener) {
@@ -7135,9 +7265,16 @@ export function createImageSession(host: BundleHost): ImageSession {
         emit();
         return false;
       }
+      const kept = state.stylePresets.filter(
+        (p) => p.name !== trimmed || p.builtIn,
+      );
       state.stylePresets = [
-        ...state.stylePresets.filter((p) => p.name !== trimmed || p.builtIn),
-        { name: trimmed, style: cloneStyle(style) },
+        ...kept,
+        {
+          id: freshId("style", kept),
+          name: trimmed,
+          style: cloneStyle(style),
+        },
       ];
       emit();
       return true;

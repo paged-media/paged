@@ -1424,40 +1424,54 @@ const TEXT_PROBES: Probe[] = [
     },
     setupUndo: 1,
   },
-  // ── Word document structure (engine ADR 1022): bookmarks, fields,
-  //    cross-references, a table of contents and index markers ──
+  // ── Word's document structure (engine ADR 1022): bookmarks, index
+  //    markers, cross-references, a table of contents, field updates ──
   {
     op: "insertTextAnchor",
     build: async ({ fx }) =>
       fx.firstStory
         ? {
             op: "insertTextAnchor",
-            args: { storyId: fx.firstStory.selfId, offset: 0, name: "Probe" },
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              name: "ProbeMark",
+            },
           }
         : null,
   },
   {
     op: "deleteTextAnchor",
-    // No wire read lists a story's text anchors and insertTextAnchor
-    // answers no createdId, so there is no id to delete: an honest skip
-    // (the table says unsupported until a read names them).
-    build: async () => null,
-  },
-  {
-    op: "insertCrossReference",
-    // A reference to the first story's first paragraph, Word's "heading".
-    build: async ({ fx }) =>
-      fx.firstStory
+    // No collection lists text destinations, and the engine mints ids
+    // in sequence: a scratch bookmark shows the next id, its undo frees
+    // it, and the anchor inserted next takes it.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const before = await collectionIds(page, "bookmarks");
+      const made = await tryMutate(page, {
+        op: "createBookmark",
+        args: { name: "Probe id", page: fx.pages[0].pageId },
+      });
+      if (!made.ok) return null;
+      const fresh = [...(await collectionIds(page, "bookmarks"))].find(
+        (id) => !before.has(id),
+      );
+      await undoN(page, 1);
+      if (!fresh) return null;
+      const placed = await tryMutate(page, {
+        op: "insertTextAnchor",
+        args: { storyId: fx.firstStory.selfId, offset: 0, name: "ProbeMark" },
+      });
+      return placed.ok
         ? {
-            op: "insertCrossReference",
+            op: "deleteTextAnchor",
             args: {
-              storyId: fx.firstStory.selfId,
-              offset: 0,
-              target: { storyId: fx.firstStory.selfId, paragraph: 0 },
-              referTo: "text",
+              anchorId: `HyperlinkTextDestination/${fresh.split("/").pop()}`,
             },
           }
-        : null,
+        : null;
+    },
+    setupUndo: 1,
   },
   {
     op: "insertIndexMarker",
@@ -1474,9 +1488,24 @@ const TEXT_PROBES: Probe[] = [
         : null,
   },
   {
+    op: "insertCrossReference",
+    // A reference to the story's own first paragraph.
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertCrossReference",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              target: { storyId: fx.firstStory.selfId, paragraph: 0 },
+              referTo: "text",
+            },
+          }
+        : null,
+  },
+  {
     op: "insertTableOfContents",
-    // One level from a scratch paragraph style (no paragraph carries it:
-    // the table is empty, but made).
+    // One level, on a scratch paragraph style.
     build: async ({ page, fx }) => {
       if (!fx.firstStory) return null;
       const style = await newStyle(page, "Paragraph");
@@ -1487,6 +1516,7 @@ const TEXT_PROBES: Probe[] = [
               storyId: fx.firstStory.selfId,
               offset: 0,
               levels: [{ style, level: 1 }],
+              title: "Contents",
             },
           }
         : null;
@@ -1495,20 +1525,19 @@ const TEXT_PROBES: Probe[] = [
   },
   {
     op: "updateFields",
-    // A Word DATE field the probe inserts first, updated on a set clock
-    // (a field already showing its result refuses the update).
+    // Updates a DATE field the probe inserts first.
     build: async ({ page, fx }) => {
       if (!fx.firstStory) return null;
-      const made = await tryMutate(page, {
+      const storyId = fx.firstStory.selfId;
+      const seeded = await tryMutate(page, {
         op: "insertField",
-        args: {
-          storyId: fx.firstStory.selfId,
-          offset: 0,
-          field: { word: { code: 'DATE \\@ "d MMMM yyyy"' } },
-        },
+        args: { storyId, offset: 0, field: { word: { code: "DATE" } } },
       });
-      return made.ok
-        ? { op: "updateFields", args: { now: "2026-10-25T09:30:00" } }
+      return seeded.ok
+        ? {
+            op: "updateFields",
+            args: { storyId, now: "2026-10-25T09:30:00" },
+          }
         : null;
     },
     setupUndo: 1,

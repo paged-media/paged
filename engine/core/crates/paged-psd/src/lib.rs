@@ -65,6 +65,7 @@ pub mod effects;
 pub mod layer_list;
 pub mod layer_pixels;
 pub mod model;
+pub mod presets;
 pub mod reader;
 pub mod vector_mask;
 pub mod vm_array;

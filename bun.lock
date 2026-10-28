@@ -476,6 +476,8 @@
       "name": "@paged-media/image",
       "version": "0.1.0-canary.21",
       "dependencies": {
+        "@paged-media/draw-geometry": "workspace:*",
+        "@paged-media/draw-tools": "workspace:*",
         "@paged-media/helpers": "workspace:*",
         "@paged-media/panel-kit": "workspace:*",
         "@paged-media/react-live": "workspace:*",

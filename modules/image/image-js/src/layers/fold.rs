@@ -752,7 +752,7 @@ impl LayerStack {
             }
             let cov = CovKey {
                 own: super::multiply_coverage(
-                    layer.live_mask().cloned(),
+                    layer.live_mask(),
                     self.pass_through_mask(layer.group),
                 ),
                 // Inside a clipping group the base's alpha is applied

@@ -52,7 +52,12 @@
 //   · the palette commands (open and export a deck; new, duplicate, delete
 //     and move the active slide) with a menu entry each — only when the
 //     host answers `contribute.command@1`; the slide verbs also need the
-//     page doors (`viewport.pages@1`) and Export needs `storage.parts@1`.
+//     page doors (`viewport.pages@1`) and Export needs `storage.parts@1`;
+//   · the output commands (File ▸ Export…, Save as template…, Slide Show ▸
+//     Custom Shows…, Slide ▸ Add Section; slide ADR 720) with a menu entry
+//     each, and the Custom shows panel (never in the rail) — only when the
+//     host answers `contribute.command@1`; the panel also needs
+//     `contribute.panel@1`.
 //
 // The editor answers every one of those doors, so all of it is live here.
 // paged.slide declares NO tool; its edit contexts are the deck's document
@@ -112,6 +117,8 @@ const SHAPES_PANEL = "media.paged.slide.panel.shapes";
 const CUSTOM_SHOWS_PANEL = "media.paged.slide.panel.customShows";
 const IMPORTER = "media.paged.slide.importer.pptx";
 const EXPORTER = "media.paged.slide.exporter.pptx";
+/** Save as template's exporter (slide ADR 720). */
+const TEMPLATE_EXPORTER = "media.paged.slide.exporter.potx";
 const NEW_SLIDE = "media.paged.slide.newSlide";
 const IMPORT_PPTX = "media.paged.slide.importPptx";
 const DUPLICATE_SLIDE = "media.paged.slide.duplicateSlide";
@@ -123,6 +130,18 @@ const DELETE_COMMENT = "media.paged.slide.command.deleteComment";
 const PREVIOUS_SLIDE = "media.paged.slide.command.previousSlide";
 const NEXT_SLIDE = "media.paged.slide.command.nextSlide";
 const INSERT_SHAPE = "media.paged.slide.insertShape";
+/** The output commands only scripts run (slide ADR 720,
+ *  `src/output/commands.ts`): the exports, custom shows and sections. */
+const EXPORT_PDF = "media.paged.slide.exportPdf";
+const EXPORT_OUTLINE = "media.paged.slide.exportOutline";
+const EXPORT_VIDEO = "media.paged.slide.exportVideo";
+const SET_CUSTOM_SHOW = "media.paged.slide.setCustomShow";
+const DELETE_CUSTOM_SHOW = "media.paged.slide.deleteCustomShow";
+const PLAY_CUSTOM_SHOW = "media.paged.slide.playCustomShow";
+const SECTIONS = "media.paged.slide.sections";
+const RENAME_SECTION = "media.paged.slide.renameSection";
+const MOVE_SECTION = "media.paged.slide.moveSection";
+const DELETE_SECTION = "media.paged.slide.deleteSection";
 
 /** The palette commands and the menu entry onto each (the bundle's
  *  `src/menu.ts`, restated). */
@@ -139,11 +158,6 @@ const PALETTE = {
   "media.paged.slide.command.addComment": "Slide/New comment",
   // Insert is the host's menu; the entry opens the Shapes panel (ADR 717).
   "media.paged.slide.command.insertShapes": "Insert/Shapes…",
-  // Export, templates, custom shows and sections (slide ADR 720).
-  "media.paged.slide.command.export": "File/Export…",
-  "media.paged.slide.command.saveAsTemplate": "File/Save as template…",
-  "media.paged.slide.command.customShows": "Slide Show/Custom Shows…",
-  "media.paged.slide.command.addSection": "Slide/Add Section",
 } as const;
 
 /** The slide show's commands (slide ADR 716, `src/show/contribute.ts`):
@@ -171,6 +185,23 @@ const SHOW = {
   ],
 } as const;
 
+/** File ▸ Export…, Save as template, Custom shows and sections (slide ADR
+ *  720, `src/output/commands.ts`): their titles and their menu entries.
+ *  Offered only in a deck with a slide. */
+const OUTPUT = {
+  "media.paged.slide.command.export": ["Export…", "File/Export…"],
+  "media.paged.slide.command.saveAsTemplate": [
+    "Save as template…",
+    "File/Save as template…",
+  ],
+  // Opens the Custom shows panel.
+  "media.paged.slide.command.customShows": [
+    "Custom shows…",
+    "Slide Show/Custom Shows…",
+  ],
+  "media.paged.slide.command.addSection": ["Add section", "Slide/Add Section"],
+} as const;
+
 const KIND = (k: string) => `plugin:media.paged.slide/${k}`;
 
 /** THE IDS, SPELLED OUT. Comparing the manifest to the registries proves
@@ -191,7 +222,7 @@ const DECLARED = {
     CUSTOM_SHOWS_PANEL,
   ],
   importers: [IMPORTER],
-  exporters: [EXPORTER],
+  exporters: [EXPORTER, TEMPLATE_EXPORTER],
   partTypes: ["pptx", "slideImport", "chartWorkbook"],
   objectKinds: ["deck", "slide", "layout", "placeholder"],
   typedCommands: [
@@ -209,22 +240,18 @@ const DECLARED = {
     ...Object.keys(SHOW),
     // Insert ▸ Shapes' typed twin, for scripts and the CLI (ADR 717).
     INSERT_SHAPE,
-    // The output verbs' typed twins carry their palette ids; the rest
-    // are for scripts and the CLI (slide ADR 720).
-    "media.paged.slide.command.export",
-    "media.paged.slide.command.saveAsTemplate",
-    "media.paged.slide.command.customShows",
-    "media.paged.slide.command.addSection",
-    "media.paged.slide.exportPdf",
-    "media.paged.slide.exportOutline",
-    "media.paged.slide.exportVideo",
-    "media.paged.slide.setCustomShow",
-    "media.paged.slide.deleteCustomShow",
-    "media.paged.slide.playCustomShow",
-    "media.paged.slide.sections",
-    "media.paged.slide.renameSection",
-    "media.paged.slide.moveSection",
-    "media.paged.slide.deleteSection",
+    // The output commands' typed twins, then the script-only ones (ADR 720).
+    ...Object.keys(OUTPUT),
+    EXPORT_PDF,
+    EXPORT_OUTLINE,
+    EXPORT_VIDEO,
+    SET_CUSTOM_SHOW,
+    DELETE_CUSTOM_SHOW,
+    PLAY_CUSTOM_SHOW,
+    SECTIONS,
+    RENAME_SECTION,
+    MOVE_SECTION,
+    DELETE_SECTION,
   ],
   /** The deck's document context (editor ADR 307): no frame is entered;
    *  and a chart frame's data (slide ADR 715), entered by double-click. */
@@ -234,7 +261,11 @@ const DECLARED = {
   ],
   /** A chart frame claims its members' double-click (slide ADR 715). */
   objectTypes: [{ type: "slideChart", bakedFallback: "group" }],
-  commands: [...Object.keys(PALETTE), ...Object.keys(SHOW)],
+  commands: [
+    ...Object.keys(PALETTE),
+    ...Object.keys(SHOW),
+    ...Object.keys(OUTPUT),
+  ],
 } as const;
 
 /** Each panel's title, and what it is: the sorter, the notes, the
@@ -591,9 +622,9 @@ test.describe("plugin surface · paged.slide", () => {
     expect(byId[COMMENTS_PANEL].iconSvg).toBe(true);
     expect(byId[SHAPES_PANEL].iconSvg).toBe(true);
     expect(byId[CUSTOM_SHOWS_PANEL].iconSvg).toBe(true);
-    // The Shapes panel never joins the rail: Insert ▸ Shapes… opens it;
-    // Slide Show ▸ Custom Shows… opens the Custom shows panel.
+    // The Shapes panel never joins the rail: Insert ▸ Shapes… opens it.
     expect(byId[SHAPES_PANEL].rail).toBe(false);
+    // Nor does Custom shows: Slide Show ▸ Custom Shows… opens it (ADR 720).
     expect(byId[CUSTOM_SHOWS_PANEL].rail).toBe(false);
     for (const id of SCHEMA_PANELS)
       expect(byId[id].defaultDock, id).toBe("right");
@@ -664,11 +695,12 @@ test.describe("plugin surface · paged.slide", () => {
     await expect(page.locator("[data-shapes-panel]")).toBeAttached({
       timeout: 15_000,
     });
-    // The Custom shows panel mounts (slide ADR 720).
+    // The Custom shows panel: outside a deck there is no show, and it says so.
     await openPanel(page, CUSTOM_SHOWS_PANEL);
-    await expect(page.locator("[data-custom-shows]")).toBeAttached({
-      timeout: 15_000,
-    });
+    await expect(page.locator('[data-custom-shows="ready"]')).toContainText(
+      "No custom shows.",
+      { timeout: 15_000 },
+    );
 
     // The real menu bar: Plugins ▸ Slide lists all nine, none greyed
     // (paged.slide has no edit context, so no context withholds them),
@@ -1222,12 +1254,11 @@ test.describe("plugin surface · paged.slide", () => {
       "media.paged.slide.command.importPptx": "Open PowerPoint deck…",
       "media.paged.slide.command.exportPptx": "Export PowerPoint deck…",
       "media.paged.slide.command.insertShapes": "Insert shape…",
-      "media.paged.slide.command.export": "Export…",
-      "media.paged.slide.command.saveAsTemplate": "Save as template…",
-      "media.paged.slide.command.customShows": "Custom shows…",
-      "media.paged.slide.command.addSection": "Add section",
       ...Object.fromEntries(
         Object.entries(SHOW).map(([id, [title]]) => [id, title]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(OUTPUT).map(([id, [title]]) => [id, title]),
       ),
     });
     for (const x of blank.commands)
@@ -1239,6 +1270,9 @@ test.describe("plugin surface · paged.slide", () => {
       ...PALETTE,
       ...Object.fromEntries(
         Object.entries(SHOW).map(([id, [, path]]) => [id, path]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(OUTPUT).map(([id, [, path]]) => [id, path]),
       ),
     });
     // Outside a deck only Open is offered.
@@ -1334,7 +1368,7 @@ test.describe("plugin surface · paged.slide", () => {
         { timeout: 15_000 },
       )
       .toEqual(
-        [...Object.keys(PALETTE), ...Object.keys(SHOW)]
+        [...Object.keys(PALETTE), ...Object.keys(SHOW), ...Object.keys(OUTPUT)]
           .filter(
             (id) =>
               id !== "media.paged.slide.command.moveSlideUp" &&
