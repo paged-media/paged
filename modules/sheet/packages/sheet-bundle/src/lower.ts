@@ -193,7 +193,13 @@ export async function measureColumns(
     key == null
       ? null
       : ((content.styles ?? []).find((s) => s.key === key) ?? null);
-  const CELL_INSET_PT = 4; // left+right padding inside a cell
+  // Left+right room inside a cell: the slack every column has had, plus
+  // the text inset a padded page gives each side of a cell with text
+  // (`textInsetPt`, written as the cell's left and right insets). Without
+  // the inset the column was 2 pt short of its text: a word within 2 pt of
+  // its width hyphenated onto a second line, and the frame sized to one
+  // line per row lost its last row.
+  const CELL_INSET_PT = 4 + 2 * (content.textInsetPt ?? 0);
   /** Ascender (pt) per measured face key. */
   const ascenders = new Map<string, number>();
 
