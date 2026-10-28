@@ -81,11 +81,12 @@ pub struct SnapshotPng {
     pub height_px: u32,
     pub layout_generation: u64,
     pub numbering_generation: u64,
-    /// The PNG. Empty when the request asked for `format: "rgba"`.
+    /// The PNG. Empty when the request asked for another `format`.
     #[tsify(type = "number[]")]
     pub png_bytes: Vec<u8>,
     /// Extensions ADR 338 — what the bytes are. Absent for a PNG (the v1
-    /// reply), `"rgba"` when `rgba` carries them.
+    /// reply), `"rgba"` when `rgba` carries them; `"jpeg"`, `"webp"` or
+    /// `"tiff"` (editor ADR 2XX) when `bytes` holds that file.
     #[serde(default, skip_serializing_if = "SnapshotFormat::is_png")]
     pub format: SnapshotFormat,
     /// Extensions ADR 338 — `format: "rgba"`: `widthPx × heightPx`
@@ -94,6 +95,12 @@ pub struct SnapshotPng {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[tsify(type = "number[]")]
     pub rgba: Vec<u8>,
+    /// Editor ADR 2XX — `format: "jpeg" | "webp" | "tiff"`: the encoded
+    /// file, written by `paged-raster` (sRGB profile embedded, resolution
+    /// = the snapshot's dpi). Absent for a PNG and for `rgba`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[tsify(type = "number[]")]
+    pub bytes: Vec<u8>,
     /// Extensions ADR 338 — the page region the image covers, in page pt,
     /// when the request had a `clip`: the clip grown outward to whole
     /// pixels at the snapshot's resolution, so the image maps onto it
@@ -112,11 +119,31 @@ pub enum SnapshotFormat {
     /// Raw straight-alpha RGBA8 (`rgba`), for a caller that works on the
     /// pixels (an image layer, a rasterized vector).
     Rgba,
+    /// Editor ADR 2XX (asset export) — a JPEG in `bytes`, at the request's
+    /// `quality`. JPEG has no alpha: a transparent snapshot is flattened
+    /// onto white first.
+    Jpeg,
+    /// Editor ADR 2XX — a WebP in `bytes` (lossless: `paged-raster`
+    /// writes no lossy WebP), alpha kept.
+    Webp,
+    /// Editor ADR 2XX — a TIFF in `bytes` (RGBA, LZW), alpha kept.
+    Tiff,
 }
 
 impl SnapshotFormat {
     pub fn is_png(&self) -> bool {
         *self == SnapshotFormat::Png
+    }
+
+    /// The `paged-raster` encoder of a file format (`None` for PNG, which
+    /// the snapshot writes itself, and for raw `rgba`).
+    pub fn encoder(&self) -> Option<paged_raster::EncodeFormat> {
+        match self {
+            SnapshotFormat::Png | SnapshotFormat::Rgba => None,
+            SnapshotFormat::Jpeg => Some(paged_raster::EncodeFormat::Jpeg),
+            SnapshotFormat::Webp => Some(paged_raster::EncodeFormat::WebP),
+            SnapshotFormat::Tiff => Some(paged_raster::EncodeFormat::Tiff),
+        }
     }
 }
 
@@ -172,6 +199,9 @@ pub struct SnapshotRequest<'a> {
     /// Crop the image to the pixels something was drawn on (on a
     /// transparent ground; a paper ground is never trimmed).
     pub trim: bool,
+    /// Editor ADR 2XX — JPEG quality, 1 to 100 (default 90); other
+    /// formats ignore it.
+    pub quality: Option<u8>,
 }
 
 impl<'a> SnapshotRequest<'a> {
@@ -188,6 +218,7 @@ impl<'a> SnapshotRequest<'a> {
             background: SnapshotBackground::Paper,
             markers: false,
             trim: false,
+            quality: None,
         }
     }
 
@@ -210,6 +241,9 @@ pub enum SnapshotError {
     UnknownPage { page_id: PageId },
     #[error("png encoding failed: {0}")]
     PngEncode(String),
+    /// Editor ADR 2XX — `paged-raster` refused to encode the `format`.
+    #[error("encoding failed: {0}")]
+    Encode(String),
     #[error("invalid target width: {0}")]
     InvalidWidth(u32),
     /// Extensions ADR 338 — a `clip` with a non-finite value or no area.
@@ -479,8 +513,10 @@ pub fn render_snapshot_request(
             png_bytes: Vec::new(),
             format: SnapshotFormat::Rgba,
             rgba: snap.rgba,
+            bytes: Vec::new(),
             region: None,
         },
+        format => encode_snapshot_file(snap, format, dpi, req.quality)?,
     };
     reply.region = region;
     Ok(reply)
@@ -622,8 +658,82 @@ pub fn encode_snapshot_png(snap: Snapshot) -> Result<SnapshotPng, SnapshotError>
         png_bytes,
         format: SnapshotFormat::Png,
         rgba: Vec::new(),
+        bytes: Vec::new(),
         region: None,
     })
+}
+
+/// Editor ADR 2XX — encode a snapshot as a JPEG, WebP or TIFF file
+/// through `paged-raster`, the engine's one raster encoder: the sRGB
+/// profile the pixels are in is embedded, and the resolution is `dpi`.
+/// JPEG has no alpha, so its pixels are flattened onto white (paper)
+/// first; WebP and TIFF keep the straight alpha.
+pub fn encode_snapshot_file(
+    snap: Snapshot,
+    format: SnapshotFormat,
+    dpi: f32,
+    quality: Option<u8>,
+) -> Result<SnapshotPng, SnapshotError> {
+    use paged_raster::{
+        Alpha, ColorModel, EncodeOptions, Metadata, RasterImage, Samples, TiffCompression,
+        TiffEncodeOptions,
+    };
+    let Some(encoder) = format.encoder() else {
+        return encode_snapshot_png(snap);
+    };
+    let mut rgba = snap.rgba;
+    if format == SnapshotFormat::Jpeg {
+        flatten_onto_white(&mut rgba);
+    }
+    let image = RasterImage::from_samples(
+        snap.width_px,
+        snap.height_px,
+        ColorModel::Rgb,
+        Alpha::Unassociated,
+        Samples::U8(rgba),
+    );
+    let ppi = (dpi.is_finite() && dpi > 0.0).then(|| (f64::from(dpi), f64::from(dpi)));
+    let options = EncodeOptions {
+        quality: quality.unwrap_or(90).clamp(1, 100),
+        ppi,
+        metadata: Metadata {
+            icc: Some(paged_raster::srgb_icc()),
+            ..Metadata::default()
+        },
+        tiff: TiffEncodeOptions {
+            compression: TiffCompression::Lzw,
+            ..TiffEncodeOptions::default()
+        },
+    };
+    let bytes = paged_raster::encode(&image, encoder, &options)
+        .map_err(|e| SnapshotError::Encode(e.to_string()))?;
+    Ok(SnapshotPng {
+        page_id: snap.page_id,
+        width_px: snap.width_px,
+        height_px: snap.height_px,
+        layout_generation: snap.layout_generation,
+        numbering_generation: snap.numbering_generation,
+        png_bytes: Vec::new(),
+        format,
+        rgba: Vec::new(),
+        bytes,
+        region: None,
+    })
+}
+
+/// Composite straight-alpha RGBA8 onto opaque white, in place (alpha
+/// becomes 255): what paper under a transparent image looks like.
+fn flatten_onto_white(rgba: &mut [u8]) {
+    for px in rgba.as_chunks_mut::<4>().0 {
+        let a = u32::from(px[3]);
+        if a == 255 {
+            continue;
+        }
+        for c in &mut px[..3] {
+            *c = ((u32::from(*c) * a + 255 * (255 - a) + 127) / 255) as u8;
+        }
+        px[3] = 255;
+    }
 }
 
 #[cfg(test)]

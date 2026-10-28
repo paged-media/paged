@@ -3381,6 +3381,7 @@ dependencies = [
  "paged-introspect",
  "paged-model",
  "paged-mutate",
+ "paged-raster",
  "paged-renderer",
  "paged-scene",
  "paged-store",

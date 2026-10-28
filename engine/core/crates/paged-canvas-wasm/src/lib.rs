@@ -954,6 +954,7 @@ mod wasm {
                 format,
                 background,
                 trim,
+                quality,
             } = msg.kind
             else {
                 return None;
@@ -972,6 +973,7 @@ mod wasm {
                 background,
                 markers,
                 trim,
+                quality,
             };
             if !v2.is_v1() {
                 return None;
