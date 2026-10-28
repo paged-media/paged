@@ -244,7 +244,7 @@ fn to_layout(img: RasterImage, name: &'static str) -> Result<Decoded> {
     let source_bits = file.bits_per_sample;
     let via_rgba8 = matches!(img.model, ColorModel::Lab) || matches!(img.data, Samples::F32(_));
     let (channels, depth, pixels) = if via_rgba8 {
-        let rgba = paged_raster::to_rgba8(&img, &paged_raster::PagedColour)
+        let rgba = paged_raster::to_rgba8(&img, &paged_raster::PagedColour::default())
             .map_err(|e| raster_err(name, e))?;
         (ChannelLayout::Rgba, SampleDepth::U8, rgba.data)
     } else {

@@ -1405,6 +1405,72 @@ pub struct LayerExt {
     pub color: u8,
     /// The LINK this layer belongs to: linked layers move together.
     pub link: Option<u32>,
+    /// The layer's STYLE (Photoshop's layer effects, `paged-psd`'s model);
+    /// `None` for none. Shared: a snapshot copies the pointer.
+    pub style: Option<Arc<image_psd::effects::LayerStyle>>,
+    /// The blending options that change how a style composites.
+    pub style_options: StyleOptions,
+}
+
+/// Blending Options ▸ Advanced Blending: the switches that change how a
+/// layer's STYLE composites (Photoshop's `infx`, `clbl`, `tsly`, `lmgm`
+/// and `vmgm` blocks).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StyleOptions {
+    /// Blend Interior Effects as Group: the overlays, satin and inner glow
+    /// join the layer before its mode and fill opacity apply.
+    pub blend_interior: bool,
+    /// Blend Clipped Layers as Group (the default, and the only way the
+    /// stack draws a clipping group).
+    pub blend_clipped: bool,
+    /// Transparency Shapes Layer (the default; effects follow the layer's
+    /// transparency).
+    pub transparency_shapes: bool,
+    /// Layer Mask Hides Effects: the mask hides the drawn effects instead
+    /// of shaping them.
+    pub mask_hides_effects: bool,
+    /// Vector Mask Hides Effects (the stack keeps the vector mask in the
+    /// layer's one mask, so either switch hides through it).
+    pub vector_mask_hides_effects: bool,
+}
+
+impl Default for StyleOptions {
+    fn default() -> Self {
+        StyleOptions {
+            blend_interior: false,
+            blend_clipped: true,
+            transparency_shapes: true,
+            mask_hides_effects: false,
+            vector_mask_hides_effects: false,
+        }
+    }
+}
+
+impl StyleOptions {
+    /// Does the mask hide the effects (rather than shape them)?
+    pub fn hides(&self) -> bool {
+        self.mask_hides_effects || self.vector_mask_hides_effects
+    }
+
+    /// The five switches as bits (persistence): 1 interior, 2 clipped,
+    /// 4 transparency shapes, 8 mask hides, 16 vector mask hides.
+    pub fn bits(&self) -> u8 {
+        u8::from(self.blend_interior)
+            | u8::from(self.blend_clipped) << 1
+            | u8::from(self.transparency_shapes) << 2
+            | u8::from(self.mask_hides_effects) << 3
+            | u8::from(self.vector_mask_hides_effects) << 4
+    }
+
+    pub fn from_bits(b: u8) -> StyleOptions {
+        StyleOptions {
+            blend_interior: b & 1 != 0,
+            blend_clipped: b & 2 != 0,
+            transparency_shapes: b & 4 != 0,
+            mask_hides_effects: b & 8 != 0,
+            vector_mask_hides_effects: b & 16 != 0,
+        }
+    }
 }
 
 impl Default for LayerExt {
@@ -1416,6 +1482,8 @@ impl Default for LayerExt {
             locks: LayerLocks::default(),
             color: 0,
             link: None,
+            style: None,
+            style_options: StyleOptions::default(),
         }
     }
 }

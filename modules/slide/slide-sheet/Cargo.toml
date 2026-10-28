@@ -1,0 +1,34 @@
+[package]
+name = "slide-sheet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: live charts. A chart's workbook (the embedded xlsx, or one made from the chart's cached values) read and written by paged.sheet, its series bound to the cells, its geometry drawn by paged.sheet's chart engine, its part written back with the edited values."
+
+[lints]
+workspace = true
+
+[dependencies]
+dml-chart.workspace = true
+paged-ooxml.workspace = true
+pptx-core.workspace = true
+slide-chart.workspace = true
+serde.workspace = true
+# paged.sheet's engine: the xlsx reader and writer, the cell model, the
+# calculation engine and formula parser (a cell typed as a formula), the
+# number formats, and the chart model and geometry. Built-in modules depend
+# on each other through the workspace (PM-0005; slide ADR 715).
+sheet-core = { path = "../../sheet/sheet-core" }
+sheet-format = { path = "../../sheet/sheet-format" }
+sheet-parser = { path = "../../sheet/sheet-parser" }
+sheet-calc = { path = "../../sheet/sheet-calc" }
+sheet-chart = { path = "../../sheet/sheet-chart" }
+sheet-xlsx = { path = "../../sheet/sheet-xlsx", default-features = false }
+
+[dev-dependencies]
+pptx-import.workspace = true
+slide-resolve.workspace = true
+paged-test-resources.workspace = true
+serde_json.workspace = true

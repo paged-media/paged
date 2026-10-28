@@ -284,6 +284,8 @@ struct LinkSpec {
     /// not a value the model holds.
     derived: bool,
     space: Option<String>,
+    /// `ImageRenderingIntent`, as imported.
+    rendering_intent: Option<String>,
     /// The bytes to embed as `<Contents>` (see `LinkCollector::embed`).
     embed: Option<Vec<u8>>,
 }
@@ -292,6 +294,12 @@ fn link_specs(spread: &Spread, links: &mut LinkCollector) -> HashMap<String, Lin
     let mut out: HashMap<String, LinkSpec> = HashMap::new();
     let space_of = |id: &str| -> Option<String> {
         spread.image_metadata.get(id).and_then(|m| m.space.clone())
+    };
+    let intent_of = |id: &str| -> Option<String> {
+        spread
+            .image_metadata
+            .get(id)
+            .and_then(|m| m.rendering_intent.clone())
     };
     let mut add = |id: Option<&str>,
                    link: Option<&str>,
@@ -337,6 +345,7 @@ fn link_specs(spread: &Spread, links: &mut LinkCollector) -> HashMap<String, Lin
                 pixel_box: dims.is_some(),
                 derived: own.is_none() && transform.is_some(),
                 space: space_of(id),
+                rendering_intent: intent_of(id),
                 embed,
             },
         );
@@ -643,6 +652,9 @@ fn write_image(
     let mut attrs: Vec<(&str, String)> = vec![("Self", format!("{host_id}Image"))];
     if let Some(space) = &spec.space {
         attrs.push(("Space", space.clone()));
+    }
+    if let Some(intent) = &spec.rendering_intent {
+        attrs.push(("ImageRenderingIntent", intent.clone()));
     }
     attrs.push((
         "ItemTransform",

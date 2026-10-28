@@ -101,6 +101,10 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
   (rav1d) and JPEG XL (jxl-oxide) behind default features, the web and small formats through
   `image`; CMYK/Lab through paged-color. The renderer and paged-gpu's wasm32 raster-time decode both call
   `decode_rgba8`.
+- `crates/paged-ps/` — a clean-room PostScript Level 2 interpreter for placed EPS (ADR 1033):
+  `interpret` returns the art (fills, strokes, clips, images, gradients) in default user
+  space; the renderer's `pipeline/placed_eps.rs` lays it into the display list. Geometry on
+  kurbo, decode filters from `paged-raster::filters`, colour maths from `paged-color::math`.
 - `crates/paged-psd/` — PSD/PSB model, parser, preservation writer, composite decode,
   layer records (also of a layered TIFF's tag 37724). `crates/paged-pixel/` — the frozen
   pixel types (`PixelFormat`, tiles, regions). Both moved from paged.image (PM-0014,

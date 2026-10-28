@@ -59,6 +59,7 @@ fn scene() -> DisplayList {
         encoded: Default::default(),
         rgba: vec![0u8, 120, 255, 255].repeat(4).into(),
         icc: None,
+        rendering: None,
     });
     list.commands.push(Cmd::Image {
         image_id: ImageId(0),

@@ -8,9 +8,9 @@
   },
   "metrics": {
     "weightedImport": {
-      "covered": 133640,
+      "covered": 133681,
       "total": 633952,
-      "value": 0.210805
+      "value": 0.210869
     },
     "impactImport": {
       "covered": 26646,
@@ -18,9 +18,9 @@
       "value": 0.487424
     },
     "weightedExport": {
-      "covered": 98628,
+      "covered": 98669,
       "total": 633952,
-      "value": 0.155576
+      "value": 0.155641
     },
     "misplacedReads": 30,
     "unseenReads": 433,
@@ -720,6 +720,7 @@
     "Spreads|Guide@PageIndex|attr",
     "Spreads|Image@ActualPpi|attr",
     "Spreads|Image@EffectivePpi|attr",
+    "Spreads|Image@ImageRenderingIntent|attr",
     "Spreads|Image@ItemTransform|attr",
     "Spreads|Image@LinkResourceURI|attr",
     "Spreads|Image@Space|attr",
@@ -1782,6 +1783,7 @@
     "Spreads|Guide@PageIndex|attr",
     "Spreads|Guide@Self|attr",
     "Spreads|Guide@ViewThreshold|attr",
+    "Spreads|Image@ImageRenderingIntent|attr",
     "Spreads|Image@ItemTransform|attr",
     "Spreads|Image@Self|attr",
     "Spreads|Image@Space|attr",

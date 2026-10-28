@@ -55,6 +55,7 @@ const M = defineMessages("image.layerParity", {
   unlink: "Unlink",
   linked: "linked",
   blendingOptions: "Blending options…",
+  layerStyleTitle: "Layer style…",
   rasterize: "Rasterize",
   newFill: "New fill layer…",
   newAdjustment: "New adjustment layer…",
@@ -384,6 +385,7 @@ export function ActiveLayerStrip({
   onLink,
   onUnlink,
   onBlendingOptions,
+  onLayerStyle,
   onRasterize,
 }: {
   layer: LayerInfo | null;
@@ -403,6 +405,8 @@ export function ActiveLayerStrip({
   onLink: () => void;
   onUnlink: () => void;
   onBlendingOptions: () => void;
+  /** Open the Layer Style dialog (the "fx" of the Layers panel). */
+  onLayerStyle?: () => void;
   onRasterize: () => void;
 }) {
   if (!layer) return null;
@@ -494,6 +498,19 @@ export function ActiveLayerStrip({
         >
           {t(M.blendingOptions)}
         </button>
+        {onLayerStyle && layer.kind !== "adjustment" ? (
+          <button
+            type="button"
+            data-image-open-layer-style
+            disabled={disabled}
+            onClick={onLayerStyle}
+            style={small}
+            aria-label={t(M.layerStyleTitle)}
+            title={t(M.layerStyleTitle)}
+          >
+            {layer.style.length > 0 ? `fx · ${layer.style.length}` : "fx"}
+          </button>
+        ) : null}
         {layer.kind === "fill" || layer.kind === "smart" ? (
           <button
             type="button"

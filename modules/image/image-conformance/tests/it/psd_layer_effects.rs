@@ -49,8 +49,10 @@ fn dir() -> PathBuf {
 /// (Photoshop's overlay covers them: a normal 100 % overlay hides a
 /// clipped multiply layer completely — placing it directly above the base
 /// was 100 levels off). Every overlay case agrees within 1 level; a
-/// switched-off Stroke draws nothing and imports; an enabled one is
-/// refused.
+/// switched-off Stroke draws nothing and imports. Since the layer styles
+/// (WP5.4) the overlay is a style effect drawn in the layer's body
+/// (`layers::styles`) and an enabled Stroke imports too: its curve's
+/// anti-aliased edge is the only difference (`psd_layer_styles.rs`).
 const EXPECT: &[(&str, Result<u8, &str>)] = &[
     ("overlay-clip-base", Ok(1)),
     ("overlay-layer-opacity-60", Ok(1)),
@@ -62,13 +64,15 @@ const EXPECT: &[(&str, Result<u8, &str>)] = &[
     ("overlay-overlay-45", Ok(1)),
     ("overlay-soft-edge", Ok(1)),
     ("stroke-disabled", Ok(1)),
-    ("stroke-enabled", Err("layer effects FrFX")),
+    // CONVENTION: a curve's outside stroke, its edge texels (psd_layer_styles.rs).
+    ("stroke-enabled", Ok(76)),
 ];
 
 fn flatten(file: &PsdFile) -> Result<Vec<u8>, String> {
     let import = file.layer_plates_rgba8().map_err(|e| e.to_string())?;
     let ctx = image_conformance::device::test_device().ok_or("no-gpu")?;
-    let stack = LayerStack::from_psd_plates(&import).map_err(|e| e.to_string())?;
+    let stack = LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
+        .map_err(|e| e.to_string())?;
     pollster::block_on(stack.composite(Some(ctx), None))
         .map(|p| p.to_vec())
         .map_err(|e| e.to_string())

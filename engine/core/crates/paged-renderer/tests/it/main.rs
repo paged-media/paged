@@ -63,6 +63,7 @@ mod overset_continuation;
 mod paragraph_pages;
 mod paste_into;
 mod pipeline_lib;
+mod placed_eps_vectors;
 mod placed_pdf_page;
 mod placed_psd;
 mod placed_svg_vectors;

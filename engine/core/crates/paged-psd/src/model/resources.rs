@@ -115,6 +115,47 @@ impl ImageResources {
         })
     }
 
+    /// The data of the first block with `id` (after its name and size),
+    /// read from the block's source bytes.
+    pub fn data(&self, id: u16) -> Option<&[u8]> {
+        let raw = self
+            .blocks
+            .iter()
+            .find(|b| b.id == id)?
+            .raw_block
+            .as_deref()?;
+        // 4 sig + 2 id, the Pascal name padded to even, the u32 size.
+        let name_len = *raw.get(6)? as usize;
+        let at = 6 + (1 + name_len).next_multiple_of(2);
+        let size = u32::from_be_bytes(raw.get(at..at + 4)?.try_into().ok()?) as usize;
+        raw.get(at + 4..at + 4 + size)
+    }
+
+    /// Replace the data of the block with `id`, or append such a block —
+    /// a constructed block, written in its canonical form (signature
+    /// `8BIM`, empty name, data padded to even).
+    pub fn set_data(&mut self, id: u16, data: &[u8]) {
+        let mut raw = Vec::with_capacity(data.len() + 13);
+        raw.extend_from_slice(&RESOURCE_SIGNATURE);
+        raw.extend_from_slice(&id.to_be_bytes());
+        raw.extend_from_slice(&[0, 0]);
+        raw.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        raw.extend_from_slice(data);
+        if data.len() % 2 == 1 {
+            raw.push(0);
+        }
+        let block = ImageResourceBlock {
+            id,
+            name: PascalString::new(""),
+            body: ResourceBody::Opaque,
+            raw_block: Some(raw),
+        };
+        match self.blocks.iter_mut().find(|b| b.id == id) {
+            Some(b) => *b = block,
+            None => self.blocks.push(block),
+        }
+    }
+
     pub fn resolution(&self) -> Option<&ResolutionInfo> {
         self.blocks.iter().find_map(|b| match &b.body {
             ResourceBody::ResolutionInfo(r) => Some(r),

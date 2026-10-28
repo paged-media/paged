@@ -55,8 +55,10 @@
 //     page doors (`viewport.pages@1`) and Export needs `storage.parts@1`.
 //
 // The editor answers every one of those doors, so all of it is live here.
-// paged.slide declares NO tool, keybinding, edit context or object type,
-// and the audit test at the bottom pins that, and how its verbs are reached.
+// paged.slide declares NO tool; its edit contexts are the deck's document
+// context and a chart frame's data (with the chart object type, slide ADR
+// 715). The audit test at the bottom pins that, and how its verbs are
+// reached.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
@@ -183,7 +185,7 @@ const DECLARED = {
   ],
   importers: [IMPORTER],
   exporters: [EXPORTER],
-  partTypes: ["pptx", "slideImport"],
+  partTypes: ["pptx", "slideImport", "chartWorkbook"],
   objectKinds: ["deck", "slide", "layout", "placeholder"],
   typedCommands: [
     NEW_SLIDE,
@@ -201,8 +203,14 @@ const DECLARED = {
     // Insert ▸ Shapes' typed twin, for scripts and the CLI (ADR 717).
     INSERT_SHAPE,
   ],
-  /** The deck's document context (editor ADR 307): no frame is entered. */
-  editContexts: [{ type: "slideDeck", entry: "doubleClick" }],
+  /** The deck's document context (editor ADR 307): no frame is entered;
+   *  and a chart frame's data (slide ADR 715), entered by double-click. */
+  editContexts: [
+    { type: "slideDeck", entry: "doubleClick" },
+    { type: "slideChart", entry: "doubleClick" },
+  ],
+  /** A chart frame claims its members' double-click (slide ADR 715). */
+  objectTypes: [{ type: "slideChart", bakedFallback: "group" }],
   commands: [...Object.keys(PALETTE), ...Object.keys(SHOW)],
 } as const;
 
@@ -484,10 +492,10 @@ test.describe("plugin surface · paged.slide", () => {
     );
     // …and declares nothing in the categories it does not use.
     expect(c.tools, "no tools are declared").toBeUndefined();
-    expect(c.editContexts, "the deck's document context").toEqual([
+    expect(c.editContexts, "the deck's and the chart's contexts").toEqual([
       ...DECLARED.editContexts,
     ]);
-    expect(c.objectTypes, "no object type is declared").toBeUndefined();
+    expect(c.objectTypes, "the chart frame").toEqual([...DECLARED.objectTypes]);
 
     for (const id of c.panels) expect(live.panels, `panel ${id}`).toContain(id);
     for (const id of c.importers)
@@ -504,7 +512,8 @@ test.describe("plugin surface · paged.slide", () => {
     // The deck context is registered (it is entered by no double-click: a
     // deck holds it as its document context).
     expect(live.editContextTypes).toContain("slideDeck");
-    expect(live.objectTypes).not.toContain("x-paged:media.paged.slide");
+    expect(live.editContextTypes).toContain("slideChart");
+    expect(live.objectTypes).toContain("x-paged:media.paged.slide");
 
     // The object model is live in the ONE shared object registry
     // (`host.objects`), with the manifest's titles.
@@ -527,7 +536,7 @@ test.describe("plugin surface · paged.slide", () => {
     test.info().annotations.push({
       type: "surface-finding",
       description:
-        "paged.slide declares partTypes 'pptx' and 'slideImport' but the host ships no partType " +
+        "paged.slide declares partTypes 'pptx', 'slideImport' and 'chartWorkbook' but the host ships no partType " +
         "registry; the declaration is inert metadata the host never reads.",
     });
   });

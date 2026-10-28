@@ -393,6 +393,15 @@ pub(super) fn placed_visible_top_left(obj: &InlineObject, at: &PlacedObject) -> 
     }
 }
 
+/// A Word first-fit paragraph's line, as [`line_object_shift`] needs it:
+/// its auto leading as a multiple of the size (`LayoutOptions::auto_leading`)
+/// and its face's `hhea` ascent in ems (`FontMetrics::hhea_ascender`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct WordLine {
+    pub auto_leading: f32,
+    pub ascent: f32,
+}
+
 /// An in-line object's character in a composed line: the object, the
 /// glyph's cluster, and the anchor character's point size.
 #[derive(Debug, Clone, Copy)]
@@ -420,12 +429,23 @@ pub(super) struct LineObject {
 ///   is a glyph as tall as its rise, so the baseline is at least `top +
 ///   rise` (ascent rule, both leading modes); with an above-line object
 ///   the line sits a full leading below it, `top + room + leading`.
+///
+/// **Word's first-fit** (`word`, engine ADR 1016) sets a line otherwise,
+/// as Word 16 answered `first-fit.word.json` (P01–P07): a line is the text's
+/// ascent above the baseline and the rest of its auto-leaded line below it
+/// (the descent, plus all of a 1.5-line spacing's extra), and a picture
+/// replaces only the ascent. So under auto leading the line moves down by
+/// `rise + auto leading − ascent` where its leading is less: 43 pt for a
+/// 40 pt picture in single-spaced Courier New 10 pt (a 3 pt descent), 48.67
+/// at 1.5 lines, where the InDesign rule gives 42 for both. The ascent is
+/// the face's `hhea` one, Word's.
 pub(super) fn line_object_shift(
     objects: &InlineObjects,
     on_line: &[LineObject],
     auto_leading: bool,
     leading_64: i32,
     first: Option<(i32, i32)>,
+    word: Option<WordLine>,
 ) -> i32 {
     let to_64 = |pt: f32| (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
     let mut above = 0;
@@ -439,7 +459,11 @@ pub(super) fn line_object_shift(
             above += to_64(o.above_room());
         } else {
             rise = rise.max(to_64(o.rise()));
-            need = need.max(to_64(o.rise() + 0.2 * lo.point_size));
+            let below = match word {
+                Some(w) => (w.auto_leading - w.ascent) * lo.point_size,
+                None => 0.2 * lo.point_size,
+            };
+            need = need.max(to_64(o.rise() + below));
         }
     }
     match first {
@@ -1133,6 +1157,9 @@ pub(super) fn emit_anchored_rect_image(
         page_image_cache,
         decoded_cache,
         None,
+        // An anchored frame's `<Image>` keeps no metadata of its own here:
+        // it follows the document's Color Settings.
+        image_rendering(options, None),
     );
 }
 
@@ -1507,6 +1534,7 @@ mod tests {
             ascender: 0.800,
             descender: 0.200,
             em_top: None,
+            hhea_ascender: 0.800,
         }
     }
 
@@ -1564,6 +1592,7 @@ mod tests {
             ascender: 0.750,
             descender: 0.250,
             em_top: None,
+            hhea_ascender: 0.750,
         };
         let lm = LineRefMetrics::resolve(BASELINE_Y, PT, LEADING, Some(&m));
         assert!(
@@ -1604,10 +1633,142 @@ mod tests {
             ascender: 0.0,
             descender: 0.0,
             em_top: None,
+            hhea_ascender: 0.0,
         };
         let lm = LineRefMetrics::resolve(BASELINE_Y, PT, LEADING, Some(&m));
         assert!(lm.top_of_leading_y.is_finite());
         assert!(close(lm.top_of_leading_y, 500.0 - 0.8 * LEADING));
+    }
+
+    // --- line_object_shift: a picture's line, InDesign's and Word's ----
+    //
+    // Word's numbers are its answer to the doc module's first-fit probe
+    // (`paged-text/tests/fixtures/first-fit.word.json`): Courier New 10 pt,
+    // whose hhea ascent is 1705/2048 em and single line 2320/2048 em (the
+    // lowering's measured table), a 20 x 40 pt picture.
+
+    const COURIER_ASCENT: f32 = 1705.0 / 2048.0;
+    const COURIER_SINGLE: f32 = 2320.0 / 2048.0;
+
+    fn picture(height: f32) -> InlineObjects {
+        InlineObjects {
+            objects: vec![InlineObject {
+                frame: 0,
+                above_line: false,
+                width: 20.0,
+                height,
+                stroke_half: 0.0,
+                y_offset: 0.0,
+                alignment: String::new(),
+            }],
+            next: 0,
+            placed: vec![None],
+        }
+    }
+
+    const ON_LINE: [LineObject; 1] = [LineObject {
+        object: 0,
+        cluster: 0,
+        point_size: 10.0,
+    }];
+
+    fn to_64(pt: f32) -> i32 {
+        (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32
+    }
+
+    fn to_pt(v: i32) -> f32 {
+        v as f32 / paged_text::shape::ADVANCE_PRECISION
+    }
+
+    /// How far below the line before it a line holding a `height` pt
+    /// picture sits, under auto leading `pitch` pt (10 pt text).
+    fn step(height: f32, pitch: f32, word: bool) -> f32 {
+        let word = word.then_some(WordLine {
+            auto_leading: pitch / 10.0,
+            ascent: COURIER_ASCENT,
+        });
+        let l = to_64(pitch);
+        to_pt(l + line_object_shift(&picture(height), &ON_LINE, true, l, None, word))
+    }
+
+    /// Word's baseline step INTO a picture case's line `k` from line
+    /// `k - 1` of the same paragraph (same face: the difference of the
+    /// glyph tops pdftotext reports).
+    fn word_step(label: &str, k: usize) -> f32 {
+        let answer: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../paged-text/tests/fixtures/first-fit.word.json"
+        ))
+        .unwrap();
+        let case = answer["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["label"] == label)
+            .unwrap();
+        let lines = case["word_lines"].as_array().unwrap();
+        let top = |i: usize| lines[i]["top_pt"].as_f64().unwrap() as f32;
+        top(k) - top(k - 1)
+    }
+
+    /// Word places its line positions on a grid of about a quarter point
+    /// (its 11.33 pt single lines step 11.25 and 11.5 in the PDF).
+    const WORD_GRID: f32 = 0.2;
+
+    #[test]
+    fn a_picture_line_under_word_first_fit_takes_words_height() {
+        let single = COURIER_SINGLE * 10.0;
+        let one_and_half = single * 1.5;
+        // P06: single spacing, the picture on the paragraph's 2nd line.
+        let word = word_step("P06", 1);
+        let ours = step(40.0, single, true);
+        assert!(
+            (ours - word).abs() < WORD_GRID,
+            "P06: {ours} vs Word {word}"
+        );
+        assert!((ours - 43.0).abs() < 0.01, "40 pt plus the 3 pt descent");
+        // ... and the line after it steps the text's pitch again.
+        assert!((word_step("P06", 2) - single).abs() < WORD_GRID);
+        // P07: 1.5 lines. The extra half line stays below the baseline.
+        let word = word_step("P07", 1);
+        let ours = step(40.0, one_and_half, true);
+        assert!(
+            (ours - word).abs() < WORD_GRID,
+            "P07: {ours} vs Word {word}"
+        );
+        assert!((word_step("P07", 2) - one_and_half).abs() < WORD_GRID);
+        // P05: a 4 pt picture is lower than the text: the pitch holds.
+        assert!((step(4.0, single, true) - single).abs() < 0.01);
+        // P03: at least 14 pt, which the lowering sets as auto leading at
+        // the single line with the text runs at 14 pt (the line's leading
+        // below): 40 + 3, as at single spacing — Word's 43.1 (from P02o
+        // and P03n, `word_step` cannot see across paragraphs).
+        let l = to_64(14.0);
+        let w = WordLine {
+            auto_leading: COURIER_SINGLE,
+            ascent: COURIER_ASCENT,
+        };
+        let ours = to_pt(l + line_object_shift(&picture(40.0), &ON_LINE, true, l, None, Some(w)));
+        assert!((ours - 43.0).abs() < 0.01, "P03: {ours}");
+    }
+
+    #[test]
+    fn a_picture_line_keeps_indesigns_rule_outside_word_first_fit() {
+        // `rise + 0.2 x pt`, measured on InDesign 20.0.1: 42 pt, whatever
+        // the auto leading — the rule Word's lines were set by before.
+        assert!((step(40.0, 12.0, false) - 42.0).abs() < 0.01);
+        assert!((step(40.0, COURIER_SINGLE * 15.0, false) - 42.0).abs() < 0.01);
+        // At a frame's first line both put the baseline a rise below the
+        // top (Word's P01, the first line of page 2: its glyph top at
+        // 103.70 pt, 72 + 40 less the 8.3 pt ascent pdftotext reports).
+        let first = Some((to_64(8.0), 0));
+        let w = Some(WordLine {
+            auto_leading: COURIER_SINGLE,
+            ascent: COURIER_ASCENT,
+        });
+        for word in [None, w] {
+            let d = line_object_shift(&picture(40.0), &ON_LINE, true, to_64(11.33), first, word);
+            assert!((to_pt(to_64(8.0) + d) - 40.0).abs() < 0.01);
+        }
     }
 
     // --- PageMargins vs PageEdge span divergence ----------------------

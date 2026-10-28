@@ -529,6 +529,7 @@ mod tests {
             encoded: Default::default(),
             rgba: vec![255u8; 16].into(),
             icc: None,
+            rendering: None,
         });
         let p = rect_path(&mut list, 0.0, 0.0, 10.0, 10.0);
         list.push(DisplayCommand::BeginBlendGroup {

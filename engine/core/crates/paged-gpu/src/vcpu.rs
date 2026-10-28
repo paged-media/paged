@@ -1905,7 +1905,7 @@ fn image_pixmap(img: &paged_compose::DecodedImage) -> Option<Pixmap> {
     let rgba = if img.rgba.len() == expected {
         img.rgba.as_ref().to_vec()
     } else if !img.encoded.is_empty() {
-        decode_image_for_render(&img.encoded, img.width, img.height)?
+        decode_image_for_render(&img.encoded, img.width, img.height, img.rendering)?
     } else {
         return None;
     };
@@ -1919,10 +1919,18 @@ fn image_pixmap(img: &paged_compose::DecodedImage) -> Option<Pixmap> {
 
 /// Decode encoded image bytes to RGBA8 at the dimensions the build
 /// recorded, resizing when a DCT-scaled JPEG decodes at another size.
-fn decode_image_for_render(bytes: &[u8], expected_w: u32, expected_h: u32) -> Option<Vec<u8>> {
+fn decode_image_for_render(
+    bytes: &[u8],
+    expected_w: u32,
+    expected_h: u32,
+    rendering: Option<paged_raster::Rendering>,
+) -> Option<Vec<u8>> {
     // One function for both lanes: paged-raster decodes (a TIFF or PSD
-    // capped at the recorded size) and resamples to it.
-    paged_raster::decode_rgba8_at(bytes, expected_w, expected_h)
+    // capped at the recorded size) and resamples to it, converting with
+    // the frame's rendering intent that the build recorded on the lazy
+    // image.
+    let conv = paged_raster::PagedColour::new(rendering.unwrap_or_default());
+    paged_raster::decode_rgba8_at_with(bytes, expected_w, expected_h, &conv)
 }
 
 /// A scratch rectangle for `bbox_pt` padded by `pad_pt`, in the pixels

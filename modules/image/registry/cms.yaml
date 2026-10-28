@@ -40,12 +40,11 @@
   # Print lane, RGB↔RGB half: genuine per-intent LUT selection (all four
   # map 1:1 to moxcms RenderingIntent; none silently degraded — the qcms
   # gap, audit §A). Proven intent-dependent on a synthetic LUT profile with
-  # distinct A2B0/A2B1 tables. BPC: moxcms 0.8.1 exposes no runtime BPC knob
-  # (the TransformOptions field is commented out upstream; the BPC module is
-  # dead code) — bpc:true is recorded for provenance but byte-identical to
-  # bpc:false. The BPC-fidelity row stays pinned to a future moxcms release
-  # (or the lcms2-shaped export oracle); the test documents the gap by
-  # contrasting with lcms2 BLACKPOINT_COMPENSATION which DOES move pixels.
+  # distinct A2B0/A2B1 tables. BPC: honoured since 2026-10-24 — the lane is
+  # an adapter over the engine's paged_color::cms, which implements Adobe's
+  # published BPC algorithm for moxcms (no BPC of its own); within 0/255 of
+  # lcms2 BLACKPOINT_COMPENSATION on a lifted-black display profile (ADR 457
+  # amendment of 2026-10-24).
   gpu_tolerance: { kind: channel_eps_u8, value: 3, note: "vs lcms2 oracle, RGB↔RGB matrix-shaper" }
   provenance:
     - "ICC.1 v2/v4; moxcms 0.8.1 (pure-Rust, BSD-3-Clause OR Apache-2.0)"
@@ -92,15 +91,10 @@
   # INTENT CONVENTION (Photoshop oracle, 2026-10): Photoshop's RGB view of
   # a CMYK document under its default Color Settings is Adobe ACE,
   # RELATIVE COLORIMETRIC + BLACK-POINT COMPENSATION (read from the app).
-  # moxcms 0.8.1 has no BPC; relcol without it is 28 levels off on the
-  # Coated FOGRA39 ink patches, while PERCEPTUAL (the profile's A2B0,
-  # black already at the PCS black) is within max 4 / mean 0.44 — as
-  # close as lcms2's own relcol+BPC (max 4 / mean 0.17). So the lane uses
-  # Perceptual and states it as "Photoshop's default view, approximated
-  # by the perceptual table". Saturated greens outside sRGB clip
-  # differently in ACE (up to 23 levels, identical for moxcms and lcms2).
-  # A profile whose perceptual table is not black-scaled would break the
-  # approximation; real BPC would be the fix (moxcms has none yet).
+  # Since 2026-10-24 the lane does exactly that (the engine's BPC over
+  # moxcms): max 1 / mean 0.06 on the Coated FOGRA39 ink patches, 4 levels
+  # on the saturated cyan-green ACE clips differently. (The perceptual-table
+  # approximation it replaced was max 4 / mean 0.44, that outlier 23.)
   gpu_tolerance:
     kind: channel_eps_u8
     value: 20

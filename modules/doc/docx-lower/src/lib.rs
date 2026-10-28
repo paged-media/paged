@@ -1483,27 +1483,44 @@ impl Lowering {
         // one the object overlaps the lines above. So a body paragraph with
         // a picture takes auto leading, which a leading of 0 asks for, at
         // the percentage that makes its text lines step Word's pitch.
-        let exact = {
+        let spacing_rule = {
             let style = self.style_of(p).map(str::to_owned);
             self.resolve_spacing(p.props.line_spacing, style.as_deref())
-                .is_some_and(|ls| ls.rule == LineRule::Exact)
+                .map(|ls| ls.rule)
         };
+        let exact = spacing_rule == Some(LineRule::Exact);
         let grows_for_picture =
             can_carry.is_some() && !exact && p.runs.iter().any(|r| !r.images.is_empty());
+        // Under at-least spacing above the face's single line, the pitch
+        // the picture paragraph's text runs carry (below).
+        let mut picture_run_pitch: Option<f32> = None;
         if grows_for_picture {
             props.push(len("characterLeading", 0.0));
             // Auto leading scaled to Word's pitch, so the paragraph's text
             // lines keep Word's step (13.8 pt for 12 pt Times New Roman, not
             // 1.2 x 12) while the picture's line still grows to the picture
-            // (ADR 617).
+            // (ADR 617). Under Word's first-fit the engine sets the picture's
+            // line as Word does: the picture over the baseline, the rest of
+            // the auto-leaded line (descent and a 1.5-line spacing's extra)
+            // under it (engine ADR 1016, `first-fit.word.json` P01-P07).
             let style = self.style_of(p).map(str::to_owned);
             let first = p.runs.iter().find(|r| !r.text.is_empty());
-            let size_pt = self
-                .resolve_face(first, style.as_deref())
-                .1
-                .map_or(10.0, |h| h as f32 / 2.0);
+            let (font, half_pts) = self.resolve_face(first, style.as_deref());
+            let size_pt = half_pts.map_or(10.0, |h| h as f32 / 2.0);
             if let Some(pitch) = self.paragraph_pitch(p).filter(|_| size_pt > 0.0) {
-                props.push(len("paragraphAutoLeading", pitch / size_pt * 100.0));
+                // At-least spacing puts its extra ABOVE the text, so under a
+                // picture only the descent remains (P03: a 40 pt picture's
+                // line is 43 pt at "at least 14 pt", as at single spacing).
+                // The auto leading is then the face's single line, and the
+                // text runs carry the pitch, so text lines keep it.
+                let single = self.single_line(font.as_deref(), half_pts);
+                let auto = if spacing_rule == Some(LineRule::AtLeast) && pitch > single + 0.001 {
+                    picture_run_pitch = Some(pitch);
+                    single
+                } else {
+                    pitch
+                };
+                props.push(len("paragraphAutoLeading", auto / size_pt * 100.0));
             }
         } else if let Some(pt) = self.paragraph_pitch(p) {
             let inherited = self
@@ -1660,9 +1677,12 @@ impl Lowering {
         }
 
         // A picture paragraph is auto-leaded as a whole (above): its runs
-        // carry no leading of their own. Nor do a cell's (the engine sets a
-        // cell paragraph by its first run's leading).
-        let run_leadings = if grows_for_picture || can_carry.is_none() {
+        // carry no leading of their own, except its at-least pitch. Nor do a
+        // cell's (the engine sets a cell paragraph by its first run's
+        // leading).
+        let run_leadings = if let Some(pitch) = picture_run_pitch {
+            vec![Some(pitch); p.runs.iter().filter(|r| !r.text.is_empty()).count()]
+        } else if grows_for_picture || can_carry.is_none() {
             Vec::new()
         } else {
             self.run_pitches(p)

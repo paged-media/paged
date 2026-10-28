@@ -17,42 +17,26 @@
  */
 
 //! The qcms backend — the display-consistency engine (D-11 ruling §F.1
-//! in the A-0 audit): the exact build core uses (qcms 0.3, `cmyk` +
-//! `iccv4-enabled`), so "the page" and "the image editor" agree by
-//! construction. Known limits inherited deliberately (audit §A): no
-//! BPC, 8-bit endpoints, Perceptual/RelCol-centric intents — the print
-//! lane (moxcms, M1) covers what this backend can't.
+//! in the A-0 audit): the engine's own qcms build (`paged_color::cms`,
+//! [`Backend::Qcms`]), so "the page" and "the image editor" agree by
+//! construction. Known limits (audit §A): no BPC, 8-bit endpoints,
+//! perceptual/relative-colorimetric-centric intents — the print lane
+//! (moxcms) covers what this backend can't.
 //!
-//! `bpc: true` requests are accepted and recorded on the handle but
-//! not honored by qcms — the conformance row for BPC fidelity is
-//! pinned to the moxcms lane; display-path consistency tests compare
-//! against core's identical non-BPC behavior.
+//! `bpc: true` requests are accepted and recorded on the handle but not
+//! honoured: qcms has no black-point compensation and no PCS access to
+//! compute one, so the transform is compiled without it (the engine's
+//! API would refuse the request; this adapter keeps the documented
+//! display-lane behaviour).
 
-use crate::{CmsEngine, CmsError, CompiledTransform, ExactTransform, Intent, Profile};
+use paged_color::cms::{Backend, Layout, ProfileRef, Rendering, Transform};
+
+use crate::{
+    adapt_err, map_intent, Adapted, CmsEngine, CmsError, CompiledTransform, Intent, Profile,
+};
 
 #[derive(Debug, Default)]
 pub struct QcmsEngine;
-
-fn map_intent(i: Intent) -> qcms::Intent {
-    match i {
-        Intent::Perceptual => qcms::Intent::Perceptual,
-        Intent::RelativeColorimetric => qcms::Intent::RelativeColorimetric,
-        Intent::Saturation => qcms::Intent::Saturation,
-        Intent::AbsoluteColorimetric => qcms::Intent::AbsoluteColorimetric,
-    }
-}
-
-struct QcmsRgba8 {
-    transform: qcms::Transform,
-}
-
-impl ExactTransform for QcmsRgba8 {
-    fn apply_rgba8(&self, pixels: &mut [u8]) {
-        // qcms converts src → dst; the in-place contract copies once.
-        let src = pixels.to_vec();
-        self.transform.convert(&src, pixels);
-    }
-}
 
 impl CmsEngine for QcmsEngine {
     fn compile(
@@ -62,26 +46,21 @@ impl CmsEngine for QcmsEngine {
         intent: Intent,
         bpc: bool,
     ) -> Result<CompiledTransform, CmsError> {
-        let src_profile = qcms::Profile::new_from_slice(&src.bytes, false)
-            .ok_or_else(|| CmsError::BadProfile("source profile rejected by qcms".into()))?;
-        let mut dst_profile = qcms::Profile::new_from_slice(&dst.bytes, false)
-            .ok_or_else(|| CmsError::BadProfile("destination profile rejected by qcms".into()))?;
-        dst_profile.precache_output_transform();
-
-        let transform = qcms::Transform::new(
-            &src_profile,
-            &dst_profile,
-            qcms::DataType::RGBA8,
-            map_intent(intent),
+        let t = Transform::new(
+            Backend::Qcms,
+            ProfileRef::Icc(&src.bytes),
+            Layout::RGBA,
+            ProfileRef::Icc(&dst.bytes),
+            Layout::RGBA,
+            Rendering::new(map_intent(intent), false),
         )
-        .ok_or_else(|| CmsError::Unsupported("qcms could not build the RGBA8 transform".into()))?;
-
+        .map_err(adapt_err)?;
         Ok(CompiledTransform {
             src: src.hash,
             dst: dst.hash,
             intent,
             bpc,
-            backend: Box::new(QcmsRgba8 { transform }),
+            backend: Box::new(Adapted(t)),
         })
     }
 }

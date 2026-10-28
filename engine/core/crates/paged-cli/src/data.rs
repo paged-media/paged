@@ -40,9 +40,10 @@
 //! swatch has is minted as one first; a record flow is paginated into one
 //! frame per page, on pages it adds, replacing the previous flow (core ADR
 //! 1014, amendments 3 and 4). What no headless lane can write is reported
-//! per binding, never skipped silently: remote images (the command line has
-//! no network client) and document asset ids (no document keeps their
-//! bytes).
+//! per binding, never skipped silently: a remote image whose origin the run
+//! does not list (`--allow-origin`, amendment 5: the run's consent, as the
+//! editor's per-origin consent is) and document asset ids (no document keeps
+//! their bytes).
 
 use std::path::{Path, PathBuf};
 
@@ -64,6 +65,7 @@ use serde_json::{json, Map, Value};
 
 use crate::engine::Session;
 use crate::export::PdfOptions;
+use crate::fetch::{FetchPolicy, Fetched};
 use crate::options::DocumentOptions;
 
 /// The addresses a selector names in the loaded document.
@@ -746,7 +748,7 @@ fn fitted(session: &Session, raw: &str, fit: &str, bytes: &[u8]) -> Option<[f32;
 /// (`ReplaceImageBytes`, the lane `paged place` uses: a link would resolve
 /// against a resolver this door never populates), then its fit. A local
 /// path is read relative to the `--source` files' folders; a remote uri is
-/// never fetched here.
+/// fetched only from an origin the run lists (`crate::fetch`).
 fn apply_image(
     session: &mut Session,
     data: &mut DataSession,
@@ -754,6 +756,7 @@ fn apply_image(
     record: usize,
     facts: &HostFacts,
     source_dirs: &[PathBuf],
+    origins: &FetchPolicy,
 ) -> Applied {
     let binding = id.as_str();
     let image = match data.resolve_lowered_at(id, record) {
@@ -776,12 +779,23 @@ fn apply_image(
         Err(e) => return failed(binding, e.to_string()),
     };
     let (bytes, shown) = match &image.reference {
-        ImageReference::Uri { uri } => {
-            return Applied::new(binding, "notHeadless").because(format!(
-                "{uri}: remote images need the editor's consented fetch (the command line \
-                 has no network client and never fetches)"
-            ))
-        }
+        ImageReference::Uri { uri } => match crate::fetch::fetch(origins, uri) {
+            Fetched::Bytes(bytes) => (bytes, uri.clone()),
+            Fetched::NotListed(origin) => {
+                return Applied::new(binding, "notHeadless").because(format!(
+                    "{uri}: remote images need the editor's consented fetch, or \
+                     --allow-origin {origin} on this run (nothing is fetched from an origin \
+                     the run does not list)"
+                ))
+            }
+            Fetched::NoClient => {
+                return Applied::new(binding, "notHeadless").because(format!(
+                    "{uri}: remote images need the editor's consented fetch (this paged was \
+                     built without the `fetch` feature: it has no network client)"
+                ))
+            }
+            Fetched::Failed(message) => return failed(binding, format!("{uri}: {message}")),
+        },
         ImageReference::AssetId { id: asset } => {
             return Applied::new(binding, "notHeadless").because(format!(
                 "asset:{asset}: no asset store keeps an asset id's bytes — neither a \
@@ -1621,16 +1635,18 @@ fn swatch_for(session: &mut Session, intent: &ColorIntent) -> Result<String> {
     Ok(named)
 }
 
-/// `paged data apply DOC --source ID=FILE … [--record N] [-o OUT]`.
+/// `paged data apply DOC --source ID=FILE … [--record N] [--allow-origin ORIGIN …] [-o OUT]`.
 pub fn apply(
     doc: &Path,
     assets: &DocumentOptions,
     sources: &[String],
     record: usize,
+    allow_origins: &[String],
     out: Option<&PathBuf>,
     pdf: &PdfOptions,
     json: bool,
 ) -> Result<()> {
+    let origins = FetchPolicy::from_flags(allow_origins)?;
     let mut session = Session::new();
     assets.open(&mut session, doc)?;
     let recipe = read_recipe(&mut session)?;
@@ -1721,6 +1737,7 @@ pub fn apply(
                 record,
                 facts,
                 &source_dirs,
+                &origins,
             )),
             Binding::Barcode { .. } => {
                 applied.push(apply_barcode(&mut session, &mut data, id, record, facts))

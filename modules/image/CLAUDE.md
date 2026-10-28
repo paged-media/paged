@@ -131,7 +131,8 @@ image-pipeline/      Engine A: lazy DAG, demand-driven ROI, op cache, sinks
 image-graph/         Engine B: tiled buffer graph — store, eval, tile cache,
                      set_params/gesture split, COW undo journal (journal.rs:
                      bounded, tile-granular, scoped per buffer)
-image-cms/           CmsEngine trait; qcms display backend (D-11: hybrid)
+image-cms/           CmsEngine trait over the engine's paged_color::cms (qcms display,
+                     moxcms print lane with intents + BPC; ADR 457)
 image-codecs/        ImageSource/ImageTarget/ByteSource + adapters over the
                      engine's paged-raster, the only decoder/encoder (ADR 468)
 (engine) paged-psd    PSD/PSB model + parser + preservation writer

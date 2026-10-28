@@ -16597,6 +16597,7 @@ mod tests {
                 encoded: bytes::Bytes::from(file.clone()),
                 rgba: bytes::Bytes::new(),
                 icc: None,
+                rendering: None,
             },
         );
         // Now the door hands back the ORIGINAL encoded bytes + natural dims.

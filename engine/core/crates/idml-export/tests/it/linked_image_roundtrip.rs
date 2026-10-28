@@ -312,3 +312,30 @@ fn an_existing_link_is_rebased_too() {
     assert_eq!(out.links[0].source_uri, "file:/old/place/apples.png");
     assert!(out.links[0].bytes.is_none());
 }
+
+#[test]
+#[allow(non_snake_case)]
+fn a_written_image_keeps_its_rendering_intent__feat__color_swatches_cms_unified() {
+    let src = source(SPREAD_WITH_RECT);
+    let mut doc = pkg::open(&src);
+    let spread = &mut doc.spreads[0].spread;
+    spread.rectangles[0].image_link = Some("assets/press.tif".into());
+    spread.image_metadata.insert(
+        "r1".into(),
+        idml_import::ImageMetadata {
+            rendering_intent: Some("Perceptual".into()),
+            ..Default::default()
+        },
+    );
+    let out = write_idml(&doc, &src).expect("write");
+    let xml = pkg::entry(&out, "Spreads/Spread_s1.xml").expect("spread");
+    assert!(
+        xml.contains(r#"<Image Self="r1Image" ImageRenderingIntent="Perceptual""#),
+        "{xml}"
+    );
+    let re = pkg::open(&out);
+    assert_eq!(
+        re.spreads[0].spread.image_metadata["r1"].explicit_rendering_intent(),
+        Some("Perceptual")
+    );
+}

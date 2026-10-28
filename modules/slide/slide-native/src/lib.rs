@@ -378,6 +378,22 @@ pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
     if let Some(f) = &it.meta.frame {
         data.insert("frame".into(), f.clone().into());
     }
+    if let Some(c) = &it.meta.chart {
+        data.insert("chart".into(), c.clone().into());
+        // The frame's box on the page (x, y, w, h), where a redraw of the
+        // live chart starts from (ADR 715).
+        let m = &it.transform;
+        let r = |v: f64| (v * 1000.0).round() / 1000.0;
+        data.insert(
+            "box".into(),
+            serde_json::json!([
+                r(m[4]),
+                r(m[5]),
+                r(it.w * m[0].hypot(m[1])),
+                r(it.h * m[2].hypot(m[3]))
+            ]),
+        );
+    }
     if data.is_empty() {
         return None;
     }
@@ -1917,6 +1933,81 @@ pub fn write(
         elements: built.elements,
         diagnostics: built.diagnostics,
     })
+}
+
+/// The `format` of the engine's page-item snippets (engine ADR 193).
+pub const SNIPPET_FORMAT: &str = "paged.snippet/1";
+
+/// One item of a slide as a page-item snippet (engine ADR 193): the item
+/// built exactly as [`build`] builds it on its slide (its members, stories,
+/// label and the colours, gradients and styles they name), in the JSON the
+/// engine's `pasteElements` takes. A live chart redrawn after its data
+/// changed (ADR 715) is pasted in place of the group it replaces. `slide`
+/// is the item's slide in `deck`; the item must be one of its top-level
+/// items.
+pub fn snippet(deck: &Deck, slide: usize, item: &Item) -> Result<String, String> {
+    let page = deck
+        .slides
+        .get(slide)
+        .ok_or_else(|| format!("no slide {slide}"))?;
+    let mini = Deck {
+        masters: Vec::new(),
+        slides: vec![SlidePage {
+            items: vec![item.clone()],
+            notes: None,
+            transition: None,
+            timing_xml: None,
+            ..page.clone()
+        }],
+        diagnostics: Vec::new(),
+        ..deck.clone()
+    };
+    let built = build(&mini, &|_| None, "snippet");
+    let mut doc = built.document;
+    let mut spread = doc
+        .spreads
+        .pop()
+        .ok_or_else(|| "the item built no spread".to_string())?
+        .spread;
+    spread.pages.clear();
+    spread.labels.remove(&page.id);
+    // The box of the item's outline, spread space: [top, left, bottom, right].
+    let m = &item.transform;
+    let corners = [(0.0, 0.0), (item.w, 0.0), (0.0, item.h), (item.w, item.h)];
+    let (mut l, mut t, mut r, mut b) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for (x, y) in corners {
+        let (px, py) = (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]);
+        l = l.min(px);
+        t = t.min(py);
+        r = r.max(px);
+        b = b.max(py);
+    }
+    let text = doc
+        .stories
+        .iter()
+        .flat_map(|s| s.story.paragraphs.iter())
+        .flat_map(|p| p.runs.iter())
+        .map(|r| r.text.as_str())
+        .collect::<Vec<_>>()
+        .join("");
+    let value = serde_json::json!({
+        "format": SNIPPET_FORMAT,
+        "spread": spread,
+        "stories": doc.stories,
+        "hyperlinks": [],
+        "bounds": [n(t), n(l), n(b), n(r)],
+        "page_origin": [0.0, 0.0],
+        "page_id": page.id,
+        "resources": {
+            "colors": doc.palette.colors,
+            "swatches": doc.palette.swatches,
+            "gradients": doc.palette.gradients,
+            "paragraph_styles": doc.styles.paragraph_styles,
+            "character_styles": doc.styles.character_styles,
+        },
+        "text": text,
+    });
+    serde_json::to_string(&value).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

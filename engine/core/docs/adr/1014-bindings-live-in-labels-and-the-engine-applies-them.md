@@ -68,7 +68,8 @@ object each one writes, and the files the recipe's sources ask for. `paged data 
 What the headless lane cannot write yet is listed per binding as `notHeadless`, never skipped. That
 covered images, tables, barcodes, record flows, rules, and a colour no swatch has (these need the
 module's lowering writers or a swatch mint). Amendment 3 writes all of them but record flows and
-two image references; amendment 4 writes record flows.
+two image references; amendment 4 writes record flows; amendment 5 writes a remote image whose
+origin the run lists.
 
 **One selector grammar.** The durable selector of a labelled page item is
 `frame[label.x-paged:media.paged.data*="\"oid\":\"pd-…\""]`, a quoted value holding its own quotes.
@@ -86,8 +87,9 @@ selector meant a literal backslash in the engine, or was refused there.
   published wasm packages (`canvas-wasm`, the viewer) do not depend on them.
 - serde_json's `float_roundtrip`, which the data crates use, unifies across a `--workspace` build of
   the engine. The engine's suite passes with it.
-- Still to come: images a remote uri names, which need an HTTP client the engine workspace does
-  not have (amendment 4), a `data@1` door over the same session (extensions ADR 343), and the bundle calling the
+- The `paged` binary is the one engine artifact with a network client (amendment 5): an optional,
+  default-on `fetch` feature of `paged-cli`, reached by no crate a wasm package builds.
+- Still to come: a `data@1` door over the same session (extensions ADR 343), and the bundle calling the
   engine's reader and guard instead of keeping its own (one implementation instead of two, held
   together by the shared cases until then).
 
@@ -208,10 +210,13 @@ What is written now:
   property is set. Because the swatches are read first, a second apply finds the one the first
   minted. A swatch name the document lacks, with no literal colour behind it, is `failed`.
 
-What stays `notHeadless`, and why (record flows are written since amendment 4):
+What stays `notHeadless`, and why (record flows are written since amendment 4, remote images of
+a listed origin since amendment 5):
 
-- **A remote image uri.** Fetching it needs the editor's consented fetch. The CLI never reaches
-  the network: it has no HTTP client.
+- **A remote image uri whose origin the run does not list.** The editor fetches it on the
+  user's consent; the command line on `--allow-origin` (amendment 5). The row's reason names the
+  flag with the uri's origin. A binary built without the `fetch` feature has no client and says
+  so.
 - **A document asset id.** No document keeps an asset id's bytes (amendment 4).
 
 One gap this left open was closed on 2026-10-28: the IDML export wrote `AppliedCellStyle` on cells
@@ -258,7 +263,8 @@ with the re-lower plan of `relower.ts` (`planRelower`):
   every record. A flow with no records removes the previous flow; when there is none, it is
   `kept`.
 
-The two image references stay `notHeadless`:
+The two image references stay `notHeadless` (since amendment 5, a remote uri of a listed origin is
+placed):
 
 - **A remote image uri.** The editor fetches it only for an origin the user consented to (editor
   ADR 218; data spec §11). The engine workspace has no HTTP client and no TLS stack, so the command
@@ -271,3 +277,59 @@ The two image references stay `notHeadless`:
   asset column's fetched bytes live in the module's per-user blob store (`host.blob`), outside the
   document. The editor's own image writer skips an asset id too (`placeableUri` gives none). The
   reason in the row says so.
+
+## Amendment 5 (2026-10-28): remote images on consent
+
+`paged data apply` fetches the image a remote uri names (`http://…`, `https://…`) when the run lists
+its origin, and places the bytes exactly as it places a local `path` image: the decode check
+(`failed` on bytes the engine cannot decode), `ReplaceImageBytes`, the fit and the fitted inner
+transform. The policy is `paged-cli/src/fetch.rs`.
+
+- **The flag.** `--allow-origin ORIGIN`, repeatable. ORIGIN is `scheme://host[:port]` (a lone
+  trailing `/` is accepted; a path, a query or user info is an error). Origins compare exactly
+  after normalising: scheme and host lowercased, and the default port (443 for https, 80 for
+  http) the same whether written or implied. `https://example.com` is not
+  `https://images.example.com`, `http://example.com` or `https://example.com:8443`.
+- **No flag, no fetch.** A uri whose origin no flag lists is `notHeadless`, and nothing is sent to
+  it. The reason names the flag with that origin (`--allow-origin https://example.com`).
+- **Redirects.** None is followed by the client itself. The policy follows at most 3, each only to a
+  listed origin, checked before the request; a `Location` is resolved against the URL that
+  answered. A redirect to an unlisted origin is `failed`, naming that origin, and that origin is
+  never asked. A fourth redirect is `failed`.
+- **http for localhost only.** https for any listed origin; plain http only for `localhost`,
+  `127.0.0.1` and `[::1]`. Any other http origin, listed or redirected to, is `failed` ("plain
+  http is refused except for localhost").
+- **Limits.** At most 50 MiB of body: the read stops at the cap and the binding is `failed`. 30 s
+  for the whole fetch, redirects included. `User-Agent: paged/<version>`.
+- **Nothing ambient.** No cookie store (ureq's `cookies` feature is off). No credentials: a URL with
+  user info is refused, and no `Authorization` header is sent. No proxy: ureq's default reads
+  `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` from the environment, and the agent sets the proxy to
+  none, because a proxy is a host the run did not list. No content encoding is asked for (ureq's
+  `gzip` feature is off), so the cap counts the bytes on the wire.
+- **The client.** `ureq` 3 (MIT OR Apache-2.0), blocking, on `rustls` 0.23 with the `ring` crypto
+  provider. Not aws-lc-rs: it needs cmake and a C toolchain beyond the `cc` build ring has. The
+  roots are the platform's trust store, read through `rustls-native-certs` (Apache-2.0 OR ISC OR
+  MIT; the system keychain on macOS, the OS bundle elsewhere, or `SSL_CERT_FILE` / `SSL_CERT_DIR`),
+  loaded only for an https fetch. A machine therefore trusts on the command line what its browser
+  trusts, enterprise roots included, and no bundled root set goes stale with the binary. It also
+  keeps the licence allow-list as it is. `webpki-roots` and `rustls-platform-verifier` (which
+  pulls `webpki-root-certs` on some targets) are CDLA-Permissive-2.0, which `deny.toml` does not
+  list. Every crate the client adds (ureq, ureq-proto, rustls, rustls-webpki, rustls-pki-types,
+  rustls-native-certs, ring, untrusted, zeroize, http, httparse, percent-encoding, utf8-zero, and
+  per platform security-framework, core-foundation, openssl-probe or schannel) is MIT, Apache-2.0
+  or ISC, and `cargo deny check` passes.
+- **Native only.** The client is an optional dependency of `paged-cli` behind its default-on
+  feature `fetch`. A `--no-default-features` build has no network client: a remote image stays
+  `notHeadless`, and its reason says the build has no client. No crate a wasm package builds
+  reaches it (`cargo tree -p paged-canvas-wasm --target wasm32-unknown-unknown` holds none of them).
+- **One rule.** The editor fetches a remote source or image only for an origin the user consented
+  to, and only for one its build lists (editor ADR 218; data spec §11). `--allow-origin` is the same
+  rule expressed per run: the person who runs the command consents by naming the origin, for that
+  run only. Nothing is remembered, and a document never widens it. A document's bindings still
+  never fetch on open.
+
+`PAGED_FETCH_MAX_BYTES` lowers the cap for one run (the tests reach it without serving 50 MiB); it
+cannot raise it. The tests serve from a listener on `127.0.0.1` inside the test, with no other
+network: an unlisted origin (not asked), a listed one (placed, in the saved document, with the user
+agent and no cookie or authorization header), a redirect to an unlisted origin (failed, not asked),
+a redirect loop (failed after three), and a body past the cap (failed).

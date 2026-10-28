@@ -61,6 +61,7 @@ mod image_convert;
 mod image_decode;
 mod images;
 mod keeps;
+mod placed_eps;
 mod placed_pdf;
 mod placed_svg;
 mod resume;
@@ -94,7 +95,7 @@ use anchored::{emit_anchored_textframe_story, MAX_ANCHORED_STORY_RECURSION};
 #[cfg(doc)]
 use tables::emit_cell_paragraph;
 
-use images::{emit_oval_image, emit_polygon_image, emit_rectangle_image};
+use images::{emit_oval_image, emit_polygon_image, emit_rectangle_image, image_rendering};
 use tables::emit_table_into_chain;
 
 pub(crate) use shapes::{

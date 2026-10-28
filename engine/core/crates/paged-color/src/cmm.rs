@@ -55,7 +55,7 @@ pub enum WorkingColor {
 /// RelativeColorimetric-centric — Saturation/Absolute degrade to
 /// the nearest supported behaviour there (documented limitation,
 /// measured by `tests/parity.rs`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Intent {
     Perceptual,
     RelativeColorimetric,
@@ -254,13 +254,8 @@ impl IccCmm {
     /// `idml_import::graphic::to_linear_rgb` has always used, so an
     /// unconfigured pipeline stays bit-identical.
     fn naive_cmyk(c: Cmyk) -> LinearRgb {
-        let cv = c.c / 100.0;
-        let mv = c.m / 100.0;
-        let yv = c.y / 100.0;
-        let kv = c.k / 100.0;
-        let r = (1.0 - cv) * (1.0 - kv);
-        let g = (1.0 - mv) * (1.0 - kv);
-        let b = (1.0 - yv) * (1.0 - kv);
+        let [r, g, b] =
+            crate::math::naive_cmyk_to_srgb(c.c / 100.0, c.m / 100.0, c.y / 100.0, c.k / 100.0);
         LinearRgb([srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)])
     }
 }
@@ -360,14 +355,8 @@ impl ExportDestination {
 /// sRGB EOTF decode — identical constants to
 /// `idml_import::graphic::srgb_to_linear` (duplicated by design:
 /// parse must not depend on this crate, and the renderer needs the
-/// same curve from both).
-pub(crate) fn srgb_to_linear(c: f32) -> f32 {
-    if c <= 0.040_45 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
+/// same curve from both). The one in this crate is [`crate::math`]'s.
+pub(crate) use crate::math::srgb_to_linear;
 
 /// Round-trip gamut probe against the CMYK working space (M4).
 /// Native: lcms2 Lab↔CMYK transform pair; wasm32: qcms transform
@@ -402,15 +391,9 @@ impl GamutProbe {
 /// avoid flagging quantisation noise on 8-bit transform paths.
 const GAMUT_DELTA_E_THRESHOLD: f32 = 3.0;
 
-/// CIE76 ΔE*ab — sufficient for a warning triangle (CIEDE2000 is
-/// overkill for a boolean gate; the fidelity harness uses ΔE2000
-/// where it matters).
-fn delta_e_76(a: [f32; 3], b: [f32; 3]) -> f32 {
-    let dl = a[0] - b[0];
-    let da = a[1] - b[1];
-    let db = a[2] - b[2];
-    (dl * dl + da * da + db * db).sqrt()
-}
+// CIE76 ΔE*ab — sufficient for a warning triangle (CIEDE2000 is
+// overkill for a boolean gate): the crate's one definition.
+use crate::cms::delta_e76 as delta_e_76;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native_export {

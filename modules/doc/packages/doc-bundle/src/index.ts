@@ -21,12 +21,23 @@
 import { defineBundle } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";
 
-import { activate } from "./activate.js";
+import { activate, activateWith, type DocBundleOptions } from "./activate.js";
 import manifestJson from "../manifest.json" with { type: "json" };
 
 export const docBundle = defineBundle({
   manifest: manifestJson as PluginManifest,
   activate,
 });
+
+/** The bundle with options (doc ADR 616: `{ odt: true }` opens
+ *  OpenDocument text). */
+export function docBundleWith(options: DocBundleOptions) {
+  return defineBundle({
+    manifest: manifestJson as PluginManifest,
+    activate: activateWith(options),
+  });
+}
+
+export type { DocBundleOptions };
 
 export default docBundle;

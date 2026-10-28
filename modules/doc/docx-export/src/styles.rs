@@ -117,7 +117,7 @@ const PARA_PATHS: &[&str] = &[
 /// A wire value as a lowering property value, `None` where it says "not
 /// set here" (an empty text, a null length or colour, a bool off: the
 /// engine reads an unset bool as off).
-fn own_value(v: &WireValue) -> Option<PropValue> {
+pub(crate) fn own_value(v: &WireValue) -> Option<PropValue> {
     match (v.kind.as_str(), v.value.as_ref()?) {
         ("text" | "enum" | "ref", Scalar::Text(s)) if !s.is_empty() => {
             Some(PropValue::Text(s.clone()))
