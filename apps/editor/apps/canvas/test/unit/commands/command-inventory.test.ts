@@ -59,7 +59,6 @@ import { PDF_VECTORS_COMMANDS } from "../../../src/panels/pdf-vectors-dialog";
 import { buildBatchCommands } from "../../../src/panels/batch-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
 import { FIND_COMMANDS } from "../../../src/find/find-commands";
-import { PDF_VECTORS_COMMANDS } from "../../../src/panels/pdf-vectors-dialog";
 import { hostCommands } from "../../../src/app/instance";
 import { AI_ASK_COMMAND } from "@paged-media/shell";
 
