@@ -284,6 +284,35 @@ fn count_subtree(spread: &Spread, stories: &[ParsedStory], r: FrameRef, d: &mut 
             count_subtree(spread, stories, *c, d);
         }
     }
+    // Engine ADR 1036 — a masked item's mask item rides with it.
+    if let Some(mask) = mask_item_of(spread, r) {
+        count_subtree(spread, stories, mask, d);
+    }
+}
+
+/// The mask item of `r`'s opacity mask (C-28), when `r` is masked.
+fn mask_item_of(spread: &Spread, r: FrameRef) -> Option<FrameRef> {
+    let id = ref_self_id(spread, r)?;
+    let mask = spread.opacity_masks.get(id)?;
+    leaf_by_id(spread, &mask.mask_item)
+}
+
+/// The leaf page item `id` names, in whichever kind list holds it.
+fn leaf_by_id(spread: &Spread, id: &str) -> Option<FrameRef> {
+    let is = |s: &Option<String>| s.as_deref() == Some(id);
+    if let Some(i) = spread.rectangles.iter().position(|f| is(&f.self_id)) {
+        return Some(FrameRef::Rectangle(i));
+    }
+    if let Some(i) = spread.polygons.iter().position(|f| is(&f.self_id)) {
+        return Some(FrameRef::Polygon(i));
+    }
+    if let Some(i) = spread.ovals.iter().position(|f| is(&f.self_id)) {
+        return Some(FrameRef::Oval(i));
+    }
+    if let Some(i) = spread.graphic_lines.iter().position(|f| is(&f.self_id)) {
+        return Some(FrameRef::GraphicLine(i));
+    }
+    None
 }
 
 // ------------------------------------------------------------------ graft
@@ -466,12 +495,33 @@ impl<'a> Graft<'a> {
             if let Some(meta) = src.image_metadata.get(&source_id).cloned() {
                 dst.image_metadata.insert(new_id.clone(), meta);
             }
+            // Engine ADR 1036 — a named item keeps its name.
+            if let Some(name) = src.item_names.get(&source_id).cloned() {
+                dst.item_names.insert(new_id.clone(), name);
+            }
             if let Some(children) = src.nested_children.get(&source_id).cloned() {
                 let cloned: Vec<FrameRef> = children
                     .iter()
                     .map(|c| self.graft(src, dst, src_stories, dst_stories, *c, false))
                     .collect();
-                dst.nested_children.insert(new_id, cloned);
+                dst.nested_children.insert(new_id.clone(), cloned);
+            }
+            // Engine ADR 1036 — the opacity mask (C-28): its mask item is
+            // copied (listed in no z-order, as in the source) and the
+            // copy's entry names the copied mask item.
+            if let Some(mask) = src.opacity_masks.get(&source_id).cloned() {
+                if let Some(mr) = leaf_by_id(src, &mask.mask_item) {
+                    let copied = self.graft(src, dst, src_stories, dst_stories, mr, false);
+                    if let Some(mask_id) = ref_self_id(dst, copied).map(str::to_string) {
+                        dst.opacity_masks.insert(
+                            new_id,
+                            paged_model::OpacityMask {
+                                mask_item: mask_id,
+                                ..mask
+                            },
+                        );
+                    }
+                }
             }
         }
         new_ref

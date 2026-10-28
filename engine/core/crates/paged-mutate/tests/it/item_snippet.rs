@@ -490,3 +490,81 @@ fn a_snippet_round_trips_as_json_and_foreign_text_is_refused() {
     };
     assert!(apply(&mut doc, &op).is_err(), "two ids for one item");
 }
+
+/// Engine ADR 1036 — a snippet whose item carries an opacity mask (C-28)
+/// pastes the mask with it: the mask item is copied under a fresh id,
+/// listed in no z-order, and the copy's mask entry names it; an item's
+/// name rides along. Undo removes both. The PDF import's place-as-vectors
+/// (publish ADR 658) writes such snippets; Copy still refuses a masked
+/// item, as a duplicate does.
+#[test]
+#[allow(non_snake_case)]
+fn a_masked_named_item_pastes_with_its_mask_and_name__feat__editor_shell_import_svg_pdf_vectors() {
+    let mut doc = fixture("geometry-groups");
+    let (si, r) = (0..doc.spreads.len())
+        .find_map(|si| {
+            doc.spreads[si]
+                .spread
+                .frames_in_order
+                .iter()
+                .find(|r| matches!(r, FrameRef::Polygon(_)))
+                .map(|r| (si, *r))
+        })
+        .expect("a polygon");
+    let id = id_of(&doc, si, r);
+    let mut snippet = extract_snippet(&doc, &[NodeId::Polygon(id.clone())]).expect("copy");
+    // Give the copied polygon a mask item (a copy of itself, in no
+    // z-order) and a name.
+    let mut mask = snippet.spread.polygons[0].clone();
+    mask.self_id = Some("mask-art".into());
+    snippet.spread.polygons.push(mask);
+    snippet.spread.opacity_masks.insert(
+        id.clone(),
+        paged_model::OpacityMask {
+            mask_item: "mask-art".into(),
+            mask_type: paged_model::OpacityMaskType::Alpha,
+            invert: true,
+        },
+    );
+    snippet
+        .spread
+        .item_names
+        .insert(id.clone(), "Placed art".into());
+    assert_eq!(
+        snippet_demand(&snippet).items,
+        2,
+        "the mask item is minted too"
+    );
+    let before = snapshot(&doc);
+    let op = paste(&snippet, spread_id(&doc, si), 5.0, 5.0);
+    let applied = apply(&mut doc, &op).expect("paste");
+    let (ids, _, _) = minted(&applied.op);
+    assert_eq!(ids.len(), 2);
+    let spread = &doc.spreads[si].spread;
+    let entry = spread
+        .opacity_masks
+        .get(&ids[0])
+        .expect("the copy is masked");
+    assert_eq!(entry.mask_item, ids[1], "by the copied mask item");
+    assert_eq!(entry.mask_type, paged_model::OpacityMaskType::Alpha);
+    assert!(entry.invert);
+    let (_, mask_ref) = locate(&doc, &ids[1]).expect("the mask item exists");
+    assert!(
+        !doc.spreads[si].spread.frames_in_order.contains(&mask_ref),
+        "a mask item paints only through its mask"
+    );
+    assert_eq!(
+        doc.spreads[si]
+            .spread
+            .item_names
+            .get(&ids[0])
+            .map(String::as_str),
+        Some("Placed art")
+    );
+    apply(&mut doc, &applied.inverse).expect("undo");
+    assert_eq!(
+        snapshot(&doc),
+        before,
+        "undo removes the mask with the item"
+    );
+}

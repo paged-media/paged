@@ -35,6 +35,10 @@
 #   ILLUSTRATOR_BUNDLE_ID      default com.adobe.illustrator
 #   PAGED_PROBE_PING_TIMEOUT   seconds to wait for the ping   (default 60)
 #   PAGED_PROBE_TIMEOUT        seconds to wait for the probe  (default 600)
+#   PAGED_PROBE_OUT            a directory a probe may write files into
+#                              (substituted for __PAGED_PDF_PROBE_OUT__ in the
+#                              probe text; the pdf-ai-export probe saves its
+#                              .pdf and .ai files there)
 #   PAGED_PROBE_STAGE          where the concatenated script and the raw
 #                              reply are kept (default: a mktemp dir, removed
 #                              on success, KEPT on failure for diagnosis)
@@ -100,7 +104,12 @@ ERR="$STAGE/$NAME.osascript.err"
 {
   cat "$LIB"
   printf '\n'
-  cat "$PROBE"
+  if [ -n "${PAGED_PROBE_OUT:-}" ]; then
+    mkdir -p "$PAGED_PROBE_OUT"
+    sed "s|__PAGED_PDF_PROBE_OUT__|$PAGED_PROBE_OUT|g" "$PROBE"
+  else
+    cat "$PROBE"
+  fi
 } >"$SRC"
 
 # --- 1. may this shell control Illustrator at all? --------------------------

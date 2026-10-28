@@ -1262,12 +1262,13 @@ test.describe("plugin surface · paged.pdf", () => {
     expect(live.openPdf!.category).toBe("File");
     expect(live.menu.map((m) => m.path)).toEqual(["File/Open PDF…"]);
 
-    // paged.pdf itself injects NOTHING else — no panel, no command, no
-    // exporter, no edit context. Its whole user-facing existence is one
-    // importer plus host-owned chrome.
+    // paged.pdf itself injects one more thing (publish ADR 658): the
+    // command behind Object ▸ Convert Placed PDF to Vectors — no panel, no
+    // exporter, no edit context. File ▸ Import ▸ PDF or AI as Vectors… is
+    // the host's again, driving the bundle's typed commands.
     expect(live.pdfOther).toEqual({
       panels: 0,
-      commands: 0,
+      commands: 1,
       exporters: 0,
       editContexts: 0,
     });

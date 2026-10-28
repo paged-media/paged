@@ -947,6 +947,9 @@ pub(super) fn remove_minted(
         spread.labels.remove(id);
         spread.image_metadata.remove(id);
         spread.nested_children.remove(id);
+        // Engine ADR 1036 — a pasted mask relation goes with its target.
+        spread.opacity_masks.remove(id);
+        spread.item_names.remove(id);
     }
     for parsed in doc
         .stories

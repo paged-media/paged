@@ -8,6 +8,13 @@
 
 [advisories]
 version = 2
+# pdf-import depends on paged-mutate (the engine's snippet type, publish ADR
+# 658), which brings the engine's wire-type generator along: the same
+# unmaintained (not vulnerable) advisory the engine allow-lists, until the
+# engine moves to `tsify`.
+ignore = [
+    "RUSTSEC-2025-0048", # tsify-next — unmaintained (use tsify)
+]
 
 [licenses]
 version = 2

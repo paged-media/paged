@@ -39,6 +39,7 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import { instantiateWasmBindgen, singleFlight } from "@paged-media/wasm-boot";
 
 import type { DocumentIr } from "./ir";
+import type { PdfInfo, PlaceRequest, PlaceResult } from "./vectors/ir";
 
 /** The minimal surface of the wasm-bindgen `--target web` glue we use —
  *  declared locally so typecheck never depends on the GENERATED (gitignored)
@@ -48,12 +49,27 @@ interface PdfMapperGlue {
   /** `pdf_ir_to_paged_wasm(ir_json) -> Uint8Array` (throws a JS error on a
    *  malformed IR or a model-build failure). */
   pdf_ir_to_paged_wasm: (irJson: string) => Uint8Array;
+  /** `pdf_to_paged_wasm(bytes, ir_json)`: the open path with the page
+   *  reader's vectors (publish ADR 658). */
+  pdf_to_paged_wasm: (bytes: Uint8Array, irJson: string) => Uint8Array;
+  /** `pdf_inspect_wasm(bytes) -> PdfInfo JSON`; throws `"<code>: <why>"`. */
+  pdf_inspect_wasm: (bytes: Uint8Array) => string;
+  /** `pdf_place_wasm(bytes, request_json) -> PlaceResult JSON`; throws
+   *  `"<code>: <why>"`. */
+  pdf_place_wasm: (bytes: Uint8Array, requestJson: string) => string;
 }
 
 /** A loaded mapper: turn a Document IR into native `.paged` bytes, or `null`
  *  if the wasm threw (the importer then reports + falls back). */
 export interface PdfMapper {
   mapIrToPaged(ir: DocumentIr): Uint8Array | null;
+  /** The open path with the PDF's own bytes: vectors and images from the
+   *  page reader, text from the IR. `null` when the wasm threw. */
+  mapPdfToPaged(bytes: Uint8Array, ir: DocumentIr): Uint8Array | null;
+  /** What a file is; throws `"<code>: <why>"` (place-as-vectors). */
+  inspect(bytes: Uint8Array): PdfInfo;
+  /** A page lowered into a snippet; throws `"<code>: <why>"`. */
+  place(bytes: Uint8Array, request: PlaceRequest): PlaceResult;
 }
 
 export interface LoadMapperOptions {
@@ -111,6 +127,24 @@ const mapperOnce = singleFlight(
             );
             return null;
           }
+        },
+        mapPdfToPaged(bytes, ir): Uint8Array | null {
+          try {
+            return glue.pdf_to_paged_wasm(bytes, JSON.stringify(ir));
+          } catch (err) {
+            host.log.warn(
+              `pdf mapper: pdf_to_paged_wasm threw — ${stringifyErr(err)}`,
+            );
+            return null;
+          }
+        },
+        inspect(bytes): PdfInfo {
+          return JSON.parse(glue.pdf_inspect_wasm(bytes)) as PdfInfo;
+        },
+        place(bytes, request): PlaceResult {
+          return JSON.parse(
+            glue.pdf_place_wasm(bytes, JSON.stringify(request)),
+          ) as PlaceResult;
         },
       };
     } catch (err) {
