@@ -41,6 +41,8 @@ paged-resample = { path = "../../engine/core/crates/paged-resample" }
 # The codecs (ADR 468): every decoder and encoder of the module is the
 # engine's raster crate; image-codecs adapts it to the frozen traits.
 paged-raster = { path = "../../engine/core/crates/paged-raster" }
+# The engine's colour conversions (CIELAB for Match Color; PM-0014 shared capability).
+paged-color = { path = "../../engine/core/crates/paged-color" }
 thiserror = "2"
 anyhow = "1"
 bytes = "1"
