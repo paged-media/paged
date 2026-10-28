@@ -5,8 +5,14 @@
   "apiVersion": "^0.2",
   "publisher": "paged.media",
   "capabilities": {
-    "document": { "read": "broad", "openNative": true },
-    "documents": { "open": true },
+    "document": {
+      "read": "broad",
+      "openNative": true,
+      "write": "scoped"
+    },
+    "documents": {
+      "open": true
+    },
     "wasm": [
       {
         "name": "pdf-import",
@@ -14,7 +20,8 @@
         "purpose": "codec",
         "maxBytes": 4194304
       }
-    ]
+    ],
+    "assets": ["images"]
   },
   "contributes": {
     "importers": ["media.paged.pdf.importer.pdf"],
@@ -26,11 +33,33 @@
           "title": "Open PDF",
           "args": "schema/import-pdf.args.json",
           "result": "schema/import-pdf.result.json"
+        },
+        {
+          "id": "media.paged.pdf.inspectPdf",
+          "title": "Inspect PDF or AI file",
+          "args": "schema/inspect-pdf.args.json",
+          "result": "schema/inspect-pdf.result.json"
+        },
+        {
+          "id": "media.paged.pdf.placeVectors",
+          "title": "Place PDF or AI page as vectors",
+          "args": "schema/place-vectors.args.json",
+          "result": "schema/place-vectors.result.json"
+        },
+        {
+          "id": "media.paged.pdf.convertPlacedToVectors",
+          "title": "Convert placed PDF to vectors",
+          "args": "schema/convert-placed.args.json",
+          "result": "schema/place-vectors.result.json"
         }
       ],
       "templateFields": [
-        { "kind": "media.paged.pdf.page", "title": "PDF page" }
+        {
+          "kind": "media.paged.pdf.page",
+          "title": "PDF page"
+        }
       ]
-    }
+    },
+    "commands": ["media.paged.pdf.command.convertPlaced"]
   }
 }

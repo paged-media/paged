@@ -1,0 +1,477 @@
+{
+  "fixture": "pdf-ai-export",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/pdf-ai-export.jsx",
+    "script_sha256": "fbccdcd92bef4437f68f8b00ece719aff6ad6a95a5936379b939267e89a6eb69",
+    "runner": "scripts/illustrator/run-probe.sh",
+    "recorded_at": "2026-10-27T13:10:39.395Z",
+    "host_os": "macOS 26.4",
+    "ruler_units": "RulerUnits.Points",
+    "artboard_rect_app": [
+      0,
+      792,
+      612,
+      0
+    ]
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down (mapped in and out of Illustrator's Y-up document coordinates through the scratch artboard's top-left corner)",
+  "operation": "the artwork drawn, then doc.saveAs(<case>.pdf, PDFSaveOptions Acrobat 7) and doc.saveAs(<case>.ai, IllustratorSaveOptions pdfCompatible)",
+  "cases": [
+    {
+      "id": "fills-strokes",
+      "parameters": {"stroke":{"index":2,"width":6,"cap":"round","join":"round","dashes":[12,6]},"illustrator":{"paint":[{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","stroke":[20,60,200],"strokeWidth":6,"cap":"round","join":"round","miterLimit":4,"dashes":[12,6]},{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","fill":[20,160,80]},{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","fill":[220,30,40]}]},"files":{"pdf":"fills-strokes.pdf","ai":"fills-strokes.ai"}},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [220,30,40],
+            "anchors": [
+              {"anchor":[60,60],"left":[60,60],"right":[60,60]},
+              {"anchor":[260,60],"left":[260,60],"right":[260,60]},
+              {"anchor":[260,160],"left":[260,160],"right":[260,160]},
+              {"anchor":[60,160],"left":[60,160],"right":[60,160]}
+            ]
+          },
+          {
+            "closed": true,
+            "fill": [20,160,80],
+            "anchors": [
+              {"anchor":[460,120],"left":[460,86.862],"right":[460,153.138]},
+              {"anchor":[400,180],"left":[433.138,180],"right":[366.862,180]},
+              {"anchor":[340,120],"left":[340,153.138],"right":[340,86.862]},
+              {"anchor":[400,60],"left":[366.862,60],"right":[433.138,60]}
+            ]
+          },
+          {
+            "closed": false,
+            "anchors": [
+              {"anchor":[80,260],"left":[80,260],"right":[80,260]},
+              {"anchor":[200,220],"left":[200,220],"right":[200,220]},
+              {"anchor":[320,300],"left":[320,300],"right":[320,300]},
+              {"anchor":[460,240],"left":[460,240],"right":[460,240]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": false,
+            "area": 2800,
+            "bounds": [80,220,460,300],
+            "winding": "ccw",
+            "areaSignedApp": -2800,
+            "polarity": "negative",
+            "filled": false,
+            "stroked": true,
+            "strokeWidth": 6,
+            "stroke": [20,60,200],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[80,260],"left":[80,260],"right":[80,260]},
+              {"anchor":[200,220],"left":[200,220],"right":[200,220]},
+              {"anchor":[320,300],"left":[320,300],"right":[320,300]},
+              {"anchor":[460,240],"left":[460,240],"right":[460,240]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 11312.995774,
+            "bounds": [340,60,460,180],
+            "winding": "cw",
+            "areaSignedApp": 11312.995774,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [20,160,80],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[460,120],"left":[460,86.862],"right":[460,153.138]},
+              {"anchor":[400,180],"left":[433.138,180],"right":[366.862,180]},
+              {"anchor":[340,120],"left":[340,153.138],"right":[340,86.862]},
+              {"anchor":[400,60],"left":[366.862,60],"right":[433.138,60]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 20000,
+            "bounds": [60,60,260,160],
+            "winding": "cw",
+            "areaSignedApp": 20000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [220,30,40],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[60,60],"left":[60,60],"right":[60,60]},
+              {"anchor":[260,60],"left":[260,60],"right":[260,60]},
+              {"anchor":[260,160],"left":[260,160],"right":[260,160]},
+              {"anchor":[60,160],"left":[60,160],"right":[60,160]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "compound-evenodd",
+      "parameters": {"compound":true,"evenodd":true,"illustrator":{"paint":[{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","fill":[40,40,200]},{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","fill":[40,40,200]}]},"files":{"pdf":"compound-evenodd.pdf","ai":"compound-evenodd.ai"}},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [40,40,200],
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [150,150,250,250],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [40,40,200],
+            "evenodd": true,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[250,150],"left":[250,150],"right":[250,150]},
+              {"anchor":[250,250],"left":[250,250],"right":[250,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 40000,
+            "bounds": [100,100,300,300],
+            "winding": "cw",
+            "areaSignedApp": 40000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [40,40,200],
+            "evenodd": true,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "clip-group",
+      "parameters": {"clip":true,"illustrator":{"paint":[{"clipping":true,"clippedBy":1,"opacity":100,"blend":"BlendModes.NORMAL"},{"clipping":false,"clippedBy":1,"opacity":100,"blend":"BlendModes.NORMAL","fill":[0,120,200]},{"clipping":false,"clippedBy":1,"opacity":100,"blend":"BlendModes.NORMAL","fill":[250,180,0]}]},"files":{"pdf":"clip-group.pdf","ai":"clip-group.ai"}},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [250,180,0],
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[260,100],"left":[260,100],"right":[260,100]},
+              {"anchor":[260,200],"left":[260,200],"right":[260,200]},
+              {"anchor":[100,200],"left":[100,200],"right":[100,200]}
+            ]
+          },
+          {
+            "closed": true,
+            "fill": [0,120,200],
+            "anchors": [
+              {"anchor":[180,160],"left":[180,160],"right":[180,160]},
+              {"anchor":[340,160],"left":[340,160],"right":[340,160]},
+              {"anchor":[340,300],"left":[340,300],"right":[340,300]},
+              {"anchor":[180,300],"left":[180,300],"right":[180,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[300,200],"left":[300,155.816],"right":[300,244.184]},
+              {"anchor":[220,280],"left":[264.184,280],"right":[175.816,280]},
+              {"anchor":[140,200],"left":[140,244.184],"right":[140,155.816]},
+              {"anchor":[220,120],"left":[175.816,120],"right":[264.184,120]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 20111.992486,
+            "bounds": [140,120,300,280],
+            "winding": "cw",
+            "areaSignedApp": 20111.992486,
+            "polarity": "positive",
+            "filled": false,
+            "stroked": false,
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[300,200],"left":[300,155.816],"right":[300,244.184]},
+              {"anchor":[220,280],"left":[264.184,280],"right":[175.816,280]},
+              {"anchor":[140,200],"left":[140,244.184],"right":[140,155.816]},
+              {"anchor":[220,120],"left":[175.816,120],"right":[264.184,120]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 22400,
+            "bounds": [180,160,340,300],
+            "winding": "cw",
+            "areaSignedApp": 22400,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,120,200],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[180,160],"left":[180,160],"right":[180,160]},
+              {"anchor":[340,160],"left":[340,160],"right":[340,160]},
+              {"anchor":[340,300],"left":[340,300],"right":[340,300]},
+              {"anchor":[180,300],"left":[180,300],"right":[180,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 16000,
+            "bounds": [100,100,260,200],
+            "winding": "cw",
+            "areaSignedApp": 16000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [250,180,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[260,100],"left":[260,100],"right":[260,100]},
+              {"anchor":[260,200],"left":[260,200],"right":[260,200]},
+              {"anchor":[100,200],"left":[100,200],"right":[100,200]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "linear-gradient",
+      "parameters": {"gradient":"linear","from":[255,0,0],"to":[0,0,255],"rotate":30,"illustrator":{"paint":[{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","fill":{"gradient":"linear","angle":0,"length":334.807621,"origin":[62,637],"stops":[{"rampPoint":0,"midPoint":50,"color":[255,0,0]},{"rampPoint":100,"midPoint":50,"color":[0,0,255]}]}}]},"files":{"pdf":"linear-gradient.pdf","ai":"linear-gradient.ai"}},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[80,80],"left":[80,80],"right":[80,80]},
+              {"anchor":[380,80],"left":[380,80],"right":[380,80]},
+              {"anchor":[380,230],"left":[380,230],"right":[380,230]},
+              {"anchor":[80,230],"left":[80,230],"right":[80,230]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 45000,
+            "bounds": [80,80,380,230],
+            "winding": "cw",
+            "areaSignedApp": 45000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[80,80],"left":[80,80],"right":[80,80]},
+              {"anchor":[380,80],"left":[380,80],"right":[380,80]},
+              {"anchor":[380,230],"left":[380,230],"right":[380,230]},
+              {"anchor":[80,230],"left":[80,230],"right":[80,230]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "radial-gradient",
+      "parameters": {"gradient":"radial","from":[255,255,255],"to":[0,90,40],"illustrator":{"paint":[{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","fill":{"gradient":"radial","angle":0,"length":120,"origin":[250,542],"stops":[{"rampPoint":0,"midPoint":50,"color":[255,255,255]},{"rampPoint":100,"midPoint":50,"color":[0,90,40]}]}}]},"files":{"pdf":"radial-gradient.pdf","ai":"radial-gradient.ai"}},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[370,250],"left":[370,183.724],"right":[370,316.276]},
+              {"anchor":[250,370],"left":[316.276,370],"right":[183.724,370]},
+              {"anchor":[130,250],"left":[130,316.276],"right":[130,183.724]},
+              {"anchor":[250,130],"left":[183.724,130],"right":[316.276,130]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 45251.983094,
+            "bounds": [130,130,370,370],
+            "winding": "cw",
+            "areaSignedApp": 45251.983094,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[370,250],"left":[370,183.724],"right":[370,316.276]},
+              {"anchor":[250,370],"left":[316.276,370],"right":[183.724,370]},
+              {"anchor":[130,250],"left":[130,316.276],"right":[130,183.724]},
+              {"anchor":[250,130],"left":[183.724,130],"right":[316.276,130]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "opacity-blend",
+      "parameters": {"opacity":50,"blend":"multiply","illustrator":{"paint":[{"clipping":false,"clippedBy":0,"opacity":50,"blend":"BlendModes.MULTIPLY","fill":[0,100,255]},{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","fill":[250,200,0]}]},"files":{"pdf":"opacity-blend.pdf","ai":"opacity-blend.ai"}},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [250,200,0],
+            "anchors": [
+              {"anchor":[80,80],"left":[80,80],"right":[80,80]},
+              {"anchor":[280,80],"left":[280,80],"right":[280,80]},
+              {"anchor":[280,280],"left":[280,280],"right":[280,280]},
+              {"anchor":[80,280],"left":[80,280],"right":[80,280]}
+            ]
+          },
+          {
+            "closed": true,
+            "fill": [0,100,255],
+            "anchors": [
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[380,180],"left":[380,180],"right":[380,180]},
+              {"anchor":[380,380],"left":[380,380],"right":[380,380]},
+              {"anchor":[180,380],"left":[180,380],"right":[180,380]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 40000,
+            "bounds": [180,180,380,380],
+            "winding": "cw",
+            "areaSignedApp": 40000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,100,255],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[380,180],"left":[380,180],"right":[380,180]},
+              {"anchor":[380,380],"left":[380,380],"right":[380,380]},
+              {"anchor":[180,380],"left":[180,380],"right":[180,380]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 40000,
+            "bounds": [80,80,280,280],
+            "winding": "cw",
+            "areaSignedApp": 40000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [250,200,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[80,80],"left":[80,80],"right":[80,80]},
+              {"anchor":[280,80],"left":[280,80],"right":[280,80]},
+              {"anchor":[280,280],"left":[280,280],"right":[280,280]},
+              {"anchor":[80,280],"left":[80,280],"right":[80,280]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "text",
+      "parameters": {"text":"Hello PDF import","font":"Roboto-Regular","size":36,"illustrator":{"paint":[{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","fill":[240,240,240]}],"text":{"contents":"Hello PDF import","font":"Roboto-Regular","family":"Roboto","size":36,"left":60,"top":80}},"files":{"pdf":"text.pdf","ai":"text.ai"}},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [240,240,240],
+            "anchors": [
+              {"anchor":[40,40],"left":[40,40],"right":[40,40]},
+              {"anchor":[560,40],"left":[560,40],"right":[560,40]},
+              {"anchor":[560,200],"left":[560,200],"right":[560,200]},
+              {"anchor":[40,200],"left":[40,200],"right":[40,200]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 83200,
+            "bounds": [40,40,560,200],
+            "winding": "cw",
+            "areaSignedApp": 83200,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [240,240,240],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[40,40],"left":[40,40],"right":[40,40]},
+              {"anchor":[560,40],"left":[560,40],"right":[560,40]},
+              {"anchor":[560,200],"left":[560,200],"right":[560,200]},
+              {"anchor":[40,200],"left":[40,200],"right":[40,200]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "no-pdf-content",
+      "parameters": {"pdfCompatible":false,"illustrator":{"paint":[{"clipping":false,"clippedBy":0,"opacity":100,"blend":"BlendModes.NORMAL","fill":[10,10,10]}]},"files":{"pdf":"no-pdf-content.pdf","ai":"no-pdf-content.ai"}},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [10,10,10],
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[100,200],"left":[100,200],"right":[100,200]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 20000,
+            "bounds": [100,100,300,200],
+            "winding": "cw",
+            "areaSignedApp": 20000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [10,10,10],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[100,200],"left":[100,200],"right":[100,200]}
+            ]
+          }
+      ] }
+    }
+  ]
+}

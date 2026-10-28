@@ -24,6 +24,15 @@ What this repository ships and what it does not, read from the code at commit `6
 - **Open a PDF as an editable document.** The `media.paged.pdf` importer reads the PDF with
   PDFium and opens a native document with one page per PDF page: text frames with size and
   fill colour, vector shapes with fill, stroke and stroke width, and placed images.
+- **Place a PDF or Illustrator page as vectors** ([ADR 658](adr/658-a-pdf-page-places-as-native-vectors.md)).
+  File ▸ Import ▸ PDF or AI as Vectors… (the editor's dialog, page picker) places one page into
+  the open document as native items — exact paths with their fill rule, strokes with caps, joins
+  and dashes, clip groups, linear and radial gradients, images, opacity, blend modes and opacity
+  masks, text frames (outlines where the document lacks the font) — as one paste, one undo step,
+  with a loss report. Object ▸ Convert Placed PDF to Vectors does it for a placed PDF frame, in
+  place and clipped to the frame. An `.ai` file reads through its PDF; Illustrator's private
+  data is not parsed; a file saved without PDF content is refused with the reason. Opening a PDF
+  takes its vectors from the same reader.
 - **Open a PDF as page images.** When the editable path fails, each page is rendered at
   150 dpi and opened as one full-page image.
 - **A template field for a placed PDF's page.** `media.paged.pdf.page` (`{ frame?, allowed? }`)

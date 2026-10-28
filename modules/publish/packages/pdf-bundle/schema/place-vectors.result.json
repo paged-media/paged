@@ -1,0 +1,58 @@
+{
+  "kind": "struct",
+  "fields": {
+    "placed": {
+      "kind": "bool"
+    },
+    "format": {
+      "kind": "enum",
+      "members": ["pdf", "ai"]
+    },
+    "pageCount": {
+      "kind": "number",
+      "integer": true
+    },
+    "root": {
+      "kind": "struct",
+      "optional": true,
+      "open": true,
+      "fields": {
+        "kind": {
+          "kind": "text"
+        },
+        "id": {
+          "kind": "text"
+        }
+      }
+    },
+    "counts": {
+      "kind": "struct",
+      "open": true,
+      "fields": {}
+    },
+    "losses": {
+      "kind": "list",
+      "of": {
+        "kind": "struct",
+        "fields": {
+          "code": {
+            "kind": "text"
+          },
+          "count": {
+            "kind": "number",
+            "integer": true
+          },
+          "message": {
+            "kind": "text"
+          }
+        }
+      }
+    },
+    "outlinedFonts": {
+      "kind": "list",
+      "of": {
+        "kind": "text"
+      }
+    }
+  }
+}

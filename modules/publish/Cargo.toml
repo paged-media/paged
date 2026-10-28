@@ -28,6 +28,9 @@ paged-scene = { path = "../../engine/core/crates/paged-scene" }
 # The native `.paged` model codec (pgm to_bytes/from_bytes): the PDF import
 # builds a Document and persists it natively (no IDML round-trip).
 paged-store = { path = "../../engine/core/crates/paged-store" }
+# The engine's snippet type (engine ADR 193): place-as-vectors lowers a page
+# into one, which the editor pastes (publish ADR 658).
+paged-mutate = { path = "../../engine/core/crates/paged-mutate" }
 # The IDML reader, for pdf-import's round-trip test (a dev-dependency).
 idml-import = { path = "../../engine/core/crates/idml-import" }
 
@@ -42,3 +45,13 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.23"
+# The page reader of "place as vectors" (publish ADR 658): the engine's own
+# PDF interpreter, the one that draws a placed PDF (engine ADR 154), at the
+# engine's version. PDFium stays the reader of text and of page rasters
+# (ADR 655); its public API exposes no shading, blend mode or soft mask.
+# No embedded base-14 fonts or CMaps: the bundle's text comes from PDFium.
+hayro-interpret = { version = "0.8", default-features = false }
+# hayro's geometry types.
+kurbo = "0.13"
+# Images the page draws, as PNG for the image frames they become.
+png = "0.18"

@@ -1,0 +1,25 @@
+{
+  "kind": "struct",
+  "fields": {
+    "format": { "kind": "enum", "members": ["pdf", "ai"] },
+    "pages": {
+      "kind": "list",
+      "of": {
+        "kind": "struct",
+        "fields": {
+          "width_pt": { "kind": "number" },
+          "height_pt": { "kind": "number" }
+        }
+      }
+    },
+    "ai": {
+      "kind": "struct",
+      "optional": true,
+      "fields": {
+        "pdf_compatible": { "kind": "bool" },
+        "has_private_data": { "kind": "bool" },
+        "creator": { "kind": "text", "optional": true }
+      }
+    }
+  }
+}
