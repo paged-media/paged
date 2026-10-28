@@ -239,6 +239,24 @@ export const CHARTS = defineMessages("slide.charts", {
   refused: "The workbook did not take that entry.",
 });
 
+/** The typed twins' titles (output/commands.ts), worded as the manifest's
+ *  objectModel commands are: what a script or the palette's typed list
+ *  reads, not the Export view's button labels. */
+export const OUTPUT_MODEL = defineMessages("slide.outputModel", {
+  saveAsTemplate: "Save as template",
+  customShows: "Custom shows",
+  exportPdf: "Export PDF (slides, handouts, notes pages)",
+  exportOutline: "Export the outline",
+  exportVideo: "Create a video (MP4)",
+  setCustomShow: "Set a custom show",
+  deleteCustomShow: "Delete a custom show",
+  playCustomShow: "Play a custom show",
+  sections: "List the sections",
+  renameSection: "Rename a section",
+  moveSection: "Move a section",
+  deleteSection: "Remove a section",
+});
+
 /** File ▸ Export, custom shows and sections (output/, slide ADR 720). */
 export const OUTPUT = defineMessages("slide.output", {
   title: "Export",
@@ -266,7 +284,7 @@ export const OUTPUT = defineMessages("slide.output", {
   resolution: "Resolution",
   fps: "Frames per second",
   secondsPerSlide: "Seconds on each slide",
-  useTimings: "Use recorded timings",
+  recordedTimings: "Use recorded timings",
   exportVideo: "Create video",
   cancel: "Cancel",
   running: "{done} of {total}",

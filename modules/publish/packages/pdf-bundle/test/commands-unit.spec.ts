@@ -35,7 +35,14 @@ import { covers, createFakeEditor } from "@paged-media/test-kit";
 
 import manifestJson from "../manifest.json";
 import { activate } from "../src/activate";
-import { IMPORT_PDF_COMMAND } from "../src/commands";
+import {
+  CONVERT_PLACED_COMMAND,
+  IMPORT_PDF_COMMAND,
+  INSPECT_PDF_COMMAND,
+  PLACE_VECTORS_COMMAND,
+} from "../src/commands";
+import { CONVERT_COMMAND, VECTORS_DIAGNOSTICS } from "../src/vectors/menu";
+import { aiWithoutPdfContent, vectorPdf } from "./fixtures/vector-pdf";
 import { _resetPdfMapperCache } from "../src/engine-loader";
 import { tinyPdf } from "./fixtures/tiny-pdf";
 
@@ -232,4 +239,66 @@ describe("the PDF importer (unit)", () => {
     ).toBe(true);
     b.dispose();
   });
+});
+
+describe("place-as-vectors (unit, publish ADR 658)", () => {
+  it("inspectPdf answers the pages and the format, and refuses an .ai without PDF content", async () => {
+    covers("command:media.paged.pdf.inspectPdf");
+    const b = boot();
+    expect(
+      await b.host.objects.invoke(INSPECT_PDF_COMMAND, { bytes: vectorPdf() }),
+    ).toEqual({ format: "pdf", pages: [{ width_pt: 300, height_pt: 300 }] });
+    await expect(
+      b.host.objects.invoke(INSPECT_PDF_COMMAND, {
+        bytes: aiWithoutPdfContent(),
+      }),
+    ).rejects.toThrow(/aiWithoutPdf: /);
+    b.dispose();
+  }, 60_000);
+
+  it("placeVectors sends ONE mutation: a paste of the page's snippet onto the page", async () => {
+    covers("command:media.paged.pdf.placeVectors");
+    const b = boot();
+    const out = (await b.host.objects.invoke(PLACE_VECTORS_COMMAND, {
+      bytes: vectorPdf(),
+      name: "art.pdf",
+      page: 1,
+      text: "outlines",
+    })) as { placed: boolean; counts: Record<string, number> };
+    expect(out.placed).toBe(true);
+    const sent = b.fake.mutations() as {
+      op: string;
+      args: { snippet: string; pageId: string };
+    }[];
+    expect(sent.map((m) => m.op)).toEqual(["pasteElements"]);
+    const snippet = JSON.parse(sent[0]!.args.snippet) as {
+      format: string;
+      spread: { groups: unknown[] };
+    };
+    expect(snippet.format).toBe("paged.snippet/1");
+    expect(snippet.spread.groups.length).toBeGreaterThan(0);
+    expect(out.counts.opacity_masks).toBe(1);
+    b.dispose();
+  }, 60_000);
+
+  it("convertPlacedToVectors refuses a frame that places no PDF, writing nothing", async () => {
+    covers(
+      "command:media.paged.pdf.convertPlacedToVectors",
+      "command:media.paged.pdf.command.convertPlaced",
+    );
+    const b = boot();
+    await expect(
+      b.host.objects.invoke(CONVERT_PLACED_COMMAND, { elementId: "r1" }),
+    ).rejects.toThrow(/failed: /);
+    // The menu's command: nothing selected → the reason in Problems.
+    const command = b.fake
+      .registered<{ id: string; handler(): Promise<unknown> }>("commands")
+      .find((c) => c.id === CONVERT_COMMAND)!;
+    expect(await command.handler()).toBeNull();
+    expect(b.host.diagnostics.get(VECTORS_DIAGNOSTICS)[0]?.message).toMatch(
+      /select one placed PDF/,
+    );
+    expect(b.fake.mutations()).toEqual([]);
+    b.dispose();
+  }, 60_000);
 });

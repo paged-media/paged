@@ -1153,6 +1153,18 @@ fn resolve_inline_image_bytes(
 ) -> ImageResolution {
     let base = inline_image_cache_key(element_id, bytes);
     let key = rendering_key(&base, rendering).into_owned();
+    // The key is the element's, so a frame whose bytes were replaced
+    // (`replaceImageBytes`, or its undo) finds the old file's entry: drop
+    // an entry whose original bytes are not these (under either key).
+    for k in [base.as_str(), key.as_str()] {
+        if decoded_cache
+            .get(k)
+            .is_some_and(|d| !d.encoded.is_empty() && d.encoded.as_ref() != bytes)
+        {
+            decoded_cache.remove(k);
+            page_image_cache.remove(k);
+        }
+    }
     let id = match page_image_cache.get(&key).copied() {
         Some(id) => id,
         None => {
@@ -1163,6 +1175,25 @@ fn resolve_inline_image_bytes(
                 d.clone()
             } else {
                 if let Some(pdf) = placed_pdf(bytes) {
+                    // Remembered encoded-only, as a linked PDF is (see
+                    // [`resolve_image_id`]), so the placed-asset door can
+                    // hand an inline PDF's bytes out too (engine ADR 1036:
+                    // a placed PDF converts to vectors).
+                    if let ImageResolution::Resolved(_, w, h) = &pdf {
+                        // Under the element's key, where `cached_svg`
+                        // looks for an encoded-only entry.
+                        decoded_cache.insert(
+                            base.clone(),
+                            paged_compose::DecodedImage {
+                                width: *w as u32,
+                                height: *h as u32,
+                                encoded: bytes::Bytes::copy_from_slice(bytes),
+                                rgba: bytes::Bytes::new(),
+                                icc: None,
+                                rendering: None,
+                            },
+                        );
+                    }
                     return pdf;
                 }
                 if let Some(svg) = placed_svg(bytes, &base, decoded_cache) {

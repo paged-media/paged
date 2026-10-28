@@ -159,7 +159,13 @@ pub mod mask;
 mod parity_tests;
 // Selection steps, document channels and paths (ADR 470).
 mod masking_ops;
+// Vector masks, shape layers and the paths as geometry (ADR 476).
+mod vector_ops;
+// Snapshots, the journal's bounds and past states (ADR 477).
+pub mod history;
+pub use history::{set_default_history_budget, SnapshotInfo};
 pub use mask::{BoundedMask, LayerMask};
+pub use vector_ops::VectorMaskStart;
 
 /// The default name of the layer an ingested image becomes.
 pub const BACKGROUND_LAYER_NAME: &str = "Background";
@@ -678,15 +684,42 @@ impl Layer {
 
     /// The mask that actually applies: `None` when there is none or it is
     /// disabled, and `None` too when it is all-one (which is the identity
-    /// — materializing it would cost an upload to change nothing).
-    pub fn live_mask(&self) -> Option<&LayerMask> {
-        if !self.mask_enabled {
-            return None;
+    /// — materializing it would cost an upload to change nothing). An
+    /// enabled VECTOR mask (image ADR 476) multiplies in; the product is
+    /// made once per user mask and handed back as the same allocation.
+    pub fn live_mask(&self) -> Option<LayerMask> {
+        let user = if self.mask_enabled {
+            match self.mask.as_ref() {
+                Some(m) if !m.is_all_one() => Some(m),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        match self.live_vector_mask() {
+            Some(v) => Some(v.combined(user)).filter(|m| !m.is_all_one()),
+            None => user.cloned(),
         }
-        match self.mask.as_ref() {
-            Some(m) if !m.is_all_one() => Some(m),
-            _ => None,
-        }
+    }
+
+    /// The vector mask, when there is one and it is enabled.
+    pub fn live_vector_mask(&self) -> Option<&crate::vectors::LayerVectorMask> {
+        self.ext.vector_mask.as_deref().filter(|v| v.enabled)
+    }
+}
+
+/// Move a layer's vector mask through a canvas operation's point map and
+/// draw it again on the `ow × oh` canvas (image ADR 476).
+pub(crate) fn follow_vector_mask(
+    layer: &mut Layer,
+    f: impl Fn([f32; 2]) -> [f32; 2],
+    ow: u32,
+    oh: u32,
+) {
+    if let Some(v) = layer.ext.vector_mask.take() {
+        let mut subpaths = v.subpaths.clone();
+        crate::vectors::map_points(&mut subpaths, f);
+        layer.ext.vector_mask = Some(Arc::new(v.with_subpaths(subpaths, ow, oh)));
     }
 }
 
@@ -961,6 +994,12 @@ pub struct LayerStack {
     /// The document's GLOBAL LIGHT and the patterns its styles draw.
     /// Document state: in every snapshot and persisted.
     styles: StyleDoc,
+    /// Named SNAPSHOTS of the whole stack, oldest first (ADR 477;
+    /// `layers/history.rs`). Session state: not persisted, not undone.
+    snapshots: Vec<history::NamedSnapshot>,
+    next_snapshot_id: u32,
+    /// The id the next recorded step takes (see [`Step`]).
+    next_step_id: u64,
 }
 
 /// What a document's layer styles share: the Global Light every effect
@@ -973,8 +1012,8 @@ pub struct StyleDoc {
 }
 
 /// Which earlier state of a layer the History / Art History brushes
-/// paint from. Until history snapshots exist these are the two states
-/// the session can name without them.
+/// paint from: the two states the session names on its own, any step on
+/// the undo or redo list (by its id), or a named snapshot (ADR 477).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HistoryKind {
     /// The layer as it was when the image was opened — precisely, before
@@ -984,6 +1023,11 @@ pub enum HistoryKind {
     /// The layer before its NEWEST pixel edit — "the step before this
     /// one". Recorded at that edit; an undo does not move it.
     Previous,
+    /// The layer as it was right AFTER the step with this id (an undo
+    /// or a redo step).
+    Step(u64),
+    /// The layer in the named snapshot with this id.
+    Snapshot(u32),
 }
 
 impl HistoryKind {
@@ -991,7 +1035,15 @@ impl HistoryKind {
         match s {
             "open" => Some(HistoryKind::Open),
             "previous" => Some(HistoryKind::Previous),
-            _ => None,
+            _ => {
+                if let Some(id) = s.strip_prefix("step:") {
+                    id.parse().ok().map(HistoryKind::Step)
+                } else if let Some(id) = s.strip_prefix("snapshot:") {
+                    id.parse().ok().map(HistoryKind::Snapshot)
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -1034,11 +1086,14 @@ struct Snapshot {
 /// history instead of wiping it.
 #[derive(Debug, Clone)]
 enum Step {
-    /// One journal entry (its label lives in the journal).
-    Pixels,
+    /// One journal entry (its label lives in the journal). `id` names
+    /// the step for its life (undo and redo keep it; ADR 477): the
+    /// History brush's source refers to a step by it.
+    Pixels { id: u64 },
     /// A structure change; `other` is the state on the far side of it
     /// (before, on the undo list; after, on the redo list).
     Structure {
+        id: u64,
         label: String,
         /// Consecutive steps with the same key merge into one (a slider
         /// drag is one undo step, not twenty).
@@ -1105,7 +1160,7 @@ impl LayerStack {
             }],
             active: 0,
             next_id: 2,
-            journal: TileJournal::new(),
+            journal: TileJournal::with_budget(history::default_budget()),
             steps: Vec::new(),
             undone: Vec::new(),
             dropped_steps: 0,
@@ -1116,6 +1171,9 @@ impl LayerStack {
             history_states: HistoryStates::default(),
             masking: Default::default(),
             styles: StyleDoc::default(),
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
         })
     }
 
@@ -1221,9 +1279,20 @@ impl LayerStack {
                 });
             }
             let adjustment = plate.adjustment.as_ref().map(psd_adjustment);
-            // The user and vector masks fold into the layer's one mask
-            // (`psd_vector_mask::plate_mask`).
-            let mask = crate::psd_vector_mask::plate_mask(plate, width, height);
+            // A vector mask stays PATHS when it can (image ADR 476): the
+            // user mask alone is the layer's mask and the vector mask
+            // multiplies in live. One with a density or feather of its own
+            // folds into the one mask (`psd_vector_mask::plate_mask`).
+            let editable_vector = crate::psd_vector_mask::editable_vector_mask(plate);
+            let mask = match editable_vector {
+                Some(_) => crate::psd_vector_mask::plate_user_mask(plate, width, height),
+                None => crate::psd_vector_mask::plate_mask(plate, width, height),
+            };
+            let mut vector_mask = editable_vector.map(|v| {
+                Arc::new(crate::vectors::LayerVectorMask::from_psd_mask(
+                    v, width, height,
+                ))
+            });
             let plate_rect = plate.rect.unwrap_or(Region::new(0, 0, width, height));
             let plate_want = plate_rect.w as usize * plate_rect.h as usize * 4;
             if adjustment.is_none() && plate.rgba.len() != plate_want {
@@ -1259,6 +1328,28 @@ impl LayerStack {
             let fill = record
                 .filter(|_| adjustment.is_none() && !import.converted_from_cmyk && !plate.smart)
                 .and_then(crate::psd_layer_ext::fill_source);
+            // A SHAPE layer (a fill cut by its vector mask, ADR 476): the
+            // fill renders over the canvas and the mask cuts the shape, so
+            // the stored render (the shape already cut) is not kept — it
+            // would be cut twice. A shape whose path cannot be drawn
+            // stays the pixels Photoshop stored.
+            let shape = record
+                .filter(|_| fill.is_some() && plate.vector_mask.is_none())
+                .and_then(|r| crate::psd_layer_ext::shape_vector_mask(r, width, height));
+            let fill = match (&fill, &shape, record) {
+                (Some(_), None, Some(r))
+                    if r.addl.iter().any(|a| matches!(&a.key, b"vmsk" | b"vsms")) =>
+                {
+                    None
+                }
+                _ => fill,
+            };
+            if let Some(v) = &shape {
+                vector_mask = Some(Arc::new(crate::vectors::LayerVectorMask::from_psd_mask(
+                    v, width, height,
+                )));
+            }
+            ext.vector_mask = vector_mask;
             layers.push(Layer {
                 id: layers.len() as u32 + 1,
                 name: name.clone(),
@@ -1288,7 +1379,7 @@ impl LayerStack {
                     (Some(a), _) => LayerKind::Adjustment(Box::new(a)),
                     (None, Some(source)) => LayerKind::Fill(Box::new(FillLayer {
                         source,
-                        stale: false,
+                        stale: shape.is_some(),
                     })),
                     (None, None) => LayerKind::Pixels,
                 },
@@ -1320,7 +1411,7 @@ impl LayerStack {
             active: layers.len() - 1,
             layers,
             next_id,
-            journal: TileJournal::new(),
+            journal: TileJournal::with_budget(history::default_budget()),
             steps: Vec::new(),
             undone: Vec::new(),
             dropped_steps: 0,
@@ -1331,6 +1422,9 @@ impl LayerStack {
             history_states: HistoryStates::default(),
             masking: Default::default(),
             styles: StyleDoc::default(),
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
         };
         stack.styles.global_light = import.global_light;
         if let Some(deep) = stack
@@ -1646,6 +1740,8 @@ impl LayerStack {
                 layer.mask = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out))
                     .map(|c| Arc::new(c).into());
             }
+            // A vector mask's paths map exactly and are drawn again.
+            follow_vector_mask(layer, |p| masking_ops::map_point(op, w, h, p), ow, oh);
         }
         let mut groups = self.groups.clone();
         for g in &mut groups {
@@ -1743,6 +1839,7 @@ impl LayerStack {
                 let m = op.remap(mask.canvas().data(), w, h, 1, 255);
                 layer.mask = SelectionCoverage::from_data(ow, oh, m).map(|c| Arc::new(c).into());
             }
+            follow_vector_mask(layer, |p| masking_ops::map_point(op, w, h, p), ow, oh);
             if let LayerKind::Smart(src) = &mut layer.kind {
                 // Rotations and flips move the source in its own extent; a
                 // crop reaches here only at 1:1, where the extents agree.
@@ -2242,8 +2339,7 @@ impl LayerStack {
         };
         self.layers[self.active].mask = Some(Arc::new(mask).into());
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
-            self.steps.push(Step::Pixels);
-            self.undone.clear();
+            self.push_pixel_step();
         }
         self.sync_with_journal();
         Ok(outcome)
@@ -2721,8 +2817,7 @@ impl LayerStack {
         }
         self.layers[self.active].rgba = pixels.into();
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
-            self.steps.push(Step::Pixels);
-            self.undone.clear();
+            self.push_pixel_step();
         }
         self.sync_with_journal();
         Ok(outcome)
@@ -2740,6 +2835,8 @@ impl LayerStack {
         }
         let want = (self.width as usize) * (self.height as usize) * 4;
         let stored = match kind {
+            HistoryKind::Step(id) => return self.layer_after_step(layer.id, id),
+            HistoryKind::Snapshot(id) => return self.layer_in_snapshot(layer.id, id),
             HistoryKind::Open => self.history_states.open.get(&layer.id),
             HistoryKind::Previous => self
                 .history_states
@@ -2789,7 +2886,9 @@ impl LayerStack {
             (Some(Step::Structure { merge_key: Some(k), .. }), Some(m)) if k == m
         );
         if !merges {
+            let id = self.take_step_id();
             self.steps.push(Step::Structure {
+                id,
                 label: label.to_string(),
                 merge_key: merge_key.map(str::to_string),
                 other: Box::new(before),
@@ -2813,7 +2912,9 @@ impl LayerStack {
         let before = self.snapshot();
         let changed = f(self)?;
         if changed {
+            let id = self.take_step_id();
             self.steps.push(Step::Structure {
+                id,
                 label: label.to_string(),
                 merge_key: None,
                 other: Box::new(before),
@@ -2862,12 +2963,12 @@ impl LayerStack {
         let mut pixel_steps = self
             .steps
             .iter()
-            .filter(|s| matches!(s, Step::Pixels))
+            .filter(|s| matches!(s, Step::Pixels { .. }))
             .count();
         while pixel_steps > held {
             match self.steps.remove(0) {
                 // The journal already counted its own eviction.
-                Step::Pixels => pixel_steps -= 1,
+                Step::Pixels { .. } => pixel_steps -= 1,
                 Step::Structure { .. } => self.dropped_steps += 1,
             }
         }
@@ -2882,7 +2983,7 @@ impl LayerStack {
             .iter()
             .filter(|s| matches!(s, Step::Structure { .. }))
             .count()
-            > MAX_STRUCTURE_STEPS
+            > self.structure_step_bound()
         {
             self.steps.remove(0);
             self.dropped_steps += 1;
@@ -2894,9 +2995,9 @@ impl LayerStack {
     pub fn undo(&mut self) -> Option<String> {
         let step = self.steps.pop()?;
         match step {
-            Step::Pixels => match self.apply_pixels(true) {
+            Step::Pixels { id } => match self.apply_pixels(true) {
                 Some(label) => {
-                    self.undone.push(Step::Pixels);
+                    self.undone.push(Step::Pixels { id });
                     Some(label)
                 }
                 None => {
@@ -2907,6 +3008,7 @@ impl LayerStack {
                 }
             },
             Step::Structure {
+                id,
                 label,
                 merge_key,
                 other,
@@ -2915,6 +3017,7 @@ impl LayerStack {
                 self.restore(*other);
                 self.structure_generation += 1;
                 self.undone.push(Step::Structure {
+                    id,
                     label: label.clone(),
                     merge_key,
                     other: Box::new(now),
@@ -2928,12 +3031,13 @@ impl LayerStack {
     pub fn redo(&mut self) -> Option<String> {
         let step = self.undone.pop()?;
         match step {
-            Step::Pixels => {
+            Step::Pixels { id } => {
                 let label = self.apply_pixels(false)?;
-                self.steps.push(Step::Pixels);
+                self.steps.push(Step::Pixels { id });
                 Some(label)
             }
             Step::Structure {
+                id,
                 label,
                 merge_key,
                 other,
@@ -2942,6 +3046,7 @@ impl LayerStack {
                 self.restore(*other);
                 self.structure_generation += 1;
                 self.steps.push(Step::Structure {
+                    id,
                     label: label.clone(),
                     merge_key,
                     other: Box::new(now),
@@ -3046,7 +3151,7 @@ impl LayerStack {
         self.steps
             .iter()
             .map(|s| match s {
-                Step::Pixels => pixel.next().unwrap_or("Edit"),
+                Step::Pixels { .. } => pixel.next().unwrap_or("Edit"),
                 Step::Structure { label, .. } => label.as_str(),
             })
             .collect()
@@ -3059,7 +3164,7 @@ impl LayerStack {
             .iter()
             .rev()
             .map(|s| match s {
-                Step::Pixels => pixel.next().unwrap_or("Edit"),
+                Step::Pixels { .. } => pixel.next().unwrap_or("Edit"),
                 Step::Structure { label, .. } => label.as_str(),
             })
             .collect()
@@ -3469,7 +3574,7 @@ impl LayerStack {
                     with_opacity(
                         effective_coverage(
                             multiply_coverage(
-                                layer.live_mask().cloned(),
+                                layer.live_mask(),
                                 self.pass_through_mask(layer.group),
                             )
                             .as_ref(),
@@ -3506,10 +3611,7 @@ impl LayerStack {
             };
             // Lower the layer's coverage to the ABI mask. `None` keeps
             // the constant-1 fast path, so an unmasked layer pays nothing.
-            let own = multiply_coverage(
-                layer.live_mask().cloned(),
-                self.pass_through_mask(layer.group),
-            );
+            let own = multiply_coverage(layer.live_mask(), self.pass_through_mask(layer.group));
             let mask_bytes: Option<Vec<u8>> =
                 effective_coverage(own.as_ref(), clip, w, h).map(|cov| {
                     SelectionMask::from_fn(w, h, |x, y| f32::from(cov.coverage_at(x, y)) / 255.0)

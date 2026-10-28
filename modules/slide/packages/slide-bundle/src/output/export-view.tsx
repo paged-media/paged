@@ -252,7 +252,7 @@ export function makeExportView(
               checked={timings}
               onChange={(e) => setTimings(e.target.checked)}
             />
-            {t(OUTPUT.useTimings)}
+            {t(OUTPUT.recordedTimings)}
           </label>
           <button
             type="button"

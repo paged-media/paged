@@ -194,6 +194,11 @@ import {
   OPEN_AS_TEMPLATE_MENU_ITEMS,
   OpenAsTemplateDialog,
 } from "../panels/template/open-as-template-dialog";
+import {
+  PDF_VECTORS_COMMANDS,
+  PDF_VECTORS_MENU_ITEMS,
+  PdfVectorsDialog,
+} from "../panels/pdf-vectors-dialog";
 import { TemplateNotice } from "../panels/template/template-notice";
 import {
   buildCoreCommandEntries,
@@ -1548,6 +1553,7 @@ function CanvasAppIntegration() {
       ...buildBatchCommands(),
       ...viewCommands,
       ...OPEN_AS_TEMPLATE_COMMANDS,
+      ...PDF_VECTORS_COMMANDS,
       SELECT_ALL_COMMAND,
       // ADR 303 — Find & Replace, Go to page.
       ...FIND_COMMANDS,
@@ -1568,6 +1574,7 @@ function CanvasAppIntegration() {
       ...BATCH_MENU_ITEMS,
       ...VIEW_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
+      ...PDF_VECTORS_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
       // The profile keeps only the host menus its menu bar names. Whole-
@@ -1791,6 +1798,7 @@ function CanvasAppRoot() {
       <OpenAsTemplateDialog />
       <FindReplaceDialog />
       <GoToDialog />
+      <PdfVectorsDialog />
       {/* The live-demo playground UI and the docs' iframe scripting bridge:
           the page entry's tools (they drive the page's `__canvas`), only in
           the dev and `demo` builds, only when the URL asks (they render

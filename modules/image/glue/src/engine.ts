@@ -41,6 +41,12 @@ import {
   type MaskingWasm,
 } from "./masking-engine";
 import type { GlobalLight, LayerStyle } from "./layer-style";
+import {
+  wrapVectors,
+  type VectorEngine,
+  type VectorWasm,
+} from "./vector-engine";
+import type { HistorySource } from "./brush-dynamics";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
 
@@ -955,6 +961,14 @@ export interface LayerInfo {
   adjustKind: AdjustmentKind | "chain" | null;
   /** A fill layer's kind. */
   fillKind: FillKind | null;
+  /** The layer's VECTOR MASK (image ADR 476) — on a fill layer it makes
+   *  a shape layer — or null. Absent on a row built by hand. */
+  vectorMask?: {
+    enabled: boolean;
+    invert: boolean;
+    subpaths: number;
+    anchors: number;
+  } | null;
 }
 
 /** A plain layer's parity fields (Photoshop's defaults) — for a reader
@@ -1100,6 +1114,51 @@ export interface LayerHistory {
   undoSteps: readonly string[];
   /** Every redo step, next-to-replay first. */
   redoSteps: readonly string[];
+  /** Each undo step's id, in `undoSteps` order (ADR 477): stable for the
+   *  step's life, what a History brush source names (`step:<id>`). */
+  undoIds: readonly number[];
+  /** Each redo step's id, in `redoSteps` order. */
+  redoIds: readonly number[];
+  /** The named snapshots, oldest first. */
+  snapshots: readonly HistorySnapshotInfo[];
+  /** Bytes the snapshots alone hold (layer buffers nothing else keeps). */
+  snapshotBytes: number;
+}
+
+/** A named snapshot of the layer stack (ADR 477). */
+export interface HistorySnapshotInfo {
+  id: number;
+  name: string;
+  width: number;
+  height: number;
+}
+
+/** A pattern preset's metadata (its RGBA8 travels beside it). */
+export interface PatternPresetMeta {
+  /** As written (Photoshop's localisable `$$$/…=Name` form survives). */
+  name: string;
+  /** The name to show. */
+  display?: string;
+  id: string;
+  width: number;
+  height: number;
+}
+
+/** A gradient stop list (paged-psd's `Gradient`, its serde form). */
+export interface GradientValue {
+  name: string;
+  /** 0–100. */
+  smoothness: number;
+  stops: ReadonlyArray<{
+    at: number;
+    rgb: [number, number, number];
+    midpoint: number;
+  }>;
+  opacityStops: ReadonlyArray<{
+    at: number;
+    opacity: number;
+    midpoint: number;
+  }>;
 }
 
 /** A layer GROUP — a named, contiguous run that composites into its own
@@ -1268,9 +1327,13 @@ export interface FilterMask {
 }
 
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
- *  doors in `engine-filters.ts`. */
+ *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`. */
 export interface ImageEngine
-  extends MaskingEngine, RetouchEngine<DecodedInfo>, FilterEngine {
+  extends
+    MaskingEngine,
+    RetouchEngine<DecodedInfo>,
+    FilterEngine,
+    VectorEngine<DecodedInfo> {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -1403,6 +1466,52 @@ export interface ImageEngine
    *  the reader's own message on bytes that are not an `.abr` (which is
    *  a different answer from a library that contains no presets). */
   abrPresets(bytes: Uint8Array): BrushLibraryInfo;
+  /** PRESET MANAGER files (ADR 477): Photoshop `.grd`, `.pat` and `.asl`,
+   *  read and written by paged-psd. Patterns come back as metadata plus
+   *  one buffer of every pattern's RGBA8 in order. Each read throws the
+   *  reader's message on bytes that are not that kind of file. */
+  presetsReadGrd(bytes: Uint8Array): {
+    gradients: Array<{ display: string; gradient: GradientValue }>;
+    skipped: number;
+  };
+  presetsWriteGrd(gradients: readonly GradientValue[]): Uint8Array;
+  presetsReadPat(bytes: Uint8Array): {
+    patterns: PatternPresetMeta[];
+    skipped: string[];
+    rgba: Uint8Array;
+  };
+  presetsWritePat(
+    patterns: readonly PatternPresetMeta[],
+    rgba: Uint8Array,
+  ): Uint8Array;
+  presetsReadAsl(bytes: Uint8Array): {
+    styles: Array<{
+      name: string;
+      display: string;
+      id: string;
+      style: LayerStyle;
+    }>;
+    patterns: PatternPresetMeta[];
+    skipped: string[];
+    rgba: Uint8Array;
+  };
+  presetsWriteAsl(
+    styles: ReadonlyArray<{ name: string; id: string; style: LayerStyle }>,
+    patterns: readonly PatternPresetMeta[],
+    rgba: Uint8Array,
+  ): Uint8Array;
+  /** HISTORY (ADR 477): the journal's depth and byte budget, for the open
+   *  stack and every stack opened after (clamped; answers what was set). */
+  layersSetHistoryBudget(
+    maxEntries: number,
+    maxBytes: number,
+  ): { maxEntries: number; maxBytes: number };
+  /** Name the current state (not an undo step); answers its id. */
+  snapshotTake(name: string): number;
+  snapshotRename(id: number, name: string): void;
+  snapshotDelete(id: number): void;
+  /** Restore a snapshot as ONE undo step named `label`, re-composited. */
+  snapshotRestore(id: number, label: string): Promise<string>;
   /** One sampled tip of an `.abr` by its `sampleIndex` (raw
    *  `[w, h, alpha…]`, decoded by `abr-preset.ts` `decodeTipBitmap`). */
   abrTip(bytes: Uint8Array, sampleIndex: number): Uint8Array;
@@ -1676,7 +1785,7 @@ export interface ImageEngine
   /** An engine-held image (the defined pattern) as the brush texture. */
   brushSetTextureImage(handle: number): void;
   /** The history state the History / Art History stroke paints from. */
-  brushSetHistorySource(kind: "open" | "previous"): void;
+  brushSetHistorySource(kind: HistorySource): void;
   /** Extend with a pen's full state (tilt in degrees, barrel rotation in
    *  degrees, the wheel 0..1). */
   brushExtendPen(sample: PenSample): Promise<Uint8Array>;
@@ -2275,7 +2384,8 @@ interface DecodedHandleWasm {
 
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
-export interface ImageWasmModule extends MaskingWasm, RetouchWasm, FilterWasm {
+export interface ImageWasmModule
+  extends MaskingWasm, RetouchWasm, FilterWasm, VectorWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -2611,6 +2721,23 @@ export interface ImageWasmModule extends MaskingWasm, RetouchWasm, FilterWasm {
   psd_save(handle: number): Uint8Array;
   psd_close(handle: number): void;
   abr_presets(bytes: Uint8Array): string;
+  presets_read_grd(bytes: Uint8Array): string;
+  presets_write_grd(json: string): Uint8Array;
+  presets_read_pat(bytes: Uint8Array): string;
+  presets_read_pat_pixels(bytes: Uint8Array): Uint8Array;
+  presets_write_pat(meta: string, rgba: Uint8Array): Uint8Array;
+  presets_read_asl(bytes: Uint8Array): string;
+  presets_read_asl_pixels(bytes: Uint8Array): Uint8Array;
+  presets_write_asl(
+    styles: string,
+    patterns: string,
+    rgba: Uint8Array,
+  ): Uint8Array;
+  layers_set_history_budget(max_entries: number, max_bytes: number): string;
+  layers_snapshot_take(name: string): number;
+  layers_snapshot_rename(id: number, name: string): void;
+  layers_snapshot_delete(id: number): void;
+  layers_snapshot_restore(id: number, label: string): Promise<string>;
   layers_open(handle: number): void;
   layers_open_from_psd(
     image_handle: number,
@@ -3063,6 +3190,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     ...maskingEngine(wasm),
     ...wrapRetouch(wasm, decodedInfoOf),
     ...filterEngineOf(wasm, decodedInfoOf),
+    ...wrapVectors(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,
@@ -3309,6 +3437,43 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     psdClose: (handle) => wasm.psd_close(handle),
     abrPresets: (bytes) =>
       JSON.parse(wasm.abr_presets(bytes)) as BrushLibraryInfo,
+    presetsReadGrd: (bytes) =>
+      JSON.parse(wasm.presets_read_grd(bytes)) as ReturnType<
+        ImageEngine["presetsReadGrd"]
+      >,
+    presetsWriteGrd: (gradients) =>
+      wasm.presets_write_grd(JSON.stringify(gradients)),
+    presetsReadPat(bytes) {
+      const meta = JSON.parse(wasm.presets_read_pat(bytes)) as {
+        patterns: PatternPresetMeta[];
+        skipped: string[];
+      };
+      return { ...meta, rgba: wasm.presets_read_pat_pixels(bytes) };
+    },
+    presetsWritePat: (patterns, rgba) =>
+      wasm.presets_write_pat(JSON.stringify(patterns), rgba),
+    presetsReadAsl(bytes) {
+      const meta = JSON.parse(wasm.presets_read_asl(bytes)) as Omit<
+        ReturnType<ImageEngine["presetsReadAsl"]>,
+        "rgba"
+      >;
+      return { ...meta, rgba: wasm.presets_read_asl_pixels(bytes) };
+    },
+    presetsWriteAsl: (styles, patterns, rgba) =>
+      wasm.presets_write_asl(
+        JSON.stringify(styles),
+        JSON.stringify(patterns),
+        rgba,
+      ),
+    layersSetHistoryBudget: (maxEntries, maxBytes) =>
+      JSON.parse(wasm.layers_set_history_budget(maxEntries, maxBytes)) as {
+        maxEntries: number;
+        maxBytes: number;
+      },
+    snapshotTake: (name) => wasm.layers_snapshot_take(name),
+    snapshotRename: (id, name) => wasm.layers_snapshot_rename(id, name),
+    snapshotDelete: (id) => wasm.layers_snapshot_delete(id),
+    snapshotRestore: (id, label) => wasm.layers_snapshot_restore(id, label),
     histogram(handle) {
       const flat = wasm.image_histogram(handle);
       return {

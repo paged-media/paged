@@ -169,6 +169,9 @@ impl LayerStack {
             history_states: Default::default(),
             masking: Default::default(),
             styles: self.styles.clone(),
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
         }
     }
 
@@ -866,6 +869,12 @@ impl LayerStack {
         let l = &mut self.layers[index];
         if let Some(m) = mask {
             l.mask = m;
+        }
+        // A LINKED vector mask moves with its layer (a shape layer's
+        // shape is its vector mask, so this is what moves a shape).
+        if l.ext.vector_mask.as_ref().is_some_and(|v| !v.not_linked) {
+            let (fx, fy) = (dx as f32, dy as f32);
+            crate::layers::follow_vector_mask(l, |p| [p[0] + fx, p[1] + fy], w, h);
         }
         match &mut l.kind {
             LayerKind::Pixels => {

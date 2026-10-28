@@ -187,6 +187,77 @@ fn block<'a>(r: &mut R<'a>) -> Result<R<'a>, IngestError> {
     })
 }
 
+/// A layer's VECTOR MASK at the end of its parity block (image ADR 476):
+/// u8 present, then u8 flags (1 invert, 2 enabled, 4 not linked), u32
+/// subpaths and per subpath {u8 closed, u32 op, u32 rule, u32 anchors,
+/// 6 f32 each}.
+fn write_vector_mask(w: &mut W, v: Option<&crate::vectors::LayerVectorMask>) {
+    let Some(v) = v else {
+        w.u8(0);
+        return;
+    };
+    w.u8(1);
+    w.u8(u8::from(v.invert) | u8::from(v.enabled) << 1 | u8::from(v.not_linked) << 2);
+    w.u32(v.subpaths.len() as u32);
+    for sp in &v.subpaths {
+        w.u8(u8::from(sp.closed));
+        w.u32(u32::from(sp.op.op));
+        w.u32(u32::from(sp.op.rule));
+        w.u32(sp.anchors.len() as u32);
+        for a in &sp.anchors {
+            for p in [a.p, a.i, a.o] {
+                w.f32(p[0]);
+                w.f32(p[1]);
+            }
+        }
+    }
+}
+
+fn read_vector_mask(
+    r: &mut R<'_>,
+    width: u32,
+    height: u32,
+) -> Result<Option<Arc<crate::vectors::LayerVectorMask>>, IngestError> {
+    if r.at >= r.b.len() || r.u8()? == 0 {
+        return Ok(None);
+    }
+    let flags = r.u8()?;
+    let mut subpaths = Vec::new();
+    for _ in 0..r.u32()? {
+        let closed = r.u8()? != 0;
+        let op = crate::masking::SubOp {
+            op: u16::try_from(r.u32()?).unwrap_or(1),
+            rule: u16::try_from(r.u32()?).unwrap_or(1),
+        };
+        let mut anchors = Vec::new();
+        for _ in 0..r.u32()? {
+            let mut v = [0f32; 6];
+            for x in &mut v {
+                *x = r.f32()?;
+            }
+            anchors.push(crate::masking::PathAnchor {
+                p: [v[0], v[1]],
+                i: [v[2], v[3]],
+                o: [v[4], v[5]],
+            });
+        }
+        subpaths.push(crate::masking::SubPath {
+            closed,
+            anchors,
+            op,
+        });
+    }
+    let mut m = crate::vectors::LayerVectorMask::new(
+        subpaths,
+        flags & 1 != 0,
+        flags & 2 != 0,
+        width,
+        height,
+    );
+    m.not_linked = flags & 4 != 0;
+    Ok(Some(Arc::new(m)))
+}
+
 impl LayerStack {
     /// The stack as a manifest plus the buffers it refers to by slot.
     pub fn export(&self) -> (Vec<u8>, Vec<Arc<[u8]>>) {
@@ -386,6 +457,8 @@ impl LayerStack {
                         .unwrap_or_default();
                     e.u32(style.len() as u32);
                     e.0.extend_from_slice(&style);
+                    // The vector mask (image ADR 476), after the style.
+                    write_vector_mask(&mut e, l.ext.vector_mask.as_deref());
                 }
                 w.u32(e.0.len() as u32);
                 w.0.extend_from_slice(&e.0);
@@ -711,6 +784,9 @@ impl LayerStack {
                     } else {
                         None
                     },
+                    // Appended for image ADR 476; a block written before it
+                    // ends here.
+                    vector_mask: read_vector_mask(&mut e, width, height)?,
                 }
             } else {
                 LayerExt::default()
@@ -845,7 +921,7 @@ impl LayerStack {
             groups,
             active,
             next_id,
-            journal: TileJournal::new(),
+            journal: TileJournal::with_budget(super::history::default_budget()),
             steps: Vec::new(),
             undone: Vec::new(),
             dropped_steps: 0,
@@ -856,6 +932,9 @@ impl LayerStack {
             history_states: Default::default(),
             masking: Default::default(),
             styles,
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
         };
         stack.masking.doc = masking;
         Ok(stack)

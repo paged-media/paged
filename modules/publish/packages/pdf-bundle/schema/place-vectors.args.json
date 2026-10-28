@@ -1,0 +1,20 @@
+{
+  "kind": "struct",
+  "fields": {
+    "bytes": {
+      "kind": "bytes",
+      "mime": ["application/pdf", "application/illustrator"]
+    },
+    "name": { "kind": "text", "default": "artwork.pdf" },
+    "page": { "kind": "number", "integer": true, "default": 1 },
+    "scale": { "kind": "number", "optional": true },
+    "x": { "kind": "number", "optional": true },
+    "y": { "kind": "number", "optional": true },
+    "text": {
+      "kind": "enum",
+      "members": ["frames", "outlines"],
+      "default": "frames"
+    },
+    "pageId": { "kind": "text", "optional": true }
+  }
+}

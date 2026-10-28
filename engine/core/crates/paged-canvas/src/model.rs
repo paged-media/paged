@@ -16864,6 +16864,36 @@ nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
         assert_eq!(got2, got, "same embedded payload, reached the same way");
     }
 
+    /// Engine ADR 1036 — an inline-placed PDF (a frame whose bytes are a
+    /// PDF, as `replaceImageBytes` writes one) is readable through the
+    /// placed-asset door once a build has drawn it, as a linked one always
+    /// was: paged.pdf's Convert Placed PDF to Vectors reads it there.
+    #[test]
+    #[allow(non_snake_case)]
+    fn an_inline_placed_pdf_is_reachable_through_the_door__feat__editor_shell_import_svg_pdf_vectors(
+    ) {
+        let pdf = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../corpus/generated/placed-pdf-Links/placed-art.pdf"
+        ))
+        .expect("the generated placed-art fixture (engine/core/scripts/regen-fixtures.sh)");
+        let bytes = inline_image_idml_bytes();
+        let mut model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        model
+            .apply_mutation(&crate::channel::Mutation::ReplaceImageBytes {
+                element_id: "r1".into(),
+                bytes: Some(crate::channel::ByteBuf(pdf.clone())),
+            })
+            .expect("the frame takes the PDF");
+        let page = crate::PageId(model.pages()[0].self_id.clone());
+        assert!(model.display_list_for_page(&page).is_some(), "built");
+        let (_, w, h, got) = model
+            .placed_asset_bytes("r1")
+            .expect("an inline PDF the engine drew is readable");
+        assert_eq!(got, pdf, "the PDF itself");
+        assert_eq!((w, h), (200, 120), "its page size");
+    }
+
     /// C-27 — a placed image's own fit/crop transform is readable.
     ///
     /// Without it a plugin generating geometry FROM the pixels can only

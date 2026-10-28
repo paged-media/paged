@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "PDF-blind mapper: a reading-ordered Document IR (from pdf.js) → paged_scene::Document → native .paged bytes. No PDF knowledge, no heuristics — those live in the TS bundle next to pdf.js."
+description = "The PDF bundle's Rust half: the PDF-blind mapper (Document IR → paged_scene::Document → .paged bytes) and the page reader of place-as-vectors (a PDF or Illustrator page → vector items, through the engine's hayro interpreter)."
 
 [lib]
 # cdylib for the wasm-bindgen `--target web` artifact the bundle loads;
@@ -19,10 +19,14 @@ workspace = true
 paged-scene = { workspace = true }
 paged-model = { workspace = true }
 paged-store = { workspace = true }
+paged-mutate = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 base64 = { workspace = true }
 thiserror = { workspace = true }
+hayro-interpret = { workspace = true }
+kurbo = { workspace = true }
+png = { workspace = true }
 
 # The wasm-bindgen surface is target-gated so the pure IR→Document→pgm mapper
 # stays native-testable and the binding only compiles for wasm32.

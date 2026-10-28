@@ -24,6 +24,8 @@ serde = { workspace = true, optional = true }
 serde = ["dep:serde"]
 
 [dev-dependencies]
+# The optional Photoshop-presets lane (tests/it/presets_photoshop.rs).
+paged-test-resources.workspace = true
 # Round-trip / model tests consume the INDEPENDENT fixture builder from
 # modules/image's image-conformance? No: the engine never depends on a
 # module, and conformance dev-depends on this crate. The fixtures are built

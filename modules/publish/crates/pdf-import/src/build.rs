@@ -35,77 +35,28 @@ use std::collections::HashMap;
 
 use base64::Engine as _;
 use paged_model::{
-    Bounds, CharacterRun, ColorEntry, ColorModel, ColorSpace, DesignMap, FrameRef, Graphic, Page,
-    Paragraph, PathAnchor, Polygon, Rectangle, Spread, SpreadRef, Story, StoryRef, TextFrame,
+    Bounds, CharacterRun, DesignMap, FrameRef, Page, Paragraph, PathAnchor, Polygon, Rectangle,
+    Spread, SpreadRef, Story, StoryRef, TextFrame,
 };
 use paged_scene::{Document, ParsedSpread, ParsedStory};
 
 use crate::ir::{DocumentIr, FrameIr, RectIr, TextFrameIr, VectorIr};
 use crate::Error;
 
-const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
-
-/// Builds the document's colour palette, deduping PDF sRGB colours into
-/// `ColorEntry` swatches the model resolves (`fill_color`/`stroke_color` refs).
-struct Palette {
-    graphic: Graphic,
-    seen: HashMap<(u8, u8, u8), String>,
-}
-impl Palette {
-    fn new() -> Self {
-        Palette {
-            graphic: Graphic::default(),
-            seen: HashMap::new(),
-        }
-    }
-    /// sRGB in 0..=1 → a deduped `"Color/pdf_r_g_b"` swatch id (model RGB is
-    /// stored 0..=255).
-    fn color_id(&mut self, rgb: [f32; 3]) -> String {
-        let key = (to_u8(rgb[0]), to_u8(rgb[1]), to_u8(rgb[2]));
-        if let Some(id) = self.seen.get(&key) {
-            return id.clone();
-        }
-        let id = format!("Color/pdf_{}_{}_{}", key.0, key.1, key.2);
-        self.graphic.colors.insert(
-            id.clone(),
-            ColorEntry {
-                self_id: id.clone(),
-                name: None,
-                space: ColorSpace::Rgb,
-                value: vec![key.0 as f32, key.1 as f32, key.2 as f32],
-                model: ColorModel::Process,
-                alternate_space: None,
-                alternate_value: Vec::new(),
-                tint: None,
-                alpha: None,
-            },
-        );
-        self.seen.insert(key, id.clone());
-        id
-    }
-}
-
-fn to_u8(v: f32) -> u8 {
-    (v.clamp(0.0, 1.0) * 255.0).round() as u8
-}
-
-/// Monotonic id source — the model only needs unique strings, and every id we
-/// mint (frame/story/page) is internal to this from-scratch document.
-struct IdGen {
-    n: u32,
-}
-impl IdGen {
-    fn new() -> Self {
-        IdGen { n: 0 }
-    }
-    fn id(&mut self, prefix: &str) -> String {
-        self.n += 1;
-        format!("{prefix}{}", self.n)
-    }
-}
+use crate::lower::{font_style, IdGen, Lowering, Palette, TextMode, TextPlan, IDENTITY};
 
 /// Map the whole IR into a native document. See the module docs.
 pub fn build_document(ir: &DocumentIr) -> Result<Document, Error> {
+    build_document_from(ir, None)
+}
+
+/// [`build_document`], with the PDF itself: each page's paths, paints,
+/// clips, groups, masks and images come from the page reader
+/// ([`crate::vectors`], publish ADR 658) — exact curves, the fill rule,
+/// gradients, clip groups, opacity masks — and its text from the IR's
+/// text frames, placed where the page paints them. A page the reader
+/// cannot read keeps the IR's own frames.
+pub fn build_document_from(ir: &DocumentIr, source: Option<&[u8]>) -> Result<Document, Error> {
     let mut ids = IdGen::new();
     let mut spreads = Vec::with_capacity(ir.pages.len());
     let mut stories = Vec::new();
@@ -144,6 +95,40 @@ pub fn build_document(ir: &DocumentIr) -> Result<Document, Error> {
                 },
                 bytes,
             );
+        }
+
+        let read = source.and_then(|bytes| {
+            crate::vectors::read_page(bytes, page_idx, &crate::vectors::ReadOptions::default()).ok()
+        });
+        if let Some(vectors) = read {
+            let text: Vec<TextFrameIr> = page
+                .frames
+                .iter()
+                .filter_map(|f| match f {
+                    FrameIr::Text(t) => Some(t.clone()),
+                    _ => None,
+                })
+                .collect();
+            let mut low = Lowering::new(
+                &mut spread,
+                &mut stories,
+                &mut palette,
+                &mut ids,
+                kurbo::Affine::IDENTITY,
+                TextPlan {
+                    frames: text,
+                    missing_fonts: Default::default(),
+                    mode: TextMode::Frames,
+                },
+            );
+            let mut roots = low.items(&vectors.items);
+            roots.extend(low.remaining_text());
+            spread.frames_in_order.extend(roots);
+            spreads.push(ParsedSpread {
+                src: format!("Spreads/Spread_{}.xml", page_idx + 1),
+                spread,
+            });
+            continue;
         }
 
         for frame in &page.frames {
@@ -342,16 +327,6 @@ fn push_vector(spread: &mut Spread, ids: &mut IdGen, palette: &mut Palette, v: &
     let idx = spread.polygons.len();
     spread.polygons.push(poly);
     spread.frames_in_order.push(FrameRef::Polygon(idx));
-}
-
-/// IDML expresses bold/italic through the font *style* string, not flags.
-fn font_style(bold: bool, italic: bool) -> Option<String> {
-    match (bold, italic) {
-        (true, true) => Some("Bold Italic".to_string()),
-        (true, false) => Some("Bold".to_string()),
-        (false, true) => Some("Italic".to_string()),
-        (false, false) => None,
-    }
 }
 
 /// A neutral rectangle — every field at its no-op value. Callers override the

@@ -133,6 +133,8 @@ export async function bundleOnFake(
     };
     select?: boolean;
     toolSettings?: ToolSettingsBackend;
+    /** The bundle's key-value store (a shared one outlives a session). */
+    storage?: ReturnType<typeof mapBacking>;
   } = {},
 ) {
   const fake = makeFakeEditor();
@@ -154,7 +156,7 @@ export async function bundleOnFake(
   const contexts: EditContextContribution[] = [];
   const loaded = loadBundle(() => fake.editor, imageBundle, {
     console: silentConsole,
-    storage: mapBacking(),
+    storage: options.storage ?? mapBacking(),
     shell,
     ...(options.toolSettings ? { toolSettings: options.toolSettings } : {}),
     onEditContextRegistered: (c: EditContextContribution) => {

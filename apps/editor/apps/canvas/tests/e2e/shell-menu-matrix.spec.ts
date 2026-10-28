@@ -164,6 +164,7 @@ const HOST_MENU = [
   "File/Open recent",
   "File/Close",
   "File/Automate/Batch…",
+  "File/Import/PDF or AI as Vectors…",
   "File/Package…",
   "File/Print…",
   "Layout/Margins and columns…",
