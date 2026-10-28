@@ -266,7 +266,7 @@ export const OUTPUT = defineMessages("slide.output", {
   resolution: "Resolution",
   fps: "Frames per second",
   secondsPerSlide: "Seconds on each slide",
-  useTimings: "Use recorded timings",
+  recordedTimings: "Use recorded timings",
   exportVideo: "Create video",
   cancel: "Cancel",
   running: "{done} of {total}",

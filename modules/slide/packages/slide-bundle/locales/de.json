@@ -132,7 +132,7 @@
   "slide.output.templateHint": "Eine Vorlage öffnet sich als neue, unbenannte Präsentation auf Basis dieser.",
   "slide.output.title": "Exportieren",
   "slide.output.untitledSection": "Abschnitt ohne Titel",
-  "slide.output.useTimings": "Aufgezeichnete Zeiten verwenden",
+  "slide.output.recordedTimings": "Aufgezeichnete Zeiten verwenden",
   "slide.output.video": "Video erstellen",
   "slide.panels.deck": "Präsentation",
   "slide.panels.notes": "Sprechernotizen",
