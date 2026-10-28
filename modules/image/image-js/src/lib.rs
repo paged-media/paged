@@ -76,6 +76,7 @@ pub mod saveback;
 pub mod selection;
 pub mod stroke;
 pub mod text;
+pub mod vectors;
 
 /// The frozen kernel ABI version this artifact was built against.
 pub fn abi_version() -> u32 {
@@ -1934,8 +1935,8 @@ mod wasm {
     // ── paths ───────────────────────────────────────────────────────
 
     /// Make Work Path: trace the selection (at `threshold`, simplified by
-    /// `tolerance` px) into a path stored in the image session. One undo
-    /// step; answers the path id.
+    /// `tolerance` px) into the work path (`name` empty) or a saved path
+    /// named `name`. One undo step; answers the path id.
     #[wasm_bindgen]
     pub fn path_from_selection(name: &str, threshold: u8, tolerance: f32) -> Result<u32, JsValue> {
         let (cov, bound) = SELECTION.with(|s| {
@@ -1957,7 +1958,15 @@ mod wasm {
             )));
         }
         let subpaths = crate::masking::subpaths_from_contours(&contours);
-        with_stack(|d| d.stack.add_path(name, subpaths).map_err(ingest_err))
+        // Without a name it is Photoshop's Make Work Path: the WORK PATH,
+        // made or replaced (ADR 476); with one, a saved path.
+        with_stack(|d| {
+            if name.trim().is_empty() {
+                d.stack.set_work_path(subpaths).map_err(ingest_err)
+            } else {
+                d.stack.add_path(name, subpaths).map_err(ingest_err)
+            }
+        })
     }
 
     /// Store a path drawn elsewhere (a host shape's anchors): `closed`
@@ -2015,6 +2024,332 @@ mod wasm {
             cov.feather(feather);
         }
         selection_step("Make Selection", |s| s.apply_shape(cov, mode))
+    }
+
+    // ── vectors inside the image (ADR 476) ───────────────────────────
+
+    /// Geometry in the glue's flat encoding: per subpath its `closed`
+    /// flag, its anchor count in `lens`, its anchors as 6 floats each in
+    /// `anchors` (point, in handle, out handle; image px) and, in `ops`,
+    /// two numbers — the PSD operation (0–3, or 0xFFFF to continue the
+    /// component before it) and fill rule (1 even-odd, 2 non-zero).
+    /// `ops` may be empty: every subpath then combines.
+    fn geometry(
+        closed: &[u8],
+        lens: &[u32],
+        anchors: &[f32],
+        ops: &[u32],
+    ) -> Result<Vec<crate::masking::SubPath>, JsValue> {
+        if closed.len() != lens.len() || !(ops.is_empty() || ops.len() == 2 * lens.len()) {
+            return Err(JsValue::from_str(
+                "a path is one closed flag, one length and (optionally) two op numbers per subpath",
+            ));
+        }
+        let mut at = 0usize;
+        let mut flat = Vec::new();
+        for &n in lens {
+            let end = at + n as usize * 6;
+            let part = anchors
+                .get(at..end)
+                .ok_or_else(|| JsValue::from_str("anchors are shorter than the lengths say"))?;
+            flat.push(part.to_vec());
+            at = end;
+        }
+        if at != anchors.len() {
+            return Err(JsValue::from_str("anchors are longer than the lengths say"));
+        }
+        let closed: Vec<bool> = closed.iter().map(|&c| c != 0).collect();
+        let mut subpaths = crate::masking::subpaths_from_flat(&closed, &flat)
+            .map_err(|e| JsValue::from_str(&e))?;
+        for (k, sp) in subpaths.iter_mut().enumerate() {
+            if let (Some(&op), Some(&rule)) = (ops.get(2 * k), ops.get(2 * k + 1)) {
+                let op = u16::try_from(op).unwrap_or(1);
+                sp.op = crate::masking::SubOp {
+                    op: if op <= 3 || op == 0xFFFF { op } else { 1 },
+                    rule: if rule == 2 {
+                        2
+                    } else if op == 0xFFFF {
+                        0
+                    } else {
+                        1
+                    },
+                };
+            }
+        }
+        Ok(subpaths)
+    }
+
+    /// One geometry as JSON: `{"closed":[…],"ops":[[op,rule],…],
+    /// "anchors":[[x,y,ix,iy,ox,oy,…],…]}`.
+    fn geometry_json(subpaths: &[crate::masking::SubPath]) -> String {
+        let closed: Vec<&str> = subpaths
+            .iter()
+            .map(|s| if s.closed { "true" } else { "false" })
+            .collect();
+        let ops: Vec<String> = subpaths
+            .iter()
+            .map(|s| format!("[{},{}]", s.op.op, s.op.rule))
+            .collect();
+        let anchors: Vec<String> = subpaths
+            .iter()
+            .map(|s| {
+                let v: Vec<String> = s
+                    .anchors
+                    .iter()
+                    .flat_map(|a| [a.p[0], a.p[1], a.i[0], a.i[1], a.o[0], a.o[1]])
+                    .map(|f| format!("{f}"))
+                    .collect();
+                format!("[{}]", v.join(","))
+            })
+            .collect();
+        format!(
+            "{{\"closed\":[{}],\"ops\":[{}],\"anchors\":[{}]}}",
+            closed.join(","),
+            ops.join(","),
+            anchors.join(",")
+        )
+    }
+
+    /// A stored path's geometry with its operations
+    /// ([`geometry_json`]), plus its id, name and whether it is the work
+    /// path.
+    #[wasm_bindgen]
+    pub fn path_geometry(id: u32) -> Result<String, JsValue> {
+        with_stack(|d| {
+            let p = d
+                .stack
+                .masking()
+                .path(id)
+                .ok_or_else(|| JsValue::from_str(&format!("no path {id}")))?;
+            Ok(format!(
+                "{{\"id\":{},\"name\":{},\"work\":{},\"geometry\":{}}}",
+                p.id,
+                json_escape(&p.name),
+                p.work,
+                geometry_json(&p.subpaths)
+            ))
+        })
+    }
+
+    /// Replace a stored path's geometry (the Pen, Direct Selection, Path
+    /// Selection). One undo step.
+    #[wasm_bindgen]
+    pub fn path_set(
+        id: u32,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<(), JsValue> {
+        let g = geometry(&closed, &lens, &anchors, &ops)?;
+        with_stack(|d| d.stack.set_path_subpaths(id, g).map_err(ingest_err))
+    }
+
+    /// Put geometry in the WORK PATH (created, or replaced). One undo
+    /// step; answers its id.
+    #[wasm_bindgen]
+    pub fn path_set_work(
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<u32, JsValue> {
+        let g = geometry(&closed, &lens, &anchors, &ops)?;
+        with_stack(|d| d.stack.set_work_path(g).map_err(ingest_err))
+    }
+
+    /// Save Path: the work path becomes a saved path (`name` empty: the
+    /// next `Path n`). One undo step.
+    #[wasm_bindgen]
+    pub fn path_save(id: u32, name: &str) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.save_path(id, name).map_err(ingest_err))
+    }
+
+    /// FILL geometry with `color` (straight RGBA in `[0, 1]`) on the
+    /// active layer through its drawing — Fill Path, and the shape tools'
+    /// Pixels mode (`shape`). The paint is the ordinary masked solid fill
+    /// (GPU-only). One undo step.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn fill_geometry(
+        handle: u32,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+        color: Vec<f32>,
+        shape: bool,
+    ) -> Result<DecodedHandle, JsValue> {
+        if color.len() != 4 {
+            return Err(JsValue::from_str(
+                "fill colour must be 4 floats (straight RGBA in [0,1])",
+            ));
+        }
+        let g = geometry(&closed, &lens, &anchors, &ops)?;
+        crate::vectors::check(&g).map_err(|e| JsValue::from_str(&e))?;
+        let (img, ctx, _sel, layered) = fill_prelude(handle)?;
+        let cov = crate::vectors::coverage(&g, img.width, img.height);
+        let Some(damage) = cov.bounds() else {
+            return Err(JsValue::from_str("the path encloses no pixel"));
+        };
+        let spec = FillSpec::Solid {
+            color: [color[0], color[1], color[2], color[3]],
+        };
+        let out = fill_rgba8(&ctx, &img, &spec, Some(Arc::new(cov)))
+            .await
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let label = if shape { "Shape (pixels)" } else { "Fill path" };
+        land_fill_in(label, img.width, img.height, out, layered, damage).await
+    }
+
+    /// ADD A VECTOR MASK to layer `index`: `start` 0 reveal all, 1 hide
+    /// all, 2 the given geometry. One undo step.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_add(
+        index: usize,
+        start: u32,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<(), JsValue> {
+        let start = match start {
+            0 => crate::layers::VectorMaskStart::RevealAll,
+            1 => crate::layers::VectorMaskStart::HideAll,
+            2 => crate::layers::VectorMaskStart::Paths(geometry(&closed, &lens, &anchors, &ops)?),
+            s => {
+                return Err(JsValue::from_str(&format!(
+                    "vector mask start {s} (0, 1 or 2)"
+                )))
+            }
+        };
+        with_stack(|d| d.stack.add_vector_mask(index, start).map_err(ingest_err))
+    }
+
+    /// Replace the geometry of layer `index`'s vector mask. One step.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_set(
+        index: usize,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<(), JsValue> {
+        let g = geometry(&closed, &lens, &anchors, &ops)?;
+        with_stack(|d| d.stack.set_vector_mask_paths(index, g).map_err(ingest_err))
+    }
+
+    /// Switch layer `index`'s vector mask (enabled, inverted). One step;
+    /// answers whether anything changed.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_flags(
+        index: usize,
+        enabled: bool,
+        invert: bool,
+    ) -> Result<bool, JsValue> {
+        with_stack(|d| {
+            d.stack
+                .set_vector_mask_flags(index, enabled, invert)
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_delete(index: usize) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.delete_vector_mask(index).map_err(ingest_err))
+    }
+
+    /// Rasterize layer `index`'s vector mask into its user mask. One step.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_rasterize(index: usize) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.rasterize_vector_mask(index).map_err(ingest_err))
+    }
+
+    /// Layer `index`'s vector mask: `{"enabled","invert","geometry"}`, or
+    /// `null` without one.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_get(index: usize) -> Result<String, JsValue> {
+        with_stack(|d| {
+            Ok(d.stack.vector_mask(index).map_or_else(
+                || "null".to_string(),
+                |v| {
+                    format!(
+                        "{{\"enabled\":{},\"invert\":{},\"geometry\":{}}}",
+                        v.enabled,
+                        v.invert,
+                        geometry_json(&v.subpaths)
+                    )
+                },
+            ))
+        })
+    }
+
+    /// A SHAPE LAYER: a solid fill of `rgb` (3 bytes) cut by the geometry,
+    /// above the active layer. Rendered on the GPU before it returns. One
+    /// undo step; answers its index.
+    #[wasm_bindgen]
+    pub async fn layers_add_shape(
+        name: &str,
+        rgb: Vec<u8>,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<usize, JsValue> {
+        let [r, g, b] = rgb[..] else {
+            return Err(JsValue::from_str("a shape's colour is 3 bytes"));
+        };
+        let geo = geometry(&closed, &lens, &anchors, &ops)?;
+        let ctx = GPU.with(|g| g.borrow().clone()).ok_or_else(|| {
+            JsValue::from_str("a shape layer renders on the GPU — call init_gpu first")
+        })?;
+        let name = name.to_string();
+        with_stack_async(|mut doc| async move {
+            let r = match doc.stack.add_shape_layer(&name, [r, g, b], geo) {
+                Ok(i) => doc
+                    .stack
+                    .refresh_fills(Some(&ctx))
+                    .await
+                    .map(|_| i)
+                    .map_err(ingest_err),
+                Err(e) => Err(ingest_err(e)),
+            };
+            (doc, r)
+        })
+        .await
+    }
+
+    /// Read the PSD's paths (resources 2000–2997 and the work path 1025)
+    /// into the open stack's Paths panel, without a step — the document
+    /// had them all along. Only when the panel has no paths yet (a stored
+    /// session's paths win). Answers `{"imported":n,"skipped":[…]}`.
+    #[wasm_bindgen]
+    pub fn psd_paths_into_stack(psd_handle: u32) -> Result<String, JsValue> {
+        let (paths, skipped) = PSDS.with(|m| {
+            m.borrow()
+                .get(&psd_handle)
+                .map(crate::vectors::paths_from_psd)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown psd handle {psd_handle}")))
+        })?;
+        with_stack(|d| {
+            let n = if d.stack.masking().paths.is_empty() {
+                let mut doc = d.stack.masking().clone();
+                let n = paths.len();
+                doc.import_paths(paths);
+                d.stack.set_masking(doc);
+                n
+            } else {
+                0
+            };
+            Ok(format!(
+                "{{\"imported\":{n},\"skipped\":[{}]}}",
+                skipped
+                    .iter()
+                    .map(|s| json_escape(s))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ))
+        })
     }
 
     #[wasm_bindgen]
@@ -2758,14 +3093,27 @@ mod wasm {
         pixels: Vec<u8>,
         layered: bool,
     ) -> Result<DecodedHandle, JsValue> {
-        if !layered {
-            return register(width, height, pixels);
-        }
         // The damage is the SELECTION's box when there is one (the fill
         // cannot land outside it), else the whole canvas.
         let damage = SELECTION
             .with(|s| s.borrow().coverage().and_then(|c| c.bounds()))
             .unwrap_or(image_core::Region::new(0, 0, width, height));
+        land_fill_in(label, width, height, pixels, layered, damage).await
+    }
+
+    /// [`land_fill_as`] with the damage rectangle given (a fill through a
+    /// coverage that is not the selection: a path, a shape).
+    async fn land_fill_in(
+        label: &'static str,
+        width: u32,
+        height: u32,
+        pixels: Vec<u8>,
+        layered: bool,
+        damage: image_core::Region,
+    ) -> Result<DecodedHandle, JsValue> {
+        if !layered {
+            return register(width, height, pixels);
+        }
         let ctx = GPU.with(|g| g.borrow().clone());
         let pixels: Arc<[u8]> = Arc::from(pixels.into_boxed_slice());
         with_stack_async(|mut doc| async move {
@@ -6755,6 +7103,18 @@ mod wasm {
 
     /// CANCEL the stroke: throw the painted pixels away. The engine-held
     /// source was never mutated, so this restores it exactly.
+    /// PEN UP inside the stroke in flight: the next sample starts a new
+    /// run (a dab where it lands, no segment from the last one) but the
+    /// stroke — and its one undo step — goes on. Stroke Path strokes
+    /// every subpath of a path as one stroke this way (ADR 476).
+    #[wasm_bindgen]
+    pub fn brush_stroke_lift() -> Result<(), JsValue> {
+        with_stroke(|st| {
+            st.lift();
+            Ok(())
+        })
+    }
+
     #[wasm_bindgen]
     pub fn brush_stroke_cancel() {
         STROKE.with(|s| *s.borrow_mut() = None);
@@ -7190,6 +7550,21 @@ mod wasm {
             l.fill()
                 .map_or_else(|| "null".to_string(), |f| format!("\"{}\"", f.source.kind_name())),
         )
+        .trim_end_matches('}')
+        .to_string()
+            + &format!(
+                ",\"vectorMask\":{}}}",
+                l.ext.vector_mask.as_deref().map_or_else(
+                    || "null".to_string(),
+                    |v| format!(
+                        "{{\"enabled\":{},\"invert\":{},\"subpaths\":{},\"anchors\":{}}}",
+                        v.enabled,
+                        v.invert,
+                        v.subpaths.len(),
+                        v.subpaths.iter().map(|s| s.anchors.len()).sum::<usize>()
+                    )
+                )
+            )
     }
 
     /// The SAMPLED TIP `sample_index` of an `.abr` (a preset's

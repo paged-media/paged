@@ -25,6 +25,7 @@ import type {
   RefineOutput,
 } from "../../masking-engine";
 import type { MaskingUiState } from "../../masking-session";
+import type { VectorUiState } from "../../vector-session";
 import type { ImageSession } from "../../session";
 import { Section } from "./disclosure";
 import { mono, note, row } from "./styles";
@@ -145,6 +146,35 @@ const M = defineMessages("image.maskingPanel", {
   pathsNote:
     "Paths are stored with the image session. Edit ▸ Selection to path " +
     "still makes document shapes when you want them on the page.",
+});
+
+/** The Paths panel's and the vector mask's words (image ADR 476). */
+const VP = defineMessages("image.vectorsPanel", {
+  workPath: "work path",
+  target: "Edit {name} with the Pen and the path tools",
+  fill: "Fill",
+  fillTitle: "Fill {name} with the foreground colour",
+  stroke: "Stroke",
+  strokeTitle: "Stroke {name} with the brush",
+  save: "Save path",
+  maskFromPath: "Vector mask",
+  maskFromPathTitle: "Add {name} to the active layer as its vector mask",
+  vectorMask: "Vector mask",
+  noVectorMask: "The active layer has no vector mask.",
+  vectorMaskOf: "{layer}: {count} subpath(s){state}",
+  vectorMaskOff: ", disabled",
+  vectorMaskInverted: ", inverted",
+  revealAll: "Reveal all",
+  hideAll: "Hide all",
+  editMask: "Edit with the path tools",
+  enable: "Enable",
+  disable: "Disable",
+  invert: "Invert",
+  rasterize: "Rasterize",
+  deleteMask: "Delete",
+  vectorNote:
+    "A vector mask is drawn from its paths, exactly as Photoshop draws it, and " +
+    "multiplies with the layer mask. On a fill layer it makes a shape layer.",
 });
 
 const SELECTS: Array<[ColorRangeSelect, string]> = [
@@ -1022,37 +1052,106 @@ export function PathsSection({
   info,
   disabled,
   hasSelection,
+  target = null,
   onMakeWorkPath,
   onMakeSelection,
   onRename,
   onDuplicate,
   onDelete,
+  onTarget,
+  onFill,
+  onStroke,
+  onSave,
+  onVectorMask,
 }: {
   info: MaskingInfo;
   disabled: boolean;
   hasSelection: boolean;
+  /** The path the Pen and the path tools edit (ADR 476). */
+  target?: number | null;
   onMakeWorkPath: () => void;
   onMakeSelection: (id: number) => void;
   onRename: (id: number, name: string) => void;
   onDuplicate: (id: number) => void;
   onDelete: (id: number) => void;
+  onTarget?: (id: number | null) => void;
+  onFill?: (id: number) => void;
+  onStroke?: (id: number) => void;
+  onSave?: () => void;
+  onVectorMask?: (id: number) => void;
 }) {
   return (
     <Section title={t(M.paths)} data-masking-paths>
       {info.paths.length === 0 && <div style={note}>{t(M.noPaths)}</div>}
       {info.paths.map((p) => (
         <div key={p.id} style={row} data-masking-path={p.id}>
+          {onTarget && (
+            <input
+              type="radio"
+              name="image-path-target"
+              aria-label={t(VP.target, { name: p.name })}
+              data-vector-path-target={p.id}
+              checked={target === p.id}
+              disabled={disabled}
+              onChange={() => onTarget(p.id)}
+            />
+          )}
           <input
             type="text"
             aria-label={t(M.rename, { name: p.name })}
             data-masking-path-name={p.id}
             defaultValue={p.name}
             disabled={disabled}
+            style={p.work ? { fontStyle: "italic" } : undefined}
             onBlur={(e) => {
               if (e.target.value !== p.name) onRename(p.id, e.target.value);
             }}
           />
+          {p.work && <span style={note}>{t(VP.workPath)}</span>}
           <span style={mono}>{p.anchors}</span>
+          {onFill && (
+            <button
+              type="button"
+              data-vector-path-fill={p.id}
+              title={t(VP.fillTitle, { name: p.name })}
+              disabled={disabled}
+              onClick={() => onFill(p.id)}
+            >
+              {t(VP.fill)}
+            </button>
+          )}
+          {onStroke && (
+            <button
+              type="button"
+              data-vector-path-stroke={p.id}
+              title={t(VP.strokeTitle, { name: p.name })}
+              disabled={disabled}
+              onClick={() => onStroke(p.id)}
+            >
+              {t(VP.stroke)}
+            </button>
+          )}
+          {onVectorMask && (
+            <button
+              type="button"
+              data-vector-path-mask={p.id}
+              title={t(VP.maskFromPathTitle, { name: p.name })}
+              disabled={disabled}
+              onClick={() => onVectorMask(p.id)}
+            >
+              {t(VP.maskFromPath)}
+            </button>
+          )}
+          {p.work && onSave && (
+            <button
+              type="button"
+              data-vector-path-save={p.id}
+              disabled={disabled}
+              onClick={() => onSave()}
+            >
+              {t(VP.save)}
+            </button>
+          )}
           <button
             type="button"
             data-masking-path-select={p.id}
@@ -1092,6 +1191,126 @@ export function PathsSection({
         </button>
       </div>
       <div style={note}>{t(M.pathsNote)}</div>
+    </Section>
+  );
+}
+
+/** The active layer's VECTOR MASK (image ADR 476): add one (reveal all,
+ *  hide all), edit it with the path tools, switch, invert, rasterize or
+ *  delete it. */
+export function VectorMaskSection({
+  layer,
+  editing,
+  disabled,
+  onAdd,
+  onEdit,
+  onToggle,
+  onInvert,
+  onRasterize,
+  onDelete,
+}: {
+  layer: {
+    name: string;
+    vectorMask?: {
+      enabled: boolean;
+      invert: boolean;
+      subpaths: number;
+    } | null;
+  } | null;
+  /** The path tools edit this mask now. */
+  editing: boolean;
+  disabled: boolean;
+  onAdd: (start: "revealAll" | "hideAll") => void;
+  onEdit: () => void;
+  onToggle: () => void;
+  onInvert: () => void;
+  onRasterize: () => void;
+  onDelete: () => void;
+}) {
+  const vm = layer?.vectorMask ?? null;
+  const off = disabled || !layer;
+  return (
+    <Section title={t(VP.vectorMask)} data-vector-mask>
+      {!vm && (
+        <>
+          <div style={note}>{t(VP.noVectorMask)}</div>
+          <div style={row}>
+            <button
+              type="button"
+              data-vector-mask-reveal-all
+              disabled={off}
+              onClick={() => onAdd("revealAll")}
+            >
+              {t(VP.revealAll)}
+            </button>
+            <button
+              type="button"
+              data-vector-mask-hide-all
+              disabled={off}
+              onClick={() => onAdd("hideAll")}
+            >
+              {t(VP.hideAll)}
+            </button>
+          </div>
+        </>
+      )}
+      {vm && layer && (
+        <>
+          <div style={note} data-vector-mask-state>
+            {t(VP.vectorMaskOf, {
+              layer: layer.name,
+              count: vm.subpaths,
+              state:
+                (vm.enabled ? "" : t(VP.vectorMaskOff)) +
+                (vm.invert ? t(VP.vectorMaskInverted) : ""),
+            })}
+          </div>
+          <div style={row}>
+            <button
+              type="button"
+              data-vector-mask-edit
+              aria-pressed={editing}
+              disabled={off}
+              onClick={() => onEdit()}
+            >
+              {t(VP.editMask)}
+            </button>
+            <button
+              type="button"
+              data-vector-mask-toggle
+              disabled={off}
+              onClick={() => onToggle()}
+            >
+              {t(vm.enabled ? VP.disable : VP.enable)}
+            </button>
+            <button
+              type="button"
+              data-vector-mask-invert
+              disabled={off}
+              onClick={() => onInvert()}
+            >
+              {t(VP.invert)}
+            </button>
+            <button
+              type="button"
+              data-vector-mask-rasterize
+              disabled={off || !vm.enabled}
+              onClick={() => onRasterize()}
+            >
+              {t(VP.rasterize)}
+            </button>
+            <button
+              type="button"
+              data-vector-mask-delete
+              disabled={off}
+              onClick={() => onDelete()}
+            >
+              {t(VP.deleteMask)}
+            </button>
+          </div>
+        </>
+      )}
+      <div style={note}>{t(VP.vectorNote)}</div>
     </Section>
   );
 }
@@ -1186,7 +1405,11 @@ export function MaskingSections({
   const live = useLive(session, onDidChangeOf);
   const st = live.state();
   const ui: MaskingUiState = live.masking().state();
+  const vui: VectorUiState = live.vectors().state();
   const m = session.masking();
+  const v = session.vectors();
+  const activeLayer = st.layers.layers[st.layers.active] ?? null;
+  const pathTarget = vui.target?.kind === "path" ? vui.target.id : null;
   const w = st.source?.width ?? 0;
   const h = st.source?.height ?? 0;
   const off = disabled || !st.source;
@@ -1286,6 +1509,29 @@ export function MaskingSections({
         onRename={(id, name) => m.renamePath(id, name)}
         onDuplicate={(id) => m.duplicatePath(id)}
         onDelete={(id) => m.deletePath(id)}
+        target={pathTarget}
+        onTarget={(id) => v.selectPath(id)}
+        onFill={(id) => void v.fillPath(id)}
+        onStroke={(id) => void v.strokePath(id)}
+        onSave={() => v.saveWorkPath()}
+        onVectorMask={(id) => {
+          v.selectPath(id);
+          void v.addVectorMask("currentPath");
+        }}
+      />
+      <VectorMaskSection
+        layer={activeLayer}
+        editing={
+          vui.target?.kind === "vectorMask" &&
+          vui.target.layer === st.layers.active
+        }
+        disabled={off}
+        onAdd={(start) => void v.addVectorMask(start)}
+        onEdit={() => v.selectVectorMask(st.layers.active)}
+        onToggle={() => void v.toggleVectorMask()}
+        onInvert={() => void v.invertVectorMask()}
+        onRasterize={() => void v.rasterizeVectorMask()}
+        onDelete={() => void v.deleteVectorMask()}
       />
     </>
   );

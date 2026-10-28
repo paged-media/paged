@@ -199,6 +199,9 @@ export interface ChannelInfo {
 export interface PathInfo {
   id: number;
   name: string;
+  /** The WORK PATH (image ADR 476): the temporary path the Pen and the
+   *  shape tools draw into, until Save Path names it. */
+  work: boolean;
   subpaths: number;
   anchors: number;
 }

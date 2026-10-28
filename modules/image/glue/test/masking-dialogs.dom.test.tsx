@@ -57,7 +57,7 @@ const INFO: MaskingInfo = {
       coverage: 0.25,
     },
   ],
-  paths: [{ id: 3, name: "Path 1", subpaths: 1, anchors: 4 }],
+  paths: [{ id: 3, name: "Path 1", work: false, subpaths: 1, anchors: 4 }],
   quickMask: null,
   editChannel: null,
 };

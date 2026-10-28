@@ -19,6 +19,8 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-render.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-stylize.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-pixelate.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/adjustments-ext.jsx
+# vector-paths opens a PSD paged wrote: stage it first (see below)
+PAGED_PROBE_STAGE=<dir> bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-paths.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -78,6 +80,13 @@ gates, so the probe names every gate on every call.
 Range and Grow / Similar: each selection is rendered as white through the
 selection over black, so the grey is the coverage; its ledger is in the test,
 every case `Agreement` or a stated `Convention`, image ADR 470).
+`image-conformance/tests/it/psd_vector_paths_photoshop.rs` (image ADR 476: the document's paths
+against what Photoshop's DOM reports and byte for byte against its resources, every recorded
+`vmsk` re-encoded byte for byte, a Photoshop shape layer opened editable and folded, and the ROUND
+TRIP — a PSD paged's layered save wrote, opened by Photoshop). The round trip's input is staged
+before the run: `PAGED_VECTOR_PROBE_INPUT=<dir>/input cargo nextest run -p image-conformance
+write_probe_input --run-ignored only`, then the probe with `PAGED_PROBE_STAGE=<dir>`; copy
+`<dir>/input/paged-vectors.psd` into `fixtures/photoshop/vector-paths/` with the recording.
 
 ## Traps, and what each step does about them
 

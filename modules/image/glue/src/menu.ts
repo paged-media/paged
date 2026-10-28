@@ -188,6 +188,16 @@ defineMessages("menu", {
   "Save selection": "Save selection",
   "Load selection…": "Load selection…",
   "Make work path": "Make work path",
+  "Vector mask": "Vector mask",
+  "Reveal all": "Reveal all",
+  "Hide all": "Hide all",
+  "Current path": "Current path",
+  Delete: "Delete",
+  "Enable or disable": "Enable or disable",
+  Paths: "Paths",
+  "Fill path": "Fill path",
+  "Stroke path": "Stroke path",
+  "Save work path": "Save work path",
   "Content-aware fill…": "Content-aware fill…",
   "Clone source": "Clone source",
   // WP5.2
@@ -494,6 +504,26 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Image/Selection/Save selection", "saveSelection", "sel-channel"],
   ["Image/Selection/Load selection…", "loadSelection", "sel-channel"],
   ["Image/Selection/Make work path", "makeWorkPath", "sel-channel"],
+
+  // WP5.11 (ADR 476) — Layer ▸ Vector Mask and the Paths panel's verbs.
+  ["Image/Layer/Vector mask/Reveal all", "vectorMaskRevealAll", "vmask-add"],
+  ["Image/Layer/Vector mask/Hide all", "vectorMaskHideAll", "vmask-add"],
+  [
+    "Image/Layer/Vector mask/Current path",
+    "vectorMaskCurrentPath",
+    "vmask-add",
+  ],
+  ["Image/Layer/Vector mask/Delete", "vectorMaskDelete", "vmask-edit"],
+  [
+    "Image/Layer/Vector mask/Enable or disable",
+    "vectorMaskToggle",
+    "vmask-edit",
+  ],
+  ["Image/Layer/Vector mask/Invert", "vectorMaskInvert", "vmask-edit"],
+  ["Image/Layer/Vector mask/Rasterize", "vectorMaskRasterize", "vmask-edit"],
+  ["Image/Paths/Fill path", "fillPath", "paths"],
+  ["Image/Paths/Stroke path", "strokePath", "paths"],
+  ["Image/Paths/Save work path", "saveWorkPath", "paths-save"],
 
   ["Image/Fill/Gradient…", "fillSelection", "fill"],
   ["Image/Fill/Noise…", "fillNoise", "fill"],
