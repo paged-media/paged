@@ -584,6 +584,48 @@ export async function unshiftSeam(
   return true;
 }
 
+/**
+ * The seam correction, only where the seam shows: {@link unshiftSeam} when
+ * the fresh modules landed one page width off (their bounds at slot +
+ * 2×offset), nothing when they landed in their slots (slot + offset, as
+ * the lowering places them since it reads the page-local geometry). The
+ * answer is the offset the modules' UNTRANSFORMED bounds sit at, the one
+ * a slot test adds to a page-local slot.
+ */
+export async function correctSeam(
+  page: Page,
+  doc: ShowcaseDoc,
+  kind: string,
+  refs: Ref[],
+  off: [number, number],
+  slots: ReadonlyArray<readonly [number, number, number, number]>,
+): Promise<{ boff: [number, number]; shifted: boolean }> {
+  const at = (b: [number, number, number, number], o: [number, number]) =>
+    slots.some((slot) => {
+      const cx = (b[1] + b[3]) / 2;
+      const cy = (b[0] + b[2]) / 2;
+      return (
+        cx >= slot[0] + o[0] - 6 &&
+        cx <= slot[2] + o[0] + 6 &&
+        cy >= slot[1] + o[1] - 6 &&
+        cy <= slot[3] + o[1] + 6
+      );
+    });
+  const twice: [number, number] = [off[0] * 2, off[1] * 2];
+  if (off[0] === 0 && off[1] === 0) return { boff: off, shifted: false };
+  const geo = await geometryOf(page, refs);
+  const placed = geo.filter((g) => g.bounds && at(g.bounds, off)).length;
+  const displaced = geo.filter((g) => g.bounds && at(g.bounds, twice)).length;
+  if (displaced <= placed) return { boff: off, shifted: false };
+  await unshiftSeam(
+    doc,
+    kind,
+    refs.map((r) => r.id),
+    off,
+  );
+  return { boff: twice, shifted: true };
+}
+
 // ── the DSL roster (build-time read) ─────────────────────────────────
 
 export interface DslFamily {
