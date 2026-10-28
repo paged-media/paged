@@ -720,7 +720,26 @@ export {
   type ProvidedProperty,
   type ProvidedWrite,
   type SelectionResolution,
+  useContextWorkspace,
+  useProvidedReadouts,
+  type ContextWorkspace,
+  type ShellWorkspace,
+  type ShellWorkspaceGuide,
+  type ShellWorkspaceResult,
+  type ShellWorkspaceView,
+  type ShellGuideEdit,
+  type ShellReadoutSection,
+  type ShellReadoutsResult,
 } from "./catalog/binding-providers";
+// Extensions ADR 3XX — the geometry of an edit context's workspace.
+export {
+  workspaceDocRect,
+  ptPerRulerUnit,
+  pageToBase,
+  baseToPage,
+  snapToGuideStep,
+  workspaceGridEvery,
+} from "./state/context-workspace";
 // The tree arithmetic is pure and exported so a panel (or a future
 // virtualized primitive) can flatten the same way the renderer does.
 export {
@@ -989,7 +1008,11 @@ export {
   viewPreferences,
   type ViewPreferences,
 } from "./state/view-preferences";
-export { snapSettingsOf, ViewSettingsSync } from "./state/view-settings-sync";
+export {
+  snapSettingsOf,
+  workspaceViewOf,
+  ViewSettingsSync,
+} from "./state/view-settings-sync";
 
 export {
   chromeStorageScope,

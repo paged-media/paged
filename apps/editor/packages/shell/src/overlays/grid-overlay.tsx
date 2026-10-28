@@ -40,6 +40,8 @@ import { useSyncExternalStore } from "react";
 
 import { viewportToDoc } from "@paged-media/client";
 
+import { useContextWorkspace } from "../catalog/binding-providers";
+import { workspaceDocRect } from "../state/context-workspace";
 import type {
   OverlayContribution,
   OverlayPageRect,
@@ -131,6 +133,10 @@ function GridRender(props: OverlayProps) {
   const pixelPreview = useToggle("pixelPreview");
   const prefs = useViewPreferences();
   const { viewportSize } = useCamera();
+  // Extensions ADR 3XX — inside an edit context with a workspace (a raster
+  // image) the grid covers the workspace from ITS origin, the physical
+  // "gridline every" mapped through its resolution, instead of the page.
+  const ctx = useContextWorkspace();
   const scale = props.camera.scale;
   const showPixels = pixelGrid && pixelPreview && scale >= PIXEL_GRID_MIN_SCALE;
   if (!showGrid && !showPixels) return null;
@@ -141,15 +147,52 @@ function GridRender(props: OverlayProps) {
       r.x + r.w >= view.x0 &&
       r.y <= view.y1 &&
       r.y + r.h >= view.y0);
-  const pages = [...props.pageRects.entries()].filter(([, r]) => inView(r));
+  const wsPage = ctx ? props.pageRects.get(ctx.workspace.pageId) : undefined;
+  const wsRect = ctx && wsPage ? workspaceDocRect(ctx.workspace, wsPage) : null;
+  const wsScale = ctx
+    ? ctx.workspace.basePerPoint * ctx.workspace.ptPerBase
+    : 1;
+  const pages = [...props.pageRects.entries()].filter(
+    ([id, r]) => inView(r) && !(wsRect && id === ctx?.workspace.pageId),
+  );
   const every = prefs.gridEvery;
   const step = gridStep(prefs);
   const subdivisions = Math.max(1, Math.round(prefs.gridSubdivisions));
   const drawMinor = subdivisions > 1 && step * scale >= MIN_SPACING_PX;
   const drawMajor = every * scale >= MIN_SPACING_PX;
   const back = prefs.gridsInBack;
+  const wsEvery = every * wsScale;
+  const wsStep = step * wsScale;
   return (
     <g pointerEvents="none" data-grid-overlay="">
+      {showGrid && wsRect && (
+        <g
+          data-workspace-grid=""
+          data-grid-step={wsStep}
+          style={back ? { mixBlendMode: "multiply" } : undefined}
+        >
+          {subdivisions > 1 && wsStep * scale >= MIN_SPACING_PX && (
+            <path
+              d={gridPath(wsRect, wsStep, view, (k) => k % subdivisions === 0)}
+              stroke={prefs.gridColor}
+              strokeOpacity={back ? 0.35 : 0.45}
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+              fill="none"
+            />
+          )}
+          {wsEvery * scale >= MIN_SPACING_PX && (
+            <path
+              d={gridPath(wsRect, wsEvery, view)}
+              stroke={prefs.gridColor}
+              strokeOpacity={back ? 0.7 : 0.9}
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+              fill="none"
+            />
+          )}
+        </g>
+      )}
       {showGrid &&
         pages.map(([pageId, rect]) => (
           <g

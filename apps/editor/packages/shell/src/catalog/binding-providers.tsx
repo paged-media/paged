@@ -154,7 +154,86 @@ export interface ShellBindingProviderHost {
   }): Promise<ShellBindingCollectionResult>;
   applyMutation(mutation: Mutation): Promise<ShellBindingWriteResult>;
   onDidChange(listener: () => void): { dispose(): void };
+  /** Extensions ADR 3XX — the active context's workspace (rulers, guides,
+   *  grid area). Optional: a registry predating the lane answers nothing,
+   *  and the rulers stay the page's. */
+  readWorkspace?(): Promise<ShellWorkspaceResult>;
+  /** A guide edit for the workspace the host is showing. */
+  editGuide?(edit: ShellGuideEdit): Promise<ShellBindingWriteResult>;
+  /** The host's grid and snap state, for the context's own tools. */
+  setWorkspaceView?(view: ShellWorkspaceView): void;
+  /** Rows the active context adds to a readout surface (the Info panel). */
+  readReadouts?(request: { surface: "info" }): Promise<ShellReadoutsResult>;
 }
+
+// ------------------------------------------------- workspace + readouts
+// Mirrors of the contract's `BindingWorkspace` family (extensions ADR
+// 3XX); see `@paged-media/plugin-api` binding-provider.ts for the field
+// docs.
+
+export interface ShellWorkspaceGuide {
+  id: string;
+  orientation: "horizontal" | "vertical";
+  position: number;
+}
+
+export interface ShellWorkspace {
+  pageId: string;
+  origin: [number, number];
+  ptPerBase: number;
+  size: [number, number];
+  unit: { label: string; basePerUnit: number };
+  basePerPoint: number;
+  guideStep?: number;
+  guides: readonly ShellWorkspaceGuide[];
+  guidesVisible: boolean;
+  guidesLocked: boolean;
+}
+
+export type ShellWorkspaceResult =
+  | {
+      resolved: true;
+      provider: string;
+      elementId: string | null;
+      workspace: ShellWorkspace;
+    }
+  | { resolved: false; reason: string };
+
+export type ShellGuideEdit =
+  | {
+      kind: "create";
+      orientation: "horizontal" | "vertical";
+      position: number;
+    }
+  | { kind: "move"; id: string; position: number }
+  | { kind: "delete"; id: string };
+
+export interface ShellWorkspaceView {
+  showGrid: boolean;
+  snapToGrid: boolean;
+  gridEveryPt: number;
+  gridSubdivisions: number;
+  snapTolerancePx: number;
+}
+
+export interface ShellReadoutSection {
+  id: string;
+  title: string;
+  rows: readonly {
+    id: string;
+    label: string;
+    value: string;
+    swatch?: string;
+  }[];
+}
+
+export type ShellReadoutsResult =
+  | {
+      resolved: true;
+      provider: string;
+      sections: readonly ShellReadoutSection[];
+    }
+  | { resolved: false; reason: string };
 
 // -------------------------------------------------------------- context
 
@@ -640,4 +719,79 @@ export function useProviderFirstMutate(): (
     },
     [host, client, model],
   );
+}
+
+// ------------------------------------------------- workspace + readouts
+
+/** The active context's workspace and the frame it was entered on. */
+export interface ContextWorkspace {
+  workspace: ShellWorkspace;
+  elementId: string | null;
+}
+
+/**
+ * Extensions ADR 3XX — the workspace of the ACTIVE edit context, or
+ * `null` (no context, or one that declines): the rulers then measure the
+ * page, and only the document's own guides and grid show. Re-read
+ * whenever the provider stack changes or a provider invalidates.
+ */
+export function useContextWorkspace(): ContextWorkspace | null {
+  const host = useBindingProviderHost();
+  const tick = useProviderTick(host);
+  const [ws, setWs] = useState<ContextWorkspace | null>(null);
+  const lane = Boolean(host?.readWorkspace);
+  useEffect(() => {
+    if (!host?.readWorkspace) return;
+    let cancelled = false;
+    void host
+      .readWorkspace()
+      .then((r) => {
+        if (cancelled) return;
+        setWs(
+          r.resolved
+            ? { workspace: r.workspace, elementId: r.elementId }
+            : null,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setWs(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [host, tick]);
+  return lane ? ws : null;
+}
+
+const NO_SECTIONS: readonly ShellReadoutSection[] = [];
+
+/**
+ * Extensions ADR 3XX — the rows the active context adds to a readout
+ * surface (the Info panel), re-read on every provider change. Empty when
+ * no active provider adds any.
+ */
+export function useProvidedReadouts(
+  surface: "info",
+): readonly ShellReadoutSection[] {
+  const host = useBindingProviderHost();
+  const tick = useProviderTick(host);
+  const [sections, setSections] =
+    useState<readonly ShellReadoutSection[]>(NO_SECTIONS);
+  const lane = Boolean(host?.readReadouts);
+  useEffect(() => {
+    if (!host?.readReadouts) return;
+    let cancelled = false;
+    void host
+      .readReadouts({ surface })
+      .then((r) => {
+        if (!cancelled) setSections(r.resolved ? r.sections : NO_SECTIONS);
+      })
+      .catch(() => {
+        if (!cancelled) setSections(NO_SECTIONS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [host, tick, surface]);
+  return lane ? sections : NO_SECTIONS;
 }

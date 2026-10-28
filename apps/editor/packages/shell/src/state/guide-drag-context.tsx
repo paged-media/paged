@@ -89,6 +89,11 @@ export interface OptimisticGuide {
  */
 export interface GuideDragState {
   kind: "create" | "move";
+  /** Whose guide: the spread's (`"page"`, an engine `<Guide>`) or the
+   *  active edit context's (`"workspace"`, extensions ADR 3XX — a raster
+   *  image's guide, sent to its provider's `editGuide`). For a workspace
+   *  guide `guide.position` and the preview are still page-local pt. */
+  target: "page" | "workspace";
   orientation: GuideOrientation;
   /** For a move: the guide being repositioned (so we can restore it
    *  on Escape and address it for moveGuide / deleteGuide). */
@@ -120,9 +125,12 @@ interface GuideDragContextValue {
 
   /** Start a creation drag out of a ruler. `orientation` is the guide
    *  that ruler produces (HRuler → horizontal, VRuler → vertical). */
-  beginCreate(orientation: GuideOrientation): void;
+  beginCreate(
+    orientation: GuideOrientation,
+    target?: GuideDragState["target"],
+  ): void;
   /** Start a move drag on a placed guide. */
-  beginMove(guide: OptimisticGuide): void;
+  beginMove(guide: OptimisticGuide, target?: GuideDragState["target"]): void;
   /** Patch the live drag's preview fields (controller, per pointer
    *  move). No-op when no drag is active. */
   updateDrag(patch: Partial<GuideDragState>): void;
@@ -145,34 +153,45 @@ export function GuideDragProvider({ children }: PropsWithChildren) {
   });
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const beginCreate = useCallback((orientation: GuideOrientation) => {
-    const next: GuideDragState = {
-      kind: "create",
-      orientation,
-      guide: null,
-      previewDocCoord: null,
-      previewPageId: null,
-      previewPosition: null,
-      overRuler: true,
-    };
-    dragRef.current = next;
-    setDrag(next);
-  }, []);
+  const beginCreate = useCallback(
+    (
+      orientation: GuideOrientation,
+      target: GuideDragState["target"] = "page",
+    ) => {
+      const next: GuideDragState = {
+        kind: "create",
+        target,
+        orientation,
+        guide: null,
+        previewDocCoord: null,
+        previewPageId: null,
+        previewPosition: null,
+        overRuler: true,
+      };
+      dragRef.current = next;
+      setDrag(next);
+    },
+    [],
+  );
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const beginMove = useCallback((guide: OptimisticGuide) => {
-    const next: GuideDragState = {
-      kind: "move",
-      orientation: guide.orientation,
-      guide,
-      previewDocCoord: null,
-      previewPageId: guide.pageId,
-      previewPosition: guide.position,
-      overRuler: false,
-    };
-    dragRef.current = next;
-    setDrag(next);
-  }, []);
+  const beginMove = useCallback(
+    (guide: OptimisticGuide, target: GuideDragState["target"] = "page") => {
+      const next: GuideDragState = {
+        kind: "move",
+        target,
+        orientation: guide.orientation,
+        guide,
+        previewDocCoord: null,
+        previewPageId: guide.pageId,
+        previewPosition: guide.position,
+        overRuler: false,
+      };
+      dragRef.current = next;
+      setDrag(next);
+    },
+    [],
+  );
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const updateDrag = useCallback((patch: Partial<GuideDragState>) => {

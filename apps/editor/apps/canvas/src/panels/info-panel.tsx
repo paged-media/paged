@@ -31,6 +31,11 @@
 //     shown: the engine converts CMYK values to the display, not sampled
 //     display RGB back to the document's CMYK, and the panel says so
 //     rather than inventing a naive conversion.
+//
+// Extensions ADR 3XX: while an edit context adds READOUTS (a raster
+// image: the pixel under the cursor, its selection, the Ruler tool's
+// measurement), they lead the panel as their own sections. The panel
+// shows the provider's rows as given and knows nothing of who sent them.
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -40,6 +45,7 @@ import {
   useCollection,
   useDocument,
   useDocumentMeta,
+  useProvidedReadouts,
   useScoped,
   useSelection,
 } from "@paged-media/shell";
@@ -162,6 +168,7 @@ export function InfoPanel() {
   const { handle } = useDocument();
   const client = useCanvasClient();
   const { placedGeometry } = useSelection();
+  const provided = useProvidedReadouts("info");
   // The unit lengths are shown in (ADR 245), once there is a document.
   const unit = useDocumentUnit();
   const unitName = DOCUMENT_UNITS.find(([u]) => u === unit)?.[1] ?? unit;
@@ -232,6 +239,35 @@ export function InfoPanel() {
 
   return (
     <div className="p-3 flex flex-col" data-info-panel="ready">
+      {provided.map((section) => (
+        <Section
+          key={section.id}
+          id={`provided:${section.id}`}
+          title={section.title}
+        >
+          {section.rows.map((row) => (
+            <div
+              key={row.id}
+              className="flex items-center justify-between gap-3 py-1.5 border-b border-input last:border-b-0"
+              data-info-row={row.id}
+            >
+              <span className="text-xs text-muted-foreground">{row.label}</span>
+              <span className="flex items-center gap-2">
+                {row.swatch && (
+                  <span
+                    className="inline-block h-3 w-5 rounded-[2px] border border-input"
+                    style={{ background: row.swatch }}
+                    data-info-swatch={row.swatch}
+                  />
+                )}
+                <span className="pg-value text-xs" data-info-value>
+                  {row.value}
+                </span>
+              </span>
+            </div>
+          ))}
+        </Section>
+      ))}
       <Section id="cursor" title={strings.t(M.cursor)}>
         <Row row="Cursor X" label="X" value={at ? len(at[0]) : "—"} />
         <Row row="Cursor Y" label="Y" value={at ? len(at[1]) : "—"} />

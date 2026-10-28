@@ -34,7 +34,9 @@
 // and drops the read-only one. The static overlay stays for hosts
 // that only display guides (the viewer).
 
+import { useContextWorkspace } from "../catalog/binding-providers";
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
+import { baseToPage, workspaceDocRect } from "../state/context-workspace";
 import { useOptionalGuideDrag } from "../state/guide-drag-context";
 import { useOptionalScreenMode } from "../state/screen-mode-context";
 
@@ -42,6 +44,84 @@ import { useOptionalScreenMode } from "../state/screen-mode-context";
  *  controller converts to doc-space via the camera so the grab zone
  *  is constant on screen across zoom (INV-6). */
 const GUIDE_GRAB_PX = 4;
+
+/** Extensions ADR 3XX — the active edit context's own guides (a raster
+ *  image's), drawn across ITS workspace in the same guide colour, each
+ *  with a grab line that starts a move unless the context locked them. */
+function WorkspaceGuides(props: OverlayProps) {
+  const gd = useOptionalGuideDrag();
+  const ctx = useContextWorkspace();
+  if (!gd || !ctx || !ctx.workspace.guidesVisible) return null;
+  const ws = ctx.workspace;
+  const pr = props.pageRects.get(ws.pageId);
+  if (!pr) return null;
+  const area = workspaceDocRect(ws, pr);
+  const inv = 1 / (props.camera.scale || 1);
+  const grab = GUIDE_GRAB_PX * inv;
+  const movingId =
+    gd.drag?.kind === "move" && gd.drag.target === "workspace"
+      ? gd.drag.guide?.id
+      : null;
+  return (
+    <g data-workspace-guides="">
+      {ws.guides.map((g) => {
+        if (g.id === movingId) return null;
+        const vertical = g.orientation === "vertical";
+        const local = baseToPage(ws, vertical ? "x" : "y", g.position);
+        const at = (vertical ? pr.x : pr.y) + local;
+        const [x1, y1, x2, y2] = vertical
+          ? [at, area.y, at, area.y + area.h]
+          : [area.x, at, area.x + area.w, at];
+        return (
+          <g key={g.id}>
+            <line
+              data-workspace-guide={g.orientation}
+              data-guide-position={g.position}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke="var(--overlay-guide)"
+              strokeWidth={1 * inv}
+              strokeOpacity={0.9}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+            {!ws.guidesLocked && (
+              <line
+                data-workspace-guide-hit={g.orientation}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke="transparent"
+                strokeWidth={grab * 2}
+                style={{
+                  pointerEvents: "stroke",
+                  cursor: vertical ? "ew-resize" : "ns-resize",
+                }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  gd.beginMove(
+                    {
+                      id: g.id,
+                      spreadId: "",
+                      orientation: g.orientation,
+                      pageId: ws.pageId,
+                      position: local,
+                    },
+                    "workspace",
+                  );
+                }}
+              />
+            )}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
 
 function GuideOverlayRender(props: OverlayProps) {
   const gd = useOptionalGuideDrag();
@@ -55,10 +135,12 @@ function GuideOverlayRender(props: OverlayProps) {
   const { guides, drag, beginMove } = gd;
   // While THIS guide is being moved, hide its placed line — the
   // preview line below stands in for it.
-  const movingId = drag?.kind === "move" ? drag.guide?.id : null;
+  const movingId =
+    drag?.kind === "move" && drag.target === "page" ? drag.guide?.id : null;
 
   return (
     <g>
+      <WorkspaceGuides {...props} />
       {guides.map((guide) => {
         if (guide.id === movingId) return null;
         const pr = props.pageRects.get(guide.pageId);
