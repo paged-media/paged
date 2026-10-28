@@ -258,6 +258,21 @@
       - "image-conformance/tests/it/psd_vector_masks_photoshop.rs (photoshop_vector_masks_import_as_recorded)"
       - "image-conformance/tests/it/psd_vector_mask_corpus.rs (opt-in corpus lane: vector_masks_draw_as_photoshops_cached_renders)"
 
+- id: image.psd.addl.tysh
+  state_row: image.layers.type
+  tier: mutatable        # READ into an editable type layer (paged-psd text_layer.rs → image-js TypeSource) and WRITTEN back: an unedited layer re-emits its own block verbatim (preservation untouched), an edited or new one is written from its source by the canonical writer
+  oracle: photoshop      # probes/text-layers.jsx and probes/warp-text.jsx fixtures (Photoshop-written type layers, every Warp Text style)
+  provenance:
+    - "Adobe Photoshop File Formats Specification — Type tool object setting (TySh): version 1, the transform as six doubles, text version 50 + a versioned `TxLr` descriptor, warp version 1 + a versioned `warp` descriptor (warpStyle, warpValue, warpPerspective, warpPerspectiveOther, warpRotate), then the bounds [PUB]"
+    - "The text engine's data (`EngineData`, a `tdta` in the `TxLr` descriptor): a PostScript-like tree of `<< /Key value >>` dictionaries, arrays, numbers, booleans and `( )` strings of UTF-16BE after a FE FF mark with `(`, `)` and `\\` escaped. Its field names and nesting — Editor/Text, StyleRun and ParagraphRun (RunArray + RunLengthArray over the text and its trailing paragraph mark), StyleSheetData (Font index into ResourceDict/FontSet, FontSize, FillColor {Type 1, Values [a r g b]}, Tracking, Leading/AutoLeading, scales, FontCaps, FontBaseline …), ParagraphSheet/Properties (Justification 0–6, indents, spaces, AutoHyphenate), Rendered/Shapes/Children/Cookie/Photoshop (ShapeType 0 point with PointBase, 1 box with BoxBounds) — are established by OBSERVATION of Photoshop 27.10-written files [OBS]"
+    - "Key forms observed in Photoshop's own TySh: `TxLr`, `Txt `, `Ornt`, `AntA`, `TxMP` and the bound corners in the 4-byte form; `textGridding`, `bounds`, `boundingBox`, `TextIndex`, `EngineData`, `warp` (class) and every `warp*` key in the long form; the block's tail is four zero 32-bit bounds padded to a multiple of four [OBS]"
+  tests:
+    rust:
+      - "paged-psd/src/text_layer.rs, engine_data.rs, descriptor_write.rs (unit: round trips)"
+      - "image-js/src/layers/type_layer.rs (unit: a_type_source_goes_through_a_psd_type_layer_and_back)"
+      - "image-conformance/tests/it/psd_text_layers.rs (photoshop_text_layers_open_as_editable_type, type_layers_are_written_back_as_type)"
+      - "image-conformance/tests/it/warp_text_photoshop.rs"
+
 # ── PSD descriptor-family primitives ─────────────────────────────────
 # Neither of these is a top-level PSD *block*; they are the two
 # structures descriptor-carrying blocks are BUILT FROM. They live here
@@ -269,7 +284,7 @@
 
 - id: image.psd.descriptor
   state_row: image.psd.roundtrip
-  tier: parsed           # READ-ONLY view. There is no descriptor WRITER: the preservation invariant keeps the opaque-bytes path authoritative for re-emission (§10.4), and a decoded tree is a derived view. Promoting this to `mutatable` means writing a descriptor emitter, which is a separate decision.
+  tier: mutatable        # READ, and since WP5.10 WRITTEN (paged-psd descriptor_write.rs) for blocks the layer model constructs (an edited type layer's TySh). The preservation invariant still keeps the opaque-bytes path authoritative for an unedited block's re-emission (§10.4).
   oracle: independent-emitter   # image-conformance/src/abr_builder emits descriptor bytes with its own big-endian sink; the reader never shares code with it
   provenance:
     - "Adobe Photoshop File Formats Specification — Descriptor structure (class name + class id + item count + items; the key-or-4cc length-0 convention; the OSType table Objc/VlLs/doub/UntF/TEXT/enum/long/comp/bool/type/GlbC/GlbO/alis/tdta; unit codes #Ang/#Prc/#Pxl/#Rsl/#Rlt/#Nne/#Pnt/#Mlm) [PUB]"

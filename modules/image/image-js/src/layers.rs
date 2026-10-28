@@ -197,7 +197,7 @@ pub enum LayerKind {
     /// pattern ([`FillLayer`]); like a smart object it composites as
     /// pixels and re-renders from its source when that changes.
     Fill(Box<FillLayer>),
-    /// A TYPE LAYER (WP5.10, image ADR 468): its pixels are the engine's
+    /// A TYPE LAYER (WP5.10, image ADR 474): its pixels are the engine's
     /// render of a text source ([`TypeLayer`]), re-rendered by the bundle
     /// when the text, its styles, its frame or its warp change.
     Type(Box<TypeLayer>),

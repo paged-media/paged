@@ -35,7 +35,7 @@ and the image's edit context owns undo while it is active (image ADR 463).
 
 ## Consequences
 
-- paged.image draws type layers through it, at the image's resolution (image ADR 468).
+- paged.image draws type layers through it, at the image's resolution (image ADR 474).
 - A story drawn this way gets no text wrap from the page's items and no IDML; the bundle that
   owns the text owns its persistence.
 - Each call builds the document once, as ADR 338's `only` does.
@@ -43,4 +43,4 @@ and the image's edit context owns undo while it is active (image ADR 463).
 ## Related
 
 - [ADR 338](338-items-render-to-pixels.md) — items render to pixels.
-- Image [ADR 468](../../../../modules/image/docs/adr/468-type-layers.md) — type layers.
+- Image [ADR 474](../../../../modules/image/docs/adr/474-type-layers.md) — type layers.

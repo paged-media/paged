@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// TYPE LAYERS (WP5.10, image ADR 468): the source of a type layer and the
+// TYPE LAYERS (WP5.10, image ADR 474): the source of a type layer and the
 // one function that turns it into pixels — through the ENGINE
 // (`host.render.story`, extensions ADR 349), so the text is laid out by
 // paged-text's composer with the document's fonts, wraps, justifies and

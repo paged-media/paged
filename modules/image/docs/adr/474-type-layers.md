@@ -1,4 +1,4 @@
-# ADR 468 — A type layer's text lives in the image; the engine lays it out and the GPU warps it
+# ADR 474 — A type layer's text lives in the image; the engine lays it out and the GPU warps it
 
 - **Status:** Accepted 2026-10-27.
 - **Scope:** `image-js/src/layers/type_layer.rs` (`TypeSource`, `TypeLayer`, `TypeRender`, the

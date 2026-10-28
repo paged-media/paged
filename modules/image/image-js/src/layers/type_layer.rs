@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! TYPE LAYERS (WP5.10, image ADR 468): a layer whose pixels are the
+//! TYPE LAYERS (WP5.10, image ADR 474): a layer whose pixels are the
 //! render of a text source — its text, character runs, paragraphs, point
 //! or box frame and Warp Text — that stays editable.
 //!
