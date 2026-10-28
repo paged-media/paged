@@ -65,6 +65,9 @@ pub struct SlidePage {
     pub notes: Option<String>,
     pub transition: Option<pptx_core::Transition>,
     pub timing_xml: Option<String>,
+    /// `p:timing` as a tree (slide ADR 714).
+    #[serde(default)]
+    pub timing: Option<pptx_core::anim::Timing>,
 }
 
 /// A page item, positioned by `transform` (its local box `(0,0)`–`(w,h)` →

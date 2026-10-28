@@ -145,6 +145,11 @@ pub struct Out {
     /// New image parts: (part, bytes).
     pub media: Vec<(String, Vec<u8>)>,
     pub lost: Vec<String>,
+    /// The `cNvPr id` each shape written under a new id got (a shape made
+    /// in the editor, a copy on the same slide), by its elements' `Self`
+    /// ids, its group's and its shape key (slide ADR 714: animation targets
+    /// follow them).
+    pub ids: BTreeMap<String, u32>,
 }
 
 /// An original shape of the slide.
@@ -388,6 +393,7 @@ struct Writer<'a, 'j> {
     lang: String,
     seen: RefCell<BTreeSet<String>>,
     next_id: RefCell<u32>,
+    ids: RefCell<BTreeMap<String, u32>>,
 }
 
 /// Write `job`. `None` when the page is the slide as import made it.
@@ -551,6 +557,7 @@ pub fn write<'a>(
         lang,
         seen: RefCell::new(BTreeSet::new()),
         next_id: RefCell::new(max_id),
+        ids: RefCell::new(BTreeMap::new()),
     };
     let top: Vec<El> = level_els(xml, &tree);
     let ctx = Ctx {
@@ -571,10 +578,12 @@ pub fn write<'a>(
     check_well_formed(&out)?;
     let lost = w.lost.into_inner();
     let media = w.media.into_inner();
+    let ids = w.ids.into_inner();
     Ok(Some(Out {
         xml: out,
         media,
         lost,
+        ids,
     }))
 }
 
@@ -626,6 +635,22 @@ impl<'a> Writer<'a, '_> {
         let mut n = self.next_id.borrow_mut();
         *n += 1;
         *n
+    }
+
+    /// Remember the id shape `c` is written under (its elements, its
+    /// group and, with `key`, its shape key; the first id a name gets
+    /// stays).
+    fn record(&self, c: &NShape, id: u32, key: bool) {
+        let mut ids = self.ids.borrow_mut();
+        for e in &c.elems {
+            ids.entry(e.id.clone()).or_insert(id);
+        }
+        if let Some((gid, _)) = &c.group {
+            ids.entry(gid.clone()).or_insert(id);
+        }
+        if let Some(k) = c.key.as_ref().filter(|_| key) {
+            ids.entry(k.clone()).or_insert(id);
+        }
     }
 
     /// One level of the tree: the document's shapes in its order, with the
@@ -686,11 +711,22 @@ impl<'a> Writer<'a, '_> {
         // A second shape with the key (a copy on the same slide) is a new
         // shape: the original's XML under a new id.
         let copy = !self.seen.borrow_mut().insert(k.clone());
+        // The deck's id, for a shape written as itself.
+        if !copy {
+            if let Some(id) = el_id(xml, &o.el) {
+                self.record(c, id, false);
+            }
+        }
         let same_parent = o.parent.as_deref() == parent;
         if !copy && same_parent && sig(b, self.job.base_doc) == sig(c, self.sh.cur) {
             return o.el.text(xml).to_string();
         }
         let new_id = copy.then(|| self.fresh_id());
+        // A copy is written under its new id (its key is the original's,
+        // so not recorded).
+        if let Some(id) = new_id {
+            self.record(c, id, false);
+        }
         match self.patch(o, b, c, ctx, new_id) {
             Ok(s) => s,
             Err(e) => {
@@ -1727,6 +1763,7 @@ impl<'a> Writer<'a, '_> {
             kids.push_str(&self.generate(ch, &inner));
         }
         let id = self.fresh_id();
+        self.record(c, id, true);
         format!(
             r#"<p:grpSp><p:nvGrpSpPr><p:cNvPr id="{id}" name="{}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>{}</p:grpSpPr>{kids}</p:grpSp>"#,
             esc(&name),
@@ -1751,6 +1788,13 @@ impl<'a> Writer<'a, '_> {
             .xfrm_of(&placed)
             .ok_or("its group cannot hold it")?;
         let id = self.fresh_id();
+        {
+            let mut ids = self.ids.borrow_mut();
+            ids.entry(e.id.clone()).or_insert(id);
+            if let Some(k) = &c.key {
+                ids.entry(k.clone()).or_insert(id);
+            }
+        }
         let name = c.name.clone().unwrap_or_else(|| match e.kind {
             Kind::TextFrame => format!("TextBox {}", id - 1),
             Kind::Rectangle if image_bytes(e).is_some() => format!("Picture {}", id - 1),

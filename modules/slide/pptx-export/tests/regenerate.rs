@@ -77,6 +77,7 @@ fn plan_of(doc: &Document) -> ExportPlan {
                     page_id: Some(id),
                     layout: st["layout"].as_str().map(str::to_string),
                     comments: None,
+                    timing: None,
                 })
             })
             .collect(),

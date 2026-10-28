@@ -31,6 +31,7 @@
 //! for export (`Transition::xml`, `Slide::timing_xml`) and otherwise reported in
 //! [`Presentation::diagnostics`].
 
+pub mod anim;
 pub mod chart;
 
 use serde::{Deserialize, Serialize};
@@ -128,6 +129,10 @@ pub struct Slide {
     pub transition: Option<Transition>,
     /// `p:timing`, verbatim, for export and for the build-step parser.
     pub timing_xml: Option<String>,
+    /// `p:timing` read as a tree (slide ADR 714); `None` when the slide has
+    /// none or it did not read (then `timing_xml` still has it).
+    #[serde(default)]
+    pub timing: Option<anim::Timing>,
     /// The slide's review comments: modern threaded comments and legacy
     /// ones, in the order the deck lists them (slide ADR 711).
     pub comments: Vec<Comment>,

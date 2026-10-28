@@ -51,6 +51,7 @@ pub mod native;
 pub mod probe;
 pub mod slide;
 pub mod text;
+pub mod timing;
 pub mod xml;
 
 use slide::relative;
@@ -92,6 +93,12 @@ pub struct SlidePlan {
     /// byte). A list the same as the source slide's keeps its bytes too.
     #[serde(default)]
     pub comments: Option<Vec<pptx_core::Comment>>,
+    /// The slide's animation timing as the document holds it (slide ADR
+    /// 714), its shapes named by page element and shape key (`None`: as
+    /// the deck had it; an empty timing: none). A timing that names the
+    /// deck's shapes as the deck did keeps its bytes.
+    #[serde(default)]
+    pub timing: Option<pptx_core::anim::Timing>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -119,6 +126,7 @@ struct Original {
     hidden: BTreeMap<String, bool>,
     notes: BTreeMap<String, Option<String>>,
     comments: BTreeMap<String, Vec<pptx_core::Comment>>,
+    timings: BTreeMap<String, Option<pptx_core::anim::Timing>>,
 }
 
 fn rels(pkg: &OpcPackage, part: &str) -> Relationships {
@@ -154,7 +162,9 @@ fn read_original(pkg: &OpcPackage, bytes: &[u8]) -> Result<Original, String> {
     let mut hidden = BTreeMap::new();
     let mut notes = BTreeMap::new();
     let mut comments = BTreeMap::new();
+    let mut timings = BTreeMap::new();
     for s in &ir.slides {
+        timings.insert(s.part.clone(), s.timing.clone());
         hidden.insert(s.part.clone(), s.hidden);
         comments.insert(s.part.clone(), s.comments.clone());
         notes.insert(
@@ -171,6 +181,7 @@ fn read_original(pkg: &OpcPackage, bytes: &[u8]) -> Result<Original, String> {
         hidden,
         notes,
         comments,
+        timings,
     })
 }
 
@@ -586,6 +597,11 @@ pub fn export_with(
                         orig.comments.get(part).map(Vec::as_slice).unwrap_or(&[]),
                     )
                 })
+                && s.timing.as_ref().is_none_or(|t| {
+                    let deck = orig.timings.get(part).cloned().flatten();
+                    let t = t.without_document_names();
+                    deck.as_ref() == Some(&t) || (deck.is_none() && t.nodes.is_empty())
+                })
         });
     if same_plan && model.is_none() && !slides.iter().any(|s| s.content_edited) {
         return Ok(Exported {
@@ -730,6 +746,10 @@ pub fn export_with(
             slide_xml = set_hidden(&slide_xml, s.hidden);
         }
 
+        // The page's shapes and the ids the writer gave them (animation
+        // targets follow them, slide ADR 714).
+        let mut page_shapes: Vec<native::NShape> = Vec::new();
+        let mut written_ids: BTreeMap<String, u32> = BTreeMap::new();
         // What is on the slide, from the document.
         if let (Some(sh), Some(deck), Some(base), Some(pid)) =
             (&shared, &deck, &base, s.page_id.as_deref())
@@ -737,6 +757,7 @@ pub fn export_with(
             let cur_spread = native::spread_of(sh.cur, pid);
             if let Some(cur_spread) = cur_spread {
                 let cur = native::page_shapes(cur_spread);
+                page_shapes = cur.clone();
                 if new {
                     let layout = s.layout.as_deref().unwrap_or("");
                     match new_slide(&ir, deck, &images, layout, cur) {
@@ -770,7 +791,9 @@ pub fn export_with(
                                         xml: ns.xml.clone(),
                                         media: Vec::new(),
                                         lost: Vec::new(),
+                                        ids: BTreeMap::new(),
                                     });
+                                    written_ids = out.ids.clone();
                                     slide_xml = set_hidden(&out.xml, s.hidden);
                                     for (p, b) in out.media {
                                         media_parts.push(p.clone());
@@ -816,6 +839,7 @@ pub fn export_with(
                         };
                         match slide::write(sh, &job, &mut r) {
                             Ok(Some(out)) => {
+                                written_ids = out.ids.clone();
                                 slide_xml = out.xml;
                                 for (p, b) in out.media {
                                     media_parts.push(p.clone());
@@ -1015,6 +1039,35 @@ pub fn export_with(
             _ => write_rels(&srels),
         };
         out_parts.insert(rels_part_name(&part), srels_bytes);
+
+        // Animations (slide ADR 714): the document's timing, or the deck's,
+        // with its shapes named as this part names them; an effect whose
+        // shape is gone is dropped. Unchanged, the part keeps its bytes.
+        let deck_timing = if new {
+            None
+        } else {
+            ir.slides
+                .iter()
+                .find(|x| x.part == src)
+                .and_then(|x| x.timing.clone())
+        };
+        if let Some(want) = s.timing.as_ref().or(deck_timing.as_ref()) {
+            let names = timing::Names::new(&page_shapes, written_ids, &slide_xml);
+            let (resolved, dropped) = timing::resolve(want, &names);
+            for d in &dropped {
+                not_exported.push(format!(
+                    "slide {}: {d} of a shape that is no longer on the slide was dropped",
+                    n + 1
+                ));
+            }
+            let changed = match &s.timing {
+                Some(_) => resolved != deck_timing,
+                None => !dropped.is_empty(),
+            };
+            if changed {
+                slide_xml = timing::splice(&slide_xml, resolved.as_ref());
+            }
+        }
         out_parts.insert(part.clone(), slide_xml.into_bytes());
         written.push((part, t.id, t.rid.clone(), src.to_string()));
     }

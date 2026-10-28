@@ -252,3 +252,41 @@ fn the_document_is_deterministic() {
         model_json(&open(&b.paged).document)
     );
 }
+
+#[test]
+fn a_slides_timing_rides_its_page_with_the_elements_its_shapes_became() {
+    // Slide ADR 714: the timing in the page label names, for each shape
+    // target, the page element the shape became and its shape key.
+    let (deck, written) = build("motion");
+    let doc = open(&written.paged).document;
+    let elements: std::collections::BTreeSet<String> = written
+        .elements
+        .values()
+        .map(|(_, id)| id.clone())
+        .collect();
+    let mut targets = 0;
+    for (s, slide) in doc.spreads.iter().zip(&deck.slides) {
+        let Some(label) = s.spread.labels.get(&slide.id).map(|l| l[0].1.clone()) else {
+            continue;
+        };
+        let env: serde_json::Value = serde_json::from_str(&label).unwrap();
+        let Some(t) = env["data"].get("timing") else {
+            assert!(slide.timing.is_none(), "{}", slide.part);
+            continue;
+        };
+        let mut t: pptx_core::anim::Timing = serde_json::from_value(t.clone()).unwrap();
+        // Without the document's names it is the deck's timing.
+        assert_eq!(&t.without_document_names(), slide.timing.as_ref().unwrap());
+        t.for_each_sp_target(&mut |spid, item, key| {
+            targets += 1;
+            assert_eq!(
+                key.as_deref(),
+                Some(format!("{}#{spid}", slide.part).as_str())
+            );
+            let item = item.as_deref().expect("a top-level shape's element");
+            assert!(elements.contains(item), "{item}");
+        });
+    }
+    // Four builds on slide 5: three effects' behaviours and four bldP.
+    assert!(targets >= 8, "{targets}");
+}

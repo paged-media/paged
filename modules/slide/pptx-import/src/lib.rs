@@ -37,6 +37,7 @@ use pptx_core::{
     Presentation, Section, Shape, Slide, Theme, Transition,
 };
 
+pub mod anim;
 pub mod chart;
 pub mod comments;
 pub mod fonts;
@@ -455,6 +456,7 @@ fn slide(
     let csld = el.child(Ns::P, "cSld");
     let mut transition = None;
     let mut timing_xml = None;
+    let mut timing = None;
     for c in &el.children {
         if c.is(Ns::P, "transition") {
             transition = Some(read_transition(c, c));
@@ -468,6 +470,7 @@ fn slide(
             }
         } else if c.is(Ns::P, "timing") {
             timing_xml = Some(c.to_xml());
+            timing = Some(anim::timing(c));
         }
     }
     Ok(Slide {
@@ -485,6 +488,7 @@ fn slide(
             .and_then(|n| notes(pkg, &n, diagnostics)),
         transition,
         timing_xml,
+        timing,
         comments: comments::of_slide(pkg, &ctx, authors),
     })
 }

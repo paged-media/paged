@@ -15,3 +15,6 @@ slide-geom.workspace = true
 # The chart model (`chart`), with this crate's paints and text properties.
 dml-chart.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1179,6 +1179,7 @@ pub fn resolve(deck: &Presentation) -> Deck {
                 .filter(|n| !n.trim().is_empty()),
             transition: s.transition.clone(),
             timing_xml: s.timing_xml.clone(),
+            timing: s.timing.clone(),
         });
     }
 
