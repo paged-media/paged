@@ -29,6 +29,9 @@ on:
       # The test fonts (Lora) are read from the engine's corpus.
       - "engine/core/corpus/fonts/**"
       - "modules/draw/**"
+      # The draw wasm links the engine's paged-svg (draw ADR 364).
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/paged-svg/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
@@ -65,6 +68,9 @@ on:
       # The test fonts (Lora) are read from the engine's corpus.
       - "engine/core/corpus/fonts/**"
       - "modules/draw/**"
+      # The draw wasm links the engine's paged-svg (draw ADR 364).
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/paged-svg/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).

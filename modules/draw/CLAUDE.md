@@ -17,8 +17,10 @@ geometry/tools through the published `@paged-media/draw` (its `./geometry` and
 
 Since Image Trace (2026-08-04) there is ALSO a Rust half, in `crates/`:
 `draw-trace` (the tracer kernel over the `visioncortex` crate — colour
-clustering, boundary walking, spline fitting) and `trace-js` (its
-wasm-bindgen surface). The built artifact lands in
+clustering, boundary walking, spline fitting), `draw-dxf` (DXF ↔ SVG over
+the `dxf` crate and `paged-svg`'s walker, ADR 364) and `trace-js` (the
+wasm-bindgen surface of both, plus `paged-svg::paint` for the recolor
+action). The built artifact lands in
 `packages/draw-bundle/wasm/`, which is BOTH the manifest-relative path
 declared under `capabilities.wasm[]` and the path `src/trace-engine.ts`
 imports — one copy, so the manifest/package drift that bit paged.image
@@ -151,8 +153,14 @@ is an exact restore rather than an inverse. Nothing is grouped, nothing
 is scaled to fit, and the count mode's count IS the object count —
 there is deliberately no way to ask for more slots than objects, because
 that is what a Repeat is), OPACITY MASKS and TYPE ON
-A PATH (the two protocol-58 rows — see the v58 seam note below), SVG
-import/export, and the `vectorGraphic` EDIT CONTEXT
+A PATH (the two protocol-58 rows — see the v58 seam note below),
+INTERCHANGE (ADR 364 — and read it before adding a reader: SVG in and out
+is the ENGINE's `document.importSvg` / `exportSvg` and nothing else, the
+module's own TS reader/writer is deleted; DXF goes in and out THROUGH
+SVG with `crates/draw-dxf` in the draw wasm; `.ai` is paged.pdf's
+`placeVectors`, `.eps` the engine's PostScript placed, exported as SVG
+and re-imported; the `recolor` action rewrites colours in the SVG
+SOURCE through `paged-svg::paint`), and the `vectorGraphic` EDIT CONTEXT
 (double-click a path-bearing kind → anchor-editing tool-set focused,
 stroke panel raised, Esc pops out). The bundle drives end-to-end through the real editor host:
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
@@ -559,7 +567,8 @@ paints nothing), Illustrator's clipping mask. Measured, and asserted in
 - **Install order:** editor → plugin-sdk → plugin-draw (`link:` chain).
 - **The Rust half is the EXCEPTION, not the new normal.** `crates/` exists
   because Image Trace's kernel is computer vision, not path algebra, and
-  `visioncortex` already is that kernel. Path math still belongs in
+  `visioncortex` already is that kernel — and, since ADR 364, because DXF
+  is format I/O over the `dxf` crate (`draw-dxf`, in the same wasm). Path math still belongs in
   `draw-geometry` — in particular the tracer does NOT decide winding: it
   reports contours, and `makeCompoundTable` (`mergeCompound` +
   `orientForNonZeroHoles`) re-winds holes by nesting depth, because the
@@ -571,9 +580,8 @@ paints nothing), Illustrator's clipping mask. Measured, and asserted in
   way, every other path the other) for Make Compound Path, because that
   is what Illustrator does — measured, `test/oracle/compound-path.spec.ts`:
   it stays non-zero and paints a square nested three levels deep SOLID.
-  SVG import picks between them by the file's `fill-rule`
-  (`orientForFillRule`): `evenodd` takes the depth rule, `nonzero` keeps
-  the authored winding, which already IS a non-zero region.
+  An SVG's `fill-rule` is no longer re-wound here: the engine carries
+  the rule on the element and its SVG import writes it (ADR 364).
 - **`flo_curves` 0.3 (transitively, via visioncortex) is NOT the version
   the engine had to patch.** Core patches flo_curves 0.8 for a
   non-transitive comparator in `GraphPath::exterior_paths` that aborts

@@ -27,6 +27,9 @@ on:
     branches: [main]
     paths:
       - "modules/draw/**"
+      # The engine crate the Cargo workspace path-depends on (draw ADR 364).
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/paged-svg/**"
       - "platform/extensions/packages/plugin-sdk/bin/**"
       - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/draw-rust.yml"
@@ -38,6 +41,9 @@ on:
   pull_request:
     paths:
       - "modules/draw/**"
+      # The engine crate the Cargo workspace path-depends on (draw ADR 364).
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/paged-svg/**"
       - "platform/extensions/packages/plugin-sdk/bin/**"
       - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/draw-rust.yml"

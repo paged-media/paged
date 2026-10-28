@@ -74,7 +74,7 @@ import { defineMessages } from "@paged-media/strings";
 import { registerCommand } from "../command-registry";
 import { announceRecipeChange } from "../link-index";
 import { readRecipeBytes, writeRecipeBytes } from "../recipe-store";
-import { resolveTargetPage } from "../io/svg";
+import { resolveTargetPage } from "../target-page";
 import {
   graphicPaintFor,
   graphicPaintOps,
