@@ -29,8 +29,16 @@
 import { t } from "@paged-media/strings";
 
 import { SHOW } from "../messages.js";
-import type { FrameSource } from "./frames.js";
-import { current, position, upNext, type ShowState } from "./show-model.js";
+import type { Player } from "./animation.js";
+import type { FrameSource, SceneSource } from "./frames.js";
+import type { SlideScene } from "./scene-source.js";
+import {
+  current,
+  position,
+  upNext,
+  type ShowSlide,
+  type ShowState,
+} from "./show-model.js";
 import {
   clock,
   keyOf,
@@ -42,6 +50,8 @@ import {
 
 export interface ConsoleDeps {
   frames: FrameSource;
+  scenes?: SceneSource;
+  player?(slide: ShowSlide, scene: SlideScene): Promise<Player | null>;
   thumbnail(pageId: string): string | null;
   /** Re-render when a thumbnail lands. */
   subscribeThumbnails(fn: () => void): () => void;
@@ -226,7 +236,14 @@ export function mountConsole(
 
   const view = new ShowView(stage, win, {
     frames: deps.frames,
+    scenes: deps.scenes,
+    player: deps.player,
     interactive: true,
+    onClick: (trigger) => {
+      if (ctl.state().tool !== "arrow") return;
+      if (trigger) ctl.trigger(trigger);
+      else ctl.dispatch({ type: "next" });
+    },
     onStroke: (pageId, s) => ctl.addStroke(pageId, s),
     onLaser: (at) =>
       deps.channel.post({ t: "laser", at } satisfies ShowMessage),
@@ -338,6 +355,8 @@ export function mountConsole(
     else if (msg.t === "key") ctl.key(msg);
     else if (msg.t === "advance") {
       if (ctl.state().tool === "arrow") ctl.dispatch({ type: "next" });
+    } else if (msg.t === "trigger") {
+      if (ctl.state().tool === "arrow") ctl.trigger(msg.target);
     }
   });
   draw(ctl.state(), ctl.state());

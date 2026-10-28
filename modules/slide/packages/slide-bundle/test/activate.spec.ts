@@ -22,6 +22,7 @@
 // real slide wasm; the host is a recording fake (the open itself is the
 // conformance spec's business).
 
+import { ANIMATIONS_PANEL_ID } from "../src/anim/pane";
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "bun:test";
@@ -215,17 +216,20 @@ describe("paged.slide importer", () => {
       },
     } as unknown as BundleHost;
     const handle = activate(host);
-    // The Shapes panel (Insert ▸ Shapes, ADR 717) beside them.
+    // The Shapes panel (Insert ▸ Shapes, ADR 717) and the Animations pane
+    // (ADR 714) beside them.
     expect(panels.map((p) => p.id)).toEqual([
       SLIDES_PANEL_ID,
       SHAPES_PANEL_ID,
       NOTES_PANEL_ID,
+      ANIMATIONS_PANEL_ID,
     ]);
     // A document that is not a deck keeps them out of the panel rail.
     expect(panels.map((p) => (p as { rail?: boolean }).rail)).toEqual([
       false,
       undefined,
       false,
+      undefined,
     ]);
     handle.dispose();
 

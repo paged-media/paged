@@ -6,7 +6,10 @@
 //      same gate as remote sources, editor ADR 218); a relative path
 //      against the column's base;
 //   2. keep — the bytes by content hash in `host.blob` (local, per plugin),
-//      so a refresh refetches only references it has not seen;
+//      so a refresh refetches only references it has not seen; a saved
+//      `.paged` carries them too (`persist.ts` `storeAssets`, ADR 563
+//      amended 2026-10-28), and a reference the open document carries is
+//      read from its part, not fetched, and kept in `host.blob` from then on;
 //   3. act — the column's action chain (`host.actions`, extensions ADR 344:
 //      a fit, a colour conversion, a background removal), its result cached
 //      under the chain's key.
@@ -89,10 +92,32 @@ export interface AssetDeps {
   consentedOrigins(): readonly string[];
   /** Fetch bytes (the editor's `fetch`; a test injects one). */
   fetch?: (url: string) => Promise<Uint8Array>;
+  /** The asset the open document carries for a reference (its asset
+   *  index and part), or null. Absent: the document is not asked. */
+  fromDocument?: (reference: string) => Promise<DocumentAsset | null>;
+}
+
+/** An asset a saved document carries: its content hash and its part. */
+export interface DocumentAsset {
+  hash: string;
+  mediaType: string;
+  read(): Promise<Uint8Array | null>;
+}
+
+/** An asset this session holds the bytes of, by the reference it was had
+ *  under: fetched through the consent gate, read from a `data:` reference,
+ *  or read from the document. */
+export interface KeptAsset {
+  hash: string;
+  mediaType: string;
+  bytes: Uint8Array;
 }
 
 export interface AssetPipeline {
   resolve(reference: string, def: AssetColumnDef): Promise<AssetOutcome>;
+  /** The bytes this session holds for a reference, or null: what a save
+   *  writes into the document. Never reads the blob store or the network. */
+  kept(reference: string): KeptAsset | null;
   /** References fetched from the network this session (a test reads it). */
   readonly fetched: readonly string[];
 }
@@ -130,21 +155,37 @@ export function createAssetPipeline(
     | { bytes: Uint8Array; mediaType: string; hash: string; fresh: boolean }
     | string
   > {
-    const known = byReference.get(reference);
+    let known = byReference.get(reference);
+    let carried: DocumentAsset | null = null;
+    if (!known && deps.fromDocument) {
+      carried = await deps.fromDocument(reference).catch(() => null);
+      known = carried?.hash;
+    }
     if (known) {
       const b = bytesOf.get(known);
-      if (b) return { ...b, hash: known, fresh: false };
+      if (b) {
+        byReference.set(reference, known);
+        return { ...b, hash: known, fresh: false };
+      }
       try {
         const stored = await blob()?.read(`${BLOB_PREFIX}${known}`);
-        if (stored)
-          return {
-            bytes: stored,
-            mediaType: mediaTypeOf(stored, reference),
-            hash: known,
-            fresh: false,
-          };
+        if (stored) {
+          const mediaType =
+            carried?.mediaType || mediaTypeOf(stored, reference);
+          bytesOf.set(known, { bytes: stored, mediaType });
+          byReference.set(reference, known);
+          return { bytes: stored, mediaType, hash: known, fresh: false };
+        }
       } catch {
-        // Fall through to a fetch.
+        // Fall through to the document, then a fetch.
+      }
+      // The document's own copy seeds the cache (memory and blob store).
+      const part = await carried?.read().catch(() => null);
+      if (part && (await sha256(part)) === known) {
+        const mediaType = carried!.mediaType || mediaTypeOf(part, reference);
+        await keep(part, mediaType);
+        byReference.set(reference, known);
+        return { bytes: part, mediaType, hash: known, fresh: false };
       }
     }
     let url: URL;
@@ -190,6 +231,11 @@ export function createAssetPipeline(
 
   return {
     fetched,
+    kept(reference) {
+      const hash = byReference.get(reference);
+      const b = hash ? bytesOf.get(hash) : undefined;
+      return hash && b ? { hash, ...b } : null;
+    },
     async resolve(reference, def) {
       const got = await load(reference, def);
       if (typeof got === "string") return { ok: false, reason: got };

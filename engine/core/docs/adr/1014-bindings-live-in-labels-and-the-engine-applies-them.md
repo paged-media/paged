@@ -69,7 +69,7 @@ What the headless lane cannot write yet is listed per binding as `notHeadless`, 
 covered images, tables, barcodes, record flows, rules, and a colour no swatch has (these need the
 module's lowering writers or a swatch mint). Amendment 3 writes all of them but record flows and
 two image references; amendment 4 writes record flows; amendment 5 writes a remote image whose
-origin the run lists.
+origin the run lists; amendment 6 writes a document asset id whose bytes a `.paged` carries.
 
 **One selector grammar.** The durable selector of a labelled page item is
 `frame[label.x-paged:media.paged.data*="\"oid\":\"pd-…\""]`, a quoted value holding its own quotes.
@@ -211,13 +211,14 @@ What is written now:
   minted. A swatch name the document lacks, with no literal colour behind it, is `failed`.
 
 What stays `notHeadless`, and why (record flows are written since amendment 4, remote images of
-a listed origin since amendment 5):
+a listed origin since amendment 5, document asset ids a `.paged` carries since amendment 6):
 
 - **A remote image uri whose origin the run does not list.** The editor fetches it on the
   user's consent; the command line on `--allow-origin` (amendment 5). The row's reason names the
   flag with the uri's origin. A binary built without the `fetch` feature has no client and says
   so.
-- **A document asset id.** No document keeps an asset id's bytes (amendment 4).
+- **A document asset id the input does not carry.** An IDML input has no container parts, and a
+  `.paged` may lack the asset index, the id or the part; the reason names which (amendment 6).
 
 One gap this left open was closed on 2026-10-28: the IDML export wrote `AppliedCellStyle` on cells
 but no cell style definitions, so a cell style a table rule created was kept in a `.paged` file but
@@ -272,11 +273,12 @@ placed):
   (`--allow-origin ORIGIN`, exact `scheme://host[:port]`, HTTPS except for localhost, with a size
   cap and a timeout) needs that dependency. It is added only together with its licence review
   (`cargo deny check`).
-- **A document asset id** (`asset:<id>`). No document keeps an asset id's bytes. The `.paged`
+- **A document asset id** (`asset:<id>`; placed from a `.paged` since amendment 6). No document
+  keeps an asset id's bytes. The `.paged`
   container's data parts hold source files and applied values (`persist.ts`), not pictures. An
   asset column's fetched bytes live in the module's per-user blob store (`host.blob`), outside the
-  document. The editor's own image writer skips an asset id too (`placeableUri` gives none). The
-  reason in the row says so.
+  document. The reason in the row says so. (Since 2026-10-28 the editor places an asset id the
+  document carries, as the command line does.)
 
 ## Amendment 5 (2026-10-28): remote images on consent
 
@@ -333,3 +335,35 @@ cannot raise it. The tests serve from a listener on `127.0.0.1` inside the test,
 network: an unlisted origin (not asked), a listed one (placed, in the saved document, with the user
 agent and no cookie or authorization header), a redirect to an unlisted origin (failed, not asked),
 a redirect loop (failed after three), and a body past the cap (failed).
+
+## Amendment 6 (2026-10-28): document asset ids from the `.paged` container
+
+A saved `.paged` carries the bytes of its asset columns' pictures (data
+[ADR 563](../../../../modules/data/docs/adr/563-asset-columns.md), amended the same day): one part
+per content hash, `paged/media.paged.data/assets/<sha256>`, and the index
+`paged/media.paged.data/assets.json` (`{ v: 1, refs: { <reference>: { hash, columns } }, assets:
+{ <hash>: { mediaType, bytes } } }`). `paged data apply` resolves an `asset:<id>` image reference
+from them: the id is looked up as a reference the index lists, else as a content hash it lists;
+the part is read through the session's container-part door (`ReadPagedPart`, as `paged parts read`
+reads it). The bytes are placed exactly as a local `path` image's: the decode check,
+`ReplaceImageBytes`, the fit and the fitted inner transform. The index is read once per apply. The
+row's value names the part (`asset:<id> (paged/media.paged.data/assets/<hash>)`).
+
+What stays `notHeadless`, each with its own reason:
+
+- **An IDML input** (`.idml`): an IDML package carries no container parts; its pictures are links.
+- **A `.paged` without the index**, or with an index that is not JSON.
+- **An id the index does not list.**
+- **A part the index names but the container lacks.**
+
+Nothing is fetched for an asset id, and no consent is asked: the bytes are the document's own. The
+CLI checks a part's bytes against the SHA-256 its name gives, as the editor does when it reads
+one back: other bytes under that name are `notHeadless`. A remote image reference the index lists
+is placed from its part the same way, with no `--allow-origin` and no request; one it does not list
+goes to the consented fetch of amendment 5. Tests: `data_cli.rs`
+(`data_apply_places_a_document_asset_id_from_the_paged_container`,
+`data_apply_refuses_an_asset_part_whose_bytes_do_not_match_its_name`,
+`data_apply_places_a_remote_image_the_document_carries_without_fetching_it`,
+`data_apply_says_which_part_an_asset_id_misses`,
+`data_apply_leaves_an_asset_id_of_an_idml_input_unwritten`,
+`data_apply_leaves_a_document_asset_id_unwritten_and_says_why`).

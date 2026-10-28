@@ -143,6 +143,40 @@ pub const SLIDE_LABEL_KEY: &str = "x-paged:media.paged.slide";
 /// envelope): its layout, speaker notes, the hidden flag and the
 /// transition. `None` when the slide has none of them.
 pub fn slide_label(s: &SlidePage) -> Option<String> {
+    slide_label_with(s, &BTreeMap::new())
+}
+
+/// A slide's animation timing with the document's names for its shapes
+/// (slide ADR 714): each shape target's `item` is the page element the
+/// top-level shape with that `cNvPr id` became (`elements`, by item id),
+/// its `key` the shape key `<part>#<id>`. A target that names no top-level
+/// shape of the slide keeps neither.
+pub fn named_timing(
+    s: &SlidePage,
+    elements: &BTreeMap<String, (&'static str, String)>,
+) -> Option<pptx_core::anim::Timing> {
+    let mut t = s.timing.clone()?;
+    let by_spid: BTreeMap<String, &Item> = s
+        .items
+        .iter()
+        .filter(|it| it.meta.shape_id != 0)
+        .map(|it| (it.meta.shape_id.to_string(), it))
+        .collect();
+    t.for_each_sp_target(&mut |spid, item, key| {
+        if let Some(it) = by_spid.get(spid.trim()) {
+            *key = Some(format!("{}#{}", s.part, slide_key(it)));
+            *item = elements.get(&it.id).map(|(_, id)| id.clone());
+        }
+    });
+    Some(t)
+}
+
+/// [`slide_label`] with the page elements the slide's items became (by
+/// item id), so the label's timing names them (slide ADR 714).
+pub fn slide_label_with(
+    s: &SlidePage,
+    elements: &BTreeMap<String, (&'static str, String)>,
+) -> Option<String> {
     let mut data = serde_json::Map::new();
     // The layout the slide was made from: its master spread's id. A new
     // slide "from this layout" copies a slide that has it.
@@ -171,6 +205,11 @@ pub fn slide_label(s: &SlidePage) -> Option<String> {
                 "xml": t.xml,
             }),
         );
+    }
+    if let Some(t) = named_timing(s, elements) {
+        if let Ok(v) = serde_json::to_value(&t) {
+            data.insert("timing".into(), v);
+        }
     }
     // The section that starts here (slide ADR 720): it moves, duplicates
     // and undoes with its first slide.
@@ -1506,10 +1545,11 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         });
         // The slide's notes, hidden flag and transition ride its page as
         // plugin metadata, so they move, duplicate and undo with it.
-        sb.label(&s.id, slide_label(s).as_deref());
         for it in &s.items {
             w.item(&mut sb, it, Some(&format!("{}#{}", s.part, slide_key(it))));
         }
+        // After the items: the timing names the elements they became.
+        sb.label(&s.id, slide_label_with(s, &w.elements).as_deref());
         spreads.push(ParsedSpread {
             src: format!("Spreads/Spread_s{}.xml", s.id),
             spread: sb.spread,

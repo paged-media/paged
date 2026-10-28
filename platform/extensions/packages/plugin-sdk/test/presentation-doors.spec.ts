@@ -30,6 +30,9 @@
 //   · the harness wires a presenter and a view registry that keep state.
 
 import { afterEach, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type {
   Disposable,
@@ -288,6 +291,72 @@ describe("host.render.layers (extensions ADR 346) [plugin-platform.render-snapsh
     expect(split.background.rgba).not.toEqual(bg.rgba);
     // An unknown page answers null.
     expect(await live.host.render.layers("nope", {})).toBeNull();
+  });
+
+  it("C4: a text frame's paragraphs come back as layers of their own, top to bottom (slide ADR 714)", async () => {
+    // A face to lay the text out with (headless loads have none).
+    const face = new Uint8Array(
+      readFileSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          "../../../../../engine/core/corpus/fonts/SpaceGrotesk-VF.ttf",
+        ),
+      ),
+    );
+    live = await createHeadlessHost({ console: silent, defaultFont: face });
+    const [pageId] = await live.load(minimalIdml());
+    expect(live.host.supports("render.layers.paragraphs@1")).toBe(true);
+    const out = await live.host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "insertTextFrame",
+            args: { pageId, bounds: [300, 72, 500, 400] },
+          },
+          { op: "bindCreated", args: { handle: "t" } },
+          {
+            op: "insertText",
+            args: { storyId: "$h:t", offset: 0, text: "Alpha\nBeta\n\nGamma" },
+          },
+        ],
+      },
+    } as never);
+    expect(out.applied).toBe(true);
+    const frames = (await live.host.document.collection<{ selfId: string }>(
+      "stories",
+    )) as Array<{ selfId: string }>;
+    const chain = await live.host.document.frameChain(
+      frames[frames.length - 1].selfId,
+    );
+    const frame = {
+      kind: "textFrame",
+      id: chain[0].frameId,
+    } as ElementId;
+    const plain = (await live.host.render.layers(pageId, {
+      scale: 1,
+      format: "rgba",
+    }))!;
+    const split = (await live.host.render.layers(pageId, {
+      paragraphs: [frame],
+      scale: 1,
+      format: "rgba",
+    }))!;
+    const paras = split.paragraphs!;
+    // Three paragraphs with text (the empty third has no layer).
+    expect(paras.map((p) => p.paragraph)).toEqual([0, 1, 3]);
+    for (const p of paras) {
+      expect(p.id).toEqual(frame);
+      expect(p.rgba!.length).toBe(p.widthPx * p.heightPx * 4);
+    }
+    // Stacked down the frame.
+    expect(paras[0].region.y).toBeLessThan(paras[1].region.y);
+    expect(paras[1].region.y).toBeLessThan(paras[2].region.y);
+    expect(paras[0].region.y + paras[0].region.height).toBeLessThanOrEqual(
+      paras[1].region.y + 1,
+    );
+    // The frame is left out of the background.
+    expect(split.background.rgba).not.toEqual(plain.background.rgba);
   });
 
   it("answers PNGs where there is no createImageBitmap", async () => {

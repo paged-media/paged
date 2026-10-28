@@ -43,6 +43,17 @@
 //                 came from: no new exposure. Absent in a part written before
 //                 it: the engine then has the `applied` hashes only.
 //
+// Beside the session part, the asset columns' pictures (data ADR 563,
+// amended 2026-10-28): on save, each asset the asset columns reference now
+// whose bytes this session holds is its own content-addressed part
+// `assets/<sha256>` (one per hash, written once), and `assets.json` indexes
+// them (`AssetIndex`: reference → hash and the columns naming it; hash →
+// media type and size). It is not in the session part, so labelled session
+// versions never name an asset, and a save deletes the parts the index no
+// longer names. A `.paged` opened elsewhere reads a reference's bytes from
+// its part instead of fetching it; the CLI places an `asset:<id>` from them.
+// An IDML export carries no parts: its pictures stay links.
+//
 // Undo: `host.parts` writes are not undoable, and the session is not document
 // content, so defining a binding is not an undo step either. What IS undoable
 // is everything the session writes INTO the document (placed fields, tables,
@@ -446,4 +457,215 @@ export function decodeSession(
         }
       : {}),
   };
+}
+
+// ── Asset parts (data ADR 563, amended 2026-10-28) ─────────────────────────
+
+/** The asset index part (relative to `paged/media.paged.data/`). */
+export const ASSET_INDEX_PART = "assets.json";
+/** The folder each asset's bytes are written to, one part per hash. */
+export const ASSET_PART_DIR = "assets/";
+export const ASSET_INDEX_VERSION = 1;
+
+/** What a document carries of its asset columns' pictures. */
+export interface AssetIndex {
+  v: typeof ASSET_INDEX_VERSION;
+  /** Each reference an asset column names → the asset's hash, and the
+   *  columns (`<query>.<field>`) that name it. */
+  refs: Record<string, { hash: string; columns: string[] }>;
+  /** Each asset by its SHA-256 (hex): its media type and size in bytes. */
+  assets: Record<string, { mediaType: string; bytes: number }>;
+}
+
+/** The part an asset's bytes are written to (`assets/<hash>`). */
+/** The content hash the index gives `reference`: an asset column's resolved
+ *  reference, or an `asset:<id>` naming one by that reference or by its
+ *  hash. */
+export function carriedHash(
+  index: AssetIndex,
+  reference: string,
+): string | undefined {
+  const direct = index.refs[reference]?.hash;
+  if (direct) return direct;
+  if (!reference.startsWith("asset:")) return undefined;
+  const id = reference.slice("asset:".length);
+  return index.refs[id]?.hash ?? (index.assets[id] ? id : undefined);
+}
+
+export function assetPartPath(hash: string): string {
+  return `${ASSET_PART_DIR}${hash}`;
+}
+
+const HEX = /^[0-9a-f]+$/;
+
+/** Read an asset index part; null when absent, unreadable or of another
+ *  version. Entries that are malformed or name no asset are dropped. */
+export function decodeAssetIndex(bytes: Uint8Array | null): AssetIndex | null {
+  if (!bytes) return null;
+  let p: unknown;
+  try {
+    p = JSON.parse(decoder.decode(bytes));
+  } catch {
+    return null;
+  }
+  if (!p || typeof p !== "object") return null;
+  const raw = p as { v?: unknown; refs?: unknown; assets?: unknown };
+  if (raw.v !== ASSET_INDEX_VERSION) return null;
+  const assets: AssetIndex["assets"] = {};
+  for (const [hash, a] of Object.entries(
+    raw.assets && typeof raw.assets === "object" ? raw.assets : {},
+  )) {
+    const m = a as { mediaType?: unknown; bytes?: unknown };
+    if (HEX.test(hash) && typeof m?.mediaType === "string")
+      assets[hash] = {
+        mediaType: m.mediaType,
+        bytes: typeof m.bytes === "number" ? m.bytes : 0,
+      };
+  }
+  const refs: AssetIndex["refs"] = {};
+  for (const [ref, e] of Object.entries(
+    raw.refs && typeof raw.refs === "object" ? raw.refs : {},
+  )) {
+    const r = e as { hash?: unknown; columns?: unknown };
+    if (typeof r?.hash === "string" && assets[r.hash])
+      refs[ref] = {
+        hash: r.hash,
+        columns: Array.isArray(r.columns)
+          ? r.columns.filter((c): c is string => typeof c === "string")
+          : [],
+      };
+  }
+  return { v: ASSET_INDEX_VERSION, refs, assets };
+}
+
+/** The index as its part's bytes, keys sorted (an unchanged index is the
+ *  same bytes, so a save does not rewrite it). */
+export function encodeAssetIndex(index: AssetIndex): Uint8Array {
+  const sorted = <T>(o: Record<string, T>) =>
+    Object.fromEntries(
+      Object.keys(o)
+        .sort()
+        .map((k) => [k, o[k]!]),
+    );
+  return encoder.encode(
+    JSON.stringify({
+      v: index.v,
+      refs: sorted(index.refs),
+      assets: sorted(index.assets),
+    }),
+  );
+}
+
+/** The parts door as `storeAssets` uses it; `list` and `delete` are absent
+ *  on a host without `storage.parts@2` (nothing is cleaned up then). */
+export interface AssetPartsIO {
+  write(path: string, bytes: Uint8Array): Promise<void>;
+  list?(prefix: string): Promise<string[]>;
+  delete?(path: string): Promise<boolean>;
+}
+
+/** Write the assets the document's asset columns reference into its parts.
+ *
+ *  `columns` holds, per asset column, the references its values name now,
+ *  or null when they are not known (its query has no records yet): such a
+ *  column keeps what `previous` lists for it. A reference whose bytes this
+ *  session holds (`kept`: fetched through the consent gate, or read from
+ *  the document) is written once per hash (a `data:` reference is not: it
+ *  carries its bytes in the data); one it
+ *  does not hold keeps its `previous` entry (the document carries it), and
+ *  one neither knows is left out — nothing is fetched here. The parts under
+ *  `assets/` the new index does not name are deleted; an empty index
+ *  deletes the index part. */
+export async function storeAssets(
+  columns: ReadonlyMap<string, readonly string[] | null>,
+  kept: (reference: string) => {
+    hash: string;
+    mediaType: string;
+    bytes: Uint8Array;
+  } | null,
+  previous: AssetIndex | null,
+  io: AssetPartsIO,
+): Promise<{ index: AssetIndex; written: string[]; deleted: string[] }> {
+  // What the container holds now: listed when the door can, else what the
+  // previous index named.
+  const relative = (p: string) =>
+    p.startsWith(ASSET_PART_DIR) ? p : `${ASSET_PART_DIR}${p}`;
+  const present = new Set(
+    io.list
+      ? (await io.list(ASSET_PART_DIR)).map(relative)
+      : Object.keys(previous?.assets ?? {}).map(assetPartPath),
+  );
+  const index: AssetIndex = { v: ASSET_INDEX_VERSION, refs: {}, assets: {} };
+  const bytesOf = new Map<string, Uint8Array>();
+  const add = (
+    ref: string,
+    column: string,
+    hash: string,
+    asset: { mediaType: string; bytes: number },
+  ) => {
+    const e = (index.refs[ref] ??= { hash, columns: [] });
+    if (e.hash !== hash) return;
+    if (!e.columns.includes(column)) e.columns.push(column);
+    index.assets[hash] ??= asset;
+  };
+  // An entry the document carried is kept only while its part is there.
+  const carried = (ref: string, column: string, hash: string) => {
+    const asset = previous?.assets[hash];
+    if (asset && present.has(assetPartPath(hash)))
+      add(ref, column, hash, asset);
+  };
+  for (const [column, references] of columns) {
+    if (references === null) {
+      for (const [ref, e] of Object.entries(previous?.refs ?? {}))
+        if (e.columns.includes(column)) carried(ref, column, e.hash);
+      continue;
+    }
+    for (const ref of new Set(references)) {
+      // A `data:` reference carries its bytes in the data already.
+      if (ref.startsWith("data:")) continue;
+      const k = kept(ref);
+      if (k) {
+        add(ref, column, k.hash, {
+          mediaType: k.mediaType,
+          bytes: k.bytes.length,
+        });
+        bytesOf.set(k.hash, k.bytes);
+        continue;
+      }
+      const e = previous?.refs[ref];
+      if (e) carried(ref, column, e.hash);
+    }
+  }
+  const written: string[] = [];
+  for (const [hash, bytes] of bytesOf) {
+    const path = assetPartPath(hash);
+    if (present.has(path)) continue;
+    await io.write(path, bytes);
+    written.push(path);
+  }
+  // The new index before the old parts go: an index never names a part
+  // that is not there.
+  const deleted: string[] = [];
+  const before = previous ? decoder.decode(encodeAssetIndex(previous)) : null;
+  const after = encodeAssetIndex(index);
+  if (Object.keys(index.assets).length === 0) {
+    if (previous && io.delete) {
+      await io.delete(ASSET_INDEX_PART);
+      deleted.push(ASSET_INDEX_PART);
+    } else if (previous) {
+      await io.write(ASSET_INDEX_PART, after);
+      written.push(ASSET_INDEX_PART);
+    }
+  } else if (decoder.decode(after) !== before) {
+    await io.write(ASSET_INDEX_PART, after);
+    written.push(ASSET_INDEX_PART);
+  }
+  if (io.delete) {
+    for (const path of present) {
+      if (index.assets[path.slice(ASSET_PART_DIR.length)]) continue;
+      await io.delete(path);
+      deleted.push(path);
+    }
+  }
+  return { index, written, deleted };
 }

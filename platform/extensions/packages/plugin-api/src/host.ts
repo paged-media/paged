@@ -1928,6 +1928,14 @@ export interface RenderLayersOptions {
   /** How far past an item's geometric bounds, in pt, its layer may reach
    *  for stroke and effects (default 72). */
   marginPt?: number;
+  /** Extensions ADR 346, amendment C4 (slide ADR 714) — text frames whose
+   *  PARAGRAPHS come back as layers of their own (`RenderedLayers.paragraphs`):
+   *  each paragraph the frame shows, the frame's pixels within the band of
+   *  that paragraph's lines, so a build can bring a list in paragraph by
+   *  paragraph. A frame here is also left out of the background. An empty
+   *  paragraph, or one the frame does not show, has no layer.
+   *  `supports("render.layers.paragraphs@1")`. */
+  paragraphs?: ElementId[];
 }
 
 /** One layer of {@link RenderedLayers}. */
@@ -1945,6 +1953,9 @@ export interface RenderedLayer {
   png?: Uint8Array;
   /** `format: "rgba"`: straight alpha, rows top to bottom. */
   rgba?: Uint8Array;
+  /** C4 — a paragraph layer: the paragraph's index in its story
+   *  (0-based); `id` is its text frame. */
+  paragraph?: number;
 }
 
 /** What `host.render.layers` answers. */
@@ -1959,6 +1970,9 @@ export interface RenderedLayers {
    *  item on another page, one that draws nothing, or every item on an
    *  engine without `render.snapshot@2` is left out. */
   items: RenderedLayer[];
+  /** C4 — the paragraph layers `paragraphs` asked for: per frame, in story
+   *  order. Absent on a host without `render.layers.paragraphs@1`. */
+  paragraphs?: RenderedLayer[];
 }
 
 // ----------------------------------------------------------------- text

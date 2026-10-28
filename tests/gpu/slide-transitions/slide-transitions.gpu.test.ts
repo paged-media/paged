@@ -366,6 +366,62 @@ describe("slide transitions on WebGPU", () => {
     }
   }, 300_000);
 
+  it("[plugin-slide.animations] composites an animation layer cut by PowerPoint's filters (slide ADR 714)", async () => {
+    if (!gpu()) return;
+    const w = 64;
+    const h = 48;
+    const alpha = async (
+      filter: string,
+      sub: string | null,
+      p: number,
+      out = false,
+    ) => {
+      const rgba = Uint8Array.from(
+        atob(await call<string>("layer", filter, sub, p, out, w, h)),
+        (c) => c.charCodeAt(0),
+      );
+      return (x: number, y: number) => rgba[(y * w + x) * 4 + 3];
+    };
+    // Wipe from the left at half way: the left half shows, the right not.
+    const wipe = await alpha("wipe", "left", 0.5);
+    expect(wipe(8, 24)).toBe(255);
+    expect(wipe(56, 24)).toBe(0);
+    // Its exit takes the left half away.
+    const gone = await alpha("wipe", "left", 0.5, true);
+    expect(gone(8, 24)).toBe(0);
+    expect(gone(56, 24)).toBe(255);
+    // Fade at a quarter: a quarter of the alpha everywhere.
+    const fade = await alpha("fade", null, 0.25);
+    expect(Math.abs(fade(32, 24) - 64)).toBeLessThan(3);
+    // Circle out at 0.3 shows the centre, not the corner; box in at 0.3 the
+    // edge, not the centre.
+    const circle = await alpha("circle", "out", 0.3);
+    expect(circle(32, 24)).toBe(255);
+    expect(circle(1, 1)).toBe(0);
+    const box = await alpha("box", "in", 0.3);
+    expect(box(1, 24)).toBe(255);
+    expect(box(32, 24)).toBe(0);
+    // Every filter compiles and draws at its ends: nothing at 0, all at 1.
+    for (const f of [
+      "barn",
+      "blinds",
+      "checkerboard",
+      "diamond",
+      "dissolve",
+      "plus",
+      "randombar",
+      "slide",
+      "strips",
+      "wedge",
+      "wheel",
+    ]) {
+      const none = await alpha(f, f === "wheel" ? "4" : null, 0);
+      const all = await alpha(f, f === "wheel" ? "4" : null, 1);
+      expect([f, none(32, 24)]).toEqual([f, 0]);
+      expect([f, all(32, 24)]).toEqual([f, 255]);
+    }
+  });
+
   it("renders every transition in under 2 ms of GPU time per 1080p frame", async () => {
     if (!gpu()) return;
     if (!init.timestamps) {

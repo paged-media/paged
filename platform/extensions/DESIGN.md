@@ -2925,7 +2925,11 @@ place of the canvas (a slide sorter), and a page as composable layers.
   the background without `items`/`hideItems` and each item alone, cropped, every layer with its
   page `region`, at one scale; `"bitmap"` (decoded `ImageBitmap`s, the default in a browser),
   `"png"` or `"rgba"`. Built on `render.snapshot` / `render.element`; never the canvas's markers.
-- **Probes.** `contribute.presentation@1`, `contribute.view@1`, `render.layers@1` (static);
+  `paragraphs` (C4, ADR 346 amendment): text frames whose paragraphs come back as layers of their
+  own (`RenderedLayers.paragraphs`, each with its `paragraph` index), cut along the engine's line
+  geometry.
+- **Probes.** `contribute.presentation@1`, `contribute.view@1`, `render.layers@1`,
+  `render.layers.paragraphs@1` (static);
   `shell.present@1`, `shell.present.secondary@1`, `shell.views@1` (the editor's registries). The
   harness wires a presenter and a view registry that keep state and draw nothing.
 - **Isolate.** A presentation's DOM surface becomes a transferred `OffscreenCanvas` and a

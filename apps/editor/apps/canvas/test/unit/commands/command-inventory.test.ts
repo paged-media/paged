@@ -55,6 +55,7 @@ import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { buildViewCommands } from "../../../src/view-commands";
 import { OPEN_AS_TEMPLATE_COMMANDS } from "../../../src/panels/template/open-as-template-dialog";
+import { PDF_VECTORS_COMMANDS } from "../../../src/panels/pdf-vectors-dialog";
 import { buildBatchCommands } from "../../../src/panels/batch-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
 import { FIND_COMMANDS } from "../../../src/find/find-commands";

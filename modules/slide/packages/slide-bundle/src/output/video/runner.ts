@@ -29,7 +29,9 @@
 // yet, so `audioOf` answers nothing and the video is silent.
 
 import type { Frame, FrameSource } from "../../show/frames.js";
+import { SlideAnimation, type Player } from "../../show/animation.js";
 import { createOfflineRenderer } from "../../show/offline.js";
+import { closeScene, type SlideScene } from "../../show/scene-source.js";
 import type { ShowSlide } from "../../show/show-model.js";
 import { muxMp4, type Sample } from "./mp4.js";
 import { timeline, videoSize, type Segment } from "./timeline.js";
@@ -159,7 +161,17 @@ export async function renderVideo(
   slides: readonly ShowSlide[],
   frames: FrameSource,
   opts: VideoOptions,
-  hooks: { onProgress?(p: VideoProgress): void; signal?: AbortSignal } = {},
+  hooks: {
+    onProgress?(p: VideoProgress): void;
+    signal?: AbortSignal;
+    /** An animated slide's layers and player at `scale` (slide ADR 714):
+     *  its builds play in the video, each click when the one before has
+     *  finished, as PowerPoint's video does. */
+    animation?(
+      slide: ShowSlide,
+      scale: number,
+    ): Promise<{ scene: SlideScene; player: Player } | null>;
+  } = {},
 ): Promise<Video> {
   const shown = slides.filter((s) => !s.hidden);
   if (shown.length === 0)
@@ -257,7 +269,48 @@ export async function renderVideo(
       const seg: Segment = plan.segments[s]!;
       const next = plan.segments[s + 1];
       if (next?.kind === "hold") frames.prefetch(next.pageId, scale);
-      if (seg.kind === "hold") {
+      const held =
+        seg.kind === "hold"
+          ? shown.find((x) => x.pageId === seg.pageId)
+          : undefined;
+      const animated =
+        seg.kind === "hold" && held?.anim && hooks.animation
+          ? await hooks.animation(held, scale)
+          : null;
+      if (seg.kind === "hold" && animated) {
+        // The slide's own clock is the video's: frame i is i / fps s in.
+        let t = 0;
+        const anim = new SlideAnimation(
+          animated.player,
+          animated.scene,
+          () => t,
+        );
+        let quietSince: number | null = null;
+        try {
+          for (let i = 0; i < seg.frames; i++) {
+            t = (i * 1000) / fps;
+            const { states, running } = anim.draws();
+            if (running) quietSince = null;
+            else if (anim.step() < anim.clicks()) {
+              quietSince ??= t;
+              if (t - quietSince >= 250) {
+                anim.next();
+                quietSince = null;
+              }
+            }
+            renderer.slide(null, { scene: animated.scene, states });
+            const f = snap();
+            try {
+              await emit(f);
+            } finally {
+              f.close();
+            }
+          }
+        } finally {
+          anim.dispose();
+          closeScene(animated.scene);
+        }
+      } else if (seg.kind === "hold") {
         renderer.slide(await frameOf(seg.pageId));
         const still = snap();
         try {

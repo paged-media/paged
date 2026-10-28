@@ -31,8 +31,10 @@
 import { t } from "@paged-media/strings";
 
 import { SHOW } from "../messages.js";
+import { SlideAnimation, type Player } from "./animation.js";
 import { createCompositor, type Compositor } from "./compositor.js";
-import { frameScale, type FrameSource } from "./frames.js";
+import { frameScale, type FrameSource, type SceneSource } from "./frames.js";
+import type { SlideScene } from "./scene-source.js";
 import { createInk, type Ink, type Stroke } from "./ink.js";
 import {
   current,
@@ -56,6 +58,10 @@ export interface ViewSnapshot {
   /** Whether the slide changed since the last snapshot (run its
    *  transition). */
   advanced: boolean;
+  /** The slide's build step (slide ADR 714). */
+  step: number;
+  /** The shapes clicked on the slide so far that play triggers, in order. */
+  triggers: readonly string[];
 }
 
 /** The messages between the console and the audience. */
@@ -71,7 +77,8 @@ export type ShowMessage =
       altKey: boolean;
       shiftKey: boolean;
     }
-  | { t: "advance" };
+  | { t: "advance" }
+  | { t: "trigger"; target: string };
 
 export interface ShowControllerOptions {
   slides: readonly ShowSlide[];
@@ -92,6 +99,8 @@ export class ShowController {
     (s: ShowState, prev: ShowState) => void
   >();
   private readonly ink = new Map<string, Stroke[]>();
+  /** Trigger shapes clicked on the slide up (slide ADR 714). */
+  private triggers: string[] = [];
   private timer: unknown = null;
   private enteredAt: number;
   private readonly startedAt: number;
@@ -128,6 +137,7 @@ export class ShowController {
     }
     const moved = next.index !== prev.index || next.ended !== prev.ended;
     if (moved || next.done) this.leave(prev);
+    if (moved || next.step < prev.step) this.triggers = [];
     this.s = next;
     if (moved || next.blank !== prev.blank || next.grid !== prev.grid)
       this.schedule();
@@ -152,6 +162,12 @@ export class ShowController {
   subscribe(fn: (s: ShowState, prev: ShowState) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
+  }
+
+  /** A click on a shape that plays a trigger (slide ADR 714). */
+  trigger(target: string): void {
+    this.triggers = [...this.triggers, target];
+    for (const l of [...this.listeners]) l(this.s, this.s);
   }
 
   strokes(pageId: string): readonly Stroke[] {
@@ -191,6 +207,8 @@ export class ShowController {
       advanced:
         prev !== undefined &&
         (prev.index !== s.index || prev.ended !== s.ended),
+      step: s.step,
+      triggers: this.triggers,
     };
   }
 
@@ -244,8 +262,14 @@ export interface ShowViewOptions {
   interactive: boolean;
   onStroke?(pageId: string, stroke: Stroke): void;
   onLaser?(at: readonly [number, number] | null): void;
-  /** A click on the slide with the arrow tool (advance). */
-  onClick?(): void;
+  /** A click on the slide with the arrow tool (advance; `trigger`: the
+   *  click landed on a shape that plays a trigger). */
+  onClick?(trigger: string | null): void;
+  /** Animated slides' layers (slide ADR 714). */
+  scenes?: SceneSource;
+  /** A player for an animated slide's timing, once its layers are drawn. */
+  player?(slide: ShowSlide, scene: SlideScene): Promise<Player | null>;
+  now?: () => number;
 }
 
 /** Draws one slide surface: the slide, the blank screens, the end screen
@@ -257,6 +281,10 @@ export class ShowView {
   private readonly win: Window;
   private shown: string | null = null;
   private seq = 0;
+  private anim: SlideAnimation | null = null;
+  private slide: ShowSlide | null = null;
+  private last: ViewSnapshot | null = null;
+  private triggersSeen = 0;
   private readonly offs: Array<() => void> = [];
 
   constructor(
@@ -313,7 +341,7 @@ export class ShowView {
     });
     this.end.textContent = t(SHOW.endOfShow);
     container.appendChild(this.end);
-    const click = () => opts.onClick?.();
+    const click = (e: MouseEvent) => opts.onClick?.(this.hitTrigger(e));
     container.addEventListener("click", click);
     const resize = () => {
       this.compositor.resize();
@@ -338,7 +366,46 @@ export class ShowView {
     );
   }
 
+  /** The trigger shape under a click, if the slide up has one there. */
+  hitTrigger(e: { clientX: number; clientY: number }): string | null {
+    const triggers = this.slide?.anim?.plan.triggers;
+    if (!triggers || !this.slide) return null;
+    const r = this.container.getBoundingClientRect?.();
+    const b = this.compositor.box();
+    const k = b.width / (this.slide.sizePt[0] || 1);
+    if (!(k > 0)) return null;
+    const x = (e.clientX - (r?.left ?? 0) - b.x) / k;
+    const y = (e.clientY - (r?.top ?? 0) - b.y) / k;
+    for (const [id, t] of Object.entries(triggers).reverse())
+      if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) return id;
+    return null;
+  }
+
+  /** The animation of the slide up (tests, the presenter). */
+  animation(): SlideAnimation | null {
+    return this.anim;
+  }
+
+  /** Bring the slide's animation to the snapshot's step and triggers. */
+  private follow(v: ViewSnapshot): void {
+    const a = this.anim;
+    if (!a) return;
+    const at = a.step();
+    if (v.step === at + 1) a.next();
+    else if (v.step !== at) a.seek(v.step);
+    if (v.triggers.length < this.triggersSeen) this.triggersSeen = 0;
+    for (const t of v.triggers.slice(this.triggersSeen)) a.click(t);
+    this.triggersSeen = v.triggers.length;
+    this.el().dataset.step = String(v.step);
+    this.compositor.kick();
+  }
+
+  private el(): HTMLElement {
+    return this.container;
+  }
+
   update(v: ViewSnapshot, next: ShowSlide | null = null): void {
+    this.last = v;
     const el = this.container;
     el.dataset.slideIndex = String(v.index);
     el.dataset.slideNumber = v.slide ? String(v.slide.number) : "";
@@ -350,6 +417,9 @@ export class ShowView {
     const slide = v.slide;
     if (!slide) {
       this.shown = null;
+      this.slide = null;
+      this.anim?.dispose();
+      this.anim = null;
       this.ink.setStrokes([]);
       return;
     }
@@ -357,21 +427,77 @@ export class ShowView {
     const aspect = h > 0 ? w / h : 16 / 9;
     if (slide.pageId !== this.shown || v.advanced) {
       this.shown = slide.pageId;
+      this.slide = slide;
       const seq = ++this.seq;
       const scale = this.scale(slide);
-      void this.opts.frames.frame(slide.pageId, scale).then((f) => {
-        if (seq !== this.seq) return;
-        this.compositor.show(f, aspect, v.advanced ? slide.transition : null);
-        this.ink.layout(this.compositor.box());
-        el.dataset.frame = f ? "drawn" : "none";
-      });
+      this.anim?.dispose();
+      this.anim = null;
+      this.triggersSeen = 0;
+      el.dataset.step = String(v.step);
+      if (next?.anim) this.opts.scenes?.prefetch(next, this.scale(next));
+      const { scenes, player } = this.opts;
+      if (slide.anim && scenes && player) {
+        void (async () => {
+          const scene = await scenes.scene(slide, scale);
+          const p = scene ? await player(slide, scene) : null;
+          if (seq !== this.seq) {
+            p?.free();
+            return;
+          }
+          if (!scene || !p) {
+            this.showFrame(slide, scale, aspect, v.advanced, seq);
+            return;
+          }
+          const latest = this.last ?? v;
+          this.anim = new SlideAnimation(
+            p,
+            scene,
+            this.opts.now ?? (() => this.win.performance.now()),
+            latest.step,
+          );
+          this.triggersSeen = 0;
+          for (const t of latest.triggers) this.anim.click(t);
+          this.triggersSeen = latest.triggers.length;
+          this.compositor.showAnimated(
+            this.anim,
+            aspect,
+            v.advanced ? slide.transition : null,
+          );
+          this.ink.layout(this.compositor.box());
+          el.dataset.frame = "animated";
+        })();
+      } else {
+        this.showFrame(slide, scale, aspect, v.advanced, seq);
+      }
       if (next) this.opts.frames.prefetch(next.pageId, this.scale(next));
+    } else {
+      this.follow(v);
     }
     this.ink.setStrokes(v.strokes);
   }
 
+  private showFrame(
+    slide: ShowSlide,
+    scale: number,
+    aspect: number,
+    advanced: boolean,
+    seq: number,
+  ): void {
+    const el = this.container;
+    {
+      void this.opts.frames.frame(slide.pageId, scale).then((f) => {
+        if (seq !== this.seq) return;
+        this.compositor.show(f, aspect, advanced ? slide.transition : null);
+        this.ink.layout(this.compositor.box());
+        el.dataset.frame = f ? "drawn" : "none";
+      });
+    }
+  }
+
   dispose(): void {
     for (const off of this.offs.splice(0)) off();
+    this.anim?.dispose();
+    this.anim = null;
     this.compositor.dispose();
     this.ink.dispose();
     this.end.remove();
@@ -461,6 +587,8 @@ export const keyOf = (e: KeyboardEvent) => ({
 
 export interface ShowSurfaceDeps {
   frames: FrameSource;
+  scenes?: SceneSource;
+  player?(slide: ShowSlide, scene: SlideScene): Promise<Player | null>;
   thumbnail(pageId: string): string | null;
   /** The show is over: leave the presentation. */
   exit(): void;
@@ -480,10 +608,14 @@ export function mountShow(
   el.appendChild(stage);
   const view = new ShowView(stage, win, {
     frames: deps.frames,
+    scenes: deps.scenes,
+    player: deps.player,
     interactive: true,
     onStroke: (pageId, s) => ctl.addStroke(pageId, s),
-    onClick: () => {
-      if (ctl.state().tool === "arrow") ctl.dispatch({ type: "next" });
+    onClick: (trigger) => {
+      if (ctl.state().tool !== "arrow") return;
+      if (trigger) ctl.trigger(trigger);
+      else ctl.dispatch({ type: "next" });
     },
   });
   const grid = doc.createElement("div");
@@ -553,6 +685,7 @@ export function mountAudience(
     onMessage(h: (m: unknown) => void): { dispose(): void };
   },
   frames: FrameSource,
+  anims: Pick<ShowSurfaceDeps, "scenes" | "player"> = {},
 ): () => void {
   const doc = el.ownerDocument;
   const stage = doc.createElement("div");
@@ -561,8 +694,15 @@ export function mountAudience(
   el.appendChild(stage);
   const view = new ShowView(stage, win, {
     frames,
+    scenes: anims.scenes,
+    player: anims.player,
     interactive: false,
-    onClick: () => channel.post({ t: "advance" } satisfies ShowMessage),
+    onClick: (trigger) =>
+      channel.post(
+        (trigger
+          ? { t: "trigger", target: trigger }
+          : { t: "advance" }) satisfies ShowMessage,
+      ),
   });
   const sub = channel.onMessage((m) => {
     const msg = m as ShowMessage;

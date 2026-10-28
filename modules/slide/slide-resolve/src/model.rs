@@ -68,6 +68,9 @@ pub struct SlidePage {
     pub notes: Option<String>,
     pub transition: Option<pptx_core::Transition>,
     pub timing_xml: Option<String>,
+    /// `p:timing` as a tree (slide ADR 714).
+    #[serde(default)]
+    pub timing: Option<pptx_core::anim::Timing>,
     /// The section that starts at this slide (`p14:section`): its id and
     /// name. A slide inside a section has none; its section is the last one
     /// started before it.

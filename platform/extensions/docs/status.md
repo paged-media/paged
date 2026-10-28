@@ -141,8 +141,9 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   window synced over a BroadcastChannel (`shell.present@1`, `shell.present.secondary@1`);
   `contribute.view` + `host.shell.showView` put a bundle's view in the canvas's place
   (`shell.views@1`); `host.render.layers` draws a page's background and items as layers at one
-  scale (`render.layers@1`). paged.slide's slide show, presenter view and slide sorter are the
-  first consumers.
+  scale (`render.layers@1`), and a text frame's paragraphs as layers of their own
+  (`render.layers.paragraphs@1`, C4, unreleased). paged.slide's slide show, presenter view, slide
+  sorter and animation builds are the first consumers.
 - **Selection.** `host.selection.set` writes the engine's geometry for the applied ids to
   the host's selection mirror, so the selection box follows a selection a bundle makes
   (0.2.54-canary.0).

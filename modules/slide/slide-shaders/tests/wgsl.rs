@@ -109,3 +109,34 @@ fn every_manifest_pass_has_a_file() {
         }
     }
 }
+
+/// The animation layer compositor (slide ADR 714): `effects/layer.wgsl`
+/// validates on its own (it carries its bindings and vertex stage) and has
+/// the entry points the renderer names.
+#[test]
+fn the_animation_layer_shader_validates() {
+    let dir = shader_dir().join("../effects");
+    let sources = read_sources(&dir).expect("effects dir");
+    let code = sources.get("layer").expect("layer.wgsl");
+    let module = naga::front::wgsl::parse_str(code)
+        .unwrap_or_else(|e| panic!("layer.wgsl: {}", e.emit_to_string(code)));
+    let mut validator = naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::empty(),
+    );
+    if let Err(e) = validator.validate(&module) {
+        panic!("layer.wgsl: {}", e.emit_to_string(code));
+    }
+    for (entry, stage) in [
+        ("vs_layer", naga::ShaderStage::Vertex),
+        ("fs_layer", naga::ShaderStage::Fragment),
+    ] {
+        assert!(
+            module
+                .entry_points
+                .iter()
+                .any(|e| e.name == entry && e.stage == stage),
+            "no {entry}"
+        );
+    }
+}
