@@ -444,14 +444,15 @@ type StackOutcome = Result<(u8, u8), &'static str>;
 ///   and feathered edges mix colours, and RGB mixing of the converted
 ///   colours lands up to 61 levels from Photoshop's CMYK mixing;
 /// * `blend-modes` is DECLINED before decoding (`cmyk-blend`);
-/// * `normal-stack-16` has no top-level layer records: Photoshop writes a
-///   16-bit document's layers into the `Lr16` block, which the import
-///   does not read yet (`no-layers`).
+/// * `normal-stack-16`: Photoshop writes a 16-bit document's layers into
+///   the `Lr16` block, which the parse reads into the layer list since
+///   image ADR 478; like `normal-stack` it is then DECLINED by the gate
+///   (`cmyk-composite`).
 const STACKS: &[(&str, StackOutcome)] = &[
     ("opaque-stack", Ok((25, 25))),
     ("transparent-soft", Ok((2, 1))),
     ("normal-stack", Err("cmyk-composite")),
-    ("normal-stack-16", Err("no-layers")),
+    ("normal-stack-16", Err("cmyk-composite")),
     ("blend-modes", Err("cmyk-blend")),
 ];
 

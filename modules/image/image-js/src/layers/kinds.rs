@@ -1438,6 +1438,9 @@ pub struct LayerExt {
     pub style: Option<Arc<image_psd::effects::LayerStyle>>,
     /// The blending options that change how a style composites.
     pub style_options: StyleOptions,
+    /// The PSD record this layer was read from and the state the import
+    /// left it in (`crate::psd_source`); `None` for a layer made here.
+    pub source: Option<Arc<crate::psd_source::PsdSource>>,
 }
 
 /// Blending Options ▸ Advanced Blending: the switches that change how a
@@ -1512,6 +1515,7 @@ impl Default for LayerExt {
             link: None,
             style: None,
             style_options: StyleOptions::default(),
+            source: None,
         }
     }
 }

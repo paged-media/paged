@@ -1311,6 +1311,10 @@ impl LayerStack {
                     .then_some(TEXT_BLEND_GAMMA),
                 ext,
             });
+            // The record it came from, for the layered save (ADR 478).
+            if let (Some(r), Some(l)) = (record, layers.last_mut()) {
+                crate::psd_source::attach(l, r);
+            }
         }
         let next_id = (layers.len() + groups.len()) as u32 + 1;
         let mut stack = LayerStack {
@@ -3910,7 +3914,9 @@ fn bounded_pixels(
 /// ([`Adjustment::to_chain`]: natural-spline curves, Levels and an
 /// Exposure offset/gamma as tables).
 pub fn psd_adjustment(adj: &image_psd::adjustment::Adjustment) -> Adjustment {
-    use image_psd::adjustment::Adjustment as Psd;
+    use image_psd::adjustment::{Adjustment as Psd, FilterColor};
+    let f = |v: i16| f32::from(v);
+    let f3 = |t: &[i16; 3]| t.map(f32::from);
     match adj {
         Psd::Curves { curves } => Adjustment::Curves {
             curves: std::array::from_fn(|c| curves[c].clone().unwrap_or_default()),
@@ -3942,16 +3948,214 @@ pub fn psd_adjustment(adj: &image_psd::adjustment::Adjustment) -> Adjustment {
             master,
             ranges,
             ..
+        } => Adjustment::HueSaturation {
+            colorize: *colorized,
+            colorize_hsl: f3(colorize),
+            master: f3(master),
+            ranges: ranges.map(|r| f3(&r)),
+        },
+        Psd::BrightnessContrast {
+            brightness,
+            contrast,
+            ..
+        } => Adjustment::BrightnessContrast {
+            brightness: *brightness as f32,
+            contrast: *contrast as f32,
+        },
+        Psd::ColorBalance {
+            shadows,
+            midtones,
+            highlights,
+            ..
+        } => Adjustment::ColorBalance {
+            shadows: f3(shadows),
+            midtones: f3(midtones),
+            highlights: f3(highlights),
+        },
+        Psd::Vibrance {
+            vibrance,
+            saturation,
+        } => Adjustment::Vibrance {
+            vibrance: *vibrance as f32,
+            saturation: *saturation as f32,
+        },
+        Psd::BlackWhite { weights, .. } => Adjustment::BlackWhite {
+            weights: weights.map(|w| w as f32),
+        },
+        Psd::PhotoFilter {
+            color,
+            density,
+            preserve_luminosity,
         } => {
-            let hsl = |t: &[i16; 3]| t.map(f32::from);
-            Adjustment::HueSaturation {
-                colorize: *colorized,
-                colorize_hsl: hsl(colorize),
-                master: hsl(master),
-                ranges: ranges.map(|r| hsl(&r)),
+            let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let color = match color {
+                FilterColor::Lab([l, a, b]) => {
+                    paged_color::lab::lab_d50_to_srgb_encoded(*l as f32, *a as f32, *b as f32)
+                        .map(q)
+                }
+                FilterColor::Rgb(c) => c.map(|v| ((u32::from(v) + 128) / 257) as u8),
+                // Declined by `unmodelled`; the warming filter's colour.
+                FilterColor::Xyz(_) => [236, 138, 0],
+            };
+            Adjustment::PhotoFilter {
+                color,
+                density: *density as f32,
+                preserve_luminosity: *preserve_luminosity,
             }
         }
+        Psd::ChannelMixer { rows, monochrome } => Adjustment::ChannelMixer {
+            rows: rows.map(|r| r.map(f)),
+            monochrome: *monochrome,
+        },
+        Psd::Posterize { levels } => Adjustment::Posterize {
+            levels: f32::from(*levels),
+        },
+        Psd::Threshold { level } => Adjustment::Threshold {
+            level: f32::from(*level),
+        },
+        Psd::GradientMap { stops, reverse, .. } => Adjustment::GradientMap {
+            stops: stops
+                .iter()
+                .map(|s| ColorStop {
+                    at: (s.location as f32 / 4096.0).clamp(0.0, 1.0),
+                    rgb: s.rgb16.map(|v| ((u32::from(v) + 128) / 257) as u8),
+                })
+                .collect(),
+            reverse: *reverse,
+        },
+        Psd::SelectiveColor { ranges, absolute } => Adjustment::SelectiveColor {
+            ranges: ranges.map(|r| r.map(f)),
+            absolute: *absolute,
+        },
     }
+}
+
+/// A typed adjustment as Photoshop's adjustment (the inverse of
+/// [`psd_adjustment`]), for the layered PSD save: `None` for what
+/// Photoshop has no adjustment layer for in this form — a stored chain,
+/// Develop (a Camera Raw filter, not a layer) and Color Lookup (whose
+/// look Photoshop compiles into an embedded profile, image ADR 478).
+pub fn adjustment_to_psd(adj: &Adjustment) -> Option<image_psd::adjustment::Adjustment> {
+    use image_psd::adjustment::{
+        Adjustment as Psd, FilterColor, GradientMapStop, LevelsRecord, BLACK_WHITE_DEFAULT_TINT,
+        HUE_RANGE_DEFAULTS,
+    };
+    let i = |v: f32| v.round() as i16;
+    let i3 = |t: &[f32; 3]| t.map(i);
+    Some(match adj {
+        Adjustment::Chain(_) | Adjustment::Develop { .. } | Adjustment::ColorLookup { .. } => {
+            return None
+        }
+        Adjustment::Curves { curves } => Psd::Curves {
+            curves: std::array::from_fn(|c| (!curves[c].is_empty()).then(|| curves[c].clone())),
+        },
+        Adjustment::Levels { records } => Psd::Levels {
+            records: records.map(|r| {
+                let lv = |v: f32| v.round().clamp(0.0, 255.0) as u16;
+                LevelsRecord {
+                    in_black: lv(r[0]),
+                    in_white: lv(r[1]),
+                    out_black: lv(r[3]),
+                    out_white: lv(r[4]),
+                    gamma_x100: (r[2] * 100.0).round().clamp(10.0, 999.0) as u16,
+                }
+            }),
+            extra_records: false,
+        },
+        Adjustment::Exposure {
+            exposure,
+            offset,
+            gamma,
+        } => Psd::Exposure {
+            exposure: *exposure,
+            offset: *offset,
+            gamma: *gamma,
+        },
+        Adjustment::Invert => Psd::Invert,
+        Adjustment::HueSaturation {
+            colorize,
+            colorize_hsl,
+            master,
+            ranges,
+        } => Psd::HueSaturation {
+            colorized: *colorize,
+            colorize: i3(colorize_hsl),
+            master: i3(master),
+            ranges: ranges.map(|r| i3(&r)),
+            bounds: HUE_RANGE_DEFAULTS,
+        },
+        Adjustment::BrightnessContrast {
+            brightness,
+            contrast,
+        } => Psd::BrightnessContrast {
+            brightness: brightness.round() as i32,
+            contrast: contrast.round() as i32,
+            mean: 127,
+            lab: false,
+            legacy: false,
+            auto: false,
+        },
+        Adjustment::ColorBalance {
+            shadows,
+            midtones,
+            highlights,
+        } => Psd::ColorBalance {
+            shadows: i3(shadows),
+            midtones: i3(midtones),
+            highlights: i3(highlights),
+            preserve_luminosity: true,
+        },
+        Adjustment::Vibrance {
+            vibrance,
+            saturation,
+        } => Psd::Vibrance {
+            vibrance: vibrance.round() as i32,
+            saturation: saturation.round() as i32,
+        },
+        Adjustment::BlackWhite { weights } => Psd::BlackWhite {
+            weights: weights.map(|w| w.round() as i32),
+            tint: false,
+            tint_rgb: BLACK_WHITE_DEFAULT_TINT,
+        },
+        Adjustment::PhotoFilter {
+            color,
+            density,
+            preserve_luminosity,
+        } => {
+            // Photoshop stores the filter colour as Lab [OBS].
+            let lab = paged_color::lab::srgb_to_lab_d50(color.map(|c| f32::from(c) / 255.0));
+            Psd::PhotoFilter {
+                color: FilterColor::Lab(lab.map(|v| f64::from((v * 100.0).round()) / 100.0)),
+                density: density.round().clamp(1.0, 100.0) as u32,
+                preserve_luminosity: *preserve_luminosity,
+            }
+        }
+        Adjustment::ChannelMixer { rows, monochrome } => Psd::ChannelMixer {
+            rows: rows.map(|r| r.map(i)),
+            monochrome: *monochrome,
+        },
+        Adjustment::Posterize { levels } => Psd::Posterize {
+            levels: levels.round().clamp(2.0, 255.0) as u16,
+        },
+        Adjustment::Threshold { level } => Psd::Threshold {
+            level: level.round().clamp(1.0, 255.0) as u16,
+        },
+        Adjustment::GradientMap { stops, reverse } => Psd::gradient_map(
+            stops
+                .iter()
+                .map(|s| GradientMapStop {
+                    location: (s.at.clamp(0.0, 1.0) * 4096.0).round() as u32,
+                    midpoint: 50,
+                    rgb16: s.rgb.map(|v| u16::from(v) * 257),
+                })
+                .collect(),
+            *reverse,
+        ),
+        Adjustment::SelectiveColor { ranges, absolute } => Psd::SelectiveColor {
+            ranges: ranges.map(|r| r.map(i)),
+            absolute: *absolute,
+        },
+    })
 }
 
 /// [`psd_adjustment`] as the adjust chain it evaluates to.

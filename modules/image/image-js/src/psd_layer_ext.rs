@@ -38,7 +38,9 @@
 //! `Clrs`, `Clrt`, `Lctn` on 0–4096, `Trns`, `Type`, `Angl`, `Scl `,
 //! `Rvrs`, `Ofst`) follow the specification's descriptor key list [PUB].
 
-use image_psd::descriptor::{read_versioned_descriptor, Descriptor, DescriptorValue, Key};
+use image_psd::descriptor::{
+    build, read_versioned_descriptor, versioned_descriptor_bytes, Descriptor, DescriptorValue,
+};
 use image_psd::model::{AdditionalLayerInfo, AddlBody, LayerRecord};
 use image_psd::reader::ByteReader;
 
@@ -126,6 +128,7 @@ pub fn record_ext(rec: &LayerRecord) -> LayerExt {
         link: None,
         style: style_of(rec).map(std::sync::Arc::new),
         style_options: style_options(rec),
+        source: None,
     }
 }
 
@@ -312,124 +315,35 @@ pub fn raw_block(key: [u8; 4], data: &[u8]) -> AdditionalLayerInfo {
     }
 }
 
-/// A descriptor writer for the value kinds the fill blocks use.
-struct D(Vec<u8>);
-
-impl D {
-    fn key(&mut self, k: &[u8]) {
-        if k.len() == 4 {
-            self.0.extend_from_slice(&0u32.to_be_bytes());
-        } else {
-            self.0.extend_from_slice(&(k.len() as u32).to_be_bytes());
-        }
-        self.0.extend_from_slice(k);
-    }
-    fn unicode(&mut self, s: &str) {
-        let units: Vec<u16> = s.encode_utf16().chain(std::iter::once(0)).collect();
-        self.0
-            .extend_from_slice(&(units.len() as u32).to_be_bytes());
-        for u in units {
-            self.0.extend_from_slice(&u.to_be_bytes());
-        }
-    }
-    fn descriptor(&mut self, class_name: &str, class: &[u8], items: &[(&[u8], DescriptorValue)]) {
-        self.unicode(class_name);
-        self.key(class);
-        self.0
-            .extend_from_slice(&(items.len() as u32).to_be_bytes());
-        for (k, v) in items {
-            self.key(k);
-            self.value(v);
-        }
-    }
-    fn value(&mut self, v: &DescriptorValue) {
-        self.0.extend_from_slice(&v.ostype());
-        self.body(v);
-    }
-    fn body(&mut self, v: &DescriptorValue) {
-        match v {
-            DescriptorValue::Descriptor(d) => {
-                self.unicode(&d.class_name);
-                self.key(d.class_id.as_bytes());
-                self.0
-                    .extend_from_slice(&(d.items.len() as u32).to_be_bytes());
-                for (k, v) in &d.items {
-                    self.key(k.as_bytes());
-                    self.value(v);
-                }
-            }
-            DescriptorValue::List(items) => {
-                self.0
-                    .extend_from_slice(&(items.len() as u32).to_be_bytes());
-                for v in items {
-                    self.value(v);
-                }
-            }
-            DescriptorValue::Double(x) => self.0.extend_from_slice(&x.to_be_bytes()),
-            DescriptorValue::UnitFloat { unit, value } => {
-                self.0.extend_from_slice(unit);
-                self.0.extend_from_slice(&value.to_be_bytes());
-            }
-            DescriptorValue::Text(s) => self.unicode(s),
-            DescriptorValue::Enum { type_key, value } => {
-                self.key(type_key.as_bytes());
-                self.key(value.as_bytes());
-            }
-            DescriptorValue::Integer(i) => self.0.extend_from_slice(&i.to_be_bytes()),
-            DescriptorValue::Bool(b) => self.0.push(u8::from(*b)),
-            // Not used by the fill blocks.
-            _ => {}
-        }
-    }
-}
-
 fn obj(class: &[u8; 4], items: Vec<(&[u8], DescriptorValue)>) -> DescriptorValue {
-    DescriptorValue::Descriptor(Descriptor {
-        class_name: String::new(),
-        class_id: Key::four(class),
-        items: items.into_iter().map(|(k, v)| (key_of(k), v)).collect(),
-    })
-}
-
-fn key_of(k: &[u8]) -> Key {
-    match <[u8; 4]>::try_from(k) {
-        Ok(four) => Key::four(&four),
-        Err(_) => Key::long(&String::from_utf8_lossy(k)),
-    }
+    build::obj(class, items)
 }
 
 fn rgb_obj(c: [u8; 3]) -> DescriptorValue {
-    obj(
-        b"RGBC",
-        vec![
-            (b"Rd  ", DescriptorValue::Double(f64::from(c[0]))),
-            (b"Grn ", DescriptorValue::Double(f64::from(c[1]))),
-            (b"Bl  ", DescriptorValue::Double(f64::from(c[2]))),
-        ],
-    )
+    build::rgb(c)
 }
 
 fn en(t: &[u8; 4], v: &[u8; 4]) -> DescriptorValue {
-    DescriptorValue::Enum {
-        type_key: Key::four(t),
-        value: Key::four(v),
-    }
+    build::en(t, v)
 }
 
 fn unit(u: &[u8; 4], v: f64) -> DescriptorValue {
-    DescriptorValue::UnitFloat { unit: *u, value: v }
+    build::unit(u, v)
 }
 
 /// The fill block (`SoCo` or `GdFl`) for `src`, or `None` for a pattern
 /// (its pixels would have to go into the document's pattern block, which
 /// is not written: the layer is saved as its render).
 pub fn fill_block(src: &FillSource) -> Option<AdditionalLayerInfo> {
-    let mut d = D(16u32.to_be_bytes().to_vec());
+    // Written by paged-psd's one descriptor writer.
+    let block = |key: [u8; 4], items: Vec<(&[u8], DescriptorValue)>| {
+        raw_block(
+            key,
+            &versioned_descriptor_bytes(&build::desc(b"null", items)),
+        )
+    };
     match src {
-        FillSource::Solid { rgb } => {
-            d.descriptor("", b"null", &[(b"Clr ", rgb_obj(*rgb))]);
-            Some(raw_block(*b"SoCo", &d.0))
-        }
+        FillSource::Solid { rgb } => Some(block(*b"SoCo", vec![(b"Clr ", rgb_obj(*rgb))])),
         FillSource::Gradient(g) => {
             let colors = g
                 .stops
@@ -479,10 +393,9 @@ pub fn fill_block(src: &FillSource) -> Option<AdditionalLayerInfo> {
                 GradientKind::Reflected => b"Rflc",
                 GradientKind::Diamond => b"Dmnd",
             };
-            d.descriptor(
-                "",
-                b"null",
-                &[
+            Some(block(
+                *b"GdFl",
+                vec![
                     (b"Grad", grad),
                     (b"Type", en(b"GrdT", style)),
                     (b"Angl", unit(b"#Ang", f64::from(g.angle))),
@@ -500,8 +413,7 @@ pub fn fill_block(src: &FillSource) -> Option<AdditionalLayerInfo> {
                         ),
                     ),
                 ],
-            );
-            Some(raw_block(*b"GdFl", &d.0))
+            ))
         }
         FillSource::Pattern(_) => None,
     }

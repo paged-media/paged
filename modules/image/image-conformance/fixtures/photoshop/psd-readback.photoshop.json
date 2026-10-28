@@ -1,0 +1,1751 @@
+{
+  "fixture": "psd-readback",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/psd-readback.jsx",
+    "script_sha256": "19605f042e8754194e7321def5ef6291342044e3e30d62eb2705da00e550ec09",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-28T16:53:43.470Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "adj-brightness-contrast",
+      "params": {
+        "file": "adj-brightness-contrast.psd",
+        "hash": "8d82b6a161f1771f"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-brightness-contrast.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.BRIGHTNESSCONTRAST",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "brightness": 30,
+              "center": 40,
+              "brightnessMode": "brightnessModeModern",
+              "useLegacy": false
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-curves-channels",
+      "params": {
+        "file": "adj-curves-channels.psd",
+        "hash": "94b2e0439bf10f01"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-curves-channels.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.CURVES",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "transferFunction": 0,
+              "presetKind": "presetKindCustom",
+              "adjustment": [
+                {
+                  "channel": "reference",
+                  "curve": [
+                    {
+                      "horizontal": 0,
+                      "vertical": 0
+                    },
+                    {
+                      "horizontal": 128,
+                      "vertical": 110
+                    },
+                    {
+                      "horizontal": 255,
+                      "vertical": 255
+                    }
+                  ]
+                },
+                {
+                  "channel": "reference",
+                  "curve": [
+                    {
+                      "horizontal": 0,
+                      "vertical": 0
+                    },
+                    {
+                      "horizontal": 128,
+                      "vertical": 180
+                    },
+                    {
+                      "horizontal": 255,
+                      "vertical": 255
+                    }
+                  ]
+                },
+                {
+                  "channel": "reference",
+                  "curve": [
+                    {
+                      "horizontal": 0,
+                      "vertical": 30
+                    },
+                    {
+                      "horizontal": 255,
+                      "vertical": 220
+                    }
+                  ]
+                }
+              ]
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-exposure-offset-gamma",
+      "params": {
+        "file": "adj-exposure-offset-gamma.psd",
+        "hash": "cb5f7462a443c0da"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-exposure-offset-gamma.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.EXPOSURE",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "presetKind": "presetKindCustom",
+              "exposure": 0.40000000596046,
+              "offset": -0.02999999932945,
+              "gammaCorrection": 1.20000004768372
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-hue-sat-reds",
+      "params": {
+        "file": "adj-hue-sat-reds.psd",
+        "hash": "fc742211b96a554a"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-hue-sat-reds.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.HUESATURATION",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "presetKind": "presetKindCustom",
+              "GeneratedPreset": false,
+              "colorize": false,
+              "OriginalColors": [
+                {
+                  "hue": 0,
+                  "saturation": 100,
+                  "lightness": 50
+                },
+                {
+                  "hue": 60,
+                  "saturation": 100,
+                  "lightness": 50
+                },
+                {
+                  "hue": 120,
+                  "saturation": 100,
+                  "lightness": 50
+                },
+                {
+                  "hue": 180,
+                  "saturation": 100,
+                  "lightness": 50
+                },
+                {
+                  "hue": 240,
+                  "saturation": 100,
+                  "lightness": 50
+                },
+                {
+                  "hue": 300,
+                  "saturation": 100,
+                  "lightness": 50
+                }
+              ],
+              "adjustment": [
+                {
+                  "localRange": 1,
+                  "beginRamp": 315,
+                  "beginSustain": 345,
+                  "endSustain": 15,
+                  "endRamp": 45,
+                  "hue": -30,
+                  "saturation": 20,
+                  "lightness": 0
+                }
+              ]
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-invert",
+      "params": {
+        "file": "adj-invert.psd",
+        "hash": "d80e446faee9d1fb"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-invert.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.INVERSION",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {},
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-levels-channels",
+      "params": {
+        "file": "adj-levels-channels.psd",
+        "hash": "25a86c9c4b901f74"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-levels-channels.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.LEVELS",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "presetKind": "presetKindCustom",
+              "adjustment": [
+                {
+                  "channel": "reference",
+                  "input": [
+                    10,
+                    240
+                  ],
+                  "gamma": 1.2,
+                  "output": [
+                    0,
+                    255
+                  ]
+                },
+                {
+                  "channel": "reference",
+                  "input": [
+                    0,
+                    200
+                  ],
+                  "gamma": 0.8,
+                  "output": [
+                    0,
+                    255
+                  ]
+                },
+                {
+                  "channel": "reference",
+                  "input": [
+                    30,
+                    255
+                  ],
+                  "gamma": 1,
+                  "output": [
+                    20,
+                    255
+                  ]
+                }
+              ]
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-photo-filter",
+      "params": {
+        "file": "adj-photo-filter.psd",
+        "hash": "85ddc23ee911f7ba"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-photo-filter.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.PHOTOFILTER",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "color": {
+                "luminance": 67.19,
+                "a": 33.14,
+                "b": 72.79
+              },
+              "density": 50,
+              "preserveLuminosity": true
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-black-white",
+      "params": {
+        "file": "adj-black-white.psd",
+        "hash": "5e8143e9200d6679"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-black-white.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.BLACKANDWHITE",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "presetKind": "presetKindCustom",
+              "red": 40,
+              "yellow": 60,
+              "grain": 40,
+              "cyan": 60,
+              "blue": 20,
+              "magenta": 80,
+              "useTint": false,
+              "tintColor": {
+                "red": 225.000001788139,
+                "grain": 211.000002622604,
+                "blue": 179.000004529953
+              }
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-channel-mixer",
+      "params": {
+        "file": "adj-channel-mixer.psd",
+        "hash": "880b7ab9dbc8986b"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-channel-mixer.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.CHANNELMIXER",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "presetKind": "presetKindCustom",
+              "monochromatic": false,
+              "red": {
+                "red": 80,
+                "grain": 20,
+                "blue": 0,
+                "constant": 0
+              },
+              "grain": {
+                "red": 10,
+                "grain": 70,
+                "blue": 20,
+                "constant": 5
+              },
+              "blue": {
+                "red": 0,
+                "grain": -10,
+                "blue": 110,
+                "constant": -5
+              }
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-channel-mixer-mono",
+      "params": {
+        "file": "adj-channel-mixer-mono.psd",
+        "hash": "5b8d814d701dc288"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-channel-mixer-mono.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.CHANNELMIXER",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "presetKind": "presetKindCustom",
+              "monochromatic": true,
+              "gray": {
+                "red": 30,
+                "grain": 59,
+                "blue": 11,
+                "constant": 0
+              }
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-color-balance",
+      "params": {
+        "file": "adj-color-balance.psd",
+        "hash": "c38efb4e7db4144a"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-color-balance.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.COLORBALANCE",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "shadowLevels": [
+                10,
+                -20,
+                30
+              ],
+              "midtoneLevels": [
+                -15,
+                25,
+                0
+              ],
+              "highlightLevels": [
+                5,
+                0,
+                -40
+              ],
+              "preserveLuminosity": true
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-gradient-map",
+      "params": {
+        "file": "adj-gradient-map.psd",
+        "hash": "1cbb2079478c2dc8"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-gradient-map.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.GRADIENTMAP",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "reverse": false,
+              "dither": false,
+              "gradientsInterpolationMethod": "classic",
+              "gradient": {
+                "name": "Custom",
+                "gradientForm": "customStops",
+                "interfaceIconFrameDimmed": 4096,
+                "colors": [
+                  {
+                    "color": {
+                      "red": 19.9996948242188,
+                      "grain": 9.99984741210938,
+                      "blue": 79.998779296875
+                    },
+                    "type": "userStop",
+                    "location": 0,
+                    "midpoint": 50
+                  },
+                  {
+                    "color": {
+                      "red": 199.996948242188,
+                      "grain": 59.9990844726562,
+                      "blue": 39.9993896484375
+                    },
+                    "type": "userStop",
+                    "location": 2048,
+                    "midpoint": 50
+                  },
+                  {
+                    "color": {
+                      "red": 249.996185302734,
+                      "grain": 239.996337890625,
+                      "blue": 199.996948242188
+                    },
+                    "type": "userStop",
+                    "location": 4096,
+                    "midpoint": 50
+                  }
+                ],
+                "transparency": [
+                  {
+                    "opacity": 100,
+                    "location": 0,
+                    "midpoint": 50
+                  },
+                  {
+                    "opacity": 100,
+                    "location": 4096,
+                    "midpoint": 50
+                  }
+                ]
+              }
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-gradient-map-reversed",
+      "params": {
+        "file": "adj-gradient-map-reversed.psd",
+        "hash": "45ee5876a106f27c"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-gradient-map-reversed.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.GRADIENTMAP",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "reverse": true,
+              "dither": false,
+              "gradientsInterpolationMethod": "classic",
+              "gradient": {
+                "name": "Custom",
+                "gradientForm": "customStops",
+                "interfaceIconFrameDimmed": 4096,
+                "colors": [
+                  {
+                    "color": {
+                      "red": 0,
+                      "grain": 0,
+                      "blue": 0
+                    },
+                    "type": "userStop",
+                    "location": 0,
+                    "midpoint": 50
+                  },
+                  {
+                    "color": {
+                      "red": 255,
+                      "grain": 255,
+                      "blue": 255
+                    },
+                    "type": "userStop",
+                    "location": 4096,
+                    "midpoint": 50
+                  }
+                ],
+                "transparency": [
+                  {
+                    "opacity": 100,
+                    "location": 0,
+                    "midpoint": 50
+                  },
+                  {
+                    "opacity": 100,
+                    "location": 4096,
+                    "midpoint": 50
+                  }
+                ]
+              }
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-posterize",
+      "params": {
+        "file": "adj-posterize.psd",
+        "hash": "ad5d22c2b83b4bf2"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-posterize.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.POSTERIZE",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "levels": 5
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-selective-color",
+      "params": {
+        "file": "adj-selective-color.psd",
+        "hash": "0483d73e51443577"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-selective-color.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.SELECTIVECOLOR",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "presetKind": "presetKindCustom",
+              "method": "relative",
+              "colorCorrection": [
+                {
+                  "colors": "radius",
+                  "cyan": 10,
+                  "magenta": -20,
+                  "yellowColor": 30,
+                  "black": 0
+                },
+                {
+                  "colors": "neutrals",
+                  "cyan": -5,
+                  "magenta": 0,
+                  "yellowColor": 15,
+                  "black": 10
+                },
+                {
+                  "colors": "blacks",
+                  "cyan": 0,
+                  "magenta": 0,
+                  "yellowColor": 0,
+                  "black": 20
+                }
+              ]
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-selective-color-absolute",
+      "params": {
+        "file": "adj-selective-color-absolute.psd",
+        "hash": "77a79b6809993762"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-selective-color-absolute.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.SELECTIVECOLOR",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "presetKind": "presetKindCustom",
+              "method": "absolute",
+              "colorCorrection": [
+                {
+                  "colors": "blues",
+                  "cyan": 25,
+                  "magenta": 0,
+                  "yellowColor": -25,
+                  "black": 0
+                },
+                {
+                  "colors": "whites",
+                  "cyan": 0,
+                  "magenta": 10,
+                  "yellowColor": 0,
+                  "black": 0
+                }
+              ]
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-threshold",
+      "params": {
+        "file": "adj-threshold.psd",
+        "hash": "f0a9c8bcef8beca6"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-threshold.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.THRESHOLD",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "level": 140
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "adj-vibrance",
+      "params": {
+        "file": "adj-vibrance.psd",
+        "hash": "c18f44b0a4e8bb93"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/adj-vibrance.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "paged",
+            "kind": "LayerKind.VIBRANCE",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "vibrance": 40,
+              "saturation": -20
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "edited-curves",
+      "params": {
+        "file": "edited-curves.psd",
+        "hash": "b460f7ca52844e5f"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/edited-curves.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "Kurven 1",
+            "kind": "LayerKind.CURVES",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "transferFunction": 0,
+              "presetKind": "presetKindCustom",
+              "adjustment": [
+                {
+                  "channel": "reference",
+                  "curve": [
+                    {
+                      "horizontal": 0,
+                      "vertical": 0
+                    },
+                    {
+                      "horizontal": 100,
+                      "vertical": 60
+                    },
+                    {
+                      "horizontal": 180,
+                      "vertical": 220
+                    },
+                    {
+                      "horizontal": 255,
+                      "vertical": 255
+                    }
+                  ]
+                }
+              ]
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "fills-and-style",
+      "params": {
+        "file": "fills-and-style.psd",
+        "hash": "0fad629caec2b22d"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/fills-and-style.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 4
+        },
+        "layers": [
+          {
+            "name": "styled",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "effects": {
+              "scale": 100,
+              "dropShadow": {
+                "enabled": true,
+                "present": true,
+                "showInDialog": true,
+                "mode": "multiply",
+                "color": {
+                  "red": 0,
+                  "grain": 0,
+                  "blue": 0
+                },
+                "opacity": 35,
+                "useGlobalAngle": true,
+                "localLightingAngle": 120,
+                "distance": 3,
+                "chokeMatte": 0,
+                "blur": 7,
+                "noise": 0,
+                "antiAlias": false,
+                "transferSpec": {
+                  "name": "Linear"
+                },
+                "layerConceals": true
+              },
+              "innerShadowMulti": [
+                {
+                  "enabled": false,
+                  "present": false,
+                  "showInDialog": true,
+                  "mode": "multiply",
+                  "color": {
+                    "red": 0,
+                    "grain": 0,
+                    "blue": 0
+                  },
+                  "opacity": 35,
+                  "useGlobalAngle": true,
+                  "localLightingAngle": 90,
+                  "distance": 3,
+                  "chokeMatte": 0,
+                  "blur": 7,
+                  "noise": 0,
+                  "antiAlias": false,
+                  "transferSpec": {
+                    "name": "Linear"
+                  }
+                }
+              ],
+              "solidFillMulti": [
+                {
+                  "enabled": false,
+                  "present": false,
+                  "showInDialog": true,
+                  "mode": "normal",
+                  "color": {
+                    "red": 129.001922607422,
+                    "grain": 129.001922607422,
+                    "blue": 129.001922607422
+                  },
+                  "opacity": 100
+                }
+              ],
+              "gradientFillMulti": [
+                {
+                  "enabled": false,
+                  "present": false,
+                  "showInDialog": true,
+                  "mode": "normal",
+                  "opacity": 100,
+                  "gradient": {
+                    "name": "Grau, Weiß",
+                    "gradientForm": "customStops",
+                    "interfaceIconFrameDimmed": 4096,
+                    "colors": [
+                      {
+                        "color": {
+                          "red": 215.000610351562,
+                          "grain": 215.000610351562,
+                          "blue": 215.000610351562
+                        },
+                        "type": "userStop",
+                        "location": 0,
+                        "midpoint": 50
+                      },
+                      {
+                        "color": {
+                          "red": 255,
+                          "grain": 255,
+                          "blue": 255
+                        },
+                        "type": "userStop",
+                        "location": 4096,
+                        "midpoint": 50
+                      }
+                    ],
+                    "transparency": [
+                      {
+                        "opacity": 100,
+                        "location": 0,
+                        "midpoint": 50
+                      },
+                      {
+                        "opacity": 100,
+                        "location": 4096,
+                        "midpoint": 50
+                      }
+                    ]
+                  },
+                  "angle": 90,
+                  "type": "linear",
+                  "reverse": false,
+                  "dither": false,
+                  "gs99": "smooth",
+                  "align": true,
+                  "scale": 100,
+                  "offset": {
+                    "horizontal": 0,
+                    "vertical": 0
+                  }
+                }
+              ],
+              "frameFX": {
+                "enabled": true,
+                "present": true,
+                "showInDialog": true,
+                "style": "outsetFrame",
+                "paintType": "solidColor",
+                "mode": "normal",
+                "opacity": 100,
+                "size": 3,
+                "color": {
+                  "red": 20.0000007078052,
+                  "grain": 20.0000007078052,
+                  "blue": 160.000005662441
+                },
+                "overprint": false
+              }
+            },
+            "depth": 0
+          },
+          {
+            "name": "gradient",
+            "kind": "LayerKind.GRADIENTFILL",
+            "opacity": 50.1960784313726,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "gradientsInterpolationMethod": "classic",
+              "angle": 30,
+              "type": "linear",
+              "noisePreSeed": 10002,
+              "gradient": {
+                "name": "Custom",
+                "gradientForm": "customStops",
+                "interfaceIconFrameDimmed": 4096,
+                "colors": [
+                  {
+                    "color": {
+                      "red": 200.000003278255,
+                      "grain": 40.0000014156103,
+                      "blue": 40.0000014156103
+                    },
+                    "type": "userStop",
+                    "location": 0,
+                    "midpoint": 50
+                  },
+                  {
+                    "color": {
+                      "red": 40.0000014156103,
+                      "grain": 40.0000014156103,
+                      "blue": 200.000003278255
+                    },
+                    "type": "userStop",
+                    "location": 4096,
+                    "midpoint": 50
+                  }
+                ],
+                "transparency": [
+                  {
+                    "opacity": 100,
+                    "location": 0,
+                    "midpoint": 50
+                  },
+                  {
+                    "opacity": 100,
+                    "location": 4096,
+                    "midpoint": 50
+                  }
+                ]
+              }
+            },
+            "depth": 0
+          },
+          {
+            "name": "solid",
+            "kind": "LayerKind.SOLIDFILL",
+            "opacity": 40,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "color": {
+                "red": 30.0000001117587,
+                "grain": 160.000005662441,
+                "blue": 90.0000022351742
+              }
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "smart-edited",
+      "params": {
+        "file": "smart-edited.psd",
+        "hash": "03c7c5f8e9dc5c26"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "psd-readback/smart-edited.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "smart, renamed",
+            "kind": "LayerKind.SMARTOBJECT",
+            "opacity": 50.1960784313726,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "smart": {
+              "linked": false,
+              "file": "square.psb"
+            },
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "sixteen-edited",
+      "params": {
+        "file": "sixteen-edited.psd",
+        "hash": "879403796729ff22"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16,
+      "files": [
+        "psd-readback/sixteen-edited.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.SIXTEEN",
+          "width": 128,
+          "height": 128,
+          "layers": 3
+        },
+        "layers": [
+          {
+            "name": "Kurven 1",
+            "kind": "LayerKind.CURVES",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "transferFunction": 0,
+              "presetKind": "presetKindCustom",
+              "adjustment": [
+                {
+                  "channel": "reference",
+                  "curve": [
+                    {
+                      "horizontal": 0,
+                      "vertical": 0
+                    },
+                    {
+                      "horizontal": 128,
+                      "vertical": 160
+                    },
+                    {
+                      "horizontal": 255,
+                      "vertical": 255
+                    }
+                  ]
+                }
+              ]
+            },
+            "depth": 0
+          },
+          {
+            "name": "square",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmyk-edited",
+      "params": {
+        "file": "cmyk-edited.psd",
+        "hash": "3bbb4d902ffb357c"
+      },
+      "profile": "Coated FOGRA39 (ISO 12647-2:2004)",
+      "bits": 8,
+      "files": [],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.CMYK",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "square",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "psb-edited",
+      "params": {
+        "file": "psb-edited.psb",
+        "hash": "52b82f39380c644f"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/psb-edited.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 4
+        },
+        "layers": [
+          {
+            "name": "new",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Kurven 1",
+            "kind": "LayerKind.CURVES",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "adjustment": {
+              "transferFunction": 0,
+              "presetKind": "presetKindCustom",
+              "adjustment": [
+                {
+                  "channel": "reference",
+                  "curve": [
+                    {
+                      "horizontal": 0,
+                      "vertical": 0
+                    },
+                    {
+                      "horizontal": 128,
+                      "vertical": 160
+                    },
+                    {
+                      "horizontal": 255,
+                      "vertical": 255
+                    }
+                  ]
+                }
+              ]
+            },
+            "depth": 0
+          },
+          {
+            "name": "square",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 25.0980392156863,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    }
+  ]
+}
