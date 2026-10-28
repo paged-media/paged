@@ -347,3 +347,172 @@ fn malformed_is_error_not_panic() {
         assert_eq!(c.model.series_count(), 0);
     }
 }
+
+/// A column chart whose series, one point, plot area and chart area carry
+/// DrawingML beyond one colour, as Excel's styled charts write it.
+fn styled_chart() -> Vec<u8> {
+    format!(
+        r#"<c:chartSpace {NS}><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>
+      <c:ser><c:idx val="0"/>
+        <c:spPr><a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="accent1"><a:satMod val="103000"/><a:lumMod val="102000"/><a:tint val="94000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="accent1"><a:alpha val="40000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>
+          <a:effectLst><a:outerShdw blurRad="57150" dist="19050" dir="5400000" algn="ctr" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="63000"/></a:srgbClr></a:outerShdw><a:reflection blurRad="6350" stA="50000" endA="300" endPos="55000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/></a:effectLst></c:spPr>
+        <c:dPt><c:idx val="1"/><c:spPr><a:solidFill><a:srgbClr val="C00000"/></a:solidFill><a:effectLst><a:glow rad="63500"><a:srgbClr val="FFC000"><a:alpha val="40000"/></a:srgbClr></a:glow></a:effectLst></c:spPr></c:dPt>
+        <c:val><c:numRef><c:f>Sheet1!$B$1:$B$3</c:f></c:numRef></c:val></c:ser>
+      </c:barChart>
+      <c:spPr><a:solidFill><a:srgbClr val="F2F2F2"><a:alpha val="50000"/></a:srgbClr></a:solidFill><a:effectLst><a:innerShdw blurRad="63500" dist="50800" dir="13500000"><a:prstClr val="black"><a:alpha val="50000"/></a:prstClr></a:innerShdw></a:effectLst></c:spPr>
+    </c:plotArea></c:chart>
+    <c:spPr><a:pattFill prst="pct50"><a:fgClr><a:srgbClr val="000000"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill><a:effectLst><a:softEdge rad="63500"/></a:effectLst></c:spPr>
+    </c:chartSpace>"#
+    )
+    .into_bytes()
+}
+
+#[test]
+fn gradients_and_effects_are_read_as_authored__feat__sheet_chart_native_effects() {
+    let m = model(&styled_chart());
+    let s = m.series().next().unwrap();
+    let fx = s.fx.as_deref().expect("series fx");
+    assert!(matches!(
+        fx.fill,
+        Some(paged_ooxml::drawingml::Fill::Gradient(_))
+    ));
+    assert!(fx.effects.outer_shadow.is_some() && fx.effects.reflection.is_some());
+    // The colour a reader without effects draws is the first stop.
+    assert!(s.fill.is_some());
+    assert_eq!(s.point_fx.len(), 1);
+    assert_eq!(s.point_fx[0].0, 1);
+    assert!(s.point_fx[0].1.fill.is_none() && s.point_fx[0].1.effects.glow.is_some());
+    let pa = m.plot_area.fx.as_deref().unwrap();
+    assert!(matches!(
+        pa.fill,
+        Some(paged_ooxml::drawingml::Fill::Solid(_))
+    ));
+    assert!(pa.effects.inner_shadow.is_some());
+    let ca = m.chart_area.fx.as_deref().unwrap();
+    assert!(matches!(
+        ca.fill,
+        Some(paged_ooxml::drawingml::Fill::Pattern(_))
+    ));
+    assert_eq!(ca.effects.soft_edge, Some(63500));
+}
+
+#[test]
+fn styled_charts_lower_onto_native_items_through_the_shared_mapper__feat__sheet_chart_native_effects(
+) {
+    use sheet_chart::{generate, PlotData, Primitive};
+    let m = sheet_chart::style::effective(&model(&styled_chart()), &Default::default());
+    let data = PlotData::of(
+        vec![vec![3.0, 5.0, 2.0]],
+        vec!["a".into(), "b".into(), "c".into()],
+    );
+    let g = generate(&m, &data, 360.0, 240.0);
+    let fx_of = |p: &Primitive| match p {
+        Primitive::Rect { fx, .. } => fx.clone(),
+        _ => None,
+    };
+    let rects: Vec<&Primitive> = g
+        .prims
+        .iter()
+        .filter(|p| matches!(p, Primitive::Rect { .. }))
+        .collect();
+    // The chart area: the pattern's mixed colour, feathered.
+    let Primitive::Rect { fill, .. } = rects[0] else {
+        unreachable!()
+    };
+    assert_eq!(fill.as_deref(), Some("#808080"));
+    assert_eq!(fx_of(rects[0]).unwrap().feather, Some(5.0));
+    // The plot area: half opaque, with an inner shadow up-left.
+    let pa = fx_of(rects[1]).unwrap();
+    assert_eq!(pa.opacity, Some(50.0));
+    let i = pa.inner_shadow.unwrap();
+    assert_eq!((i.angle, i.color.as_str()), (135.0, "#000000"));
+    assert!((i.distance - 4.0).abs() < 2e-3);
+    // The bars: the series' gradient (accent 1 resolved with its
+    // transforms), fading through its alpha stop, and its shadow.
+    let bars: Vec<_> = rects.iter().filter_map(|p| fx_of(p)).skip(2).collect();
+    assert_eq!(bars.len(), 3, "{:?}", g.prims);
+    let b0 = &bars[0];
+    let gr = b0.gradient.as_ref().unwrap();
+    assert_eq!((gr.kind, gr.angle), ("linear", Some(-90.0)));
+    assert_eq!(gr.stops[1], (100.0, "#4472C4".to_string()));
+    assert_eq!(
+        b0.gradient_feather.as_ref().unwrap().stops[1],
+        (100.0, 40.0)
+    );
+    let sh = b0.drop_shadow.as_ref().unwrap();
+    assert_eq!((sh.y_offset, sh.size, sh.opacity), (1.5, 2.25, 63.0));
+    // Point 1: its own glow, its own solid red, no gradient.
+    let b1 = &bars[1];
+    assert!(b1.gradient.is_none() && b1.drop_shadow.is_none());
+    assert_eq!(b1.outer_glow.as_ref().unwrap().color, "#FFC000");
+    // What the page cannot hold is said once per kind.
+    assert!(
+        g.losses.iter().any(|l| l.contains("reflection")),
+        "{:?}",
+        g.losses
+    );
+    assert!(
+        g.losses.iter().any(|l| l.contains("pattern")),
+        "{:?}",
+        g.losses
+    );
+    assert_eq!(
+        g.losses.iter().filter(|l| l.contains("reflection")).count(),
+        1
+    );
+}
+
+#[test]
+fn a_document_colour_wins_over_the_files_gradient__feat__sheet_chart_native_effects() {
+    let mut m = model(&styled_chart());
+    let s = &mut m.plots[0].series[0];
+    s.fill = Some(sheet_chart::style::swatch_color(&doc_swatch(
+        "Color/Brand",
+        0x123456,
+    )));
+    let e = sheet_chart::style::effective(&m, &Default::default());
+    let fx = e.series().next().unwrap().fx.as_deref().unwrap();
+    assert!(fx.fill.is_none(), "the swatch paints, not the gradient");
+    assert!(fx.effects.outer_shadow.is_some(), "the effects stay");
+}
+
+#[test]
+fn colours_read_through_the_shared_drawingml_reader() {
+    let el = |x: &str| {
+        paged_ooxml::tree::parse(
+            format!(
+                r#"<a:x xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{x}</a:x>"#
+            )
+            .as_bytes(),
+        )
+        .unwrap()
+        .children[0]
+            .clone()
+    };
+    // A scheme slot stays a theme reference with its Excel tint.
+    let c = color_of(&el(
+        r#"<a:schemeClr val="accent2"><a:lumMod val="75000"/></a:schemeClr>"#,
+    ))
+    .unwrap();
+    assert_eq!(c, color_scheme(5, -0.25));
+    // Every other colour resolves exactly.
+    assert_eq!(
+        color_of(&el(
+            r#"<a:srgbClr val="808080"><a:lumMod val="50000"/></a:srgbClr>"#
+        )),
+        Some(color_rgb(0x404040))
+    );
+    assert_eq!(
+        color_of(&el(r#"<a:prstClr val="dkBlue"/>"#)),
+        Some(color_rgb(0x00008B))
+    );
+    assert_eq!(color_of(&el(r#"<a:prstClr val="nonsense"/>"#)), None);
+    assert_eq!(
+        color_of(&el(r#"<a:sysClr val="window" lastClr="FFFFFF"/>"#)),
+        Some(color_rgb(0xFFFFFF))
+    );
+    assert_eq!(
+        color_of(&el(r#"<a:hslClr hue="0" sat="100000" lum="50000"/>"#)),
+        Some(color_rgb(0xFF0000))
+    );
+}

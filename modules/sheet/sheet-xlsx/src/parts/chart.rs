@@ -43,9 +43,15 @@
 //!   orientation, crossing, date base unit, number format, gridlines, line,
 //!   tick-label text and position, deletion. The title, legend, chart and
 //!   plot area paints, default text and `c:style`.
-//! - Colours as [`ColorRef`]s: `a:srgbClr`, `a:schemeClr` (a theme slot with
-//!   its `lumMod`/`lumOff`/`tint`/`shade` as an Excel tint), `a:sysClr`,
-//!   `a:prstClr`; `a:noFill` lines are `none`.
+//! - Colours as [`ColorRef`]s, through the shared DrawingML colour reader:
+//!   `a:schemeClr` (a theme slot with its `lumMod`/`lumOff`/`tint`/`shade`
+//!   as an Excel tint), and `a:srgbClr`, `a:sysClr`, `a:prstClr`,
+//!   `a:hslClr`, `a:scrgbClr` resolved with their transforms; `a:noFill`
+//!   lines are `none`.
+//! - Beyond one colour (sheet ADR 527): a role's gradient, pattern or
+//!   translucent fill, a gradient line and its `a:effectLst` as authored
+//!   ([`DmlFx`]), for the geometry to lower through the shared mapper; the
+//!   role's colour stays the gradient's first stop.
 //! - DOCUMENT REFERENCES: Paged writes the document swatch / style a role
 //!   was bound to into a paged `c:extLst` extension beside the concrete
 //!   value it wrote ([`PAGED_EXT_URI`]); on re-import a reference is restored
@@ -166,22 +172,32 @@ pub struct ShapeProps {
     pub fill: Option<ColorRef>,
     pub no_fill: bool,
     pub line: Option<LineStyle>,
+    /// The gradient, translucency and effects the colour does not hold
+    /// (sheet ADR 527).
+    pub fx: Option<Box<DmlFx>>,
 }
 
 /// What the Excel profile reads of a chart.
 struct ExcelProfile;
 
-/// A DrawingML colour choice element → a [`ColorRef`].
+/// A DrawingML colour choice element → a [`ColorRef`], through the shared
+/// reader (`paged_ooxml::drawingml::color`, plan C11): a theme slot stays a
+/// theme reference with its `lumMod`/`lumOff`/`tint`/`shade` as an Excel
+/// tint (the swatch model a chart role keeps); every other colour resolves
+/// to its sRGB with its transforms applied exactly. Alpha is not a colour
+/// role's: a translucent fill rides in [`DmlFx`].
 pub fn color_of(el: &El) -> Option<ColorRef> {
-    let mods = |el: &El| {
-        let pct = |name: &str| {
-            el.child(Ns::A, name)
-                .and_then(|m| m.attr("val"))
-                .and_then(|v| v.trim().parse::<f64>().ok())
-                .map(|v| v / 100_000.0)
-        };
+    use paged_ooxml::drawingml::{color, resolve, ColorBase};
+    let c = color(el)?;
+    let pct = |name: &str| {
+        c.transforms
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| f64::from(*v) / 100_000.0)
+    };
+    if let ColorBase::Scheme(slot) = &c.base {
         let tint = sheet_chart::colors::tint_of(pct("lumMod"), pct("lumOff"));
-        if tint != 0.0 {
+        let tint = if tint != 0.0 {
             tint
         } else if let Some(t) = pct("tint") {
             1.0 - t
@@ -189,65 +205,29 @@ pub fn color_of(el: &El) -> Option<ColorRef> {
             s - 1.0
         } else {
             0.0
-        }
-    };
-    let concrete = match el.local.as_str() {
-        "srgbClr" => {
-            let v = u32::from_str_radix(el.attr("val")?.trim(), 16).ok()?;
-            color_rgb(sheet_chart::colors::apply_tint(v, mods(el)))
-        }
-        "sysClr" => {
-            let v = el
-                .attr("lastClr")
-                .and_then(|v| u32::from_str_radix(v.trim(), 16).ok())
-                .unwrap_or(if el.attr("val") == Some("window") {
-                    0xFFFFFF
-                } else {
-                    0
-                });
-            color_rgb(sheet_chart::colors::apply_tint(v, mods(el)))
-        }
-        "schemeClr" => {
-            let idx = match el.attr("val")? {
-                "dk1" | "tx1" => 0,
-                "lt1" | "bg1" => 1,
-                "dk2" | "tx2" => 2,
-                "lt2" | "bg2" => 3,
-                "accent1" => 4,
-                "accent2" => 5,
-                "accent3" => 6,
-                "accent4" => 7,
-                "accent5" => 8,
-                "accent6" => 9,
-                "hlink" => 10,
-                "folHlink" => 11,
-                _ => return Some(ColorRef::auto()),
-            };
-            color_scheme(idx, mods(el))
-        }
-        "prstClr" => color_rgb(match el.attr("val")? {
-            "black" => 0x000000,
-            "white" => 0xFFFFFF,
-            "red" => 0xFF0000,
-            "green" => 0x008000,
-            "blue" => 0x0000FF,
-            "yellow" => 0xFFFF00,
-            "gray" | "grey" => 0x808080,
-            _ => return None,
-        }),
-        "scrgbClr" => {
-            let c = |n: &str| {
-                el.attr(n)
-                    .and_then(|v| v.parse::<f64>().ok())
-                    .map_or(0, |v| {
-                        ((v / 100_000.0).clamp(0.0, 1.0) * 255.0).round() as u32
-                    })
-            };
-            color_rgb((c("r") << 16) | (c("g") << 8) | c("b"))
-        }
-        _ => return None,
-    };
-    Some(concrete)
+        };
+        let idx = match slot.as_str() {
+            "dk1" | "tx1" => 0,
+            "lt1" | "bg1" => 1,
+            "dk2" | "tx2" => 2,
+            "lt2" | "bg2" => 3,
+            "accent1" => 4,
+            "accent2" => 5,
+            "accent3" => 6,
+            "accent4" => 7,
+            "accent5" => 8,
+            "accent6" => 9,
+            "hlink" => 10,
+            "folHlink" => 11,
+            _ => return Some(ColorRef::auto()),
+        };
+        return Some(color_scheme(idx, tint));
+    }
+    if let ColorBase::Preset(name) = &c.base {
+        // An unknown preset name is no colour (not black).
+        paged_ooxml::drawingml::color::preset(name)?;
+    }
+    Some(color_rgb(resolve(&c, &()).hex()))
 }
 
 /// The colour of a `a:solidFill` (or the first colour child of `el`).
@@ -264,16 +244,53 @@ fn grad_first(el: &El) -> Option<ColorRef> {
         .and_then(|gs| gs.children.iter().find_map(color_of))
 }
 
+/// The foreground of a pattern fill (the chart draws the pattern's mix
+/// where it lowers the pattern, sheet ADR 527).
+fn pattern_fg(el: &El) -> Option<ColorRef> {
+    el.path(&[(Ns::A, "pattFill"), (Ns::A, "fgClr")])
+        .and_then(|f| f.children.iter().find_map(color_of))
+}
+
+/// A fill a [`ColorRef`] cannot hold: a gradient, a pattern, a solid
+/// colour with an alpha.
+fn beyond_solid(f: paged_ooxml::drawingml::Fill) -> Option<paged_ooxml::drawingml::Fill> {
+    use paged_ooxml::drawingml::Fill;
+    match &f {
+        Fill::Gradient(_) | Fill::Pattern(_) => Some(f),
+        Fill::Solid(c) if c.transforms.iter().any(|(n, _)| n.starts_with("alpha")) => Some(f),
+        _ => None,
+    }
+}
+
+/// The DrawingML of a `c:spPr` beyond its solid colours (sheet ADR 527).
+fn dml_fx(sp: &El) -> Option<Box<DmlFx>> {
+    let rels = |_: &str| None;
+    let fx = DmlFx {
+        fill: paged_ooxml::drawingml::fill_in(sp, &rels).and_then(beyond_solid),
+        line_fill: sp
+            .child(Ns::A, "ln")
+            .and_then(|ln| paged_ooxml::drawingml::fill_in(ln, &rels))
+            .and_then(beyond_solid),
+        effects: sp
+            .child(Ns::A, "effectLst")
+            .map(|e| paged_ooxml::drawingml::effects(e, &rels))
+            .unwrap_or_default(),
+    };
+    (!fx.is_empty()).then(|| Box::new(fx))
+}
+
 impl dml_chart::Props for ExcelProfile {
     type Shape = ShapeProps;
     type Text = FontSpec;
     fn shape(&self, sp: &El) -> ShapeProps {
         let line = sp.child(Ns::A, "ln").map(|ln| LineStyle {
-            color: solid(ln),
+            color: solid(ln)
+                .or_else(|| grad_first(ln))
+                .or_else(|| pattern_fg(ln)),
             width_pt: ln
                 .attr("w")
                 .and_then(|w| w.parse::<f64>().ok())
-                .map(|emu| emu / 12_700.0),
+                .map(|emu| emu / paged_ooxml::units::EMU_PER_PT),
             dash: ln
                 .child(Ns::A, "prstDash")
                 .and_then(|d| d.attr("val"))
@@ -282,9 +299,12 @@ impl dml_chart::Props for ExcelProfile {
             none: ln.child(Ns::A, "noFill").is_some(),
         });
         ShapeProps {
-            fill: solid(sp).or_else(|| grad_first(sp)),
+            fill: solid(sp)
+                .or_else(|| grad_first(sp))
+                .or_else(|| pattern_fg(sp)),
             no_fill: sp.child(Ns::A, "noFill").is_some(),
             line,
+            fx: dml_fx(sp),
         }
     }
     fn text(&self, rp: &El) -> FontSpec {
@@ -320,6 +340,7 @@ fn area_of(sp: &ShapeProps) -> AreaStyle {
         fill: sp.fill.clone(),
         no_fill: sp.no_fill,
         line: sp.line.clone(),
+        fx: sp.fx.clone(),
     }
 }
 
@@ -677,6 +698,7 @@ fn series_of(
     out.sizes = range(&s.refs.bubble_sizes);
     out.fill = shape_fill(&s.props);
     out.line = s.props.line.clone();
+    out.fx = s.props.fx.clone();
     let mut marker = s.marker.as_deref().map(|sym| Marker {
         symbol: MarkerSymbol::from_tag(sym),
         ..Marker::default()
@@ -707,6 +729,11 @@ fn series_of(
         .points
         .iter()
         .filter_map(|(i, sp)| shape_fill(sp).map(|c| (*i, c)))
+        .collect();
+    out.point_fx = s
+        .points
+        .iter()
+        .filter_map(|(i, sp)| sp.fx.as_deref().map(|fx| (*i, fx.clone())))
         .collect();
     out.labels = s.labels.as_ref().map(labels_of);
     out.trendlines = s

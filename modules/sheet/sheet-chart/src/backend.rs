@@ -170,6 +170,7 @@ impl DrawingBackend for GeomBackend {
             stroke_w: style.stroke_width() as f64,
             stroke_swatch_ref: None,
             dash: None,
+            fx: None,
         });
         Ok(())
     }
@@ -204,6 +205,7 @@ impl DrawingBackend for GeomBackend {
             stroke_w,
             fill_swatch_ref: None,
             stroke_swatch_ref: None,
+            fx: None,
         });
         Ok(())
     }
@@ -226,6 +228,7 @@ impl DrawingBackend for GeomBackend {
                 stroke_w: style.stroke_width() as f64,
                 stroke_swatch_ref: None,
                 dash: None,
+                fx: None,
             });
         }
         Ok(())
@@ -250,6 +253,7 @@ impl DrawingBackend for GeomBackend {
                 stroke_w: 0.0,
                 fill_swatch_ref: None,
                 stroke_swatch_ref: None,
+                fx: None,
             });
         }
         Ok(())
@@ -290,6 +294,7 @@ impl DrawingBackend for GeomBackend {
             },
             fill_swatch_ref: None,
             stroke_swatch_ref: None,
+            fx: None,
         });
         Ok(())
     }

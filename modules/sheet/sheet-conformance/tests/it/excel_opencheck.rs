@@ -684,6 +684,15 @@ fn write_the_paged_files() {
         std::fs::write(dir.join(format!("orig-{fixture}")), corpus(fixture)).unwrap();
     }
     std::fs::write(dir.join("control-broken.xlsx"), broken_control()).unwrap();
+    // Sheet ADR 527: a chart Excel styled with a gradient, a translucent
+    // plot area and effects, its plot area given a document swatch — the
+    // splice keeps the effect lists. Its baseline is the styled chart as
+    // generated (the DrawingML is synthetic, the package Paged's own).
+    let styled = crate::chart_write::styled_chart_workbook();
+    let mut s = SheetSession::load_xlsx(&styled).unwrap();
+    crate::chart_write::swatch_on_the_plot_area(&mut s);
+    std::fs::write(dir.join("chart-effects-edit.xlsx"), s.save_xlsx().unwrap()).unwrap();
+    std::fs::write(dir.join("orig-chart-effects-edit.xlsx"), styled).unwrap();
 }
 
 /// What a package holds, read through Paged's own reader.

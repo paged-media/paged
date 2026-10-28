@@ -116,6 +116,24 @@ pub fn span(angle: f64, w: f64, h: f64) -> Placement {
     }
 }
 
+/// Where a fill gradient's axis starts on a `w` × `h` box, relative to the
+/// box's top-left: a radial one's centre ([`placement`] already says it);
+/// for a linear one, the start of the axis PowerPoint and Excel run
+/// through the box's centre, `length` long at the engine's (counter-
+/// clockwise) angle. The engine starts an unplaced linear gradient at
+/// the box's bottom-left corner, which is that start only for an axis
+/// running up or right (0°–90°); a module that knows the item's inner
+/// coordinates states the start instead (sheet ADR 527).
+pub fn axis_start(p: &Placement, w: f64, h: f64) -> Option<[f32; 2]> {
+    if p.start.is_some() {
+        return p.start;
+    }
+    let (sn, cs) = (p.angle? as f64).to_radians().sin_cos();
+    let half = p.length? as f64 / 2.0;
+    // The engine's axis direction on the y-down page is (cos θ, −sin θ).
+    Some([pt(w / 2.0 - half * cs), pt(h / 2.0 + half * sn)])
+}
+
 /// A gradient swatch: id, kind, (location %, colour id) stops.
 type GradientSwatch = (String, GradientKind, Vec<(f64, String)>);
 

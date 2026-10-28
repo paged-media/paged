@@ -99,6 +99,7 @@ pub fn sparkline(
             stroke_w: 0.0,
             fill_swatch_ref: p.swatch.clone(),
             stroke_swatch_ref: None,
+            fx: None,
         });
     };
     let bw = (w - 2.0 * INSET) / n as f64 * 0.8;
@@ -113,6 +114,7 @@ pub fn sparkline(
                         stroke_w: g.line_weight,
                         stroke_swatch_ref: series.swatch.clone(),
                         dash: None,
+                        fx: None,
                     });
                 }
                 run.clear();
@@ -172,6 +174,7 @@ pub fn sparkline(
             stroke_w: 0.5,
             stroke_swatch_ref: ax.swatch,
             dash: None,
+            fx: None,
         });
     }
     // Point highlights: the markers of a line, the coloured bars of a column.
@@ -229,6 +232,7 @@ pub fn sparkline(
                     stroke_w: 0.0,
                     fill_swatch_ref: p.swatch.clone(),
                     stroke_swatch_ref: None,
+                    fx: None,
                 });
             }
             SparklineKind::Column => {

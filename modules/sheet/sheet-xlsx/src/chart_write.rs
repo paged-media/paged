@@ -1298,6 +1298,10 @@ fn splice_tree(
     };
     if before.plot_area != after.plot_area {
         let sp = opt_frag(w::shape_xml(&out.plot_area))?;
+        let old = pa.children.iter().find(|c| c.is(Ns::C, "spPr")).cloned();
+        let keep_fill = before.plot_area.fill == after.plot_area.fill
+            && before.plot_area.no_fill == after.plot_area.no_fill;
+        let sp = carry_dml(old.as_ref(), sp, after.plot_area.fx.as_deref(), keep_fill)?;
         put_last(pa, "spPr", sp);
     }
     let structural = family(before) != family(after) || before.plots.len() != after.plots.len();
@@ -1445,6 +1449,70 @@ fn set_val(el: &mut El, v: &str) {
     }
 }
 
+/// A regenerated `c:spPr` keeps what it cannot say itself (sheet ADR 527):
+/// the old one's `a:effectLst` while the role still has its effects, and
+/// its gradient, pattern or translucent fill while the role's colour was
+/// not changed. Both as read, so a theme colour in them stays one.
+fn carry_dml(
+    old: Option<&El>,
+    new: Option<El>,
+    fx: Option<&DmlFx>,
+    keep_fill: bool,
+) -> Result<Option<El>, String> {
+    let (Some(old), Some(fx)) = (old, fx) else {
+        return Ok(new);
+    };
+    const FILLS: [&str; 6] = [
+        "noFill",
+        "solidFill",
+        "gradFill",
+        "blipFill",
+        "pattFill",
+        "grpFill",
+    ];
+    let is_fill = |c: &El| c.ns == Ns::A && FILLS.contains(&c.local.as_str());
+    let old_fill = old
+        .children
+        .iter()
+        .find(|c| is_fill(c))
+        .filter(|_| keep_fill && fx.fill.is_some());
+    let old_fx = old
+        .child(Ns::A, "effectLst")
+        .filter(|_| !fx.effects.is_empty());
+    if old_fill.is_none() && old_fx.is_none() {
+        return Ok(new);
+    }
+    let mut sp = match new {
+        Some(sp) => sp,
+        None => frag("<c:spPr></c:spPr>")?,
+    };
+    if let Some(f) = old_fill {
+        match sp.children.iter().position(|c| is_fill(c)) {
+            Some(i) => sp.children[i] = f.clone(),
+            None => {
+                let at = sp
+                    .children
+                    .iter()
+                    .position(|c| c.is(Ns::A, "ln") || c.is(Ns::A, "effectLst"))
+                    .unwrap_or(sp.children.len());
+                sp.children.insert(at, f.clone());
+            }
+        }
+    }
+    if let Some(e) = old_fx {
+        sp.children.retain(|c| !c.is(Ns::A, "effectLst"));
+        let at = sp
+            .children
+            .iter()
+            .position(|c| {
+                c.ns == Ns::A && matches!(c.local.as_str(), "scene3d" | "sp3d" | "extLst")
+            })
+            .unwrap_or(sp.children.len());
+        sp.children.insert(at, e.clone());
+    }
+    Ok(Some(sp))
+}
+
 /// `spPr` of the plot area sits last (before `extLst`).
 fn put_last(parent: &mut El, local: &str, new: Option<El>) {
     parent.children.retain(|c| !c.is(Ns::C, local));
@@ -1511,6 +1579,9 @@ fn patch_series(
     }
     if changed(&|b| b.fill != after.fill || b.line != after.line) {
         let sp = opt_frag(w::shape_xml(&so.shape))?;
+        let old = ser.children.iter().find(|c| c.is(Ns::C, "spPr")).cloned();
+        let keep_fill = before.is_some_and(|b| b.fill == after.fill);
+        let sp = carry_dml(old.as_ref(), sp, after.fx.as_deref(), keep_fill)?;
         w::put_child(ser, Ns::C, "spPr", sp, w::ORDER_SER);
     }
     if changed(&|b| b.labels != after.labels) {

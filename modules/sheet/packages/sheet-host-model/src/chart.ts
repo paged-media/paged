@@ -94,6 +94,70 @@ import {
 /** Text alignment for a chart text label's anchor point. */
 export type TextAnchor = "start" | "middle" | "end";
 
+// ── Native effects (sheet ADR 527): sheet-chart/src/native.rs's serde ──────
+//
+// The role's DrawingML gradient, translucency and effects as the shared
+// mapper (`dml-native`) lowered them, colours as `#RRGGBB`.
+
+/** A gradient fill. `stops` are `[location 0–100, #RRGGBB]`. */
+export interface NativeGradient {
+  kind: "linear" | "radial";
+  stops: [number, string][];
+  /** The engine's angle (counter-clockwise degrees); linear only. */
+  angle?: number;
+  /** The axis length (linear) or the radius (radial), pt. */
+  length?: number;
+  /** The axis start (linear) or the centre (radial), chart-content pt. */
+  start?: [number, number];
+}
+
+/** A drop shadow. */
+export interface NativeShadow {
+  xOffset: number;
+  yOffset: number;
+  size: number;
+  /** 0–100. */
+  opacity: number;
+  color: string;
+}
+
+/** An inner shadow, as the engine's editors address it. */
+export interface NativeInnerShadow {
+  /** Counter-clockwise degrees. */
+  angle: number;
+  distance: number;
+  size: number;
+  opacity: number;
+  color: string;
+}
+
+/** An outer glow. */
+export interface NativeGlow {
+  size: number;
+  opacity: number;
+  color: string;
+}
+
+/** A gradient feather: `stops` are `[location 0–100, opacity 0–100]`. */
+export interface NativeFeather {
+  gradientType: string;
+  angle?: number;
+  stops: [number, number][];
+}
+
+/** What a primitive carries beyond its solid fill and stroke. */
+export interface NativeFx {
+  gradient?: NativeGradient;
+  /** The item's opacity, 0–100. */
+  opacity?: number;
+  dropShadow?: NativeShadow;
+  innerShadow?: NativeInnerShadow;
+  outerGlow?: NativeGlow;
+  /** A soft edge's width, pt. */
+  feather?: number;
+  gradientFeather?: NativeFeather;
+}
+
 /** An axis-aligned rectangle (bars, plot frame, legend swatches). */
 export interface RectPrim {
   kind: "rect";
@@ -108,6 +172,8 @@ export interface RectPrim {
    *  instead of a minted chart swatch. */
   fillSwatchRef?: string;
   strokeSwatchRef?: string;
+  /** Gradient, translucency and effects (sheet ADR 527). */
+  fx?: NativeFx;
 }
 
 /** A polyline (line-chart series, axis rules). At least two points. */
@@ -119,6 +185,8 @@ export interface LinePrim {
   strokeSwatchRef?: string;
   /** `a:prstDash` of the line (`dash`, `sysDot`, …). */
   dash?: string;
+  /** Translucency and effects (sheet ADR 527). */
+  fx?: NativeFx;
 }
 
 /** A closed polygon (area fills, scatter diamond markers). */
@@ -130,6 +198,8 @@ export interface PolygonPrim {
   strokeW: number;
   fillSwatchRef?: string;
   strokeSwatchRef?: string;
+  /** Gradient, translucency and effects (sheet ADR 527). */
+  fx?: NativeFx;
 }
 
 /** A pie/donut wedge: center (cx,cy), radius r, angular span in degrees
@@ -147,6 +217,8 @@ export interface WedgePrim {
   innerR?: number;
   fillSwatchRef?: string;
   strokeSwatchRef?: string;
+  /** Gradient, translucency and effects (sheet ADR 527). */
+  fx?: NativeFx;
 }
 
 /** A text label (title, axis ticks, legend entries). */
@@ -183,6 +255,9 @@ export interface ChartGeometry {
   prims: ChartPrimitive[];
   /** A 3-D chart drawn as its 2-D kind. */
   flattened3d?: boolean;
+  /** What the chart's DrawingML asks for that the page items cannot hold,
+   *  one line per kind (sheet ADR 527). */
+  losses?: string[];
 }
 
 // ── Placement + result ──────────────────────────────────────────────────────
@@ -193,6 +268,10 @@ export interface ChartGeometry {
 export interface ChartPlacement {
   pageId: PageId;
   bounds: [number, number, number, number];
+  /** The page's top-left in its spread's coordinates (`PageSummary
+   *  .pageOrigin`): a page item's gradient start is in those (sheet ADR
+   *  527). Without it a gradient keeps the engine's default placement. */
+  pageOrigin?: [number, number];
 }
 
 /** A label text frame the caller must pour text into (phase 2): the text,
@@ -575,11 +654,15 @@ function styleOps(
   strokeW: number,
   fillSwatchRef?: string,
   strokeSwatchRef?: string,
+  fx?: NativeFx,
 ): Mutation[] {
   const ops: Mutation[] = [];
   const fillHex = fill == null ? null : normalizeHex(fill);
-  const fillRef =
-    fillSwatchRef ?? (fillHex != null ? swatchIdForHex(fillHex) : null);
+  // A gradient paints instead of the role's solid colour (its first stop).
+  const gradient = fill != null ? fx?.gradient : undefined;
+  const fillRef = gradient
+    ? chartGradientId(gradient)
+    : (fillSwatchRef ?? (fillHex != null ? swatchIdForHex(fillHex) : null));
   if (fillRef != null) {
     ops.push({
       op: "setElementProperty",
@@ -612,6 +695,145 @@ function styleOps(
         },
       });
     }
+  }
+  return ops;
+}
+
+// ── Native effects (sheet ADR 527) ──────────────────────────────────────────
+
+/** A location as an id segment: to the thousandth, `.` as `p`. */
+function idNumber(v: number): string {
+  return String(Math.round(v * 1000) / 1000).replace(".", "p");
+}
+
+/** The deterministic gradient-swatch id of a chart gradient, keyed by its
+ *  kind and stops (content-addressed like the chart's colour swatches, so
+ *  the same ramp across bars and re-lowers is ONE swatch). */
+export function chartGradientId(g: NativeGradient): string {
+  const stops = g.stops
+    .map(([at, hex]) => `${idNumber(at)}-${normalizeHex(hex) ?? "000000"}`)
+    .join("-");
+  return `Gradient/uPagedSheetChart${g.kind === "radial" ? "R" : "L"}-${stops}`;
+}
+
+/** The createGradient ops for every distinct chart gradient the document
+ *  does not already carry (the same ruling as {@link swatchMintOps}: a
+ *  duplicate fails the whole batch; a failed read (`null`) mints nothing).
+ *  Its stops reference the chart's colour swatches, minted before it. */
+export function gradientMintOps(
+  geom: ChartGeometry,
+  knownSwatchIds?: KnownSwatchIds,
+): Mutation[] {
+  if (knownSwatchIds === null) return [];
+  const seen = new Set<string>();
+  const ops: Mutation[] = [];
+  for (const prim of geom.prims) {
+    if (prim.kind === "text" || prim.kind === "line") continue;
+    const g = prim.fx?.gradient;
+    if (!g || prim.fill == null) continue;
+    const id = chartGradientId(g);
+    if (seen.has(id) || knownSwatchIds?.has(id)) continue;
+    seen.add(id);
+    ops.push({
+      op: "createGradient",
+      args: {
+        spec: {
+          selfId: id,
+          name: `paged.sheet chart gradient ${seen.size}`,
+          kind: g.kind === "radial" ? "Radial" : "Linear",
+          stops: g.stops.map(([at, hex]) => ({
+            stopColor: swatchIdForHex(normalizeHex(hex) ?? "000000"),
+            locationPct: at,
+          })),
+        },
+      },
+    });
+  }
+  return ops;
+}
+
+/** The ops that give a just-created path (`$created`, or `target`) the
+ *  gradient's placement, the item's opacity and its effects. `[ox, oy]` is the chart's
+ *  page-local origin; a gradient's start is written only with the page's
+ *  origin in its spread (the engine reads it in spread coordinates). PURE. */
+export function nativeFxOps(
+  fx: NativeFx | undefined,
+  ox: number,
+  oy: number,
+  pageOrigin: [number, number] | undefined,
+  filled: boolean,
+  target: ElementId = CREATED_POLYGON,
+): Mutation[] {
+  if (!fx) return [];
+  const ops: Mutation[] = [];
+  const set = (path: PropertyPath, value: Value) =>
+    ops.push({
+      op: "setElementProperty",
+      args: { elementId: target, path, value },
+    });
+  const len = (v: number): Value => ({ type: "length", value: v });
+  const on: Value = { type: "bool", value: true };
+  const color = (hex: string): Value =>
+    colorRefValue(swatchIdForHex(normalizeHex(hex) ?? "000000"));
+  const g = filled ? fx.gradient : undefined;
+  if (g) {
+    if (g.angle != null) set("frameGradientFillAngle", len(g.angle));
+    if (g.length != null) set("frameGradientFillLength", len(g.length));
+    if (g.start && pageOrigin) {
+      set("frameGradientFillStart", {
+        type: "lengths",
+        value: [
+          pageOrigin[0] + ox + g.start[0],
+          pageOrigin[1] + oy + g.start[1],
+        ],
+      });
+    }
+  }
+  if (fx.opacity != null) set("frameOpacity", len(fx.opacity));
+  const d = fx.dropShadow;
+  if (d) {
+    set("frameDropShadow", on);
+    set("frameDropShadowXOffset", len(d.xOffset));
+    set("frameDropShadowYOffset", len(d.yOffset));
+    set("frameDropShadowSize", len(d.size));
+    set("frameDropShadowOpacity", len(d.opacity));
+    set("frameDropShadowColor", color(d.color));
+  }
+  const i = fx.innerShadow;
+  if (i) {
+    set("frameInnerShadowEnabled", on);
+    set("frameInnerShadowBlendMode", { type: "text", value: "Normal" });
+    set("frameInnerShadowAngle", len(i.angle));
+    set("frameInnerShadowDistance", len(i.distance));
+    set("frameInnerShadowSize", len(i.size));
+    set("frameInnerShadowOpacity", len(i.opacity));
+    set("frameInnerShadowColor", color(i.color));
+  }
+  const o = fx.outerGlow;
+  if (o) {
+    set("frameOuterGlowEnabled", on);
+    set("frameOuterGlowBlendMode", { type: "text", value: "Normal" });
+    set("frameOuterGlowSize", len(o.size));
+    set("frameOuterGlowOpacity", len(o.opacity));
+    set("frameOuterGlowColor", color(o.color));
+  }
+  if (fx.feather != null) {
+    set("frameFeatherEnabled", on);
+    set("frameFeatherWidth", len(fx.feather));
+  }
+  const gf = filled ? fx.gradientFeather : undefined;
+  if (gf) {
+    set("frameGradientFeather", {
+      type: "gradientFeather",
+      value: {
+        gradientType: gf.gradientType,
+        ...(gf.angle != null ? { angleDeg: gf.angle } : {}),
+        stops: gf.stops.map(([locationPct, alphaPct]) => ({
+          locationPct,
+          alphaPct,
+        })),
+      },
+    });
   }
   return ops;
 }
@@ -663,7 +885,11 @@ export function chartGeometryToMutations(
   // frameStrokeColor refs resolve. Not creating children, so they leave the
   // `$created` sentinel untouched. A colour already in the document is
   // referenced, NOT re-minted: re-minting is what failed the whole batch.
-  const ops: Mutation[] = swatchOps(geom, knownSwatchIds);
+  const ops: Mutation[] = [
+    ...swatchOps(geom, knownSwatchIds),
+    ...gradientMintOps(geom, knownSwatchIds),
+  ];
+  const origin = placement.pageOrigin;
   const texts: ChartTextLabel[] = [];
 
   // Whether a page element has been created yet (the binding rides the FIRST
@@ -696,46 +922,48 @@ export function chartGeometryToMutations(
     switch (prim.kind) {
       case "rect":
         ops.push(insertPath(pageId, left, top, rectRing(prim), false));
-        afterCreate(
-          "polygon",
-          styleOps(
+        afterCreate("polygon", [
+          ...styleOps(
             prim.fill,
             prim.stroke,
             prim.strokeW,
             prim.fillSwatchRef,
             prim.strokeSwatchRef,
+            prim.fx,
           ),
-        );
+          ...nativeFxOps(prim.fx, left, top, origin, prim.fill != null),
+        ]);
         break;
       case "line":
         if (prim.pts.length >= 2) {
           ops.push(insertPath(pageId, left, top, prim.pts, true));
           // A polyline has no fill — only the series stroke.
-          afterCreate(
-            "polygon",
-            styleOps(
+          afterCreate("polygon", [
+            ...styleOps(
               null,
               prim.stroke,
               prim.strokeW,
               undefined,
               prim.strokeSwatchRef,
             ),
-          );
+            ...nativeFxOps(prim.fx, left, top, origin, false),
+          ]);
         }
         break;
       case "polygon":
         if (prim.pts.length >= 2) {
           ops.push(insertPath(pageId, left, top, prim.pts, false));
-          afterCreate(
-            "polygon",
-            styleOps(
+          afterCreate("polygon", [
+            ...styleOps(
               prim.fill,
               prim.stroke,
               prim.strokeW,
               prim.fillSwatchRef,
               prim.strokeSwatchRef,
+              prim.fx,
             ),
-          );
+            ...nativeFxOps(prim.fx, left, top, origin, prim.fill != null),
+          ]);
         }
         break;
       case "wedge": {
@@ -744,16 +972,17 @@ export function chartGeometryToMutations(
           ops.push(insertPath(pageId, left, top, ring, false));
           // A wedge carries no stroke weight in the IR; a hairline default
           // applies when a stroke colour is present.
-          afterCreate(
-            "polygon",
-            styleOps(
+          afterCreate("polygon", [
+            ...styleOps(
               prim.fill,
               prim.stroke,
               0,
               prim.fillSwatchRef,
               prim.strokeSwatchRef,
+              prim.fx,
             ),
-          );
+            ...nativeFxOps(prim.fx, left, top, origin, prim.fill != null),
+          ]);
         }
         break;
       }

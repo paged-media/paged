@@ -49,7 +49,7 @@ import type {
   SwatchSummary,
 } from "@paged-media/plugin-api";
 
-import type { ChartGeometry } from "./chart";
+import type { ChartGeometry, NativeFx } from "./chart";
 import type { LoweredContent, LoweredStyle } from "./lowered";
 
 /** Which part of the workbook a palette colour came from. The facet is
@@ -162,6 +162,15 @@ export function distinctChartHexes(geom: ChartGeometry): string[] {
     seen.add(h);
     out.push(h);
   };
+  // Sheet ADR 527: a gradient's stops and the effects' colours are chart
+  // swatches too (a line takes no gradient).
+  const addFx = (fx: NativeFx | undefined, filled: boolean) => {
+    if (!fx) return;
+    if (filled) for (const [, hex] of fx.gradient?.stops ?? []) add(hex);
+    add(fx.dropShadow?.color ?? null);
+    add(fx.innerShadow?.color ?? null);
+    add(fx.outerGlow?.color ?? null);
+  };
   // A colour that names a document swatch is referenced, never minted.
   for (const prim of geom.prims) {
     switch (prim.kind) {
@@ -170,9 +179,11 @@ export function distinctChartHexes(geom: ChartGeometry): string[] {
       case "wedge":
         if (!prim.fillSwatchRef) add(prim.fill);
         if (!prim.strokeSwatchRef) add(prim.stroke);
+        addFx(prim.fx, prim.fill != null);
         break;
       case "line":
         if (!prim.strokeSwatchRef) add(prim.stroke);
+        addFx(prim.fx, false);
         break;
       case "text":
         if (!prim.colorSwatchRef) add(prim.color ?? null);
