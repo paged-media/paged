@@ -28,13 +28,14 @@
 
 use std::collections::HashMap;
 
+use docx_lower::ir::{LoweredMaster, LoweredMasterFrame};
 use paged_model::{
     Bounds, CharacterStyleDef, ColorEntry, ColorModel, ColorSpace, DesignMap, DocumentPreference,
-    FirstBaselineOffset, FrameRef, Graphic, MarginPreference, ObjectStyleDef, Page, Paragraph,
-    ParagraphStyleDef, PathAnchor, Spread, SpreadRef, Story, StoryRef, StyleSheet, SwatchEntry,
-    TextFrame, XmlTag,
+    FirstBaselineOffset, FrameRef, Graphic, MarginPreference, NumberingStyle, ObjectStyleDef, Page,
+    Paragraph, ParagraphStyleDef, PathAnchor, Section, Spread, SpreadRef, Story, StoryRef,
+    StyleSheet, SwatchEntry, TextFrame, VerticalJustification, XmlTag,
 };
-use paged_scene::{Document, ParsedSpread, ParsedStory};
+use paged_scene::{Document, ParsedMasterSpread, ParsedSpread, ParsedStory};
 
 use crate::SkeletonPage;
 
@@ -59,6 +60,151 @@ fn story_src(p: &SkeletonPage) -> String {
 
 /// The skeleton of `pages` as a native document named `name`.
 pub fn skeleton_document(pages: &[SkeletonPage], name: &str) -> Document {
+    skeleton_document_with(pages, &[], name)
+}
+
+fn master_src(m: &LoweredMaster) -> String {
+    format!("MasterSpreads/MasterSpread_{}.xml", m.id)
+}
+
+fn master_story_src(f: &LoweredMasterFrame) -> String {
+    format!("Stories/Story_{}.xml", f.story_id)
+}
+
+/// One empty story: the pour fills it.
+fn empty_story(src: String, self_id: String) -> ParsedStory {
+    ParsedStory {
+        src,
+        self_id,
+        story: Story {
+            paragraphs: vec![Paragraph {
+                paragraph_style: Some(NO_PARA_STYLE.into()),
+                ..Paragraph::default()
+            }],
+            ..Story::default()
+        },
+    }
+}
+
+/// A text frame on `[top, left, bottom, right]` holding `story`, as the
+/// skeleton's frames are: no fill or stroke, `LeadingOffset` first
+/// baseline, zero insets.
+fn text_frame(id: &str, story: &str, [top, left, bottom, right]: [f32; 4]) -> TextFrame {
+    let corner = |x: f32, y: f32| PathAnchor {
+        anchor: (x, y),
+        left: (x, y),
+        right: (x, y),
+    };
+    let mut frame = TextFrame::new(
+        id.to_string(),
+        Some(story.to_string()),
+        Bounds {
+            top,
+            left,
+            bottom,
+            right,
+        },
+    );
+    frame.item_transform = Some(IDENTITY);
+    frame.fill_color = Some(NONE_SWATCH.into());
+    frame.stroke_color = Some(NONE_SWATCH.into());
+    frame.stroke_weight = Some(0.0);
+    frame.next_text_frame = Some("n".into());
+    frame.first_baseline_offset = Some(FirstBaselineOffset::LeadingOffset);
+    frame.inset_spacing = Some([0.0; 4]);
+    frame.applied_object_style = Some(NO_OBJECT_STYLE.into());
+    frame.anchors = vec![
+        corner(left, top),
+        corner(left, bottom),
+        corner(right, bottom),
+        corner(right, top),
+    ];
+    frame
+}
+
+/// A section master (doc ADR 611): one page of the section's size with
+/// its header frame and footer frame.
+fn master_spread(m: &LoweredMaster) -> ParsedMasterSpread {
+    let mut page = Page::new(
+        format!("{}_pg", m.id),
+        Bounds {
+            top: 0.0,
+            left: 0.0,
+            bottom: m.page_height_pt,
+            right: m.page_width_pt,
+        },
+    );
+    page.item_transform = Some(IDENTITY);
+    let mut spread = Spread {
+        self_id: Some(m.id.clone()),
+        item_transform: Some(IDENTITY),
+        ..Spread::default()
+    };
+    spread.pages.push(page);
+    for f in [&m.header, &m.footer].into_iter().flatten() {
+        let mut frame = text_frame(&f.frame_id, &f.story_id, f.bounds);
+        if f.bottom_aligned {
+            frame.vertical_justification = Some(VerticalJustification::Bottom);
+        }
+        spread
+            .frames_in_order
+            .push(FrameRef::TextFrame(spread.text_frames.len()));
+        spread.text_frames.push(frame);
+    }
+    ParsedMasterSpread {
+        src: master_src(m),
+        self_id: m.id.clone(),
+        spread,
+        name: Some(m.name.clone()),
+    }
+}
+
+/// Word's `w:pgNumType/@w:fmt` as the section's numbering style.
+fn numbering_style(fmt: Option<&str>) -> NumberingStyle {
+    match fmt {
+        Some("lowerRoman") => NumberingStyle::LowerRoman,
+        Some("upperRoman") => NumberingStyle::UpperRoman,
+        Some("lowerLetter") => NumberingStyle::LowerAlpha,
+        Some("upperLetter") => NumberingStyle::UpperAlpha,
+        Some("decimalZero") => NumberingStyle::SingleLeadingZeros,
+        _ => NumberingStyle::Arabic,
+    }
+}
+
+/// The page-numbering sections (doc ADR 611): one at each story page
+/// whose Word section restarts its numbers or numbers in another format,
+/// and one at the first page when any other exists.
+fn sections(pages: &[SkeletonPage]) -> Vec<Section> {
+    let numbered =
+        |p: &SkeletonPage| p.page_number_start.is_some() || p.page_number_format.is_some();
+    if !pages.iter().any(numbered) {
+        return Vec::new();
+    }
+    pages
+        .iter()
+        .enumerate()
+        .filter(|(k, p)| *k == 0 || numbered(p))
+        .map(|(k, p)| Section {
+            self_id: format!("docx_sec{k}"),
+            page_start: Some(p.page_id.clone()),
+            continue_numbering: k > 0 && p.page_number_start.is_none(),
+            start_at: Some(p.page_number_start.map_or(1, |n| n.max(1) as u32)),
+            numbering_style: numbering_style(p.page_number_format.as_deref()),
+            section_prefix: None,
+            marker: None,
+            include_prefix: false,
+        })
+        .collect()
+}
+
+/// [`skeleton_document`] with the section masters (doc ADR 611): a master
+/// spread each, their header and footer stories, the pages showing them,
+/// and the page-numbering sections.
+pub fn skeleton_document_with(
+    pages: &[SkeletonPage],
+    masters: &[LoweredMaster],
+    name: &str,
+) -> Document {
     // Word documents are single-sided: no facing pages, the first story's
     // page as the document's default size.
     let (w, h) = pages
@@ -73,7 +219,18 @@ pub fn skeleton_document(pages: &[SkeletonPage], name: &str) -> Document {
         stories: pages
             .iter()
             .map(|p| StoryRef { src: story_src(p) })
+            .chain(
+                masters
+                    .iter()
+                    .flat_map(|m| [&m.header, &m.footer])
+                    .flatten()
+                    .map(|f| StoryRef {
+                        src: master_story_src(f),
+                    }),
+            )
             .collect(),
+        master_spreads: masters.iter().map(master_src).collect(),
+        sections: sections(pages),
         dom_version: Some(DOM_VERSION.into()),
         document_name: Some(name.into()),
         document_preference: DocumentPreference {
@@ -99,20 +256,19 @@ pub fn skeleton_document(pages: &[SkeletonPage], name: &str) -> Document {
         spreads: pages.iter().map(spread).collect(),
         stories: pages
             .iter()
-            .map(|p| ParsedStory {
-                src: story_src(p),
-                self_id: p.story_id.clone(),
-                // One empty paragraph: the pour fills it.
-                story: Story {
-                    paragraphs: vec![Paragraph {
-                        paragraph_style: Some(NO_PARA_STYLE.into()),
-                        ..Paragraph::default()
-                    }],
-                    ..Story::default()
-                },
-            })
+            .map(|p| empty_story(story_src(p), p.story_id.clone()))
+            .chain(
+                masters
+                    .iter()
+                    .flat_map(|m| [&m.header, &m.footer])
+                    .flatten()
+                    .map(|f| empty_story(master_story_src(f), f.story_id.clone())),
+            )
             .collect(),
-        master_spreads: HashMap::new(),
+        master_spreads: masters
+            .iter()
+            .map(|m| (m.id.clone(), master_spread(m)))
+            .collect::<HashMap<_, _>>(),
         frame_for_story: HashMap::new(),
         text_frame_index: HashMap::new(),
         styles: styles(),
@@ -199,41 +355,12 @@ fn spread(p: &SkeletonPage) -> ParsedSpread {
             right: p.width,
         },
     );
-    page.applied_master = Some("n".into());
+    page.applied_master = Some(p.master.clone().unwrap_or_else(|| "n".into()));
     page.item_transform = Some(IDENTITY);
     page.master_page_transform = Some(IDENTITY);
     page.show_master_items = Some(true);
 
-    let [top, left, bottom, right] = p.frame_bounds();
-    let corner = |x: f32, y: f32| PathAnchor {
-        anchor: (x, y),
-        left: (x, y),
-        right: (x, y),
-    };
-    let mut frame = TextFrame::new(
-        p.frame_id.clone(),
-        Some(p.story_id.clone()),
-        Bounds {
-            top,
-            left,
-            bottom,
-            right,
-        },
-    );
-    frame.item_transform = Some(IDENTITY);
-    frame.fill_color = Some(NONE_SWATCH.into());
-    frame.stroke_color = Some(NONE_SWATCH.into());
-    frame.stroke_weight = Some(0.0);
-    frame.next_text_frame = Some("n".into());
-    frame.first_baseline_offset = Some(FirstBaselineOffset::LeadingOffset);
-    frame.inset_spacing = Some([0.0; 4]);
-    frame.applied_object_style = Some(NO_OBJECT_STYLE.into());
-    frame.anchors = vec![
-        corner(left, top),
-        corner(left, bottom),
-        corner(right, bottom),
-        corner(right, top),
-    ];
+    let mut frame = text_frame(&p.frame_id, &p.story_id, p.frame_bounds());
     if m.column_count > 1 {
         frame.column_count = Some(m.column_count);
         frame.column_gutter = Some(m.column_gutter);

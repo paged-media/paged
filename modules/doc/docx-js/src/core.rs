@@ -180,7 +180,7 @@ impl DocSession {
     /// cell list) and `para` (the paragraph in the cell); the cell writes
     /// become [`CellRunEdit`]s.
     pub fn object_edits(&self, edits: &ObjectEdits) -> Result<EditSet, String> {
-        let ir = self.lowered();
+        let ir = docx_export::notes::strip_lowered(self.lowered());
         let paragraph = |block: usize| match ir.story.blocks.get(block) {
             Some(LoweredBlock::Paragraph(p)) => Ok(p),
             Some(LoweredBlock::Table(_)) => Err(format!(
@@ -362,7 +362,10 @@ impl DocSession {
         styles: &[docx_export::StyleIn],
         layout: docx_export::TableParagraphs,
     ) -> Result<(Vec<u8>, Vec<String>), String> {
-        let baseline = self.lowered();
+        // Save-back works on Word's text, where a note reference is an
+        // element, not the engine's marker character (doc ADR 611).
+        let baseline = docx_export::notes::strip_lowered(self.lowered());
+        let content = &docx_export::notes::strip_content(content);
         let mut coloured = baseline.clone();
         docx_export::add_canvas_colors(&mut coloured, colors);
         let plan =

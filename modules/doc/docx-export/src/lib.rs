@@ -30,6 +30,7 @@ mod bindings;
 mod diff;
 mod edit;
 mod native;
+pub mod notes;
 mod overlay;
 mod rpr;
 mod splice;
