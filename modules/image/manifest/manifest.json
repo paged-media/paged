@@ -31,7 +31,7 @@
         "name": "compute",
         "path": "wasm/image_js_bg.wasm",
         "purpose": "compute",
-        "maxBytes": 8388608
+        "maxBytes": 9437184
       }
     ]
   },

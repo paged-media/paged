@@ -86,7 +86,11 @@ the notes `gif-palette` (more than 256 colours or partial alpha), `jxl-lossless`
 a session not opened from a PSD is told it needs one. The importer also names the media types
 of OpenEXR, Radiance HDR and TGA. The module's wasm grows from 8,017,844 to 8,146,076 bytes
 (+128 KB, brotli +37 KB: the JPEG XL encoder about 55 KB, the GIF quantizer and the
-BMP/TGA/layer writers about 72 KB), under the 8,388,608-byte cap.
+BMP/TGA/layer writers about 72 KB), under the 8,388,608-byte cap. Merged on main beside the
+layered PSD writer and the history and preset files (image ADRs 477 and 478), the wasm is
+8,474,703 bytes, so the manifest's `maxBytes` for it rises to 9 MiB (9,437,184 bytes): the
+growth is the codecs this record adds and the writers those records add, each measured where
+it landed, not a regression; the application budget of 100 MB is unchanged.
 
 **The host's Asset Export** is not on main yet (its snapshot formats are a wire enum of PNG,
 JPEG, WebP and TIFF); GIF, BMP, TGA and JPEG XL join it there through `EncodeFormat::from_name`
