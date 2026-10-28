@@ -38,6 +38,15 @@ const row: React.CSSProperties = {
   fontSize: 12,
 };
 
+/** "New show N" with the first N no show in `shows` is named (outside the
+ *  component: the React Compiler does not lower a counter a lambda
+ *  updates). */
+function freeShowName(base: string, shows: readonly CustomShow[]): string {
+  let n = shows.length + 1;
+  while (shows.some((s) => s.name === `${base} ${n}`)) n++;
+  return `${base} ${n}`;
+}
+
 export function makeCustomShowsPanel(
   host: BundleHost,
   store: SlidesStore,
@@ -127,13 +136,8 @@ export function makeCustomShowsPanel(
           data-custom-show-new
           onClick={() => {
             const id = nextShowId(visible);
-            let n = visible.length + 1;
-            while (visible.some((s) => s.name === `${t(OUTPUT.newShow)} ${n}`))
-              n++;
-            write([
-              ...visible,
-              { id, name: `${t(OUTPUT.newShow)} ${n}`, pages: [] },
-            ]);
+            const name = freeShowName(t(OUTPUT.newShow), visible);
+            write([...visible, { id, name, pages: [] }]);
             setPicked(id);
           }}
         >
