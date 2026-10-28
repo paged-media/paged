@@ -30,9 +30,14 @@
 //!   depth ([`RasterImage`]); [`to_rgba8`] turns them into straight-alpha
 //!   sRGB bytes, converting CMYK and Lab through a [`ColourConvert`].
 //! - [`decode_rgba8`] is the one call the render paths make.
-//! - [`encode_tiff`] writes Gray, RGB and CMYK at 8 or 16 bits, with or
-//!   without alpha, uncompressed, LZW or Deflate, with ICC, XMP and
-//!   resolution.
+//! - [`encode`] writes PNG, JPEG, WebP (lossless) and TIFF with the ICC
+//!   profile, EXIF, XMP, IPTC and resolution of an [`EncodeOptions`];
+//!   [`encode_tiff`] is the TIFF half (Gray, RGB and CMYK at 8 or 16 bits,
+//!   with or without alpha, uncompressed, LZW or Deflate).
+//! - [`read_metadata`] collects a file's ICC, EXIF, XMP, IPTC and
+//!   Photoshop resources, so an edit can write them back.
+//! - [`resize`] and [`rgb_to_cmyk`] prepare pixels for an export at
+//!   another scale or in print colour.
 //!
 //! ## Formats
 //!
@@ -53,7 +58,11 @@
 //!
 //! PNG, JPEG, WebP, GIF and BMP decode through `image`, exactly as the
 //! renderer did before this crate existed: [`decode_rgba8`] on one of them
-//! is `image::load_from_memory(..).to_rgba8()`, byte for byte.
+//! is `image::load_from_memory(..).to_rgba8()`, byte for byte. [`decode`]
+//! reads a JPEG through zune-jpeg itself (the decoder `image` uses), so a
+//! CMYK or YCCK JPEG keeps its inks (Adobe APP14 inversion undone) and
+//! converts through its profile like a CMYK TIFF; [`jpeg_header`] is the
+//! frame header and APP14 read a JPEG pass-through needs.
 //!
 //! PSD and PSB (`8BPS`) read through `paged-psd`: [`probe`] from its
 //! summary (header, resources, layer records; no pixel copied), [`decode`]
@@ -100,7 +109,7 @@
 //! ## Not here yet
 //!
 //! Orientation is reported, not applied (the renderer never applied it).
-//! Region decode, the encoders beyond TIFF, and gray or RGB ICC conversion
+//! Region decode, lossy WebP encoding, and gray or RGB ICC conversion
 //! follow in later work. A layered TIFF
 //! (tag 37724) decodes its flattened image; its layer records are read
 //! through `paged-psd` for [`RasterInfo::layer_count`] only.
@@ -110,22 +119,30 @@
 mod avif;
 mod convert;
 mod dng;
+mod encode;
 mod eps;
+pub mod exif;
 mod icc;
+mod jpeg;
 mod jxl;
 mod lj92;
+mod meta;
 mod other;
 mod psd;
 mod shrink;
-mod sniff;
 mod tif;
 
 pub use eps::bounding_box as eps_bounding_box;
 
 pub use convert::{to_rgba8, ColourConvert, NaiveColour, PagedColour};
+pub use encode::{encode, resize, rgb_to_cmyk, srgb_icc, EncodeFormat, EncodeOptions, WEBP_LOSSY};
 pub use icc::extract_icc;
+pub use jpeg::{jpeg_header, JpegHeader};
+pub use meta::{extract_icc_any, read_metadata, Metadata};
+/// The rendering intent of [`rgb_to_cmyk`] (paged-color's).
+pub use paged_color::Intent;
+pub use paged_sniff::{sniff, Format};
 pub use shrink::shrunk_dimensions;
-pub use sniff::{sniff, Format};
 pub use tif::encode::{encode_tiff, encode_tiff_pages, TiffCompression, TiffEncodeOptions};
 
 /// Everything a header tells about one page of a raster file.
@@ -154,6 +171,9 @@ pub struct RasterInfo {
     pub xmp: Option<Vec<u8>>,
     /// The embedded IPTC-NAA record (TIFF tag 33723).
     pub iptc: Option<Vec<u8>>,
+    /// The embedded EXIF payload from its TIFF header on (JPEG APP1, PNG
+    /// `eXIf`, WebP `EXIF`). A TIFF's own EXIF IFD is not collected.
+    pub exif: Option<Vec<u8>>,
     /// The embedded Photoshop image resource blocks (TIFF tag 34377).
     pub photoshop_irb: Option<Vec<u8>>,
     /// Photoshop's layer data is present: a PSD/PSB with layer records, or
@@ -339,6 +359,7 @@ pub fn probe_page(bytes: &[u8], page: usize) -> Result<RasterInfo> {
         Some(Format::Dng) => dng::probe(bytes, page),
         Some(Format::Avif) => avif::probe(bytes, page),
         Some(Format::Jxl) => jxl::probe(bytes, page),
+        Some(Format::Jpeg) => jpeg::probe(bytes, page),
         Some(format) => other::probe(bytes, format, page),
         None => Err(Error::UnknownFormat),
     }
@@ -353,6 +374,7 @@ pub fn decode(bytes: &[u8], opts: DecodeOptions) -> Result<RasterImage> {
         Some(Format::Dng) => dng::decode(bytes, opts),
         Some(Format::Avif) => avif::decode(bytes, opts),
         Some(Format::Jxl) => jxl::decode(bytes, opts),
+        Some(Format::Jpeg) => jpeg::decode(bytes, opts),
         Some(format) => other::decode(bytes, format, opts),
         None => Err(Error::UnknownFormat),
     }
@@ -405,6 +427,20 @@ pub fn decode_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Result<Rgba8> {
             .and_then(|img| to_rgba8(&img, &PagedColour)),
         _ => other::decode_rgba8(bytes),
     }
+}
+
+/// [`decode_rgba8`] at exactly `width` x `height`: decoded within the
+/// larger of the two (so a TIFF or PSD shrinks while it decodes), then
+/// resampled (triangle filter) when the result is another size. The call
+/// paged-gpu's raster-time decode makes, on both of its lanes.
+pub fn decode_rgba8_at(bytes: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
+    let decoded = decode_rgba8(bytes, Some(width.max(height))).ok()?;
+    if decoded.width == width && decoded.height == height {
+        return Some(decoded.data);
+    }
+    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, decoded.data)?;
+    let raw = image::imageops::resize(&img, width, height, image::imageops::FilterType::Triangle);
+    Some(raw.into_raw())
 }
 
 /// The formats [`decode_rgba8`] reads through this crate's own decoders

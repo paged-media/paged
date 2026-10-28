@@ -179,3 +179,40 @@ editor's wasm.
   the new `DiagnosticCode` is appended at the end, and diagnostics are not on the wire.
 - WP9.1 (`paged-ps`) replaces the EPS preview with the artwork and keeps the preview as the
   fallback; WP9.4 owns the encoders.
+
+## Amendment — 2026-10-25: the encoders, metadata, and `paged-raster` as the only decoder
+
+Work package WP1.4 and the raster half of plan C5 (image ADR 468).
+
+**Encoders.** `encode(img, EncodeFormat, &EncodeOptions)` writes PNG (Gray/RGB with or without
+alpha, 8 and 16 bits; `iCCP`, `eXIf`, the XMP `iTXt`, `pHYs`), JPEG (Gray/RGB, quality; APP2 ICC,
+APP1 EXIF and XMP, APP13 IPTC, JFIF density; alpha dropped), WebP (lossless only, image-webp
+has no lossy encoder; `ICCP`, `EXIF`, `XMP `) and TIFF (the existing `encode_tiff`; ICC, XMP,
+IPTC, Photoshop resources, resolution). EXIF is written with Orientation 1
+(`exif::with_upright_orientation`). `resize`, `rgb_to_cmyk` (through `paged-color`'s export
+destination with an intent and BPC, else the naive formula, reported) and `srgb_icc` prepare an
+export. `paged-color` gains `IccCmm::export_rgb8_to_cmyk8`, the bulk form of its export
+transform.
+
+**Metadata.** `read_metadata` collects ICC, EXIF, XMP, IPTC and Photoshop resources from JPEG,
+PNG, WebP, TIFF and PSD. `RasterInfo` gains `exif` (JPEG APP1, PNG `eXIf`, WebP `EXIF`, PSD
+resource 1058); PNG's `pHYs` and JPEG's JFIF or EXIF resolution fill `resolution`, and a JPEG's
+EXIF orientation fills `orientation`.
+
+**JPEG.** `decode` reads a JPEG through zune-jpeg directly (the decoder `image` uses, so no new
+crate): a CMYK or YCCK JPEG keeps its inks, with the Adobe APP14 inversion undone exactly when
+APP14 is present, and converts through its profile like a CMYK TIFF. A JFIF file's colour
+model reads `YCbCr` (Adobe transform 0: `Rgb`). `decode_rgba8`, the render path, is unchanged:
+`image`'s decode, byte for byte. `jpeg_header` is the frame header and APP14 read.
+
+**One decoder.** paged-gpu's two `decode_image_for_render` copies are one call,
+`decode_rgba8_at` (decode within the recorded size, resample to it). `paged-export-pdf`'s JPEG
+sniff, component count and APP14 test are `paged-raster`'s. The format sniff moved into a
+dependency-free leaf crate, `paged-sniff` (`Format`, `sniff`, extensions, media types), which
+`paged-raster` re-exports; `idml-export` names a placed image's file through it without linking
+a decoder. The web module's PNG encoder stays in its bundle: it is TypeScript running in the
+bake, where the module's only Rust is its Blitz wasm, so the encoder is not reachable without a
+second wasm call on the bake path.
+
+**Dependencies.** `zune-jpeg`, `zune-core`, `image-webp` and `moxcms` become direct dependencies
+of `paged-raster`; all four were already in the graph through `image`.

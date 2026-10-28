@@ -26,7 +26,8 @@
 //
 // - its LABEL — the binding envelope (`x-paged:media.paged.data`) a lowering
 //   writes onto what it creates: a table's frame, a merge's frames, the last
-//   module of a barcode;
+//   module of a barcode (the headless `paged data apply` stamps every module
+//   of the symbols it draws, so this finds those whole too);
 // - the session's record of what a lowering MINTED (`MutationOutcome.minted`),
 //   which names every module of a barcode, not only the labelled one.
 //
@@ -129,6 +130,9 @@ function matches(
   t: RelowerTarget,
 ): boolean {
   if (!data || data.kind !== t.kind) return false;
+  // A label that carries `bind` is a bound item itself (the frame a barcode is
+  // drawn into), never one of its modules — the headless writer's rule too.
+  if (t.kind === "barcode" && "bind" in data) return false;
   if (t.kind === "merge")
     return t.merge !== undefined && data.merge === t.merge;
   return t.binding !== undefined && data.binding === t.binding;

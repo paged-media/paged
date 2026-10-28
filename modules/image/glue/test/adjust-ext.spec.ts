@@ -494,7 +494,7 @@ describe("the save-back lane (real engine wasm)", () => {
     handle.dispose();
   });
 
-  it("registers the three save-back exporters", async () => {
+  it("registers the five save-back exporters", async () => {
     const { imageBundle } = await import("../src/index");
     const { loadBundle } = await import("@paged-media/plugin-sdk");
     const fake = makeFakeEditor();
@@ -507,6 +507,8 @@ describe("the save-back lane (real engine wasm)", () => {
       "media.paged.image.exporter.psd",
       "media.paged.image.exporter.png",
       "media.paged.image.exporter.jpeg",
+      "media.paged.image.exporter.tiff",
+      "media.paged.image.exporter.webp",
     ]);
     loaded.dispose();
     expect(fake.exporters.ids()).toHaveLength(0);

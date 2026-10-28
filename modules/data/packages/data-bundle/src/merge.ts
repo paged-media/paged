@@ -364,7 +364,10 @@ export function pageElements(
 }
 
 /** Apply an IDML item transform `[a b c d e f]` to bounds (axis-aligned). */
-function transformBounds(b: Bounds, t: number[] | null | undefined): Bounds {
+export function transformBounds(
+  b: Bounds,
+  t: number[] | null | undefined,
+): Bounds {
   if (!t) return b;
   const [a, bb, c, d, e, f] = t;
   const pts = [

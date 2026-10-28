@@ -105,6 +105,8 @@ const ENCODE_DEFAULTS = { format: "keep" as OutFormat, quality: 90 };
 const MEDIA_TYPE: Record<RasterFormat, string> = {
   png: "image/png",
   jpeg: "image/jpeg",
+  webp: "image/webp",
+  tiff: "image/tiff",
 };
 
 /** The container the decoder will sniff, by magic. */
@@ -183,8 +185,14 @@ function encode(
   id: string,
 ): ActionAsset {
   const asked = params.format ?? "keep";
-  if (asked !== "keep" && asked !== "png" && asked !== "jpeg")
-    throw new Error(`${id}: format is "keep", "png" or "jpeg"`);
+  if (
+    asked !== "keep" &&
+    asked !== "png" &&
+    asked !== "jpeg" &&
+    asked !== "webp" &&
+    asked !== "tiff"
+  )
+    throw new Error(`${id}: format is "keep", "png", "jpeg", "webp" or "tiff"`);
   const format: RasterFormat =
     asked === "keep" ? (r.source === "jpeg" ? "jpeg" : "png") : asked;
   const quality = Number(params.quality ?? 90);

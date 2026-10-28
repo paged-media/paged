@@ -264,8 +264,9 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     // The refused one-call batch, then the placement batch + the content
     // batch — nothing per cell.
     expect(mutations).toHaveLength(3);
-    // Batch 1 — frame + binding + native table (NO drawn rules: the table
-    // draws borders). The table addresses the frame's story by handle.
+    // Batch 1 — frame (auto-sized to its table) + binding + native table
+    // (NO drawn rules: the table draws borders). The table addresses the
+    // frame's story by handle.
     expect(mutations[1].op).toBe("batch");
     const ops = (
       mutations[1] as {
@@ -275,12 +276,15 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     expect(ops.map((o) => o.op)).toEqual([
       "insertTextFrame",
       "bindCreated",
+      "setElementProperty",
       "setPluginMetadata",
       "insertTable",
     ]);
+    expect(ops[2].args.path).toBe("textFrameAutoSizing");
     expect(ops[1].args.handle).toBe("f");
     expect(ops[2].args.elementId).toEqual({ kind: "textFrame", id: "$h:f" });
-    const tbl = ops[3].args as {
+    expect(ops[3].args.elementId).toEqual({ kind: "textFrame", id: "$h:f" });
+    const tbl = ops[4].args as {
       storyId: string;
       rows: number;
       cols: number;

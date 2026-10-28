@@ -66,8 +66,9 @@ object each one writes, and the files the recipe's sources ask for. `paged data 
    variables (`paged:<key>`, `textVariableContents`).
 
 What the headless lane cannot write yet is listed per binding as `notHeadless`, never skipped. That
-covers images, tables, barcodes, record flows, rules, and a colour no swatch has (these need the
-module's lowering writers or a swatch mint).
+covered images, tables, barcodes, record flows, rules, and a colour no swatch has (these need the
+module's lowering writers or a swatch mint). Amendment 3 writes all of them but record flows and
+two image references; amendment 4 writes record flows.
 
 **One selector grammar.** The durable selector of a labelled page item is
 `frame[label.x-paged:media.paged.data*="\"oid\":\"pd-…\""]`, a quoted value holding its own quotes.
@@ -85,8 +86,8 @@ selector meant a literal backslash in the engine, or was refused there.
   published wasm packages (`canvas-wasm`, the viewer) do not depend on them.
 - serde_json's `float_roundtrip`, which the data crates use, unifies across a `--workspace` build of
   the engine. The engine's suite passes with it.
-- Still to come: the remaining binding kinds headless (they need the lowering writers to move down
-  too), a `data@1` door over the same session (extensions ADR 343), and the bundle calling the
+- Still to come: images a remote uri names, which need an HTTP client the engine workspace does
+  not have (amendment 4), a `data@1` door over the same session (extensions ADR 343), and the bundle calling the
   engine's reader and guard instead of keeping its own (one implementation instead of two, held
   together by the shared cases until then).
 
@@ -150,3 +151,123 @@ worker bridges the two over shared memory:
   the interpreter's own refusal stands.
 
 The CLI's door is unchanged, and so is the refusal of a run with none.
+
+## Amendment 3 (2026-10-28): the lowered kinds headless
+
+`paged data apply` now writes the binding kinds the engine lowers (`paged-data-lower`), not only
+property and variable bindings. The engine resolves and lowers each binding at record `N`, as the
+editor's session does. `paged-cli/src/data.rs` then sends the mutations the module's writers send
+(`data-bundle/src/lower.ts`), through the same `Session::send`. Each binding still reports one
+outcome: `written`, `kept` (a pinned or overridden binding, a missing policy that writes nothing),
+`failed` (with the engine's or the writer's reason) or `notHeadless`.
+
+What is written now:
+
+- **Visibility.** It was already written, without being listed: `resolve_properties_at` resolves
+  a visibility binding as the `elementVisible` property it is (data ADR 558 §4). It is now tested
+  and documented. The `Leave` missing policy writes nothing (`kept`).
+- **Tables.** A native table goes into the story of the text frame whose label carries the
+  binding. One batch holds `insertTable`, `bindCreated` and one cell `insertText` per non-empty
+  cell. The new table's id is kept in that frame's label, under `extra.<binding>.tableId`. The
+  next apply deletes that table (`deleteTable`) in the batch that inserts its replacement, so
+  applying again replaces the table instead of adding a second one. The frame stays as the user
+  left it. A table binding that no text frame carries is `notHeadless`: placing a fresh frame
+  stays with the module.
+- **Images.** A local `path` is read next to the `--source` files (relative), or as given
+  (absolute; a `file://` prefix is dropped). Inline `bytes` are used as they are. Either kind
+  goes into the bound frame through `ReplaceImageBytes`, the lane `paged place` uses: a
+  `placeImage` link would resolve against a resolver this door never populates. Then the fit is
+  set (the label's fit, else the engine's `ImgFit` mapped as `idmlFit` maps it), together with
+  the fitted inner transform `paged place --fit` writes. Bytes the engine cannot decode are
+  `failed`.
+- **Barcodes.** The engine encodes the symbol and scales it into the frame's box, read through
+  `RequestElementGeometry`. Each dark module becomes a closed `insertPath`, taken through the
+  frame's own transform, with the lowering's paint triples (`Color/Black` fill, `Swatch/None`
+  stroke). Every module is stamped `{ kind: "barcode", binding }`. The next apply deletes the
+  stamped modules after drawing the new ones, in the same batch: core refuses inserts that
+  follow deletes of the same spread's items. The module's writer stamps only a symbol's last
+  module (one label op per symbol, not per module: the module's W4 count budget holds), and
+  since 2026-10-28 that stamp also carries the symbol's module count (`modules`). The headless
+  writer takes the unlabelled polygons painted just before such a stamp, up to that count, with
+  it. The module's re-lower already found every stamped module, and now skips a label that
+  carries `bind` as the headless writer does. Both writers replace each other's symbols whole;
+  a symbol drawn by the module before 2026-10-28 carries no count, so the headless writer
+  removes only its stamped module (the module's own re-lower removes it whole).
+- **Rules.** The rule's label records the query it is evaluated over and its target
+  (`extra.<binding>`: a table column, a story range, or the paragraphs of a story, written by
+  the bundle's `property-session.ts`). `evaluate_rule` decides which records fire. A table rule
+  sets `appliedCellStyle` on the fired rows' cells; the cell style is created first when the
+  document has none by that name, and the styles are read before anything is created. A
+  paragraph or character rule sends one `applyStyle` per range (the story's paragraph ranges
+  come from `RequestStoryContent`). Rules run after the other kinds, because they style a table
+  this apply may just have replaced. A rule fires over all records, so `--record` does not apply
+  to it. A rule whose label records no target is `notHeadless`.
+- **A colour no swatch has.** The document's swatches are searched as `findSwatch` searches
+  them: by `Self`, by name, then as `Color/<name>`. When none matches and the value is a literal
+  colour, the swatch is minted (`CreateSwatch`, under InDesign's unnamed-colour name) before the
+  property is set. Because the swatches are read first, a second apply finds the one the first
+  minted. A swatch name the document lacks, with no literal colour behind it, is `failed`.
+
+What stays `notHeadless`, and why (record flows are written since amendment 4):
+
+- **A remote image uri.** Fetching it needs the editor's consented fetch. The CLI never reaches
+  the network: it has no HTTP client.
+- **A document asset id.** No document keeps an asset id's bytes (amendment 4).
+
+One gap this left open was closed on 2026-10-28: the IDML export wrote `AppliedCellStyle` on cells
+but no cell style definitions, so a cell style a table rule created was kept in a `.paged` file but
+not in an IDML one. The export now writes every cell style the document holds that its
+`Resources/Styles.xml` lacks into the part's last `<RootCellStyleGroup>` (gaining the group when the
+part has none), with each field the model keeps (name, fill and tint, the four edge strokes,
+vertical justification, rotation, the first-baseline policy) and its parent as the typed `BasedOn`
+child; a source cell style that was edited is rewritten in place, and an untouched part keeps its
+bytes (`idml-export` `cell_style_roundtrip`). An apply on an IDML file finds the style it created.
+
+## Amendment 4 (2026-10-28): record flows headless; what the two image references still need
+
+`paged data apply` now writes record flows. `apply_record_flow` (`paged-cli/src/data.rs`) is the
+headless twin of the module's flow writer (`data-bundle/src/flow-writer.ts` `commitRecordFlow`),
+with the re-lower plan of `relower.ts` (`planRelower`):
+
+- **Pagination is the engine's.** The flow is paginated over margin-box frames, one per page, as
+  `paginateOverPages` does. A first pass over one unbounded frame counts the blocks; the second
+  pass gets a chain of that many frames, each the start page's margin-box height, with the
+  binding's own header options (`DataSession::flow_layout`). Each frame holds exactly the blocks
+  the paginator put there. It shows one paragraph per header, record field line and footer, and a
+  re-emitted header is marked "(continued)". The frames are not threaded: a thread would let the
+  layout break the text again, which the module's writer avoids too.
+- **The start page.** It is the page of the frame whose label carries the binding. The editor
+  uses its active page; the command line has none. With no such frame on a page, the flow starts
+  on the first page. The second and later frames go on pages added after the start page (one batch
+  of `insertPage`). One batch places the frames: `insertTextFrame` on the margin box, then
+  `bindCreated`, the frame's text, and its stamp.
+- **The stamps.** Every frame is stamped as the module stamps it: `{ kind: "recordFlow",
+  binding, frame, records }`, with `createdPage` on the frames on added pages. Either writer
+  therefore finds the other's flow. The next apply deletes the stamped frames, and the added pages
+  that hold nothing else once those frames are gone. These deletes ride the frames' batch, after
+  the inserts, because core refuses inserts that follow deletes of the same spread's items.
+  Sometimes the frame that carried the binding (`bind`, after the editor synced its labels) is one
+  of those deleted. Its persistence keys (`oid`, `bind`, `queries`, `sources`, `extra`) then move to
+  the new first frame, so the binding stays in the document.
+- **Overset.** The paginator measures with the template's line height. After the frames are
+  placed, the engine's own layout is read for each frame (`RequestFrameChain`, the read behind the
+  editor's overset issue). The row reports the frames whose text oversets (`value.overset`). It
+  also reports the frames, the pages, how many pages were added, and how many records were placed
+  of how many.
+- **`--record` does not apply.** A flow places every record of its query, as a rule fires over
+  every record. A flow with no records removes the previous flow; when there is none, it is
+  `kept`.
+
+The two image references stay `notHeadless`:
+
+- **A remote image uri.** The editor fetches it only for an origin the user consented to (editor
+  ADR 218; data spec §11). The engine workspace has no HTTP client and no TLS stack, so the command
+  line still never reaches the network. A per-origin opt-in on `paged data apply`
+  (`--allow-origin ORIGIN`, exact `scheme://host[:port]`, HTTPS except for localhost, with a size
+  cap and a timeout) needs that dependency. It is added only together with its licence review
+  (`cargo deny check`).
+- **A document asset id** (`asset:<id>`). No document keeps an asset id's bytes. The `.paged`
+  container's data parts hold source files and applied values (`persist.ts`), not pictures. An
+  asset column's fetched bytes live in the module's per-user blob store (`host.blob`), outside the
+  document. The editor's own image writer skips an asset id too (`placeableUri` gives none). The
+  reason in the row says so.

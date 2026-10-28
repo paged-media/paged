@@ -49,7 +49,9 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::{Reader, Writer};
 
 use idml_import::graphic::{ColorEntry, GradientEntry, GradientKind, Graphic, InkDef};
-use idml_import::styles::{CharacterStyleDef, ObjectStyleDef, ParagraphStyleDef, StyleSheet};
+use idml_import::styles::{
+    CellStyleDef, CharacterStyleDef, ObjectStyleDef, ParagraphStyleDef, StyleSheet,
+};
 
 use crate::rewrite::{escape_attr, format_f32};
 
@@ -538,6 +540,45 @@ fn missing_object_styles<'a>(
         .filter(move |s| !seen.contains(&s.self_id) && !is_reserved_style_id(&s.self_id))
 }
 
+/// Serialise one model `<CellStyle>`: every field [`CellStyleDef`]
+/// holds (see [`crate::style_attrs::cell_style_attrs`]), the parent as
+/// the typed `<BasedOn>` child like every other style kind.
+///
+/// A cell's `AppliedCellStyle` was written while the definition was not,
+/// so a cell style created in a document (a `CreateStyle` on the cell
+/// collection, a data rule's cell style) re-opened as a reference to
+/// nothing and the cells lost its fill and strokes.
+fn write_cell_style(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    s: &CellStyleDef,
+) -> Result<(), quick_xml::Error> {
+    let mut attrs: Vec<(&str, String)> = vec![("Self", s.self_id.clone())];
+    attrs.extend(crate::style_attrs::cell_style_attrs(s));
+    emit_style_element(
+        writer,
+        "CellStyle",
+        &attrs,
+        &s.based_on,
+        &None,
+        None,
+        None,
+        None,
+    )
+}
+
+/// The cell styles `styles` carries that the source part doesn't define,
+/// minus InDesign's reserved `CellStyle/$ID/[None]` (see
+/// [`is_reserved_style_id`]). Empty for an unmutated document.
+fn missing_cell_styles<'a>(
+    styles: &'a StyleSheet,
+    seen: &'a std::collections::HashSet<String>,
+) -> impl Iterator<Item = &'a CellStyleDef> {
+    styles
+        .cell_styles
+        .values()
+        .filter(move |s| !seen.contains(&s.self_id) && !is_reserved_style_id(&s.self_id))
+}
+
 /// What the WHOLE `Resources/Styles.xml` holds — the knowledge a single
 /// forward pass does not have when it reaches the first group.
 ///
@@ -566,6 +607,7 @@ struct StylesLayout {
     para: std::collections::HashSet<String>,
     character: std::collections::HashSet<String>,
     object: std::collections::HashSet<String>,
+    cell: std::collections::HashSet<String>,
     numbering_lists: std::collections::HashSet<String>,
     /// How many `<Root*StyleGroup>` elements of each kind the part
     /// carries. New definitions go into the LAST one, which is where a
@@ -573,6 +615,7 @@ struct StylesLayout {
     para_groups: usize,
     char_groups: usize,
     object_groups: usize,
+    cell_groups: usize,
 }
 
 /// Read `original` once for [`StylesLayout`]. Deliberately a separate
@@ -606,6 +649,11 @@ fn scan_styles(original: &[u8]) -> Result<StylesLayout, quick_xml::Error> {
                         out.object.insert(id);
                     }
                 }
+                b"CellStyle" => {
+                    if let Some(id) = attr_value(e, b"Self") {
+                        out.cell.insert(id);
+                    }
+                }
                 b"NumberingList" => {
                     if let Some(id) = attr_value(e, b"Self") {
                         out.numbering_lists.insert(id);
@@ -614,6 +662,7 @@ fn scan_styles(original: &[u8]) -> Result<StylesLayout, quick_xml::Error> {
                 b"RootParagraphStyleGroup" => out.para_groups += 1,
                 b"RootCharacterStyleGroup" => out.char_groups += 1,
                 b"RootObjectStyleGroup" => out.object_groups += 1,
+                b"RootCellStyleGroup" => out.cell_groups += 1,
                 _ => {}
             },
             _ => {}
@@ -624,10 +673,11 @@ fn scan_styles(original: &[u8]) -> Result<StylesLayout, quick_xml::Error> {
 }
 
 /// Rewrite `Resources/Styles.xml` so every model paragraph / character
-/// / object style is present. New paragraph styles are injected before
+/// / object / cell style is present. New paragraph styles are injected before
 /// the LAST `</RootParagraphStyleGroup>`, character styles before the
 /// last `</RootCharacterStyleGroup>`, object styles before the last
-/// `</RootObjectStyleGroup>`. Byte-identical to `original` when
+/// `</RootObjectStyleGroup>`, cell styles before the last
+/// `</RootCellStyleGroup>`. Byte-identical to `original` when
 /// nothing new (and when the source has no group, the new styles flush
 /// at `</idPkg:Styles>` so they aren't silently dropped).
 ///
@@ -731,12 +781,15 @@ pub fn patch_styles_defined_elsewhere(
     let mut para_group_seen = 0usize;
     let mut char_group_seen = 0usize;
     let mut object_group_seen = 0usize;
+    let mut cell_group_seen = 0usize;
     let mut in_last_para_group = false;
     let mut in_last_char_group = false;
     let mut in_last_object_group = false;
+    let mut in_last_cell_group = false;
     let mut para_group_closed = false;
     let mut char_group_closed = false;
     let mut object_group_closed = false;
+    let mut cell_group_closed = false;
 
     loop {
         let ev = reader.read_event_into(&mut buf)?;
@@ -764,6 +817,22 @@ pub fn patch_styles_defined_elsewhere(
                     "RootObjectStyleGroup",
                 )))?;
                 object_group_closed = true;
+            }
+            // The same for an empty `<RootCellStyleGroup/>`.
+            Event::Empty(ref e)
+                if e.name().as_ref() == b"RootCellStyleGroup"
+                    && cell_group_seen + 1 == layout.cell_groups
+                    && missing_cell_styles(styles, &layout.cell).next().is_some() =>
+            {
+                cell_group_seen += 1;
+                writer.write_event(Event::Start(e.borrow()))?;
+                for s in missing_cell_styles(styles, &layout.cell) {
+                    write_cell_style(&mut writer, s)?;
+                }
+                writer.write_event(Event::End(quick_xml::events::BytesEnd::new(
+                    "RootCellStyleGroup",
+                )))?;
+                cell_group_closed = true;
             }
             Event::Start(ref e) | Event::Empty(ref e) => {
                 // A style the model has is patched in place: every
@@ -805,6 +874,16 @@ pub fn patch_styles_defined_elsewhere(
                             )
                         })
                         .transpose()?,
+                    b"CellStyle" => attr_value(e, b"Self")
+                        .and_then(|id| styles.cell_styles.get(&id))
+                        .map(|def| {
+                            crate::rewrite::patch_start(
+                                e,
+                                |k, raw| crate::style_attrs::cell_style_attr_patch(k, raw, def),
+                                &crate::style_attrs::cell_style_attrs(def),
+                            )
+                        })
+                        .transpose()?,
                     _ => None,
                 };
                 // An unchanged tag keeps its bytes — InDesign's own
@@ -831,6 +910,10 @@ pub fn patch_styles_defined_elsewhere(
                     b"RootObjectStyleGroup" => {
                         object_group_seen += 1;
                         in_last_object_group = object_group_seen == layout.object_groups;
+                    }
+                    b"RootCellStyleGroup" => {
+                        cell_group_seen += 1;
+                        in_last_cell_group = cell_group_seen == layout.cell_groups;
                     }
                     _ => {}
                 }
@@ -872,6 +955,15 @@ pub fn patch_styles_defined_elsewhere(
                 object_group_closed = true;
                 writer.write_event(ev.borrow())?;
             }
+            Event::End(ref e)
+                if e.name().as_ref() == b"RootCellStyleGroup" && in_last_cell_group =>
+            {
+                for s in missing_cell_styles(styles, &layout.cell) {
+                    write_cell_style(&mut writer, s)?;
+                }
+                cell_group_closed = true;
+                writer.write_event(ev.borrow())?;
+            }
             Event::End(ref e) if e.name().as_ref() == b"idPkg:Styles" => {
                 // Fallback: a source with no Root*StyleGroup (rare) still
                 // gets the new defs so a reference never dangles.
@@ -893,6 +985,18 @@ pub fn patch_styles_defined_elsewhere(
                             write_character_style(&mut writer, s)?;
                         }
                     }
+                }
+                // Cell styles likewise live in their group
+                // (`<RootCellStyleGroup>`), which the part may not have.
+                if !cell_group_closed && missing_cell_styles(styles, &layout.cell).next().is_some()
+                {
+                    writer.write_event(Event::Start(BytesStart::new("RootCellStyleGroup")))?;
+                    for s in missing_cell_styles(styles, &layout.cell) {
+                        write_cell_style(&mut writer, s)?;
+                    }
+                    writer.write_event(Event::End(quick_xml::events::BytesEnd::new(
+                        "RootCellStyleGroup",
+                    )))?;
                 }
                 // Object styles need their group: a bare `<ObjectStyle>`
                 // loose in the part isn't the shape InDesign reads them

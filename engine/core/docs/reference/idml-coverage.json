@@ -20,13 +20,13 @@
     "elements": 142,
     "attributes": 761,
     "imported": 1469,
-    "exported": 1158,
-    "importedAndExported": 952,
-    "importOnly": 517,
+    "exported": 1182,
+    "importedAndExported": 976,
+    "importOnly": 493,
     "exportOnly": 206,
     "propertiesChild": 61,
     "importerReadSites": 1082,
-    "exporterWriteSites": 1138,
+    "exporterWriteSites": 1169,
     "unresolved": 0,
     "partRows": 4150,
     "misplaced": 30,
@@ -44,9 +44,9 @@
       "value": 0.487424
     },
     "weightedExport": {
-      "covered": 98020,
+      "covered": 98628,
       "total": 633952,
-      "value": 0.154617
+      "value": 0.155576
     },
     "misplacedReads": 30,
     "unseenReads": 433,
@@ -2285,17 +2285,22 @@
       "importerField": "CellStyleDef.bottom_edge_stroke_color",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1322
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 579
+      }
     },
     {
       "element": "CellStyle",
@@ -2304,17 +2309,22 @@
       "importerField": "CellStyleDef.bottom_edge_stroke_tint",
       "coarseType": "tint",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1339
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 582
+      }
     },
     {
       "element": "CellStyle",
@@ -2323,17 +2333,22 @@
       "importerField": "CellStyleDef.bottom_edge_stroke_type",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1329
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 580
+      }
     },
     {
       "element": "CellStyle",
@@ -2342,17 +2357,22 @@
       "importerField": "CellStyleDef.bottom_edge_stroke_weight",
       "coarseType": "number",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1323
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 581
+      }
     },
     {
       "element": "CellStyle",
@@ -2361,17 +2381,22 @@
       "importerField": "CellStyleDef.fill_color",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1317
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 532
+      }
     },
     {
       "element": "CellStyle",
@@ -2380,17 +2405,22 @@
       "importerField": "CellStyleDef.fill_tint",
       "coarseType": "tint",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1337
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 533
+      }
     },
     {
       "element": "CellStyle",
@@ -2399,17 +2429,22 @@
       "importerField": "CellStyleDef.first_baseline_offset",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1334
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 538
+      }
     },
     {
       "element": "CellStyle",
@@ -2418,17 +2453,22 @@
       "importerField": "CellStyleDef.left_edge_stroke_color",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1324
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 585
+      }
     },
     {
       "element": "CellStyle",
@@ -2437,17 +2477,22 @@
       "importerField": "CellStyleDef.left_edge_stroke_tint",
       "coarseType": "tint",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1340
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 588
+      }
     },
     {
       "element": "CellStyle",
@@ -2456,17 +2501,22 @@
       "importerField": "CellStyleDef.left_edge_stroke_type",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1330
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 586
+      }
     },
     {
       "element": "CellStyle",
@@ -2475,17 +2525,22 @@
       "importerField": "CellStyleDef.left_edge_stroke_weight",
       "coarseType": "number",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1325
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 587
+      }
     },
     {
       "element": "CellStyle",
@@ -2494,17 +2549,22 @@
       "importerField": "CellStyleDef.minimum_first_baseline_offset",
       "coarseType": "number",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1335
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 545
+      }
     },
     {
       "element": "CellStyle",
@@ -2513,17 +2573,22 @@
       "importerField": "CellStyleDef.name",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1315
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 532
+      }
     },
     {
       "element": "CellStyle",
@@ -2532,17 +2597,22 @@
       "importerField": "CellStyleDef.right_edge_stroke_color",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1326
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 591
+      }
     },
     {
       "element": "CellStyle",
@@ -2551,17 +2621,22 @@
       "importerField": "CellStyleDef.right_edge_stroke_tint",
       "coarseType": "tint",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1341
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 594
+      }
     },
     {
       "element": "CellStyle",
@@ -2570,17 +2645,22 @@
       "importerField": "CellStyleDef.right_edge_stroke_type",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1331
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 592
+      }
     },
     {
       "element": "CellStyle",
@@ -2589,17 +2669,22 @@
       "importerField": "CellStyleDef.right_edge_stroke_weight",
       "coarseType": "number",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1327
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 593
+      }
     },
     {
       "element": "CellStyle",
@@ -2608,17 +2693,22 @@
       "importerField": "CellStyleDef.rotation_angle",
       "coarseType": "number",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1319
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 548
+      }
     },
     {
       "element": "CellStyle",
@@ -2627,17 +2717,22 @@
       "importerField": null,
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1308
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/resources.rs",
+        "line": 555
+      }
     },
     {
       "element": "CellStyle",
@@ -2646,17 +2741,22 @@
       "importerField": "CellStyleDef.top_edge_stroke_color",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1320
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 573
+      }
     },
     {
       "element": "CellStyle",
@@ -2665,17 +2765,22 @@
       "importerField": "CellStyleDef.top_edge_stroke_tint",
       "coarseType": "tint",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1338
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 576
+      }
     },
     {
       "element": "CellStyle",
@@ -2684,17 +2789,22 @@
       "importerField": "CellStyleDef.top_edge_stroke_type",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1328
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 574
+      }
     },
     {
       "element": "CellStyle",
@@ -2703,17 +2813,22 @@
       "importerField": "CellStyleDef.top_edge_stroke_weight",
       "coarseType": "number",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1321
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 575
+      }
     },
     {
       "element": "CellStyle",
@@ -2722,17 +2837,22 @@
       "importerField": "CellStyleDef.vertical_justification",
       "coarseType": "string",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "Resources/Graphic",
         "Resources/Styles"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "Resources/Styles"
+      ],
       "source": {
         "file": "crates/idml-import/src/styles.rs",
         "line": 1318
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/style_attrs.rs",
+        "line": 537
+      }
     },
     {
       "element": "Change",
@@ -2953,7 +3073,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 432
+        "line": 434
       }
     },
     {
@@ -2996,7 +3116,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 483
+        "line": 485
       }
     },
     {
@@ -3442,7 +3562,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 447
+        "line": 449
       }
     },
     {
@@ -6326,7 +6446,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 113
+        "line": 115
       }
     },
     {
@@ -6349,7 +6469,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 111
+        "line": 113
       }
     },
     {
@@ -6366,11 +6486,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 325
+        "line": 327
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 325
+        "line": 327
       }
     },
     {
@@ -6387,11 +6507,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 321
+        "line": 323
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 321
+        "line": 323
       }
     },
     {
@@ -6408,11 +6528,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 326
+        "line": 328
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 326
+        "line": 328
       }
     },
     {
@@ -6435,7 +6555,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 105
+        "line": 107
       }
     },
     {
@@ -6458,7 +6578,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 103
+        "line": 105
       }
     },
     {
@@ -6481,7 +6601,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 108
+        "line": 110
       }
     },
     {
@@ -6504,7 +6624,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 102
+        "line": 104
       }
     },
     {
@@ -6527,7 +6647,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 104
+        "line": 106
       }
     },
     {
@@ -6544,11 +6664,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 328
+        "line": 330
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 328
+        "line": 330
       }
     },
     {
@@ -6571,7 +6691,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 118
+        "line": 120
       }
     },
     {
@@ -6588,11 +6708,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 327
+        "line": 329
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 327
+        "line": 329
       }
     },
     {
@@ -8813,7 +8933,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 769
+        "line": 767
       }
     },
     {
@@ -11361,7 +11481,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 171
+        "line": 173
       }
     },
     {
@@ -11384,7 +11504,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 169
+        "line": 171
       }
     },
     {
@@ -11407,7 +11527,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 173
+        "line": 175
       }
     },
     {
@@ -11702,7 +11822,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 182
+        "line": 184
       }
     },
     {
@@ -11727,7 +11847,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 185
+        "line": 187
       }
     },
     {
@@ -11771,7 +11891,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 181
+        "line": 183
       }
     },
     {
@@ -11789,11 +11909,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 667
+        "line": 665
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 667
+        "line": 665
       }
     },
     {
@@ -11811,11 +11931,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 664
+        "line": 662
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 664
+        "line": 662
       }
     },
     {
@@ -11833,11 +11953,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 666
+        "line": 664
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 666
+        "line": 664
       }
     },
     {
@@ -11855,11 +11975,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 665
+        "line": 663
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 665
+        "line": 663
       }
     },
     {
@@ -14581,7 +14701,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 650
+        "line": 648
       }
     },
     {
@@ -14620,11 +14740,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 645
+        "line": 643
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 645
+        "line": 643
       }
     },
     {
@@ -14649,7 +14769,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 647
+        "line": 645
       }
     },
     {
@@ -14694,7 +14814,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 769
+        "line": 767
       }
     },
     {
@@ -15317,7 +15437,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 154
+        "line": 156
       }
     },
     {
@@ -15340,7 +15460,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 133
+        "line": 135
       }
     },
     {
@@ -15363,7 +15483,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 136
+        "line": 138
       }
     },
     {
@@ -15386,7 +15506,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 139
+        "line": 141
       }
     },
     {
@@ -15409,7 +15529,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 151
+        "line": 153
       }
     },
     {
@@ -15432,7 +15552,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 130
+        "line": 132
       }
     },
     {
@@ -15455,7 +15575,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 142
+        "line": 144
       }
     },
     {
@@ -15478,7 +15598,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 145
+        "line": 147
       }
     },
     {
@@ -15501,7 +15621,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 128
+        "line": 130
       }
     },
     {
@@ -15524,7 +15644,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 148
+        "line": 150
       }
     },
     {
@@ -16287,11 +16407,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 698
+        "line": 696
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 698
+        "line": 696
       }
     },
     {
@@ -16309,11 +16429,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 700
+        "line": 698
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 700
+        "line": 698
       }
     },
     {
@@ -16331,11 +16451,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 699
+        "line": 697
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 699
+        "line": 697
       }
     },
     {
@@ -16353,11 +16473,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 702
+        "line": 700
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 702
+        "line": 700
       }
     },
     {
@@ -16375,11 +16495,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 701
+        "line": 699
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 701
+        "line": 699
       }
     },
     {
@@ -16416,11 +16536,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 693
+        "line": 691
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 693
+        "line": 691
       }
     },
     {
@@ -16438,11 +16558,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 694
+        "line": 692
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 694
+        "line": 692
       }
     },
     {
@@ -16460,11 +16580,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 696
+        "line": 694
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 696
+        "line": 694
       }
     },
     {
@@ -16482,11 +16602,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 681
+        "line": 679
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 681
+        "line": 679
       }
     },
     {
@@ -16504,11 +16624,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 695
+        "line": 693
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 695
+        "line": 693
       }
     },
     {
@@ -16526,11 +16646,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 703
+        "line": 701
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 703
+        "line": 701
       }
     },
     {
@@ -16557,7 +16677,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 679
+        "line": 677
       }
     },
     {
@@ -16576,11 +16696,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 678
+        "line": 676
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 678
+        "line": 676
       }
     },
     {
@@ -16598,11 +16718,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 697
+        "line": 695
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 697
+        "line": 695
       }
     },
     {
@@ -16621,11 +16741,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 685
+        "line": 683
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 685
+        "line": 683
       }
     },
     {
@@ -17487,7 +17607,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 957
+        "line": 1061
       }
     },
     {
@@ -17512,7 +17632,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 950
+        "line": 1054
       }
     },
     {
@@ -17537,7 +17657,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 948
+        "line": 1052
       }
     },
     {
@@ -17562,7 +17682,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 947
+        "line": 1051
       }
     },
     {
@@ -18042,7 +18162,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 514
+        "line": 516
       }
     },
     {
@@ -19470,7 +19590,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/images.rs",
-        "line": 769
+        "line": 767
       }
     },
     {
@@ -20070,7 +20190,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 432
+        "line": 434
       }
     },
     {
@@ -20236,7 +20356,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 483
+        "line": 485
       }
     },
     {
@@ -21319,7 +21439,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 447
+        "line": 449
       }
     },
     {
@@ -31131,11 +31251,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 338
+        "line": 340
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 338
+        "line": 340
       }
     },
     {
@@ -31152,11 +31272,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 337
+        "line": 339
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 337
+        "line": 339
       }
     },
     {
@@ -40725,57 +40845,57 @@
     {"part":"Resources/Styles","element":"CellStyle","attribute":"AppliedParagraphStyle","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"BasedOn","kind":"attr","docCount":1,"nonModalDocs":1,"imported":true,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"BasedOn","kind":"properties-child","docCount":5,"nonModalDocs":2,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeColor","kind":"attr","docCount":4,"nonModalDocs":3,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeColor","kind":"attr","docCount":4,"nonModalDocs":3,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeGapColor","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeGapTint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeOverprint","kind":"attr","docCount":3,"nonModalDocs":1,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeTint","kind":"attr","docCount":3,"nonModalDocs":2,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeType","kind":"attr","docCount":3,"nonModalDocs":0,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeWeight","kind":"attr","docCount":4,"nonModalDocs":4,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeTint","kind":"attr","docCount":3,"nonModalDocs":2,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeType","kind":"attr","docCount":3,"nonModalDocs":0,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomEdgeStrokeWeight","kind":"attr","docCount":4,"nonModalDocs":4,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"BottomInset","kind":"attr","docCount":4,"nonModalDocs":2,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"DiagonalLineInFront","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"DiagonalLineStrokeColor","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"DiagonalLineStrokeType","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"DiagonalLineStrokeWeight","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"ExtendedKeyboardShortcut","kind":"attr","docCount":5,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"FillColor","kind":"attr","docCount":5,"nonModalDocs":2,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"FillTint","kind":"attr","docCount":2,"nonModalDocs":2,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"FillColor","kind":"attr","docCount":5,"nonModalDocs":2,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"FillTint","kind":"attr","docCount":2,"nonModalDocs":2,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"GraphicBottomInset","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"GraphicLeftInset","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"GraphicRightInset","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"GraphicTopInset","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"KeyboardShortcut","kind":"attr","docCount":5,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeColor","kind":"attr","docCount":4,"nonModalDocs":1,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeColor","kind":"attr","docCount":4,"nonModalDocs":1,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeGapColor","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeGapTint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeOverprint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeTint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeType","kind":"attr","docCount":3,"nonModalDocs":1,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeWeight","kind":"attr","docCount":4,"nonModalDocs":2,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeTint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeType","kind":"attr","docCount":3,"nonModalDocs":1,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftEdgeStrokeWeight","kind":"attr","docCount":4,"nonModalDocs":2,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"LeftInset","kind":"attr","docCount":4,"nonModalDocs":4,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"Name","kind":"attr","docCount":272,"nonModalDocs":6,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeColor","kind":"attr","docCount":4,"nonModalDocs":1,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"Name","kind":"attr","docCount":272,"nonModalDocs":6,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeColor","kind":"attr","docCount":4,"nonModalDocs":1,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeGapColor","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeGapTint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeOverprint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeTint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeType","kind":"attr","docCount":3,"nonModalDocs":1,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeWeight","kind":"attr","docCount":4,"nonModalDocs":2,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeTint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeType","kind":"attr","docCount":3,"nonModalDocs":1,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"RightEdgeStrokeWeight","kind":"attr","docCount":4,"nonModalDocs":2,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"RightInset","kind":"attr","docCount":4,"nonModalDocs":2,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"Self","kind":"attr","docCount":272,"nonModalDocs":6,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"Self","kind":"attr","docCount":272,"nonModalDocs":6,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"TextBottomInset","kind":"attr","docCount":4,"nonModalDocs":2,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"TextLeftInset","kind":"attr","docCount":4,"nonModalDocs":4,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"TextRightInset","kind":"attr","docCount":4,"nonModalDocs":2,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"TextTopInset","kind":"attr","docCount":4,"nonModalDocs":2,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeColor","kind":"attr","docCount":4,"nonModalDocs":3,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeColor","kind":"attr","docCount":4,"nonModalDocs":3,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeGapColor","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeGapTint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeOverprint","kind":"attr","docCount":1,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeTint","kind":"attr","docCount":3,"nonModalDocs":2,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeType","kind":"attr","docCount":3,"nonModalDocs":1,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeWeight","kind":"attr","docCount":4,"nonModalDocs":4,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeTint","kind":"attr","docCount":3,"nonModalDocs":2,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeType","kind":"attr","docCount":3,"nonModalDocs":1,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"TopEdgeStrokeWeight","kind":"attr","docCount":4,"nonModalDocs":4,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyle","attribute":"TopInset","kind":"attr","docCount":4,"nonModalDocs":2,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Resources/Styles","element":"CellStyle","attribute":"VerticalJustification","kind":"attr","docCount":5,"nonModalDocs":1,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Resources/Styles","element":"CellStyle","attribute":"VerticalJustification","kind":"attr","docCount":5,"nonModalDocs":1,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyleGroup","attribute":"Name","kind":"attr","docCount":1,"nonModalDocs":1,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"CellStyleGroup","attribute":"Self","kind":"attr","docCount":1,"nonModalDocs":1,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Preferences","element":"ChapterNumberPreference","attribute":"ChapterNumber","kind":"attr","docCount":271,"nonModalDocs":0,"imported":true,"exported":false,"readElsewhere":false},

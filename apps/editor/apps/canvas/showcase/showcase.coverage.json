@@ -1,8 +1,9 @@
 {
-  "generatedFrom": "unavailable",
-  "registryFound": false,
-  "registryRows": 0,
-  "claimedRows": 196,
+  "generatedFrom": "cockpit.export.v1 capability record exported 2026-10-27T10:02:54.697565838Z",
+  "recordExportedAt": "2026-10-27T10:02:54.697565838Z",
+  "registryFound": true,
+  "registryRows": 838,
+  "claimedRows": 195,
   "claims": [
     {
       "module": "fm-sections",
@@ -267,7 +268,9 @@
         "typography.drop-caps",
         "stories-text.style-apply-range"
       ],
-      "notes": []
+      "notes": [
+        "keep flags measured inert: paragraphKeepLinesTogether and paragraphKeepWithNext are accepted, stored, and round-trip on the wire, but setting them moved no pixels — the composer does not yet consult them when fragmenting across linked frames"
+      ]
     },
     {
       "module": "st-opener",
@@ -556,7 +559,7 @@
         "styles.object.crud"
       ],
       "notes": [
-        "deleteFrame on the nested child refused as expected: {\"kind\":\"notImplemented\",\"details\":{\"what\":\"frame mutation failed: invalid value for FrameTransform on Oval(\\\"ufe074d\\\"): B-18: the item is pasted into a container — release it before removing\"}}",
+        "deleteFrame on the nested child refused as expected: {\"kind\":\"notImplemented\",\"details\":{\"what\":\"frame mutation failed: invalid value for FrameTransform on Oval(\\\"ufe074e\\\"): B-18: the item is pasted into a container — release it before removing\"}}",
         "SURPRISE: setStyleProperty accepted an object-collection write — the definition door opened; the margin note is now stale"
       ]
     },
@@ -971,7 +974,7 @@
         "each tile's committed bytes are the exporter's own output, unretouched — whatever a kernel currently does to these pixels is what the page shows",
         "finding, from proofing this spread: the engine's line breaker composes certain caption rects as a character-wrapped sliver regardless of content (frame and story verify correct in the container; the p47 probe shows the same seam) — tile 2's caption is position-nudged 2 pt to dodge it",
         "finding, from proofing this spread: on the builds this chapter was authored against, the gaussian-blur tile's export showed a corrupted band over its right 256-px tile column (the windowed kernel's halo seam is the suspect); the tile is committed exactly as exported — check the tile, not this note",
-        "kernel roster: 131 ids across 14 families, read from modules/image/registry/kernels.yaml"
+        "kernel roster: 144 ids across 15 families, read from modules/image/registry/kernels.yaml"
       ]
     },
     {
@@ -1014,11 +1017,10 @@
       ],
       "covers": [],
       "notes": [
-        "finding: every solid-paint stroke committed with zero dabs (brush and pencil, default and changed colour alike) while the sample-mode clone/heal on the previous page land through identical gestures — the solid-deposit lane, which brush, pencil and raster type share, is the measured suspect",
-        "brush, magenta, 64 px → Painted 0 dabs into layer “Background” — undoable (the strok",
-        "pencil, cyan, 26 px → Painted 0 dabs into layer “Background” — undoable (the strok",
-        "type → Type set in Space Grotesk.",
-        "the painted export is byte-identical to the identity baseline — no stroke or glyph landed; the captions state it"
+        "brush, default colour, 150 px → Painted 32 dabs into layer “Background” — undoable (the stro",
+        "brush, magenta, 64 px → Painted 79 dabs into layer “Background” — undoable (the stro",
+        "pencil, cyan, 26 px → Painted 181 dabs into layer “Background” — undoable (the str",
+        "type → Type set in Space Grotesk."
       ]
     },
     {
@@ -1065,7 +1067,7 @@
         "sheet.chart.graphs"
       ],
       "notes": [
-        "ten charts lowered as 99 native path(s) and 102 label frame(s); stacked-column, stacked-bar and radar are the 2026-08 kind-set additions that make the set a superset of Illustrator's nine"
+        "ten charts lowered as 112 native path(s) and 130 label frame(s); stacked-column, stacked-bar and radar are the 2026-08 kind-set additions that make the set a superset of Illustrator's nine"
       ]
     },
     {
@@ -1096,7 +1098,7 @@
         "sheet.lower.page"
       ],
       "notes": [
-        "the function registry counts 263 implemented rows (the page prints its own count; 224 was the count when this chapter was written)"
+        "the function registry counts 519 implemented rows (the page prints its own count; 224 was the count when this chapter was written)"
       ]
     },
     {
@@ -1109,11 +1111,12 @@
       "covers": [
         "sheet.lower.page",
         "sheet.calc.spill",
-        "layout-model.text-frame-chain"
+        "layout-model.text-frame-chain",
+        "tables.header-footer-repeat"
       ],
       "notes": [
         "wire-shape finding: insert bounds are PAGE-local; resizeFrame bounds are SPREAD-space (spine at x 0, verso negative) — a page-local resize walks a verso frame onto the recto while it stays parented to its own page",
-        "the hit test answered the frame's story but no table-cell context at its centre, so the header band could not be added — tables.header-footer-repeat is NOT claimed by this page"
+        "The chain reports OVERSET: rows remain past the second frame — recorded, not hidden."
       ]
     },
     {
@@ -1132,7 +1135,7 @@
       "notes": [
         "sorting the spill range C3:C6 was NOT refused — the engine reported \"Sorted.\"; the refusal contract may have moved",
         "clipboard lane degraded on this run: [media.paged.sheet] pasteAtSelection: the clipboard is empty",
-        "FINDING — the Export Center rendered no plugin-exports section in this session (built-in targets only), while the exporter registry reports [media.paged.draw.exporter.svg, media.paged.sheet.exporter.xlsx, media.paged.image.exporter.psd, media.paged.image.exporter.png, media.paged.image.exporter.jpeg, media.paged.publish.exporter.idml, media.paged.doc.exporter.docx, media.paged.slide.exporter.pptx]; the workbook bytes were pulled through that registry — the same door the panel reads"
+        "FINDING — the Export Center rendered no plugin-exports section in this session (built-in targets only), while the exporter registry reports [media.paged.draw.exporter.svg, media.paged.sheet.exporter.xlsx, media.paged.sheet.exporter.xlsm, media.paged.sheet.exporter.csv, media.paged.image.exporter.psd, media.paged.image.exporter.png, media.paged.image.exporter.jpeg, media.paged.publish.exporter.idml, media.paged.doc.exporter.docx, media.paged.slide.exporter.pptx]; the workbook bytes were pulled through that registry — the same door the panel reads"
       ]
     },
     {
@@ -1178,7 +1181,7 @@
       "notes": [
         "unthreadWebFlow round trip verified through the persisted envelope (chain 3 → 4 → 3); the scratch frame was deleted — demonstrated, not resident",
         "renderWebFlow submitted 4 frame(s) across the two flows (overset reported past the last frame)",
-        "flow readout: Render flow #2 — 4 frame(s) · overset CSS Regions: 'article#annual-longread' flows into 'article-flow' across the frame chain multiple named"
+        "flow readout: Render flow #2 — 4 frames · overset CSS Regions: 'article#annual-longread' flows into 'article-flow' across the frame chain multiple named f"
       ]
     },
     {
@@ -1198,7 +1201,7 @@
       ],
       "notes": [
         "the bake materialized 32 native item(s): 2 rectangle(s), 29 text frame(s), 1 path(s), plus 6 minted swatch(es)",
-        "listPagedParts paged/media.paged.web/ — 0 part(s): none — every web source here fits its frame's label (39 plugin part(s) in the container)"
+        "listPagedParts paged/media.paged.web/ — 0 part(s): none — every web source here fits its frame's label (40 plugin part(s) in the container)"
       ]
     },
     {
@@ -1287,8 +1290,7 @@
       ],
       "notes": [
         "SEAM FINDING — the four symbols (and the re-drawn expression specimens) landed one page width off (stored offset -540,0); translated back by the measured offset in one batch before classification.",
-        "lowerAll re-drew the expression page's bound symbols onto this page (585 stray path modules) — removed; a re-lower always draws afresh onto the active page rather than replacing in place.",
-        "UPC-A — upc: no modules — the likely cause is the CSV type sniffer reading the leading-zero UPC column numerically (072034010010 → 72034010010), an 11-digit value no UPC-A encoder accepts; the missing policy drew nothing rather than a fake symbol."
+        "lowerAll re-drew the expression page's bound symbols onto this page (585 stray path modules) — removed; a re-lower always draws afresh onto the active page rather than replacing in place."
       ]
     },
     {
@@ -1300,13 +1302,13 @@
       "covers": [
         "tables.model",
         "data.bind.engine",
-        "data.governed.extract",
         "data.automation.batch",
         "data.provider.contract"
       ],
       "notes": [
-        "lowerAll re-drew the six bound symbols during the table pass — 1122 stray path modules removed from the active page.",
-        "the lowered table paints past its frame (a native table ignores the frame's bottom bound), so the page trimmed it to one header and eight records via deleteTableRow — an ordinary table edit, stated on the page."
+        "lowerAll re-drew the six bound symbols during the table pass — 1152 stray path modules removed from the active page.",
+        "the lowered table paints past its frame (a native table ignores the frame's bottom bound), so the page trimmed it to one header and eight records via deleteTableRow — an ordinary table edit, stated on the page.",
+        "the governed catalog is demonstrated with an empty sidecar; data.governed.extract is partial in the capability record and is not claimed."
       ]
     },
     {
@@ -1349,7 +1351,7 @@
         "plugin-doc.save-back"
       ],
       "notes": [
-        "FINDING — the exporter IS in the host exporter registry (registry lists: media.paged.draw.exporter.svg, media.paged.sheet.exporter.xlsx, media.paged.image.exporter.psd, media.paged.image.exporter.png, media.paged.image.exporter.jpeg, media.paged.publish.exporter.idml, media.paged.doc.exporter.docx, media.paged.slide.exporter.pptx) but the export center's plugin section never rendered its row, so the one-click download surface missed a registered exporter; the page pulled the bytes through the registry (the journey lane) and the blob-to-download door went unexercised."
+        "FINDING — the exporter IS in the host exporter registry (registry lists: media.paged.draw.exporter.svg, media.paged.sheet.exporter.xlsx, media.paged.sheet.exporter.xlsm, media.paged.sheet.exporter.csv, media.paged.image.exporter.psd, media.paged.image.exporter.png, media.paged.image.exporter.jpeg, media.paged.publish.exporter.idml, media.paged.doc.exporter.docx, media.paged.slide.exporter.pptx) but the export center's plugin section never rendered its row, so the one-click download surface missed a registered exporter; the page pulled the bytes through the registry (the journey lane) and the blob-to-download door went unexercised."
       ]
     },
     {
@@ -1395,7 +1397,7 @@
         "the-renderer.export-diagnostics"
       ],
       "notes": [
-        "exportPdf standard=pdf17 — 15796563 bytes (discarded), 1 diagnostic(s), 1 finding(s), 4.1s"
+        "exportPdf standard=pdf17 — 15787275 bytes (discarded), 1 diagnostic(s), 1 finding(s), 4.3s"
       ]
     },
     {
@@ -1409,7 +1411,7 @@
         "package-anatomy.paged-parts-door"
       ],
       "notes": [
-        "listPagedParts paged/ — 57 part(s) before this page, 58 after; paged/annual/manifest-note.json written (caller unset) and read back 153 bytes"
+        "listPagedParts paged/ — 64 part(s) before this page, 65 after; paged/annual/manifest-note.json written (caller unset) and read back 153 bytes"
       ]
     },
     {
@@ -1423,7 +1425,7 @@
         "effects-transparency.opacity-mask"
       ],
       "notes": [
-        "exportIdml — 9656529 bytes (discarded), lost: 5 entr(ies)"
+        "exportIdml — 9669267 bytes (discarded), lost: 5 entr(ies)"
       ]
     },
     {
@@ -1487,7 +1489,7 @@
       ],
       "notes": [
         "the cover carried 4 polygon(s) the cover module never wrote — the SVG import's output, minted onto page one because the host re-derives the active page from the camera on every render",
-        "carried 4 contour(s) to page 77 by copying framePath (anchors + subpathStarts, so compounds stay compound) and re-basing by the probed spread seam (0, 0)"
+        "carried 4 contour(s) to page 77 by copying framePath (anchors + subpathStarts, so compounds stay compound) and the fill rule, and re-basing by the probed spread seam (0, 0)"
       ]
     },
     {
@@ -1516,12 +1518,13 @@
         "package-anatomy.paged-parts-door"
       ],
       "notes": [
-        "colophon numbers — chapters 37 · rows 196 · ops 117/151 · paths 201/243 · parts 58 · canvas-wasm 0.74.0-dev (protocol 74)"
+        "colophon numbers — chapters 37 · rows 195 · ops 117/162 · paths 202/258 · parts 65 · canvas-wasm 0.77.0-dev (protocol 77)"
       ]
     }
   ],
   "unknown": [],
   "notShipped": [],
+  "broken": [],
   "families": {
     "sections-numbering-variables": 4,
     "color-swatches": 22,
@@ -1536,7 +1539,7 @@
     "effects-transparency": 19,
     "master-spreads-overrides": 3,
     "cross-references-hyperlinks": 5,
-    "tables": 18,
+    "tables": 19,
     "images-graphics": 8,
     "plugin-draw": 23,
     "plugin-platform": 15,
@@ -1545,7 +1548,7 @@
     "sheet": 14,
     "package-anatomy": 6,
     "plugin-web": 15,
-    "data": 15,
+    "data": 14,
     "plugin-doc": 4,
     "the-renderer": 2,
     "round-tripping": 1
@@ -1560,6 +1563,7 @@
     "lt-features: characterCase SmallCaps passes text through unchanged (smcp not driven, P-12); AllCaps renders",
     "lt-features: paragraph-style OTFFigureStyle never reaches run resolution (paged-scene merge_below_paragraph has no otf arm) — figure-style rows rely on the style definitions only",
     "lt-metrics: optical kerning falls back to metrics (recorded limit, margin note)",
+    "pg-keeps: keep flags measured inert: paragraphKeepLinesTogether and paragraphKeepWithNext are accepted, stored, and round-trip on the wire, but setting them moved no pixels — the composer does not yet consult them when fragmenting across linked frames",
     "sc-vertical: ruby + kenten rows deliberately unclaimed (renderer stages partial); limits recorded as margin notes on p43/p44",
     "ap-navigation: hyperlinks 3 -> 5 (2 authored live, both URL destinations); bookmarks 3, all fixture-authored",
     "ap-destination: indexTopics 10 (collection live); cross-reference verified via export (1 source marker) + carrier hyperlink xref-overleaf — the crossReferences collection reads a never-populated designmap vector and lists 0",
@@ -1572,7 +1576,7 @@
     "ob-transforms: transform pivot: single-knob writes pivot about the item-space origin (translation preserved) — every tile pre-seeds t = c - Mc; frameTransform replace semantics proved by readback",
     "ob-strokes: 8 arrowhead kinds enumerated live; miter limit demonstrated biting (12 keeps a 24-degree spike, 1.5 shears it); caps and alignment are rectangle-addressed on the wire, arrowheads graphic-line-only",
     "ob-paths: all 10 topology ops and all 11 planar ops (4 boolean modes, 6 region verbs, faces) applied on-page with before/after pairs; edit positions and face ids read back, never guessed",
-    "ob-grouping: deleteFrame on the nested child refused as expected: {\"kind\":\"notImplemented\",\"details\":{\"what\":\"frame mutation failed: invalid value for FrameTransform on Oval(\\\"ufe074d\\\"): B-18: the item is pasted into a container — release it before removing\"}}",
+    "ob-grouping: deleteFrame on the nested child refused as expected: {\"kind\":\"notImplemented\",\"details\":{\"what\":\"frame mutation failed: invalid value for FrameTransform on Oval(\\\"ufe074e\\\"): B-18: the item is pasted into a container — release it before removing\"}}",
     "ob-grouping: SURPRISE: setStyleProperty accepted an object-collection write — the definition door opened; the margin note is now stale",
     "il-light: sweep/conic gradient paint exists in the renderer with no authoring door — GradientSpec is Linear|Radial (margin-noted)",
     "il-light: opacity masks certified on the CPU lane; IDML export names masked items as lost (margin-noted; the assembly asserts the loss list)",
@@ -1589,31 +1593,30 @@
     "dk-contact-sheet: each tile's committed bytes are the exporter's own output, unretouched — whatever a kernel currently does to these pixels is what the page shows",
     "dk-contact-sheet: finding, from proofing this spread: the engine's line breaker composes certain caption rects as a character-wrapped sliver regardless of content (frame and story verify correct in the container; the p47 probe shows the same seam) — tile 2's caption is position-nudged 2 pt to dodge it",
     "dk-contact-sheet: finding, from proofing this spread: on the builds this chapter was authored against, the gaussian-blur tile's export showed a corrupted band over its right 256-px tile column (the windowed kernel's halo seam is the suspect); the tile is committed exactly as exported — check the tile, not this note",
-    "dk-contact-sheet: kernel roster: 131 ids across 14 families, read from modules/image/registry/kernels.yaml",
+    "dk-contact-sheet: kernel roster: 144 ids across 15 families, read from modules/image/registry/kernels.yaml",
     "dk-selections: selection runs at native resolution — resizeTo swaps the engine handle with no selectionBind (code reading; the resample+selection seam is untested territory this page chose not to stand on)",
     "dk-retouch: clone → Painted 15 dabs into layer “Background” — undoable (the stroke's tiles are journaled). The document and the source file ",
     "dk-retouch: heal → Painted 11 dabs into layer “Background” — undoable (the stroke's tiles are journaled). The document and the source file ",
     "dk-retouch: content-aware fill → Filled the selection with noise on layer “Background” — undoable. Document unchanged; Apply to recomposite.",
-    "dk-paint-type: finding: every solid-paint stroke committed with zero dabs (brush and pencil, default and changed colour alike) while the sample-mode clone/heal on the previous page land through identical gestures — the solid-deposit lane, which brush, pencil and raster type share, is the measured suspect",
-    "dk-paint-type: brush, magenta, 64 px → Painted 0 dabs into layer “Background” — undoable (the strok",
-    "dk-paint-type: pencil, cyan, 26 px → Painted 0 dabs into layer “Background” — undoable (the strok",
+    "dk-paint-type: brush, default colour, 150 px → Painted 32 dabs into layer “Background” — undoable (the stro",
+    "dk-paint-type: brush, magenta, 64 px → Painted 79 dabs into layer “Background” — undoable (the stro",
+    "dk-paint-type: pencil, cyan, 26 px → Painted 181 dabs into layer “Background” — undoable (the str",
     "dk-paint-type: type → Type set in Space Grotesk.",
-    "dk-paint-type: the painted export is byte-identical to the identity baseline — no stroke or glyph landed; the captions state it",
-    "lg-chart-wall: ten charts lowered as 99 native path(s) and 102 label frame(s); stacked-column, stacked-bar and radar are the 2026-08 kind-set additions that make the set a superset of Illustrator's nine",
+    "lg-chart-wall: ten charts lowered as 112 native path(s) and 130 label frame(s); stacked-column, stacked-bar and radar are the 2026-08 kind-set additions that make the set a superset of Illustrator's nine",
     "lg-pour: showGridInFrame painted the live grid into the lowered frame (C-1 scene layer), and hideGridInFrame cleared it — demonstrated, not resident: session state never reaches the checkpoint",
-    "lg-formulas: the function registry counts 263 implemented rows (the page prints its own count; 224 was the count when this chapter was written)",
+    "lg-formulas: the function registry counts 519 implemented rows (the page prints its own count; 224 was the count when this chapter was written)",
     "lg-chain: wire-shape finding: insert bounds are PAGE-local; resizeFrame bounds are SPREAD-space (spine at x 0, verso negative) — a page-local resize walks a verso frame onto the recto while it stays parented to its own page",
-    "lg-chain: the hit test answered the frame's story but no table-cell context at its centre, so the header band could not be added — tables.header-footer-repeat is NOT claimed by this page",
+    "lg-chain: The chain reports OVERSET: rows remain past the second frame — recorded, not hidden.",
     "lg-roundtrip: sorting the spill range C3:C6 was NOT refused — the engine reported \"Sorted.\"; the refusal contract may have moved",
     "lg-roundtrip: clipboard lane degraded on this run: [media.paged.sheet] pasteAtSelection: the clipboard is empty",
-    "lg-roundtrip: FINDING — the Export Center rendered no plugin-exports section in this session (built-in targets only), while the exporter registry reports [media.paged.draw.exporter.svg, media.paged.sheet.exporter.xlsx, media.paged.image.exporter.psd, media.paged.image.exporter.png, media.paged.image.exporter.jpeg, media.paged.publish.exporter.idml, media.paged.doc.exporter.docx, media.paged.slide.exporter.pptx]; the workbook bytes were pulled through that registry — the same door the panel reads",
+    "lg-roundtrip: FINDING — the Export Center rendered no plugin-exports section in this session (built-in targets only), while the exporter registry reports [media.paged.draw.exporter.svg, media.paged.sheet.exporter.xlsx, media.paged.sheet.exporter.xlsm, media.paged.sheet.exporter.csv, media.paged.image.exporter.psd, media.paged.image.exporter.png, media.paged.image.exporter.jpeg, media.paged.publish.exporter.idml, media.paged.doc.exporter.docx, media.paged.slide.exporter.pptx]; the workbook bytes were pulled through that registry — the same door the panel reads",
     "lr-source: insertWebFrame minted its frame + starter envelope on this page (one undoable batch, verified by geometry) — the demonstration frame was then removed and the exhibit frame authored at the design box, because reshaping the default frame in place would take SPREAD-space resizeFrame bounds (the chain spread records that wire shape)",
     "lr-source: the source panel kept its earlier draft after the direct metadata write — the envelope reached the document (the render below reads it) but the open panel lane still shows 67 chars; the panel re-reads on selection CHANGE, and re-selecting the same frame is not one",
     "lr-flows: unthreadWebFlow round trip verified through the persisted envelope (chain 3 → 4 → 3); the scratch frame was deleted — demonstrated, not resident",
     "lr-flows: renderWebFlow submitted 4 frame(s) across the two flows (overset reported past the last frame)",
-    "lr-flows: flow readout: Render flow #2 — 4 frame(s) · overset CSS Regions: 'article#annual-longread' flows into 'article-flow' across the frame chain multiple named",
+    "lr-flows: flow readout: Render flow #2 — 4 frames · overset CSS Regions: 'article#annual-longread' flows into 'article-flow' across the frame chain multiple named f",
     "lr-bake: the bake materialized 32 native item(s): 2 rectangle(s), 29 text frame(s), 1 path(s), plus 6 minted swatch(es)",
-    "lr-bake: listPagedParts paged/media.paged.web/ — 0 part(s): none — every web source here fits its frame's label (39 plugin part(s) in the container)",
+    "lr-bake: listPagedParts paged/media.paged.web/ — 0 part(s): none — every web source here fits its frame's label (40 plugin part(s) in the container)",
     "lr-fragments: flow renders this run: fares table across 3 frame(s), card column across 2 frame(s)",
     "ct-cards: PRODUCT FINDING — the Arrow→RecordSet seam decodes a DATE column to epoch-milliseconds while the engine's Value::Date expects i32 days, so serde refuses the whole ingest of any dated result (`invalid value: integer 1735862400000, expected i32`). annual-orders.csv is the first dated source the seam has met; this chapter drives it with order_date withheld and says so in the margin.",
     "ct-dsl: the function registry lists 53 functions, not the documented 42 — the roster printed is the registry's own answer.",
@@ -1621,16 +1624,16 @@
     "ct-dsl: SEAM FINDING — the barcode lowering feeds the bound rectangle's STORED geometry to the page-local insertPath wire, so on this page (stored offset -540,0) every module landed one page width off, on the pasteboard; the page translated the fresh modules back by the measured offset in one batch.",
     "ct-barcodes: SEAM FINDING — the four symbols (and the re-drawn expression specimens) landed one page width off (stored offset -540,0); translated back by the measured offset in one batch before classification.",
     "ct-barcodes: lowerAll re-drew the expression page's bound symbols onto this page (585 stray path modules) — removed; a re-lower always draws afresh onto the active page rather than replacing in place.",
-    "ct-barcodes: UPC-A — upc: no modules — the likely cause is the CSV type sniffer reading the leading-zero UPC column numerically (072034010010 → 72034010010), an 11-digit value no UPC-A encoder accepts; the missing policy drew nothing rather than a fake symbol.",
-    "ct-table: lowerAll re-drew the six bound symbols during the table pass — 1122 stray path modules removed from the active page.",
+    "ct-table: lowerAll re-drew the six bound symbols during the table pass — 1152 stray path modules removed from the active page.",
     "ct-table: the lowered table paints past its frame (a native table ignores the frame's bottom bound), so the page trimmed it to one header and eight records via deleteTableRow — an ordinary table edit, stated on the page.",
+    "ct-table: the governed catalog is demonstrated with an empty sidecar; data.governed.extract is partial in the capability record and is not claimed.",
     "mp-manuscript: paged.doc save-back readiness on this lane: live.",
     "mp-manuscript: FINDING — the poured story renders visually UNSTYLED on this lane: the synthesized heading/caption styles and both list families are applied over the story (the outline panel counts them) but the paint shows one face and size, no bold, no bullet or number glyphs, and the docx docDefaults face does not reach the render.",
     "mp-manuscript: FINDING — the embedded plate-mark PNG lowers to an anchored image frame that paints the missing-image placeholder (its bytes have no URI-addressable home through insertAnchoredFrame) and the anchored frame overlaps the table rows beneath it; the ledger lines' dot-leader tabs paint as substitute glyphs.",
-    "mp-saveback: FINDING — the exporter IS in the host exporter registry (registry lists: media.paged.draw.exporter.svg, media.paged.sheet.exporter.xlsx, media.paged.image.exporter.psd, media.paged.image.exporter.png, media.paged.image.exporter.jpeg, media.paged.publish.exporter.idml, media.paged.doc.exporter.docx, media.paged.slide.exporter.pptx) but the export center's plugin section never rendered its row, so the one-click download surface missed a registered exporter; the page pulled the bytes through the registry (the journey lane) and the blob-to-download door went unexercised.",
-    "pr-preflight: exportPdf standard=pdf17 — 15796563 bytes (discarded), 1 diagnostic(s), 1 finding(s), 4.1s",
-    "pr-container: listPagedParts paged/ — 57 part(s) before this page, 58 after; paged/annual/manifest-note.json written (caller unset) and read back 153 bytes",
-    "pr-losses: exportIdml — 9656529 bytes (discarded), lost: 5 entr(ies)",
+    "mp-saveback: FINDING — the exporter IS in the host exporter registry (registry lists: media.paged.draw.exporter.svg, media.paged.sheet.exporter.xlsx, media.paged.sheet.exporter.xlsm, media.paged.sheet.exporter.csv, media.paged.image.exporter.psd, media.paged.image.exporter.png, media.paged.image.exporter.jpeg, media.paged.publish.exporter.idml, media.paged.doc.exporter.docx, media.paged.slide.exporter.pptx) but the export center's plugin section never rendered its row, so the one-click download surface missed a registered exporter; the page pulled the bytes through the registry (the journey lane) and the blob-to-download door went unexercised.",
+    "pr-preflight: exportPdf standard=pdf17 — 15787275 bytes (discarded), 1 diagnostic(s), 1 finding(s), 4.3s",
+    "pr-container: listPagedParts paged/ — 64 part(s) before this page, 65 after; paged/annual/manifest-note.json written (caller unset) and read back 153 bytes",
+    "pr-losses: exportIdml — 9669267 bytes (discarded), lost: 5 entr(ies)",
     "ax-limits: limits compiled from sources: 76 (◪ 70 · □ 6)",
     "ax-index: index resolved from the document's own export: 10 topics referenced, 12 marker page(s); topics collection lists 10",
     "rm-bench: wire lane — 12 property path(s) exercised on the scratch page: frameBounds, frameFillTint, elementVisible, elementLocked, frameNonprinting, framePathPoint, pathPointInsert, pathPointCurveType, pathPointRemove, appliedParagraphStyle, appliedCharacterStyle, pluginMetadata",
@@ -1638,35 +1641,347 @@
     "rm-bench: read-only by engine contract — tableRowCount, tableColumnCount: the write door refuses them (core asserts the refusal in its own tests), so the bench reads them back instead of pretending to set them",
     "rm-bench: the module carries its own oracle — its doors leave no mark on a finished page by design",
     "rp-crest: the cover carried 4 polygon(s) the cover module never wrote — the SVG import's output, minted onto page one because the host re-derives the active page from the camera on every render",
-    "rp-crest: carried 4 contour(s) to page 77 by copying framePath (anchors + subpathStarts, so compounds stay compound) and re-basing by the probed spread seam (0, 0)",
+    "rp-crest: carried 4 contour(s) to page 77 by copying framePath (anchors + subpathStarts, so compounds stay compound) and the fill rule, and re-basing by the probed spread seam (0, 0)",
     "lr-prose: the chart wall's heading: clean (14 characters)",
     "lr-prose: the chart wall's standfirst: clean (238 characters)",
     "lr-prose: deleteRange demonstrated on a scratch frame (four characters off the front) and the frame removed — the repair this page once made, kept as a demonstration",
     "lr-prose: the module carries its own oracle — its doors leave no mark on a finished page by design",
-    "ax-colophon: colophon numbers — chapters 37 · rows 196 · ops 117/151 · paths 201/243 · parts 58 · canvas-wasm 0.74.0-dev (protocol 74)",
-    "idml export lost: opacity mask on `ufe07b1` (artwork `ufe07b2`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
-    "idml export lost: opacity mask on `ufe07b3` (artwork `ufe07b4`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
-    "idml export lost: opacity mask on `ufe17c6` (artwork `ufe17c7`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
-    "idml export lost: story `Story/u1048` (58 chars, 1 tables) is referenced by no frame — dropped from the export; delete it or place it",
-    "idml export lost: story `Story/u1049` (19 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
-    "idml export lost: story `Story/u1050` (14 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
-    "idml export lost: story `Story/u226` (203 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
-    "idml export lost: story `Story/u633` (29 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
-    "model: 1055 stories, 0 overset",
+    "ax-colophon: colophon numbers — chapters 37 · rows 195 · ops 117/162 · paths 202/258 · parts 65 · canvas-wasm 0.77.0-dev (protocol 77)",
+    "idml export lost: opacity mask on `ufe07b2` (artwork `ufe07b3`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
+    "idml export lost: opacity mask on `ufe07b4` (artwork `ufe07b5`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
+    "idml export lost: opacity mask on `ufe182f` (artwork `ufe1830`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
+    "idml export lost: story `Story/u1077` (58 chars, 1 tables) is referenced by no frame — dropped from the export; delete it or place it",
+    "idml export lost: story `Story/u1078` (19 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
+    "idml export lost: story `Story/u1079` (14 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
+    "idml export lost: story `Story/u227` (203 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
+    "idml export lost: story `Story/u634` (29 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
+    "model: 1084 stories, 0 overset",
     "stories threaded across frames: 8",
     "pdf export: placed image could not be decoded; frame fill used instead",
     "output intent — re-registered Paged Default CMYK for the press pass (the live profile registry is session state; a reopened document names a profile whose bytes it does not carry)",
     "pdfx4 export: placed image could not be decoded; frame fill used instead",
-    "colour management — registered Coated FOGRA39 (ISO 12647-2:2004) from /Library/Application Support/Adobe/Color/Profiles/Recommended/CoatedFOGRA39.icc and made it the working space before the page renders",
-    "feature registry unavailable (set PAGED_FEATURE_REGISTRY to its registry/features directory) — registry axis NOT checked"
+    "colour management — registered Coated FOGRA39 (ISO 12647-2:2004) from /Library/Application Support/Adobe/Color/Profiles/Recommended/CoatedFOGRA39.icc and made it the working space before the page renders"
   ],
   "registryClosure": {
     "armed": false,
-    "excluded": 0,
-    "unaccounted": []
+    "excluded": 121,
+    "unaccounted": [
+      "anchored-inline-objects.anchor-alignment",
+      "anchored-inline-objects.anchored-frames",
+      "anchored-inline-objects.anchored-ops",
+      "color-swatches.color-overrides",
+      "cross-references-hyperlinks.toc",
+      "data.assets.columns",
+      "data.bind.property",
+      "data.bind.row-diff",
+      "data.bind.sync-review",
+      "data.bind.text-variables",
+      "data.dataset.library-xml",
+      "data.export.datamerge",
+      "data.i18n.display",
+      "data.i18n.locale-table",
+      "data.lower.merge-plan",
+      "data.object-model",
+      "data.persist.labels",
+      "data.plugin.persistence",
+      "data.rule.authoring",
+      "data.store.turso",
+      "data.transforms",
+      "edge-cases.diagnostics-channel",
+      "effects-transparency.transparency-groups",
+      "foundations.container.open",
+      "foundations.designmap.structure",
+      "foundations.domversion-capture",
+      "frames-paths.appearance-bake",
+      "frames-paths.clip-groups",
+      "frames-paths.fill-rule-even-odd",
+      "frames-paths.frame.delete",
+      "frames-paths.frame.move-op",
+      "frames-paths.page-item-kinds",
+      "frames-paths.path-clipping",
+      "frames-paths.stroke-overprint",
+      "frames-paths.stroke-striped-wavy",
+      "frames-paths.stroke-variable-width",
+      "geometry-coordinates.compound-subpaths",
+      "geometry-coordinates.image-content-transform",
+      "image.actions.cpu-resample",
+      "image.channels.to-selection",
+      "image.codec.exif",
+      "image.codec.traits",
+      "image.editor.auto-enhance",
+      "image.editor.blur-sharpen-brush",
+      "image.editor.canvas-ops",
+      "image.editor.crop",
+      "image.editor.crop-straighten",
+      "image.editor.dodge-burn",
+      "image.editor.gradient-tool",
+      "image.editor.history-panel",
+      "image.editor.host-undo",
+      "image.editor.live-preview",
+      "image.editor.mask-painting",
+      "image.editor.move-tool",
+      "image.editor.paint",
+      "image.editor.paint-bucket",
+      "image.editor.patch",
+      "image.editor.pattern-fill",
+      "image.editor.red-eye",
+      "image.editor.region-filter",
+      "image.editor.spot-heal",
+      "image.io.save-back",
+      "image.kernel.wgsl-abi",
+      "image.layers.clipping",
+      "image.layers.f16-fold",
+      "image.layers.groups",
+      "image.layers.smart-objects",
+      "image.object-model",
+      "image.paths.path-to-selection",
+      "image.perf.budgets",
+      "image.pipeline.async-sink",
+      "image.pipeline.engine-a-skeleton",
+      "image.residency.tier01",
+      "image.selection.modify",
+      "images-graphics.clipping-paths",
+      "images-graphics.format-extensions",
+      "images-graphics.image-clipping",
+      "images-graphics.placed-psd",
+      "images-graphics.tiff-raster",
+      "layers.nested-groups",
+      "layout-model.break-before",
+      "layout-model.column-rules",
+      "layout-model.keep-options",
+      "layout-model.page-growth",
+      "layout-model.page-margin-reads",
+      "layout-model.span-split-columns",
+      "layout-model.spread-item-transform",
+      "layout-model.text-columns",
+      "master-spreads-overrides.show-master-items",
+      "package-anatomy.composition-part",
+      "package-anatomy.core-import",
+      "package-anatomy.graphic-part",
+      "package-anatomy.inline-image-contents",
+      "package-anatomy.native-model-part",
+      "package-anatomy.story-parts",
+      "parser-internals.streaming-xml",
+      "parser-internals.zip-entry-streaming",
+      "plugin-doc.atomic-pour",
+      "plugin-doc.edit-context",
+      "plugin-doc.identity-alignment",
+      "plugin-doc.nested-table-locator",
+      "plugin-doc.object-model",
+      "plugin-doc.opc-foundation",
+      "plugin-doc.save-back-feedback",
+      "plugin-doc.save-back-paragraph-props",
+      "plugin-doc.save-back-table-structure",
+      "plugin-doc.verbatim-export",
+      "plugin-draw.appearance-panel",
+      "plugin-draw.brush-tools",
+      "plugin-draw.corner-radius-tool",
+      "plugin-draw.create-outlines",
+      "plugin-draw.direct-selection",
+      "plugin-draw.edit-context-live",
+      "plugin-draw.eyedropper",
+      "plugin-draw.fill-schema-panel",
+      "plugin-draw.geometry-handles",
+      "plugin-draw.geometry-properties",
+      "plugin-draw.gradient-stops",
+      "plugin-draw.headless-conformance",
+      "plugin-draw.illustrator-oracle",
+      "plugin-draw.layers-binding-provider",
+      "plugin-draw.layers-panel",
+      "plugin-draw.measure-overlay-text",
+      "plugin-draw.objects",
+      "plugin-draw.path-cutting",
+      "plugin-draw.pen-existing-paths",
+      "plugin-draw.pencil-pressure",
+      "plugin-draw.perf-budgets",
+      "plugin-draw.recolor-artwork",
+      "plugin-draw.reflect-transform",
+      "plugin-draw.reverse-path",
+      "plugin-draw.snapping",
+      "plugin-draw.stroke-dash-commands",
+      "plugin-draw.stroke-schema-panel",
+      "plugin-draw.tool-options",
+      "plugin-draw.type-on-path",
+      "plugin-draw.write-batching",
+      "plugin-pdf.editable-vector",
+      "plugin-pdf.image-filters",
+      "plugin-pdf.native-ocf-writer",
+      "plugin-pdf.pdfium-reader",
+      "plugin-pdf.typed-commands",
+      "plugin-platform.bind-created",
+      "plugin-platform.binding-providers",
+      "plugin-platform.blob-store",
+      "plugin-platform.caller-gated-doors",
+      "plugin-platform.catalog-vendoring",
+      "plugin-platform.clipboard-door",
+      "plugin-platform.command-registration",
+      "plugin-platform.credential-store",
+      "plugin-platform.data-door",
+      "plugin-platform.data-providers",
+      "plugin-platform.document-opened",
+      "plugin-platform.edit-context",
+      "plugin-platform.frame-chain-read",
+      "plugin-platform.headless-host-conformance",
+      "plugin-platform.host-eyedropper",
+      "plugin-platform.host-widgets",
+      "plugin-platform.image-resource",
+      "plugin-platform.kv-storage",
+      "plugin-platform.manifest-schema",
+      "plugin-platform.menu-contribution",
+      "plugin-platform.native-document",
+      "plugin-platform.network-consent",
+      "plugin-platform.one-entry-gesture",
+      "plugin-platform.overlay-channel",
+      "plugin-platform.overlay-registration",
+      "plugin-platform.panel-rail-door",
+      "plugin-platform.panel-registration",
+      "plugin-platform.parent-of",
+      "plugin-platform.planar-regions-door",
+      "plugin-platform.render-snapshot-v2",
+      "plugin-platform.save-file",
+      "plugin-platform.sdk-bundle-shape",
+      "plugin-platform.tool-registration",
+      "plugin-platform.wire-compat-assertions",
+      "plugin-platform.wire-drift-gate",
+      "plugin-platform.worker-pool",
+      "plugin-publish.byte-identity-sweep",
+      "plugin-publish.idml-adapter-crates",
+      "plugin-publish.idml-exporter",
+      "plugin-publish.idml-importer",
+      "plugin-publish.save-back-defects",
+      "plugin-publish.typed-commands",
+      "plugin-slide.object-model",
+      "plugin-slide.powerpoint-oracle",
+      "plugin-slide.pptx-read",
+      "plugin-slide.preset-geometry",
+      "plugin-web.auto-render",
+      "plugin-web.chrome-parity",
+      "plugin-web.data-binding",
+      "plugin-web.html-importer",
+      "plugin-web.in-frame-edit",
+      "plugin-web.object-model",
+      "plugin-web.outline-canvas",
+      "plugin-web.overflow-policies",
+      "plugin-web.page-breaks",
+      "plugin-web.panel-undo",
+      "plugin-web.perf-budgets",
+      "plugin-web.resources",
+      "plugin-web.web-fonts",
+      "round-tripping.batch-atomicity",
+      "round-tripping.gesture-transactions",
+      "round-tripping.native-reserialization",
+      "round-tripping.undo-redo",
+      "scripting.ai-complete",
+      "scripting.ai-script-writing",
+      "scripting.author-returns-id",
+      "scripting.cli",
+      "scripting.collections",
+      "scripting.console",
+      "scripting.docs-playground-seeds",
+      "scripting.engine-serve",
+      "scripting.full-mutation-surface",
+      "scripting.headless-run",
+      "scripting.inspection",
+      "scripting.mcp",
+      "scripting.mutation-parity",
+      "scripting.page-enumeration",
+      "scripting.property-readwrite",
+      "scripting.repl",
+      "scripting.runtime-budgets",
+      "scripting.script-editor",
+      "scripting.structural-authoring",
+      "scripting.text-authoring",
+      "scripting.undo-redo",
+      "scripting.visible-results",
+      "sheet.binding-providers",
+      "sheet.calc.accel",
+      "sheet.calc.iterative",
+      "sheet.calc.model",
+      "sheet.calc.rewrite.structural-door",
+      "sheet.chart.authoring",
+      "sheet.chart.axes",
+      "sheet.chart.chartex",
+      "sheet.chart.combo",
+      "sheet.chart.series-features",
+      "sheet.chart.stacking",
+      "sheet.chart.style-roles",
+      "sheet.chart.writer",
+      "sheet.data.consumer",
+      "sheet.data.edit-table",
+      "sheet.edit.clipboard",
+      "sheet.edit.fill",
+      "sheet.edit.typed-entry",
+      "sheet.edit.undo",
+      "sheet.fn.engineering",
+      "sheet.fn.financial",
+      "sheet.fn.information",
+      "sheet.fn.lookup-array",
+      "sheet.fn.math-trig",
+      "sheet.fn.statistical",
+      "sheet.fn.text-regex",
+      "sheet.format.locale.latin-tier",
+      "sheet.grid.find",
+      "sheet.grid.freeze.render",
+      "sheet.grid.keyboard",
+      "sheet.grid.panel-edit-contract",
+      "sheet.grid.selection",
+      "sheet.import.csv",
+      "sheet.layout.freeze",
+      "sheet.layout.merge",
+      "sheet.names.define",
+      "sheet.objects",
+      "sheet.parser.dialect",
+      "sheet.plugin.formula-bar",
+      "sheet.plugin.function-browser",
+      "sheet.table.structured",
+      "sheet.xlsx.comments",
+      "sheet.xlsx.condfmt",
+      "sheet.xlsx.data-validation",
+      "sheet.xlsx.hyperlinks",
+      "sheet.xlsx.pictures",
+      "sheet.xlsx.pivot",
+      "stories-text.caret-selection",
+      "stories-text.endnotes",
+      "stories-text.notes",
+      "styles.cell.crud",
+      "styles.paragraph-border",
+      "styles.paragraph-shading",
+      "styles.table.crud",
+      "tables.cell-diagonals",
+      "tables.cell-rotation",
+      "tables.nested-tables",
+      "tables.row-keep-options",
+      "the-renderer.collections-read",
+      "the-renderer.cpu-backend",
+      "the-renderer.devtools-introspection",
+      "the-renderer.display-list",
+      "the-renderer.font-registry",
+      "the-renderer.gpu-backend",
+      "the-renderer.hit-testing",
+      "the-renderer.missing-asset-fallback",
+      "the-renderer.offscreen-worker",
+      "the-renderer.pdf-export-marks",
+      "the-renderer.pdf-font-embedding",
+      "the-renderer.pdf-image-downsampling",
+      "the-renderer.pipeline",
+      "the-renderer.properties-read",
+      "the-renderer.scene-cache",
+      "the-renderer.scene-digest",
+      "the-renderer.snapping",
+      "the-renderer.snapshots",
+      "the-renderer.viewer-session",
+      "the-renderer.viewer-wrapper",
+      "typography.balance-ragged",
+      "typography.baseline-grid",
+      "typography.hyphenation-zone",
+      "typography.kenten",
+      "typography.kinsoku",
+      "typography.mojikumi",
+      "typography.ruby"
+    ]
   },
   "ops": {
-    "universe": 151,
+    "universe": 162,
     "used": 117,
     "missing": [
       "acceptTrackedChange",
@@ -1675,6 +1990,7 @@
       "createBookmark",
       "createMaster",
       "createTextVariable",
+      "createXmlTag",
       "deleteBookmark",
       "deleteEndnote",
       "deleteFootnote",
@@ -1683,9 +1999,11 @@
       "deleteNote",
       "deleteTable",
       "deleteTextVariable",
+      "deleteXmlTag",
       "duplicateElements",
       "editHyperlink",
       "editNote",
+      "findReplace",
       "generateIndex",
       "insertEndnote",
       "insertFootnote",
@@ -1697,10 +2015,18 @@
       "rejectTrackedChange",
       "renameBookmark",
       "renameMaster",
+      "restartNumbering",
       "set",
       "setDocumentMetadata",
       "setFlowGrowRule",
+      "setListLevel",
       "setPageMetadata",
+      "setStyleBasedOn",
+      "setXmlAttribute",
+      "tagItem",
+      "tagRange",
+      "untagItem",
+      "untagRange",
       "updateCrossReferences",
       "updateTableOfContents"
     ],
@@ -1720,11 +2046,16 @@
     ]
   },
   "propertyPaths": {
-    "universe": 243,
-    "used": 201,
+    "universe": 258,
+    "used": 202,
     "missing": [
+      "characterDoubleStrikethrough",
+      "characterHidden",
+      "characterHighlightColor",
       "characterLanguage",
       "characterNoBreak",
+      "characterUnderlineColor",
+      "characterUnderlineType",
       "frameContentBlendMode",
       "frameContentOpacity",
       "frameDropShadowBlendMode",
@@ -1734,13 +2065,19 @@
       "frameDropShadowUseGlobalLight",
       "frameFillBlendMode",
       "frameFillOpacity",
+      "frameGradientFillStart",
+      "framePdfPage",
       "frameStrokeBlendMode",
       "frameStrokeOpacity",
+      "groupClip",
       "groupIsolateBlending",
       "groupKnockout",
       "itemName",
       "paragraphAutoLeading",
       "paragraphBalanceRaggedLines",
+      "paragraphBorderColor",
+      "paragraphBorderOn",
+      "paragraphBorderWeight",
       "paragraphBulletsCharacterStyle",
       "paragraphBulletsTextAfter",
       "paragraphComposer",
@@ -1755,6 +2092,9 @@
       "paragraphNumberingExpression",
       "paragraphNumberingLevel",
       "paragraphNumberingStartAt",
+      "paragraphShadingColor",
+      "paragraphShadingOn",
+      "paragraphShadingTint",
       "paragraphSingleWordJustification",
       "paragraphSpanColumnMinSpaceAfter",
       "paragraphSpanColumnMinSpaceBefore",
@@ -1768,13 +2108,13 @@
     ]
   },
   "idmlLost": [
-    "opacity mask on `ufe07b1` (artwork `ufe07b2`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
-    "opacity mask on `ufe07b3` (artwork `ufe07b4`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
-    "opacity mask on `ufe17c6` (artwork `ufe17c7`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
-    "story `Story/u1048` (58 chars, 1 tables) is referenced by no frame — dropped from the export; delete it or place it",
-    "story `Story/u1049` (19 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
-    "story `Story/u1050` (14 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
-    "story `Story/u226` (203 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
-    "story `Story/u633` (29 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it"
+    "opacity mask on `ufe07b2` (artwork `ufe07b3`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
+    "opacity mask on `ufe07b4` (artwork `ufe07b5`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
+    "opacity mask on `ufe182f` (artwork `ufe1830`) is a paged-native construct — IDML has no opacity-mask element, so the mask is dropped and its artwork exports as an ordinary item. Save as `.paged` to keep it.",
+    "story `Story/u1077` (58 chars, 1 tables) is referenced by no frame — dropped from the export; delete it or place it",
+    "story `Story/u1078` (19 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
+    "story `Story/u1079` (14 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
+    "story `Story/u227` (203 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it",
+    "story `Story/u634` (29 chars, 0 tables) is referenced by no frame — dropped from the export; delete it or place it"
   ]
 }
