@@ -88,6 +88,8 @@ import type {
   RenderedLayer,
   RenderRect,
   ViewContribution,
+  SubContextProviderContribution,
+  SubContextState,
   ControlBarGroupContribution,
   StatusItemContribution,
   ElementId,
@@ -321,6 +323,9 @@ export const HOST_FEATURES: readonly string[] = [
   // `shell.views@1`.
   "contribute.presentation@1",
   "contribute.view@1",
+  // Extensions ADR 349 (C6) — the sub-context provider DOOR (static); a
+  // host that enters sub-contexts is the dynamic `shell.subContext@1`.
+  "contribute.subContextProvider@1",
   // Extensions ADR 348 — the control-bar group and status-item DOORS
   // (static); a host that renders them is the dynamic
   // `controlBar.groups@1` / `statusBar.items@1`. The keybinding `scope`
@@ -1351,6 +1356,11 @@ export type ShellBackend = Omit<
   | "showView"
   | "activeView"
   | "onDidChangeView"
+  // Extensions ADR 349 — served by the editor's `subContexts` registry.
+  | "enterSubContext"
+  | "exitSubContext"
+  | "subContext"
+  | "onDidChangeSubContext"
 > &
   Partial<Pick<ShellSurface, "saveFile" | "enterEditContext">> & {
     /** Leave the active edit context of `type` (extensions ADR 334); the
@@ -2324,6 +2334,21 @@ export function createBundleHost(
           d.dispose();
         }),
       );
+    },
+    // Extensions ADR 349 (C6) — a header / footer / note provider borrows
+    // its edit context's declaration, like a control-bar group.
+    subContextProvider(c: SubContextProviderContribution) {
+      requireOwnContext(c.editContext, "contribute.subContextProvider");
+      const reg = getEditor()?.registries?.subContexts;
+      if (!reg) {
+        log.warn(
+          `contribute.subContextProvider("${c.editContext}") registered ` +
+            `nothing — the host wired no sub-contexts (probe ` +
+            `supports("shell.subContext@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      return store.add(reg.register(manifest.id, c));
     },
     // Extensions ADR 348 (C1, C3) — both borrow their context's
     // declaration, like a frame surface: a group for a context that can
@@ -4548,6 +4573,7 @@ export function createBundleHost(
   // bundle as `host.shell.saveFile is not a function`.
   const shellBackend = options?.shell;
   let holdsDocumentContext = false;
+  let leavesSubContextOnDispose = false;
   const documentContextBackend = options?.documentContext;
   const shell: ShellSurface = {
     openPanel(panelId, panelOptions) {
@@ -4705,6 +4731,35 @@ export function createBundleHost(
       const reg = getEditor()?.registries?.views;
       if (!reg) return toDisposable(() => {});
       return store.add(reg.onChange(() => handler(reg.active())));
+    },
+    // Extensions ADR 349 (C6) — a header, footer or note edited in place.
+    // A bundle leaves only its own; the host owns the chrome.
+    enterSubContext(spec) {
+      const reg = getEditor()?.registries?.subContexts;
+      if (!reg) {
+        log.warn(
+          `shell.enterSubContext ignored — the host wired no sub-contexts ` +
+            `(probe supports("shell.subContext@1"))`,
+        );
+        return false;
+      }
+      const took = reg.enter(manifest.id, spec);
+      if (took && !leavesSubContextOnDispose) {
+        leavesSubContextOnDispose = true;
+        store.add(toDisposable(() => void reg.exit(manifest.id)));
+      }
+      return took;
+    },
+    exitSubContext() {
+      return getEditor()?.registries?.subContexts?.exit(manifest.id) ?? false;
+    },
+    subContext(): SubContextState | null {
+      return getEditor()?.registries?.subContexts?.current() ?? null;
+    },
+    onDidChangeSubContext(handler) {
+      const reg = getEditor()?.registries?.subContexts;
+      if (!reg) return toDisposable(() => {});
+      return store.add(reg.onChange(() => handler(reg.current())));
     },
   };
 
@@ -5818,6 +5873,9 @@ export function createBundleHost(
   }
   if (getEditor()?.registries?.views) {
     featureSet.add("shell.views@1");
+  }
+  if (getEditor()?.registries?.subContexts) {
+    featureSet.add("shell.subContext@1");
   }
   if (getEditor()?.registries?.frameSurfaces) {
     featureSet.add("editContext.frameSurface@1");

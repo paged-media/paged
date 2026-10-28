@@ -30,15 +30,19 @@ mod bindings;
 mod diff;
 mod edit;
 mod native;
+pub mod notes;
 mod overlay;
 mod rpr;
 mod splice;
+pub mod structure;
 mod styles;
 mod write;
 
 pub use bindings::{build_bindings, BlockBinding, DocxBindings, ParaUse, RunBinding, RunLock};
 pub use diff::diff;
-pub use edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit};
+pub use edit::{
+    AtomInsert, CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit,
+};
 pub use native::{native_document, NativeDocIn, PageIn};
 pub use overlay::{
     add_canvas_colors, overlay_cells, overlay_cells_known, overlay_story_content,
@@ -72,6 +76,19 @@ pub fn apply_edits(
     main_part: &str,
     bindings: &DocxBindings,
     edits: &EditSet,
+) -> Result<Vec<String>, OoxmlError> {
+    apply_edits_with(pkg, main_part, bindings, edits, &[])
+}
+
+/// [`apply_edits`] plus `atoms`: note references, fields and bookmarks put
+/// into body paragraphs ([`AtomInsert`], doc ADRs 611/612), patched in the
+/// same pass. An atom aimed at a run another edit rewrites is refused.
+pub fn apply_edits_with(
+    pkg: &mut OpcPackage,
+    main_part: &str,
+    bindings: &DocxBindings,
+    edits: &EditSet,
+    atoms: &[AtomInsert],
 ) -> Result<Vec<String>, OoxmlError> {
     let mut skips: Vec<String> = Vec::new();
     let mut targets: Vec<ResolvedTarget> = Vec::new();
@@ -108,6 +125,7 @@ pub fn apply_edits(
             rpr_merge,
             split: Vec::new(),
             inside_at: None,
+            between: Vec::new(),
         });
     }
 
@@ -569,6 +587,81 @@ pub fn apply_edits(
             split: split_pieces(base, pieces),
             delete: false,
         });
+    }
+
+    // Doc ADRs 611/612 — note references, fields and bookmarks put into
+    // body paragraphs, grouped by the run they go into.
+    let mut groups: BTreeMap<(usize, Option<usize>), Vec<&AtomInsert>> = BTreeMap::new();
+    for a in atoms {
+        groups.entry((a.block, a.run)).or_default().push(a);
+    }
+    for ((block, run), mut group) in groups {
+        let label = format!("insertion skipped: block {block}");
+        let Some(run) = run else {
+            if let Some(why) = locks
+                .paragraph(block)
+                .or_else(|| bindings.paragraph_refusal(block, ParaUse::Address))
+            {
+                skips.push(format!("{label} {why}"));
+                continue;
+            }
+            let Some(p) = bindings.para_ord(block) else {
+                skips.push(format!("{label} is not a body paragraph"));
+                continue;
+            };
+            let frags = group.iter().map(|a| a.xml.as_bytes().to_vec());
+            let entry = paras.entry(p).or_default();
+            entry.prepend_runs.extend(frags);
+            continue;
+        };
+        if let Some(why) = locks.run(block, run) {
+            skips.push(format!("{label} run {run} {why}"));
+            continue;
+        }
+        let Some(a) = bindings.resolve(block, run) else {
+            skips.push(format!("{label} run {run} is not patchable"));
+            continue;
+        };
+        if targets
+            .iter()
+            .any(|t| t.para_ord == a.para_ord && t.run_ord == a.run_ord && t.wrapper == a.wrapper)
+        {
+            skips.push(format!(
+                "{label} run {run}: the run's text was edited too; save the insertion on its own"
+            ));
+            continue;
+        }
+        group.sort_by_key(|g| g.before.chars().count());
+        let mut t = ResolvedTarget::edit(a.para_ord, a.run_ord);
+        t.wrapper = a.wrapper;
+        t.label = format!("{label} run {run}");
+        let full = format!("{}{}", group[0].before, group[0].after);
+        let total = full.chars().count();
+        let mut cut = 0usize;
+        let chars: Vec<char> = full.chars().collect();
+        for g in &group {
+            let at = g.before.chars().count().min(total);
+            if at >= total {
+                t.insert_after.push(g.xml.as_bytes().to_vec());
+                continue;
+            }
+            if at > cut || t.split.is_empty() {
+                t.split.push(splice::SplitPiece {
+                    text: chars[cut..at].iter().collect(),
+                    rpr_merge: None,
+                });
+                cut = at;
+            }
+            t.between
+                .push((t.split.len() - 1, g.xml.as_bytes().to_vec()));
+        }
+        if !t.split.is_empty() {
+            t.split.push(splice::SplitPiece {
+                text: chars[cut..].iter().collect(),
+                rpr_merge: None,
+            });
+        }
+        targets.push(t);
     }
 
     if targets.is_empty()

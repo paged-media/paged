@@ -36,6 +36,7 @@ import {
   createFrameSurfaceRegistry,
   createPresentationRegistry,
   createViewRegistry,
+  createSubContextRegistry,
   createControlBarGroupRegistry,
   createDocumentContextStore,
   createStatusItemRegistry,
@@ -54,6 +55,7 @@ import {
   type FrameSurfaceRegistry,
   type PresentationRegistry,
   type ViewRegistry,
+  type SubContextRegistry,
   type ControlBarGroupRegistry,
   type DocumentContextStore,
   type StatusItemRegistry,
@@ -115,6 +117,9 @@ export interface ShellRegistries {
   /** Module views (extensions ADR 345, editor ADR 306): a bundle's work
    *  surface shown in place of the canvas. */
   views: ViewRegistry;
+  /** Sub-contexts (extensions ADR 349, editor ADR 301): a header, footer
+   *  or note edited in place on a page. */
+  subContexts: SubContextRegistry;
 }
 
 const Context = createContext<ShellRegistries | null>(null);
@@ -166,6 +171,7 @@ export function createShellRegistries(
     frameSurfaces: createFrameSurfaceRegistry(),
     presentations: createPresentationRegistry(),
     views: createViewRegistry(),
+    subContexts: createSubContextRegistry(),
     controlBarGroups: createControlBarGroupRegistry(),
     statusItems: createStatusItemRegistry(),
     documentContext: createDocumentContextStore(),
@@ -219,4 +225,10 @@ export function useRegistries(): ShellRegistries {
     throw new Error("useRegistries called outside RegistriesProvider");
   }
   return ctx;
+}
+
+/** The registries, or null outside a RegistriesProvider (a controller
+ *  mounted standalone in a unit test). */
+export function useOptionalRegistries(): ShellRegistries | null {
+  return useContext(Context);
 }

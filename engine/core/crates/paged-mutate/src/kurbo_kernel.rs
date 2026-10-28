@@ -32,9 +32,10 @@
 //!     offset opens (bevel from exact per-segment parallels, miter and
 //!     round from the stroker's two sides at `2·|delta|`), every
 //!     candidate resolved through the flo_curves boolean kernel.
-//!     An open path, or one of several subpaths, is not offset here:
-//!     the apply arm sends it to [`outline_stroke`] at `2·|delta|` with
-//!     a butt cap, a closed two-sided band (ADR 004, amendment §2).
+//!     Compound and open paths are offset by
+//!     [`crate::stroke_kernel::offset_path`] on top of it (engine ADR
+//!     1019): per contour by nesting, and an open contour as a two-sided
+//!     band or a one-sided parallel path.
 //!   - [`nearest_point_on_path`] — closest point on the path's
 //!     cubics (B-06): collapses the third TS copy of `closestTOnCubic`
 //!     once exposed as a worker query.
@@ -300,132 +301,35 @@ pub fn outline_stroke(
     Some((a, s, closed))
 }
 
-/// Variable-width stroke outline (B-08, the open half of §13.12). The
-/// constant-width [`outline_stroke`] can't taper, so a pressure-varying
-/// pen stroke needs this: `widths[i]` is the FULL stroke width sampled
-/// at width-stop `i` (the editor's Pen maps its per-anchor pressure
-/// profile through `draw-tools` `strokeWidthFromPressure`). The
-/// centreline is flattened to a polyline; each vertex takes a half-width
-/// linearly interpolated across the width stops by NORMALISED arc length
-/// and is pushed along the local unit normal, producing ONE closed
-/// filled contour (left side forward, then right side back). It fills
-/// correctly under the engine's nonzero winding — the same rationale
-/// [`outline_stroke`] documents.
+/// Variable-width stroke outline (B-08, §13.12): `widths[i]` is the FULL
+/// stroke width sampled at width-stop `i` (the editor's Pen maps its
+/// per-anchor pressure profile through `draw-tools`
+/// `strokeWidthFromPressure`), spread over each subpath's normalised arc
+/// length.
 ///
-/// v1 scope (documented, not silent): a SINGLE open contour (a brush
-/// stroke), butt ends; round/square caps, miter/round joins, and
-/// multi-subpath inputs are follow-ups (the `cap`/`join`/`miter` params
-/// are accepted now so the op signature is stable). Returns `None` on
-/// degenerate input (< 2 anchors, no width stops, zero-length path, or a
-/// multi-subpath input).
-///
-/// What "no joins" means here, so the unused parameters read as a
-/// decision: each side is ONE vertex per centreline vertex, pushed
-/// `half_width` along the normal of the chord between its neighbours.
-/// On a flattened curve the turn per vertex is tiny and that is the
-/// parallel curve. At a real CORNER of the centreline (turn angle φ) the
-/// two parallel edges would meet `half_width / cos(φ/2)` out; this
-/// places the vertex at `half_width`, so the outline is pinched to
-/// `cos(φ/2)` of its width there — neither a miter, a round nor a bevel.
-/// [`offset_closed_path`] used to ignore the same pair and no longer
-/// does; this function still does, because a join here needs the
-/// per-vertex construction replaced, not a parameter passed through
-/// (kurbo's stroker, which draws the joins elsewhere in this module,
-/// has no variable width).
+/// Since engine ADR 1019 this honours `cap` at open ends and `join` /
+/// `miter_limit` at every corner, and outlines every subpath (a closed
+/// one as a ring); the construction is
+/// [`crate::stroke_kernel::variable_width_outline`]. `None` on degenerate
+/// input (< 2 anchors, no width stops, zero-length path).
 pub fn variable_width_outline_stroke(
     anchors: &[PathAnchor],
     subpath_starts: &[usize],
-    _subpath_open: &[bool],
+    subpath_open: &[bool],
     widths: &[f32],
-    _cap: StrokeCap,
-    _join: StrokeJoin,
-    _miter_limit: f32,
+    cap: StrokeCap,
+    join: StrokeJoin,
+    miter_limit: f32,
 ) -> Option<(Vec<PathAnchor>, Vec<usize>, Vec<bool>)> {
-    if anchors.len() < 2 || widths.is_empty() {
-        return None;
-    }
-    // v1: a single contour (a brush stroke). Multi-subpath variable
-    // width is a follow-up.
-    if subpath_starts.len() > 1 {
-        return None;
-    }
-    // A brush stroke is an OPEN centreline regardless of the stored flag.
-    let path = anchors_to_bezpath(anchors, subpath_starts, &[true]);
-
-    // Flatten the centreline to a polyline (curves → lines at TOLERANCE).
-    let mut pts: Vec<Point> = Vec::new();
-    kurbo::flatten(path.elements().iter().copied(), TOLERANCE, |el| match el {
-        PathEl::MoveTo(p) | PathEl::LineTo(p) => pts.push(p),
-        _ => {}
-    });
-    pts.dedup_by(|a, b| (*a - *b).hypot() < EPS);
-    if pts.len() < 2 {
-        return None;
-    }
-
-    // Cumulative arc length per vertex.
-    let mut cum = vec![0.0f64; pts.len()];
-    for i in 1..pts.len() {
-        cum[i] = cum[i - 1] + (pts[i] - pts[i - 1]).hypot();
-    }
-    let total = *cum.last().unwrap();
-    if total <= EPS {
-        return None;
-    }
-
-    // Half-width at a normalised arc-length position `s` (0..=1), lerped
-    // across the width stops (distributed uniformly over 0..=1 by index).
-    let half_width = |s: f64| -> f64 {
-        let n = widths.len();
-        if n == 1 {
-            return f64::from(widths[0]).max(0.0) * 0.5;
-        }
-        let x = s.clamp(0.0, 1.0) * (n - 1) as f64;
-        let i = (x.floor() as usize).min(n - 2);
-        let frac = x - i as f64;
-        let w = f64::from(widths[i]) * (1.0 - frac) + f64::from(widths[i + 1]) * frac;
-        w.max(0.0) * 0.5
-    };
-
-    // Offset each vertex along the local unit normal (left = +normal).
-    let n = pts.len();
-    let mut left: Vec<Point> = Vec::with_capacity(n);
-    let mut right: Vec<Point> = Vec::with_capacity(n);
-    for i in 0..n {
-        let prev = pts[i.saturating_sub(1)];
-        let next = pts[(i + 1).min(n - 1)];
-        let tang = next - prev;
-        let len = tang.hypot();
-        let (nx, ny) = if len > EPS {
-            (-tang.y / len, tang.x / len)
-        } else {
-            (0.0, 1.0)
-        };
-        let hw = half_width(cum[i] / total);
-        left.push(Point::new(pts[i].x + nx * hw, pts[i].y + ny * hw));
-        right.push(Point::new(pts[i].x - nx * hw, pts[i].y - ny * hw));
-    }
-
-    // Closed contour: left forward, right backward (corner anchors).
-    let corner = |p: Point| PathAnchor {
-        anchor: xy(p),
-        left: xy(p),
-        right: xy(p),
-    };
-    let mut out: Vec<PathAnchor> = Vec::with_capacity(2 * n);
-    out.extend(left.iter().map(|&p| corner(p)));
-    out.extend(right.iter().rev().map(|&p| corner(p)));
-    if out.len() < 3 {
-        return None;
-    }
-    // C-81 — the outline-stroke family's direction (see `outline_stroke`).
-    crate::orientation::orient_contours(
-        &mut out,
-        &[0],
-        &[false],
-        crate::orientation::Turn::Clockwise,
-    );
-    Some((out, vec![0], vec![false]))
+    crate::stroke_kernel::variable_width_outline(
+        anchors,
+        subpath_starts,
+        subpath_open,
+        widths,
+        cap,
+        join,
+        miter_limit,
+    )
 }
 
 /// Perpendicular distance from `p` to the segment `a`→`b` (the
@@ -583,7 +487,7 @@ pub fn simplify_path(
 /// the miter limit and the round arc mean here exactly what they mean
 /// on a stroke, and there is one implementation of a join, not two.
 ///
-/// Multi-subpath (holes) and open inputs are deferred in v1.
+/// Multi-subpath (holes) and open inputs: [`crate::stroke_kernel::offset_path`].
 pub fn offset_closed_path(
     anchors: &[PathAnchor],
     subpath_starts: &[usize],

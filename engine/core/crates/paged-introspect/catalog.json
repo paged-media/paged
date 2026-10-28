@@ -450,10 +450,10 @@
     },
     {
       "name": "paged.offsetPath",
-      "params": "(elemId, delta, join, miter)",
+      "params": "(elemId, delta, join, miter, side?)",
       "returns": "bool",
       "kind": "write",
-      "summary": "Inset (delta<0) / outset (delta>0) a single closed contour."
+      "summary": "Inset (delta<0) / outset (delta>0) a path; compound paths keep their holes; side (both|left|right) offsets an open contour to one side."
     },
     {
       "name": "paged.simplifyPath",

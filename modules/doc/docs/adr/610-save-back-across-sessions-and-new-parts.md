@@ -74,3 +74,31 @@ ADR 602 left four gaps that the Word-parity plan (wave W1) closes on the plugin 
 - [ADR 602](602-save-back-is-a-byte-splice.md), [ADR 603](603-two-entry-points.md) — the splice
   this extends; where the stored source part comes from.
 - [ADR 609](609-styles-and-theme.md) — theme references written back.
+
+## Amendment 1 (2026-10-28): the document structure (doc ADRs 611, 612)
+
+- **Headers and footers.** The bundle reads every master story (`save-structure.ts`,
+  `readStructure`); per header/footer part, the first master story that differs from the
+  part's lowering is the edit, overlaid, diffed and spliced into that `headerN.xml` /
+  `footerN.xml` with the body's patcher (`hdr` / `ftr` roots; header, footer and note
+  paragraphs now carry their ordinal within the part). Zero-edit save stays byte-identical
+  per part.
+- **Notes.** The `footnotes` / `endnotes` collections, in document order, are matched to the
+  body's reference markers. A changed text is written into the note's existing runs (the
+  `w:footnoteRef` mark and Word's space kept). A marker the lowering did not have is a new
+  note: a `w:footnote` / `w:endnote` with the next id (FootnoteText / FootnoteReference
+  styles when the document has them), its reference run spliced where the marker stands
+  (splitting the run), and, where the document had no notes part, the part with Word's
+  separator (-1) and continuation separator (0), its relationship and content-type override.
+  A removed marker removes the reference and the note.
+- **Fields and bookmarks.** The story read names a run's field (`fieldCode`) and the story's
+  text anchors: an F9-changed result rewrites the result run; a new field is written as a
+  complex field (begin / instrText / separate / result / end); a new bookmark as
+  `w:bookmarkStart` / `w:bookmarkEnd` with a new id.
+- **Not written:** a table of contents made in paged is not written as a `TOC` field (its
+  entries save as text); a note added or removed, or a field or bookmark inserted, in a run
+  whose text also changed in the same save is skipped with a message (save once after each);
+  a note whose paragraph count changed is skipped; tables in headers are not lowered.
+- Evidence: `docx-conformance/tests/it/structure_saveback.rs` (9), `doc-bundle/test/headless/
+  structure-saveback.spec.ts` (3, real engine).
+

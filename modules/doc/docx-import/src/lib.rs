@@ -425,7 +425,7 @@ fn map_notes(pkg: &OpcPackage, main_part: &str, ctx: &ImportCtx) -> Vec<Note> {
                 out.push(Note {
                     id: f.id,
                     endnote: false,
-                    paragraphs: note_paragraphs(&f.footnote_choice, ctx),
+                    paragraphs: numbered(note_paragraphs(&f.footnote_choice, ctx)),
                 });
             }
         }
@@ -442,7 +442,7 @@ fn map_notes(pkg: &OpcPackage, main_part: &str, ctx: &ImportCtx) -> Vec<Note> {
                 out.push(Note {
                     id: e.id,
                     endnote: true,
-                    paragraphs: endnote_paragraphs(&e.endnote_choice, ctx),
+                    paragraphs: numbered(endnote_paragraphs(&e.endnote_choice, ctx)),
                 });
             }
         }
@@ -450,8 +450,17 @@ fn map_notes(pkg: &OpcPackage, main_part: &str, ctx: &ImportCtx) -> Vec<Note> {
     out
 }
 
-/// A footnote's body paragraphs. Cell provenance is `None` and the body ordinal
-/// is 0: note content lives in its own part, so it is not save-back patchable.
+/// Number a part's (or a note's) paragraphs in order: their ordinal among
+/// the `<w:p>` children of the part's root (or of the note), the address
+/// save-back patches a header, footer or note paragraph by (doc ADR 611).
+fn numbered(mut paragraphs: Vec<Paragraph>) -> Vec<Paragraph> {
+    for (i, p) in paragraphs.iter_mut().enumerate() {
+        p.source_para_ord = i as u32;
+    }
+    paragraphs
+}
+
+/// A footnote's body paragraphs, numbered within the note ([`numbered`]).
 fn note_paragraphs(choices: &[wml::FootnoteChoice], ctx: &ImportCtx) -> Vec<Paragraph> {
     choices
         .iter()
@@ -556,7 +565,7 @@ fn map_headers_footers(
                         ),
                         part: name.clone(),
                         section: k,
-                        paragraphs: header_footer_paragraphs(*footer, &name, bytes, ctx),
+                        paragraphs: numbered(header_footer_paragraphs(*footer, &name, bytes, ctx)),
                     });
                     out.len() - 1
                 }
@@ -579,8 +588,8 @@ fn map_headers_footers(
     out
 }
 
-/// A header (`w:hdr`) or footer (`w:ftr`) part's paragraphs. Not save-back
-/// patchable yet (the body ordinal is 0, no cell provenance).
+/// A header (`w:hdr`) or footer (`w:ftr`) part's paragraphs, numbered by
+/// the caller ([`numbered`]).
 fn header_footer_paragraphs(
     footer: bool,
     name: &str,
@@ -1005,6 +1014,8 @@ fn map_paragraph(
         link_ord: 0,
         field_ord: 0,
         merge_ord: 0,
+        field_seq: 0,
+        toc_field: None,
         bookmarks: Vec::new(),
         unshown: 0,
     };
@@ -1017,6 +1028,7 @@ fn map_paragraph(
         runs,
         bookmarks,
         unshown,
+        toc_field,
         ..
     } = walk;
     let tracked_ppr = p.paragraph_properties.as_deref().is_some_and(|pp| {
@@ -1068,6 +1080,7 @@ fn map_paragraph(
             unshown_runs: unshown,
             tracked_ppr,
         },
+        toc_field,
     }
 }
 
@@ -1236,6 +1249,8 @@ enum Path {
 struct Stamp {
     hyperlink: Option<String>,
     field: Option<String>,
+    field_code: Option<String>,
+    field_seq: Option<u32>,
     merge: Option<MergeField>,
 }
 
@@ -1258,6 +1273,10 @@ struct ParaWalk<'c, 'a> {
     field_ord: u32,
     // Ordinal of the next MERGEFIELD in this paragraph (both field forms).
     merge_ord: u32,
+    // Number of the next field to begin in this paragraph (both forms).
+    field_seq: u32,
+    // A TOC field's instruction, when one begins in this paragraph.
+    toc_field: Option<String>,
     bookmarks: Vec<String>,
     // Runs left out: tracked deletions and hidden runs.
     unshown: u32,
@@ -1329,10 +1348,14 @@ impl<'a> ParaWalk<'_, 'a> {
                     if merge.is_some() {
                         self.merge_ord += 1;
                     }
+                    let seq = self.field_seq;
+                    self.field_seq += 1;
                     let stamp = Stamp {
                         hyperlink: parse_hyperlink_instr(&fs.instruction)
                             .or_else(|| stamp.hyperlink.clone()),
                         field: field_name(&fs.instruction),
+                        field_code: Some(fs.instruction.trim().to_string()),
+                        field_seq: Some(seq),
                         merge,
                     };
                     self.items(
@@ -1382,11 +1405,20 @@ impl<'a> ParaWalk<'_, 'a> {
     fn run(&mut self, r: &wml::Run, source: Option<RunSource>, stamp: &Stamp) {
         if let Some(kind) = run_field_char(r) {
             match kind {
-                wml::FieldCharValues::Begin => self.fields.push(FieldFrame::default()),
+                wml::FieldCharValues::Begin => {
+                    self.fields.push(FieldFrame {
+                        seq: self.field_seq,
+                        ..FieldFrame::default()
+                    });
+                    self.field_seq += 1;
+                }
                 wml::FieldCharValues::Separate => {
                     if let Some(f) = self.fields.last_mut() {
                         f.result_url = parse_hyperlink_instr(&f.instruction);
                         f.result_field = field_name(&f.instruction);
+                        if f.result_field.as_deref() == Some("TOC") && self.toc_field.is_none() {
+                            self.toc_field = Some(f.instruction.trim().to_string());
+                        }
                         f.merge = parse_merge_field(&f.instruction, self.merge_ord);
                         if f.merge.is_some() {
                             self.merge_ord += 1;
@@ -1426,6 +1458,8 @@ impl<'a> ParaWalk<'_, 'a> {
         run.source = source;
         run.hyperlink = stamp.hyperlink.clone();
         run.field = stamp.field.clone();
+        run.field_code = stamp.field_code.clone();
+        run.field_seq = stamp.field_seq;
         run.merge_field = stamp.merge.clone();
         if let Some(f) = self.fields.last() {
             if f.separated {
@@ -1434,6 +1468,8 @@ impl<'a> ParaWalk<'_, 'a> {
                 }
                 if f.result_field.is_some() {
                     run.field = f.result_field.clone();
+                    run.field_code = Some(f.instruction.trim().to_string());
+                    run.field_seq = Some(f.seq);
                 }
                 if f.merge.is_some() {
                     run.merge_field = f.merge.clone();
@@ -1725,6 +1761,8 @@ fn cell_content_control(
 struct FieldFrame {
     instruction: String,
     separated: bool,
+    /// The field's number among those that begin in its paragraph.
+    seq: u32,
     /// The resolved external URL if this is a `HYPERLINK` field (else `None`).
     result_url: Option<String>,
     /// The field's NAME (instruction's first token, upper-cased) — `PAGE`,
@@ -1876,6 +1914,8 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
     let mut images = Vec::new();
     let mut other_drawings = 0u32;
     let mut note_ref = None;
+    let mut note_is_endnote = false;
+    let mut note_at = 0usize;
     let mut ptabs = Vec::new();
     let mut symbols = Vec::new();
     for c in &r.run_choice {
@@ -1965,8 +2005,15 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
             },
             // A footnote/endnote reference mark — the run carries no text; the
             // note body lives in the notes part, keyed by this id.
-            wml::RunChoice::FootnoteReference(f) => note_ref = Some(f.id),
-            wml::RunChoice::EndnoteReference(e) => note_ref = Some(e.id),
+            wml::RunChoice::FootnoteReference(f) => {
+                note_ref = Some(f.id);
+                note_at = text.chars().count();
+            }
+            wml::RunChoice::EndnoteReference(e) => {
+                note_ref = Some(e.id);
+                note_is_endnote = true;
+                note_at = text.chars().count();
+            }
             _ => {}
         }
     }
@@ -1983,7 +2030,11 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
         // The caller (map_paragraph) stamps the real provenance from context.
         source: None,
         note_ref,
+        note_is_endnote,
+        note_at,
         field: None,
+        field_code: None,
+        field_seq: None,
         merge_field: None,
     }
 }

@@ -4481,6 +4481,7 @@ impl CanvasModel {
                 delta,
                 join,
                 miter_limit,
+                side,
             } => Some(Operation::SetProperty {
                 node: path_node_id_for(element_id)?,
                 path: PropertyPath::OffsetPath,
@@ -4488,6 +4489,7 @@ impl CanvasModel {
                     delta: *delta,
                     join: join.clone(),
                     miter_limit: *miter_limit,
+                    side: side.clone(),
                     prev_anchors: None,
                     prev_subpath_starts: None,
                     prev_subpath_open: None,
@@ -11835,6 +11837,20 @@ impl CanvasModel {
         Some(crate::channel::StoryContent {
             self_id: s.self_id.clone(),
             paragraphs: s.story.paragraphs.iter().map(paragraph_content).collect(),
+            text_anchors: s
+                .story
+                .destinations
+                .iter()
+                .filter(|d| !d.paragraph_destination)
+                .filter_map(|d| {
+                    Some(crate::channel::TextAnchorContent {
+                        self_id: d.self_id.clone(),
+                        name: d.name.clone()?,
+                        paragraph: d.paragraph,
+                        offset: d.offset,
+                    })
+                })
+                .collect(),
         })
     }
 
@@ -16039,8 +16055,10 @@ pub(crate) fn paragraph_content(para: &paged_model::Paragraph) -> crate::channel
                 position: run.position.clone(),
                 tracking: run.tracking,
                 text_variable: run.text_variable.clone(),
+                field_code: run.field.as_ref().map(|f| f.code.clone()),
             })
             .collect(),
+        toc: para.toc.clone(),
     }
 }
 

@@ -76,13 +76,13 @@
 // GAP HANDLING. Two paths that do not meet do not bound a face.
 //
 // ---------------------------------------------------------- the caps
-// 12 inputs, 256 faces, and the engine REFUSES past either — it never
-// truncates. Twelve is low for real Live Paint artwork, so the refusal
-// is put in front of the user with the engine's own sentence rather than
+// 1000 inputs, 100 000 faces and a work budget (engine ADR 1019), and the
+// engine REFUSES past any of them — it never truncates. The refusal is
+// put in front of the user with the engine's own sentence rather than
 // swallowed: Make group probes the arrangement BEFORE writing anything
 // and refuses with that sentence on the shared pathfinder status
-// binding, so a 13-path selection never becomes a group that cannot
-// paint. `complete: false` (the faces are real but do not tile the
+// binding, so a selection past the caps never becomes a group that
+// cannot paint. `complete: false` (the faces are real but do not tile the
 // union) is a WARNING, not a refusal — the listed faces stay paintable.
 //
 // ------------------------------------------------------ the two shapes

@@ -111,6 +111,7 @@ import {
   useOptionalEditContextStack,
 } from "./state/edit-context-stack";
 import { EditContextController } from "./state/edit-context-controller";
+import { SubContextController } from "./state/sub-context-controller";
 import {
   BindingProviderProvider,
   type ShellBindingProviderHost,
@@ -1445,6 +1446,7 @@ function ShellChrome({
        *   The controller (side-effect-only) wires Esc-pop, panel
        *   emphasis, tool focus, and selection-driven auto-exit. */}
       <EditContextController />
+      <SubContextController />
       <EditContextBreadcrumb />
       {notices}
 

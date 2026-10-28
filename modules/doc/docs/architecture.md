@@ -73,9 +73,13 @@ swatches, styles, stories, tables, anchored frames, hyperlinks, laid out by the 
   `ParagraphStyle/docx-Default`. Word's layout rules are written as native property values:
   breaks as `paragraphStartParagraph`, keep rules as the `paragraphKeep…` properties,
   first-fit line breaking as `paragraphComposer`, line spacing as `characterLeading`.
-- **Not placed.** Footnotes, endnotes, headers and footers are parsed but not placed; a
-  floating picture is placed inline, without its position and wrap; a field other than a
-  hyperlink is placed as its last computed text. `LoweredDoc.diagnostics` reports each.
+- **Document structure** ([ADR 611](adr/611-headers-footers-and-notes-placed.md),
+  [ADR 612](adr/612-fields-and-toc.md)). On a standalone open, headers and footers sit on
+  section masters the skeleton writes and the grow rules name, notes at their references,
+  fields as live engine Word fields, bookmarks as text anchors, Word's TOC entries with live
+  page numbers. An inserted document leaves headers, footers and notes unplaced. A floating
+  picture is placed inline, without its position and wrap. `LoweredDoc.diagnostics` reports
+  what is not placed.
 - **The wasm boundary.** `DocEngine` has eleven methods besides its constructor. Byte arrays
   cross it (the `.docx` in; the skeleton and the saved `.docx` out) and JSON strings (the
   lowering, story ids, the read-back story, the skipped edits), with no version number.

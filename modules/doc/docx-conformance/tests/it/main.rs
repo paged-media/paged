@@ -31,6 +31,8 @@ mod real_word_corpus;
 mod run_specials;
 mod save_back;
 mod sections;
+mod structure;
+mod structure_saveback;
 mod symbols;
 mod tall_rows;
 mod template_fields;

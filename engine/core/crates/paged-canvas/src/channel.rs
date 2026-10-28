@@ -4442,6 +4442,26 @@ pub struct StoryContent {
     pub self_id: String,
     /// Paragraphs in body order.
     pub paragraphs: Vec<ParagraphContent>,
+    /// Engine ADR 1022 — the story's named text anchors (Word's
+    /// bookmarks), each at its paragraph and character offset in it. A
+    /// content plugin writes them back as its own format's bookmarks.
+    /// Additive on 77.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub text_anchors: Vec<TextAnchorContent>,
+}
+
+/// Engine ADR 1022 — one named text anchor of a story (a
+/// `HyperlinkTextDestination` in its text).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct TextAnchorContent {
+    pub self_id: String,
+    pub name: String,
+    /// Index of the paragraph it stands in.
+    pub paragraph: u32,
+    /// Its character offset in that paragraph.
+    pub offset: u32,
 }
 
 /// DOC-03 — one paragraph's applied style + its runs.
@@ -4453,6 +4473,10 @@ pub struct ParagraphContent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paragraph_style: Option<String>,
     pub runs: Vec<RunContent>,
+    /// Engine ADR 1022 — the table of contents style this paragraph is an
+    /// entry of (`Paragraph.toc`), when it is one. Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toc: Option<String>,
 }
 
 /// DOC-03 — one run's text + its applied character style + its DIRECT character
@@ -4492,6 +4516,11 @@ pub struct RunContent {
     /// data field's text variable is in, a copy pasted by hand included.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_variable: Option<String>,
+    /// Engine ADR 1022 — the Word field this run is the result of (its
+    /// instruction, `PAGEREF _Ref1 \h`), when it is one; the run's `text`
+    /// is the field's result. Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_code: Option<String>,
 }
 
 /// Inspector P1 — one node in the scene tree. Children are nested

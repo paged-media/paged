@@ -383,14 +383,15 @@ export async function addPlainShapes(
   return made;
 }
 
-/** The engine's planar-arrangement input cap. */
+/** The size of the arrangement scenario: the planar input cap before
+ *  engine ADR 1019 (it is 1000 now), kept so the budgets stay comparable. */
 export const ARRANGEMENT_INPUTS = 12;
 
 /** `inputs` mutually overlapping squares, each offset 5 pt down-right of
  *  the last: every pair of outlines crosses twice, so 12 of them divide
- *  into n(n-1)+1 = 133 faces — the largest arrangement the engine will
- *  ENUMERATE (12 inputs is its cap; 256 faces is the other one). ONE
- *  batch. */
+ *  into n(n-1)+1 = 133 faces — the largest arrangement the engine
+ *  enumerated before engine ADR 1019 (12 inputs and 256 faces were its
+ *  caps). ONE batch. */
 export async function addArrangement(
   w: Workload,
   inputs = ARRANGEMENT_INPUTS,

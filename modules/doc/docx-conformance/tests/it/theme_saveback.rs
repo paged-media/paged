@@ -548,7 +548,8 @@ fn an_edited_run_keeps_a_note_reference_inside_its_text_in_place__feat__plugin_d
     let mut content = identity(&base);
     let runs = &mut content.paragraphs[2].runs;
     let text: String = runs.iter().map(|r| r.text.as_str()).collect();
-    assert_eq!(text, "Before after.");
+    // The reference reads as the engine's footnote marker (doc ADR 611).
+    assert_eq!(text, "Before\u{E01C} after.");
     runs.truncate(1);
     runs[0].text = "Before, after!".into();
     let (saved, skips) = session.save_edited_from_content(&content).unwrap();
