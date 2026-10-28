@@ -570,6 +570,7 @@ export function CanvasPanel(_props: PanelProps) {
         docId={handle.docId}
         pageIds={handle.pageIds}
         pageSizesPt={handle.pageSizesPt}
+        pageOriginsPt={handle.pageOriginsPt}
         camera={camera}
         onCameraChange={setCamera}
         activeTool={activeTool}

@@ -123,11 +123,20 @@ async function pasteboardAnchor(
     paged.client
       .elementGeometry(targets.slice() as never)
       .catch(() => [] as { pageId?: string | null }[]),
-    paged.client.collection<{ selfId: string; sizePt: [number, number] }>(
-      "pages",
-    ),
+    paged.client.collection<{
+      selfId: string;
+      sizePt: [number, number];
+      canvasOriginPt?: [number, number] | null;
+    }>("pages"),
   ]);
-  const rects = layoutPageRects(pages.map((p) => p.sizePt));
+  // Engine ADR 1011 — each page at its place on the canvas.
+  const origins = pages.every((p) => p.canvasOriginPt)
+    ? pages.map((p) => p.canvasOriginPt as [number, number])
+    : null;
+  const rects = layoutPageRects(
+    pages.map((p) => p.sizePt),
+    origins,
+  );
   const pageId =
     (geometry as { pageId?: string | null }[]).find((g) => g?.pageId)?.pageId ??
     pages[0]?.selfId;

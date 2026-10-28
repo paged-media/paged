@@ -1,6 +1,6 @@
 # paged.slide — status
 
-Read from the code on 2026-10-25.
+Read from the code on 2026-10-28.
 
 ## Built
 
@@ -166,6 +166,24 @@ Read from the code on 2026-10-25.
   slides, golden frames hold at 0.25, 0.5 and 0.75, and every transition takes under 1 ms of
   GPU time per 1080p frame on an M3 Max (most take under 0.2 ms). The show runtime that plays
   them is the next part of M5.
+- **Animations** (ADR 714). A slide's `p:timing` is read as a tree (`pptx_core::anim`: par /
+  seq / excl, every behaviour, conditions, triggers, builds by paragraph; what the model does not
+  know is kept as XML) and rides its page label with each shape named by its page item and shape
+  key. Export keeps an unchanged timing's bytes, writes an edited one with the slide's written
+  shape ids, drops (and reports) effects whose shape is gone, and removes `p:timing` when no
+  effect is left. The player (`slide-anim`, `AnimPlayer` in the wasm) evaluates the tree from
+  the clicks and shape clicks: PowerPoint's formulas and key points, motion paths, scale,
+  rotation, colour, filters, repeat, auto-reverse, acceleration, seeking on the next click. The
+  preset table is PowerPoint's own (the `animations` fixture: every effect its dictionary
+  offers, every direction, every exit twin). In the show an animated slide is its background
+  plus a layer per animated item (paragraph layers for builds by paragraph, extensions ADR 346
+  C4), composited each frame by one WGSL shader with PowerPoint's 15 filters on WebGPU (Canvas2D
+  without it); clicks play builds before the slide advances, back undoes one, a trigger shape's
+  click plays its sequence. The Animations pane adds any preset to the selected shape (by
+  paragraph on request), lists the effects with a timeline (drag to retime and reorder) and
+  edits direction, start, duration, delay, repeat, rewind and trigger; Preview plays the slide
+  over the canvas; the Animation Painter copies a shape's effects. Typed commands add, remove,
+  retime, move, list and preview animations.
 - **Files and output** (ADR 720, editor ADR 308). File ▸ Export… is a view in place of the
   canvas: PDF slides, handouts (1, 2, 3, 4, 6 or 9 a page; three with lines for notes) and notes
   pages, laid out by `slide-output` over the renderer's slide images (150 dpi; notes in
@@ -260,9 +278,10 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   palette edits (a swatch's new colour does not mark its shapes edited), a picture frame's
   reshaped outline, placeholders other than text ones on a slide made in the editor. Each is
   reported in the export's diagnostics, and the shape is written as the deck had it. A notes
-  master for a deck that has none. Transitions, timing, masters and layouts are still copied, not
+  master for a deck that has none. Transitions, masters and layouts are still copied, not
   regenerated (later waves of ADR 711).
-- Animations in the show (per-item layers, wave 5), ink saved as annotations.
+- Ink saved as annotations. Motion paths edited on the canvas with paged.draw's handles
+  (wave 5's last item). Animation approximations: ADR 714, Consequences.
 - Live charts (ADR 715): a chart inside a PowerPoint group is drawn and its data exported, but
   not redrawn on the page after an edit; a duplicated slide's chart shares its chart part (an
   edit redraws both); the workbook edit itself is not on the undo stack (undo restores the old

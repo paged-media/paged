@@ -203,16 +203,20 @@ mod wasm {
         /// a flat `[page_id_len, ...page_id_utf8, w_pt, h_pt]`-style
         /// blob? No — wasm-bindgen handles `Vec<JsValue>` poorly.
         /// Easier: each call returns one page; iterate by index.
-        /// Returns `None` past the end. Tuple is `[page_id, w_pt, h_pt]`
-        /// serialised as a JS array.
+        /// Returns `None` past the end. Tuple is `[page_id, w_pt, h_pt,
+        /// x_pt, y_pt]` serialised as a JS array; `x_pt` / `y_pt` (v77) are
+        /// the page's top-left on the canvas (engine ADR 1011).
         #[wasm_bindgen(js_name = pageInfo)]
         pub fn page_info(&self, index: usize) -> Option<js_sys::Array> {
             let model = self.core.model.as_ref()?;
             let page = model.built().pages.get(index)?;
-            let arr = js_sys::Array::new_with_length(3);
+            let arr = js_sys::Array::new_with_length(5);
             arr.set(0, JsValue::from_str(page.id.as_str()));
             arr.set(1, JsValue::from_f64(page.width_pt as f64));
             arr.set(2, JsValue::from_f64(page.height_pt as f64));
+            // v77 (engine ADR 1011) — the page's top-left on the canvas.
+            arr.set(3, JsValue::from_f64(page.canvas_origin.0 as f64));
+            arr.set(4, JsValue::from_f64(page.canvas_origin.1 as f64));
             Some(arr)
         }
 
@@ -592,10 +596,11 @@ mod wasm {
             };
             let mode = model.view_settings().mode;
 
-            // Document space (pt) → surface (device px). Pages stack
-            // down the document's y axis; the camera adds its pan, scale
-            // and rotation; dpr brings CSS px → device px.
-            const PAGE_GAP_PT: f32 = 24.0;
+            // Document space (pt) → surface (device px). Each page sits at
+            // its place on the canvas (engine ADR 1011:
+            // `BuiltPage::canvas_origin`, the default vertical stack unless
+            // the page was placed); the camera adds its pan, scale and
+            // rotation; dpr brings CSS px → device px.
             let k = scale * dpr;
             let rotation = if rotation.is_finite() { rotation } else { 0.0 };
             let (sin, cos) = rotation.sin_cos();
@@ -610,14 +615,18 @@ mod wasm {
             // this view. Visibility = the page's surface-space bbox
             // intersects [0..vw, 0..vh]. Pages below the threshold aren't
             // touched, so their cache entries become LRU candidates.
-            let mut y_pt = 0.0_f32;
-            let mut visible: Vec<(usize, SceneView, f32)> = Vec::new();
+            let mut visible: Vec<(usize, SceneView, f32, f32)> = Vec::new();
             for (idx, built_page) in model.built().pages.iter().enumerate() {
+                let (x_pt, y_pt) = built_page.canvas_origin;
                 let corners = [
-                    apply(camera, 0.0, y_pt),
-                    apply(camera, built_page.width_pt, y_pt),
-                    apply(camera, built_page.width_pt, y_pt + built_page.height_pt),
-                    apply(camera, 0.0, y_pt + built_page.height_pt),
+                    apply(camera, x_pt, y_pt),
+                    apply(camera, x_pt + built_page.width_pt, y_pt),
+                    apply(
+                        camera,
+                        x_pt + built_page.width_pt,
+                        y_pt + built_page.height_pt,
+                    ),
+                    apply(camera, x_pt, y_pt + built_page.height_pt),
                 ];
                 let min_x = corners.iter().map(|p| p.0).fold(f32::INFINITY, f32::min);
                 let max_x = corners
@@ -645,24 +654,25 @@ mod wasm {
                         let scene = build_view_scene(built_page, view);
                         self.scene_cache.insert((idx, view), scene);
                     }
-                    visible.push((idx, view, y_pt));
+                    visible.push((idx, view, x_pt, y_pt));
                 }
-                y_pt += built_page.height_pt + PAGE_GAP_PT;
             }
 
             // Pass 2: the (scene, transform) list. Every visible page's
             // entry is present after pass 1.
             let bg = paged_compose::Color::rgba(0.831, 0.851, 0.871, 1.0);
-            let compose =
-                |m: [f32; 6], y: f32| [m[0], m[1], m[2], m[3], m[2] * y + m[4], m[3] * y + m[5]];
+            let compose = |m: [f32; 6], x: f32, y: f32| {
+                let (ex, ey) = apply(m, x, y);
+                [m[0], m[1], m[2], m[3], ex, ey]
+            };
             let pixel = mode.pixel_preview();
             let mut pages: Vec<(&paged_gpu::VelloScene, [f32; 6])> = Vec::new();
-            for &(idx, view, y) in &visible {
+            for &(idx, view, x, y) in &visible {
                 if let Some(scene) = self.scene_cache.entries.get(&(idx, view)) {
                     let placement = if pixel {
-                        [1.0, 0.0, 0.0, 1.0, 0.0, y]
+                        [1.0, 0.0, 0.0, 1.0, x, y]
                     } else {
-                        compose(camera, y)
+                        compose(camera, x, y)
                     };
                     pages.push((scene, placement));
                 }
@@ -673,8 +683,8 @@ mod wasm {
                     Ok(false) => {
                         // Below 1 px/pt there is nothing to enlarge:
                         // present the vector scenes instead.
-                        for (entry, &(_, _, y)) in pages.iter_mut().zip(visible.iter()) {
-                            entry.1 = compose(camera, y);
+                        for (entry, &(_, _, x, y)) in pages.iter_mut().zip(visible.iter()) {
+                            entry.1 = compose(camera, x, y);
                         }
                     }
                     Err(e) => {

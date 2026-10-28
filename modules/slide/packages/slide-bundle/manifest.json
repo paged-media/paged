@@ -53,7 +53,10 @@
       "media.paged.slide.command.export",
       "media.paged.slide.command.saveAsTemplate",
       "media.paged.slide.command.customShows",
-      "media.paged.slide.command.addSection"
+      "media.paged.slide.command.addSection",
+      "media.paged.slide.command.animationPane",
+      "media.paged.slide.command.previewAnimations",
+      "media.paged.slide.command.animationPainter"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
     "exporters": [
@@ -87,7 +90,8 @@
       "media.paged.slide.panel.deck",
       "media.paged.slide.panel.comments",
       "media.paged.slide.panel.shapes",
-      "media.paged.slide.panel.customShows"
+      "media.paged.slide.panel.customShows",
+      "media.paged.slide.panel.animations"
     ],
     "partTypes": [
       {
@@ -360,6 +364,42 @@
           "id": "media.paged.slide.deleteSection",
           "title": "Remove a section",
           "args": "schema/delete-section.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.addAnimation",
+          "title": "Add an animation",
+          "args": "schema/add-animation.args.json",
+          "result": "schema/add-animation.result.json"
+        },
+        {
+          "id": "media.paged.slide.removeAnimation",
+          "title": "Remove an animation",
+          "args": "schema/remove-animation.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.setAnimationTiming",
+          "title": "Set an animation's timing",
+          "args": "schema/set-animation-timing.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.moveAnimation",
+          "title": "Move an animation",
+          "args": "schema/move-animation.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.listAnimations",
+          "title": "List a slide's animations",
+          "args": "schema/list-animations.args.json",
+          "result": "schema/list-animations.result.json"
+        },
+        {
+          "id": "media.paged.slide.previewAnimations",
+          "title": "Preview a slide's animations",
+          "args": "schema/preview-animations.args.json",
           "result": "schema/empty.json"
         }
       ],

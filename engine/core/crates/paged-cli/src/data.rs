@@ -42,8 +42,9 @@
 //! 1014, amendments 3 and 4). What no headless lane can write is reported
 //! per binding, never skipped silently: a remote image whose origin the run
 //! does not list (`--allow-origin`, amendment 5: the run's consent, as the
-//! editor's per-origin consent is) and document asset ids (no document keeps
-//! their bytes).
+//! editor's per-origin consent is) and a document asset id the input does
+//! not carry (an IDML input, or a `.paged` without that asset; amendment 6:
+//! an `asset:<id>` resolves from the container's asset index and part).
 
 use std::path::{Path, PathBuf};
 
@@ -744,6 +745,129 @@ fn fitted(session: &Session, raw: &str, fit: &str, bytes: &[u8]) -> Option<[f32;
     )
 }
 
+/// The `.paged` container part paged.data keeps its asset index in (data
+/// ADR 563, amendment 2026-10-28): `{ v: 1, refs: { <reference>: { hash,
+/// columns } }, assets: { <hash>: { mediaType, bytes } } }`.
+const ASSET_INDEX_PART: &str = "paged/media.paged.data/assets.json";
+/// Where each asset's bytes are, one part per content hash.
+const ASSET_PART_DIR: &str = "paged/media.paged.data/assets/";
+
+/// The asset bytes a `.paged` container carries, read once per apply: an
+/// `asset:<id>` names an asset by the reference its asset column resolved
+/// or by its content hash.
+struct DocumentAssets {
+    /// Whether the input is a `.paged` container (an IDML package carries
+    /// no parts: its pictures are links).
+    container: bool,
+    /// The index, once read: `Err` says why there is none.
+    index: Option<std::result::Result<Value, String>>,
+}
+
+impl DocumentAssets {
+    fn of(doc: &Path) -> Self {
+        let idml = doc
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("idml"));
+        DocumentAssets {
+            container: !idml,
+            index: None,
+        }
+    }
+
+    /// The bytes a `.paged` carries for `reference` (an asset column's
+    /// resolved url), when its index lists it and the part is there; `None`
+    /// for anything else, so the caller falls back to its own route.
+    fn carried(&mut self, session: &mut Session, reference: &str) -> Option<(Vec<u8>, String)> {
+        if !self.container {
+            return None;
+        }
+        let listed = self.index_of(session).ok()?["refs"]
+            .get(reference)
+            .is_some();
+        if !listed {
+            return None;
+        }
+        self.resolve(session, reference).ok()
+    }
+
+    /// The asset index, read once.
+    fn index_of(&mut self, session: &mut Session) -> std::result::Result<&Value, String> {
+        self.index
+            .get_or_insert_with(|| match read_part(session, ASSET_INDEX_PART) {
+                Ok(Some(bytes)) => serde_json::from_slice::<Value>(&bytes)
+                    .map_err(|e| format!("the asset index {ASSET_INDEX_PART} is not JSON ({e})")),
+                Ok(None) => Err(format!(
+                    "the .paged container has no asset index ({ASSET_INDEX_PART}: the editor \
+                     writes it when it saves a document whose asset columns fetched their pictures)"
+                )),
+                Err(e) => Err(format!("{ASSET_INDEX_PART}: {e}")),
+            })
+            .as_ref()
+            .map_err(|e| e.clone())
+    }
+
+    /// The bytes `asset:<id>` names and the part they came from, or why
+    /// they cannot be had headless.
+    fn resolve(
+        &mut self,
+        session: &mut Session,
+        id: &str,
+    ) -> std::result::Result<(Vec<u8>, String), String> {
+        if !self.container {
+            return Err(format!(
+                "asset:{id}: an IDML document carries no asset bytes (they travel in a .paged \
+                 container; an IDML export links its pictures)"
+            ));
+        }
+        let index = self
+            .index_of(session)
+            .map_err(|e| format!("asset:{id}: {e}"))?;
+        let hash = index["refs"][id]["hash"]
+            .as_str()
+            .or_else(|| index["assets"].get(id).map(|_| id))
+            .filter(|h| !h.is_empty() && h.bytes().all(|b| b.is_ascii_hexdigit()))
+            .ok_or_else(|| format!("asset:{id}: the document's asset index names no asset {id:?}"))?
+            .to_string();
+        let part = format!("{ASSET_PART_DIR}{hash}");
+        match read_part(session, &part) {
+            // A part is named by its bytes' SHA-256 (the editor's asset
+            // cache key): bytes that do not hash to their name are not the
+            // picture the index means.
+            Ok(Some(bytes)) if sha256_hex(&bytes) == hash.to_ascii_lowercase() => Ok((bytes, part)),
+            Ok(Some(_)) => Err(format!(
+                "asset:{id}: {part} does not hold the bytes its name hashes (it is not the \
+                 picture the index names)"
+            )),
+            Ok(None) => Err(format!(
+                "asset:{id}: the asset index names {part}, but the container has no such part"
+            )),
+            Err(e) => Err(format!("asset:{id}: {part}: {e}")),
+        }
+    }
+}
+
+/// SHA-256 of `bytes`, lowercase hex.
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// One container part's bytes, `None` when there is no such part.
+fn read_part(session: &mut Session, path: &str) -> Result<Option<Vec<u8>>> {
+    match session.send(MainToWorkerKind::ReadPagedPart {
+        path: path.to_string(),
+    })? {
+        WorkerToMainKind::PagedPartRead { found: false, .. } => Ok(None),
+        WorkerToMainKind::PagedPartRead { bytes, .. } => Ok(Some(bytes.as_slice().to_vec())),
+        WorkerToMainKind::PagedPartFailed { error } => bail!("{error}"),
+        other => bail!("unexpected reply to a part read: {other:?}"),
+    }
+}
+
 /// An image binding: the picture's bytes into its frame
 /// (`ReplaceImageBytes`, the lane `paged place` uses: a link would resolve
 /// against a resolver this door never populates), then its fit. A local
@@ -757,6 +881,7 @@ fn apply_image(
     facts: &HostFacts,
     source_dirs: &[PathBuf],
     origins: &FetchPolicy,
+    doc_assets: &mut DocumentAssets,
 ) -> Applied {
     let binding = id.as_str();
     let image = match data.resolve_lowered_at(id, record) {
@@ -779,29 +904,32 @@ fn apply_image(
         Err(e) => return failed(binding, e.to_string()),
     };
     let (bytes, shown) = match &image.reference {
-        ImageReference::Uri { uri } => match crate::fetch::fetch(origins, uri) {
-            Fetched::Bytes(bytes) => (bytes, uri.clone()),
-            Fetched::NotListed(origin) => {
-                return Applied::new(binding, "notHeadless").because(format!(
-                    "{uri}: remote images need the editor's consented fetch, or \
+        ImageReference::Uri { uri } => match doc_assets.carried(session, uri) {
+            // The document carries the picture its asset column fetched
+            // (data ADR 563): placed from that part, nothing fetched.
+            Some((bytes, part)) => (bytes, format!("{uri} ({part})")),
+            None => match crate::fetch::fetch(origins, uri) {
+                Fetched::Bytes(bytes) => (bytes, uri.clone()),
+                Fetched::NotListed(origin) => {
+                    return Applied::new(binding, "notHeadless").because(format!(
+                        "{uri}: remote images need the editor's consented fetch, or \
                      --allow-origin {origin} on this run (nothing is fetched from an origin \
                      the run does not list)"
-                ))
-            }
-            Fetched::NoClient => {
-                return Applied::new(binding, "notHeadless").because(format!(
-                    "{uri}: remote images need the editor's consented fetch (this paged was \
+                    ))
+                }
+                Fetched::NoClient => {
+                    return Applied::new(binding, "notHeadless").because(format!(
+                        "{uri}: remote images need the editor's consented fetch (this paged was \
                      built without the `fetch` feature: it has no network client)"
-                ))
-            }
-            Fetched::Failed(message) => return failed(binding, format!("{uri}: {message}")),
+                    ))
+                }
+                Fetched::Failed(message) => return failed(binding, format!("{uri}: {message}")),
+            },
         },
-        ImageReference::AssetId { id: asset } => {
-            return Applied::new(binding, "notHeadless").because(format!(
-                "asset:{asset}: no asset store keeps an asset id's bytes — neither a \
-                 .paged container part nor the editor maps the id to a picture"
-            ))
-        }
+        ImageReference::AssetId { id: asset } => match doc_assets.resolve(session, asset) {
+            Ok((bytes, part)) => (bytes, format!("asset:{asset} ({part})")),
+            Err(reason) => return Applied::new(binding, "notHeadless").because(reason),
+        },
         ImageReference::None => {
             return Applied::new(binding, "kept").because("the value names no image")
         }
@@ -1709,6 +1837,7 @@ pub fn apply(
         .filter_map(|(_, file)| file.parent().map(Path::to_path_buf))
         .collect();
     let facts = &recipe.facts;
+    let mut doc_assets = DocumentAssets::of(doc);
     let mut rules = Vec::new();
     for (id, binding) in &defs {
         let lowered = matches!(
@@ -1738,6 +1867,7 @@ pub fn apply(
                 facts,
                 &source_dirs,
                 &origins,
+                &mut doc_assets,
             )),
             Binding::Barcode { .. } => {
                 applied.push(apply_barcode(&mut session, &mut data, id, record, facts))

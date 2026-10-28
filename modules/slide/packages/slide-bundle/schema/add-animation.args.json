@@ -1,0 +1,45 @@
+{
+  "kind": "struct",
+  "fields": {
+    "slide": {
+      "kind": "ref",
+      "to": "plugin:media.paged.slide/slide",
+      "optional": true
+    },
+    "shape": {
+      "kind": "text"
+    },
+    "effect": {
+      "kind": "text",
+      "optional": true
+    },
+    "presetClass": {
+      "kind": "text",
+      "optional": true
+    },
+    "presetId": {
+      "kind": "number",
+      "optional": true
+    },
+    "direction": {
+      "kind": "text",
+      "optional": true
+    },
+    "start": {
+      "kind": "text",
+      "optional": true
+    },
+    "durationMs": {
+      "kind": "number",
+      "optional": true
+    },
+    "delayMs": {
+      "kind": "number",
+      "optional": true
+    },
+    "byParagraph": {
+      "kind": "bool",
+      "optional": true
+    }
+  }
+}

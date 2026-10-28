@@ -39,6 +39,8 @@
 //! Everything is generated in-process and deterministic: no fixture bytes
 //! are committed, and two runs build the same document.
 
+pub mod planar;
+
 use paged_canvas::{CanvasModel, CanvasOptions, Mutation};
 use serde_json::json;
 

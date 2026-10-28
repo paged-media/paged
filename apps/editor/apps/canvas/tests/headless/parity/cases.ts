@@ -747,6 +747,12 @@ export const PARITY_CASES: readonly ParityCase[] = [
     boa: (a) => `paged.movePage(${q(a.page)})`,
   },
   {
+    // Engine ADR 1011 — a page (an artboard) placed on the canvas.
+    op: "placePage",
+    args: { page: P.page2, originPt: [900, 40] },
+    boa: (a) => `paged.placePage(${q(a.page)}, ${q(a.originPt)})`,
+  },
+  {
     op: "applyMasterToPage",
     args: { page: P.page2, master: null },
     boa: (a) => `paged.applyMasterToPage(${q(a.page)})`,

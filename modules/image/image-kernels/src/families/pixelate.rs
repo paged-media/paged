@@ -612,15 +612,37 @@ fn sample_straight(p: vec2<f32>) -> vec3<f32> {
     return clamp(c.rgb / c.a, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
-fn channel_cov(gp: vec2<f32>, deg: f32, ch: i32, r_max: f32) -> f32 {
-    let th = deg * 0.017453292519943295;
-    let cs = cos(th);
-    let sn = sin(th);
+// sin and cos of an angle in degrees in plain f32 arithmetic: exact
+// reduction to [-45, 45] degrees by quarter turns, then the Taylor series.
+// The built-ins' accuracy differs between GPUs (a driver may trade it for
+// speed), and a screen angle error moves every dot edge in proportion to its
+// distance from the origin: the parity gate saw one GPU 55 f16 ULP off at a
+// dot edge where another matched the reference exactly.
+fn sincos_deg(deg: f32) -> vec2<f32> {
+    let q = round(deg / 90.0);
+    let x = (deg - q * 90.0) * 0.017453292519943295;
+    let x2 = x * x;
+    let s = x * (1.0 - x2 / 6.0 * (1.0 - x2 / 20.0 * (1.0 - x2 / 42.0 * (1.0 - x2 / 72.0))));
+    let c = 1.0 - x2 / 2.0 * (1.0 - x2 / 12.0 * (1.0 - x2 / 30.0 * (1.0 - x2 / 56.0)));
+    let k = ((i32(q) % 4) + 4) % 4;
+    if (k == 1) { return vec2<f32>(c, -s); }
+    if (k == 2) { return vec2<f32>(-s, -c); }
+    if (k == 3) { return vec2<f32>(-c, s); }
+    return vec2<f32>(s, c);
+}
+
+// The paper a channel's screen leaves at `gp`: 1 − the largest dot
+// coverage, taken as the smallest `dist − rad + 0.5` so a pixel the ink
+// nearly fills keeps its precision (1 − 0.9999… would cancel it away).
+fn channel_paper(gp: vec2<f32>, deg: f32, ch: i32, r_max: f32) -> f32 {
+    let sc = sincos_deg(deg);
+    let sn = sc.x;
+    let cs = sc.y;
     let cell = 2.0 * r_max;
     let u = vec2<f32>(cs * gp.x + sn * gp.y, cs * gp.y - sn * gp.x);
     let idx = floor(u / cell);
     let o = vec2<f32>(f32(params.ox), f32(params.oy));
-    var best = 0.0;
+    var paper = 1.0;
     for (var j : i32 = -1; j <= 1; j = j + 1) {
         for (var i : i32 = -1; i <= 1; i = i + 1) {
             let uc = (idx + vec2<f32>(f32(i), f32(j)) + vec2<f32>(0.5)) * cell;
@@ -632,10 +654,10 @@ fn channel_cov(gp: vec2<f32>, deg: f32, ch: i32, r_max: f32) -> f32 {
             let rad = r_max * sqrt(2.0 * (1.0 - v));
             let dv = u - uc;
             let dist = sqrt(dv.x * dv.x + dv.y * dv.y);
-            best = max(best, clamp(rad - dist + 0.5, 0.0, 1.0));
+            paper = min(paper, clamp(dist - rad + 0.5, 0.0, 1.0));
         }
     }
-    return best;
+    return paper;
 }
 
 @compute @workgroup_size(16, 16, 1)
@@ -646,11 +668,11 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let a = tap(xy);
     let r_max = clamp(params.max_radius, 4.0, 127.0);
     let gp = vec2<f32>(xy) + vec2<f32>(0.5) + vec2<f32>(f32(params.ox), f32(params.oy));
-    let ink = vec3<f32>(
-        channel_cov(gp, params.angle1, 0, r_max),
-        channel_cov(gp, params.angle2, 1, r_max),
-        channel_cov(gp, params.angle3, 2, r_max));
-    let styled = vec4<f32>((vec3<f32>(1.0) - ink) * a.a, a.a);
+    let paper = vec3<f32>(
+        channel_paper(gp, params.angle1, 0, r_max),
+        channel_paper(gp, params.angle2, 1, r_max),
+        channel_paper(gp, params.angle3, 2, r_max));
+    let styled = vec4<f32>(paper * a.a, a.a);
     let result = mix(a, styled, vec4<f32>(clamp(params.amount, 0.0, 1.0)));
     let m = textureLoad(mask, xy, 0).r;
     textureStore(outp, xy, mix(a, result, vec4<f32>(m)));

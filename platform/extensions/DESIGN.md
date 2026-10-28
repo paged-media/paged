@@ -308,7 +308,8 @@ door cannot afford:
 
 - `found: false` + `reason` — the query could not be answered at all:
   no document, an id that doesn't resolve, or more than the kernel's
-  `MAX_PLANAR_INPUTS` (12) inputs / more than 256 faces. The engine
+  `MAX_PLANAR_INPUTS` (1000) inputs / more than 100 000 faces / past the
+  work budget (engine ADR 1019). The engine
   REFUSES rather than truncating, and a caller that rendered that as an
   empty face list would tell the user "these paths divide into nothing".
   paged.draw already surfaces `reason` verbatim on a status binding;
@@ -745,6 +746,16 @@ elementIds?, text?, minify?, region? })` is a read. Both answer an outcome
 on an engine before 77, never a throw. paged.draw's SVG importer and
 exporter delegate to them and keep their own TypeScript reader as the
 fallback for a host without the flags.
+
+Free page placement (engine ADR 1011) needs no flag: `placePage { page,
+originPt? }` is a new wire op, so protocol 77's handshake proves the engine
+has it. It puts a page (an artboard) at `originPt` on the canvas, absent
+returns it to the default vertical stack; the page order stays
+`movePage`'s. The vendored wire carries where every page sits —
+`DocumentHandle.pageOriginsPt`, `pageOriginsPt` beside every `pageSizesPt`,
+and the pages collection's `canvasOriginPt` / `canvasPlaced` / `boundsPt` —
+and the catalog the `pageCanvasOrigin` page path. An artboard's name is the
+page metadata entry `x-paged:paged.artboard` (`{"v":1,"data":{"name"}}`).
 
 ### 4.9 `host.editor` — the marked escape hatch
 
@@ -2914,7 +2925,11 @@ place of the canvas (a slide sorter), and a page as composable layers.
   the background without `items`/`hideItems` and each item alone, cropped, every layer with its
   page `region`, at one scale; `"bitmap"` (decoded `ImageBitmap`s, the default in a browser),
   `"png"` or `"rgba"`. Built on `render.snapshot` / `render.element`; never the canvas's markers.
-- **Probes.** `contribute.presentation@1`, `contribute.view@1`, `render.layers@1` (static);
+  `paragraphs` (C4, ADR 346 amendment): text frames whose paragraphs come back as layers of their
+  own (`RenderedLayers.paragraphs`, each with its `paragraph` index), cut along the engine's line
+  geometry.
+- **Probes.** `contribute.presentation@1`, `contribute.view@1`, `render.layers@1`,
+  `render.layers.paragraphs@1` (static);
   `shell.present@1`, `shell.present.secondary@1`, `shell.views@1` (the editor's registries). The
   harness wires a presenter and a view registry that keep state and draw nothing.
 - **Isolate.** A presentation's DOM surface becomes a transferred `OffscreenCanvas` and a

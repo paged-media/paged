@@ -1219,6 +1219,44 @@ pub struct Page {
     /// frames/lines/text onto the page; `None`/`Some(true)` ⇒ stamp as
     /// usual.
     pub show_master_items: Option<bool>,
+    /// Engine ADR 1011 — where the page sits on the editor's pasteboard
+    /// (the canvas), its top-left in document points: an artboard's
+    /// position. `None` (every imported page, every page made without a
+    /// placement) is the default slot of [`canvas_layout`]: pages stacked
+    /// down the canvas in document order with [`CANVAS_PAGE_GAP_PT`]
+    /// between them, the layout the editor always showed. Native: IDML
+    /// has no free page placement (its spreads stack), so the writer
+    /// reports a moved page as a loss. Not serialised when `None`, so a
+    /// document nobody arranged is byte- and hash-identical to before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas_origin: Option<[f32; 2]>,
+}
+
+/// Engine ADR 1011 — the gap between two pages in the default canvas
+/// layout, pt. The editor, the viewer session and the canvas presenter
+/// stacked pages with it before pages could be placed.
+pub const CANVAS_PAGE_GAP_PT: f32 = 24.0;
+
+/// Engine ADR 1011 — every page's top-left on the canvas, pt, in document
+/// order. `pages` yields each page's size `(width, height)` and its
+/// explicit [`Page::canvas_origin`]. A placed page sits where it was put;
+/// an unplaced one takes its DEFAULT SLOT: `x = 0`, `y` the sum of the
+/// heights of the pages before it plus one [`CANVAS_PAGE_GAP_PT`] each —
+/// the vertical stack, independent of where any other page was placed, so
+/// moving one page never moves another.
+pub fn canvas_layout(
+    pages: impl IntoIterator<Item = ((f32, f32), Option<[f32; 2]>)>,
+) -> Vec<(f32, f32)> {
+    let mut out = Vec::new();
+    let mut y = 0.0_f32;
+    for ((_, h), origin) in pages {
+        out.push(match origin {
+            Some([ox, oy]) => (ox, oy),
+            None => (0.0, y),
+        });
+        y += h + CANVAS_PAGE_GAP_PT;
+    }
+    out
 }
 
 impl Page {
@@ -1235,6 +1273,7 @@ impl Page {
             override_list: Vec::new(),
             name: None,
             show_master_items: None,
+            canvas_origin: None,
         }
     }
 }
@@ -10041,5 +10080,50 @@ mod word_model_tests {
             !json.contains("decorations"),
             "unset decorations are not serialised"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(non_snake_case)] // the `__feat__<id>` suffix links each test to its cockpit feature
+mod canvas_layout_tests {
+    use super::*;
+
+    #[test]
+    fn unplaced_pages_stack_down_the_canvas__feat__layout_model_artboards() {
+        let got = canvas_layout([((612.0, 792.0), None), ((400.0, 300.0), None)]);
+        assert_eq!(got, vec![(0.0, 0.0), (0.0, 792.0 + CANVAS_PAGE_GAP_PT)]);
+    }
+
+    #[test]
+    fn a_placed_page_moves_no_other_page__feat__layout_model_artboards() {
+        let got = canvas_layout([
+            ((612.0, 792.0), Some([900.0, -50.0])),
+            ((612.0, 792.0), None),
+            ((612.0, 792.0), None),
+        ]);
+        assert_eq!(got[0], (900.0, -50.0));
+        // The second and third keep their stacked slots.
+        assert_eq!(got[1], (0.0, 816.0));
+        assert_eq!(got[2], (0.0, 1632.0));
+    }
+
+    #[test]
+    fn an_unplaced_page_serialises_without_an_origin__feat__layout_model_artboards() {
+        let page = Page::new(
+            "p1",
+            Bounds {
+                top: 0.0,
+                left: 0.0,
+                bottom: 10.0,
+                right: 10.0,
+            },
+        );
+        let json = serde_json::to_string(&page).unwrap();
+        assert!(!json.contains("canvas_origin"), "{json}");
+        let mut placed = page.clone();
+        placed.canvas_origin = Some([5.0, 6.0]);
+        let json = serde_json::to_string(&placed).unwrap();
+        let back: Page = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.canvas_origin, Some([5.0, 6.0]));
     }
 }

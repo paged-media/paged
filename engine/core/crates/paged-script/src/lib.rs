@@ -897,6 +897,7 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             2,
         )
         .function(guarded(paged_move_page), js_string!("movePage"), 2)
+        .function(guarded(paged_place_page), js_string!("placePage"), 2)
         .function(guarded(paged_on_master), js_string!("onMaster"), 2)
         .function(guarded(paged_create_master), js_string!("createMaster"), 2)
         .function(guarded(paged_delete_master), js_string!("deleteMaster"), 1)
@@ -948,7 +949,7 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("outlineStroke"),
             5,
         )
-        .function(guarded(paged_offset_path), js_string!("offsetPath"), 4)
+        .function(guarded(paged_offset_path), js_string!("offsetPath"), 5)
         .function(guarded(paged_simplify_path), js_string!("simplifyPath"), 2)
         .function(
             guarded(paged_pathfinder_boolean),
@@ -2252,6 +2253,44 @@ fn paged_move_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRe
     }))
 }
 
+/// `paged.placePage(pageId, [x, y]?)` — put a page (an artboard) at
+/// `[x, y]` on the canvas, its top-left in pt; omitted/null returns it to
+/// its default slot (`Mutation::PlacePage`, v77, engine ADR 1011). A value
+/// that is not a pair of numbers refuses (`false`).
+fn paged_place_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let at = args.get_or_undefined(1);
+    let origin_pt = if at.is_null_or_undefined() {
+        None
+    } else {
+        let Some(obj) = at.as_object() else {
+            return Ok(JsValue::from(false));
+        };
+        let len = obj
+            .get(js_string!("length"), ctx)
+            .ok()
+            .and_then(|v| v.as_number());
+        if len != Some(2.0) {
+            return Ok(JsValue::from(false));
+        }
+        let mut xy = [0.0f32; 2];
+        for (i, slot) in xy.iter_mut().enumerate() {
+            match obj.get(i as u32, ctx).ok().and_then(|v| v.as_number()) {
+                Some(n) => *slot = n as f32,
+                None => return Ok(JsValue::from(false)),
+            }
+        }
+        Some((xy[0], xy[1]))
+    };
+    Ok(apply_bool(&Mutation::PlacePage {
+        page: PageId(page),
+        origin_pt,
+    }))
+}
+
 /// `paged.createMaster(masterId, { name?, widthPt?, heightPt?,
 /// duplicateOf? })` — create a master spread (`Mutation::CreateMaster`).
 fn paged_create_master(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -2802,8 +2841,9 @@ fn paged_outline_stroke(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
     }))
 }
 
-/// `paged.offsetPath(elemId, delta, join, miter)` — inset/outset a single
-/// closed contour (`Mutation::OffsetPath`).
+/// `paged.offsetPath(elemId, delta, join, miter, side?)` — inset/outset
+/// a path; `side` (`"both"` default, `"left"`, `"right"`) picks the side
+/// an OPEN contour is offset to (`Mutation::OffsetPath`, engine ADR 1019).
 fn paged_offset_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let id = args
         .get_or_undefined(0)
@@ -2818,11 +2858,18 @@ fn paged_offset_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> Js
         .to_string(ctx)?
         .to_std_string_escaped();
     let miter_limit = args.get_or_undefined(3).to_number(ctx)? as f32;
+    let side = args.get_or_undefined(4);
+    let side = if side.is_undefined() || side.is_null() {
+        None
+    } else {
+        Some(side.to_string(ctx)?.to_std_string_escaped())
+    };
     Ok(apply_bool(&Mutation::OffsetPath {
         element_id,
         delta,
         join,
         miter_limit,
+        side,
     }))
 }
 

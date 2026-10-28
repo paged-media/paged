@@ -352,6 +352,9 @@ export function coversDoor(
         case "placeImage":
           covers("script:paged.placeImage");
           return;
+        case "placePage":
+          covers("script:paged.placePage");
+          return;
         case "releaseFrom":
           covers("script:paged.releaseFrom");
           return;

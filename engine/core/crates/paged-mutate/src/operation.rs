@@ -414,6 +414,12 @@ pub enum PropertyPath {
     /// Items keep their coordinates (InDesign's layout-adjust off);
     /// `spread_origin` re-derives on rebuild.
     PageBounds,
+    /// Engine ADR 1011 — a page's place on the canvas (its artboard
+    /// position): `Value::Lengths([x, y])`, the page's top-left in
+    /// document points; the empty list returns the page to its default
+    /// slot (`paged_model::canvas_layout`). Only `NodeId::Page` carries
+    /// it. Content keeps its page coordinates, so it moves with the page.
+    PageCanvasOrigin,
     /// SDK Phase 5 (v1 sweep) — drop-shadow per-field editors.
     /// All five operate on the frame's `drop_shadow:
     /// Option<DropShadowSetting>`. Writing to any of them
@@ -1739,6 +1745,7 @@ impl PropertyPath {
             PropertyPath::ClosePath => "path.close",
             PropertyPath::FrameGradientFeather => "frame.gradientFeather",
             PropertyPath::PageBounds => "page.bounds",
+            PropertyPath::PageCanvasOrigin => "page.canvasOrigin",
             PropertyPath::FrameNonprinting => "frame.nonprinting",
             PropertyPath::FrameDropShadowMode => "frame.dropShadowMode",
             PropertyPath::FrameDropShadowXOffset => "frame.dropShadowXOffset",
@@ -2650,6 +2657,12 @@ pub enum Value {
         delta: f32,
         join: String,
         miter_limit: f32,
+        /// Engine ADR 1019 — which side an OPEN contour is offset to:
+        /// `"both"` (absent: the two-sided band), `"left"` or `"right"`
+        /// of its direction on the page (one open parallel path).
+        /// Closed contours ignore it.
+        #[serde(default)]
+        side: Option<String>,
         #[serde(default)]
         prev_anchors: Option<Vec<PathAnchorSpec>>,
         #[serde(default)]

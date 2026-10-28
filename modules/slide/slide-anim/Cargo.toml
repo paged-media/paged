@@ -1,0 +1,22 @@
+[package]
+name = "slide-anim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: animation timing evaluated (the show's per-frame state), listed and edited (slide ADR 714)."
+
+[lints]
+workspace = true
+
+[dependencies]
+pptx-core.workspace = true
+# Preset templates are kept as PowerPoint's XML and read through the
+# importer's timing reader (slide-js links it anyway).
+pptx-import.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+paged-ooxml.workspace = true

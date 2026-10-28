@@ -109,6 +109,10 @@
       ]
     },
     {
+      "tool": "paged.tool.artboard",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
       "tool": "paged.tool.page",
       "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
     },

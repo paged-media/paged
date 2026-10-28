@@ -47,7 +47,11 @@ import { workerJournal } from "./journal";
  */
 export interface RendererWasm {
   pageCount(): number;
-  pageInfo(index: number): [string, number, number] | undefined;
+  /** `[id, widthPt, heightPt, xPt?, yPt?]` — the last two (v77, engine
+   *  ADR 1011) are the page's top-left on the canvas. */
+  pageInfo(
+    index: number,
+  ): [string, number, number, number?, number?] | undefined;
   renderTilePng(pageId: string, targetWidthPx: number): Uint8Array | undefined;
   /**
    * When set, the renderer uses Vello via the worker's WebGPU
@@ -187,14 +191,20 @@ export class WorkerRenderer {
   refreshLayout(): void {
     const count = this.wasm.pageCount();
     const sizes: Array<[number, number]> = [];
+    const origins: Array<[number, number]> = [];
     const ids: PageId[] = [];
     for (let i = 0; i < count; i++) {
       const info = this.wasm.pageInfo(i);
       if (!info) continue;
       ids.push(info[0]);
       sizes.push([info[1], info[2]]);
+      if (info[3] !== undefined && info[4] !== undefined) {
+        origins.push([info[3], info[4]]);
+      }
     }
-    const rects = layoutPages(sizes);
+    // Each page at its place on the canvas; an older engine reports none
+    // and the pages stack.
+    const rects = layoutPages(sizes, origins);
     this.pages = ids.map((pageId, i) => ({ pageId, rect: rects[i], index: i }));
     // New document → previous tiles are stale. Clear them.
     for (const t of this.tiles.values()) t.bitmap.close();

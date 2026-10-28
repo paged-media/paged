@@ -2447,6 +2447,15 @@ fn page_cases(c: &mut Vec<Case>) {
         page: page_at(m, 1),
         after: None,
     }));
+    c.push(inert(
+        "PlacePage",
+        "layout",
+        "a page's place on the canvas is where presenters put it; its display list stays page-relative",
+        |m| Mutation::PlacePage {
+            page: page_at(m, 1),
+            origin_pt: Some((900.0, 0.0)),
+        },
+    ));
     c.push(paints("DuplicatePage", "layout", |m| {
         Mutation::DuplicatePage {
             page: first_page(m),
@@ -2622,6 +2631,7 @@ fn path_cases(c: &mut Vec<Case>) {
             delta: 24.0,
             join: "miter".into(),
             miter_limit: 4.0,
+            side: None,
         }
     }));
     c.push(paints("SimplifyPath", "geometry", |m| {

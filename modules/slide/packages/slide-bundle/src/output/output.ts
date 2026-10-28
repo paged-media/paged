@@ -34,7 +34,8 @@ import {
   sectionsOf,
 } from "../sections.js";
 import { createFrameSource } from "../show/frames.js";
-import { showSlides } from "../show/contribute.js";
+import { attachAnimations, showSlides } from "../show/contribute.js";
+import { drawScene } from "../show/scene-source.js";
 import { readSlides, type Slide, type SlidesStore } from "../slides-model.js";
 import {
   chosenSlides,
@@ -239,6 +240,18 @@ export class Output {
       slides: req.slides,
     });
     const show = showSlides(chosen, await this.deps.readReport());
+    // Their animations play in the video (slide ADR 714).
+    const engine = await this.deps.engine();
+    try {
+      await attachAnimations(
+        this.host,
+        engine,
+        show,
+        new Map(chosen.map((s) => [s.pageId, s.state.timing])),
+      );
+    } catch {
+      // Without them the slides are drawn whole.
+    }
     const title = await this.deps.deckName();
     const opts: VideoOptions = {
       height: height as VideoOptions["height"],
@@ -253,6 +266,22 @@ export class Output {
         const v = await renderVideo(show, frames, opts, {
           signal,
           onProgress: (p) => progress(p.done, p.total),
+          animation: async (slide, scale) => {
+            if (!slide.anim) return null;
+            const scene = await drawScene(
+              this.host,
+              slide.anim.plan,
+              scale,
+              slide.sizePt,
+            );
+            if (!scene) return null;
+            const player = engine.animPlayer({
+              timing: slide.anim.timing,
+              slide: { w: slide.sizePt[0], h: slide.sizePt[1] },
+              boxes: scene.boxes,
+            });
+            return { scene, player };
+          },
         });
         return { ...v, fileName: `${title || "presentation"}.mp4` };
       } finally {

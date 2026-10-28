@@ -61,3 +61,49 @@ in the frame, so the missing picture shows as an empty frame with a status, not 
   object; it trims the base, saves the column in the session part and announces a change of the
   query, so a reader (the Data panel) reads the columns again. The editor's per-column picker is
   the Data panel's picture column editor (editor ADR 291, amended the same day).
+- Amended 2026-10-28: **a saved `.paged` carries the asset bytes**, so a headless run of `paged
+  data apply` (from a script, CI or a server) can place them (core [ADR 1014](../../../../engine/core/docs/adr/1014-bindings-live-in-labels-and-the-engine-applies-them.md),
+  amendment 6). `persist.ts` `storeAssets`, called from the session's will-save listener after the
+  session part is written:
+  - **Parts.** Each asset the asset columns reference now, whose bytes this session holds, is its
+    own container part `assets/<sha256>` (under the module's `paged/media.paged.data/`), the hash
+    the one the pipeline keeps it by. One part per hash: two references or two columns with the
+    same bytes share it, and a part already in the container is not written again.
+  - **Index.** `assets.json` beside it: `{ v: 1, refs: { <reference>: { hash, columns } },
+    assets: { <hash>: { mediaType, bytes } } }`, keys sorted, so an unchanged index is not
+    rewritten. It is its own part, not in the session part: labelled session versions (protocol
+    69) never name an asset, and the index needs no version of its own.
+  - **What is referenced** is read per asset column from its query's records (the field's value at
+    each record). A column whose query has no records yet (a reopened document before a refresh)
+    keeps what the document carried for it; so does a reference this session has not loaded,
+    while its part is there.
+  - **Consent.** Only bytes the session holds are written: fetched through the consent gate, or
+    read from the document itself. Nothing is fetched to save; a reference with no consent is not
+    written; a `data:` reference is not written either (the data carries its bytes).
+  - **Cleanup.** After the new index is written, every `assets/` part it does not name is deleted
+    (`storage.parts@2`); an empty index deletes `assets.json`.
+  - **Restore.** A reference no cache holds is looked up in the open document's index (read once
+    per document, when first needed, not at open, so opening a document costs no extra host
+    call). Its part is read, checked against its hash, and kept like a fetched asset (memory and
+    `host.blob`). A document opened on another machine shows and re-lowers its pictures with no
+    consent and no network. A part whose bytes are not its hash is ignored, and the reference is
+    fetched as before.
+  - **Size.** A `.paged` grows by the raw bytes of every referenced asset (once per distinct
+    picture), on top of the processed pictures it places as data URIs. That is the price of a
+    document the command line can fill without the server. A link-only column is still a column
+    that is not declared an asset column.
+  - **IDML** exports are unchanged: an IDML package carries no container parts, and its pictures
+    stay links. `paged data apply` on an IDML input reports an asset id `notHeadless` and says so.
+  - An `asset:<id>` image value is placed in the editor too: the id is looked up in the index as
+    a reference or a content hash (`carriedHash`, `persist.ts`), the part is read and checked
+    against its hash, and the asset pipeline places it (through the binding's column chain when it
+    has one). An id the document does not carry is not fetched: its binding says why.
+  - A remote reference the document carries is placed headless from its part, with no
+    `--allow-origin` and no request (core ADR 1014, amendment 6).
+  - Tests: `src/__tests__/persist.test.ts` (one part per hash and an index of every reference,
+    nothing rewritten when unchanged, stale parts deleted after the index, carried entries kept,
+    nothing written that the session never had, the index read back);
+    `src/__tests__/assets.test.ts` (a reference the document carries is read from its part with no
+    consent or fetch, and kept; a part that is not its hash falls back to the fetch);
+    `test/asset-columns-real-core.spec.ts` (save, reopen in another host, placed from the part
+    with no network; the column removed, a save drops the parts and the index).

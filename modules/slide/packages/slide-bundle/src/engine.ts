@@ -32,6 +32,16 @@ import {
   type WasmBindgenGlue,
 } from "@paged-media/wasm-boot";
 
+import type {
+  EffectList,
+  GalleryPreset,
+  PlayerEvent,
+  PlayerFrame,
+  PlayerInput,
+  Timing,
+  TimingEdit,
+} from "./anim/model.js";
+
 const ENGINE_NOT_BUILT =
   "paged.slide engine wasm not built: run scripts/build-wasm.sh";
 
@@ -253,6 +263,9 @@ export interface SlidePlan {
   /** The slide's comments as the document holds them; absent: write them
    *  as the deck had them. */
   comments?: SlideComment[];
+  /** The slide's animations as the document holds them (slide ADR 714);
+   *  absent: as the deck had them. No effects: `{ nodes: [] }`. */
+  timing?: Timing;
 }
 
 /** One labelled page element as the live-preset door takes it
@@ -304,6 +317,12 @@ export interface GalleryItem {
   prst: string;
   category: string;
   path: string;
+}
+
+interface WasmAnimPlayer {
+  clicks(): number;
+  evaluate(events: string, nowMs: number): string;
+  free(): void;
 }
 
 /** What a deck export writes beyond its slides (pptx-export `ExportPlan`,
@@ -377,6 +396,8 @@ export interface SlideWasmModule extends WasmBindgenGlue {
   LiveCharts: new (pptx: Uint8Array) => LiveCharts;
   importPptx(bytes: Uint8Array, name: string): WasmImported;
   live(request: string): string;
+  anim(request: string): string;
+  AnimPlayer: new (input: string) => WasmAnimPlayer;
   embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
   exportPptx(
     original: Uint8Array,
@@ -473,6 +494,34 @@ export class SlideEngine {
     return this.live({ op: "gallery" });
   }
 
+  /** Animations (slide ADR 714): one JSON request to the Rust side, which
+   *  reads, edits and evaluates timings. */
+  private anim<T>(request: object): T {
+    return JSON.parse(this.mod.anim(JSON.stringify(request))) as T;
+  }
+
+  /** A slide's effects as the Animation Pane lists them. */
+  effects(timing: Timing | null): EffectList {
+    if (!timing) return { effects: [], clicks: 0 };
+    return this.anim({ op: "list", timing });
+  }
+
+  /** Every preset by class (the Add Animation gallery). */
+  animationGallery(): GalleryPreset[] {
+    return this.anim({ op: "gallery" });
+  }
+
+  /** `timing` with `edit` made; null when no effect is left. */
+  editTiming(timing: Timing | null, edit: TimingEdit): Timing | null {
+    return this.anim<{ timing: Timing | null }>({ op: "edit", timing, edit })
+      .timing;
+  }
+
+  /** A player for one slide's timing: compiled once, evaluated per frame. */
+  animPlayer(input: PlayerInput): AnimPlayer {
+    return new AnimPlayer(new this.mod.AnimPlayer(JSON.stringify(input)));
+  }
+
   /** Write a `.pptx` from the deck the document was imported from and its
    *  slides in page order. With the document's `.paged` serialization,
    *  what is on the slides is written from it (edited and new slides
@@ -500,6 +549,33 @@ export class SlideEngine {
     } finally {
       out.free();
     }
+  }
+}
+
+/** One slide's animations, compiled (slide-anim `AnimPlayer`). */
+export class AnimPlayer {
+  private freed = false;
+  constructor(private readonly p: WasmAnimPlayer) {}
+
+  /** Clicks the main sequence takes before the slide advances. */
+  clicks(): number {
+    return this.freed ? 0 : this.p.clicks();
+  }
+
+  /** The layers' state at `nowMs` after the slide started, given the
+   *  clicks so far. */
+  evaluate(events: readonly PlayerEvent[], nowMs: number): PlayerFrame {
+    if (this.freed)
+      return { layers: {}, running: false, nextChange: null, commands: [] };
+    return JSON.parse(
+      this.p.evaluate(JSON.stringify(events), nowMs),
+    ) as PlayerFrame;
+  }
+
+  free(): void {
+    if (this.freed) return;
+    this.freed = true;
+    this.p.free();
   }
 }
 

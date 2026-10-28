@@ -118,6 +118,9 @@
 // setXmlAttribute — each probed with real args on the `text` fixture as the
 // template's author (tagging is an author's write).
 //
+// 2026-10-25: protocol 77 (engine ADR 1011) named one new Mutation op —
+// placePage — probed with real args on the geometry fixture.
+//
 // 2026-10-17: the pin moved to canvas-wasm 0.71.13 (additive on protocol
 // 71). AC-E2E-CAPS-COVER named five new Mutation ops from core's v73 wire
 // (ADRs 163–165): insertFootnote, deleteFootnote, deleteHyperlink,
@@ -150,6 +153,12 @@
 // findReplace. Each got a real-args probe: a scratch paragraph style
 // re-parented, a list level and a numbering restart on the first story's
 // first character, and a find and replace of a word the probe types first.
+
+// 2026-10-28: Word's document structure (engine ADR 1022) named six new
+// Mutation ops — insertTextAnchor, deleteTextAnchor, insertIndexMarker,
+// insertCrossReference, insertTableOfContents and updateFields. Each got a
+// real-args probe on the first story; deleteTextAnchor learns the id the
+// next mint takes from a scratch bookmark it undoes.
 
 export type CapabilityStatus = "supported" | "unsupported";
 
@@ -391,6 +400,11 @@ export const CAPABILITIES: Capability[] = [
     note: "proto 70; moves a page's single-page spread after `after` (null = to the front); wire-only, no editor UI",
   },
   {
+    op: "placePage",
+    status: "supported",
+    note: "proto 77 (engine ADR 1011); puts a page (an artboard) at originPt on the canvas, absent = its default stacked slot; the Artboard tool and the Artboards panel issue it",
+  },
+  {
     op: "setPageMetadata",
     status: "supported",
     note: "proto 70; a page's plugin label, read back on the pages collection's pluginMetadata; travels with movePage/duplicatePage; plugin-sdk gates the key namespace; no editor UI",
@@ -603,6 +617,37 @@ export const CAPABILITIES: Capability[] = [
     op: "findReplace",
     status: "supported",
     note: "proto 76, ADR 1021; {spec, replace, replaceAll?, paragraphStyle?, characterStyle?}; probed on a word typed into the first story",
+  },
+  // Word's document structure (protocol 77, engine ADR 1022).
+  {
+    op: "insertTextAnchor",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, name}; a Word bookmark; probed at the first story's start",
+  },
+  {
+    op: "deleteTextAnchor",
+    status: "supported",
+    note: "proto 77, ADR 1022; {anchorId}; probed on an anchor the probe inserts",
+  },
+  {
+    op: "insertIndexMarker",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, topic, sortOrder?}; probed at the first story's start",
+  },
+  {
+    op: "insertCrossReference",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, target, referTo, hyperlink?}; probed referring to the story's first paragraph",
+  },
+  {
+    op: "insertTableOfContents",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, levels, title?, tocStyleName?, pageNumbers?, leader?, tabPosition?}; probed with one scratch paragraph style",
+  },
+  {
+    op: "updateFields",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId?, offset?, now?}; probed on a DATE field the probe inserts",
   },
 ];
 

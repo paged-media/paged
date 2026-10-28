@@ -619,7 +619,161 @@ fn data_apply_leaves_a_document_asset_id_unwritten_and_says_why__feat__data_bind
         stock["message"]
             .as_str()
             .unwrap()
-            .starts_with("asset:logo-a: no asset store keeps an asset id's bytes"),
+            .starts_with("asset:logo-a: the .paged container has no asset index"),
+        "{stock:#}"
+    );
+}
+
+/// The asset paged.data's editor side writes on save (data ADR 563,
+/// amendment 2026-10-28): the index names `logo-a` by its content hash,
+/// and the bytes are their own part. `with_part: false` leaves the part out.
+/// SHA-256 of `bytes`, lowercase hex: the name an asset part goes by.
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The part name of the picture `with_assets` carries for `logo-a`.
+fn logo_hash() -> String {
+    sha256_hex(&red_png(6, 2))
+}
+
+fn with_assets(dir: &Path, doc: &Path, with_part: bool) -> PathBuf {
+    let png = red_png(6, 2);
+    let hash = sha256_hex(&png);
+    let index = serde_json::json!({
+        "v": 1,
+        "refs": { "logo-a": { "hash": hash, "columns": ["q.stock"] } },
+        "assets": { hash.as_str(): { "mediaType": "image/png", "bytes": png.len() } },
+    });
+    let index_file = dir.join("assets.json");
+    std::fs::write(&index_file, index.to_string()).unwrap();
+    let out = dir.join(if with_part {
+        "assets.paged"
+    } else {
+        "no-part.paged"
+    });
+    ok(paged(&[
+        "parts",
+        "write",
+        s(doc),
+        "paged/media.paged.data/assets.json",
+        s(&index_file),
+        "--save",
+        s(&out),
+    ]));
+    if with_part {
+        let part_file = dir.join("logo-a.png");
+        std::fs::write(&part_file, &png).unwrap();
+        ok(paged(&[
+            "parts",
+            "write",
+            s(&out),
+            &format!("paged/media.paged.data/assets/{hash}"),
+            s(&part_file),
+            "--save",
+        ]));
+    }
+    out
+}
+
+#[test]
+fn data_apply_places_a_document_asset_id_from_the_paged_container__feat__data_bind_labels_native() {
+    let d = dir("asset-part");
+    let doc = with_assets(&d, &lowered_document(&d), true);
+    let saved = d.join("placed.idml");
+    let applied = apply_lowered(&d, &doc, "0", &saved);
+    let stock = row(&applied, "stock");
+    assert_eq!(stock["outcome"], "written", "{stock:#}");
+    assert!(
+        stock["value"]["image"]
+            .as_str()
+            .unwrap()
+            .starts_with(&format!(
+                "asset:logo-a (paged/media.paged.data/assets/{}",
+                logo_hash()
+            )),
+        "{stock:#}"
+    );
+    let frame = stock["targets"][0].as_str().unwrap();
+    let id = frame.split_once(':').unwrap().1;
+    let spreads = idml_parts(&saved, "Spreads/");
+    assert!(
+        spreads.contains(&format!("<Image Self=\"{id}Image\"")),
+        "{spreads}"
+    );
+
+    // Record 1 names `logo-g`, which the index does not carry.
+    let applied = apply_lowered(&d, &doc, "1", &d.join("grace.paged"));
+    let stock = row(&applied, "stock");
+    assert_eq!(stock["outcome"], "notHeadless", "{stock:#}");
+    assert_eq!(
+        stock["message"], "asset:logo-g: the document's asset index names no asset \"logo-g\"",
+        "{stock:#}"
+    );
+}
+
+#[test]
+fn data_apply_refuses_an_asset_part_whose_bytes_do_not_match_its_name__feat__data_bind_labels_native(
+) {
+    let d = dir("asset-tampered");
+    let doc = with_assets(&d, &lowered_document(&d), true);
+    // Other bytes under logo-a's part name.
+    std::fs::write(d.join("other.png"), red_png(7, 3)).unwrap();
+    ok(paged(&[
+        "parts",
+        "write",
+        s(&doc),
+        &format!("paged/media.paged.data/assets/{}", logo_hash()),
+        s(&d.join("other.png")),
+        "--save",
+    ]));
+    let applied = apply_lowered(&d, &doc, "0", &d.join("out.paged"));
+    let stock = row(&applied, "stock");
+    assert_eq!(stock["outcome"], "notHeadless", "{stock:#}");
+    assert!(
+        stock["message"].as_str().unwrap().ends_with(
+            "does not hold the bytes its name hashes (it is not the picture the index names)"
+        ),
+        "{stock:#}"
+    );
+}
+
+#[test]
+fn data_apply_says_which_part_an_asset_id_misses__feat__data_bind_labels_native() {
+    let d = dir("asset-missing");
+    let doc = with_assets(&d, &lowered_document(&d), false);
+    let applied = apply_lowered(&d, &doc, "0", &d.join("out.paged"));
+    let stock = row(&applied, "stock");
+    assert_eq!(stock["outcome"], "notHeadless", "{stock:#}");
+    let message = stock["message"].as_str().unwrap();
+    assert!(
+        message.starts_with(&format!(
+            "asset:logo-a: the asset index names paged/media.paged.data/assets/{}",
+            logo_hash()
+        )) && message.ends_with("but the container has no such part"),
+        "{stock:#}"
+    );
+}
+
+#[test]
+fn data_apply_leaves_an_asset_id_of_an_idml_input_unwritten__feat__data_bind_labels_native() {
+    let d = dir("asset-idml");
+    let doc = with_assets(&d, &lowered_document(&d), true);
+    // Through IDML, which links its pictures: no container, no asset parts.
+    let idml = d.join("first.idml");
+    apply_lowered(&d, &doc, "1", &idml);
+    let applied = apply_lowered(&d, &idml, "0", &d.join("second.idml"));
+    let stock = row(&applied, "stock");
+    assert_eq!(stock["outcome"], "notHeadless", "{stock:#}");
+    assert!(
+        stock["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("asset:logo-a: an IDML document carries no asset bytes"),
         "{stock:#}"
     );
 }
@@ -847,6 +1001,74 @@ fn data_apply_leaves_a_remote_image_unfetched_without_its_origin_and_names_the_f
         &d.join("out.paged"),
     );
     assert_eq!(row(&applied, "remote")["outcome"], "notHeadless");
+    assert!(log.lock().unwrap().is_empty(), "the server was asked");
+}
+
+#[test]
+fn data_apply_places_a_remote_image_the_document_carries_without_fetching_it__feat__data_bind_labels_native(
+) {
+    let d = dir("remote-carried");
+    let (port, log) = serve(|_| (200, String::new(), red_png(3, 4)));
+    let url = format!("http://127.0.0.1:{port}/a.png");
+    // The editor saved the picture its asset column fetched for this url.
+    let png = red_png(5, 5);
+    let hash = sha256_hex(&png);
+    let index = serde_json::json!({
+        "v": 1,
+        "refs": { url.as_str(): { "hash": hash, "columns": ["q.remote"] } },
+        "assets": { hash.as_str(): { "mediaType": "image/png", "bytes": png.len() } },
+    });
+    std::fs::write(d.join("assets.json"), index.to_string()).unwrap();
+    std::fs::write(d.join("a.png"), &png).unwrap();
+    let doc = d.join("carried.paged");
+    ok(paged(&[
+        "parts",
+        "write",
+        s(&lowered_document(&d)),
+        "paged/media.paged.data/assets.json",
+        s(&d.join("assets.json")),
+        "--save",
+        s(&doc),
+    ]));
+    ok(paged(&[
+        "parts",
+        "write",
+        s(&doc),
+        &format!("paged/media.paged.data/assets/{hash}"),
+        s(&d.join("a.png")),
+        "--save",
+    ]));
+    std::fs::write(
+        d.join("products.csv"),
+        format!(
+            "name,price,shown,colour,photo,ean,remote,stock\n\
+             Ada,10,true,#ff0000,red.png,4006381333931,{url},asset:logo-a\n"
+        ),
+    )
+    .unwrap();
+    let csv = format!("products={}", s(&d.join("products.csv")));
+    let out = d.join("out.paged");
+    let report: Value = serde_json::from_str(&ok(paged(&[
+        "data",
+        "apply",
+        s(&doc),
+        "--source",
+        &csv,
+        "-o",
+        s(&out),
+        "--json",
+    ])))
+    .unwrap();
+    let applied = report["applied"].as_array().unwrap().clone();
+    let remote = row(&applied, "remote");
+    assert_eq!(remote["outcome"], "written", "{remote:#}");
+    assert!(
+        remote["value"]["image"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!("(paged/media.paged.data/assets/{hash})")),
+        "{remote:#}"
+    );
     assert!(log.lock().unwrap().is_empty(), "the server was asked");
 }
 

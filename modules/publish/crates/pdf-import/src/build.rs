@@ -77,6 +77,7 @@ pub fn build_document_from(ir: &DocumentIr, source: Option<&[u8]>) -> Result<Doc
             override_list: Vec::new(),
             name: Some((page_idx + 1).to_string()),
             show_master_items: Some(false),
+            canvas_origin: None,
         });
 
         // The full-page raster (if any) is drawn first so recovered frames

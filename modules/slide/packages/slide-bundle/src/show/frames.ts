@@ -29,6 +29,9 @@
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
+import type { ShowSlide } from "./show-model.js";
+import { closeScene, drawScene, type SlideScene } from "./scene-source.js";
+
 /** A decoded frame: an ImageBitmap in a browser. */
 export type Frame = ImageBitmap;
 
@@ -117,6 +120,64 @@ export function createFrameSource(host: BundleHost): FrameSource {
     },
     clear() {
       for (const f of settled.values()) f.close();
+      settled.clear();
+      cache.clear();
+    },
+    dispose() {
+      this.clear();
+    },
+  };
+}
+
+/** Animated slides' layers (slide ADR 714), cached per page and scale and
+ *  prefetched like the frames. */
+export interface SceneSource {
+  scene(slide: ShowSlide, scale: number): Promise<SlideScene | null>;
+  prefetch(slide: ShowSlide, scale: number): void;
+  clear(): void;
+  dispose(): void;
+}
+
+export function createSceneSource(host: BundleHost): SceneSource {
+  const cache = new Map<string, Promise<SlideScene | null>>();
+  const settled = new Map<string, SlideScene>();
+  const evict = () => {
+    while (cache.size > KEEP) {
+      const oldest = cache.keys().next().value as string;
+      cache.delete(oldest);
+      const s = settled.get(oldest);
+      if (s) closeScene(s);
+      settled.delete(oldest);
+    }
+  };
+  const scene = (slide: ShowSlide, scale: number) => {
+    const key = `${slide.pageId}@${scale}`;
+    const hit = cache.get(key);
+    if (hit) {
+      cache.delete(key);
+      cache.set(key, hit);
+      return hit;
+    }
+    const plan = slide.anim?.plan;
+    const job: Promise<SlideScene | null> = plan
+      ? drawScene(host, plan, scale, slide.sizePt)
+          .then((s) => {
+            if (s && cache.get(key) === job) settled.set(key, s);
+            return s;
+          })
+          .catch(() => null)
+      : Promise.resolve(null);
+    cache.set(key, job);
+    evict();
+    return job;
+  };
+  return {
+    scene,
+    prefetch(slide, scale) {
+      if (slide.anim) void scene(slide, scale);
+    },
+    clear() {
+      for (const s of settled.values()) closeScene(s);
       settled.clear();
       cache.clear();
     },

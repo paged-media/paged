@@ -161,6 +161,41 @@ fn move_page() {
 }
 
 #[test]
+fn place_page() {
+    covers!("script:paged.placePage");
+    let (mut m, first, second) = two_pages();
+    refuses(&mut m, "paged.placePage('no-such-page', [0, 0])", "false");
+    throws(&mut m, "paged.placePage(Symbol('p'))", SYMBOL_TO_STRING);
+    refuses(
+        &mut m,
+        &format!("paged.placePage({second:?}, [1])"),
+        "false",
+    );
+    refuses(
+        &mut m,
+        &format!("paged.placePage({second:?}, 'x')"),
+        "false",
+    );
+    writes(
+        &mut m,
+        &format!("paged.placePage({second:?}, [700, -40])"),
+        "true",
+    );
+    let pages = json_of(&ok(&mut m, "paged.pages()"));
+    assert_eq!(
+        pages[1]["canvasOriginPt"],
+        serde_json::json!([700.0, -40.0])
+    );
+    assert_eq!(pages[1]["canvasPlaced"], serde_json::json!(true));
+    assert_eq!(pages[0]["canvasOriginPt"], serde_json::json!([0.0, 0.0]));
+    // The order is movePage's: placing reorders nothing.
+    assert_eq!(page_ids(&mut m), vec![first, second.clone()]);
+    writes(&mut m, &format!("paged.placePage({second:?})"), "true");
+    let pages = json_of(&ok(&mut m, "paged.pages()"));
+    assert_eq!(pages[1]["canvasPlaced"], serde_json::json!(false));
+}
+
+#[test]
 fn apply_master_to_page() {
     covers!("script:paged.applyMasterToPage");
     let mut m = sample("masters");

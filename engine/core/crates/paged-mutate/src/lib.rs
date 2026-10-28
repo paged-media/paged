@@ -62,8 +62,10 @@ pub mod orientation;
 pub mod path_math;
 pub mod pathfinder;
 pub mod planar;
+mod planar_dcel;
 #[cfg(feature = "schema")]
 pub mod schema;
+pub mod stroke_kernel;
 
 pub use apply::apply;
 pub use apply::apply_checked;
@@ -7813,6 +7815,7 @@ mod tests {
                 override_list: Vec::new(),
                 name: None,
                 show_master_items: None,
+                canvas_origin: None,
             }
         }
 

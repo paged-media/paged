@@ -49,6 +49,7 @@ fn minted_spread(page_hides_master_items: bool) -> String {
         override_list: Vec::new(),
         name: None,
         show_master_items: page_hides_master_items.then_some(false),
+        canvas_origin: None,
     });
     doc.spreads.push(paged_scene::ParsedSpread {
         src: "Spreads/Spread_s2.xml".into(),

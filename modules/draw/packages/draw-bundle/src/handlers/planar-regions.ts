@@ -29,10 +29,11 @@
 // answers the full `PlanarRegionsResult`.
 //
 // THREE ANSWERS, NEVER FLATTENED (the shape K-11 also settled on):
-//   · `found: false` + `reason`  — a REFUSAL. The caps are 12 inputs and
-//     256 faces and the engine refuses past either; it never truncates.
+//   · `found: false` + `reason`  — a REFUSAL. The caps are 1000 inputs and
+//     100 000 faces, behind a work budget (engine ADR 1019), and the
+//     engine refuses past any of them; it never truncates.
 //   · `found: true, complete: false` — the faces listed are real but do
-//     not tile the union (the kernel's probe pass missed a sliver).
+//     not tile the union (a region thinner than the kernel's grid).
 //   · `found: true, complete: true` — the whole arrangement.
 // Collapsing any of these into "no regions" would be a lie, so a refusal
 // goes to WARN *and* onto the shared pathfinder status binding.
@@ -45,9 +46,10 @@
 // exactly two situations:
 //   · COLD START — the first sample after the cache was dropped, so the
 //     highlight appears immediately rather than one round trip late;
-//   · FACE-CAP REFUSAL — the full enumeration refuses past 256 faces, but
-//     `face_at_point` carries no face cap, so hover stays live there at
-//     one round trip per move. The log says so once.
+//   · FULL-ENUMERATION REFUSAL — past the face cap or the work budget
+//     the full enumeration refuses; the point form is asked instead, at
+//     one round trip per move (it refuses on the same budget). The log
+//     says so once.
 //
 // -------------------------------------------------------- the space
 // The engine's arrangement runs in RAW path space — per-element
@@ -81,15 +83,15 @@ import type { RegionFace } from "@paged-media/draw-tools";
 import { BIND_PATHFINDER_STATUS } from "../commands/pathfinder-region";
 import { pageOriginOf, SPREAD_ORIGIN, type PageOrigin } from "../page-origin";
 
-/** The engine's input cap (`paged_mutate::planar::MAX_PLANAR_INPUTS`).
- *  Mirrored here ONLY so a caller can say "12" before spending a round
- *  trip; the authority is still the engine's own refusal, which is what
- *  gets shown. */
-export const MAX_PLANAR_INPUTS = 12;
+/** The engine's input cap (`paged_mutate::planar::MAX_PLANAR_INPUTS`,
+ *  engine ADR 1019). Mirrored here ONLY so a caller can say "1000" before
+ *  spending a round trip; the authority is still the engine's own
+ *  refusal, which is what gets shown. */
+export const MAX_PLANAR_INPUTS = 1000;
 
 /** The engine's face cap (`MAX_PLANAR_FACES`). Same rule: the engine's
  *  sentence is what a user sees, never this number. */
-export const MAX_PLANAR_FACES = 256;
+export const MAX_PLANAR_FACES = 100_000;
 
 /** K-11 IS PUBLISHED — these are now ALIASES of the contract's own
  *  types, not local re-declarations. They are kept as names because the

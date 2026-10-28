@@ -200,6 +200,7 @@ pub(super) fn apply_create_master(
                             override_list: Vec::new(),
                             name: None,
                             show_master_items: None,
+                            canvas_origin: None,
                         }],
                         ..paged_model::Spread::default()
                     }

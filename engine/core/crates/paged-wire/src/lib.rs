@@ -1700,12 +1700,17 @@ pub enum Mutation {
         miter_limit: f32,
     },
     /// B-05 (protocol v30) — inset (`delta < 0`) / outset
-    /// (`delta > 0`) of a single closed contour.
+    /// (`delta > 0`). Engine ADR 1019: any path — a compound path keeps
+    /// its holes (each contour moves by its nesting), and an OPEN contour
+    /// becomes the two-sided band, or with `side` `"left"` / `"right"`
+    /// one open parallel path on that side of its direction on the page.
     OffsetPath {
         element_id: ElementId,
         delta: f32,
         join: String,
         miter_limit: f32,
+        #[serde(default)]
+        side: Option<String>,
     },
     /// B-05 (protocol v30) — re-express the path within `tolerance`
     /// pt max deviation with fewer anchors.
@@ -2686,6 +2691,18 @@ pub enum Mutation {
         #[serde(default)]
         after: Option<PageId>,
     },
+    /// v77 (engine ADR 1011) — put a page (an artboard) at `origin_pt`
+    /// on the canvas: its top-left in document points. Absent returns the
+    /// page to its default slot, the vertical stack the canvas always
+    /// showed. The page's content keeps its page coordinates and moves
+    /// with it; no other page moves; the page ORDER is `movePage`'s. One
+    /// undo step (a `batch` of them, e.g. rearranging every artboard, is
+    /// one too). Lowers to `set(page, page.canvasOrigin)`.
+    PlacePage {
+        page: PageId,
+        #[serde(default)]
+        origin_pt: Option<(f32, f32)>,
+    },
     /// W0.5 — insert a `<Section>` anchored at `at_page`.
     InsertSection {
         at_page: PageId,
@@ -3009,6 +3026,7 @@ mutation_vocabulary! {
     ApplyMasterToPage,
     DuplicatePage,
     MovePage,
+    PlacePage,
     OnMaster,
     CreateMaster,
     DeleteMaster,
