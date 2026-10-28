@@ -60,6 +60,7 @@ import {
 } from "./doc-state.js";
 import { contributeDocObjectModel } from "./object-model.js";
 import { contributeWord, type WordContribution } from "./word/contribute.js";
+import { structureOf, type WordStructure } from "./word/structure.js";
 import {
   docPropertiesPanel,
   PROPERTIES_PANEL_ID,
@@ -101,6 +102,9 @@ interface LastDoc {
   /** The lowering used span/split columns (ADR 029); save-back lowers its
    *  baseline the same way. */
   midPageColumns: boolean;
+  /** Doc ADR 611 — the sections and masters of a document opened as the
+   *  document (the header and footer editing); `null` for a placement. */
+  structure?: WordStructure | null;
 }
 
 export function activate(host: BundleHost): BundleHandle {
@@ -185,6 +189,7 @@ function activateDoc(
             pouredParagraphCount(blocks),
           ),
           midPageColumns: opened.midPageColumns,
+          structure: structureOf(opened.ir, opened.storyIds),
         };
         docStore.set({
           fileName: name,
@@ -629,6 +634,7 @@ function activateDoc(
           (d) => (d.frame as { id: string }).id === STANDALONE_FRAME,
         );
       },
+      structure: () => last?.structure ?? null,
     });
   }
 

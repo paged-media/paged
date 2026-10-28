@@ -79,7 +79,27 @@
       "media.paged.doc.command.word.styleUpdate",
       "media.paged.doc.command.word.styleModify",
       "media.paged.doc.command.word.styleNew",
-      "media.paged.doc.command.word.applyStyles"
+      "media.paged.doc.command.word.applyStyles",
+      "media.paged.doc.command.word.pageBreak",
+      "media.paged.doc.command.word.sectionNextPage",
+      "media.paged.doc.command.word.sectionOddPage",
+      "media.paged.doc.command.word.sectionEvenPage",
+      "media.paged.doc.command.word.sectionContinuous",
+      "media.paged.doc.command.word.footnote",
+      "media.paged.doc.command.word.endnote",
+      "media.paged.doc.command.word.updateFields",
+      "media.paged.doc.command.word.toggleFieldCodes",
+      "media.paged.doc.command.word.insertToc",
+      "media.paged.doc.command.word.updateToc",
+      "media.paged.doc.command.word.insertPageNumber",
+      "media.paged.doc.command.word.insertPageCount",
+      "media.paged.doc.command.word.insertDate",
+      "media.paged.doc.command.word.editHeader",
+      "media.paged.doc.command.word.editFooter",
+      "media.paged.doc.command.word.closeHeaderFooter",
+      "media.paged.doc.command.word.differentFirstPage",
+      "media.paged.doc.command.word.differentOddEven",
+      "media.paged.doc.command.word.linkToPrevious"
     ],
     "importers": [
       "media.paged.doc.importer.docx",
@@ -1228,6 +1248,246 @@
         {
           "id": "media.paged.doc.command.word.applyStyles",
           "title": "Apply styles",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.pageBreak",
+          "title": "Page break",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.sectionNextPage",
+          "title": "Section break (next page)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.sectionOddPage",
+          "title": "Section break (odd page)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.sectionEvenPage",
+          "title": "Section break (even page)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.sectionContinuous",
+          "title": "Section break (continuous)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.footnote",
+          "title": "Insert footnote",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.endnote",
+          "title": "Insert endnote",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.updateFields",
+          "title": "Update fields",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.toggleFieldCodes",
+          "title": "Toggle field codes",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.insertToc",
+          "title": "Table of contents",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.updateToc",
+          "title": "Update table",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.insertPageNumber",
+          "title": "Page number",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.insertPageCount",
+          "title": "Number of pages",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.insertDate",
+          "title": "Date",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.editHeader",
+          "title": "Edit header",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.editFooter",
+          "title": "Edit footer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.closeHeaderFooter",
+          "title": "Close header and footer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.differentFirstPage",
+          "title": "Different first page",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.differentOddEven",
+          "title": "Different odd & even pages",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.linkToPrevious",
+          "title": "Link to previous",
           "args": {
             "kind": "struct",
             "fields": {}

@@ -143,7 +143,16 @@ describe.skipIf(!docxPresent)(
       covers("keybinding:shift+tab→media.paged.doc.command.word.listLevelUp");
       covers("keybinding:cmd+alt+c→media.paged.doc.command.word.copyFormat");
       covers("keybinding:cmd+alt+v→media.paged.doc.command.word.pasteFormat");
-      expect(WORD_KEYS).toHaveLength(26);
+      // Doc ADRs 611 / 612 — the structure keys.
+      covers("keybinding:cmd+enter→media.paged.doc.command.word.pageBreak");
+      covers("keybinding:cmd+alt+f→media.paged.doc.command.word.footnote");
+      covers("keybinding:cmd+alt+d→media.paged.doc.command.word.endnote");
+      covers("keybinding:f9→media.paged.doc.command.word.updateFields");
+      covers(
+        "keybinding:shift+f9→media.paged.doc.command.word.toggleFieldCodes",
+      );
+      covers("keybinding:alt+f9→media.paged.doc.command.word.toggleFieldCodes");
+      expect(WORD_KEYS).toHaveLength(32);
       for (const k of WORD_KEYS) {
         expect(bound).toContainEqual(
           expect.objectContaining({

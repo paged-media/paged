@@ -42,6 +42,11 @@ import {
   makeWordsStatus,
   makeZoomStatus,
 } from "./status-items.js";
+import {
+  HEADER_BAR_COMMANDS,
+  resolveHeaderFooter,
+  type WordStructure,
+} from "./structure.js";
 import { createWordStore, type WordStore } from "./word-state.js";
 
 export interface WordDeps {
@@ -50,6 +55,9 @@ export interface WordDeps {
   /** Is the open document a Word document opened as the document (its
    *  standalone label)? Asked on every document open. */
   isWordDocument(): Promise<boolean>;
+  /** Doc ADR 611 — the sections and masters of the Word document opened in
+   *  this session, for the header and footer editing; `null` otherwise. */
+  structure?(): WordStructure | null;
 }
 
 /** The command titles, by command name. */
@@ -103,6 +111,26 @@ const TITLES: Record<WordCommandName, () => string> = {
   styleModify: () => t(WORD.styleModify),
   styleNew: () => t(WORD.styleNew),
   applyStyles: () => t(WORD.applyStyles),
+  pageBreak: () => t(WORD.pageBreak),
+  sectionNextPage: () => t(WORD.sectionNextPage),
+  sectionOddPage: () => t(WORD.sectionOddPage),
+  sectionEvenPage: () => t(WORD.sectionEvenPage),
+  sectionContinuous: () => t(WORD.sectionContinuous),
+  footnote: () => t(WORD.footnote),
+  endnote: () => t(WORD.endnote),
+  updateFields: () => t(WORD.updateFields),
+  toggleFieldCodes: () => t(WORD.toggleFieldCodes),
+  insertToc: () => t(WORD.insertToc),
+  updateToc: () => t(WORD.updateToc),
+  insertPageNumber: () => t(WORD.insertPageNumber),
+  insertPageCount: () => t(WORD.insertPageCount),
+  insertDate: () => t(WORD.insertDate),
+  editHeader: () => t(WORD.editHeader),
+  editFooter: () => t(WORD.editFooter),
+  closeHeaderFooter: () => t(WORD.closeHeaderFooter),
+  differentFirstPage: () => t(WORD.differentFirstPage),
+  differentOddEven: () => t(WORD.differentOddEven),
+  linkToPrevious: () => t(WORD.linkToPrevious),
 };
 
 /** What `contributeWord` hands back: its teardown, the store (tests read
@@ -133,6 +161,7 @@ export function contributeWord(
     highlight: null,
     shading: null,
     focusStyleBox: () => store.requestStyleBoxFocus(),
+    structure: () => deps.structure?.() ?? null,
   };
   const hasText = () => host.text?.selection() != null;
   const run = (name: WordCommandName) =>
@@ -261,6 +290,23 @@ export function contributeWord(
         }).dispose,
       );
     }
+  }
+
+  // Editor ADR 301 / contract C6 — a double-click in a page's header or
+  // footer band edits its master's story in place.
+  if (host.supports("contribute.subContextProvider@1")) {
+    disposers.push(
+      host.contribute.subContextProvider({
+        editContext: WORD_CONTEXT,
+        resolve: (hit) =>
+          resolveHeaderFooter(
+            host,
+            deps.structure?.() ?? null,
+            hit,
+            HEADER_BAR_COMMANDS.map((n) => WORD_COMMAND[n]),
+          ),
+      }).dispose,
+    );
   }
 
   // Keep the store current: the selection's format on every selection
