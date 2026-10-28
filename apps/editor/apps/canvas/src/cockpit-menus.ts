@@ -139,6 +139,13 @@ export const COCKPIT_MENU_SEAMS: MenuItemContribution[] = [
   // Object ▸ Effects: the Effects panel, and Global light… (registered
   // with its dialog, panels/global-light-dialog.tsx).
   panel("Object/Effects/Effects…", "paged.effects", 30, "effects"),
+  // Engine ADR 1037 — the placed picture's filter stack.
+  panel(
+    "Object/Effects/Picture adjustments…",
+    "paged.picture-adjustments",
+    32,
+    "effects",
+  ),
   // ── Data (the data-publishing surface) ──
   //
   // D1 — these three were `soon(...)` seams whose labels duplicated
