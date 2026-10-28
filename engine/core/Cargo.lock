@@ -3862,6 +3862,7 @@ version = "0.0.0"
 dependencies = [
  "miniz_oxide 0.9.1",
  "paged-pixel",
+ "serde",
  "thiserror",
 ]
 

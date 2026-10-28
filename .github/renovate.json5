@@ -224,6 +224,11 @@
     },
     {
       matchManagers: ["cargo"],
+      matchFileNames: ["platform/shared/dml-native/**"],
+      groupName: "rust: dml-native",
+    },
+    {
+      matchManagers: ["cargo"],
       matchFileNames: ["apps/server/**"],
       groupName: "rust: server",
     },

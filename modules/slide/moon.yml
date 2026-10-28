@@ -31,6 +31,9 @@ dependsOn:
   # dml-geom, the shared DrawingML geometry (slide ADR 717, PM-0014).
   - id: "dml-geom"
     scope: "production"
+  # dml-native, the shared DrawingML paint mapper (slide ADR 722).
+  - id: "dml-native"
+    scope: "production"
   # slide-chart labels through sheet-format (and sheet-core, whose build
   # reads sheet's function registry), which read platform/shared/fmt (ADR 710);
   # slide-sheet's live charts through sheet's workbook engine (ADR 715).
@@ -67,6 +70,8 @@ fileGroups:
     - "/platform/shared/dml-geom/src/**/*.rs"
     - "/platform/shared/dml-geom/data/*.xml"
     - "/platform/shared/dml-geom/Cargo.toml"
+    - "/platform/shared/dml-native/src/**/*.rs"
+    - "/platform/shared/dml-native/Cargo.toml"
     - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"
@@ -94,6 +99,8 @@ fileGroups:
     - "/platform/shared/dml-geom/src/**/*.rs"
     - "/platform/shared/dml-geom/data/*.xml"
     - "/platform/shared/dml-geom/Cargo.toml"
+    - "/platform/shared/dml-native/src/**/*.rs"
+    - "/platform/shared/dml-native/Cargo.toml"
     - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"

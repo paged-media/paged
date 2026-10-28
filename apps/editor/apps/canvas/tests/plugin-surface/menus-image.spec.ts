@@ -19,7 +19,7 @@
 
 // PLUGIN MENUS — paged.image (modules/image/glue/src/menu.ts).
 //
-// A hundred and seventeen entries: a hundred and fourteen under the Image menu (folded into
+// A hundred and thirty-three entries: a hundred and thirty under the Image menu (folded into
 // Plugins ▸ Image; shown as a context menu inside a raster frame) and three
 // under the host's Edit menu (Edit ▸ Selection to path, Edit ▸ Path to
 // selection, Edit ▸ Content-aware fill…).
@@ -668,6 +668,283 @@ test.describe.serial("plugin menus — paged.image", () => {
       live,
       "Image/Layer/Layer style/Blending options…",
       "media.paged.image.command.blendingOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Bevel and emboss… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Bevel and emboss…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Layer style/Bevel and emboss…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Bevel and emboss…",
+      "media.paged.image.command.layerStyleBevel",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Stroke… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Stroke…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Stroke…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Stroke…",
+      "media.paged.image.command.layerStyleStroke",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Inner shadow… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Inner shadow…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Inner shadow…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Inner shadow…",
+      "media.paged.image.command.layerStyleInnerShadow",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Inner glow… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Inner glow…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Inner glow…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Inner glow…",
+      "media.paged.image.command.layerStyleInnerGlow",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Satin… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Satin…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Satin…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Satin…",
+      "media.paged.image.command.layerStyleSatin",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Colour overlay… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Colour overlay…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Colour overlay…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Colour overlay…",
+      "media.paged.image.command.layerStyleColorOverlay",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Gradient overlay… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Gradient overlay…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Layer style/Gradient overlay…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Gradient overlay…",
+      "media.paged.image.command.layerStyleGradientOverlay",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Pattern overlay… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Pattern overlay…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Layer style/Pattern overlay…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Pattern overlay…",
+      "media.paged.image.command.layerStylePatternOverlay",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Outer glow… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Outer glow…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Outer glow…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Outer glow…",
+      "media.paged.image.command.layerStyleOuterGlow",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Drop shadow… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Drop shadow…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Drop shadow…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Drop shadow…",
+      "media.paged.image.command.layerStyleDropShadow",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Copy layer style — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Copy layer style");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Layer style/Copy layer style",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Copy layer style",
+      "media.paged.image.command.copyLayerStyle",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Paste layer style — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Paste layer style");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Layer style/Paste layer style",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Paste layer style",
+      "media.paged.image.command.pasteLayerStyle",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Clear layer style — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Clear layer style");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Layer style/Clear layer style",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Clear layer style",
+      "media.paged.image.command.clearLayerStyle",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Global light… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Global light…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Global light…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Global light…",
+      "media.paged.image.command.globalLight",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Hide all effects — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Hide all effects");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Layer style/Hide all effects",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Hide all effects",
+      "media.paged.image.command.toggleEffects",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Scale effects… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Scale effects…");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer style/Scale effects…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Scale effects…",
+      "media.paged.image.command.scaleEffects",
     );
     expect(out.shell).toEqual([
       { door: "openPanel", arg: "media.paged.image.panel.adjustments" },

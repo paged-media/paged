@@ -71,6 +71,12 @@ afterAll(async () => {
 
 const manifestOf = (id: string): PluginManifest => hosts.get(id)!.manifest;
 
+/** Declared, but registered only when the host turns it on: OpenDocument
+ *  import is behind a flag (`docBundleWith({ odt: true })`, doc ADR 616) and
+ *  the bundle the editor ships leaves it off (the contracts test allows the
+ *  same id). */
+const OFF_BY_DEFAULT = new Set(["media.paged.doc.importer.odt"]);
+
 describe("the editor's built-in bundles, activated together in the headless editor", () => {
   test("all nine activate, in the table's order, slide included", () => {
     expect(PLUGIN_BUNDLES.map((b) => b.id)).toEqual([...BUILT_INS]);
@@ -120,7 +126,9 @@ describe("the editor's built-in bundles, activated together in the headless edit
         ...(c.panels ?? []).filter((x) => !panels.has(x)),
         ...(c.commands ?? []).filter((x) => !commands.has(x)),
         ...(c.tools ?? []).filter((x) => !tools.has(x)),
-        ...(c.importers ?? []).filter((x) => !importers.has(x)),
+        ...(c.importers ?? []).filter(
+          (x) => !importers.has(x) && !OFF_BY_DEFAULT.has(x),
+        ),
         ...(c.exporters ?? []).filter((x) => !exporters.has(x)),
         ...(c.objectModel?.commands ?? [])
           .map((x) => x.id)
