@@ -30,7 +30,9 @@ import type { BundleHost, Diagnostic } from "@paged-media/plugin-api";
 import { sha256Hex } from "@paged-media/helpers";
 
 import type { CommentsFile } from "./comments-model.js";
-import type { ExportedDeck, SlidePlan } from "./engine.js";
+import { liveShows, showsOfLabel } from "./custom-shows.js";
+import type { DeckPlan, ExportedDeck, SlidePlan } from "./engine.js";
+import { parseLabel } from "./object-model.js";
 import { parseState, type PluginMetadataEntry } from "./slides-model.js";
 
 type TreeNode = {
@@ -128,6 +130,47 @@ export async function exportPlan(
       ...(comments ? { comments: comments.byPage[p.selfId] ?? [] } : {}),
     };
   });
+}
+
+/** What the document says about the deck as a whole (slide ADR 720): its
+ *  sections (each by the page it starts at) and its custom shows (by page),
+ *  and the package kind to write. A deck that never had sections and has
+ *  none writes none. */
+export async function deckPlan(
+  host: BundleHost,
+  format: DeckPlan["format"] = "pptx",
+): Promise<DeckPlan> {
+  const pages = await host.document.collection<{
+    selfId: string;
+    pluginMetadata?: PluginMetadataEntry[];
+  }>("pages");
+  const seen = new Set<string>();
+  const sections: NonNullable<DeckPlan["sections"]> = [];
+  for (const p of pages) {
+    const sec = parseState(p.pluginMetadata).section;
+    if (!sec || seen.has(sec.id)) continue;
+    seen.add(sec.id);
+    sections.push({ id: sec.id, name: sec.name, firstPage: p.selfId });
+  }
+  let label: Record<string, unknown> | null = null;
+  if (host.supports("document.documentMetadata@1")) {
+    try {
+      label = parseLabel<Record<string, unknown>>(
+        await host.document.getDocumentMetadata(),
+      );
+    } catch {
+      label = null;
+    }
+  }
+  const shows = liveShows(
+    showsOfLabel(label),
+    pages.map((p) => p.selfId),
+  );
+  return {
+    format,
+    sections,
+    customShows: shows.map((s) => ({ id: s.id, name: s.name, pages: s.pages })),
+  };
 }
 
 /** The document as `.paged` bytes for the exporter, or null when the host

@@ -59,6 +59,16 @@ export interface SlideState {
   notes?: string;
   hidden?: boolean;
   transition?: Transition;
+  /** A section starts at this slide (slide ADR 720): its id and name. The
+   *  slides after it belong to it until the next start. */
+  section?: SectionStart;
+}
+
+/** A section's start, as its first slide's label holds it. */
+export interface SectionStart {
+  /** PowerPoint's `{GUID}`. */
+  id: string;
+  name: string;
 }
 
 export interface Slide {
@@ -88,6 +98,15 @@ export function parseState(
     if (typeof d.transition === "object" && d.transition !== null) {
       out.transition = d.transition as Transition;
     }
+    const sec = d.section as { id?: unknown; name?: unknown } | undefined;
+    if (
+      typeof sec === "object" &&
+      sec !== null &&
+      typeof sec.id === "string" &&
+      typeof sec.name === "string"
+    ) {
+      out.section = { id: sec.id, name: sec.name };
+    }
     return out;
   } catch {
     return {};
@@ -102,6 +121,7 @@ export function encodeState(state: SlideState): string | null {
   if (state.notes && state.notes.trim() !== "") data.notes = state.notes;
   if (state.hidden) data.hidden = true;
   if (state.transition) data.transition = state.transition;
+  if (state.section) data.section = state.section;
   return Object.keys(data).length === 0 ? null : JSON.stringify({ v: 1, data });
 }
 
@@ -142,8 +162,30 @@ export function duplicateMutation(pageId: string): MutationInput {
   return { op: "duplicatePage", args: { page: pageId } };
 }
 
-export function deleteMutation(pageId: string): MutationInput {
-  return { op: "deletePage", args: { pageId } };
+/** Delete a slide. Given the deck's slides, a section the slide starts is
+ *  handed to the slide after it (when that one starts none), so deleting
+ *  a section's first slide keeps the section, as in PowerPoint. */
+export function deleteMutation(
+  pageId: string,
+  slides?: readonly Slide[],
+): MutationInput {
+  const del: MutationInput = { op: "deletePage", args: { pageId } };
+  const i = slides?.findIndex((s) => s.pageId === pageId) ?? -1;
+  const here = i >= 0 ? slides![i] : undefined;
+  const next = i >= 0 ? slides![i + 1] : undefined;
+  if (!here?.state.section || !next || next.state.section) return del;
+  return {
+    op: "batch",
+    args: {
+      ops: [
+        setStateMutation(next.pageId, {
+          ...next.state,
+          section: here.state.section,
+        }),
+        del,
+      ],
+    },
+  } as MutationInput;
 }
 
 type PageSummary = {
@@ -151,6 +193,20 @@ type PageSummary = {
   sizePt: [number, number];
   pluginMetadata?: PluginMetadataEntry[];
 };
+
+/** The deck's slides as the document holds them now (null when no page
+ *  carries a slide label: not a deck). */
+export async function readSlides(host: BundleHost): Promise<Slide[] | null> {
+  const pages = await host.document.collection<PageSummary>("pages");
+  if (!pages.some((p) => p.pluginMetadata?.some((m) => m.key === SLIDE_KEY)))
+    return null;
+  return pages.map((p, i) => ({
+    pageId: p.selfId,
+    number: i + 1,
+    sizePt: p.sizePt,
+    state: parseState(p.pluginMetadata),
+  }));
+}
 
 /** Thumbnail width in device pixels. */
 export const THUMB_WIDTH = 320;

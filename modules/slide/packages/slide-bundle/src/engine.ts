@@ -243,7 +243,72 @@ export interface GalleryItem {
   path: string;
 }
 
-interface SlideWasmModule extends WasmBindgenGlue {
+/** What a deck export writes beyond its slides (pptx-export `ExportPlan`,
+ *  slide ADR 720). Absent fields: as the deck had them. */
+export interface DeckPlan {
+  /** The package kind: `pptx`, `potx` (a template) or `ppsx`. */
+  format?: "pptx" | "potx" | "ppsx";
+  sections?: { id?: string; name: string; firstPage: string }[];
+  customShows?: { id?: number; name: string; pages: string[] }[];
+}
+
+/** What a PDF is asked to be (slide-output `pdf::Options`). */
+export interface PdfOptions {
+  layout: "slides" | "handouts" | "notes";
+  /** Handouts: 1, 2, 3, 4, 6 or 9 slides a page. */
+  perPage?: number;
+  /** Paper for handouts and notes pages, pt, portrait. */
+  paper?: [number, number];
+  slideSize: [number, number];
+  title?: string;
+  frame?: boolean;
+}
+
+/** A written PDF. */
+export interface WrittenPdf {
+  bytes: Uint8Array;
+  pages: number;
+  /** Characters the PDF's standard font could not draw (shown as `?`). */
+  replaced: number;
+}
+
+/** The wasm PDF writer: slides added one at a time, then the file. */
+export interface PdfBuilder {
+  addSlide(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    number: number,
+    notes: string,
+  ): void;
+  finish(): WrittenPdf;
+  dispose(): void;
+}
+
+interface WasmPdfWriter {
+  addSlide(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    number: number,
+    notes: string,
+  ): void;
+  finish(): {
+    bytes: Uint8Array;
+    pages: number;
+    replaced: number;
+    free(): void;
+  };
+  free(): void;
+}
+
+export interface SlideWasmModule extends WasmBindgenGlue {
+  exportOutline(
+    document: Uint8Array,
+    pages: string,
+    format: string,
+  ): Uint8Array;
+  PdfWriter: new (options: string) => WasmPdfWriter;
   importPptx(bytes: Uint8Array, name: string): WasmImported;
   live(request: string): string;
   embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
@@ -262,6 +327,11 @@ export async function slideEngine(): Promise<SlideEngine> {
 
 export class SlideEngine {
   constructor(private readonly mod: SlideWasmModule) {}
+
+  /** The wasm module itself (the output writers, engine.ts). */
+  module(): SlideWasmModule {
+    return this.mod;
+  }
 
   /** Read a `.pptx` into the `.paged` package of its native slides. Throws with
    *  the engine's message when the file is not a presentation. */
@@ -338,10 +408,11 @@ export class SlideEngine {
     original: Uint8Array,
     slides: readonly SlidePlan[],
     document?: Uint8Array | null,
+    deck: DeckPlan = {},
   ): ExportedDeck {
     const out = this.mod.exportPptx(
       original,
-      JSON.stringify({ slides }),
+      JSON.stringify({ ...deck, slides }),
       document ?? undefined,
     );
     try {
@@ -354,6 +425,38 @@ export class SlideEngine {
       out.free();
     }
   }
+}
+
+/** The engine's outline (titles, body levels) of `pages` of the document,
+ *  as RTF or UTF-8 text (slide ADR 720). */
+export function exportOutline(
+  engine: SlideEngine,
+  document: Uint8Array,
+  pages: readonly string[],
+  format: "rtf" | "txt",
+): Uint8Array {
+  return engine.module().exportOutline(document, JSON.stringify(pages), format);
+}
+
+/** A PDF writer on the engine (slide ADR 720). */
+export function pdfBuilder(
+  engine: SlideEngine,
+  options: PdfOptions,
+): PdfBuilder {
+  const w = new (engine.module().PdfWriter)(JSON.stringify(options));
+  return {
+    addSlide: (rgba, width, height, number, notes) =>
+      w.addSlide(rgba, width, height, number, notes),
+    finish() {
+      const out = w.finish();
+      try {
+        return { bytes: out.bytes, pages: out.pages, replaced: out.replaced };
+      } finally {
+        out.free();
+      }
+    },
+    dispose: () => w.free(),
+  };
 }
 
 /** The one instantiation per realm (wasm-boot's single flight). */

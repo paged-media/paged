@@ -30,8 +30,7 @@
     },
     "gpu": {
       "realm": "bundle"
-    },
-    "rendering": ["overlay"]
+    }
   },
   "contributes": {
     "commands": [
@@ -50,12 +49,19 @@
       "media.paged.slide.command.presenterView",
       "media.paged.slide.command.rehearseTimings",
       "media.paged.slide.command.slideSorter",
-      "media.paged.slide.command.insertShapes"
+      "media.paged.slide.command.insertShapes",
+      "media.paged.slide.command.export",
+      "media.paged.slide.command.saveAsTemplate",
+      "media.paged.slide.command.customShows",
+      "media.paged.slide.command.addSection"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
-    "exporters": ["media.paged.slide.exporter.pptx"],
+    "exporters": [
+      "media.paged.slide.exporter.pptx",
+      "media.paged.slide.exporter.potx"
+    ],
     "presentations": ["media.paged.slide.show"],
-    "views": ["media.paged.slide.view.sorter"],
+    "views": ["media.paged.slide.view.sorter", "media.paged.slide.view.export"],
     "editContexts": [
       {
         "type": "slideDeck",
@@ -70,7 +76,8 @@
       "media.paged.slide.panel.placeholder",
       "media.paged.slide.panel.deck",
       "media.paged.slide.panel.comments",
-      "media.paged.slide.panel.shapes"
+      "media.paged.slide.panel.shapes",
+      "media.paged.slide.panel.customShows"
     ],
     "partTypes": [
       {
@@ -254,6 +261,90 @@
           "title": "Insert a shape",
           "args": "schema/insert-shape.args.json",
           "result": "schema/insert-shape.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.export",
+          "title": "Export…",
+          "args": "schema/empty.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.saveAsTemplate",
+          "title": "Save as template",
+          "args": "schema/empty.json",
+          "result": "schema/export-template.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.customShows",
+          "title": "Custom shows",
+          "args": "schema/empty.json",
+          "result": "schema/custom-shows.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.addSection",
+          "title": "Add section",
+          "args": "schema/add-section.args.json",
+          "result": "schema/section.result.json"
+        },
+        {
+          "id": "media.paged.slide.exportPdf",
+          "title": "Export PDF (slides, handouts, notes pages)",
+          "args": "schema/export-pdf.args.json",
+          "result": "schema/export-pdf.result.json"
+        },
+        {
+          "id": "media.paged.slide.exportOutline",
+          "title": "Export the outline",
+          "args": "schema/export-outline.args.json",
+          "result": "schema/export-outline.result.json"
+        },
+        {
+          "id": "media.paged.slide.exportVideo",
+          "title": "Create a video (MP4)",
+          "args": "schema/export-video.args.json",
+          "result": "schema/export-video.result.json"
+        },
+        {
+          "id": "media.paged.slide.setCustomShow",
+          "title": "Set a custom show",
+          "args": "schema/custom-show.args.json",
+          "result": "schema/custom-show.result.json"
+        },
+        {
+          "id": "media.paged.slide.deleteCustomShow",
+          "title": "Delete a custom show",
+          "args": "schema/named.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.playCustomShow",
+          "title": "Play a custom show",
+          "args": "schema/named.args.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.sections",
+          "title": "List the sections",
+          "args": "schema/empty.json",
+          "result": "schema/sections.result.json"
+        },
+        {
+          "id": "media.paged.slide.renameSection",
+          "title": "Rename a section",
+          "args": "schema/rename-section.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.moveSection",
+          "title": "Move a section",
+          "args": "schema/move-section.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.deleteSection",
+          "title": "Remove a section",
+          "args": "schema/delete-section.args.json",
+          "result": "schema/empty.json"
         }
       ],
       "templateFields": [
