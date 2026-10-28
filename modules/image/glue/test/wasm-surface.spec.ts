@@ -75,7 +75,7 @@ const UNMODELLED_ON_PURPOSE = new Map([
 function declaredIn(file: string, name: string): string[] {
   const src = readFileSync(file, "utf8");
   const block = new RegExp(
-    `export interface ${name}(?: extends [A-Za-z<>, ]+)? \\{(.*?)\\n\\}`,
+    `export interface ${name}(?:\\s+extends [A-Za-z<>,\\s]+?)? \\{(.*?)\\n\\}`,
     "s",
   ).exec(src);
   if (!block) throw new Error(`${name} interface not found in ${file}`);

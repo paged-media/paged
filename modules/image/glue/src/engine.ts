@@ -49,6 +49,7 @@ import {
   type RetouchEngine,
   type RetouchWasm,
 } from "./retouch-engine";
+import {
   filterEngineOf,
   type FilterEngine,
   type FilterWasm,
@@ -1269,9 +1270,7 @@ export interface FilterMask {
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
  *  doors in `engine-filters.ts`. */
 export interface ImageEngine
-  extends MaskingEngine,
-    RetouchEngine<DecodedInfo>,
-    FilterEngine {
+  extends MaskingEngine, RetouchEngine<DecodedInfo>, FilterEngine {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2276,10 +2275,7 @@ interface DecodedHandleWasm {
 
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
-export interface ImageWasmModule
-  extends MaskingWasm,
-    RetouchWasm,
-    FilterWasm {
+export interface ImageWasmModule extends MaskingWasm, RetouchWasm, FilterWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
