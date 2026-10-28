@@ -42,7 +42,7 @@ import {
   mapBacking,
   silentConsole as silent,
 } from "@paged-media/plugin-sdk";
-import { parseCssColor, parseSvgDocument } from "@paged-media/draw-geometry";
+import { parseCssColor, parsePathData } from "@paged-media/draw-geometry";
 
 import { drawBundle } from "../src";
 import { DRAW_ACTION_IDS, recolorSvg } from "../src/actions";
@@ -163,12 +163,29 @@ function stubDecoder(): void {
 
 afterEach(() => unstubAllGlobals());
 
+/** The attributes of each `<tag …>` of `svg`, in order. */
+const elements = (svg: string, tag: string): Record<string, string>[] =>
+  [...svg.matchAll(new RegExp(`<${tag}\\b([^>]*)>`, "g"))].map((m) =>
+    Object.fromEntries(
+      [...m[1]!.matchAll(/([\w-]+)="([^"]*)"/g)].map((a) => [a[1]!, a[2]!]),
+    ),
+  );
+
+/** A trace's SVG as its size and paths (the trace writes one `<path>` per
+ *  region or stroke). */
 const svgOf = (out: unknown) => {
   const a = out as ActionAsset;
   expect(a.mediaType).toBe("image/svg+xml");
-  const doc = parseSvgDocument(new TextDecoder().decode(a.bytes));
-  expect(doc).not.toBeNull();
-  return doc!;
+  const text = new TextDecoder().decode(a.bytes);
+  const root = elements(text, "svg")[0]!;
+  return {
+    width: Number(root.width),
+    height: Number(root.height),
+    shapes: elements(text, "path").map((p) => ({
+      anchors: parsePathData(p.d!),
+      fill: p.fill,
+    })),
+  };
 };
 
 describe("media.paged.draw actions on a shared registry [plugin-platform.actions-door]", () => {
@@ -198,7 +215,7 @@ describe("media.paged.draw actions on a shared registry [plugin-platform.actions
       expect([doc.width, doc.height]).toEqual([32, 32]);
       // The paper is dropped (ignoreWhite); the square is one red region.
       expect(doc.shapes.length).toBe(1);
-      expect(parseCssColor(doc.shapes[0]!.style.fill!)).toEqual([200, 20, 30]);
+      expect(parseCssColor(doc.shapes[0]!.fill!)).toEqual([200, 20, 30]);
       const xs = doc.shapes[0]!.anchors.anchors.map((a) => a.anchor[0]);
       expect(Math.min(...xs)).toBeCloseTo(8, 0);
       expect(Math.max(...xs)).toBeCloseTo(24, 0);
@@ -249,7 +266,7 @@ describe("media.paged.draw actions on a shared registry [plugin-platform.actions
         },
       ];
       const first = await runner.actions.runChain(steps, fakePicture(32));
-      expect(svgOf(first.output).shapes[0]!.style.fill).toBe("#0000ff");
+      expect(svgOf(first.output).shapes[0]!.fill).toBe("#0000ff");
       const again = await runner.actions.runChain(steps, fakePicture(32));
       expect(again).toMatchObject({ cached: true, key: first.key });
     },
@@ -263,43 +280,72 @@ const ART =
   `<rect x="20" y="0" width="10" height="10" fill="#1040e0"/>` +
   `</svg>`;
 
-describe("recolor over an SVG [plugin-draw.recolor-artwork]", () => {
-  const fills = (svg: string) =>
-    parseSvgDocument(svg)!.shapes.map((s) => s.style.fill);
+describe.skipIf(!built)(
+  "recolor over an SVG [plugin-draw.recolor-artwork]",
+  () => {
+    const fills = (svg: string) => elements(svg, "rect").map((r) => r.fill);
+    const strokes = (svg: string) => elements(svg, "rect").map((r) => r.stroke);
 
-  it("reduces to N colours, keeping an existing colour per cluster", () => {
-    const out = recolorSvg(ART, { mode: "reduce", count: 3 });
-    const f = fills(out);
-    // The two reds are one cluster; blue and the black stroke stay.
-    expect(f[0]).toBe(f[1]);
-    expect(f[2]).toBe("#1040e0");
-    expect(parseSvgDocument(out)!.shapes[1]!.style.stroke).toBe("#101010");
-    expect(parseSvgDocument(out)).toMatchObject({ width: 30, height: 10 });
-  });
-
-  it("maps colours and moves them to a harmony, leaving neutrals", () => {
-    expect(
-      fills(recolorSvg(ART, { mode: "map", map: { "#1040e0": "#00ff00" } })),
-    ).toEqual(["#e01010", "#d02020", "#00ff00"]);
-    const h = recolorSvg(ART, {
-      mode: "harmony",
-      rule: "complementary",
-      base: "#00a0a0",
+    it("reduces to N colours, keeping an existing colour per cluster", async () => {
+      const out = await recolorSvg(ART, { mode: "reduce", count: 3 });
+      const f = fills(out);
+      // The two reds are one cluster; blue and the black stroke stay.
+      expect(f[0]).toBe(f[1]);
+      expect(f[2]).toBe("#1040e0");
+      expect(strokes(out)[1]).toBe("#101010");
+      // Everything but the colours is the file as it was.
+      expect(out.replace(/#[0-9a-f]{6}/g, "#")).toBe(
+        ART.replace(/#[0-9a-f]{6}/g, "#"),
+      );
     });
-    const [r] = parseCssColor(fills(h)[0]!)!;
-    expect(r).toBeLessThan(100); // red became a cyan-ish colour
-    expect(parseSvgDocument(h)!.shapes[1]!.style.stroke).toBe("#101010");
-  });
 
-  it("refuses what it cannot read", async () => {
-    expect(() => recolorSvg(ART, { mode: "spin" })).toThrow(/mode is/);
-    expect(() => recolorSvg("not svg", {})).toThrow(/not an SVG document/);
-    const { runner } = hosts();
-    await expect(
-      runner.actions.run(DRAW_ACTION_IDS.recolor, {
-        bytes: new Uint8Array([1]),
-        mediaType: "image/png",
-      }),
-    ).rejects.toThrow(/takes image\/svg\+xml/);
-  });
-});
+    it("maps colours and moves them to a harmony, leaving neutrals", async () => {
+      expect(
+        fills(
+          await recolorSvg(ART, { mode: "map", map: { "#1040e0": "#00ff00" } }),
+        ),
+      ).toEqual(["#e01010", "#d02020", "#00ff00"]);
+      const h = await recolorSvg(ART, {
+        mode: "harmony",
+        rule: "complementary",
+        base: "#00a0a0",
+      });
+      const [r] = parseCssColor(fills(h)[0]!)!;
+      expect(r).toBeLessThan(100); // red became a cyan-ish colour
+      expect(strokes(h)[1]).toBe("#101010");
+    });
+
+    it("carries what a flattening reader dropped: gradient stops, CSS, <use> (draw ADR 364)", async () => {
+      const rich =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">` +
+        `<style>.k { fill: #e01010 }</style>` +
+        `<linearGradient id="g"><stop offset="0" stop-color="#e01010"/><stop offset="1" stop-color="#ffffff"/></linearGradient>` +
+        `<rect id="r" class="k" width="5" height="5"/><use href="#r" x="5"/>` +
+        `<rect y="5" width="10" height="5" fill="url(#g)"/></svg>`;
+      const out = await recolorSvg(rich, {
+        mode: "map",
+        map: { "#e01010": "#00aa00" },
+      });
+      expect(out).toContain(".k { fill: #00aa00 }");
+      expect(out).toContain('stop-color="#00aa00"');
+      expect(out).toContain('<use href="#r" x="5"/>');
+      expect(out).toContain('fill="url(#g)"');
+    });
+
+    it("refuses what it cannot read", async () => {
+      await expect(recolorSvg(ART, { mode: "spin" })).rejects.toThrow(
+        /mode is/,
+      );
+      await expect(recolorSvg("not svg", {})).rejects.toThrow(
+        /not an SVG document/,
+      );
+      const { runner } = hosts();
+      await expect(
+        runner.actions.run(DRAW_ACTION_IDS.recolor, {
+          bytes: new Uint8Array([1]),
+          mediaType: "image/png",
+        }),
+      ).rejects.toThrow(/takes image\/svg\+xml/);
+    });
+  },
+);

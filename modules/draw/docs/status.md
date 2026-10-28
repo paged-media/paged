@@ -127,8 +127,12 @@ canary added is under [Releases](#releases).
   panel shows the fill's harmony and its shades / tints, warm / cool and vivid / muted
   variations; a click fills the selection (Alt-click strokes). The colour math is
   draw-geometry's `color-harmony.ts`.
-- **SVG.** An importer for `.svg` files and an exporter for the selection, through the
-  engine's `paged-svg` where the host has it.
+- **Interchange** ([ADR 364](adr/364-interchange-rides-the-engines-doors.md)). SVG in
+  (`.svg`) and out (the selection) through the engine's `paged-svg`; DXF in (`.dxf`) and
+  out (the selection, else the page) through the same doors and the draw wasm's
+  `draw-dxf`; Illustrator files (`.ai`, PDF-compatible) through paged.pdf's
+  place-as-vectors; EPS (`.eps`) through the engine's PostScript interpreter, landed as
+  editable paths.
 - **Simplify with a live preview.** While the Path Options Simplify section is open, the
   simplified selection is drawn dashed over the canvas with its anchor counts, following
   every edit and selection change. A corner angle (0–180°) keeps anchors at least that sharp
@@ -342,8 +346,10 @@ The trace runs the trace wasm in a `host.workers` worker when the host has one. 
 the platform's (`io/raster-decode.ts`), so it runs where `createImageBitmap` and
 `OffscreenCanvas` exist and refuses with the decoder's sentence elsewhere (Node, the headless
 host); a picture over `maxTracePixels` is traced downsampled. Decoding in the engine instead
-waits for `paged-raster` (PM-0014). The recolour writes draw-geometry's SVG flattening: one
-path per shape, solid paints only. Recolouring a raster is pixel work and is not registered.
+waits for `paged-raster` (PM-0014). The recolour rewrites the colours where the SVG declares
+them (fills, strokes, gradient stops, `style` attributes and `<style>` rules; the engine's
+`paged-svg::paint`) and keeps every other byte; an undeclared default black is left alone.
+Recolouring a raster is pixel work and is not registered.
 
 ## Limits of what is shipped
 
@@ -444,13 +450,28 @@ path per shape, solid paints only. Recolouring a raster is pixel work and is not
   stroke. Export writes what the selection draws: fills and strokes, gradients, opacity and
   blend, clips and masks, pictures as data URIs, and text as outlines (a conic gradient is
   its mean colour; effects other than a drop shadow and a gradient feather are reported).
-- **On a host without those doors** (an engine before protocol 77) the module's own reader
-  runs, as before: paths, basic shapes, group transforms and solid colours only; gradients,
-  text, images, `<use>`, clip paths, masks and stylesheets are not read, an unstroked shape
-  gets a 1 pt black stroke, export writes solid colours only. `fill-rule="evenodd"` is the
-  element's native fill rule where the engine has it (`document.fillRule@1`), re-wound by
-  nesting depth otherwise; a shape stays one path per contour when a contour after the
-  first is open, or when the engine reports no page origin.
+- **On a host without those doors** (an engine before protocol 77) there is no SVG, DXF
+  or EPS importer and no SVG or DXF exporter: the module has no SVG reader of its own any
+  more (ADR 364).
+- **DXF** import reads model space: LINE, LWPOLYLINE and 2-D POLYLINE (bulges as arcs),
+  CIRCLE, ARC, ELLIPSE, SPLINE (exact Bézier pieces up to degree 3; rational and higher
+  degrees as cubics through points and tangents), INSERT (blocks, arrays, eight levels) and
+  SOLID HATCH as a filled path; one named group per layer (a layer that is off is left
+  out), true and index colours, line weights, `$INSUNITS` (unitless read as millimetres).
+  Reported and left out: every other entity type (TEXT, MTEXT, DIMENSION, POINT, IMAGE,
+  pattern hatches, …), paper space, meshes, entities outside the drawing plane, a varying
+  polyline width (drawn at one width). Export writes each contour as an LWPOLYLINE
+  (straight) or an exact cubic SPLINE (curved), in millimetres, its stroke colour as a true
+  colour with the nearest index colour, its width snapped to DXF's line weights, a
+  top-level named group as a layer. Reported: fills (written as outlines), gradients and
+  patterns (their first colour), dashes, opacity, blend, clips (content written whole),
+  masks, filters, images. Illustrator 30.1 reads the exported SVG exactly; paged.draw reads
+  Illustrator's DXF exactly (fills from its HATCH), recorded in
+  `scripts/illustrator/probes/interchange-open.jsx`. Illustrator's opening of the exported
+  DXF is not recorded: its DXF/DWG Options dialog cannot be filled in from a script.
+- **AI** needs paged.pdf loaded (the importer runs its `placeVectors`); an `.ai` saved
+  without PDF compatibility is refused there. **EPS** needs a `%%BoundingBox`; where the
+  engine draws nothing from the program, the EPS stays placed as PostScript artwork.
 
 ## Not built
 
@@ -467,7 +488,7 @@ path per shape, solid paints only. Recolouring a raster is pixel work and is not
 - A variable-width centreline (a traced stroke has the ink's mean width); a Color Guide
   "save group"; Recolor Artwork's per-row colour editing in the panel (the `map` payload
   does it).
-- Readers for `.ai` and `.eps` files.
+- Lottie export.
 
 ## Releases
 

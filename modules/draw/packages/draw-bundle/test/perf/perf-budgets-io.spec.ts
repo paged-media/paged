@@ -35,9 +35,7 @@ import {
 
 import type { ElementId } from "@paged-media/plugin-api";
 
-import { importSvg, shapesFromSvgBytes } from "../../src";
-import { commitSvgImport } from "../../src/io/svg";
-import { tsLane } from "../headless/host";
+import { importSvg } from "../../src";
 import { BUDGET_TIMEOUT_MS, countingHost, report } from "./counting-host";
 import {
   addPlainShapes,
@@ -57,8 +55,7 @@ const hex = (n: number): string =>
  *   · 3 in 5 — a `<rect>` with a fill AND a stroke (two swatches);
  *   · 1 in 5 — a `<circle>` with a fill only (one swatch);
  *   · 1 in 5 — a `<path>` of THREE closed subpaths with a fill only
- *     (one swatch, ONE compound element: `insertPath` takes one contour,
- *     so the first is inserted and the table written by `framePath`).
+ *     (one swatch, ONE compound element).
  *
  *  Every colour is distinct, so no two shapes share a swatch. Everything
  *  lands inside the 612 × 792 page. */
@@ -168,14 +165,14 @@ async function landed(
 
 /** What the 50-shape file must put where — written from the SVG, not
  *  from the importer: one row per SHAPE (a compound's row is its first
- *  contour), in document order. A shape
- *  with no stroke gets the engine's creation fallback, a 1 pt
- *  `Color/Black` (`SVG_IMPORT_UNSTROKED`; the swatch is named "Black"). */
+ *  contour), in document order. A shape with no stroke has none: the old
+ *  TypeScript lane gave it a 1 pt black hairline (the creation fallback),
+ *  a fidelity gap the engine's import does not have (draw ADR 364). */
 function expected50(): {
   at: [number, number];
   fill: string;
-  stroke: string;
-  weight: number;
+  stroke: string | null;
+  weight: number | null;
 }[] {
   const rows = [];
   for (let i = 0; i < 50; i++) {
@@ -184,9 +181,14 @@ function expected50(): {
     const fill = hex(i * 2);
     if (i % 5 === 3) {
       // A circle's path starts at its rightmost point.
-      rows.push({ at: [x + 27, y + 15], fill, stroke: "Black", weight: 1 });
+      rows.push({
+        at: [x + 27, y + 15],
+        fill,
+        stroke: null,
+        weight: UNSTROKED,
+      });
     } else if (i % 5 === 4) {
-      rows.push({ at: [x, y], fill, stroke: "Black", weight: 1 });
+      rows.push({ at: [x, y], fill, stroke: null, weight: UNSTROKED });
     } else {
       rows.push({ at: [x, y], fill, stroke: hex(i * 2 + 1), weight: 1 });
     }
@@ -194,34 +196,32 @@ function expected50(): {
   return rows as {
     at: [number, number];
     fill: string;
-    stroke: string;
-    weight: number;
+    stroke: string | null;
+    weight: number | null;
   }[];
 }
+
+/** The weight the engine's import leaves on a shape it gives no stroke
+ *  (pinned below from what the engine answers). */
+const UNSTROKED = 0;
 
 setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 describe("perf budgets — interchange", () => {
-  // COVERS: the SVG import lane in `io/svg.ts` — `commitSvgImport`, what
-  // File ▸ Open runs, and `importSvg`, the variant that also answers the
-  // ids it inserted. The TypeScript lane, the fallback for an engine
-  // before protocol 77 (`tsLane`): the engine's lane is one read and the
-  // same one batch, pinned by svg-engine.spec.ts.
+  // COVERS: the SVG import lane in `io/svg.ts` — `importSvg`, what File ▸
+  // Open runs, which since draw ADR 364 is the engine's `document.importSvg`
+  // door and nothing else.
   //
   // History of these budgets (a budget only goes DOWN):
   //
-  //                         mutations  undo steps  reads  swatches
-  //   as found (50 shapes)     201        150        3       80
-  //   now                        1          1        2       80
+  //                          mutations  undo steps  reads  importSvg
+  //   as found (50 shapes)      201        150        3        —
+  //   TypeScript batch            1          1        2        —
+  //   now (the engine's)          0          1        2        1
   //
-  // As found it was a loop of awaited single mutations: per shape a
-  // swatch per colour, a creation-defaults swap, and an insert per
-  // contour — every one a rebuild of the 500-shape document, and the 80
-  // swatches and 70 inserts an undo step each. Now the file is ONE batch
-  // whose children insert a contour, bind it, and paint it through the
-  // handle (`io/svg.ts` says why the paint is not inherited from the
-  // creation defaults any more: that one child sends the whole batch
-  // down the engine lane where the undo log's cap bites).
+  // As found it was a loop of awaited single mutations; then one batch
+  // the bundle built from its own reader; now the engine reads the file
+  // and applies its own one batch, and the bundle writes nothing.
   describe("SVG import — a 50-shape file into a 500-shape document", () => {
     const SHAPES = 50;
     let w: Workload;
@@ -232,149 +232,84 @@ describe("perf budgets — interchange", () => {
     }, 120_000);
     afterAll(() => w?.h.dispose());
 
-    it("1 mutation and 1 undo step for one File ▸ Open", async () => {
+    it("1 door call and 1 undo step for one File ▸ Open", async () => {
       expect(w.refusals).toEqual([]);
       const before = await leafIds(w.h);
       expect(before).toHaveLength(502);
       const swatchesBefore = (await swatchRows(w)).length;
       const defaultsBefore = await creationDefaults(w);
-      const file = svgFile("perf.svg", syntheticSvg(SHAPES));
-      // The file is what the comment says: 30 rects, 10 circles and 10
-      // three-contour paths.
-      const parsed = shapesFromSvgBytes(file.bytes);
-      expect(parsed).toHaveLength(SHAPES);
-      expect(
-        parsed.filter((s) => s.anchors.subpathStarts.length === 3),
-      ).toHaveLength(10);
-
       const mark = await undoMark(w);
-      const { host, work } = countingHost(tsLane(w.h.host));
-      const done = await commitSvgImport(host, file);
-      const counted = work.snapshot();
-
-      // ---- behaviour: the right paint on the right contour, in order.
-      const after = await leafIds(w.h);
-      const known = new Set(before.map((id) => String(id.id)));
-      const made = after.filter((id) => !known.has(String(id.id)));
-      // 30 + 10 + 10 shapes, each ONE element — the three-contour paths
-      // compounds…
-      expect(made).toHaveLength(50);
-      // …appended, so the file paints on top, in document order.
-      expect(after.slice(-50)).toEqual(made);
-      expect(await landed(w, made)).toEqual(expected50());
-      expect(done).toEqual({
-        shapes: 50,
-        elements: 50,
-        swatches: 80,
-        batches: 1,
-        refused: 0,
-      });
-      // One swatch per DISTINCT colour: 2 × 30 + 10 + 10. (Here that is
-      // also one per colour per shape — every colour in this file is
-      // different. `svg-io.spec.ts` pins the sharing.)
-      expect((await swatchRows(w)).length - swatchesBefore).toBe(80);
-      // The user's creation defaults are not touched, so not restored.
-      expect(await creationDefaults(w)).toEqual(defaultsBefore);
-
-      const undoSteps = await undoStepsSince(w, mark);
-      report("svg import 50", counted, { undoSteps, leavesAdded: made.length });
-
-      // ---- the budget.
-      // ONE mutation. Its 350 children: 80 swatches, for each of the 50
-      // shapes an insert, a bind and three paint writes, and for each of
-      // the 10 compounds its `framePath` and `frameBounds`.
-      // As found: 201 mutations.
-      expect(counted.mutations).toEqual([{ op: "batch", ops: 350 }]);
-      // ONE press of undo removes the file. As found: 150.
-      expect(undoSteps).toBe(1);
-      expect(await leafIds(w.h)).toEqual(before);
-      expect((await swatchRows(w)).length).toBe(swatchesBefore);
-      // The target page: meta, then (no active page headlessly) the page
-      // list. As found: 3 — a second meta read for the defaults to
-      // restore, which nothing writes any more.
-      expect(counted.count("document.meta")).toBe(1);
-      expect(counted.count("document.collection")).toBe(1);
-      expect(counted.reads()).toBe(2);
-    });
-
-    // `importSvg` is the same commit, plus the list of what it inserted.
-    // As found the loop got each id from its own insert's outcome, for
-    // free — at 201 mutations; the one-batch commit then paid two tree
-    // reads for the list, a before/after diff, because a batch outcome
-    // carries ONE `createdId`. The engine's reply lists every id a batch
-    // minted (`mutationApplied.minted`, in mint order), and the list is
-    // read off it now (`commands/minted.ts`): no read on top.
-    it("asking which elements were inserted costs nothing on top", async () => {
-      const before = await leafIds(w.h);
-      const mark = await undoMark(w);
-      const { host, work } = countingHost(tsLane(w.h.host));
+      const { host, work } = countingHost(w.h.host);
       const inserted = await importSvg(
         host,
         svgFile("perf.svg", syntheticSvg(SHAPES)),
       );
       const counted = work.snapshot();
 
-      // Exactly the new leaves, in insertion (= paint) order.
-      expect(inserted).toEqual((await leafIds(w.h)).slice(before.length));
-      expect(inserted).toHaveLength(50);
-      expect(await landed(w, inserted)).toEqual(expected50());
+      // ---- behaviour: the right paint on the right element, in order.
+      const after = await leafIds(w.h);
+      const known = new Set(before.map((id) => String(id.id)));
+      const made = after.filter((id) => !known.has(String(id.id)));
+      // 30 + 10 + 10 shapes, each ONE element — the three-contour paths
+      // compounds…
+      expect(made).toHaveLength(50);
+      expect(inserted.filter((id) => id.kind !== "group")).toEqual(made);
+      // …appended, so the file paints on top, in document order.
+      expect(after.slice(-50)).toEqual(made);
+      const compounds = await Promise.all(
+        made.map(
+          async (id) =>
+            (await w.h.host.document.pathAnchors(id))!.subpathStarts.length,
+        ),
+      );
+      expect(compounds.filter((n) => n === 3)).toHaveLength(10);
+      expect(await landed(w, made)).toEqual(expected50());
+      // One swatch per DISTINCT colour: 2 × 30 + 10 + 10.
+      expect((await swatchRows(w)).length - swatchesBefore).toBe(80);
+      // The user's creation defaults are not touched.
+      expect(await creationDefaults(w)).toEqual(defaultsBefore);
 
       const undoSteps = await undoStepsSince(w, mark);
-      report("svg import 50, with ids", counted, { undoSteps });
+      report("svg import 50", counted, { undoSteps, leavesAdded: made.length });
 
-      expect(counted.mutations).toEqual([{ op: "batch", ops: 350 }]);
+      // ---- the budget.
+      // NO mutation of the bundle's: the engine's door applies its batch.
+      expect(counted.mutations).toEqual([]);
+      expect(counted.count("document.importSvg")).toBe(1);
+      // ONE press of undo removes the file. As found: 150.
       expect(undoSteps).toBe(1);
-      // As found: 2.
-      expect(counted.count("document.tree")).toBe(0);
+      expect(await leafIds(w.h)).toEqual(before);
+      expect((await swatchRows(w)).length).toBe(swatchesBefore);
+      // The target page: meta, then (no active page headlessly) the page
+      // list.
       expect(counted.count("document.meta")).toBe(1);
       expect(counted.count("document.collection")).toBe(1);
-      // The commit's own two — the same as File ▸ Open's. As found: 4.
-      expect(counted.reads()).toBe(2);
+      expect(counted.count("document.tree")).toBe(0);
     });
 
     // COVERS: the same lane on a file bigger than the engine's undo log.
     //
     //                          mutations  undo steps   import    undo
     //   as found (3 000 shapes)  12 001     9 000      20.7 s   21.5 s
-    //   now                           1         1       0.3 s    0.1 s
+    //   TypeScript batch              1         1       0.3 s    0.1 s
     //
-    // (The two durations are one run on one laptop, written down so the
-    // counts have a scale — they are not budgets.)
-    //
-    // The count that matters is the SECOND one, and it is not a given.
-    // The engine's undo log holds 10 000 entries. A batch that styles
-    // through `setDocumentDefaults` takes the engine's per-child lane,
-    // where each of this file's children would hold a log entry until
-    // the batch collapses — and one undo would then leave 500 shapes and
-    // 1 001 swatches behind for good (`svg-io.spec.ts` pins that edge).
-    // The batch built here has 21 000 children and is ONE log entry: it
-    // is NOT chunked, because 40 batches of 500 contours measured SLOWER
-    // than one batch of 20 000 (7.9 s against 5.2 s) and cost 40 undos.
-    it("a 3 000-shape file is still one mutation, and one undo takes all of it back", async () => {
+    // The engine's batch is one log entry whatever its size: one undo
+    // takes all of it back, not one shape and not one swatch stranded.
+    it("a 3 000-shape file is one undo step, and one undo takes all of it back", async () => {
       const BIG = 3000;
       const before = await leafIds(w.h);
       const swatchesBefore = (await swatchRows(w)).length;
       const mark = await undoMark(w);
-      const { host, work } = countingHost(tsLane(w.h.host));
-      const done = await commitSvgImport(
-        host,
-        svgFile("big.svg", denseSvg(BIG)),
-      );
+      const { host, work } = countingHost(w.h.host);
+      await importSvg(host, svgFile("big.svg", denseSvg(BIG)));
       const counted = work.snapshot();
 
-      expect(done).toEqual({
-        shapes: BIG,
-        elements: BIG,
-        swatches: 2 * BIG,
-        batches: 1,
-        refused: 0,
-      });
       const after = await leafIds(w.h);
       expect(after).toHaveLength(before.length + BIG);
       expect((await swatchRows(w)).length).toBe(swatchesBefore + 2 * BIG);
       // First and last made it, in order, with their own paint.
       expect(
-        await landed(w, [after[before.length], after[after.length - 1]]),
+        await landed(w, [after[before.length]!, after[after.length - 1]!]),
       ).toEqual([
         { at: [6, 280], fill: hex(0), stroke: hex(1), weight: 0.5 },
         {
@@ -391,13 +326,11 @@ describe("perf budgets — interchange", () => {
       const undoSteps = await undoStepsSince(w, mark);
       report("svg import 3000", counted, { undoSteps, leavesAdded: BIG });
 
-      // 2 swatches + insert + bind + 3 paint writes, per shape.
-      expect(counted.mutations).toEqual([{ op: "batch", ops: 7 * BIG }]);
+      expect(counted.mutations).toEqual([]);
       expect(undoSteps).toBe(1);
       // ALL of it: not one shape and not one swatch stranded.
       expect(await leafIds(w.h)).toEqual(before);
       expect((await swatchRows(w)).length).toBe(swatchesBefore);
-      expect(counted.reads()).toBe(2);
     });
   });
 });

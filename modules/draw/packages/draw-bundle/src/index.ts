@@ -1037,23 +1037,45 @@ export {
   BIND_ARROWHEAD_CONTROLS_VISIBLE,
   ARROWHEAD_OPTIONS,
 } from "./panels/stroke-panel";
-// Phase 8 — SVG interchange (K-2): the importer/exporter registration +
-// the pure planning helpers (insert/style mutation builders), exported
-// for the conformance specs (the no-second-copy rule).
+// Interchange (draw ADR 364): SVG, DXF, Illustrator and EPS through the
+// engine's SVG doors and paged.pdf's placement — registration and the
+// import/export functions, exported for the conformance specs.
 export {
   contributeSvgIo,
   importSvg,
+  importSvgFile,
   exportSvg,
-  shapesFromSvgBytes,
-  svgImportUnitsFor,
-  insertPathMutationsForShape,
-  styleDefaultsForShape,
-  resolveTargetPage,
   SVG_IMPORTER_ID,
   SVG_EXPORTER_ID,
   SVG_MIME,
-  type ShapeDefaults,
+  MAX_SVG_BYTES,
+  type SvgFileImport,
 } from "./io/svg";
+export {
+  contributeDxfIo,
+  importDxf,
+  exportDxf,
+  DXF_IMPORTER_ID,
+  DXF_EXPORTER_ID,
+} from "./io/dxf";
+export {
+  contributeVectorFileImporters,
+  importAi,
+  importEps,
+  epsBoundingBox,
+  epsPlacementFor,
+  AI_IMPORTER_ID,
+  EPS_IMPORTER_ID,
+  PDF_PLACE_VECTORS,
+} from "./io/vector-files";
+export {
+  bootInterchange,
+  type InterchangeEngine,
+  type InterchangeReport,
+  type DxfImport,
+  type DxfExport,
+} from "./interchange-wasm";
+export { insertPathMutationsForShape, resolveTargetPage } from "./target-page";
 // Wave 2 — Eyedropper: the sample/apply pure halves + the module
 // sample state, exported for the conformance spec (the no-second-copy
 // rule).
