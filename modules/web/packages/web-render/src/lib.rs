@@ -61,6 +61,7 @@
 //! artifact was built from, so the bundle's test suite can refuse a stale one.
 
 pub mod display_list;
+pub mod effects;
 pub mod lower;
 pub mod perf;
 
@@ -70,12 +71,16 @@ mod boundary;
 #[cfg(feature = "blitz")]
 pub use boundary::{
     register_font_json, register_resource_bytes, render_web_flow_boundary_json,
-    render_web_frame_json, take_resource_misses_json, take_text_advances_json,
+    render_web_frame_json, take_effects_json, take_resource_misses_json, take_text_advances_json,
 };
 pub mod wire;
 
 #[cfg(feature = "blitz")]
 pub mod capture;
+
+// The DOM half of the CSS effect-group capture (ADR 415).
+#[cfg(feature = "blitz")]
+mod fx_capture;
 
 #[cfg(feature = "blitz")]
 pub mod fonts;
@@ -109,6 +114,7 @@ pub use display_list::{
     LocalKey, RunFace, UnsupportedKind, WebBlendMode, WebDisplayList, WebDrawCmd, WebGlyphRun,
     WebGradient, WebGradientStop, WebImage,
 };
+pub use effects::{CssFilter, LayerEffects, SceneEffectGroup, WebEffect};
 pub use lower::{lower, LowerReport, Lowered};
 pub use wire::{
     RectPt, SceneBlendMode, SceneGradient, SceneGradientStop, SceneItem, SceneLayer, ScenePaint,
@@ -195,6 +201,14 @@ pub fn take_resource_misses() -> String {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn take_text_advances() -> String {
     take_text_advances_json()
+}
+
+/// The CSS effect groups of the last render (ADR 415), one entry per layer,
+/// as JSON — what a bake maps onto native items.
+#[cfg(all(feature = "blitz", target_arch = "wasm32"))]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn take_effects() -> String {
+    take_effects_json()
 }
 
 /// The hash of the sources this wasm was built from
