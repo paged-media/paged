@@ -1963,6 +1963,15 @@ export interface GestureAnchor {
      * it needs no protocol bump.
      */
     pivotInPage?: [number, number];
+    /**
+     * Free Transform (editor ADR 295) — the axis a `Shear` slants along.
+     * Absent (every caller before it existed) is [`ShearAxis::X`], the
+     * horizontal shear the Shear tool has always made; `Y` is the
+     * vertical shear a side handle of the Free Transform box drives
+     * (`y\' = y + k·(x − pivot.x)`). Ignored by every other gesture.
+     * Additive (`serde(default)`), so it needs no protocol bump.
+     */
+    shearAxis?: ShearAxis;
 }
 
 /**
@@ -2876,6 +2885,12 @@ export interface SvgImportPlan {
      */
     error: string | null;
 }
+
+/**
+ * The axis a [`GestureType::Shear`] slants along (see
+ * [`GestureAnchor::shear_axis`]).
+ */
+export type ShearAxis = "x" | "y";
 
 /**
  * The canonical mutation primitive. A closed set, extended only with
