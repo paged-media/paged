@@ -392,6 +392,42 @@ pub fn srgb_icc() -> Vec<u8> {
         .unwrap_or_default()
 }
 
+/// sRGB pixels converted to CMYK bytes (0 = no ink): through `profile`
+/// with `intent` (black-point compensation on) when it is a usable CMYK
+/// output profile, else with the naive formula (`k = 1 - max(r, g, b)`).
+/// Returns the pixels and whether the profile was used. The one
+/// sRGB-to-ink conversion a raster export (a CMYK TIFF) and a CMYK PSD
+/// save share.
+pub fn srgb8_to_cmyk8(
+    rgb: &[[u8; 3]],
+    profile: Option<&[u8]>,
+    intent: paged_color::Intent,
+) -> (Vec<[u8; 4]>, bool) {
+    let mut cmyk = vec![[0u8; 4]; rgb.len()];
+    let managed = profile.is_some_and(|p| {
+        let mut cmm =
+            paged_color::IccCmm::new(None, paged_color::DisplaySetup { intent, bpc: true });
+        cmm.configure_export(Some(p), paged_color::ExportPolicy::ConvertToDestination);
+        cmm.export_rgb8_to_cmyk8(rgb, &mut cmyk)
+    });
+    if !managed {
+        for (o, p) in cmyk.iter_mut().zip(rgb) {
+            let [r, g, b] = p.map(|v| f32::from(v) / 255.0);
+            let k = 1.0 - r.max(g).max(b);
+            let ink = |c: f32| {
+                if k >= 1.0 {
+                    0.0
+                } else {
+                    (1.0 - c - k) / (1.0 - k)
+                }
+            };
+            let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            *o = [q(ink(r)), q(ink(g)), q(ink(b)), q(k)];
+        }
+    }
+    (cmyk, managed)
+}
+
 /// sRGB samples (8-bit, Gray or RGB, alpha kept) converted to CMYK for a
 /// print export: through `profile` with `intent` when it is a usable CMYK
 /// output profile, else with the naive formula (`k = 1 - max(r, g, b)`).
@@ -419,28 +455,7 @@ pub fn rgb_to_cmyk(
             img.model
         )));
     }
-    let mut cmyk = vec![[0u8; 4]; rgb.len()];
-    let managed = profile.is_some_and(|p| {
-        let mut cmm =
-            paged_color::IccCmm::new(None, paged_color::DisplaySetup { intent, bpc: true });
-        cmm.configure_export(Some(p), paged_color::ExportPolicy::ConvertToDestination);
-        cmm.export_rgb8_to_cmyk8(&rgb, &mut cmyk)
-    });
-    if !managed {
-        for (o, p) in cmyk.iter_mut().zip(&rgb) {
-            let [r, g, b] = p.map(|v| f32::from(v) / 255.0);
-            let k = 1.0 - r.max(g).max(b);
-            let ink = |c: f32| {
-                if k >= 1.0 {
-                    0.0
-                } else {
-                    (1.0 - c - k) / (1.0 - k)
-                }
-            };
-            let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-            *o = [q(ink(r)), q(ink(g)), q(ink(b)), q(k)];
-        }
-    }
+    let (cmyk, managed) = srgb8_to_cmyk8(&rgb, profile, intent);
     let mut data = Vec::with_capacity(rgb.len() * (4 + usize::from(alpha)));
     for (i, c) in cmyk.iter().enumerate() {
         data.extend_from_slice(c);

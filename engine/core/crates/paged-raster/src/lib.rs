@@ -139,7 +139,9 @@ mod tif;
 pub use eps::bounding_box as eps_bounding_box;
 
 pub use convert::{to_rgba8, ColourConvert, NaiveColour, PagedColour};
-pub use encode::{encode, resize, rgb_to_cmyk, srgb_icc, EncodeFormat, EncodeOptions, WEBP_LOSSY};
+pub use encode::{
+    encode, resize, rgb_to_cmyk, srgb8_to_cmyk8, srgb_icc, EncodeFormat, EncodeOptions, WEBP_LOSSY,
+};
 pub use icc::extract_icc;
 pub use jpeg::{jpeg_header, JpegHeader};
 pub use meta::{extract_icc_any, read_metadata, Metadata};

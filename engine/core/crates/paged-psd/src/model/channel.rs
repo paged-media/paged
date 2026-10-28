@@ -35,11 +35,10 @@
 //!   rows. Each row decodes to exactly `cols` bytes.
 //! * **ZIP (2)** — `bytes` = a zlib stream; inflate to the plane.
 //! * **ZIP-with-prediction (3)** — inflate, then undo the per-row
-//!   horizontal byte delta (`out[i] += out[i-1]` within each row). Only
-//!   the 8-bit case is implemented here; 16-bit prediction (which deltas
-//!   16-bit samples, big-endian) is deferred to M2 and reported as
-//!   `Unsupported` (the `depth` param is taken now so the signature is
-//!   stable). Method 2 just inflates raw bytes for any depth.
+//!   horizontal delta within each row — over bytes at depth 8, over
+//!   big-endian 16-bit SAMPLES at depth 16 (Photoshop's 16-bit layers,
+//!   read back from its own files). 32-bit prediction is `Unsupported`.
+//!   Method 2 just inflates raw bytes for any depth.
 //!
 //! Provenance: Adobe Photoshop File Format specification, "Channel
 //! Image Data"; zlib/DEFLATE (RFC 1950/1951); TIFF horizontal
@@ -123,17 +122,24 @@ impl ChannelData {
             )),
             Compression::Rle => self.decode_rle(container, rows, cols, plane_len),
             Compression::Zip => inflate(&self.bytes, plane_len),
-            Compression::ZipPrediction => {
-                if depth != 8 {
-                    return Err(PsdError::Unsupported(format!(
-                        "ZIP-with-prediction at depth {depth} (only 8-bit lands in M1; \
-                         16/32-bit prediction is M2)"
-                    )));
+            Compression::ZipPrediction => match depth {
+                8 => {
+                    let mut plane = inflate(&self.bytes, plane_len)?;
+                    undo_prediction_8bit(&mut plane, rows as usize, cols as usize);
+                    Ok(plane)
                 }
-                let mut plane = inflate(&self.bytes, plane_len)?;
-                undo_prediction_8bit(&mut plane, rows as usize, cols as usize);
-                Ok(plane)
-            }
+                // 16-bit: the delta runs over big-endian SAMPLES (what
+                // Photoshop writes into a 16-bit document's `Lr16`
+                // block, checked on its own files); reduced to the high
+                // byte like RAW.
+                16 => {
+                    let samples = self.decode_samples16(rows, cols)?;
+                    Ok(samples.iter().map(|s| (s >> 8) as u8).collect())
+                }
+                _ => Err(PsdError::Unsupported(format!(
+                    "ZIP-with-prediction at depth {depth} (8- and 16-bit are read)"
+                ))),
+            },
         }
     }
 
@@ -214,6 +220,79 @@ impl ChannelData {
             packbits::decode(row_src, dst)?;
         }
         Ok(plane)
+    }
+
+    /// The 16-bit SAMPLES of a 16-bit channel stored RAW or
+    /// ZIP-with-prediction (`rows * cols` of them), at full precision.
+    pub fn decode_samples16(&self, rows: u32, cols: u32) -> Result<Vec<u16>> {
+        let n = (rows as usize)
+            .checked_mul(cols as usize)
+            .ok_or_else(|| malformed(format!("plane size {rows}×{cols} overflows usize")))?;
+        let bytes = match self.compression {
+            Compression::Raw => {
+                if self.bytes.len() != n * 2 {
+                    return Err(malformed(format!(
+                        "16-bit RAW channel is {} byte(s), expected {}",
+                        self.bytes.len(),
+                        n * 2
+                    )));
+                }
+                self.bytes.clone()
+            }
+            Compression::Zip => inflate(&self.bytes, n * 2)?,
+            Compression::ZipPrediction => inflate(&self.bytes, n * 2)?,
+            Compression::Rle => {
+                return Err(PsdError::Unsupported(
+                    "16-bit RLE channel samples (see `decode`)".into(),
+                ))
+            }
+        };
+        let mut samples: Vec<u16> = bytes
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_be_bytes(*b))
+            .collect();
+        if self.compression == Compression::ZipPrediction {
+            let cols = cols as usize;
+            for row in samples.chunks_mut(cols.max(1)) {
+                for i in 1..row.len() {
+                    row[i] = row[i].wrapping_add(row[i - 1]);
+                }
+            }
+        }
+        Ok(samples)
+    }
+
+    /// Build a ZIP-with-prediction `ChannelData` (compression 3, what
+    /// Photoshop writes for a 16-bit document's layers) from 16-bit
+    /// samples, `rows * cols` of them: each row's samples after the first
+    /// become their difference from the previous one, the big-endian
+    /// result is deflated into a zlib stream.
+    pub fn encode_zip_predicted16(samples: &[u16], rows: u32, cols: u32) -> Result<ChannelData> {
+        let cols = cols as usize;
+        let n = (rows as usize)
+            .checked_mul(cols)
+            .ok_or_else(|| malformed(format!("plane size {rows}×{cols} overflows usize")))?;
+        if samples.len() != n {
+            return Err(malformed(format!(
+                "ZIP encode: {} sample(s), expected {n}",
+                samples.len()
+            )));
+        }
+        let mut bytes = Vec::with_capacity(n * 2);
+        for row in samples.chunks(cols.max(1)) {
+            let mut prev = 0u16;
+            for (i, &s) in row.iter().enumerate() {
+                let d = if i == 0 { s } else { s.wrapping_sub(prev) };
+                bytes.extend_from_slice(&d.to_be_bytes());
+                prev = s;
+            }
+        }
+        Ok(ChannelData {
+            compression: Compression::ZipPrediction,
+            bytes: miniz_oxide::deflate::compress_to_vec_zlib(&bytes, 6),
+        })
     }
 
     /// Build a RAW `ChannelData` from a planar 8-bit buffer (writer-side
@@ -355,6 +434,19 @@ mod tests {
 
     /// 16-bit RLE stays refused, and the refusal cites its evidence
     /// rather than reading as "nobody got to it".
+    #[test]
+    fn image_psd_layer_channel_data_zip_prediction_sixteen_bit_round_trips() {
+        let samples: Vec<u16> = (0..12u16).map(|i| i * 5000 + 7).collect();
+        let cd = ChannelData::encode_zip_predicted16(&samples, 3, 4).unwrap();
+        assert_eq!(cd.compression, Compression::ZipPrediction);
+        assert_eq!(cd.decode_samples16(3, 4).unwrap(), samples);
+        let reduced = cd.decode(Container::Psd, 3, 4, 16).unwrap();
+        assert_eq!(
+            reduced,
+            samples.iter().map(|s| (s >> 8) as u8).collect::<Vec<_>>()
+        );
+    }
+
     #[test]
     fn image_psd_layer_channel_data_rle_sixteen_bit_is_refused_with_its_reason() {
         let ch = ChannelData {
