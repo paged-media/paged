@@ -538,6 +538,16 @@ fn vector_mask_blocks(store: &Store, l: &Layer) -> Vec<AdditionalLayerInfo> {
 
 /// A layer MADE in paged, as a new record.
 fn built_record(store: &Store, l: &Layer) -> Result<LayerRecord, IngestError> {
+    // A new SHAPE layer's stored pixels are its fill cut by its path
+    // (ADR 476), so its fill must be rendered. A plain fill layer's content
+    // block is what Photoshop draws (it renders the fill again), so it is
+    // written as it stands.
+    if l.fill().is_some_and(|f| f.stale) && l.live_vector_mask().is_some() {
+        return Err(IngestError::Unsupported(format!(
+            "fill layer \"{}\" is not rendered yet — composite before saving",
+            l.name
+        )));
+    }
     let mut addl = Vec::new();
     let (rect, mut channels, mut channel_data) = match &l.kind {
         LayerKind::Adjustment(a) => {
@@ -878,12 +888,6 @@ pub fn psd_write_stack(
                 None,
             )?);
             open.push(g);
-        }
-        if layer.fill().is_some_and(|f| f.stale) {
-            return Err(IngestError::Unsupported(format!(
-                "fill layer \"{}\" is not rendered yet — composite before saving",
-                layer.name
-            )));
         }
         records.push(match &layer.ext.source {
             Some(src) => {
