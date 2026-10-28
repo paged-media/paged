@@ -126,6 +126,7 @@ import {
   type EditTarget,
   type PsdLayerInfo,
   type RasterFormat,
+  type SaveBackFormat,
   type ExportOptions,
   type ExportNote,
   EXPORT_FORMATS,
@@ -644,6 +645,15 @@ export interface ImageSession extends RetouchApi {
    *  composite). Null when no PSD is loaded, and null (with the reason
    *  as the status) when the save-back declines an edited file. */
   psdExportBytes(): Promise<{ bytes: Uint8Array; fileName: string } | null>;
+  /** The PSD export's document as a layered TIFF (engine ADR 1038): the
+   *  composite as the TIFF's image and the layers in its ImageSourceData
+   *  tag, which Photoshop reopens with its layers. Null, with the reason
+   *  as the status, for a session not opened from a PSD or a document
+   *  the writer refuses (16/32-bit, PSB, no layers). */
+  layeredTiffExportBytes(): Promise<{
+    bytes: Uint8Array;
+    fileName: string;
+  } | null>;
   /** What the PNG / JPEG exporters hand out: the adjusted result
    *  re-encoded in the REQUESTED format (whatever the source was). */
   rasterExportBytes(
@@ -1641,6 +1651,15 @@ const S = defineMessages("image.status", {
   exportNoteNarrowed: "This format holds 8 bits; the pixels were narrowed.",
   exportNoteAlphaDropped: "JPEG has no transparency; it was dropped.",
   exportNoteGrayUntagged: "Grayscale is written without a profile.",
+  exportNoteGifPalette:
+    "GIF holds 256 colours and one bit of transparency: the colours were reduced.",
+  exportNoteJxlLossless: "JPEG XL is written lossless.",
+  exportNoteNoMetadata:
+    "This format carries no metadata or colour profile; none was written.",
+  layeredTiffNeedsPsd:
+    "A TIFF with layers is written from a PSD: open the image from a PSD first.",
+  layeredTiffExported:
+    "{file} — a TIFF with the PSD's layers (Photoshop reopens them).",
   exportProfileSet: "CMYK profile: {name}.",
   noProfileChosen: "No profile chosen.",
   saveBackReady: "{note} {file}, {bytes} bytes — ready.",
@@ -2066,7 +2085,7 @@ export function createImageSession(host: BundleHost): ImageSession {
   /** The ingested source's container, for the PNG/JPEG save-back lane
    *  ("jpeg" only when the ORIGINAL bytes were a JPEG — a re-encode
    *  never invents a lossy format). */
-  let sourceFormat: RasterFormat | "psd" | null = null;
+  let sourceFormat: SaveBackFormat | "psd" | null = null;
   /** The bytes the session opened: Export As and the save-back carry
    *  their EXIF, XMP and IPTC (and a CMYK source's profile). */
   let sourceBytes: Uint8Array | null = null;
@@ -2913,7 +2932,7 @@ export function createImageSession(host: BundleHost): ImageSession {
    *  the format the file already was (never inventing a lossy one): JPEG,
    *  TIFF and WebP go back as themselves. Every other container (GIF,
    *  BMP, AVIF, HDR, ...) falls to PNG — the lossless default. */
-  const sniffFormat = (bytes: Uint8Array): RasterFormat | "psd" => {
+  const sniffFormat = (bytes: Uint8Array): SaveBackFormat | "psd" => {
     if (isPsd(bytes)) return "psd";
     const b = (i: number) => bytes[i] ?? -1;
     if (b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff) return "jpeg";
@@ -2937,6 +2956,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     narrowed: S.exportNoteNarrowed,
     "alpha-dropped": S.exportNoteAlphaDropped,
     "gray-untagged": S.exportNoteGrayUntagged,
+    "gif-palette": S.exportNoteGifPalette,
+    "jxl-lossless": S.exportNoteJxlLossless,
+    "no-metadata": S.exportNoteNoMetadata,
   };
   /** The engine's notes for the last export, as sentences. */
   const exportNoteText = (): string =>
@@ -4686,7 +4708,7 @@ export function createImageSession(host: BundleHost): ImageSession {
           setStatus(t(S.psdSaveBackUnavailableTheStructural));
           return null;
         } else {
-          const fmt: RasterFormat = sourceFormat ?? "png";
+          const fmt: SaveBackFormat = sourceFormat ?? "png";
           // The source's EXIF, XMP and IPTC ride along, the pixels are
           // tagged sRGB, the resolution is written (ADR 468).
           result = {
@@ -4861,6 +4883,27 @@ export function createImageSession(host: BundleHost): ImageSession {
       // is already the status). Exporting the original instead would
       // look like success and drop the edits, so export nothing.
       return null;
+    },
+
+    async layeredTiffExportBytes() {
+      if (psdHandle === null || !engine || !state.psd) {
+        setStatus(t(S.layeredTiffNeedsPsd));
+        emit();
+        return null;
+      }
+      const psd = await api.psdExportBytes();
+      if (!psd) return null;
+      try {
+        const bytes = engine.psdToLayeredTiff(psd.bytes, "lzw");
+        const fileName = `${baseName(psd.fileName)}.tif`;
+        setStatus(t(S.layeredTiffExported, { file: fileName }));
+        emit();
+        return { bytes, fileName };
+      } catch (err) {
+        setStatus(t(S.exportFailed, { error: errText(err) }));
+        emit();
+        return null;
+      }
     },
 
     async rasterExportBytes(format) {

@@ -79,7 +79,7 @@ import {
   type DecodedInfo,
   type DisplayTreatment,
   type ImageEngine,
-  type RasterFormat,
+  type SaveBackFormat,
 } from "./engine";
 import { defaultAdjust, writeAdjust } from "./object-model/adjust";
 
@@ -98,11 +98,11 @@ export const IMAGE_ACTION_IDS = {
 
 /** The output format: `keep` writes JPEG for a JPEG and PNG for anything
  *  else (a PSD composite becomes a PNG). */
-type OutFormat = "keep" | RasterFormat;
+type OutFormat = "keep" | SaveBackFormat;
 
 const ENCODE_DEFAULTS = { format: "keep" as OutFormat, quality: 90 };
 
-const MEDIA_TYPE: Record<RasterFormat, string> = {
+const MEDIA_TYPE: Record<SaveBackFormat, string> = {
   png: "image/png",
   jpeg: "image/jpeg",
   webp: "image/webp",
@@ -193,7 +193,7 @@ function encode(
     asked !== "tiff"
   )
     throw new Error(`${id}: format is "keep", "png", "jpeg", "webp" or "tiff"`);
-  const format: RasterFormat =
+  const format: SaveBackFormat =
     asked === "keep" ? (r.source === "jpeg" ? "jpeg" : "png") : asked;
   const quality = Number(params.quality ?? 90);
   if (!Number.isInteger(quality) || quality < 1 || quality > 100)

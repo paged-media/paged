@@ -508,6 +508,7 @@ describe("the save-back lane (real engine wasm)", () => {
       "media.paged.image.exporter.png",
       "media.paged.image.exporter.jpeg",
       "media.paged.image.exporter.tiff",
+      "media.paged.image.exporter.tiffLayers",
       "media.paged.image.exporter.webp",
     ]);
     loaded.dispose();

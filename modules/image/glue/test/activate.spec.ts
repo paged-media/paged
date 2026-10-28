@@ -374,6 +374,7 @@ describe("imageBundle.activate", () => {
       "media.paged.image.exporter.png",
       "media.paged.image.exporter.jpeg",
       "media.paged.image.exporter.tiff",
+      "media.paged.image.exporter.tiffLayers",
       "media.paged.image.exporter.webp",
     ]);
     expect(
