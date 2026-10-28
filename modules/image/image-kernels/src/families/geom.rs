@@ -1505,6 +1505,69 @@ struct Params {
     min_weight: f32,
     _abi_pad: u32,
 }
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(0) @binding(1) var in1 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+fn src_tap(p: vec2<i32>, sd: vec2<i32>) -> vec4<f32> {
+    return textureLoad(in0, clamp(p, vec2<i32>(0), sd - vec2<i32>(1)), 0);
+}
+
+fn bilinear(s: vec2<f32>, sd: vec2<i32>) -> vec4<f32> {
+    let f = floor(s);
+    let t = s - f;
+    let i = vec2<i32>(f);
+    let p00 = src_tap(i, sd);
+    let p10 = src_tap(i + vec2<i32>(1, 0), sd);
+    let p01 = src_tap(i + vec2<i32>(0, 1), sd);
+    let p11 = src_tap(i + vec2<i32>(1, 1), sd);
+    return mix(mix(p00, p10, t.x), mix(p01, p11, t.x), t.y);
+}
+
+fn nnf(c: vec2<i32>, k: i32, nd: vec2<i32>) -> vec4<f32> {
+    let q = clamp(vec2<i32>(c.x * 3 + k, c.y), vec2<i32>(0), nd - vec2<i32>(1));
+    return textureLoad(in1, q, 0);
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = vec2<i32>(textureDimensions(outp));
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    if (xy.x >= dims.x || xy.y >= dims.y) { return; }
+    let sdu = textureDimensions(in0);
+    let sd = vec2<i32>(i32(sdu.x), i32(sdu.y));
+    let ndu = textureDimensions(in1);
+    let nd = vec2<i32>(i32(ndu.x), i32(ndu.y));
+    let r = i32(min(params.radius, 16u));
+    let a = src_tap(xy + vec2<i32>(params.origin_x, params.origin_y), sd);
+    var acc = vec4<f32>(0.0);
+    var wsum = 0.0;
+    for (var dy = -r; dy <= r; dy = dy + 1) {
+        for (var dx = -r; dx <= r; dx = dx + 1) {
+            let c = xy + vec2<i32>(dx + r, dy + r);
+            let wb = nnf(c, 2, nd);
+            if (wb.x > params.min_weight) {
+                let t0 = nnf(c, 0, nd);
+                let m = nnf(c, 1, nd);
+                let centre = vec2<f32>(t0.x * 64.0 + t0.y, t0.z * 64.0 + t0.w);
+                let off = vec2<f32>(f32(-dx), f32(-dy));
+                let s = centre + vec2<f32>(m.x * off.x + m.y * off.y, m.z * off.x + m.w * off.y);
+                let v = bilinear(s, sd) + vec4<f32>(wb.yzw * params.bias_scale, 0.0);
+                acc = acc + wb.x * v;
+                wsum = wsum + wb.x;
+            }
+        }
+    }
+    var result = a;
+    if (wsum > 0.0) {
+        result = acc / wsum;
+    }
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
+}
 ";
 
 // ─────────────────────── warp_projective ──────────────────────────
@@ -1697,69 +1760,6 @@ struct Params {
     interp: u32,
     masked: u32,
     _abi_pad: u32,
-}
-
-@group(0) @binding(0) var in0 : texture_2d<f32>;
-@group(0) @binding(1) var in1 : texture_2d<f32>;
-@group(1) @binding(0) var<uniform> params : Params;
-@group(2) @binding(0) var mask : texture_2d<f32>;
-@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
-
-fn src_tap(p: vec2<i32>, sd: vec2<i32>) -> vec4<f32> {
-    return textureLoad(in0, clamp(p, vec2<i32>(0), sd - vec2<i32>(1)), 0);
-}
-
-fn bilinear(s: vec2<f32>, sd: vec2<i32>) -> vec4<f32> {
-    let f = floor(s);
-    let t = s - f;
-    let i = vec2<i32>(f);
-    let p00 = src_tap(i, sd);
-    let p10 = src_tap(i + vec2<i32>(1, 0), sd);
-    let p01 = src_tap(i + vec2<i32>(0, 1), sd);
-    let p11 = src_tap(i + vec2<i32>(1, 1), sd);
-    return mix(mix(p00, p10, t.x), mix(p01, p11, t.x), t.y);
-}
-
-fn nnf(c: vec2<i32>, k: i32, nd: vec2<i32>) -> vec4<f32> {
-    let q = clamp(vec2<i32>(c.x * 3 + k, c.y), vec2<i32>(0), nd - vec2<i32>(1));
-    return textureLoad(in1, q, 0);
-}
-
-@compute @workgroup_size(16, 16, 1)
-fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
-    let dims = vec2<i32>(textureDimensions(outp));
-    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
-    if (xy.x >= dims.x || xy.y >= dims.y) { return; }
-    let sdu = textureDimensions(in0);
-    let sd = vec2<i32>(i32(sdu.x), i32(sdu.y));
-    let ndu = textureDimensions(in1);
-    let nd = vec2<i32>(i32(ndu.x), i32(ndu.y));
-    let r = i32(min(params.radius, 16u));
-    let a = src_tap(xy + vec2<i32>(params.origin_x, params.origin_y), sd);
-    var acc = vec4<f32>(0.0);
-    var wsum = 0.0;
-    for (var dy = -r; dy <= r; dy = dy + 1) {
-        for (var dx = -r; dx <= r; dx = dx + 1) {
-            let c = xy + vec2<i32>(dx + r, dy + r);
-            let wb = nnf(c, 2, nd);
-            if (wb.x > params.min_weight) {
-                let t0 = nnf(c, 0, nd);
-                let m = nnf(c, 1, nd);
-                let centre = vec2<f32>(t0.x * 64.0 + t0.y, t0.z * 64.0 + t0.w);
-                let off = vec2<f32>(f32(-dx), f32(-dy));
-                let s = centre + vec2<f32>(m.x * off.x + m.y * off.y, m.z * off.x + m.w * off.y);
-                let v = bilinear(s, sd) + vec4<f32>(wb.yzw * params.bias_scale, 0.0);
-                acc = acc + wb.x * v;
-                wsum = wsum + wb.x;
-            }
-        }
-    }
-    var result = a;
-    if (wsum > 0.0) {
-        result = acc / wsum;
-    }
-    let m = textureLoad(mask, xy, 0).r;
-    textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
 }
 
 @group(0) @binding(0) var in0 : texture_2d<f32>;
