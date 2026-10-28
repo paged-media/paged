@@ -1424,6 +1424,124 @@ const TEXT_PROBES: Probe[] = [
     },
     setupUndo: 1,
   },
+  // ── Word's document structure (engine ADR 1022): bookmarks, index
+  //    markers, cross-references, a table of contents, field updates ──
+  {
+    op: "insertTextAnchor",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertTextAnchor",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              name: "ProbeMark",
+            },
+          }
+        : null,
+  },
+  {
+    op: "deleteTextAnchor",
+    // No collection lists text destinations, and the engine mints ids
+    // in sequence: a scratch bookmark shows the next id, its undo frees
+    // it, and the anchor inserted next takes it.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const before = await collectionIds(page, "bookmarks");
+      const made = await tryMutate(page, {
+        op: "createBookmark",
+        args: { name: "Probe id", page: fx.pages[0].pageId },
+      });
+      if (!made.ok) return null;
+      const fresh = [...(await collectionIds(page, "bookmarks"))].find(
+        (id) => !before.has(id),
+      );
+      await undoN(page, 1);
+      if (!fresh) return null;
+      const placed = await tryMutate(page, {
+        op: "insertTextAnchor",
+        args: { storyId: fx.firstStory.selfId, offset: 0, name: "ProbeMark" },
+      });
+      return placed.ok
+        ? {
+            op: "deleteTextAnchor",
+            args: {
+              anchorId: `HyperlinkTextDestination/${fresh.split("/").pop()}`,
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "insertIndexMarker",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertIndexMarker",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              topic: ["Probe"],
+            },
+          }
+        : null,
+  },
+  {
+    op: "insertCrossReference",
+    // A reference to the story's own first paragraph.
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertCrossReference",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              target: { storyId: fx.firstStory.selfId, paragraph: 0 },
+              referTo: "text",
+            },
+          }
+        : null,
+  },
+  {
+    op: "insertTableOfContents",
+    // One level, on a scratch paragraph style.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const style = await newStyle(page, "Paragraph");
+      return style
+        ? {
+            op: "insertTableOfContents",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              levels: [{ style, level: 1 }],
+              title: "Contents",
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "updateFields",
+    // Updates a DATE field the probe inserts first.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const storyId = fx.firstStory.selfId;
+      const seeded = await tryMutate(page, {
+        op: "insertField",
+        args: { storyId, offset: 0, field: { word: { code: "DATE" } } },
+      });
+      return seeded.ok
+        ? {
+            op: "updateFields",
+            args: { storyId, now: "2026-10-25T09:30:00" },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
   // ── the v62 re-capture: story-addressed doors the table had never
   //    heard of (the 94→117 drift; args from the generated .d.ts +
   //    the real consumers — showcase 11-tables, plugin-doc, D-01) ────

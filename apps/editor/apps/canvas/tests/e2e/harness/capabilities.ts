@@ -151,6 +151,12 @@
 // re-parented, a list level and a numbering restart on the first story's
 // first character, and a find and replace of a word the probe types first.
 
+// 2026-10-28: Word's document structure (engine ADR 1022) named six new
+// Mutation ops — insertTextAnchor, deleteTextAnchor, insertIndexMarker,
+// insertCrossReference, insertTableOfContents and updateFields. Each got a
+// real-args probe on the first story; deleteTextAnchor learns the id the
+// next mint takes from a scratch bookmark it undoes.
+
 export type CapabilityStatus = "supported" | "unsupported";
 
 export interface Capability {
@@ -603,6 +609,37 @@ export const CAPABILITIES: Capability[] = [
     op: "findReplace",
     status: "supported",
     note: "proto 76, ADR 1021; {spec, replace, replaceAll?, paragraphStyle?, characterStyle?}; probed on a word typed into the first story",
+  },
+  // Word's document structure (protocol 77, engine ADR 1022).
+  {
+    op: "insertTextAnchor",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, name}; a Word bookmark; probed at the first story's start",
+  },
+  {
+    op: "deleteTextAnchor",
+    status: "supported",
+    note: "proto 77, ADR 1022; {anchorId}; probed on an anchor the probe inserts",
+  },
+  {
+    op: "insertIndexMarker",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, topic, sortOrder?}; probed at the first story's start",
+  },
+  {
+    op: "insertCrossReference",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, target, referTo, hyperlink?}; probed referring to the story's first paragraph",
+  },
+  {
+    op: "insertTableOfContents",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, levels, title?, tocStyleName?, pageNumbers?, leader?, tabPosition?}; probed with one scratch paragraph style",
+  },
+  {
+    op: "updateFields",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId?, offset?, now?}; probed on a DATE field the probe inserts",
   },
 ];
 
