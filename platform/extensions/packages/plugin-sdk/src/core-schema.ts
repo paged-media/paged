@@ -778,6 +778,8 @@ export const CORE_PATHS: Record<
   frameFillRule: V71,
   // The gradient fill's start is protocol 77 (engine ADR 1031).
   frameGradientFillStart: V71,
+  // An image frame's filter stack is protocol 77 (engine ADR 1037).
+  frameImageAdjustments: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",
