@@ -143,6 +143,19 @@ impl StrokeSession {
         Ok(())
     }
 
+    /// Pen up for the engine's run: no last sample, the spacing residual
+    /// and the smoothing started afresh (`StrokeSession::lift`).
+    pub(super) fn lift_run(&mut self) {
+        let smoothing = self.dynamics.smoothing;
+        if let Some(b) = self.brush.as_mut() {
+            b.last = None;
+            b.residual = 0.0;
+            if let Some(s) = b.smoother.as_mut() {
+                *s = PulledString::new(smoothing);
+            }
+        }
+    }
+
     /// Does this stroke need the engine (any pane, a bitmap tip, or a
     /// tool that only exists here)?
     pub(super) fn uses_engine(&self) -> bool {

@@ -100,8 +100,9 @@ impl PsdSaveBackShape {
                 "the layers were written as the file's layers (smart objects and pattern \
                  fills as their rendered pixels), with masks, groups, opacity, fill \
                  opacity, blend, Blend If, knockout, locks, colour labels, visibility, \
-                 clipping, colour and gradient fill layers and Curves, Levels, Exposure, \
-                 Invert and Hue/Saturation adjustment layers"
+                 clipping, colour and gradient fill layers, shape layers and vector masks, the \
+                 paths, and Curves, Levels, Exposure, Invert and Hue/Saturation adjustment \
+                 layers"
             }
         }
     }
@@ -972,7 +973,27 @@ pub fn psd_write_stack(
         } else {
             (height, width)
         };
-        let rgba = layer.rgba.to_rgba8();
+        if layer.fill().is_some_and(|f| f.stale) {
+            return Err(IngestError::Unsupported(format!(
+                "fill layer \"{}\" is not rendered yet — composite before saving",
+                layer.name
+            )));
+        }
+        let mut rgba = layer.rgba.to_rgba8().into_owned();
+        // A SHAPE layer's stored pixels are its fill already cut by its
+        // path — what Photoshop stores, and does not cut a second time
+        // (image ADR 476); the fill render here is the whole canvas.
+        let shape_cut = layer.live_vector_mask().filter(|_| layer.fill().is_some());
+        if let Some(v) = shape_cut {
+            for (px, &c) in rgba
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .zip(v.raster().data())
+            {
+                px[3] = ((u32::from(px[3]) * u32::from(c) + 127) / 255) as u8;
+            }
+        }
         let planes = if adjustment.is_some() {
             vec![Vec::new(); 4]
         } else {
@@ -989,8 +1010,17 @@ pub fn psd_write_stack(
             });
             channel_data.push(cd);
         }
-        let mask = match &layer.mask {
-            Some(cov) => {
+        // The user mask as channel −2. A pixel layer whose only mask is
+        // an enabled VECTOR mask carries its drawing there instead,
+        // flagged "came from rendering other data" (flags bit 3), which is
+        // how Photoshop caches it and how a reader that draws no paths
+        // still sees the layer masked (ADR 476).
+        let cached_vector = match (&layer.mask, layer.live_vector_mask()) {
+            (None, Some(v)) if shape_cut.is_none() => Some(v.raster()),
+            _ => None,
+        };
+        let mask = match (&layer.mask, cached_vector) {
+            (Some(cov), _) => {
                 let (info, cd, record) = mask_channel(
                     &cov.to_canvas(),
                     layer.mask_enabled,
@@ -1002,7 +1032,15 @@ pub fn psd_write_stack(
                 channel_data.push(cd);
                 Some(record)
             }
-            None => None,
+            (None, Some(render)) => {
+                let (info, cd, mut record) = mask_channel(render, true, width, height, container)?;
+                record.flags |= 0x08;
+                record.raw[17] |= 0x08;
+                channels.push(info);
+                channel_data.push(cd);
+                Some(record)
+            }
+            (None, None) => None,
         };
         let (name_legacy, mut addl) = named_record(&layer.name, None);
         // The parity properties (fill opacity, knockout, locks, label),
@@ -1014,6 +1052,14 @@ pub fn psd_write_stack(
             addl.extend(crate::psd_layer_ext::fill_block(&f.source));
         }
         addl.extend(adjustment);
+        // The VECTOR MASK as its `vmsk` block (a shape layer's too, beside
+        // its fill content), the way Photoshop 27 writes both.
+        if let Some(v) = &layer.ext.vector_mask {
+            addl.push(crate::psd_layer_ext::raw_block(
+                *b"vmsk",
+                &v.to_psd_mask().encode(width, height),
+            ));
+        }
         records.push(LayerRecord {
             top: 0,
             left: 0,
@@ -1050,6 +1096,8 @@ pub fn psd_write_stack(
     file.layer_mask.layers = records;
     file.layer_mask.transparency_in_merged = true;
     file.layer_mask.section_raw = None;
+    // The document's paths: the saved ones and the work path (ADR 476).
+    crate::vectors::paths_into_psd(file, stack.masking()).map_err(IngestError::Unsupported)?;
     Ok(PsdSaveBackShape::Layered)
 }
 

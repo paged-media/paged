@@ -124,6 +124,7 @@ pub fn record_ext(rec: &LayerRecord) -> LayerExt {
         },
         color,
         link: None,
+        vector_mask: None,
     }
 }
 
@@ -151,15 +152,42 @@ fn color_of(d: &Descriptor) -> Option<[u8; 3]> {
     Some([v, v, v])
 }
 
+/// Is the record a STROKED shape — stroke content (`vscg`), or a vector
+/// stroke (`vstk`) that is switched on or hides the fill? Its pixels
+/// carry a stroke this model does not draw, so it stays pixels.
+fn stroked(rec: &LayerRecord) -> bool {
+    if block(rec, b"vscg").is_some() {
+        return true;
+    }
+    let Some(p) = block(rec, b"vstk") else {
+        return false;
+    };
+    match read_versioned_descriptor(&mut ByteReader::new(p)) {
+        Ok((_, d)) => {
+            d.bool(b"strokeEnabled").unwrap_or(true) || !d.bool(b"fillEnabled").unwrap_or(true)
+        }
+        Err(_) => true,
+    }
+}
+
+/// A SHAPE layer's vector mask (`vmsk`, or `vsms`), parsed for a
+/// `width × height` document — the shape the fill is cut by (image ADR
+/// 476). `None` when the record has none or it cannot be drawn.
+pub fn shape_vector_mask(
+    rec: &LayerRecord,
+    width: u32,
+    height: u32,
+) -> Option<image_psd::vector_mask::VectorMask> {
+    let p = block(rec, b"vmsk").or_else(|| block(rec, b"vsms"))?;
+    image_psd::vector_mask::VectorMask::parse(p, width, height).ok()
+}
+
 /// The record's FILL content, when it is a fill layer this model renders:
-/// a solid colour or a gradient without transparency stops, on a layer
-/// that is not a shape (no vector mask or stroke content beside it).
+/// a solid colour or a gradient without transparency stops — on a plain
+/// fill layer, or on a SHAPE layer (a vector mask beside it, image ADR
+/// 476) that is not stroked.
 pub fn fill_source(rec: &LayerRecord) -> Option<FillSource> {
-    let shape = rec
-        .addl
-        .iter()
-        .any(|a| matches!(&a.key, b"vmsk" | b"vsms" | b"vscg" | b"vstk"));
-    if shape {
+    if stroked(rec) {
         return None;
     }
     if let Some(p) = block(rec, b"SoCo") {
@@ -532,7 +560,9 @@ mod tests {
         });
         let rec = record(vec![fill_block(&grad).expect("GdFl")], Vec::new());
         assert_eq!(fill_source(&rec), Some(grad));
-        // A shape (vector mask beside the content) is not a fill layer.
+        // A SHAPE (a vector mask beside the content) is a fill layer cut by
+        // its path (ADR 476); its path is read by `shape_vector_mask`, which
+        // refuses one it cannot draw (here: version 0).
         let rec = record(
             vec![
                 fill_block(&FillSource::Solid { rgb: [1, 2, 3] }).expect("SoCo"),
@@ -540,7 +570,21 @@ mod tests {
             ],
             Vec::new(),
         );
-        assert_eq!(fill_source(&rec), None);
+        assert_eq!(
+            fill_source(&rec),
+            Some(FillSource::Solid { rgb: [1, 2, 3] })
+        );
+        assert!(shape_vector_mask(&rec, 4, 4).is_none());
+        // A STROKED shape stays pixels: stroke content, or a vector stroke
+        // that is switched on.
+        let stroked = record(
+            vec![
+                fill_block(&FillSource::Solid { rgb: [1, 2, 3] }).expect("SoCo"),
+                raw_block(*b"vscg", &[0; 8]),
+            ],
+            Vec::new(),
+        );
+        assert_eq!(fill_source(&stroked), None);
     }
 
     #[test]
@@ -564,6 +608,7 @@ mod tests {
             color: 5,
             blend_if: Some(Box::new(bi)),
             link: None,
+            vector_mask: None,
         };
         let rec = record(ext_blocks(&ext, true), blend_ranges_bytes(Some(&bi)));
         let back = record_ext(&rec);

@@ -834,6 +834,16 @@ impl StrokeSession {
             .collect()
     }
 
+    /// PEN UP: the next sample starts a new run — one dab where it lands,
+    /// no segment from the last sample, the spacing walk and any
+    /// smoothing started afresh — inside the same stroke (one commit, one
+    /// undo step). Stroke Path strokes a path's subpaths so (ADR 476).
+    pub fn lift(&mut self) {
+        self.last = None;
+        self.walk = image_gpu::StrokeWalk::new();
+        self.lift_run();
+    }
+
     /// Plan the dabs a new sample adds, WITHOUT stamping them. Split out
     /// so the spacing walk is testable on its own and so `extend` reads
     /// as "plan, stamp, composite".

@@ -63,6 +63,7 @@ mod psd_render;
 mod psd_text_layers;
 mod psd_vector_mask_corpus;
 mod psd_vector_masks_photoshop;
+mod psd_vector_paths_photoshop;
 mod real_jpeg_corpus;
 mod real_png_corpus;
 mod real_psd_corpus;

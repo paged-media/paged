@@ -35,6 +35,7 @@ stood, for decisions made earlier; their status says so.
 | [469](469-patchmatch-retouching.md) | Retouching searches with multi-resolution PatchMatch; the vote is a kernel with a CPU twin | Accepted 2026-10-24 (amends 450 for that twin) |
 | [470](470-selection-and-masking.md) | Selection and masking: a selection kernel, selections on the undo list, channels and paths in the session | Accepted 2026-10-24 (amends 463 and 465) |
 | [471](471-brush-engine.md) | The brush engine: Brush Settings as a seeded dab planner over the one accumulator | Accepted 2026-10-24 |
+| [476](476-vectors-inside-the-image.md) | Vectors inside the image: one path geometry, drawn by the vector-mask rasterizer, edited by draw's machines | Accepted 2026-10-28 (amends 470) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

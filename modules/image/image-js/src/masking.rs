@@ -87,12 +87,63 @@ impl PathAnchor {
     }
 }
 
+/// How a subpath joins the path's shape (image ADR 476): the operation
+/// and fill rule of the PSD length record, as Photoshop stores them. A
+/// subpath that STARTS a component carries its operation (0 exclude, 1
+/// combine, 2 subtract, 3 intersect) and fill rule (1 even-odd, 2
+/// non-zero); one that continues the component before it carries
+/// `0xFFFF` and 0 ([`SubOp::CONTINUE`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SubOp {
+    pub op: u16,
+    pub rule: u16,
+}
+
+impl SubOp {
+    /// A new component that COMBINES, even-odd — what Photoshop 27
+    /// writes for a subpath drawn with the default path operation
+    /// ([OBS], its own files).
+    pub const COMBINE: SubOp = SubOp { op: 1, rule: 1 };
+    /// The subpath continues the component before it.
+    pub const CONTINUE: SubOp = SubOp {
+        op: 0xFFFF,
+        rule: 0,
+    };
+
+    /// A new component with operation `op` (0–3; anything else combines).
+    pub fn component(op: u16) -> SubOp {
+        SubOp {
+            op: if op <= 3 { op } else { 1 },
+            rule: 1,
+        }
+    }
+}
+
+impl Default for SubOp {
+    fn default() -> Self {
+        SubOp::COMBINE
+    }
+}
+
 /// One subpath (a closed one fills; an open one is a stroke path and
 /// contributes nothing to a selection unless closed implicitly).
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubPath {
     pub closed: bool,
     pub anchors: Vec<PathAnchor>,
+    /// How it joins the path's shape.
+    pub op: SubOp,
+}
+
+impl SubPath {
+    /// A subpath that starts a combining component.
+    pub fn new(closed: bool, anchors: Vec<PathAnchor>) -> SubPath {
+        SubPath {
+            closed,
+            anchors,
+            op: SubOp::COMBINE,
+        }
+    }
 }
 
 /// A path stored in the image session (Photoshop's Paths panel), in
@@ -102,6 +153,10 @@ pub struct DocPath {
     pub id: u32,
     pub name: String,
     pub subpaths: Vec<SubPath>,
+    /// The WORK PATH: the temporary path the Pen and the shape tools
+    /// draw into while no saved path is chosen, and Make Work Path
+    /// replaces. At most one per document (image ADR 476).
+    pub work: bool,
 }
 
 /// The masking state of one document.
@@ -273,8 +328,87 @@ impl MaskingDoc {
         } else {
             name.trim().to_string()
         };
-        self.paths.push(DocPath { id, name, subpaths });
+        self.paths.push(DocPath {
+            id,
+            name,
+            subpaths,
+            work: false,
+        });
         id
+    }
+
+    /// The work path's id, when there is one.
+    pub fn work_path(&self) -> Option<u32> {
+        self.paths.iter().find(|p| p.work).map(|p| p.id)
+    }
+
+    /// Put `subpaths` in the WORK PATH: replaced when there is one (it
+    /// keeps its id and place), created at the end otherwise. Answers its
+    /// id.
+    pub fn set_work_path(&mut self, subpaths: Vec<SubPath>) -> u32 {
+        if let Some(p) = self.paths.iter_mut().find(|p| p.work) {
+            p.subpaths = subpaths;
+            return p.id;
+        }
+        let id = self.fresh_id();
+        self.paths.push(DocPath {
+            id,
+            name: WORK_PATH_NAME.to_string(),
+            subpaths,
+            work: true,
+        });
+        id
+    }
+
+    /// Save Path: the work path becomes a saved path named `name` (empty:
+    /// the next free `Path n`). Refused for a path that is not the work
+    /// path.
+    pub fn save_path(&mut self, id: u32, name: &str) -> Result<(), String> {
+        let i = self.path_index(id)?;
+        if !self.paths[i].work {
+            return Err("only the work path is saved".into());
+        }
+        let name = if name.trim().is_empty() {
+            let taken: Vec<&str> = self.paths.iter().map(|p| p.name.as_str()).collect();
+            next_name("Path", &taken)
+        } else {
+            name.trim().to_string()
+        };
+        self.paths[i].work = false;
+        self.paths[i].name = name;
+        Ok(())
+    }
+
+    /// Add paths read from a file (its saved paths and work path, in its
+    /// order), WITHOUT a step: the document had them all along. A second
+    /// work path is kept as a saved path.
+    pub fn import_paths(&mut self, paths: Vec<(String, bool, Vec<SubPath>)>) {
+        for (name, work, subpaths) in paths {
+            let work = work && self.work_path().is_none();
+            let id = self.fresh_id();
+            let name = if work {
+                WORK_PATH_NAME.to_string()
+            } else if name.trim().is_empty() {
+                let taken: Vec<&str> = self.paths.iter().map(|p| p.name.as_str()).collect();
+                next_name("Path", &taken)
+            } else {
+                name
+            };
+            self.paths.push(DocPath {
+                id,
+                name,
+                subpaths,
+                work,
+            });
+        }
+    }
+
+    /// Replace a path's geometry (the Pen, Direct Selection and Path
+    /// Selection edit it so).
+    pub fn set_path_subpaths(&mut self, id: u32, subpaths: Vec<SubPath>) -> Result<(), String> {
+        let i = self.path_index(id)?;
+        self.paths[i].subpaths = subpaths;
+        Ok(())
     }
 
     pub fn remove_path(&mut self, id: u32) -> Result<(), String> {
@@ -290,6 +424,8 @@ impl MaskingDoc {
         }
         let i = self.path_index(id)?;
         self.paths[i].name = name.to_string();
+        // Naming the work path saves it (Photoshop's Save Path).
+        self.paths[i].work = false;
         Ok(())
     }
 
@@ -303,6 +439,8 @@ impl MaskingDoc {
                 id: new,
                 name: format!("{} copy", src.name),
                 subpaths: src.subpaths,
+                // A duplicate is a saved path, even of the work path.
+                work: false,
             },
         );
         Ok(new)
@@ -335,9 +473,10 @@ impl MaskingDoc {
             .iter()
             .map(|p| {
                 format!(
-                    "{{\"id\":{},\"name\":{},\"subpaths\":{},\"anchors\":{}}}",
+                    "{{\"id\":{},\"name\":{},\"work\":{},\"subpaths\":{},\"anchors\":{}}}",
                     p.id,
                     json_str(&p.name),
+                    p.work,
                     p.subpaths.len(),
                     p.subpaths.iter().map(|s| s.anchors.len()).sum::<usize>()
                 )
@@ -388,12 +527,14 @@ impl MaskingDoc {
 
     // ── persistence ─────────────────────────────────────────────────
 
-    /// The trailing manifest block (`"PGMK"`, version 1): u32 next id;
+    /// The trailing manifest block (`"PGMK"`, version 2): u32 next id;
     /// u32 channel count and per channel {u32 id, str name, u8 kind (0
     /// alpha, 1 spot, 2 quick mask), u8 r, g, b, f32 solidity, u32
-    /// buffer slot}; u32 path count and per path {u32 id, str name, u32
-    /// subpaths and per subpath {u8 closed, u32 anchors, 6 f32 each}}.
-    /// Empty state writes nothing at all.
+    /// buffer slot}; u32 path count and per path {u32 id, str name,
+    /// (version 2) u8 work, u32 subpaths and per subpath {u8 closed,
+    /// (version 2) u16 op, u16 rule, u32 anchors, 6 f32 each}}. Version 1
+    /// (no work flag, every subpath combining) is still read. Empty state
+    /// writes nothing at all.
     pub fn encode(&self, out: &mut Vec<u8>, mut slot: impl FnMut(Arc<[u8]>) -> u32) {
         if self.is_empty() {
             return;
@@ -426,9 +567,12 @@ impl MaskingDoc {
         for p in &self.paths {
             u32(out, p.id);
             s(out, &p.name);
+            out.push(u8::from(p.work));
             u32(out, p.subpaths.len() as u32);
             for sp in &p.subpaths {
                 out.push(u8::from(sp.closed));
+                out.extend_from_slice(&sp.op.op.to_le_bytes());
+                out.extend_from_slice(&sp.op.rule.to_le_bytes());
                 u32(out, sp.anchors.len() as u32);
                 for a in &sp.anchors {
                     for v in [a.p, a.i, a.o] {
@@ -458,7 +602,7 @@ impl MaskingDoc {
             return Ok(MaskingDoc::default());
         }
         let version = r.u32()?;
-        if version != MASKING_VERSION {
+        if !(1..=MASKING_VERSION).contains(&version) {
             return Err(format!(
                 "masking block version {version} (this engine reads {MASKING_VERSION})"
             ));
@@ -496,9 +640,18 @@ impl MaskingDoc {
         for _ in 0..r.u32()? {
             let id = r.u32()?;
             let name = r.str()?;
+            let work = version >= 2 && r.u8()? != 0;
             let mut subpaths = Vec::new();
             for _ in 0..r.u32()? {
                 let closed = r.u8()? != 0;
+                let op = if version >= 2 {
+                    SubOp {
+                        op: r.u16()?,
+                        rule: r.u16()?,
+                    }
+                } else {
+                    SubOp::COMBINE
+                };
                 let mut anchors = Vec::new();
                 for _ in 0..r.u32()? {
                     let mut v = [0f32; 6];
@@ -511,9 +664,18 @@ impl MaskingDoc {
                         o: [v[4], v[5]],
                     });
                 }
-                subpaths.push(SubPath { closed, anchors });
+                subpaths.push(SubPath {
+                    closed,
+                    anchors,
+                    op,
+                });
             }
-            doc.paths.push(DocPath { id, name, subpaths });
+            doc.paths.push(DocPath {
+                id,
+                name,
+                subpaths,
+                work,
+            });
         }
         let max_id = doc
             .channels
@@ -528,7 +690,10 @@ impl MaskingDoc {
 }
 
 const MASKING_MAGIC: &[u8; 4] = b"PGMK";
-const MASKING_VERSION: u32 = 1;
+const MASKING_VERSION: u32 = 2;
+
+/// Photoshop's name for the work path.
+pub const WORK_PATH_NAME: &str = "Work Path";
 
 struct Reader<'a> {
     b: &'a [u8],
@@ -548,6 +713,9 @@ impl Reader<'_> {
     }
     fn u8(&mut self) -> Result<u8, String> {
         Ok(self.take(1)?[0])
+    }
+    fn u16(&mut self) -> Result<u16, String> {
+        Ok(u16::from_le_bytes(self.take(2)?.try_into().expect("2")))
     }
     fn u32(&mut self) -> Result<u32, String> {
         Ok(u32::from_le_bytes(self.take(4)?.try_into().expect("4")))
@@ -677,10 +845,12 @@ pub fn rasterize_nonzero(width: u32, height: u32, polys: &[Vec<[f32; 2]>]) -> Se
         .unwrap_or_else(|| SelectionCoverage::empty(width, height))
 }
 
-/// A path as a selection (every subpath closed; nonzero winding).
+/// A path as a selection, drawn the way Photoshop draws a vector mask
+/// (image ADR 476: its components' operations and fill rules, open
+/// subpaths closed by a straight line, 17 × 15 samples per pixel —
+/// `psd_vector_mask::rasterize`).
 pub fn path_coverage(path: &DocPath, width: u32, height: u32) -> SelectionCoverage {
-    let polys: Vec<Vec<[f32; 2]>> = path.subpaths.iter().map(|s| flatten(s, 16)).collect();
-    rasterize_nonzero(width, height, &polys)
+    crate::vectors::coverage(&path.subpaths, width, height)
 }
 
 /// Traced contours (`paths::trace`) as subpaths of corner anchors.
@@ -689,6 +859,7 @@ pub fn subpaths_from_contours(contours: &[crate::paths::Contour]) -> Vec<SubPath
         .iter()
         .map(|c| SubPath {
             closed: true,
+            op: SubOp::COMBINE,
             anchors: c
                 .points
                 .iter()
@@ -744,6 +915,7 @@ pub fn subpaths_from_flat(closed: &[bool], flat: &[Vec<f32>]) -> Result<Vec<SubP
             }
             Ok(SubPath {
                 closed: c,
+                op: SubOp::COMBINE,
                 anchors: v
                     .as_chunks::<6>()
                     .0
@@ -980,6 +1152,7 @@ mod tests {
             "",
             vec![SubPath {
                 closed: true,
+                op: crate::masking::SubOp::COMBINE,
                 anchors: vec![
                     PathAnchor::corner(0.0, 0.0),
                     PathAnchor {
@@ -1041,6 +1214,7 @@ mod tests {
         // A Bézier flattens through its handles.
         let sp = SubPath {
             closed: false,
+            op: crate::masking::SubOp::COMBINE,
             anchors: vec![
                 PathAnchor {
                     p: [0.0, 0.0],

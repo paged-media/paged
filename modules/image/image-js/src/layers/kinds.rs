@@ -1405,6 +1405,10 @@ pub struct LayerExt {
     pub color: u8,
     /// The LINK this layer belongs to: linked layers move together.
     pub link: Option<u32>,
+    /// The layer's VECTOR MASK (image ADR 476): paths drawn as coverage
+    /// and multiplied with its user mask. On a fill layer it makes a
+    /// SHAPE LAYER.
+    pub vector_mask: Option<std::sync::Arc<crate::vectors::LayerVectorMask>>,
 }
 
 impl Default for LayerExt {
@@ -1416,6 +1420,7 @@ impl Default for LayerExt {
             locks: LayerLocks::default(),
             color: 0,
             link: None,
+            vector_mask: None,
         }
     }
 }

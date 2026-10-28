@@ -520,6 +520,7 @@ mod tests {
                 "",
                 vec![SubPath {
                     closed: true,
+                    op: crate::masking::SubOp::COMBINE,
                     anchors: vec![crate::masking::PathAnchor::corner(1.0, 0.5)],
                 }],
             )
@@ -556,6 +557,7 @@ mod tests {
             "Outline",
             vec![SubPath {
                 closed: true,
+                op: crate::masking::SubOp::COMBINE,
                 anchors: vec![crate::masking::PathAnchor::corner(0.0, 0.0)],
             }],
         )
