@@ -1424,6 +1424,95 @@ const TEXT_PROBES: Probe[] = [
     },
     setupUndo: 1,
   },
+  // ── Word document structure (engine ADR 1022): bookmarks, fields,
+  //    cross-references, a table of contents and index markers ──
+  {
+    op: "insertTextAnchor",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertTextAnchor",
+            args: { storyId: fx.firstStory.selfId, offset: 0, name: "Probe" },
+          }
+        : null,
+  },
+  {
+    op: "deleteTextAnchor",
+    // No wire read lists a story's text anchors and insertTextAnchor
+    // answers no createdId, so there is no id to delete: an honest skip
+    // (the table says unsupported until a read names them).
+    build: async () => null,
+  },
+  {
+    op: "insertCrossReference",
+    // A reference to the first story's first paragraph, Word's "heading".
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertCrossReference",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              target: { storyId: fx.firstStory.selfId, paragraph: 0 },
+              referTo: "text",
+            },
+          }
+        : null,
+  },
+  {
+    op: "insertIndexMarker",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertIndexMarker",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              topic: ["Probe"],
+            },
+          }
+        : null,
+  },
+  {
+    op: "insertTableOfContents",
+    // One level from a scratch paragraph style (no paragraph carries it:
+    // the table is empty, but made).
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const style = await newStyle(page, "Paragraph");
+      return style
+        ? {
+            op: "insertTableOfContents",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              levels: [{ style, level: 1 }],
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "updateFields",
+    // A Word DATE field the probe inserts first, updated on a set clock
+    // (a field already showing its result refuses the update).
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const made = await tryMutate(page, {
+        op: "insertField",
+        args: {
+          storyId: fx.firstStory.selfId,
+          offset: 0,
+          field: { word: { code: 'DATE \\@ "d MMMM yyyy"' } },
+        },
+      });
+      return made.ok
+        ? { op: "updateFields", args: { now: "2026-10-25T09:30:00" } }
+        : null;
+    },
+    setupUndo: 1,
+  },
   // ── the v62 re-capture: story-addressed doors the table had never
   //    heard of (the 94→117 drift; args from the generated .d.ts +
   //    the real consumers — showcase 11-tables, plugin-doc, D-01) ────

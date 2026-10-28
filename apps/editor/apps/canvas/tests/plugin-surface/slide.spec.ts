@@ -109,6 +109,7 @@ const PLACEHOLDER_PANEL = "media.paged.slide.panel.placeholder";
 const DECK_PANEL = "media.paged.slide.panel.deck";
 const COMMENTS_PANEL = "media.paged.slide.panel.comments";
 const SHAPES_PANEL = "media.paged.slide.panel.shapes";
+const CUSTOM_SHOWS_PANEL = "media.paged.slide.panel.customShows";
 const IMPORTER = "media.paged.slide.importer.pptx";
 const EXPORTER = "media.paged.slide.exporter.pptx";
 const NEW_SLIDE = "media.paged.slide.newSlide";
@@ -138,6 +139,11 @@ const PALETTE = {
   "media.paged.slide.command.addComment": "Slide/New comment",
   // Insert is the host's menu; the entry opens the Shapes panel (ADR 717).
   "media.paged.slide.command.insertShapes": "Insert/Shapes…",
+  // Export, templates, custom shows and sections (slide ADR 720).
+  "media.paged.slide.command.export": "File/Export…",
+  "media.paged.slide.command.saveAsTemplate": "File/Save as template…",
+  "media.paged.slide.command.customShows": "Slide Show/Custom Shows…",
+  "media.paged.slide.command.addSection": "Slide/Add Section",
 } as const;
 
 /** The slide show's commands (slide ADR 716, `src/show/contribute.ts`):
@@ -182,6 +188,7 @@ const DECLARED = {
     DECK_PANEL,
     COMMENTS_PANEL,
     SHAPES_PANEL,
+    CUSTOM_SHOWS_PANEL,
   ],
   importers: [IMPORTER],
   exporters: [EXPORTER],
@@ -202,6 +209,22 @@ const DECLARED = {
     ...Object.keys(SHOW),
     // Insert ▸ Shapes' typed twin, for scripts and the CLI (ADR 717).
     INSERT_SHAPE,
+    // The output verbs' typed twins carry their palette ids; the rest
+    // are for scripts and the CLI (slide ADR 720).
+    "media.paged.slide.command.export",
+    "media.paged.slide.command.saveAsTemplate",
+    "media.paged.slide.command.customShows",
+    "media.paged.slide.command.addSection",
+    "media.paged.slide.exportPdf",
+    "media.paged.slide.exportOutline",
+    "media.paged.slide.exportVideo",
+    "media.paged.slide.setCustomShow",
+    "media.paged.slide.deleteCustomShow",
+    "media.paged.slide.playCustomShow",
+    "media.paged.slide.sections",
+    "media.paged.slide.renameSection",
+    "media.paged.slide.moveSection",
+    "media.paged.slide.deleteSection",
   ],
   /** The deck's document context (editor ADR 307): no frame is entered;
    *  and a chart frame's data (slide ADR 715), entered by double-click. */
@@ -215,8 +238,8 @@ const DECLARED = {
 } as const;
 
 /** Each panel's title, and what it is: the sorter, the notes, the
- *  comments and the shapes are React panels; the other four are schema
- *  panels of property rows. */
+ *  comments, the shapes and the custom shows are React panels; the other
+ *  four are schema panels of property rows. */
 const PANEL_TITLES: Record<string, string> = {
   [SLIDES_PANEL]: "Slides",
   [NOTES_PANEL]: "Notes",
@@ -226,6 +249,7 @@ const PANEL_TITLES: Record<string, string> = {
   [DECK_PANEL]: "Deck",
   [COMMENTS_PANEL]: "Comments",
   [SHAPES_PANEL]: "Shapes",
+  [CUSTOM_SHOWS_PANEL]: "Custom shows",
 };
 const SCHEMA_PANELS = [
   SLIDE_PANEL,
@@ -543,7 +567,7 @@ test.describe("plugin surface · paged.slide", () => {
 
   // ── 2. PANELS ────────────────────────────────────────────────────
 
-  test("all eight panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
+  test("all nine panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
     page,
   }) => {
     await bootBlank(page);
@@ -560,13 +584,17 @@ test.describe("plugin surface · paged.slide", () => {
     expect(byId[NOTES_PANEL].defaultDock).toBe("bottom");
     expect(byId[COMMENTS_PANEL].defaultDock).toBe("right");
     expect(byId[SHAPES_PANEL].defaultDock).toBe("right");
-    // The four React panels carry their own glyph for the panel rail.
+    expect(byId[CUSTOM_SHOWS_PANEL].defaultDock).toBe("right");
+    // The five React panels carry their own glyph for the panel rail.
     expect(byId[SLIDES_PANEL].iconSvg).toBe(true);
     expect(byId[NOTES_PANEL].iconSvg).toBe(true);
     expect(byId[COMMENTS_PANEL].iconSvg).toBe(true);
     expect(byId[SHAPES_PANEL].iconSvg).toBe(true);
-    // The Shapes panel never joins the rail: Insert ▸ Shapes… opens it.
+    expect(byId[CUSTOM_SHOWS_PANEL].iconSvg).toBe(true);
+    // The Shapes panel never joins the rail: Insert ▸ Shapes… opens it;
+    // Slide Show ▸ Custom Shows… opens the Custom shows panel.
     expect(byId[SHAPES_PANEL].rail).toBe(false);
+    expect(byId[CUSTOM_SHOWS_PANEL].rail).toBe(false);
     for (const id of SCHEMA_PANELS)
       expect(byId[id].defaultDock, id).toBe("right");
 
@@ -636,8 +664,13 @@ test.describe("plugin surface · paged.slide", () => {
     await expect(page.locator("[data-shapes-panel]")).toBeAttached({
       timeout: 15_000,
     });
+    // The Custom shows panel mounts (slide ADR 720).
+    await openPanel(page, CUSTOM_SHOWS_PANEL);
+    await expect(page.locator("[data-custom-shows]")).toBeAttached({
+      timeout: 15_000,
+    });
 
-    // The real menu bar: Plugins ▸ Slide lists all eight, none greyed
+    // The real menu bar: Plugins ▸ Slide lists all nine, none greyed
     // (paged.slide has no edit context, so no context withholds them),
     // and picking one opens it.
     await page.keyboard.press("Escape");
@@ -1189,6 +1222,10 @@ test.describe("plugin surface · paged.slide", () => {
       "media.paged.slide.command.importPptx": "Open PowerPoint deck…",
       "media.paged.slide.command.exportPptx": "Export PowerPoint deck…",
       "media.paged.slide.command.insertShapes": "Insert shape…",
+      "media.paged.slide.command.export": "Export…",
+      "media.paged.slide.command.saveAsTemplate": "Save as template…",
+      "media.paged.slide.command.customShows": "Custom shows…",
+      "media.paged.slide.command.addSection": "Add section",
       ...Object.fromEntries(
         Object.entries(SHOW).map(([id, [title]]) => [id, title]),
       ),
