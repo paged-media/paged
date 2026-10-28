@@ -1375,6 +1375,13 @@ mod tests {
                 .contains("not written as a PSD adjustment layer"),
             "{err}"
         );
+        // Develop (WP5.2) has no Photoshop adjustment layer either (its
+        // Camera Raw Filter is a smart filter): the same flatten fallback.
+        let mut s = layered_stack();
+        s.add_adjustment_layer("", Adjustment::default_for("develop").expect("kind"), None);
+        let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+        let err = psd_write_stack(&mut f, &s, &[0u8; 32]).expect_err("refused");
+        assert!(err.to_string().contains("is a Develop layer"), "{err}");
     }
 
     /// Fill layers, the five readable adjustment kinds and the parity

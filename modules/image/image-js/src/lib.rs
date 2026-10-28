@@ -44,6 +44,7 @@
 //! (image-conformance / `image-kernels` feature `reference`) is
 //! reachable from this crate (cargo-tree guard, spec §4 dep rule 2).
 
+pub mod adjust_readouts;
 pub mod brushes;
 pub mod channels;
 pub mod clone_source;
@@ -117,6 +118,15 @@ mod wasm {
     use crate::selection::SessionSelection;
     use crate::stroke::{blend_kernel, blend_names, StrokeParams, StrokeSession, StrokeTool};
     use image_gpu::dab::PressureTarget;
+
+    // WP5.2 filter doors: one child module per family group (`src/wasm/`).
+    // Each reaches this module's private helpers (`apply_point_kernel`,
+    // `fill_prelude`, the landing) as a descendant.
+    mod filters_adjust;
+    mod filters_blur;
+    mod filters_chain;
+    mod filters_distort;
+    mod filters_stylize;
 
     thread_local! {
         /// The bundle-realm GPU device (I-07: created HERE, where

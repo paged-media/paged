@@ -164,9 +164,9 @@ describe("Filter ▸ … opens the Filter dialog", () => {
     await opensTheDialog("mosaic", /Mosaic/);
   });
 
-  it("filterHalftone opens the Colour halftone dialog at its defaults", async () => {
+  it("filterHalftone opens the Halftone pattern dialog at its defaults", async () => {
     covers("command:media.paged.image.command.filterHalftone");
-    await opensTheDialog("halftone", /Colour\shalftone/);
+    await opensTheDialog("halftone", /Halftone\spattern/);
   });
 
   it("filterPaintDaubs opens the Paint daubs dialog at its defaults", async () => {
