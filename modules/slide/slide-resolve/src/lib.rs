@@ -1179,8 +1179,31 @@ pub fn resolve(deck: &Presentation) -> Deck {
                 .filter(|n| !n.trim().is_empty()),
             transition: s.transition.clone(),
             timing_xml: s.timing_xml.clone(),
+            section: deck
+                .sections
+                .iter()
+                .find(|sec| sec.slide_ids.first() == Some(&s.slide_id))
+                .map(|sec| SectionStart {
+                    id: sec.id.clone(),
+                    name: sec.name.clone(),
+                }),
         });
     }
+    // Custom shows name slide parts; the document knows pages.
+    out.custom_shows = deck
+        .custom_shows
+        .iter()
+        .map(|c| CustomShowPages {
+            id: c.id,
+            name: c.name.clone(),
+            pages: c
+                .slides
+                .iter()
+                .filter_map(|part| out.slides.iter().find(|p| &p.part == part))
+                .map(|p| p.id.clone())
+                .collect(),
+        })
+        .collect();
 
     let mut fonts = std::collections::BTreeSet::new();
     fn collect(items: &[Item], fonts: &mut std::collections::BTreeSet<String>) {

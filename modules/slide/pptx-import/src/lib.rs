@@ -33,8 +33,8 @@ use std::collections::BTreeMap;
 
 use paged_ooxml::{part_dir, rels_part_name, resolve_target, OpcPackage, Relationships};
 use pptx_core::{
-    Background, ColorMap, EmbeddedFont, FontSet, FrameContent, GraphicFrame, Layout, Master,
-    Presentation, Section, Shape, Slide, Theme, Transition,
+    Background, ColorMap, CustomShow, EmbeddedFont, FontSet, FrameContent, GraphicFrame, Layout,
+    Master, Presentation, Section, Shape, Slide, Theme, Transition,
 };
 
 pub mod chart;
@@ -144,6 +144,7 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
             .map(|d| text::list_style(d, &ctx)),
         embedded_fonts: embedded_fonts(&pres_el, &ctx),
         sections: sections(&pres_el),
+        custom_shows: custom_shows(&pres_el, &ctx),
         ..Default::default()
     };
 
@@ -650,6 +651,32 @@ fn embedded_fonts(pres: &El, ctx: &Ctx) -> Vec<EmbeddedFont> {
         .collect()
 }
 
+/// `p:custShowLst`: each show's name, id and slides (by relationship id
+/// of the presentation part, resolved to slide parts).
+fn custom_shows(pres: &El, ctx: &Ctx) -> Vec<CustomShow> {
+    let Some(lst) = pres.child(Ns::P, "custShowLst") else {
+        return Vec::new();
+    };
+    lst.children
+        .iter()
+        .filter(|c| c.is(Ns::P, "custShow"))
+        .map(|c| CustomShow {
+            name: c.attr("name").unwrap_or("").to_string(),
+            id: c.attr_u32("id").unwrap_or(0),
+            slides: c
+                .child(Ns::P, "sldLst")
+                .map(|l| {
+                    l.children
+                        .iter()
+                        .filter(|s| s.is(Ns::P, "sld"))
+                        .filter_map(|s| ctx.target(s.attr_ns(Ns::R, "id")?))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        })
+        .collect()
+}
+
 fn sections(pres: &El) -> Vec<Section> {
     let Some(ext) = pres.child(Ns::P, "extLst") else {
         return Vec::new();
@@ -661,6 +688,7 @@ fn sections(pres: &El) -> Vec<Section> {
         .flat_map(|l| l.children.iter().filter(|c| c.local == "section"))
         .map(|s| Section {
             name: s.attr("name").unwrap_or("").to_string(),
+            id: s.attr("id").unwrap_or("").to_string(),
             slide_ids: s
                 .children
                 .iter()

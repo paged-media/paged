@@ -48,6 +48,8 @@ use serde::Deserialize;
 pub mod comments;
 pub mod geom;
 pub mod native;
+pub mod outline;
+pub mod presentation;
 pub mod probe;
 pub mod slide;
 pub mod text;
@@ -94,10 +96,21 @@ pub struct SlidePlan {
     pub comments: Option<Vec<pptx_core::Comment>>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportPlan {
     pub slides: Vec<SlidePlan>,
+    /// The package kind to write (slide ADR 720): `pptx`, `potx` (Save as
+    /// template) or `ppsx`. Absent: the deck's own.
+    #[serde(default)]
+    pub format: Option<presentation::Format>,
+    /// The document's sections, by the page each starts at (absent: as the
+    /// deck had them, kept contiguous over the written slides).
+    #[serde(default)]
+    pub sections: Option<Vec<presentation::SectionPlan>>,
+    /// The document's custom shows, by page (absent: as the deck had them).
+    #[serde(default)]
+    pub custom_shows: Option<Vec<presentation::CustomShowPlan>>,
 }
 
 /// The written package and what it could not carry.
@@ -175,7 +188,7 @@ fn read_original(pkg: &OpcPackage, bytes: &[u8]) -> Result<Original, String> {
 }
 
 /// Every start or empty tag named `name` in `xml`, as its text.
-fn tags<'a>(xml: &'a str, name: &str) -> Vec<&'a str> {
+pub(crate) fn tags<'a>(xml: &'a str, name: &str) -> Vec<&'a str> {
     let open = format!("<{name}");
     let mut out = Vec::new();
     let mut at = 0;
@@ -198,7 +211,7 @@ fn tags<'a>(xml: &'a str, name: &str) -> Vec<&'a str> {
 }
 
 /// An attribute's raw value in one tag.
-fn attr(tag: &str, name: &str) -> Option<String> {
+pub(crate) fn attr(tag: &str, name: &str) -> Option<String> {
     let key = format!(" {name}=\"");
     let i = tag.find(&key)? + key.len();
     let j = tag[i..].find('"')? + i;
@@ -587,7 +600,18 @@ pub fn export_with(
                     )
                 })
         });
-    if same_plan && model.is_none() && !slides.iter().any(|s| s.content_edited) {
+    let pres_orig = text(&pkg, &orig.presentation)?;
+    let ct_orig = text(&pkg, "[Content_Types].xml")?;
+    // The deck-wide parts the plan names: unchanged when the deck's own.
+    let deck_wide_same = plan.format.is_none_or(|f| {
+        ct_orig.contains(&format!(
+            r#"PartName="/{}" ContentType="{}""#,
+            orig.presentation,
+            f.content_type()
+        ))
+    }) && plan.sections.is_none()
+        && plan.custom_shows.is_none();
+    if same_plan && deck_wide_same && model.is_none() && !slides.iter().any(|s| s.content_edited) {
         return Ok(Exported {
             bytes: original.to_vec(),
             diagnostics,
@@ -1149,7 +1173,7 @@ pub fn export_with(
             .iter()
             .zip(&orig.slides)
             .all(|((p, id, rid, _), (op, oid, orid))| p == op && id == oid && rid == orid);
-    let mut pres = text(&pkg, &orig.presentation)?;
+    let mut pres = pres_orig.clone();
     let list: String = written
         .iter()
         .map(|(_, id, rid, _)| format!(r#"<p:sldId id="{id}" r:id="{rid}"/>"#))
@@ -1163,10 +1187,62 @@ pub fn export_with(
                 &format!("<p:sldIdLst>{list}</p:sldIdLst>"),
             );
         }
-        pres = rewrite_sections(&pres, &orig, &written);
+        if plan.sections.is_none() {
+            pres = rewrite_sections(&pres, &orig, &written);
+        }
+    }
+    // Sections and custom shows as the document holds them (slide ADR 720),
+    // written when they differ from what the list above leaves.
+    let page_of: BTreeMap<&str, &str> = slides
+        .iter()
+        .zip(&targets)
+        .filter_map(|(s, t)| Some((t.part.as_str(), s.page_id.as_deref()?)))
+        .collect();
+    if let Some(plan_sections) = &plan.sections {
+        let over: Vec<(Option<&str>, u32)> = written
+            .iter()
+            .map(|(p, id, _, _)| (page_of.get(p.as_str()).copied(), *id))
+            .collect();
+        let want = presentation::plan_sections(plan_sections, &over);
+        if want != presentation::read_sections(&pres) {
+            pres = presentation::write_sections(&pres, &want);
+        }
+    }
+    if let Some(plan_shows) = &plan.custom_shows {
+        let over: Vec<(Option<&str>, &str)> = written
+            .iter()
+            .map(|(p, _, rid, _)| (page_of.get(p.as_str()).copied(), rid.as_str()))
+            .collect();
+        let want = presentation::plan_custom_shows(plan_shows, &over);
+        if want != presentation::read_custom_shows(&pres) {
+            pres = presentation::write_custom_shows(&pres, &want);
+        }
+    } else if !same_list {
+        // The deck's own shows: a slide that is gone leaves them.
+        let kept: BTreeSet<&str> = written.iter().map(|w| w.2.as_str()).collect();
+        let shows = presentation::read_custom_shows(&pres);
+        let pruned: Vec<_> = shows
+            .iter()
+            .map(|(n, i, r)| {
+                (
+                    n.clone(),
+                    *i,
+                    r.iter()
+                        .filter(|x| kept.contains(x.as_str()))
+                        .cloned()
+                        .collect(),
+                )
+            })
+            .collect();
+        if pruned != shows {
+            pres = presentation::write_custom_shows(&pres, &pruned);
+        }
     }
 
-    let mut ct = text(&pkg, "[Content_Types].xml")?;
+    let mut ct = ct_orig.clone();
+    if let Some(f) = plan.format {
+        ct = presentation::set_main_content_type(&ct, &orig.presentation, f.content_type());
+    }
     let removed_parts: BTreeSet<String> = removed
         .iter()
         .filter(|p| !p.contains("/_rels/"))
@@ -1176,7 +1252,13 @@ pub fn export_with(
     ct = add_defaults(&ct, &media_parts);
 
     // Nothing changed at all: the original bytes.
-    if same_list && added_types.is_empty() && removed.is_empty() && media_parts.is_empty() {
+    if same_list
+        && pres == pres_orig
+        && ct == ct_orig
+        && added_types.is_empty()
+        && removed.is_empty()
+        && media_parts.is_empty()
+    {
         let identical = out_parts
             .iter()
             .all(|(n, b)| pkg.part(n).is_some_and(|o| o == b.as_slice()));

@@ -80,6 +80,7 @@ fn plan_of(doc: &Document) -> ExportPlan {
                 })
             })
             .collect(),
+        ..ExportPlan::default()
     }
 }
 
