@@ -2401,7 +2401,7 @@ pub enum Mutation {
         #[serde(default)]
         character_style: Option<String>,
     },
-    // rides v76 (added before first consumer sync) — engine ADR 1022.
+    // rides v77 — engine ADR 1022.
     /// Engine ADR 1022 — Word's F9: recompute the Word fields' results
     /// (every story's, or story `storyId`'s, or only the field starting at
     /// story char `offset` of that story) over the current layout. `DATE`

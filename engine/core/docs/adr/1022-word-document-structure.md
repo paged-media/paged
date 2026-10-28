@@ -1,9 +1,8 @@
 # ADR 1022 — Word document structure: section masters, Word fields, and creating tables of contents, cross-references and index markers
 
 - **Status:** Accepted 2026-10-25.
-- **Scope:** protocol v76 (the new mutations, operations and fields ride v76, which is
-  unreleased: governance rule 4; every addition is optional on the wire and skipped in the
-  model when unset). Amends [ADR 026](026-auto-growing-region-chains.md) (a grow rule now names
+- **Scope:** protocol v77 (the new mutations, operations and fields ride v77 as a rider;
+  every addition is optional on the wire and skipped in the model when unset). Amends [ADR 026](026-auto-growing-region-chains.md) (a grow rule now names
   masters). Extends [165](165-update-table-of-contents.md) (a table of contents inside a story),
   [168](168-generate-index.md) (an index marker op), [169](169-update-cross-references.md)
   (inserting a cross-reference) and [173](173-bookmarks-edited.md) (Word's bookmarks, which are

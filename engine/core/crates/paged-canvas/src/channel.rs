@@ -778,6 +778,13 @@ export type WorkerToMain = WorkerToMainKind & {
 //     rotate snaps to 0/45/90 and the neighbours' angles.
 //   - The camera SAB's spare slot (offset 12) carries the view rotation.
 //   A new message kind an older worker cannot answer, hence the bump.
+// v77 (rider) — Word document structure (engine ADR 1022): the mutations
+//   updateFields, insertTextAnchor, deleteTextAnchor, insertCrossReference,
+//   insertTableOfContents and insertIndexMarker; `FieldKind::Word` on
+//   insertField; `setFlowGrowRule` gains master / firstMaster / evenMaster
+//   / sectionStart (additive); `StorySummary.growRule` and
+//   `PageSummary.appliedMaster` (additive); the PropertyPath
+//   `documentShowFieldCodes`. New mutations an older worker refuses.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
 
 /// A per-run script budget on the wire (v63). Every field is optional

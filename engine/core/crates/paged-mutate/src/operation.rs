@@ -4108,7 +4108,7 @@ pub enum Operation {
     /// `offset` of paragraph `paragraph` of story `story_id`, at position
     /// `index` of the story's destinations (the end when absent). `REF` and
     /// `PAGEREF` fields and cross-references find it by name. Inverse:
-    /// `DeleteTextAnchor`. // rides v76.
+    /// `DeleteTextAnchor`. // rides v77.
     InsertTextAnchor {
         story_id: String,
         paragraph: u32,
@@ -4122,7 +4122,7 @@ pub enum Operation {
     /// Engine ADR 1022 — delete the text destination `anchor_id` from the
     /// story that holds it, and the bookmarks going to it. Inverse:
     /// `InsertTextAnchor` at its old position (restoring the bookmarks
-    /// through a batch). // rides v76.
+    /// through a batch). // rides v77.
     DeleteTextAnchor {
         anchor_id: String,
     },
@@ -4137,7 +4137,7 @@ pub enum Operation {
     /// `story_id` for the topic path `topic` (level 1 first, up to four
     /// levels), sorted by `sort_order` when given. Topics the document
     /// lacks are created, nested under their parents, as InDesign's New
-    /// Page Reference makes them. Inverse: `RestoreIndexMarkers`. // rides v76.
+    /// Page Reference makes them. Inverse: `RestoreIndexMarkers`. // rides v77.
     InsertIndexMarker {
         story_id: String,
         paragraph: u32,
@@ -4156,7 +4156,7 @@ pub enum Operation {
     },
     /// Engine ADR 1022 — create, replace (`def_json`: a JSON `TOCStyleDef`)
     /// or delete (`None`) TOC style `toc_style_id`. Inverse: the same op
-    /// with the prior definition. // rides v76.
+    /// with the prior definition. // rides v77.
     SetTocStyle {
         toc_style_id: String,
         #[serde(default)]
@@ -5283,7 +5283,7 @@ pub enum FieldKind {
     /// Engine ADR 1022 — a Word field: its own run, tagged with the field
     /// read out of `code` (Word's instruction, `PAGEREF _Ref1 \h`), whose
     /// text is `result`. Without a result the canvas computes one before
-    /// it inserts (a bare model shows the code in braces). // rides v76.
+    /// it inserts (a bare model shows the code in braces). // rides v77.
     Word {
         code: String,
         #[serde(default)]

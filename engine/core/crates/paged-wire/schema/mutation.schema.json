@@ -6067,7 +6067,7 @@
           "additionalProperties": false
         },
         {
-          "description": "Engine ADR 1022 — a Word field: its own run, tagged with the field\nread out of `code` (Word's instruction, `PAGEREF _Ref1 \\h`), whose\ntext is `result`. Without a result the canvas computes one before\nit inserts (a bare model shows the code in braces). // rides v76.",
+          "description": "Engine ADR 1022 — a Word field: its own run, tagged with the field\nread out of `code` (Word's instruction, `PAGEREF _Ref1 \\h`), whose\ntext is `result`. Without a result the canvas computes one before\nit inserts (a bare model shows the code in braces). // rides v77.",
           "type": "object",
           "properties": {
             "word": {
