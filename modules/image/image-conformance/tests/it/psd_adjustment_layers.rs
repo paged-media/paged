@@ -36,8 +36,11 @@ use image_js::layers::LayerStack;
 use image_psd::PsdFile;
 
 fn dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/photoshop/adjustment-layers")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/photoshop")
 }
+
+/// The probes whose PSDs are replayed here.
+const DIRS: [&str; 2] = ["adjustment-layers", "adjustment-layers-ext"];
 
 /// `Ok(max_levels)` = imported and at most that far from Photoshop's
 /// merged composite (8-bit levels, any channel); `Err(text)` = refused,
@@ -57,8 +60,33 @@ fn dir() -> PathBuf {
 /// * Photo Filter and Brightness/Contrast are refused: the engine's
 ///   stages differ from Photoshop's (oracle_photoshop ledger, 86 and 25
 ///   levels).
+///
+/// Recorded 2026-10-28 (`adjustment-layers-ext`, image ADR 478): every
+/// kind is now READ (and written back byte for byte,
+/// psd_adjustment_blocks_photoshop.rs); the import draws those the stack
+/// reproduces —
+/// * Black & White and Channel Mixer within a level;
+/// * Posterize and Threshold equal but on their quantisation boundaries
+///   (p99 ≤ 1 level; the few boundary pixels round the other way);
+/// * Color Balance (109), Vibrance (77), Gradient Map (50), Selective
+///   Color (47), Photo Filter (89) and Brightness/Contrast (25) are
+///   declined by name (paged-psd `NOT_REPRODUCED`): the stack's stages
+///   are not Photoshop's yet, so such a file opens flattened; a tinted
+///   Black & White is not modelled.
 const EXPECT: &[(&str, Result<u8, &str>)] = &[
+    ("black-white", Ok(1)),
+    ("black-white-tint", Err("tinted Black & White")),
     ("brightness-contrast", Err("Brightness/Contrast")),
+    ("channel-mixer", Ok(1)),
+    ("channel-mixer-mono", Ok(1)),
+    ("color-balance", Err("Color Balance")),
+    ("gradient-map", Err("Gradient Map")),
+    ("gradient-map-reversed", Err("Gradient Map")),
+    ("posterize", Ok(64)),
+    ("selective-color", Err("Selective Color")),
+    ("selective-color-absolute", Err("Selective Color")),
+    ("threshold", Ok(255)),
+    ("vibrance", Err("Vibrance")),
     ("curves-at-60", Ok(0)),
     ("curves-channels", Ok(0)),
     ("curves-composite", Ok(0)),
@@ -84,12 +112,17 @@ fn flatten(file: &PsdFile) -> Result<Vec<u8>, String> {
 }
 
 fn ids() -> Vec<String> {
-    let mut v: Vec<String> = std::fs::read_dir(dir())
-        .expect("fixtures dir")
-        .flatten()
-        .filter_map(|e| {
-            let n = e.file_name().to_string_lossy().into_owned();
-            n.strip_suffix(".psd").map(str::to_string)
+    let mut v: Vec<String> = DIRS
+        .iter()
+        .flat_map(|d| {
+            std::fs::read_dir(dir().join(d))
+                .expect("fixtures dir")
+                .flatten()
+                .filter_map(|e| {
+                    let n = e.file_name().to_string_lossy().into_owned();
+                    n.strip_suffix(".psd").map(|id| format!("{d}/{id}"))
+                })
+                .collect::<Vec<_>>()
         })
         .collect();
     v.sort();
@@ -131,7 +164,8 @@ fn photoshop_adjustment_layers_composite_as_recorded__feat__image_psd_layer_impo
                 Err(e)
             }
         };
-        match EXPECT.iter().find(|(e, _)| *e == id) {
+        let short = id.rsplit('/').next().unwrap_or(&id);
+        match EXPECT.iter().find(|(e, _)| *e == short) {
             None => problems.push(format!("{id}: no expectation recorded ({got:?})")),
             Some((_, want)) => match (want, &got) {
                 (Ok(w), Ok(g)) if g <= w => {}

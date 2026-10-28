@@ -47,11 +47,10 @@
 //! Its inverse, [`Operation::RemoveSnippet`], removes exactly what it added
 //! (items, stories, hyperlinks, resources).
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashSet};
 
 use paged_model::{FrameRef, Spread};
 use paged_scene::{Document, ParsedStory};
-use serde::{Deserialize, Serialize};
 
 use crate::error::OperationError;
 use crate::operation::{AppliedOperation, InvalidationHint, NodeId, Operation};
@@ -62,63 +61,10 @@ use super::duplicate_nodes::{
 };
 use super::insert_node::ensure_frames_in_order;
 
-/// The `format` every snippet this engine writes carries.
-pub const SNIPPET_FORMAT: &str = "paged.snippet/1";
-
-/// Copied page items and what they name (see the module docs). Plain
-/// serde: the clipboard holds its JSON.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ItemSnippet {
-    /// [`SNIPPET_FORMAT`].
-    pub format: String,
-    /// The copied items, ids as in the source document. The roots are
-    /// `spread.frames_in_order` (back to front); members, pasted-in
-    /// children and nested groups sit in the kind vecs beside them. A root
-    /// group's transform is in spread space. No pages.
-    pub spread: Spread,
-    /// The text frames' and text paths' stories, ids as in the source.
-    pub stories: Vec<ParsedStory>,
-    /// The `<Hyperlink>`s the copied stories' sources own.
-    #[serde(default)]
-    pub hyperlinks: Vec<paged_model::Hyperlink>,
-    /// The roots' union box, spread space: `[top, left, bottom, right]`.
-    pub bounds: [f32; 4],
-    /// The top-left of the page the items were copied from, in its spread:
-    /// Paste in Place keeps the items' position relative to the page.
-    #[serde(default)]
-    pub page_origin: Option<[f32; 2]>,
-    /// The source page's `Self` id.
-    #[serde(default)]
-    pub page_id: Option<String>,
-    /// What the items reference, by id.
-    #[serde(default)]
-    pub resources: SnippetResources,
-    /// The copied stories' text, frames back to front, one blank line
-    /// between frames: the plain-text form of the copy.
-    #[serde(default)]
-    pub text: String,
-}
-
-/// The document resources a snippet's items reference, by `Self` id.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SnippetResources {
-    #[serde(default)]
-    pub colors: BTreeMap<String, paged_model::ColorEntry>,
-    #[serde(default)]
-    pub swatches: BTreeMap<String, paged_model::SwatchEntry>,
-    #[serde(default)]
-    pub gradients: BTreeMap<String, paged_model::GradientEntry>,
-    #[serde(default)]
-    pub paragraph_styles: BTreeMap<String, paged_model::ParagraphStyleDef>,
-    #[serde(default)]
-    pub character_styles: BTreeMap<String, paged_model::CharacterStyleDef>,
-    #[serde(default)]
-    pub object_styles: BTreeMap<String, paged_model::ObjectStyleDef>,
-    #[serde(default)]
-    pub stroke_styles: BTreeMap<String, paged_model::StrokeStyleDef>,
-    #[serde(default)]
-    pub conditions: BTreeMap<String, paged_model::ConditionDef>,
-}
+// The snippet's types live in `paged-scene` (`paged_scene::snippet`), so a
+// crate that only reads or writes snippets need not link the mutation
+// engine; they are re-exported here under their old path.
+pub use paged_scene::snippet::{ItemSnippet, SnippetResources, SNIPPET_FORMAT};
 
 // ------------------------------------------------------------------ copy
 

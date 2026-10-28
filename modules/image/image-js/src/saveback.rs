@@ -56,11 +56,9 @@ use image_core::{
     TileSliceRef, Transfer,
 };
 use image_psd::model::{
-    AdditionalLayerInfo, AddlBody, BlendRanges, ChannelData, ChannelInfo, ColorMode, Compression,
-    GlobalImageData, LayerMaskData, LayerRecord, LsctData, PascalString, PsdFile, SectionKind,
+    BlendRanges, ChannelData, ChannelInfo, ColorMode, Compression, GlobalImageData, LayerRecord,
+    PascalString, PsdFile,
 };
-
-use image_gpu::SelectionCoverage;
 
 use crate::ingest::IngestError;
 
@@ -97,12 +95,12 @@ impl PsdSaveBackShape {
                  any original layer structure is NOT in this file"
             }
             PsdSaveBackShape::Layered => {
-                "the layers were written as the file's layers (smart objects and pattern \
-                 fills as their rendered pixels), with masks, groups, opacity, fill \
-                 opacity, blend, Blend If, knockout, locks, colour labels, visibility, \
-                 clipping, colour and gradient fill layers, shape layers and vector masks, the \
-                 paths, and Curves, Levels, Exposure, Invert and Hue/Saturation adjustment \
-                 layers"
+                "the layers were written as the file's layers: unedited layers exactly as \
+                 they were read (text, smart objects and vector masks included), edited and \
+                 new ones with their pixels, masks, vector masks and shape layers, the paths, groups, opacity, fill opacity, blend, \
+                 Blend If, knockout, locks, colour labels, visibility, clipping, styles, \
+                 colour and gradient fill layers (pattern fills as their rendered pixels) \
+                 and adjustment layers"
             }
         }
     }
@@ -626,490 +624,13 @@ pub fn psd_write_adjusted(
     Ok(PsdSaveBackShape::Flattened)
 }
 
-/// The PSD blend-mode key for a `compose.*` name — the inverse of
-/// `layers::psd_blend_kernel` (same 26 modes, Adobe's keys).
-fn psd_blend_key(name: &str) -> [u8; 4] {
-    match name.strip_prefix("compose.").unwrap_or(name) {
-        "multiply" => *b"mul ",
-        "screen" => *b"scrn",
-        "overlay" => *b"over",
-        "darken" => *b"dark",
-        "lighten" => *b"lite",
-        "color_dodge" => *b"div ",
-        "color_burn" => *b"idiv",
-        "hard_light" => *b"hLit",
-        "soft_light" => *b"sLit",
-        "difference" => *b"diff",
-        "exclusion" => *b"smud",
-        "hue" => *b"hue ",
-        "saturation" => *b"sat ",
-        "color" => *b"colr",
-        "luminosity" => *b"lum ",
-        "linear_burn" => *b"lbrn",
-        "linear_dodge" => *b"lddg",
-        "darker_color" => *b"dkCl",
-        "lighter_color" => *b"lgCl",
-        "vivid_light" => *b"vLit",
-        "linear_light" => *b"lLit",
-        "pin_light" => *b"pLit",
-        "hard_mix" => *b"hMix",
-        "subtract" => *b"fsub",
-        "divide" => *b"fdiv",
-        _ => *b"norm",
-    }
-}
-
-/// A typed adjustment as Photoshop's own adjustment block — for the five
-/// kinds the layered import reads back (`image_psd::adjustment`), in the
-/// layouts it parses: Curves (`curv`), Levels (`levl`), Exposure
-/// (`expA`), Invert (`nvrt`) and Hue/Saturation (`hue2`). `None` for any
-/// other kind.
-fn adjustment_block(a: &crate::layers::Adjustment) -> Option<AdditionalLayerInfo> {
-    use crate::layers::Adjustment as A;
-    let be16 = |v: &mut Vec<u8>, x: u16| v.extend_from_slice(&x.to_be_bytes());
-    let i16s = |v: &mut Vec<u8>, x: f32| v.extend_from_slice(&(x.round() as i16).to_be_bytes());
-    let (key, data): ([u8; 4], Vec<u8>) = match a {
-        A::Invert => (*b"nvrt", Vec::new()),
-        A::Exposure {
-            exposure,
-            offset,
-            gamma,
-        } => {
-            let mut v = Vec::new();
-            be16(&mut v, 1);
-            for x in [exposure, offset, gamma] {
-                v.extend_from_slice(&x.to_bits().to_be_bytes());
-            }
-            (*b"expA", v)
-        }
-        A::Levels { records } => {
-            let mut v = Vec::new();
-            be16(&mut v, 2);
-            for k in 0..29 {
-                let r = records
-                    .get(k)
-                    .copied()
-                    .unwrap_or([0.0, 255.0, 1.0, 0.0, 255.0]);
-                for x in [r[0], r[1], r[3], r[4]] {
-                    be16(&mut v, x.round().clamp(0.0, 255.0) as u16);
-                }
-                be16(&mut v, (r[2] * 100.0).round().clamp(10.0, 999.0) as u16);
-            }
-            (*b"levl", v)
-        }
-        A::Curves { curves } => {
-            let mut v = vec![0u8];
-            be16(&mut v, 1);
-            let map = curves
-                .iter()
-                .enumerate()
-                .filter(|(_, c)| !c.is_empty())
-                .fold(0u32, |m, (i, _)| m | 1 << i);
-            v.extend_from_slice(&map.to_be_bytes());
-            for c in curves.iter().filter(|c| !c.is_empty()) {
-                be16(&mut v, c.len() as u16);
-                for &(input, output) in c {
-                    // Output first, then input (Photoshop's order).
-                    be16(&mut v, u16::from(output));
-                    be16(&mut v, u16::from(input));
-                }
-            }
-            (*b"curv", v)
-        }
-        A::HueSaturation {
-            colorize,
-            colorize_hsl,
-            master,
-            ranges,
-        } => {
-            let mut v = Vec::new();
-            be16(&mut v, 2);
-            v.push(u8::from(*colorize));
-            v.push(0);
-            for x in colorize_hsl.iter().chain(master) {
-                i16s(&mut v, *x);
-            }
-            for (k, r) in ranges.iter().enumerate() {
-                for b in image_psd::adjustment::HUE_RANGE_DEFAULTS[k] {
-                    v.extend_from_slice(&b.to_be_bytes());
-                }
-                for x in r {
-                    i16s(&mut v, *x);
-                }
-            }
-            (*b"hue2", v)
-        }
-        _ => return None,
-    };
-    Some(crate::psd_layer_ext::raw_block(key, &data))
-}
-
-fn opacity_u8(o: f32) -> u8 {
-    (o.clamp(0.0, 1.0) * 255.0).round() as u8
-}
-
-fn named_record(name: &str, kind: Option<LsctData>) -> (PascalString, Vec<AdditionalLayerInfo>) {
-    let mut addl = Vec::new();
-    if let Some(l) = kind {
-        addl.push(AdditionalLayerInfo {
-            sig: *b"8BIM",
-            key: *b"lsct",
-            body: AddlBody::SectionDivider(l),
-            raw_block: None,
-        });
-    }
-    // The Unicode name, which every modern reader prefers over the
-    // legacy Pascal one (that one is truncated, and not Unicode).
-    addl.push(AdditionalLayerInfo {
-        sig: *b"8BIM",
-        key: *b"luni",
-        body: AddlBody::UnicodeName(name.to_string()),
-        raw_block: None,
-    });
-    let legacy: String = name.chars().filter(char::is_ascii).collect();
-    (PascalString::new(&legacy), addl)
-}
-
-/// A canvas-extent user mask as channel −2 plus its mask record: the
-/// rect is the canvas, the default colour 0 (outside the rect is hidden),
-/// flags bit 1 = mask disabled, two pad bytes.
-fn mask_channel(
-    cov: &SelectionCoverage,
-    enabled: bool,
-    width: u32,
-    height: u32,
-    container: image_psd::Container,
-) -> Result<(ChannelInfo, ChannelData, LayerMaskData), IngestError> {
-    let cd = ChannelData::encode_rle(cov.data(), container, height, width)
-        .map_err(|e| IngestError::Decode(e.to_string()))?;
-    let info = ChannelInfo {
-        id: -2,
-        data_len: 2 + cd.bytes.len() as u64,
-    };
-    let flags = if enabled { 0 } else { 0x02 };
-    let mut raw = Vec::with_capacity(20);
-    for v in [0i32, 0, height as i32, width as i32] {
-        raw.extend_from_slice(&v.to_be_bytes());
-    }
-    raw.extend_from_slice(&[0, flags, 0, 0]);
-    Ok((
-        info,
-        cd,
-        LayerMaskData {
-            top: 0,
-            left: 0,
-            bottom: height as i32,
-            right: width as i32,
-            default_color: 0,
-            flags,
-            raw,
-        },
-    ))
-}
-
-/// A group's opening (`OpenFolder`, above its members) or closing
-/// (`BoundingDivider`, below them) record: no pixels, four empty
-/// channels, and the group's mask on the folder record when it has one.
-#[allow(clippy::too_many_arguments)]
-fn section_record(
-    name: &str,
-    lsct: LsctData,
-    opacity: u8,
-    flags: u8,
-    blend_key: [u8; 4],
-    mask: Option<(&SelectionCoverage, bool, u32, u32)>,
-    container: image_psd::Container,
-) -> Result<LayerRecord, IngestError> {
-    let mut channels = Vec::new();
-    let mut channel_data = Vec::new();
-    for id in [-1i16, 0, 1, 2] {
-        let cd = ChannelData::encode_rle(&[], container, 0, 0)
-            .map_err(|e| IngestError::Decode(e.to_string()))?;
-        channels.push(ChannelInfo {
-            id,
-            data_len: 2 + cd.bytes.len() as u64,
-        });
-        channel_data.push(cd);
-    }
-    let mask = match mask {
-        Some((cov, enabled, width, height)) => {
-            let (info, cd, record) = mask_channel(cov, enabled, width, height, container)?;
-            channels.push(info);
-            channel_data.push(cd);
-            Some(record)
-        }
-        None => None,
-    };
-    let (name_legacy, addl) = named_record(name, Some(lsct));
-    Ok(LayerRecord {
-        top: 0,
-        left: 0,
-        bottom: 0,
-        right: 0,
-        channels,
-        blend_sig: *b"8BIM",
-        blend_key,
-        opacity,
-        clipping: 0,
-        flags,
-        filler: 0,
-        mask,
-        blend_ranges: BlendRanges::default(),
-        name_legacy,
-        addl,
-        extra_raw: None,
-        channel_data,
-    })
-}
-
-/// Write the session's layer STACK into the retained PSD as its layers,
-/// with `composite` (straight RGBA8, the stack's fold) as the merged
-/// image. Refuses — so the caller can fall back to the flattened save —
-/// a stack holding adjustment layers (PSD adjustment blocks are not
-/// written yet), a file that is not 8-bit RGB, or a size mismatch.
-pub fn psd_write_stack(
-    file: &mut PsdFile,
-    stack: &crate::layers::LayerStack,
-    composite: &[u8],
-) -> Result<PsdSaveBackShape, IngestError> {
-    use crate::layers::LayerKind;
-    let (width, height) = (stack.width(), stack.height());
-    if file.header.depth != 8 || file.header.color_mode != ColorMode::Rgb {
-        return Err(IngestError::Unsupported(
-            "a layered PSD save writes 8-bit RGB files only".into(),
-        ));
-    }
-    if file.header.width != width || file.header.height != height {
-        return Err(IngestError::Unsupported(format!(
-            "layered PSD save: the layers are {width}×{height}, the file is {}×{}",
-            file.header.width, file.header.height
-        )));
-    }
-    // Adjustment layers are written as Photoshop's own blocks for the
-    // kinds the layered import reads back; any other kind makes the save
-    // fall back to the flatten, which says why.
-    let mut adjustment_blocks = Vec::with_capacity(stack.layers().len());
-    for l in stack.layers() {
-        adjustment_blocks.push(match &l.kind {
-            LayerKind::Adjustment(a) => Some(adjustment_block(a).ok_or_else(|| {
-                IngestError::Unsupported(format!(
-                    "adjustment layer \"{}\" is a {} layer, which is not written as a PSD \
-                     adjustment layer (Curves, Levels, Exposure, Invert and Hue/Saturation are)",
-                    l.name,
-                    a.default_layer_name()
-                ))
-            })?),
-            _ => None,
-        });
-    }
-    let n = width as usize * height as usize;
-    if composite.len() != n * 4 {
-        return Err(IngestError::Decode(
-            "layered PSD save: composite is mis-sized".into(),
-        ));
-    }
-    // The styles' Global Light lives in the document's resources.
-    if stack.layers().iter().any(|l| l.ext.style.is_some()) {
-        stack.style_doc().global_light.store(file);
-    }
-    let container = file.container;
-    let group = |id: u32| stack.groups().iter().find(|g| g.id == id);
-    let mut records: Vec<LayerRecord> = Vec::new();
-    // Bottom-first, opening and closing groups as the chain changes. A
-    // group CLOSES (its folder record goes above its members) when a
-    // layer leaves it, and OPENS (its divider goes below) when one enters.
-    let mut open: Vec<u32> = Vec::new();
-    let close = |records: &mut Vec<LayerRecord>, id: u32| -> Result<(), IngestError> {
-        let g = group(id).ok_or_else(|| IngestError::Decode(format!("no group {id}")))?;
-        let blend = psd_blend_key(g.blend.id);
-        let (key, lsct_blend) = if g.pass_through {
-            (*b"pass", *b"pass")
-        } else {
-            (blend, blend)
-        };
-        records.push(section_record(
-            &g.name,
-            LsctData {
-                kind: SectionKind::OpenFolder,
-                blend_key: Some(lsct_blend),
-                sub_kind: None,
-            },
-            opacity_u8(g.opacity),
-            if g.visible { 0 } else { 0x02 },
-            key,
-            g.mask
-                .as_deref()
-                .map(|m| (m, g.mask_enabled, stack.width(), stack.height())),
-            container,
-        )?);
-        Ok(())
-    };
-    for (li, layer) in stack.layers().iter().enumerate() {
-        let want = stack.group_chain(layer.group);
-        while let Some(&top) = open.last() {
-            if want.starts_with(&open) {
-                break;
-            }
-            open.pop();
-            close(&mut records, top)?;
-        }
-        for &g in &want[open.len()..] {
-            records.push(section_record(
-                "</Layer group>",
-                LsctData {
-                    kind: SectionKind::BoundingDivider,
-                    blend_key: None,
-                    sub_kind: None,
-                },
-                255,
-                0,
-                *b"norm",
-                None,
-                container,
-            )?);
-            open.push(g);
-        }
-        // Pixels: straight RGBA8 (a 16-bit layer narrows; the file is 8-bit).
-        // An adjustment layer has none: an empty rectangle.
-        let adjustment = adjustment_blocks[li].take();
-        let (rect_h, rect_w) = if adjustment.is_some() {
-            (0, 0)
-        } else {
-            (height, width)
-        };
-        if layer.fill().is_some_and(|f| f.stale) {
-            return Err(IngestError::Unsupported(format!(
-                "fill layer \"{}\" is not rendered yet — composite before saving",
-                layer.name
-            )));
-        }
-        let mut rgba = layer.rgba.to_rgba8().into_owned();
-        // A SHAPE layer's stored pixels are its fill already cut by its
-        // path — what Photoshop stores, and does not cut a second time
-        // (image ADR 476); the fill render here is the whole canvas.
-        let shape_cut = layer.live_vector_mask().filter(|_| layer.fill().is_some());
-        if let Some(v) = shape_cut {
-            for (px, &c) in rgba
-                .as_chunks_mut::<4>()
-                .0
-                .iter_mut()
-                .zip(v.raster().data())
-            {
-                px[3] = ((u32::from(px[3]) * u32::from(c) + 127) / 255) as u8;
-            }
-        }
-        let planes = if adjustment.is_some() {
-            vec![Vec::new(); 4]
-        } else {
-            planes_from_rgba8(&rgba, n, true)
-        };
-        let mut channels = Vec::new();
-        let mut channel_data = Vec::new();
-        for (id, plane) in [(-1i16, 3usize), (0, 0), (1, 1), (2, 2)] {
-            let cd = ChannelData::encode_rle(&planes[plane], container, rect_h, rect_w)
-                .map_err(|e| IngestError::Decode(e.to_string()))?;
-            channels.push(ChannelInfo {
-                id,
-                data_len: 2 + cd.bytes.len() as u64,
-            });
-            channel_data.push(cd);
-        }
-        // The user mask as channel −2. A pixel layer whose only mask is
-        // an enabled VECTOR mask carries its drawing there instead,
-        // flagged "came from rendering other data" (flags bit 3), which is
-        // how Photoshop caches it and how a reader that draws no paths
-        // still sees the layer masked (ADR 476).
-        let cached_vector = match (&layer.mask, layer.live_vector_mask()) {
-            (None, Some(v)) if shape_cut.is_none() => Some(v.raster()),
-            _ => None,
-        };
-        let mask = match (&layer.mask, cached_vector) {
-            (Some(cov), _) => {
-                let (info, cd, record) = mask_channel(
-                    &cov.to_canvas(),
-                    layer.mask_enabled,
-                    width,
-                    height,
-                    container,
-                )?;
-                channels.push(info);
-                channel_data.push(cd);
-                Some(record)
-            }
-            (None, Some(render)) => {
-                let (info, cd, mut record) = mask_channel(render, true, width, height, container)?;
-                record.flags |= 0x08;
-                record.raw[17] |= 0x08;
-                channels.push(info);
-                channel_data.push(cd);
-                Some(record)
-            }
-            (None, None) => None,
-        };
-        let (name_legacy, mut addl) = named_record(&layer.name, None);
-        // The parity properties (fill opacity, knockout, locks, label),
-        // a fill layer's content and an adjustment's block.
-        addl.extend(crate::psd_layer_ext::ext_blocks(&layer.ext, layer.locked));
-        // The layer's style and its blending options.
-        addl.extend(crate::psd_layer_ext::style_blocks(&layer.ext));
-        if let Some(f) = layer.fill() {
-            // A pattern fill's pixels belong in the document's pattern
-            // block, which is not written: it is saved as its render.
-            addl.extend(crate::psd_layer_ext::fill_block(&f.source));
-        }
-        addl.extend(adjustment);
-        // The VECTOR MASK as its `vmsk` block (a shape layer's too, beside
-        // its fill content), the way Photoshop 27 writes both.
-        if let Some(v) = &layer.ext.vector_mask {
-            addl.push(crate::psd_layer_ext::raw_block(
-                *b"vmsk",
-                &v.to_psd_mask().encode(width, height),
-            ));
-        }
-        records.push(LayerRecord {
-            top: 0,
-            left: 0,
-            bottom: rect_h as i32,
-            right: rect_w as i32,
-            channels,
-            blend_sig: *b"8BIM",
-            blend_key: psd_blend_key(layer.blend.id),
-            opacity: opacity_u8(layer.opacity),
-            clipping: u8::from(layer.clipped),
-            flags: if layer.visible { 0 } else { 0x02 },
-            filler: 0,
-            mask,
-            blend_ranges: match layer.live_blend_if() {
-                Some(bi) => BlendRanges {
-                    raw: crate::psd_layer_ext::blend_ranges_bytes(Some(bi)),
-                },
-                None => BlendRanges::default(),
-            },
-            name_legacy,
-            addl,
-            extra_raw: None,
-            channel_data,
-        });
-    }
-    while let Some(top) = open.pop() {
-        close(&mut records, top)?;
-    }
-
-    // The merged composite (with transparency), and a header that says so.
-    let planes = planes_from_rgba8(composite, n, true);
-    file.composite = encode_composite_rle(&planes, file, width, height)?;
-    file.header.channels = 4;
-    file.layer_mask.layers = records;
-    file.layer_mask.transparency_in_merged = true;
-    file.layer_mask.section_raw = None;
-    // The document's paths: the saved ones and the work path (ADR 476).
-    crate::vectors::paths_into_psd(file, stack.masking()).map_err(IngestError::Unsupported)?;
-    Ok(PsdSaveBackShape::Layered)
-}
+pub use crate::psd_write::psd_write_stack;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image_gpu::SelectionCoverage;
+    use image_psd::model::SectionKind;
 
     /// A 2×1 8-bit RGB PSD (RAW composite, no layers) — the same shape
     /// the glue's `psdBytes()` fixture builds.
@@ -1406,30 +927,34 @@ mod tests {
         assert!(!g.mask_enabled, "the switch survives");
     }
 
-    /// An adjustment kind the PSD writer has no block for refuses the
-    /// layered save (so the caller flattens and says why); the kinds the
-    /// import reads back are written.
+    /// An adjustment kind Photoshop has no adjustment layer for refuses the
+    /// layered save (so the caller flattens and says why); every other
+    /// kind is written.
     #[test]
     #[allow(non_snake_case)]
     fn an_unwritable_adjustment_layer_is_refused_for_the_flatten_fallback__feat__image_io_save_back(
     ) {
         use crate::layers::Adjustment;
+        // Develop (WP5.2) has no Photoshop adjustment layer (its Camera
+        // Raw Filter is a smart filter), and Color Lookup's look is a
+        // profile Photoshop compiles itself: the flatten fallback.
+        for (kind, name) in [("develop", "Develop"), ("colorLookup", "Color Lookup")] {
+            let mut s = layered_stack();
+            s.add_adjustment_layer("", Adjustment::default_for(kind).expect("kind"), None);
+            let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+            let err = psd_write_stack(&mut f, &s, &[0u8; 32]).expect_err("refused");
+            assert!(
+                err.to_string().contains(&format!("is a {name} layer")),
+                "{err}"
+            );
+        }
         let mut s = layered_stack();
         s.add_adjustment_layer("", Adjustment::default_for("vibrance").expect("kind"), None);
         let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
-        let err = psd_write_stack(&mut f, &s, &[0u8; 32]).expect_err("refused");
-        assert!(
-            err.to_string()
-                .contains("not written as a PSD adjustment layer"),
-            "{err}"
+        assert_eq!(
+            psd_write_stack(&mut f, &s, &[0u8; 32]).expect("written"),
+            PsdSaveBackShape::Layered
         );
-        // Develop (WP5.2) has no Photoshop adjustment layer either (its
-        // Camera Raw Filter is a smart filter): the same flatten fallback.
-        let mut s = layered_stack();
-        s.add_adjustment_layer("", Adjustment::default_for("develop").expect("kind"), None);
-        let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
-        let err = psd_write_stack(&mut f, &s, &[0u8; 32]).expect_err("refused");
-        assert!(err.to_string().contains("is a Develop layer"), "{err}");
     }
 
     /// Fill layers, the five readable adjustment kinds and the parity

@@ -33,7 +33,7 @@ import { parseAddress, toElementId } from "@paged-media/plugin-sdk";
 import { t } from "@paged-media/strings";
 
 import type { SlideEngine } from "../engine.js";
-import { ANIM } from "../messages.js";
+import { ANIM, ANIM_MODEL } from "../messages.js";
 import type { SlidesStore } from "../slides-model.js";
 import { AnimationAuthoring } from "./authoring.js";
 import type { EffectStart } from "./model.js";
@@ -140,7 +140,7 @@ export function animationTypedCommands(
     { index: number }
   > = {
     id: ANIM_TYPED.add,
-    title: t(ANIM.addAnimation),
+    title: t(ANIM_MODEL.addAnimation),
     args: struct({
       slide: { ...SLIDE_REF, optional: true },
       shape: text(),
@@ -195,7 +195,7 @@ export function animationTypedCommands(
     Record<string, never>
   > = {
     id: ANIM_TYPED.remove,
-    title: t(ANIM.removeAnimation),
+    title: t(ANIM_MODEL.removeAnimation),
     args: struct({ slide: { ...SLIDE_REF, optional: true }, index: num() }),
     result: EMPTY,
     async handler(_ctx, args) {
@@ -223,7 +223,7 @@ export function animationTypedCommands(
     Record<string, never>
   > = {
     id: ANIM_TYPED.timing,
-    title: t(ANIM.setAnimationTiming),
+    title: t(ANIM_MODEL.setAnimationTiming),
     args: struct({
       slide: { ...SLIDE_REF, optional: true },
       index: num(),
@@ -278,7 +278,7 @@ export function animationTypedCommands(
     Record<string, never>
   > = {
     id: ANIM_TYPED.move,
-    title: t(ANIM.moveAnimation),
+    title: t(ANIM_MODEL.moveAnimation),
     args: struct({
       slide: { ...SLIDE_REF, optional: true },
       from: num(),
@@ -315,7 +315,7 @@ export function animationTypedCommands(
     }
   > = {
     id: ANIM_TYPED.list,
-    title: t(ANIM.listAnimations),
+    title: t(ANIM_MODEL.listAnimations),
     args: struct({ slide: { ...SLIDE_REF, optional: true } }),
     result: struct({
       clicks: num(),
@@ -358,7 +358,7 @@ export function animationTypedCommands(
     Record<string, never>
   > = {
     id: ANIM_TYPED.preview,
-    title: t(ANIM.previewAnimations),
+    title: t(ANIM_MODEL.previewAnimations),
     args: struct({ slide: { ...SLIDE_REF, optional: true } }),
     result: EMPTY,
     async handler(_ctx, args) {

@@ -329,18 +329,22 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   file opens flattened when a layer, group or overlay uses a mode other than Normal or Multiply
   (measured 9.9–50 ΔE00 p95 off on synthetic tiles), when it has no real merged data, or when
   its RGB flatten is more than 8 levels off the converted composite on over 1 % of the pixels or
-  more than 2 levels off on over 5 % (a tint: Multiply over pale stock). Photo Filter and
-  Brightness/Contrast still open flattened: each fixture records one parameter set, which does
-  not determine Photoshop's formula; fill opacity on a special mode still declines (the in-app
-  model is unverified).
-  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are not imported, so such a
-  file opens flattened (paged-psd reads their records, `PsdFile::layer_list`, which the import
-  does not use yet). Across the 157-file private corpus, 76 files open as layers and are measured
+  more than 2 levels off on over 5 % (a tint: Multiply over pale stock). Every Photoshop
+  adjustment kind but Color Lookup is read; Black & White, Channel Mixer, Posterize and
+  Threshold are drawn, while Brightness/Contrast, Color Balance, Vibrance, Photo Filter, Gradient
+  Map and Selective Color still open flattened (measured 25–109 levels from Photoshop; image
+  ADR 478); fill opacity on a special mode still declines (the in-app model is unverified).
+  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are read into the layer list
+  at parse and import like any others (ADR 478). Across the 157-file private corpus, 76 files open as layers and are measured
   against Photoshop's composite (3 did on 2026-10-04), all but one within 1.5 % of pixels more
   than 2 levels off; the rest open flattened, the commonest reasons being smart objects the
   composite does not vouch for (26, most of them Multiply smart objects in CMYK documents, which
   need ink-space blending), effects (16), CMYK blending (12) and fill opacity on special blend
-  modes (8). Save-back is 8-bit RGB. "Apply to file" and
+  modes (8). The layered save writes 8- and 16-bit RGB and CMYK PSDs and PSBs: an unedited
+  layer as the record it was read from, an edited one with only its edits replaced (smart
+  objects, text and vector masks stay live until their pixels change), every adjustment kind
+  Photoshop has a layer for (not Color Lookup or Develop), fill layers and styles — Photoshop
+  reopens them as live layers ([ADR 478](adr/478-psd-write-depth.md)). "Apply to file" and
   the PNG and JPEG exporters encode the composite. The PSD exporter returns the retained file
   byte for byte only when the parameters are the identity and the pixels have not been edited since ingest; otherwise it
   runs the save-back, and when the save-back declines (a size change, a non-RGB or non-8-bit file) it exports nothing
@@ -394,8 +398,7 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
 - A colour-transform kernel on the GPU ([ADR 457](adr/457-colour-management.md)).
 - Image formats other than PNG, JPEG and PSD/PSB. `registry/codecs.yaml` records AVIF and
   JPEG XL as planned, camera RAW and HEIC as out of scope ([ADR 456](adr/456-codecs.md)).
-- A writer for PSD descriptors, which are parsed read-only (`registry/psd-blocks.yaml`).
 - A runner for the GEGL oracle the registry names for some rows.
-- Rendering a smart object from its embedded source, layer effects other than Color Overlay, and reading PSD
-  adjustment layers other than Curves, Levels, Exposure, Invert and Hue/Saturation back as adjustment
-  layers.
+- Rendering a smart object from its embedded source, drawing the PSD adjustment kinds the import
+  declines (above) as Photoshop does, and writing Color Lookup layers, text (`TySh`, WP5.10), vector
+  masks and shapes (WP5.11) and a transformed smart object's placement (WP5.14).

@@ -21,6 +21,12 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-pixelate.js
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/adjustments-ext.jsx
 # vector-paths opens a PSD paged wrote: stage it first (see below)
 PAGED_PROBE_STAGE=<dir> bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-paths.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/adjustment-layers-ext.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/psd-containers.jsx
+# psd-readback opens files paged WROTE: stage them first (image ADR 478)
+PAGED_PSD_READBACK_OUT=<stage>/psd-readback cargo nextest run -p image-conformance \
+  --run-ignored only write_psd_readback_inputs
+PAGED_PROBE_STAGE=<stage> bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/psd-readback.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -58,6 +64,16 @@ send (the DOM has no method for most of them; ScriptListener-style keys):
   light list); the Blur Gallery (Field/Iris/Tilt-Shift/Path/Spin pins are
   only scriptable through its workspace's undocumented descriptor) and the
   Filter Gallery effects (8-bit only and keyed per effect; a later probe).
+
+The PSD-writing probes (image ADR 478): `adjustment-layers-ext` (one adjustment layer of each
+kind `adjustment-layers` does not cover, so paged-psd's writer is held to Photoshop's own blocks
+byte for byte: `psd_adjustment_blocks_photoshop.rs`; Color Lookup is not recorded, a scripted
+`.cube` load makes an empty layer), `psd-containers` (a 16-bit layered document, a PSB, a CMYK
+document, an embedded smart object; a linked one is not recorded, its `lnkE` holds an absolute temporary path) and `psd-readback`, which has Photoshop OPEN the
+files the layered save writes and report each layer's kind, adjustment descriptor, effects and a
+render (`psd_write_photoshop.rs`; the files are rebuilt by the test and held to the recording by
+content hash, so they are not committed). A probe file that Photoshop cannot open is an error
+the runner refuses — that is how the Curves block's missing `Crv ` extension was found.
 
 Replays: `image-conformance/tests/it/oracle_photoshop.rs` (blend modes,
 adjustments, filters → `fixtures/photoshop/ledger.json`, every case

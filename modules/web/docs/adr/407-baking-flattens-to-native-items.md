@@ -88,3 +88,11 @@ flatten is "not implemented"; it shipped in commit `fdbe007`.
 - [ADR 402](402-text-crosses-as-strings.md), [ADR 405](405-flow-chain-is-plugin-data.md), [ADR 406](406-web-frame-and-source-storage.md) — the limits the flatten inherits
 - [ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md), [ADR 310](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/310-one-write-door.md), [ADR 017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md) — baking as the fallback for plugin content; the write door; the exporter door this plugin does not use
 - [ADR 013](https://github.com/paged-media/core/blob/main/docs/adr/013-in-frame-scenelayer.md), [ADR 505](https://github.com/paged-media/plugin-sheets/blob/main/docs/adr/505-native-table-and-edit-grid.md) — the scene layer; the sheet plugin's lowering to native content
+
+## Amendment 2026-10-28
+
+The flatten now carries more than the decision above lists (strokes, gradients, shadows, images
+and multi-subpath fills landed since), and an element's CSS effects map onto native items:
+[ADR 415](415-css-effects-map-onto-native-items.md) records how the effect groups reach the bake
+beside the scene layer and what each maps to. The decision itself — the flatten is the only way
+web content enters the document, and the plugin contributes no exporter — is unchanged.

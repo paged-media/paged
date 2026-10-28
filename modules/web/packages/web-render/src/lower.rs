@@ -87,6 +87,7 @@
 use crate::display_list::{
     RunFace, WebBlendMode, WebDisplayList, WebDrawCmd, WebGlyphRun, WebGradient, WebImage,
 };
+use crate::effects::{LayerEffects, SceneEffectGroup};
 use crate::wire::{
     SceneBlendMode, SceneGradient, SceneGradientStop, SceneItem, SceneLayer, SceneTextItem,
 };
@@ -188,6 +189,10 @@ pub struct Lowered {
     /// in item order — what a native text frame baked from the run must
     /// hold. Not part of the wire layer.
     pub text_advances: Vec<f32>,
+    /// The CSS effect groups over `layer`'s items (ADR 415). Not part of the
+    /// wire layer either: the canvas composes the flat items, a bake reads
+    /// the groups.
+    pub effects: LayerEffects,
 }
 
 /// Lower a captured web display list to a C-1 [`SceneLayer`] + report.
@@ -198,6 +203,9 @@ pub fn lower(dl: &WebDisplayList) -> Lowered {
     let mut layer = SceneLayer::default();
     let mut report = LowerReport::default();
     let mut text_advances = Vec::new();
+    let mut effects = LayerEffects::default();
+    // The open groups, innermost last (indices into `effects.groups`).
+    let mut open: Vec<usize> = Vec::new();
 
     for cmd in &dl.commands {
         match cmd {
@@ -379,15 +387,76 @@ pub fn lower(dl: &WebDisplayList) -> Lowered {
             WebDrawCmd::BoxShadow => {
                 report.dropped_shadows += 1;
             }
+            WebDrawCmd::PushGroup(fx) => {
+                let start = layer.items.len();
+                open.push(effects.groups.len());
+                effects.groups.push(SceneEffectGroup {
+                    start,
+                    end: start,
+                    parent: None,
+                    opacity: fx.opacity,
+                    blend: fx.blend.clone(),
+                    isolate: fx.isolate,
+                    filters: fx.filters.clone(),
+                    clip: fx.clip.clone(),
+                    // The mask's own paint, lowered like any content (it
+                    // never reaches the layer: it is the element's alpha).
+                    mask: if fx.mask.is_empty() {
+                        Vec::new()
+                    } else {
+                        lower(&WebDisplayList {
+                            commands: fx.mask.clone(),
+                        })
+                        .layer
+                        .items
+                    },
+                    losses: fx.losses.clone(),
+                });
+            }
+            WebDrawCmd::PopGroup => {
+                // An unbalanced pop (a flow band that cut the push away) closes
+                // nothing.
+                if let Some(i) = open.pop() {
+                    effects.groups[i].end = layer.items.len();
+                }
+            }
+            WebDrawCmd::EffectLoss { key } => {
+                *effects.losses.entry(key.clone()).or_insert(0) += 1;
+            }
         }
     }
+    // A group still open at the end (its pop fell outside a flow band) ends
+    // with the layer.
+    for i in open {
+        effects.groups[i].end = layer.items.len();
+    }
+    effects.groups = nest_groups(std::mem::take(&mut effects.groups));
 
     report.emitted = layer.items.len();
     Lowered {
         layer,
         report,
         text_advances,
+        effects,
     }
+}
+
+/// Drop the groups that wrap no item (an element that painted nothing, or a
+/// flow band that took none of its items) and give each kept group its
+/// innermost enclosing kept group as `parent`. Groups arrive in push order,
+/// so an enclosing group always comes before the groups it holds.
+fn nest_groups(groups: Vec<SceneEffectGroup>) -> Vec<SceneEffectGroup> {
+    let mut kept: Vec<SceneEffectGroup> = Vec::new();
+    for mut g in groups {
+        if g.end <= g.start {
+            continue;
+        }
+        g.parent = kept
+            .iter()
+            .rposition(|p| p.start <= g.start && g.end <= p.end);
+        kept.push(g);
+    }
+    kept
 }
 
 /// Lower a captured text run to a C-1 `text` item, or `None` for an empty
@@ -598,6 +667,75 @@ mod tests {
 
     fn blue() -> ScenePaint {
         ScenePaint::rgba(0.0, 0.3, 0.8, 1.0)
+    }
+
+    fn fill(x: f32) -> WebDrawCmd {
+        WebDrawCmd::FillRect {
+            rect: RectPt::new(x, 0.0, 10.0, 10.0),
+            paint: blue(),
+        }
+    }
+
+    #[test]
+    fn effect_groups_lower_to_item_ranges_with_their_parents() {
+        let mut dl = WebDisplayList::new();
+        dl.push(fill(0.0));
+        dl.push(WebDrawCmd::PushGroup(Box::new(crate::effects::WebEffect {
+            opacity: 0.5,
+            ..Default::default()
+        })));
+        dl.push(fill(10.0));
+        dl.push(WebDrawCmd::PushGroup(Box::new(crate::effects::WebEffect {
+            opacity: 1.0,
+            blend: Some("Multiply".into()),
+            ..Default::default()
+        })));
+        dl.push(fill(20.0));
+        dl.push(WebDrawCmd::PopGroup);
+        // A group that paints nothing is dropped.
+        dl.push(WebDrawCmd::PushGroup(Box::default()));
+        dl.push(WebDrawCmd::PopGroup);
+        dl.push(fill(30.0));
+        dl.push(WebDrawCmd::PopGroup);
+        dl.push(WebDrawCmd::EffectLoss {
+            key: "cssEffect.inline".into(),
+        });
+        let out = lower(&dl);
+        assert_eq!(out.layer.items.len(), 4, "groups draw nothing themselves");
+        let g = &out.effects.groups;
+        assert_eq!(g.len(), 2, "{g:?}");
+        assert_eq!((g[0].start, g[0].end, g[0].parent), (1, 4, None));
+        assert_eq!((g[1].start, g[1].end, g[1].parent), (2, 3, Some(0)));
+        assert_eq!(g[0].opacity, 0.5);
+        assert_eq!(g[1].blend.as_deref(), Some("Multiply"));
+        assert_eq!(out.effects.losses.get("cssEffect.inline"), Some(&1));
+    }
+
+    #[test]
+    fn a_groups_mask_lowers_beside_the_layer_and_an_unclosed_group_ends_with_it() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::PushGroup(Box::new(crate::effects::WebEffect {
+            opacity: 1.0,
+            mask: vec![fill(0.0)],
+            ..Default::default()
+        })));
+        dl.push(fill(5.0));
+        let out = lower(&dl);
+        assert_eq!(out.layer.items.len(), 1, "the mask is not content");
+        let g = &out.effects.groups[0];
+        assert_eq!((g.start, g.end), (0, 1));
+        assert_eq!(g.mask.len(), 1);
+        assert!(matches!(g.mask[0], SceneItem::FillPath { .. }));
+    }
+
+    #[test]
+    fn an_unbalanced_pop_closes_nothing() {
+        let mut dl = WebDisplayList::new();
+        dl.push(WebDrawCmd::PopGroup);
+        dl.push(fill(0.0));
+        let out = lower(&dl);
+        assert!(out.effects.is_empty());
+        assert_eq!(out.layer.items.len(), 1);
     }
 
     #[test]

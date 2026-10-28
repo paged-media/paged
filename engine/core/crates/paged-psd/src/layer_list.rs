@@ -84,7 +84,7 @@ impl PsdFile {
             return Ok(LayerList {
                 layers: self.layer_mask.layers.clone(),
                 transparency_in_merged: self.layer_mask.transparency_in_merged,
-                key: None,
+                key: self.layer_mask.deep_key,
             });
         }
         for block in &self.layer_mask.addl_global {
@@ -103,6 +103,30 @@ impl PsdFile {
         }
         Ok(LayerList::default())
     }
+}
+
+/// The layers of the first `Lr16` / `Lr32` document block in `blocks`
+/// (a deep document's layers, read at parse time into the model's one
+/// list), with their channel payloads. `None` when there is none.
+pub(crate) fn deep_layers(
+    blocks: &[crate::model::AdditionalLayerInfo],
+    container: Container,
+) -> Result<Option<LayerList>> {
+    for block in blocks {
+        if &block.key != b"Lr16" && &block.key != b"Lr32" {
+            continue;
+        }
+        let Some(raw) = block.raw_block.as_deref() else {
+            continue;
+        };
+        let mut r = ByteReader::new(raw);
+        r.fourcc()?;
+        r.fourcc()?;
+        let len = r.len_field(block_len_width(container, block.sig, block.key))? as usize;
+        let data = r.take(len)?;
+        return layer_info_block(data, container, block.key, true).map(Some);
+    }
+    Ok(None)
 }
 
 /// The layer list in a TIFF's ImageSourceData (tag 37724) payload, with

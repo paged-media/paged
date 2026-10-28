@@ -39,6 +39,7 @@ stood, for decisions made earlier; their status says so.
 | [473](473-filter-families-and-galleries.md) | Filter families as kernels and recipes; the galleries are workspaces over one chain | Accepted 2026-10-25 |
 | [476](476-vectors-inside-the-image.md) | Vectors inside the image: one path geometry, drawn by the vector-mask rasterizer, edited by draw's machines | Accepted 2026-10-28 (amends 470) |
 | [477](477-history-and-presets.md) | Snapshots, a configurable journal and one Preset Manager in the image context | Accepted 2026-10-28 (WP5.9; amends 463) |
+| [478](478-psd-write-depth.md) | The layered PSD save writes what it reads | Accepted 2026-10-28 (WP5.15) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
