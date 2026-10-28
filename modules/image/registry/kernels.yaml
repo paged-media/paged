@@ -2140,6 +2140,16 @@
 - id: style.distance
   rust_path: families::style::STYLE_DISTANCE
   state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "signed distance to the layer's edge from the flooded fields, an anti-aliased edge texel taking 0.5 - coverage: the spread, choke, stroke, precise glow and chisel bevel read it"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
 # ── WP5.2 filter families (distort, render) ─────────────────────────
 # (rows for families::distort and families::render go below this line)
 - id: distort.displace
@@ -2281,17 +2291,24 @@
   oracle: photoshop
   status: implemented
   provenance:
-    - "signed distance to the layer's edge from the flooded fields, an anti-aliased edge texel taking 0.5 - coverage: the spread, choke, stroke, precise glow and chisel bevel read it"
-    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
-  tests:
-    rust: ["image-conformance/tests/it/family_style.rs"]
-- id: style.ramp
-  rust_path: families::style::STYLE_RAMP
-  state_row: image.kernel.family-t3
     - "Photoshop user guide, Trace Contour (level, upper/lower edge): per channel, a pixel on the chosen side of the level beside a 4-neighbour across it is a contour pixel (0), all else 1 — iso-level edge detection, textbook; no reference reading"
     - "identity: amount 0"
   tests:
     rust: ["image-conformance/tests/it/filters_stylize.rs"]
+
+- id: style.ramp
+  rust_path: families::style::STYLE_RAMP
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "coverage from a signed distance: an anti-aliased band between two offsets (stroke, dilation) or a linear falloff (precise glow, chisel height)"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
 
 - id: stylize.wind
   rust_path: families::stylize::STYLIZE_WIND
@@ -2316,21 +2333,14 @@
   oracle: photoshop
   status: implemented
   provenance:
-    - "coverage from a signed distance: an anti-aliased band between two offsets (stroke, dilation) or a linear falloff (precise glow, chisel height)"
-    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
-  tests:
-    rust: ["image-conformance/tests/it/family_style.rs"]
-- id: style.contour
-  rust_path: families::style::STYLE_CONTOUR
-  state_row: image.kernel.family-t3
     - "Photoshop user guide, Tiles (number of tiles, maximum offset, fill empty area with background/foreground/inverse/unaltered): square tiles shifted by hashed offsets, overlaps by hashed priority; no reference reading"
     - "identity: amount 0"
   tests:
     rust: ["image-conformance/tests/it/filters_stylize.rs"]
 
-- id: stylize.extrude
-  rust_path: families::stylize::STYLIZE_EXTRUDE
-  state_row: image.kernel.family-t2
+- id: style.contour
+  rust_path: families::style::STYLE_CONTOUR
+  state_row: image.kernel.family-t3
   class: point
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 4 }
@@ -2341,13 +2351,34 @@
     - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
   tests:
     rust: ["image-conformance/tests/it/family_style.rs"]
-- id: style.colorize
-  rust_path: families::style::STYLE_COLORIZE
-  state_row: image.kernel.family-t3
+
+- id: stylize.extrude
+  rust_path: families::stylize::STYLIZE_EXTRUDE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
     - "Photoshop user guide, Extrude (blocks/pyramids, size, random or level-based depth, solid front faces, mask incomplete blocks): blocks as squares swept along a parallel projection away from the canvas centre (the projection of a box), pyramids as four orientation-shaded faces; no reference reading"
     - "identity: amount 0"
   tests:
     rust: ["image-conformance/tests/it/filters_stylize.rs"]
+
+- id: style.colorize
+  rust_path: families::style::STYLE_COLORIZE
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "coverage to a premultiplied colour through a 256-entry RGBA lookup (one colour, or a gradient across the falloff or along its parameter) with noise on alpha and jitter on the gradient position from an integer hash (Photoshop User Guide: Noise, Jitter)"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
 
 - id: pixelate.crystallize
   rust_path: families::pixelate::PIXELATE_CRYSTALLIZE
@@ -2372,18 +2403,24 @@
   oracle: photoshop
   status: implemented
   provenance:
-    - "coverage to a premultiplied colour through a 256-entry RGBA lookup (one colour, or a gradient across the falloff or along its parameter) with noise on alpha and jitter on the gradient position from an integer hash (Photoshop User Guide: Noise, Jitter)"
-    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
-  tests:
-    rust: ["image-conformance/tests/it/family_style.rs"]
-- id: style.bevel
-  rust_path: families::style::STYLE_BEVEL
-  state_row: image.kernel.family-t3
-  class: resample
     - "jittered-grid sites (Worley, SIGGRAPH 1996) drawn as antialiased dots of hashed radius on the background colour; Photoshop user guide, Pointillize (cell size, background colour); no reference reading"
     - "identity: amount 0"
   tests:
     rust: ["image-conformance/tests/it/filters_pixelate.rs"]
+
+- id: style.bevel
+  rust_path: families::style::STYLE_BEVEL
+  state_row: image.kernel.family-t3
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 8 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "Lambert shading of a height field lit from an azimuth and altitude, normals from central differences (textbook); Bevel and Emboss's Angle, Altitude and Depth"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
 
 - id: pixelate.mezzotint
   rust_path: families::pixelate::PIXELATE_MEZZOTINT
@@ -2408,17 +2445,24 @@
   oracle: photoshop
   status: implemented
   provenance:
-    - "Lambert shading of a height field lit from an azimuth and altitude, normals from central differences (textbook); Bevel and Emboss's Angle, Altitude and Depth"
-    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
-  tests:
-    rust: ["image-conformance/tests/it/family_style.rs"]
-- id: style.split
-  rust_path: families::style::STYLE_SPLIT
-  state_row: image.kernel.family-t3
     - "rotated per-channel dot screens with area-proportional INK dots (dark on white, dot area following 1 − v, the polarity the Photoshop probe records) from print practice; Photoshop user guide, Color Halftone (max radius 4-127 px, screen angles 108/162/90/45 by default); no reference reading"
     - "identity: amount 0"
   tests:
     rust: ["image-conformance/tests/it/filters_pixelate.rs"]
+
+- id: style.split
+  rust_path: families::style::STYLE_SPLIT
+  state_row: image.kernel.family-t3
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "a shade split into highlight (above the flat surface's shade) and shadow (below it): Bevel and Emboss's two lights"
+    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/family_style.rs"]
 
 # ── WP5.2 Blur Gallery and Filter Gallery breadth ───────────────────
 # (rows for families::blurgal and families::gallery_ext go below this line)
@@ -2553,10 +2597,11 @@
   oracle: photoshop
   status: implemented
   provenance:
-    - "a shade split into highlight (above the flat surface's shade) and shadow (below it): Bevel and Emboss's two lights"
-    - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
+    - "local-mean shadow/highlight recovery: the correction is driven by the mean luminance of a Vogel sunflower disc (integer CPU-made taps) and ADDED, so detail inside a region survives; the tone-width and radius semantics are the dialog's published ones; no reference reading"
+    - "identity: both amounts and the midtone contrast 0 (the tone path is skipped)"
   tests:
-    rust: ["image-conformance/tests/it/family_style.rs"]
+    rust: ["image-conformance/tests/it/filters_adjust_ext.rs"]
+
 - id: style.absdiff
   rust_path: families::style::STYLE_ABSDIFF
   state_row: image.kernel.family-t3
@@ -2570,10 +2615,6 @@
     - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
   tests:
     rust: ["image-conformance/tests/it/family_style.rs"]
-    - "local-mean shadow/highlight recovery: the correction is driven by the mean luminance of a Vogel sunflower disc (integer CPU-made taps) and ADDED, so detail inside a region survives; the tone-width and radius semantics are the dialog's published ones; no reference reading"
-    - "identity: both amounts and the midtone contrast 0 (the tone path is skipped)"
-  tests:
-    rust: ["image-conformance/tests/it/filters_adjust_ext.rs"]
 
 - id: adjust.hdr_toning
   rust_path: families::adjust_ext::ADJUST_HDR_TONING
