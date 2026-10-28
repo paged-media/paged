@@ -80,7 +80,7 @@ fn plan_of(doc: &Document, edit: Option<(usize, Timing)>) -> ExportPlan {
                 })
             })
             .collect(),
-        charts: Vec::new(),
+        ..ExportPlan::default()
     }
 }
 

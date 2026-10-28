@@ -94,4 +94,6 @@ needs the presets as behaviour templates.
   hooks with nothing to play until media items land (wave 4's media door).
 - Paragraph layers are cut along line boxes: a glyph past its line into the next paragraph's
   band is cut at the band (ADR 346 amendment).
-- MP4 export (wave 6) drives the same player and compositor frame by frame.
+- The MP4 export (ADR 720) plays the same player frame by frame through the offline renderer's
+  `slide(frame, layers)` (Canvas2D): each click step when the one before has finished, within
+  the slide's time; builds that run past it are cut.
