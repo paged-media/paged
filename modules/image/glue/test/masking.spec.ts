@@ -232,8 +232,13 @@ describe("[image.selection.select-and-mask] Paths in the image session", () => {
     await k.run(`${C}.makeWorkPath`);
     const p = m(k).state().info.paths;
     expect(p).toHaveLength(1);
-    expect(p[0]).toMatchObject({ name: "Path 1", subpaths: 1, anchors: 4 });
-    expect(undoLabel(k)).toBe("New path");
+    expect(p[0]).toMatchObject({
+      name: "Work Path",
+      work: true,
+      subpaths: 1,
+      anchors: 4,
+    });
+    expect(undoLabel(k)).toBe("Work path");
     const stored = m(k).engine()!.pathGet(p[0].id);
     expect(stored.closed).toEqual([true]);
     k.session.deselect();

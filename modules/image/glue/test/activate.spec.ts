@@ -207,6 +207,16 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.saveSelection",
       "media.paged.image.command.loadSelection",
       "media.paged.image.command.makeWorkPath",
+      "media.paged.image.command.fillPath",
+      "media.paged.image.command.strokePath",
+      "media.paged.image.command.saveWorkPath",
+      "media.paged.image.command.vectorMaskRevealAll",
+      "media.paged.image.command.vectorMaskHideAll",
+      "media.paged.image.command.vectorMaskCurrentPath",
+      "media.paged.image.command.vectorMaskDelete",
+      "media.paged.image.command.vectorMaskToggle",
+      "media.paged.image.command.vectorMaskInvert",
+      "media.paged.image.command.vectorMaskRasterize",
     ]);
     expect(fake.tools.ids()).toEqual([
       "media.paged.image.tool.crop",
@@ -260,6 +270,17 @@ describe("imageBundle.activate", () => {
       // selection slot), WP5.5.
       "media.paged.image.tool.magneticLasso",
       "media.paged.image.tool.refineEdge",
+      // Vectors inside the image (WP5.11): the pen slot, the path
+      // selection slot and the shape slot.
+      "media.paged.image.tool.pen",
+      "media.paged.image.tool.freeformPen",
+      "media.paged.image.tool.pathSelect",
+      "media.paged.image.tool.directSelect",
+      "media.paged.image.tool.rectangleShape",
+      "media.paged.image.tool.ellipseShape",
+      "media.paged.image.tool.polygonShape",
+      "media.paged.image.tool.lineShape",
+      "media.paged.image.tool.customShape",
     ]);
     expect(fake.importers.ids()).toEqual(["media.paged.image.importer.raster"]);
   });

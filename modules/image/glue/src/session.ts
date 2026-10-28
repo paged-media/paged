@@ -146,6 +146,10 @@ import {
   type MaskingController,
 } from "./masking-session";
 import {
+  createVectorController,
+  type VectorController,
+} from "./vector-session";
+import {
   createBrushMachine,
   type BrushMachine,
   type BrushSample,
@@ -531,6 +535,9 @@ export interface ImageSession extends RetouchApi {
    *  Select and Mask, Quick Mask, channels, paths, the display view
    *  (image ADR 470). */
   masking(): MaskingController;
+  /** Vectors inside the image: the paths the Pen and the shape tools
+   *  draw, vector masks and shape layers (image ADR 476). */
+  vectors(): VectorController;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -1827,6 +1834,7 @@ export function createImageSession(host: BundleHost): ImageSession {
   let selectionMachineRef: SelectionMachine | null = null;
   // Selection and masking (created below, once `api` helpers exist).
   let maskingRef: MaskingController | null = null;
+  let vectorsRef: VectorController | null = null;
   // The paint interaction machine (pointer sampling only — the stroke's
   // base snapshot + coverage live engine-side).
   let brushMachineRef: BrushMachine | null = null;
@@ -2860,6 +2868,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     if (!engine || !state.source || psdHandle === null) return;
     try {
       const n = await engine.layersOpenFromPsd(state.source.handle, psdHandle);
+      // The document's paths come with it (ADR 476).
+      vectorsRef?.importPsdPaths(psdHandle);
       // Our composite of the layer tree, not the file's merged one.
       await engine.layersComposite();
       state.layersNote = t(S.psdLayersOpened, { count: n });
@@ -3596,10 +3606,33 @@ export function createImageSession(host: BundleHost): ImageSession {
     wand: () => state.wand,
   });
   const masking = maskingRef;
+  const vectors = (vectorsRef = createVectorController({
+    engine: () => engine,
+    source: () => state.source,
+    layers: () => state.layers,
+    foreground: () => state.colors.fg,
+    gpu: () => state.gpu,
+    setStatus,
+    emit,
+    markEdited: () => {
+      state.uncommitted = true;
+    },
+    refreshLayers,
+    refreshPaths: () => masking.refresh(),
+    recomposite: () => recomposite(),
+    applyEffect: (label, run) => api.applyEffect(label, run),
+    stroke: {
+      begin: (tool) => api.brushBegin(tool),
+      extend: (x, y) => api.brushExtend({ x, y, pressure: 1 }),
+      commit: () => api.brushCommit(),
+      cancel: () => api.brushCancel(),
+    },
+  }));
 
   const api: ImageSession = {
     ...retouch,
     masking: () => masking,
+    vectors: () => vectors,
     state: () => state,
 
     onDidChange(listener) {

@@ -674,6 +674,42 @@
       "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/masking-tools.spec.ts); matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.image.tool.pen",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/vectors.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.freeformPen",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/vectors.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.pathSelect",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/vectors.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.directSelect",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/vectors.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.rectangleShape",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/vectors.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.ellipseShape",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/vectors.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.polygonShape",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/vectors.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.lineShape",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/vectors.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.customShape",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/vectors.spec.ts); matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.image.tool.crop",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },

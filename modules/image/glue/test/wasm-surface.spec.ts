@@ -37,6 +37,9 @@ const MASKING_TS = fileURLToPath(
 const RETOUCH_TS = fileURLToPath(
   new URL("../src/retouch-engine.ts", import.meta.url),
 );
+const VECTOR_TS = fileURLToPath(
+  new URL("../src/vector-engine.ts", import.meta.url),
+);
 
 /**
  * wasm-bindgen's `--target web` glue also exports its init machinery,
@@ -89,6 +92,7 @@ function declaredInTs(): string[] {
     ...declaredIn(ENGINE_TS, "ImageWasmModule"),
     ...declaredIn(MASKING_TS, "MaskingWasm"),
     ...declaredIn(RETOUCH_TS, "RetouchWasm"),
+    ...declaredIn(VECTOR_TS, "VectorWasm"),
   ];
 }
 

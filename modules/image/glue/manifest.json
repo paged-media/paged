@@ -172,7 +172,17 @@
       "media.paged.image.command.loadSelection",
       "media.paged.image.command.makeWorkPath",
       "media.paged.image.command.contentAwareFillWorkspace",
-      "media.paged.image.command.openCloneSource"
+      "media.paged.image.command.openCloneSource",
+      "media.paged.image.command.fillPath",
+      "media.paged.image.command.strokePath",
+      "media.paged.image.command.saveWorkPath",
+      "media.paged.image.command.vectorMaskRevealAll",
+      "media.paged.image.command.vectorMaskHideAll",
+      "media.paged.image.command.vectorMaskCurrentPath",
+      "media.paged.image.command.vectorMaskDelete",
+      "media.paged.image.command.vectorMaskToggle",
+      "media.paged.image.command.vectorMaskInvert",
+      "media.paged.image.command.vectorMaskRasterize"
     ],
     "tools": [
       "media.paged.image.tool.crop",
@@ -212,7 +222,16 @@
       "media.paged.image.tool.refineEdge",
       "media.paged.image.tool.contentAwareMove",
       "media.paged.image.tool.remove",
-      "media.paged.image.tool.cafSampling"
+      "media.paged.image.tool.cafSampling",
+      "media.paged.image.tool.pen",
+      "media.paged.image.tool.freeformPen",
+      "media.paged.image.tool.pathSelect",
+      "media.paged.image.tool.directSelect",
+      "media.paged.image.tool.rectangleShape",
+      "media.paged.image.tool.ellipseShape",
+      "media.paged.image.tool.polygonShape",
+      "media.paged.image.tool.lineShape",
+      "media.paged.image.tool.customShape"
     ],
     "importers": ["media.paged.image.importer.raster"],
     "exporters": [
@@ -1383,6 +1402,86 @@
         {
           "id": "media.paged.image.command.makeWorkPath",
           "title": "Make work path from selection (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.fillPath",
+          "title": "Fill path (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.strokePath",
+          "title": "Stroke path (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.saveWorkPath",
+          "title": "Save work path (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskRevealAll",
+          "title": "Add vector mask (reveal all) (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskHideAll",
+          "title": "Add vector mask (hide all) (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskCurrentPath",
+          "title": "Add vector mask (current path) (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskDelete",
+          "title": "Delete vector mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskToggle",
+          "title": "Enable / disable vector mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskInvert",
+          "title": "Invert vector mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskRasterize",
+          "title": "Rasterize vector mask (image)",
           "args": {
             "kind": "struct",
             "fields": {}

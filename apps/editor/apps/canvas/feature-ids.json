@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 613,
+    "command": 623,
     "keybinding": 154,
-    "menu": 434,
+    "menu": 444,
     "panel": 136,
-    "tool": 103
+    "tool": 112
   },
   "features": [
     {
@@ -1381,6 +1381,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.fillPath",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.fillPattern",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1831,6 +1836,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.saveWorkPath",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.selectAll",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1866,6 +1876,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.strokePath",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.toggleLockTransparent",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1882,6 +1897,41 @@
     },
     {
       "id": "command:media.paged.image.command.unlinkLayer",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.vectorMaskCurrentPath",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.vectorMaskDelete",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.vectorMaskHideAll",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.vectorMaskInvert",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.vectorMaskRasterize",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.vectorMaskRevealAll",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.vectorMaskToggle",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -5176,12 +5226,62 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Layer/Vector mask/Current path",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Vector mask/Delete",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Vector mask/Enable or disable",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Vector mask/Hide all",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Vector mask/Invert",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Vector mask/Rasterize",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Vector mask/Reveal all",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Load brush library (.abr)…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
     {
       "id": "menu:Image/Open image panel",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Paths/Fill path",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Paths/Save work path",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Paths/Stroke path",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6961,7 +7061,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.customShape",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.directSelect",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.dodge",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.ellipseShape",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -6972,6 +7087,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.eyedropper",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.freeformPen",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -6992,6 +7112,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.lasso",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.lineShape",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -7036,7 +7161,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.pathSelect",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.pen",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.pencil",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.polygonShape",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -7047,6 +7187,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.quickSelect",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.rectangleShape",
       "kind": "tool",
       "owner": "media.paged.image"
     },
