@@ -1301,15 +1301,21 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
                 // A hyphen the word already has is a break too (InDesign
                 // and Word: `two-` / `way`), hyphenation on or off and
                 // whatever the zone: breaking there hyphenates nothing.
-                crate::hyphenate::merge_opportunities(
-                    points,
-                    crate::hyphenate::hard_hyphen_opportunities(word_text),
-                )
-                .into_iter()
-                .filter(|&b| b > 0 && b < word_text.len())
-                .map(|b| w.start + b)
-                .filter(|&b| !held(b, b))
-                .collect()
+                let mut hard = crate::hyphenate::hard_hyphen_opportunities(word_text);
+                // Word's first-fit also breaks after an en or an em dash
+                // (`first-fit.word.json` H03, H04); InDesign does not.
+                if word_first_fit {
+                    hard = crate::hyphenate::merge_opportunities(
+                        hard,
+                        crate::hyphenate::word_dash_opportunities(word_text),
+                    );
+                }
+                crate::hyphenate::merge_opportunities(points, hard)
+                    .into_iter()
+                    .filter(|&b| b > 0 && b < word_text.len())
+                    .map(|b| w.start + b)
+                    .filter(|&b| !held(b, b))
+                    .collect()
             }
             None => Vec::new(),
         };
@@ -1330,10 +1336,13 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
             is_hyphen.push(false);
             // After a hyphen the text already has, the line gains no
             // hyphen glyph and no width.
-            let hard = crate::hyphenate::breaks_after_hard_hyphen(&paragraph_text, *offset);
-            // Word's first-fit breaks after a hyphen the text has as it
-            // does at a space (ADR 1016, `first-fit.word.json` H01): not a
-            // hyphenation, so no zone and no ladder decides it.
+            let hard = crate::hyphenate::breaks_after_hard_hyphen(&paragraph_text, *offset)
+                || (word_first_fit
+                    && crate::hyphenate::breaks_after_word_dash(&paragraph_text, *offset));
+            // Word's first-fit breaks after a hyphen or a dash the text has
+            // as it does at a space (ADR 1016, `first-fit.word.json` H01,
+            // H03, H04): not a hyphenation, so no zone and no ladder
+            // decides it.
             let ordinary = hard && word_first_fit;
             items.push(Item::Penalty {
                 width: if hard { 0 } else { hyphen_width },

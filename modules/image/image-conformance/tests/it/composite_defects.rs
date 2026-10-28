@@ -47,7 +47,7 @@ fn plate(name: &str, rgb: [u8; 3], opacity: u8, key: &[u8; 4], clipped: bool) ->
         smart: false,
         text: false,
         adjustment: None,
-        color_overlay: None,
+        style: None,
         record: usize::MAX,
     }
 }
@@ -60,6 +60,7 @@ fn flatten(layers: Vec<LayerPlate>) -> Option<Arc<[u8]>> {
         height: H,
         depth_reduced: false,
         converted_from_cmyk: false,
+        global_light: Default::default(),
         layers,
     })
     .expect("stack");

@@ -58,6 +58,7 @@ fn notes_of(s: &pptx_core::Slide) -> Option<String> {
 fn as_is(bytes: &[u8]) -> ExportPlan {
     let ir = pptx_import::import_pptx(bytes).unwrap();
     ExportPlan {
+        charts: Vec::new(),
         slides: ir
             .slides
             .iter()

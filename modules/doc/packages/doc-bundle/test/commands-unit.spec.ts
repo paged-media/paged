@@ -125,7 +125,10 @@ describe("media.paged.doc.command.placeDoc — the palette command (unit)", () =
       await waitFor(() => expect(s.opened).toContain(PANEL), {
         timeout: 4_000,
       });
-      expect(s.asked).toEqual([{ accept: [".docx", ".dotx"] }]);
+      // Doc ADR 616: every Word format the engine reads (not the refused .doc).
+      expect(s.asked).toEqual([
+        { accept: [".docx", ".dotx", ".docm", ".dotm", ".rtf"] },
+      ]);
       const args = frameOf(b.fake);
       expect(args.pageId).toBe("page-1");
       // [top, left, bottom, right] inside the Word page: positive margins.
@@ -212,6 +215,34 @@ describe("the typed commands (unit)", () => {
     expect(b.fake.mutations()).toEqual([]);
     b.dispose();
   });
+
+  it.skipIf(!docxPresent)(
+    `saveAsDocx refuses a document with no text to write, writing nothing ${NEEDS_DOCX}`,
+    async () => {
+      covers("command:media.paged.doc.command.saveAsDocx");
+      const b = boot();
+      await expect(
+        b.host.objects.invoke("media.paged.doc.command.saveAsDocx", {}),
+      ).rejects.toThrow(/failed: the document has no text/);
+      expect(b.fake.mutations()).toEqual([]);
+      b.dispose();
+    },
+  );
+
+  it.skipIf(!docxPresent)(
+    `pasteRtf without a text caret is unavailable, writing nothing ${NEEDS_DOCX}`,
+    async () => {
+      covers("command:media.paged.doc.command.pasteRtf");
+      const b = boot();
+      await expect(
+        b.host.objects.invoke("media.paged.doc.command.pasteRtf", {
+          rtf: "{\\rtf1 Pasted\\par}",
+        }),
+      ).rejects.toThrow(/unavailable: no text caret/);
+      expect(b.fake.mutations()).toEqual([]);
+      b.dispose();
+    },
+  );
 
   it("fillMergeFields refuses an address that is not a placed Word document, writing nothing", async () => {
     covers("command:media.paged.doc.command.fillMergeFields");

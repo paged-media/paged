@@ -167,6 +167,24 @@ pub(super) struct KnockoutStep {
 /// The slot the Background layer's fold state is saved under.
 pub(super) const DEEP_SLOT: u32 = u32::MAX;
 
+/// A styled layer's backdrop is saved under `STYLE_SLOT | id`.
+pub(super) const STYLE_SLOT: u32 = 0x4000_0000;
+
+/// The mask cache keeps a layer's effect-hiding mask under `id | this`.
+pub(super) const HIDE_MASK_BIT: u32 = 0x2000_0000;
+
+/// An open clipping group in the plan: the base's blend and opacity,
+/// whether its close applies the base's shape, and the steps a styled
+/// base adds just before (interior effects blended as a group) and after
+/// its close (the rest of its style).
+struct OpenClip {
+    blend: &'static KernelDef,
+    opacity: f32,
+    shape: bool,
+    before: Vec<Step>,
+    after: Vec<Step>,
+}
+
 /// What a pixel step does beyond a plain blend (the blending options).
 #[derive(Clone, PartialEq, Default)]
 pub(super) struct PixelExtra {
@@ -234,6 +252,40 @@ pub(super) enum Step {
     ClipClose {
         blend: &'static KernelDef,
         opacity: f32,
+        /// Apply the base's alpha (a clipping group). `false` closes a
+        /// styled layer's BODY: its shape is applied later, at
+        /// `BodyClose`, after the interior effects.
+        shape: bool,
+    },
+    /// Draw one effect of a layer's STYLE onto the accumulator
+    /// (`styles`). `px` is the layer's canvas-sized pixels, `cov` the
+    /// mask that shapes the effects (none when the mask hides them).
+    /// `interior` blends the effect through the layer's shape (an
+    /// interior effect of a clipped layer, which has no body).
+    Effect {
+        layer: u32,
+        px: Arc<[u8]>,
+        cov: CovKey,
+        interior: bool,
+        fx: Arc<super::styles::EffectStep>,
+    },
+    /// Start a styled layer's BODY: keep the accumulator (with the
+    /// exterior effects) to mix the body into at `BodyClose`.
+    BodyOpen,
+    /// End it: `mix(kept, accumulator, shape)` — the layer's alpha times
+    /// `cov`.
+    BodyClose {
+        layer: u32,
+        px: Arc<[u8]>,
+        cov: CovKey,
+    },
+    /// End a styled layer: `mix(saved backdrop, accumulator, opacity ×
+    /// cov)` — its opacity, and a mask that hides its effects.
+    StyleClose {
+        layer: u32,
+        slot: u32,
+        opacity: f32,
+        cov: CovKey,
     },
     /// Blend the group's accumulator into the parked one (`None`: the
     /// group vanished, and the parked accumulator comes back unchanged).
@@ -326,12 +378,62 @@ impl Step {
                 },
             ) => layer == l2 && Arc::ptr_eq(px, p2) && cov.same(c2),
             (
-                Step::ClipClose { blend, opacity },
+                Step::ClipClose {
+                    blend,
+                    opacity,
+                    shape,
+                },
                 Step::ClipClose {
                     blend: b2,
                     opacity: o2,
+                    shape: s2,
                 },
-            ) => std::ptr::eq(*blend, *b2) && opacity.to_bits() == o2.to_bits(),
+            ) => std::ptr::eq(*blend, *b2) && opacity.to_bits() == o2.to_bits() && shape == s2,
+            (
+                Step::Effect {
+                    layer,
+                    px,
+                    cov,
+                    interior,
+                    fx,
+                },
+                Step::Effect {
+                    layer: l2,
+                    px: p2,
+                    cov: c2,
+                    interior: i2,
+                    fx: f2,
+                },
+            ) => {
+                layer == l2
+                    && Arc::ptr_eq(px, p2)
+                    && cov.same(c2)
+                    && interior == i2
+                    && (Arc::ptr_eq(fx, f2) || fx == f2)
+            }
+            (Step::BodyOpen, Step::BodyOpen) => true,
+            (
+                Step::BodyClose { layer, px, cov },
+                Step::BodyClose {
+                    layer: l2,
+                    px: p2,
+                    cov: c2,
+                },
+            ) => layer == l2 && Arc::ptr_eq(px, p2) && cov.same(c2),
+            (
+                Step::StyleClose {
+                    layer,
+                    slot,
+                    opacity,
+                    cov,
+                },
+                Step::StyleClose {
+                    layer: l2,
+                    slot: s2,
+                    opacity: o2,
+                    cov: c2,
+                },
+            ) => layer == l2 && slot == s2 && opacity.to_bits() == o2.to_bits() && cov.same(c2),
             (
                 Step::Close { group, blend, cov },
                 Step::Close {
@@ -365,7 +467,13 @@ impl Step {
     fn needs_whole_refold(&self) -> bool {
         matches!(
             self,
-            Step::Direct { .. } | Step::Save { .. } | Step::Pixel { extra: Some(_), .. }
+            Step::Direct { .. }
+                | Step::Save { .. }
+                | Step::Pixel { extra: Some(_), .. }
+                | Step::Effect { .. }
+                | Step::BodyOpen
+                | Step::BodyClose { .. }
+                | Step::StyleClose { .. }
         )
     }
 }
@@ -503,6 +611,7 @@ impl FoldCache {
                 | Step::ClipOpen { layer, .. }
                 | Step::Direct { layer, .. } => Some(*layer),
                 Step::Close { group, .. } => Some(*group),
+                Step::StyleClose { layer, .. } => Some(*layer | HIDE_MASK_BIT),
                 _ => None,
             })
             .collect();
@@ -531,11 +640,17 @@ impl LayerStack {
                 None => Arc::clone(&p.px),
             }
         };
-        // The base's (blend, opacity) while a clipping group is open.
-        let mut clip_group: Option<(&'static KernelDef, f32)> = None;
-        let close_clip = |steps: &mut Vec<Step>, g: &mut Option<(&'static KernelDef, f32)>| {
-            if let Some((blend, opacity)) = g.take() {
-                steps.push(Step::ClipClose { blend, opacity });
+        // The open clipping group's base (blend, opacity, …).
+        let mut clip_group: Option<OpenClip> = None;
+        let close_clip = |steps: &mut Vec<Step>, g: &mut Option<OpenClip>| {
+            if let Some(g) = g.take() {
+                steps.extend(g.before);
+                steps.push(Step::ClipClose {
+                    blend: g.blend,
+                    opacity: g.opacity,
+                    shape: g.shape,
+                });
+                steps.extend(g.after);
             }
         };
         // KNOCKOUT needs the fold state at its backdrops: the Background
@@ -616,7 +731,13 @@ impl LayerStack {
                     }) = steps.last()
                     {
                         if *layer == self.layers[base.0].id {
-                            clip_group = Some((*blend, *opacity));
+                            clip_group = Some(OpenClip {
+                                blend,
+                                opacity: *opacity,
+                                shape: true,
+                                before: Vec::new(),
+                                after: Vec::new(),
+                            });
                             let open_step = Step::ClipOpen {
                                 layer: *layer,
                                 px: canvas_of(base),
@@ -660,6 +781,143 @@ impl LayerStack {
                         opacity,
                         cov,
                     }),
+                }
+                continue;
+            }
+            // A LAYER STYLE: the layer's effects around its pixels
+            // (`styles`, which documents the order).
+            let style_plan = layer
+                .ext
+                .style
+                .as_ref()
+                .map(|s| (s, super::styles::StylePlan::of(s)))
+                .filter(|(_, p)| !p.is_empty());
+            if let Some((style, plan)) = style_plan {
+                let canvas_px = canvas_of((*index, plate));
+                let opts = layer.ext.style_options;
+                let hides = opts.hides() && cov.own.is_some();
+                let shape = CovKey {
+                    own: if hides { None } else { cov.own.clone() },
+                    clip: None,
+                };
+                let needs_bounds = plan
+                    .exterior
+                    .iter()
+                    .chain(&plan.interior)
+                    .chain(&plan.interior_top)
+                    .chain(&plan.top)
+                    .any(super::styles::Fx::needs_bounds);
+                let bounds = if needs_bounds {
+                    super::styles::alpha_bounds(&canvas_px, self.width, self.height)
+                } else {
+                    Region::new(0, 0, self.width, self.height)
+                };
+                let effect = |fx: super::styles::Fx, interior: bool| Step::Effect {
+                    layer: layer.id,
+                    px: Arc::clone(&canvas_px),
+                    cov: shape.clone(),
+                    interior,
+                    fx: Arc::new(super::styles::EffectStep {
+                        pattern: self.style_pattern(&fx),
+                        fx,
+                        scale: style.scale,
+                        light: self.styles.global_light,
+                        bounds,
+                        seed: layer.id,
+                        fill,
+                        stroke_reach: super::styles::stroke_reach(style),
+                    }),
+                };
+                let slot = STYLE_SLOT | layer.id;
+                let wrap = layer.opacity < 1.0 || hides;
+                if wrap {
+                    steps.push(Step::Save { slot });
+                }
+                for fx in plan.exterior {
+                    steps.push(effect(fx, false));
+                }
+                let mut tail: Vec<Step> =
+                    plan.top.into_iter().map(|fx| effect(fx, false)).collect();
+                if wrap {
+                    tail.push(Step::StyleClose {
+                        layer: layer.id,
+                        slot,
+                        opacity: layer.opacity,
+                        cov: CovKey {
+                            own: if hides { cov.own.clone() } else { None },
+                            clip: None,
+                        },
+                    });
+                }
+                let next_clipped = self.layers.get(*index + 1).is_some_and(|n| n.clipped);
+                let neutral = super::special_fill_neutral(layer.blend).filter(|_| fill < 1.0);
+                let has_interior = !plan.interior.is_empty() || !plan.interior_top.is_empty();
+                if !layer.clipped && (has_interior || next_clipped) {
+                    // THE BODY: a clipping group of the layer made opaque,
+                    // closed without its shape, then the interior effects,
+                    // then the shape.
+                    steps.push(Step::BodyOpen);
+                    steps.push(Step::ClipOpen {
+                        layer: layer.id,
+                        px: Arc::clone(&canvas_px),
+                        cov: CovKey::default(),
+                    });
+                    let interior: Vec<Step> = plan
+                        .interior
+                        .into_iter()
+                        .map(|fx| effect(fx, false))
+                        .collect();
+                    let (before, mut after) = if opts.blend_interior {
+                        (interior, Vec::new())
+                    } else {
+                        (Vec::new(), interior)
+                    };
+                    // Inner Shadow and the inner part of a stroke stay
+                    // outside the group (Photoshop's Blend Interior Effects
+                    // covers the overlays, satin and inner glow).
+                    after.extend(plan.interior_top.into_iter().map(|fx| effect(fx, false)));
+                    after.push(Step::BodyClose {
+                        layer: layer.id,
+                        px: Arc::clone(&canvas_px),
+                        cov: shape.clone(),
+                    });
+                    after.extend(tail);
+                    clip_group = Some(OpenClip {
+                        blend: layer.blend,
+                        opacity: fill,
+                        shape: false,
+                        before,
+                        after,
+                    });
+                } else {
+                    let blend_fill = if neutral.is_some() { 1.0 } else { fill };
+                    let extra = PixelExtra {
+                        blend_if: layer.live_blend_if().map(|b| b.kernel_params()),
+                        fade: neutral.map(|n| BandFadeNeutralParams::new(n, fill)),
+                        knockout: None,
+                    };
+                    steps.push(Step::Pixel {
+                        layer: layer.id,
+                        px: Arc::clone(&canvas_px),
+                        rect: None,
+                        blend: layer.blend,
+                        gamma: layer
+                            .blend_gamma
+                            .filter(|_| std::ptr::eq(layer.blend, &COMPOSE_NORMAL)),
+                        opacity: blend_fill,
+                        cov: CovKey {
+                            own: shape.own.clone(),
+                            clip: cov.clip.clone(),
+                        },
+                        extra: (extra != PixelExtra::default()).then(|| Box::new(extra)),
+                    });
+                    for fx in plan.interior.into_iter().chain(plan.interior_top) {
+                        steps.push(effect(fx, true));
+                    }
+                    steps.extend(tail);
+                }
+                if background && *index == 0 {
+                    steps.push(Step::Save { slot: DEEP_SLOT });
                 }
                 continue;
             }
@@ -772,6 +1030,9 @@ impl LayerStack {
         let (w, h) = (self.width, self.height);
         let mut snap = None;
         let mut folded = 0u64;
+        // Each styled layer's source alpha (and distance field), shared by
+        // its effects within this composite.
+        let mut sources: Vec<(u32, Arc<[u8]>, super::styles::Source)> = Vec::new();
         for (i, step) in steps.iter().enumerate().skip(from) {
             if i == checkpoint {
                 snap = Some(st.clone());
@@ -918,14 +1179,100 @@ impl LayerStack {
                     st.clip.push(base);
                     st.acc = Some(opaque);
                 }
-                Step::ClipClose { blend, opacity } => {
+                Step::ClipClose {
+                    blend,
+                    opacity,
+                    shape,
+                } => {
                     let base = st.clip.pop().expect("a clip group is open");
                     let inner = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
                     let outer = st.parked.pop().flatten();
                     let outer = outer.unwrap_or_else(|| ctx.zeros(w, h));
-                    st.acc = Some(clip_close(
-                        batch, &base, &inner, &outer, blend, *opacity, w, h,
-                    )?);
+                    st.acc = Some(if *shape {
+                        clip_close(batch, &base, &inner, &outer, blend, *opacity, w, h)?
+                    } else {
+                        let out = batch.target(w, h);
+                        batch
+                            .dispatch(
+                                blend,
+                                &[&outer, &inner],
+                                ComposeParams::new(*opacity).as_bytes(),
+                                None,
+                                &out,
+                            )
+                            .map_err(gpu_err)?;
+                        out
+                    });
+                }
+                Step::Effect {
+                    layer,
+                    px,
+                    cov,
+                    interior,
+                    fx,
+                } => {
+                    let plate = cache.plate(batch, *layer, px, w, h)?;
+                    let mask = cache.mask(batch, *layer, cov, w, h);
+                    let src = match sources
+                        .iter_mut()
+                        .position(|(id, p, _)| *id == *layer && Arc::ptr_eq(p, px))
+                    {
+                        Some(i) => i,
+                        None => {
+                            let a = super::styles::source_alpha(
+                                ctx,
+                                batch,
+                                &plate,
+                                mask.as_ref(),
+                                w,
+                                h,
+                            )?;
+                            sources.push((*layer, Arc::clone(px), super::styles::Source::new(a)));
+                            sources.len() - 1
+                        }
+                    };
+                    let acc = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
+                    let drawn =
+                        super::styles::draw(ctx, batch, &acc, &mut sources[src].2, fx, w, h)?;
+                    st.acc = Some(if *interior {
+                        let shape = sources[src].2.alpha.clone();
+                        take_through(batch, &acc, &drawn, &shape, w, h)?
+                    } else {
+                        drawn
+                    });
+                }
+                Step::BodyOpen => {
+                    let keep = st.acc.clone();
+                    st.parked.push(keep);
+                }
+                Step::BodyClose { layer, px, cov } => {
+                    let plate = cache.plate(batch, *layer, px, w, h)?;
+                    let mask = cache.mask(batch, *layer, cov, w, h);
+                    let shape =
+                        super::styles::source_alpha(ctx, batch, &plate, mask.as_ref(), w, h)?;
+                    let body = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
+                    let kept = st.parked.pop().flatten().unwrap_or_else(|| ctx.zeros(w, h));
+                    st.acc = Some(take_through(batch, &kept, &body, &shape, w, h)?);
+                }
+                Step::StyleClose {
+                    layer,
+                    slot,
+                    opacity,
+                    cov,
+                } => {
+                    let backdrop = st
+                        .saved
+                        .iter()
+                        .find(|(s, _)| s == slot)
+                        .and_then(|(_, r)| r.clone())
+                        .unwrap_or_else(|| ctx.zeros(w, h));
+                    st.saved.retain(|(s, _)| s != slot);
+                    let mask = cache.mask(batch, *layer | HIDE_MASK_BIT, cov, w, h);
+                    let acc = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
+                    st.acc = Some(match scaled_mask(ctx, batch, mask, *opacity, w, h)? {
+                        None => acc,
+                        Some(m) => take_through(batch, &backdrop, &acc, &m, w, h)?,
+                    });
                 }
                 Step::Close { group, blend, cov } => {
                     let inner = st.acc.take();
@@ -1613,7 +1960,11 @@ impl LayerStack {
                 | Step::ClipOpen { .. }
                 | Step::ClipClose { .. }
                 | Step::Direct { .. }
-                | Step::Save { .. } => {
+                | Step::Save { .. }
+                | Step::Effect { .. }
+                | Step::BodyOpen
+                | Step::BodyClose { .. }
+                | Step::StyleClose { .. } => {
                     unreachable!("excluded above")
                 }
             }

@@ -57,6 +57,14 @@
 //! opacity, f32 fill opacity, str blend, u8 knockout, u8 blend-if
 //! present, 32 u8}}.
 //!
+//! Version 5 (layer styles, WP5.4) appends, inside each layer's
+//! length-prefixed block, u8 style-option bits (`StyleOptions::bits`) and
+//! u32 n + n bytes of the layer's style as an `lfx2` payload (0: none —
+//! the same bytes a PSD carries, written and read by `paged-psd`); and
+//! after the comps the document's style state: f32 global angle, f32
+//! global altitude, u32 pattern count, per pattern {str name, u32 width,
+//! u32 height, f32 scale, f32 angle, u32 tile slot}.
+//!
 //! The history is not persisted: a reopened stack starts with none.
 
 use std::sync::Arc;
@@ -72,7 +80,7 @@ use super::{
 use crate::ingest::{AdjustParams, IngestError};
 
 const MAGIC: &[u8; 4] = b"PGIL";
-const VERSION: u32 = 4;
+const VERSION: u32 = 5;
 
 struct W(Vec<u8>);
 
@@ -368,6 +376,17 @@ impl LayerStack {
                 e.u8(l.ext.color);
                 e.i64(l.ext.link.map_or(-1, i64::from));
                 write_blend_if(&mut e, l.ext.blend_if.as_deref());
+                if version >= 5 {
+                    e.u8(l.ext.style_options.bits());
+                    let style = l
+                        .ext
+                        .style
+                        .as_ref()
+                        .map(|s| s.to_payload())
+                        .unwrap_or_default();
+                    e.u32(style.len() as u32);
+                    e.0.extend_from_slice(&style);
+                }
                 w.u32(e.0.len() as u32);
                 w.0.extend_from_slice(&e.0);
             }
@@ -428,6 +447,23 @@ impl LayerStack {
                         None => w.u8(0),
                     }
                 }
+            }
+        }
+        // The document's layer styles (ADR 472): Global Light and the
+        // patterns, read before the masking block that ends the manifest.
+        if version >= 5 {
+            let g = self.styles.global_light;
+            w.f32(g.angle);
+            w.f32(g.altitude);
+            w.u32(self.styles.patterns.len() as u32);
+            for p in &self.styles.patterns {
+                w.str(&p.name);
+                w.u32(p.width);
+                w.u32(p.height);
+                w.f32(p.scale);
+                w.f32(p.angle);
+                let s = slot(Arc::clone(&p.tile));
+                w.u32(s);
             }
         }
         // Channels and paths (ADR 470): a trailing block older readers
@@ -655,6 +691,26 @@ impl LayerStack {
                     color: e.u8()?.min(7),
                     link: u32::try_from(e.i64()?).ok(),
                     blend_if: read_blend_if(&mut e)?,
+                    style_options: if e.at < e.b.len() {
+                        super::StyleOptions::from_bits(e.u8()?)
+                    } else {
+                        super::StyleOptions::default()
+                    },
+                    style: if e.at < e.b.len() {
+                        let n = e.u32()? as usize;
+                        let bytes = e.take(n)?;
+                        if n == 0 {
+                            None
+                        } else {
+                            Some(Arc::new(
+                                image_psd::effects::LayerStyle::parse(bytes).map_err(|err| {
+                                    IngestError::Decode(format!("layer \"{name}\": style: {err}"))
+                                })?,
+                            ))
+                        }
+                    } else {
+                        None
+                    },
                 }
             } else {
                 LayerExt::default()
@@ -747,6 +803,32 @@ impl LayerStack {
                 });
             }
         }
+        let mut styles = super::StyleDoc::default();
+        if version >= 5 {
+            styles.global_light = image_psd::effects::GlobalLight {
+                angle: r.f32()?,
+                altitude: r.f32()?,
+            };
+            for _ in 0..r.u32()? {
+                let name = r.str()?;
+                let (pw, ph) = (r.u32()?, r.u32()?);
+                let (scale, angle) = (r.f32()?, r.f32()?);
+                let tile = buffer(r.u32()?)?;
+                if tile.len() != pw as usize * ph as usize * 4 {
+                    return Err(IngestError::Decode(format!(
+                        "layer manifest: style pattern \"{name}\" is mis-sized"
+                    )));
+                }
+                styles.patterns.push(Arc::new(super::PatternFill {
+                    name,
+                    tile,
+                    width: pw,
+                    height: ph,
+                    scale,
+                    angle,
+                }));
+            }
+        }
         if layers.is_empty() || active >= layers.len() {
             return Err(IngestError::Decode(
                 "layer manifest: no layers, or active out of range".into(),
@@ -773,6 +855,7 @@ impl LayerStack {
             comps,
             history_states: Default::default(),
             masking: Default::default(),
+            styles,
         };
         stack.masking.doc = masking;
         Ok(stack)

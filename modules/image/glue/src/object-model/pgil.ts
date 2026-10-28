@@ -13,7 +13,7 @@
 // either codec fails there rather than in a document.
 
 const MAGIC = [0x50, 0x47, 0x49, 0x4c]; // "PGIL"
-export const PGIL_VERSION = 4;
+export const PGIL_VERSION = 5;
 
 export interface PgilRect {
   x: number;
@@ -160,7 +160,31 @@ export interface PgilStack {
   /** Bottom-first. */
   layers: PgilLayer[];
   comps: PgilComp[];
+  /** Version 5: the layer styles' shared state (a layer's own style rides
+   *  in its ext block's tail, as the engine's `lfx2` bytes). */
+  styles: PgilStyles;
 }
+
+/** The document's Global Light and the patterns its styles draw. */
+export interface PgilStyles {
+  angle: number;
+  altitude: number;
+  patterns: {
+    name: string;
+    width: number;
+    height: number;
+    scale: number;
+    angle: number;
+    /** Straight RGBA8, `width·height·4`. */
+    tile: Uint8Array;
+  }[];
+}
+
+export const DEFAULT_STYLES: Readonly<PgilStyles> = {
+  angle: 120,
+  altitude: 30,
+  patterns: [],
+};
 
 class Reader {
   private at = 0;
@@ -452,10 +476,40 @@ export function readPgil(
       comps.push({ id, name, flags, entries });
     }
   }
-  return { version, width, height, active, nextId, groups, layers, comps };
+  const styles: PgilStyles = { ...DEFAULT_STYLES, patterns: [] };
+  if (version >= 5) {
+    styles.angle = r.f32();
+    styles.altitude = r.f32();
+    for (let n = r.u32(), i = 0; i < n; i++) {
+      const name = r.str();
+      const pw = r.u32(),
+        ph = r.u32();
+      const scale = r.f32(),
+        angle = r.f32();
+      styles.patterns.push({
+        name,
+        width: pw,
+        height: ph,
+        scale,
+        angle,
+        tile: buf(r.u32()),
+      });
+    }
+  }
+  return {
+    version,
+    width,
+    height,
+    active,
+    nextId,
+    groups,
+    layers,
+    comps,
+    styles,
+  };
 }
 
-/** Encode a stack as the engine's version-4 export: the manifest first,
+/** Encode a stack as the engine's version-5 export: the manifest first,
  *  then the buffers, slots assigned in the engine's order (group masks,
  *  then per layer: pixels, mask, smart source). */
 export function writePgil(stack: PgilStack): Uint8Array[] {
@@ -601,6 +655,17 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
       } else w.u8(0);
     }
   }
+  w.f32(stack.styles.angle);
+  w.f32(stack.styles.altitude);
+  w.u32(stack.styles.patterns.length);
+  for (const p of stack.styles.patterns) {
+    w.str(p.name);
+    w.u32(p.width);
+    w.u32(p.height);
+    w.f32(p.scale);
+    w.f32(p.angle);
+    w.u32(slot(p.tile));
+  }
   return [w.done(), ...buffers];
 }
 
@@ -624,6 +689,7 @@ export function clonePgil(s: PgilStack): PgilStack {
       ...c,
       entries: c.entries.map((e) => ({ ...e })),
     })),
+    styles: { ...s.styles, patterns: s.styles.patterns.map((p) => ({ ...p })) },
   };
 }
 
@@ -667,5 +733,6 @@ export function stackFromImage(
       },
     ],
     comps: [],
+    styles: { ...DEFAULT_STYLES, patterns: [] },
   };
 }

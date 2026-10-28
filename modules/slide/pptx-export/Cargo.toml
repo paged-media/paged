@@ -17,6 +17,8 @@ pptx-import.workspace = true
 slide-resolve.workspace = true
 slide-native.workspace = true
 slide-geom.workspace = true
+# Live charts (ADR 715): the chart workbooks, read and written by paged.sheet.
+slide-sheet.workspace = true
 paged-model.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true

@@ -368,8 +368,11 @@ pub fn rasterize(mask: &VectorMask, width: u32, height: u32) -> SelectionCoverag
 /// stack holds one mask per layer). `None` when the plate has no mask.
 pub fn plate_mask(plate: &LayerPlate, width: u32, height: u32) -> Option<MaskPlate> {
     // A pixel layer's masks live at its plate's rectangle (ADR 464; the
-    // import cut the user mask there); an adjustment's span the canvas.
-    let rect = plate.rect.filter(|_| plate.adjustment.is_none());
+    // import cut the user mask there); an adjustment's span the canvas,
+    // and so do a styled layer's (its effects reach past its rectangle).
+    let rect = plate
+        .rect
+        .filter(|_| plate.adjustment.is_none() && plate.style.is_none());
     let params = plate.mask_params;
     // The record's density/feather, applied as Photoshop applies them —
     // live, on the canvas, before the cut (a feather reaches past the
@@ -744,7 +747,7 @@ mod tests {
                 smart: false,
                 text: false,
                 adjustment: None,
-                color_overlay: None,
+                style: None,
                 record: usize::MAX,
             }
         };
