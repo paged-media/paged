@@ -138,3 +138,29 @@ fn motion_reads_transitions_and_timing() {
     assert!(timing.contains("mainSeq"));
     assert_eq!(timing.matches("presetClass=\"entr\"").count(), 4);
 }
+
+#[test]
+fn animations_every_timing_powerpoint_wrote_reads_and_writes_back_byte_for_byte() {
+    // The animations fixture: every effect in PowerPoint's dictionary, each
+    // direction it takes and its exit twin, text by paragraph, timing
+    // options (slide ADR 714).
+    for name in ["animations", "motion"] {
+        let deck = fixture(name);
+        let mut n = 0;
+        for s in &deck.slides {
+            let (Some(xml), Some(t)) = (&s.timing_xml, &s.timing) else {
+                continue;
+            };
+            n += 1;
+            assert_eq!(&t.to_xml(), xml, "{name} {}", s.part);
+            let mut raws = Vec::new();
+            t.walk(&mut |node| {
+                if let pptx_core::anim::TimeNode::Raw { xml } = node {
+                    raws.push(xml.clone());
+                }
+            });
+            assert!(raws.is_empty(), "{name} {}: unread {raws:?}", s.part);
+        }
+        assert!(n > 0, "{name}: no timing");
+    }
+}

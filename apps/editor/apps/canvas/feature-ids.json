@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 733,
+    "command": 724,
     "keybinding": 154,
-    "menu": 538,
-    "panel": 137,
-    "tool": 112
+    "menu": 526,
+    "panel": 138,
+    "tool": 103
   },
   "features": [
     {
@@ -1421,11 +1421,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.fillPath",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.fillPattern",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1951,11 +1946,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.historyOptions",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.imageSize",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2186,11 +2176,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.newSnapshot",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.openBrushPresets",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2217,11 +2202,6 @@
     },
     {
       "id": "command:media.paged.image.command.pathToSelection",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.presetManager",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2276,11 +2256,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.saveWorkPath",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.scaleEffects",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2326,11 +2301,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.strokePath",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.toggleEffects",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2356,62 +2326,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.vectorMaskCurrentPath",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.vectorMaskDelete",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.vectorMaskHideAll",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.vectorMaskInvert",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.vectorMaskRasterize",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.vectorMaskRevealAll",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.image.command.vectorMaskToggle",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "command:media.paged.pdf.command.convertPlaced",
-      "kind": "command",
-      "owner": "media.paged.pdf"
-    },
-    {
-      "id": "command:media.paged.pdf.convertPlacedToVectors",
-      "kind": "command",
-      "owner": "media.paged.pdf"
-    },
-    {
       "id": "command:media.paged.pdf.importPdf",
-      "kind": "command",
-      "owner": "media.paged.pdf"
-    },
-    {
-      "id": "command:media.paged.pdf.inspectPdf",
-      "kind": "command",
-      "owner": "media.paged.pdf"
-    },
-    {
-      "id": "command:media.paged.pdf.placeVectors",
       "kind": "command",
       "owner": "media.paged.pdf"
     },
@@ -2681,12 +2596,27 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.slide.addAnimation",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.addComment",
       "kind": "command",
       "owner": "media.paged.slide"
     },
     {
       "id": "command:media.paged.slide.command.addSection",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.animationPainter",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.animationPane",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2752,6 +2682,11 @@
     },
     {
       "id": "command:media.paged.slide.command.presenterView",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.previewAnimations",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2841,6 +2776,16 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.listAnimations",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.moveAnimation",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.moveSection",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2856,12 +2801,27 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.previewAnimations",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.removeAnimation",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.renameSection",
       "kind": "command",
       "owner": "media.paged.slide"
     },
     {
       "id": "command:media.paged.slide.sections",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setAnimationTiming",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3222,11 +3182,6 @@
     },
     {
       "id": "command:paged.file.exportSvgSelection",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.file.importPdfVectors",
       "kind": "command",
       "owner": "editor"
     },
@@ -4466,6 +4421,21 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Animations/Animation Painter",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Animations/Animation Pane",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Animations/Preview Animations",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Context/Circle invalid data",
       "kind": "menu",
       "owner": "media.paged.sheet"
@@ -5169,11 +5139,6 @@
       "id": "menu:File/Export…",
       "kind": "menu",
       "owner": "media.paged.slide"
-    },
-    {
-      "id": "menu:File/Import/PDF or AI as Vectors…",
-      "kind": "menu",
-      "owner": "editor"
     },
     {
       "id": "menu:File/Import/SVG…",
@@ -5906,16 +5871,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/History/History options…",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/History/New snapshot",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "menu:Image/Image rotation/Arbitrary…",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -6226,67 +6181,12 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "menu:Image/Layer/Vector mask/Current path",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Vector mask/Delete",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Vector mask/Enable or disable",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Vector mask/Hide all",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Vector mask/Invert",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Vector mask/Rasterize",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Layer/Vector mask/Reveal all",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "menu:Image/Load brush library (.abr)…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
     {
       "id": "menu:Image/Open image panel",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Paths/Fill path",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Paths/Save work path",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Paths/Stroke path",
-      "kind": "menu",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "menu:Image/Presets/Preset manager…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6474,11 +6374,6 @@
       "id": "menu:Object/Clipping mask/Release",
       "kind": "menu",
       "owner": "editor"
-    },
-    {
-      "id": "menu:Object/Convert Placed PDF to Vectors",
-      "kind": "menu",
-      "owner": "media.paged.pdf"
     },
     {
       "id": "menu:Object/Delete",
@@ -7311,6 +7206,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "panel:media.paged.slide.panel.animations",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "panel:media.paged.slide.panel.comments",
       "kind": "panel",
       "owner": "media.paged.slide"
@@ -8086,22 +7986,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "tool:media.paged.image.tool.customShape",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "tool:media.paged.image.tool.directSelect",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "tool:media.paged.image.tool.dodge",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "tool:media.paged.image.tool.ellipseShape",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -8112,11 +7997,6 @@
     },
     {
       "id": "tool:media.paged.image.tool.eyedropper",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "tool:media.paged.image.tool.freeformPen",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -8137,11 +8017,6 @@
     },
     {
       "id": "tool:media.paged.image.tool.lasso",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "tool:media.paged.image.tool.lineShape",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -8186,22 +8061,7 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "tool:media.paged.image.tool.pathSelect",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "tool:media.paged.image.tool.pen",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "tool:media.paged.image.tool.pencil",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "tool:media.paged.image.tool.polygonShape",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -8212,11 +8072,6 @@
     },
     {
       "id": "tool:media.paged.image.tool.quickSelect",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "tool:media.paged.image.tool.rectangleShape",
       "kind": "tool",
       "owner": "media.paged.image"
     },

@@ -51,6 +51,11 @@ import type {
 import { fromElementId } from "@paged-media/plugin-sdk";
 import { t } from "@paged-media/strings";
 
+import {
+  animationTypedCommands,
+  contributeAnimations,
+  type AnimBinding,
+} from "./anim/contribute.js";
 import { ChartEditing, contributeCharts } from "./charts.js";
 import { chartPlans, keepCharts } from "./charts-model.js";
 import { contributeCommentMarkers } from "./comment-markers.js";
@@ -353,6 +358,7 @@ export function activate(host: BundleHost): BundleHandle {
   // The slide show's typed commands are registered with the model, which
   // comes first; they run the show once it is contributed below.
   let runShow: ((id: string) => Promise<boolean>) | null = null;
+  let animBinding: AnimBinding | null = null;
   let playCustom: ((name: string) => Promise<boolean>) | null = null;
   // The deck's outputs (slide ADR 720): PDF, outline, template, video,
   // custom shows and sections; made once the store exists.
@@ -364,10 +370,15 @@ export function activate(host: BundleHost): BundleHandle {
     extraCommands: showTypedCommands((id) =>
       runShow ? runShow(id) : Promise.resolve(false),
     ),
-    outputCommands: outputTypedCommands(
-      () => output,
-      () => outputUi,
-    ),
+    // The output's typed commands, then the animations' twins (slide ADR
+    // 714, bound below), in the manifest's order.
+    outputCommands: [
+      ...outputTypedCommands(
+        () => output,
+        () => outputUi,
+      ),
+      ...animationTypedCommands(() => animBinding),
+    ],
     comments: () => comments,
     step,
     activePage: () => store?.activePage() ?? null,
@@ -598,6 +609,7 @@ export function activate(host: BundleHost): BundleHandle {
       host,
       {
         store,
+        engine: slideEngine,
         readReport,
         customShowPages: async (name) => {
           const shows = (await output?.shows.list()) ?? [];
@@ -744,6 +756,21 @@ export function activate(host: BundleHost): BundleHandle {
         for (const d of panelDisposers.splice(0)) d();
       },
     );
+  }
+
+  // Slide ADR 714 — the Animations pane, Preview on the canvas, the
+  // Animation Painter and their commands.
+  if (store) {
+    const anims = contributeAnimations(host, store, slideEngine, {
+      panel: richPanels,
+      overlay:
+        host.supports("contribute.overlay@1") && renders(host, "overlay"),
+    });
+    animBinding = anims.binding;
+    disposers.push(() => {
+      animBinding = null;
+      anims.dispose();
+    });
   }
 
   // Live charts (ADR 715): a chart frame is entered by double-click; its

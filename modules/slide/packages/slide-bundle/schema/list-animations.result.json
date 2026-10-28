@@ -1,0 +1,43 @@
+{
+  "kind": "struct",
+  "fields": {
+    "clicks": {
+      "kind": "number"
+    },
+    "effects": {
+      "kind": "list",
+      "of": {
+        "kind": "struct",
+        "fields": {
+          "index": {
+            "kind": "number"
+          },
+          "name": {
+            "kind": "text"
+          },
+          "presetClass": {
+            "kind": "text"
+          },
+          "shape": {
+            "kind": "text"
+          },
+          "start": {
+            "kind": "text"
+          },
+          "delayMs": {
+            "kind": "number"
+          },
+          "durationMs": {
+            "kind": "number"
+          },
+          "click": {
+            "kind": "number"
+          },
+          "paragraph": {
+            "kind": "number"
+          }
+        }
+      }
+    }
+  }
+}

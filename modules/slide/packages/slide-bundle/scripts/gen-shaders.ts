@@ -68,7 +68,24 @@ export function renderSourcesModule(files: Record<string, string>): string {
   return lines.join("\n");
 }
 
+/** The animation layer compositor's shaders (slide ADR 714), beside
+ *  their own module. */
+export const EFFECT_DIR = resolve(import.meta.dir, "..", "src", "show", "effects");
+export const EFFECT_GENERATED = join(EFFECT_DIR, "sources.generated.ts");
+
+export function renderEffectsModule(files: Record<string, string>): string {
+  return renderSourcesModule(files).replace(
+    "export const SHADER_SOURCES",
+    "export const EFFECT_SOURCES",
+  );
+}
+
 if (import.meta.main) {
   writeFileSync(GENERATED, renderSourcesModule(readShaderFiles()));
   console.log(`wrote ${GENERATED}`);
+  writeFileSync(
+    EFFECT_GENERATED,
+    renderEffectsModule(readShaderFiles(EFFECT_DIR)),
+  );
+  console.log(`wrote ${EFFECT_GENERATED}`);
 }

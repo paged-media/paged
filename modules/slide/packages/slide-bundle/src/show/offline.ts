@@ -23,11 +23,15 @@
 // video export steps it at a fixed frame rate and hands each frame to the
 // encoder.
 //
-// The seam for animations (wave 5): `slide` takes the slide's background
-// frame today; per-item layers at a time `t` plug in here as an optional
-// argument without changing the callers that draw whole slides.
+// Animations (slide ADR 714): `slide` takes an animated slide's layers and
+// their draw states at the frame's moment as an optional second argument,
+// drawn by the Canvas2D compositor (scene-2d.ts) the live show falls back
+// to; callers that draw whole slides pass the frame alone.
 
 import type { Frame } from "./frames.js";
+import type { DrawState } from "./scene.js";
+import { drawScene2d } from "./scene-2d.js";
+import type { SlideScene } from "./scene-source.js";
 import {
   transitionRendererFactory,
   type TransitionRenderer,
@@ -41,8 +45,12 @@ export interface OfflineRenderer {
   readonly canvas: FrameCanvas;
   /** Whether transitions run on the GPU (false: they cut). */
   readonly gpu: boolean;
-  /** Draw a slide, filling the frame. */
-  slide(frame: Frame | null): void;
+  /** Draw a slide, filling the frame: its frame, or an animated slide's
+   *  layers in their states (slide ADR 714). */
+  slide(
+    frame: Frame | null,
+    layers?: { scene: SlideScene; states: readonly DrawState[] },
+  ): void;
   /** Draw `kind` from one slide to the next at `progress` (0…1). False
    *  when no shader ran (no WebGPU, an unknown kind): `to` was drawn. */
   transition(
@@ -144,7 +152,15 @@ export async function createOfflineRenderer(
   return {
     canvas,
     gpu: gpu !== null,
-    slide: fill,
+    slide(frame, layers) {
+      if (!layers) return fill(frame);
+      fill(null);
+      const k = width / (layers.scene.sizePt[0] || 1);
+      g.save();
+      g.setTransform(k, 0, 0, k, 0, 0);
+      drawScene2d(g, layers.scene, layers.states);
+      g.restore();
+    },
     async transition(from, to, kind, progress, params = {}) {
       if (!gpu || !gpu.renderer.supports(kind)) {
         fill(to);

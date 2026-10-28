@@ -25,6 +25,8 @@
 //! hidden flags by page id), the font families the deck uses and every
 //! diagnostic.
 
+pub mod anim;
+
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 

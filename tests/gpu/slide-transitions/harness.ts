@@ -28,6 +28,10 @@ import {
   type CompileReport,
   type TransitionShaderRenderer,
 } from "../../../modules/slide/packages/slide-bundle/src/show/shaders/index.ts";
+import {
+  createLayerRenderer,
+  type LayerRenderer,
+} from "../../../modules/slide/packages/slide-bundle/src/show/effects/index.ts";
 
 const FORMAT: GPUTextureFormat = "rgba8unorm";
 
@@ -53,6 +57,17 @@ export interface Harness {
   ): Promise<string[]>;
   png(rgba: string, w: number, h: number): Promise<string>;
   unpng(png: string): Promise<{ rgba: string; w: number; h: number }>;
+  /** The animation layer compositor (slide ADR 714): the outgoing slide
+   *  as one layer over transparent black at w × h pt = px, cut by
+   *  `filter(sub)` at `progress`, RGBA, base64. */
+  layer(
+    filter: string,
+    sub: string | null,
+    progress: number,
+    out: boolean,
+    w: number,
+    h: number,
+  ): Promise<string>;
   /** GPU milliseconds of `frames` renders at w × h (timestamp queries). */
   time(
     kind: string,
@@ -71,6 +86,7 @@ declare global {
 
 let device: GPUDevice | null = null;
 let renderer: TransitionShaderRenderer | null = null;
+let layers: LayerRenderer | null = null;
 let timestamps = false;
 const slideCache = new Map<
   string,
@@ -191,6 +207,10 @@ window.slideTransitions = {
       requiredFeatures: timestamps ? ["timestamp-query"] : [],
     });
     renderer = createTransitionRenderer(device, FORMAT);
+    device.pushErrorScope("validation");
+    layers = createLayerRenderer(device, FORMAT);
+    const layerError = await device.popErrorScope();
+    if (layerError) throw new Error(`layer.wgsl: ${layerError.message}`);
     const info = adapter.info;
     return {
       ok: true,
@@ -229,6 +249,39 @@ window.slideTransitions = {
     }
     target.destroy();
     return out;
+  },
+
+  async layer(filter, sub, progress, out, w, h) {
+    const s = slides(w, h);
+    const target = device!.createTexture({
+      size: [w, h],
+      format: FORMAT,
+      usage: F.textureRenderAttachment | F.textureCopySrc,
+    });
+    device!.pushErrorScope("validation");
+    layers!.render(
+      target.createView(),
+      [w, h],
+      [
+        {
+          texture: s.from,
+          region: { x: 0, y: 0, width: w, height: h },
+          state: {
+            visible: true,
+            opacity: 1,
+            matrix: [1, 0, 0, 1, 0, 0],
+            masks: [{ filter, sub, progress, out, box: { x: 0, y: 0, w, h } }],
+            tint: null,
+          },
+        },
+      ],
+      [0, 0, 0, 0],
+    );
+    const err = await device!.popErrorScope();
+    if (err) throw new Error(err.message);
+    const bytes = await readTexture(target, w, h);
+    target.destroy();
+    return b64(bytes);
   },
 
   async png(rgba, w, h) {

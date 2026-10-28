@@ -1,0 +1,37 @@
+{
+  "kind": "struct",
+  "fields": {
+    "slide": {
+      "kind": "ref",
+      "to": "plugin:media.paged.slide/slide",
+      "optional": true
+    },
+    "index": {
+      "kind": "number"
+    },
+    "start": {
+      "kind": "text",
+      "optional": true
+    },
+    "durationMs": {
+      "kind": "number",
+      "optional": true
+    },
+    "delayMs": {
+      "kind": "number",
+      "optional": true
+    },
+    "repeat": {
+      "kind": "text",
+      "optional": true
+    },
+    "rewind": {
+      "kind": "bool",
+      "optional": true
+    },
+    "trigger": {
+      "kind": "text",
+      "optional": true
+    }
+  }
+}
