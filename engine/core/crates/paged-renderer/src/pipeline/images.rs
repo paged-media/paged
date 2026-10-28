@@ -1180,14 +1180,17 @@ fn resolve_inline_image_bytes(
                     // hand an inline PDF's bytes out too (engine ADR 1036:
                     // a placed PDF converts to vectors).
                     if let ImageResolution::Resolved(_, w, h) = &pdf {
+                        // Under the element's key, where `cached_svg`
+                        // looks for an encoded-only entry.
                         decoded_cache.insert(
-                            key.clone(),
+                            base.clone(),
                             paged_compose::DecodedImage {
                                 width: *w as u32,
                                 height: *h as u32,
                                 encoded: bytes::Bytes::copy_from_slice(bytes),
                                 rgba: bytes::Bytes::new(),
                                 icc: None,
+                                rendering: None,
                             },
                         );
                     }
