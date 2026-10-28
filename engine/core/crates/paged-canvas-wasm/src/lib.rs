@@ -621,7 +621,11 @@ mod wasm {
                 let corners = [
                     apply(camera, x_pt, y_pt),
                     apply(camera, x_pt + built_page.width_pt, y_pt),
-                    apply(camera, x_pt + built_page.width_pt, y_pt + built_page.height_pt),
+                    apply(
+                        camera,
+                        x_pt + built_page.width_pt,
+                        y_pt + built_page.height_pt,
+                    ),
                     apply(camera, x_pt, y_pt + built_page.height_pt),
                 ];
                 let min_x = corners.iter().map(|p| p.0).fold(f32::INFINITY, f32::min);
