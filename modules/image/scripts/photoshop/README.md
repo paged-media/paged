@@ -14,6 +14,7 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/cmyk-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-masks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/brush-strokes.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/selection.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/guides.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -47,6 +48,11 @@ gates, so the probe names every gate on every call.
 Range and Grow / Similar: each selection is rendered as white through the
 selection over black, so the grey is the coverage; its ledger is in the test,
 every case `Agreement` or a stated `Convention`, image ADR 470).
+`image-conformance/tests/it/psd_guides_photoshop.rs` (ruler guides: the
+grid-and-guides resource 1032 of PSDs Photoshop saved -- whole, fractional
+and off-canvas positions, a guide placed in inches at 300 ppi, none -- read
+exactly, adopted by the image workspace, and re-encoded to Photoshop's own
+bytes; image ADR 474).
 
 ## Traps, and what each step does about them
 

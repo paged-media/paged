@@ -1,0 +1,137 @@
+{
+  "fixture": "guides",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/guides.jsx",
+    "script_sha256": "f92054cd09598921f8d5ab165b0f9f2698cb025897b61360614e73181e21b549",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-28T07:47:51.781Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "whole-pixels",
+      "params": {
+        "what": "two vertical and two horizontal guides at whole pixels"
+      },
+      "files": [
+        "guides/whole-pixels.psd"
+      ],
+      "values": {
+        "guides": [
+          {
+            "direction": "vertical",
+            "px": 10
+          },
+          {
+            "direction": "horizontal",
+            "px": 20
+          },
+          {
+            "direction": "vertical",
+            "px": 32
+          },
+          {
+            "direction": "horizontal",
+            "px": 0
+          }
+        ],
+        "ppi": 72,
+        "width": 64,
+        "height": 48
+      }
+    },
+    {
+      "id": "fractional",
+      "params": {
+        "what": "guides at 12.5, 0.25 and 33.03125 px"
+      },
+      "files": [
+        "guides/fractional.psd"
+      ],
+      "values": {
+        "guides": [
+          {
+            "direction": "vertical",
+            "px": 12.5
+          },
+          {
+            "direction": "horizontal",
+            "px": 0.25
+          },
+          {
+            "direction": "vertical",
+            "px": 33.03125
+          }
+        ],
+        "ppi": 72,
+        "width": 64,
+        "height": 48
+      }
+    },
+    {
+      "id": "outside",
+      "params": {
+        "what": "guides left of and below the canvas"
+      },
+      "files": [
+        "guides/outside.psd"
+      ],
+      "values": {
+        "guides": [
+          {
+            "direction": "vertical",
+            "px": -8
+          },
+          {
+            "direction": "horizontal",
+            "px": 80
+          }
+        ],
+        "ppi": 72,
+        "width": 64,
+        "height": 48
+      }
+    },
+    {
+      "id": "inches-300ppi",
+      "params": {
+        "what": "a 300 ppi document, a guide placed at 0.1 in"
+      },
+      "files": [
+        "guides/inches-300ppi.psd"
+      ],
+      "values": {
+        "guides": [
+          {
+            "direction": "vertical",
+            "px": 30
+          }
+        ],
+        "ppi": 300,
+        "width": 64,
+        "height": 48
+      }
+    },
+    {
+      "id": "none",
+      "params": {
+        "what": "no guides"
+      },
+      "files": [
+        "guides/none.psd"
+      ],
+      "values": {
+        "guides": [],
+        "ppi": 72,
+        "width": 64,
+        "height": 48
+      }
+    }
+  ]
+}

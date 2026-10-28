@@ -449,14 +449,23 @@ impl MaskingDoc {
         height: u32,
         buffer: impl Fn(u32) -> Result<Arc<[u8]>, String>,
     ) -> Result<MaskingDoc, String> {
-        if rest.is_empty() {
-            return Ok(MaskingDoc::default());
+        Self::decode_with_len(rest, width, height, buffer).map(|(doc, _)| doc)
+    }
+
+    /// [`decode`](Self::decode), also answering how many bytes of `rest`
+    /// the block took (0 when `rest` does not start with it), so the
+    /// trailing blocks after it can be read.
+    pub fn decode_with_len(
+        rest: &[u8],
+        width: u32,
+        height: u32,
+        buffer: impl Fn(u32) -> Result<Arc<[u8]>, String>,
+    ) -> Result<(MaskingDoc, usize), String> {
+        if rest.len() < 4 || &rest[..4] != MASKING_MAGIC {
+            // Empty, or bytes another block wrote: no masking state.
+            return Ok((MaskingDoc::default(), 0));
         }
-        let mut r = Reader { b: rest, at: 0 };
-        if r.take(4)? != MASKING_MAGIC {
-            // Bytes another block wrote: not ours, so no masking state.
-            return Ok(MaskingDoc::default());
-        }
+        let mut r = Reader { b: rest, at: 4 };
         let version = r.u32()?;
         if version != MASKING_VERSION {
             return Err(format!(
@@ -523,20 +532,22 @@ impl MaskingDoc {
             .max()
             .unwrap_or(0);
         doc.next_id = doc.next_id.max(max_id + 1);
-        Ok(doc)
+        Ok((doc, r.at))
     }
 }
 
 const MASKING_MAGIC: &[u8; 4] = b"PGMK";
 const MASKING_VERSION: u32 = 1;
 
-struct Reader<'a> {
-    b: &'a [u8],
-    at: usize,
+/// A little-endian reader over a manifest block (shared with the
+/// workspace block, `workspace.rs`).
+pub(crate) struct Reader<'a> {
+    pub(crate) b: &'a [u8],
+    pub(crate) at: usize,
 }
 
 impl Reader<'_> {
-    fn take(&mut self, n: usize) -> Result<&[u8], String> {
+    pub(crate) fn take(&mut self, n: usize) -> Result<&[u8], String> {
         let end = self
             .at
             .checked_add(n)
@@ -546,16 +557,16 @@ impl Reader<'_> {
         self.at = end;
         Ok(s)
     }
-    fn u8(&mut self) -> Result<u8, String> {
+    pub(crate) fn u8(&mut self) -> Result<u8, String> {
         Ok(self.take(1)?[0])
     }
-    fn u32(&mut self) -> Result<u32, String> {
+    pub(crate) fn u32(&mut self) -> Result<u32, String> {
         Ok(u32::from_le_bytes(self.take(4)?.try_into().expect("4")))
     }
-    fn f32(&mut self) -> Result<f32, String> {
+    pub(crate) fn f32(&mut self) -> Result<f32, String> {
         Ok(f32::from_le_bytes(self.take(4)?.try_into().expect("4")))
     }
-    fn str(&mut self) -> Result<String, String> {
+    pub(crate) fn str(&mut self) -> Result<String, String> {
         let n = self.u32()? as usize;
         String::from_utf8(self.take(n)?.to_vec()).map_err(|_| "a name is not UTF-8".to_string())
     }

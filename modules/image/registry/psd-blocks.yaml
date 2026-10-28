@@ -49,6 +49,16 @@
   tests:
     rust: ["image-conformance/tests/it/psd_fixtures.rs"]
 
+- id: image.psd.resource.grid-and-guides
+  state_row: image.psd.roundtrip
+  tier: mutatable        # WP5.12 (image ADR 474): typed (id 1032), read on open, written on save; unchanged guides keep the bytes
+  oracle: photoshop        # scripts/photoshop/probes/guides.jsx; the canonical re-encode equals Photoshop's bytes
+  provenance:
+    - "Adobe Photoshop File Format specification — Image Resources Section, id 1032 (Grid and guides information: version, grid cycle, guide count, per guide a 1/32-px location and a direction byte)"
+  tests:
+    rust: ["engine/core/crates/paged-psd/tests/it/roundtrip.rs", "image-js/src/workspace.rs", "image-conformance/tests/it/psd_guides_photoshop.rs"]
+    ts: ["glue/test/workspace-persist.spec.ts"]
+
 - id: image.psd.resource.opaque
   state_row: image.psd.roundtrip
   tier: preserved        # M0 green (fixtures + proptest); target was: preserved (the invariant itself)

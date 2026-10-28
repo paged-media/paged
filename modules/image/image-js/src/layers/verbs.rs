@@ -168,6 +168,7 @@ impl LayerStack {
             comps: Vec::new(),
             history_states: Default::default(),
             masking: Default::default(),
+            workspace: Default::default(),
         }
     }
 

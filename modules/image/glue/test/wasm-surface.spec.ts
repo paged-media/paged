@@ -37,6 +37,9 @@ const MASKING_TS = fileURLToPath(
 const RETOUCH_TS = fileURLToPath(
   new URL("../src/retouch-engine.ts", import.meta.url),
 );
+const WORKSPACE_TS = fileURLToPath(
+  new URL("../src/workspace-engine.ts", import.meta.url),
+);
 
 /**
  * wasm-bindgen's `--target web` glue also exports its init machinery,
@@ -72,7 +75,7 @@ const UNMODELLED_ON_PURPOSE = new Map([
 function declaredIn(file: string, name: string): string[] {
   const src = readFileSync(file, "utf8");
   const block = new RegExp(
-    `export interface ${name}(?: extends [A-Za-z<>, ]+)? \\{(.*?)\\n\\}`,
+    `export interface ${name}(?:\\s+extends\\s+[A-Za-z<>,\\s]+?)?\\s*\\{(.*?)\\n\\}`,
     "s",
   ).exec(src);
   if (!block) throw new Error(`${name} interface not found in ${file}`);
@@ -89,6 +92,7 @@ function declaredInTs(): string[] {
     ...declaredIn(ENGINE_TS, "ImageWasmModule"),
     ...declaredIn(MASKING_TS, "MaskingWasm"),
     ...declaredIn(RETOUCH_TS, "RetouchWasm"),
+    ...declaredIn(WORKSPACE_TS, "WorkspaceWasm"),
   ];
 }
 

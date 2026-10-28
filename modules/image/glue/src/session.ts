@@ -176,6 +176,10 @@ import {
   untitledName,
   type UserBrushPreset,
 } from "./brush-presets";
+import {
+  createWorkspaceController,
+  type WorkspaceController,
+} from "./workspace";
 
 /** The fixed v0 feather sigma (px) the `featherSelection` command uses
  *  when the caller passes none (a slider is a follow-up). */
@@ -288,6 +292,7 @@ export type ImageDialog =
   | { kind: "imageSize" }
   | { kind: "trim" }
   | { kind: "rotate" }
+  | { kind: "newGuide" }
   | { kind: "blendingOptions"; index: number };
 
 /** The Layers list's search and filter (Photoshop's filter bar): rows
@@ -514,6 +519,9 @@ export interface ImageSession extends RetouchApi {
    *  Select and Mask, Quick Mask, channels, paths, the display view
    *  (image ADR 470). */
   masking(): MaskingController;
+  /** WP5.12 — guides, count, notes, slices, the Ruler, the snapping and
+   *  the Info rows (image ADR 474, `workspace.ts`). */
+  workspace(): WorkspaceController;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -709,7 +717,7 @@ export interface ImageSession extends RetouchApi {
   applyAverage(): Promise<boolean>;
   /** Show one of the Image dialogs (Image Size, Trim, Arbitrary
    *  rotation) on top of the panel. */
-  openDialog(kind: "imageSize" | "trim" | "rotate"): boolean;
+  openDialog(kind: "imageSize" | "trim" | "rotate" | "newGuide"): boolean;
   /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
    *  active one by default): fill opacity, knockout and Blend If. */
   openBlendingOptions(index?: number): boolean;
@@ -1783,6 +1791,7 @@ export function createImageSession(host: BundleHost): ImageSession {
   let selectionMachineRef: SelectionMachine | null = null;
   // Selection and masking (created below, once `api` helpers exist).
   let maskingRef: MaskingController | null = null;
+  let workspaceRef: WorkspaceController | null = null;
   // The paint interaction machine (pointer sampling only — the stroke's
   // base snapshot + coverage live engine-side).
   let brushMachineRef: BrushMachine | null = null;
@@ -2164,6 +2173,8 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.layers = EMPTY_LAYER_STACK;
       state.history = null;
     }
+    // The workspace rides the stack (undo, redo, open all move it).
+    workspaceRef?.sync();
   };
 
   /** Fold the stack into the bound engine-held image, re-read the
@@ -3151,6 +3162,16 @@ export function createImageSession(host: BundleHost): ImageSession {
       // Compute the levels/curves histogram, bind the stack + selection,
       // and build the crop machine.
       refreshSourceReadout();
+      // The file's ruler guides (resource 1032) are where the image's
+      // workspace starts — not an undo step (image ADR 474).
+      if (psdHandle !== null && engine) {
+        try {
+          engine.adoptPsdGuides(psdHandle);
+          refreshLayers();
+        } catch (err) {
+          host.log.debug("PSD guides not adopted", err);
+        }
+      }
       // The selection kept for the revision the frame shows now; one kept
       // for another revision lay over pixels that have moved since.
       if (ref) openRecord = await frameRecordOf(ref, bytes).catch(() => null);
@@ -3481,9 +3502,27 @@ export function createImageSession(host: BundleHost): ImageSession {
   });
   const masking = maskingRef;
 
+  workspaceRef = createWorkspaceController({
+    host,
+    engine: () => engine,
+    source: () => state.source,
+    ppi: () => state.ppi,
+    selection: () => state.selection,
+    emit,
+    setStatus,
+    markEdited: () => {
+      state.uncommitted = true;
+      state.saveBack = null;
+      refreshLayers();
+    },
+    rotateCanvas: (degrees) => api.rotateCanvas(degrees),
+  });
+  const workspace = workspaceRef;
+
   const api: ImageSession = {
     ...retouch,
     masking: () => masking,
+    workspace: () => workspace,
     state: () => state,
 
     onDidChange(listener) {
@@ -4106,6 +4145,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     psdExport() {
       if (psdHandle === null || !engine || !state.psd) return null;
       try {
+        // The image's guides as the file's resource 1032 (unchanged
+        // guides leave the bytes alone: the preservation rule).
+        engine.psdWriteGuides(psdHandle);
         return { bytes: engine.psdSave(psdHandle), fileName: state.psd.name };
       } catch (err) {
         setStatus(t(S.psdSaveFailed, { error: errText(err) }));
@@ -4141,6 +4183,7 @@ export function createImageSession(host: BundleHost): ImageSession {
             rgba,
           );
           refreshPsdLayers();
+          engine.psdWriteGuides(psdHandle);
           result = {
             bytes: engine.psdSave(psdHandle),
             fileName: `${stem}.psd`,

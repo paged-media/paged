@@ -57,6 +57,11 @@
 //! opacity, f32 fill opacity, str blend, u8 knockout, u8 blend-if
 //! present, 32 u8}}.
 //!
+//! After the masking block (ADR 470) comes the WORKSPACE block (image ADR
+//! 471, `"PGWS"`): guides, count marks, notes and slices
+//! (`workspace.rs` documents its layout). Both blocks are tagged and
+//! absent when empty, so an older manifest still reads.
+//!
 //! The history is not persisted: a reopened stack starts with none.
 
 use std::sync::Arc;
@@ -434,6 +439,9 @@ impl LayerStack {
         // skip; nothing at all without masking state.
         if version >= 3 {
             self.masking.doc.encode(&mut w.0, &mut slot);
+            // Guides, count marks, notes and slices (image ADR 474): a
+            // further trailing block, after the masking one.
+            self.workspace.encode(&mut w.0);
         }
         (w.0, buffers)
     }
@@ -752,10 +760,13 @@ impl LayerStack {
                 "layer manifest: no layers, or active out of range".into(),
             ));
         }
-        let masking = crate::masking::MaskingDoc::decode(&manifest[r.at..], width, height, |i| {
-            buffer(i).map_err(|e| e.to_string())
-        })
-        .map_err(|e| IngestError::Decode(format!("layer manifest: {e}")))?;
+        let (masking, masking_len) =
+            crate::masking::MaskingDoc::decode_with_len(&manifest[r.at..], width, height, |i| {
+                buffer(i).map_err(|e| e.to_string())
+            })
+            .map_err(|e| IngestError::Decode(format!("layer manifest: {e}")))?;
+        let workspace = crate::workspace::Workspace::decode(&manifest[r.at + masking_len..])
+            .map_err(|e| IngestError::Decode(format!("layer manifest: {e}")))?;
         let mut stack = LayerStack {
             width,
             height,
@@ -773,6 +784,7 @@ impl LayerStack {
             comps,
             history_states: Default::default(),
             masking: Default::default(),
+            workspace,
         };
         stack.masking.doc = masking;
         Ok(stack)
