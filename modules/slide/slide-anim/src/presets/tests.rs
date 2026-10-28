@@ -200,9 +200,13 @@ fn the_table_is_what_powerpoint_wrote() {
         std::fs::write(&p, &json).unwrap();
         return;
     }
+    // As data: the committed file is formatted by the repository's JSON
+    // formatter, which lays it out its own way.
+    let committed: serde_json::Value = serde_json::from_str(DATA).expect("presets.json");
+    let generated: serde_json::Value = serde_json::from_str(&json).expect("generated");
     assert!(
-        DATA == json,
-        "data/presets.json is stale: regenerate with PAGED_SLIDE_WRITE_PRESETS=1"
+        committed == generated,
+        "data/presets.json is stale: regenerate with PAGED_SLIDE_WRITE_PRESETS=1 (then bun fmt)"
     );
     let recorded = t.presets.iter().filter(|p| !p.d).count();
     let count = |c: &str| {

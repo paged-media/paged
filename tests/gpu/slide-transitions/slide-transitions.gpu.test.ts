@@ -403,8 +403,17 @@ describe("slide transitions on WebGPU", () => {
     expect(box(32, 24)).toBe(0);
     // Every filter compiles and draws at its ends: nothing at 0, all at 1.
     for (const f of [
-      "barn", "blinds", "checkerboard", "diamond", "dissolve", "plus",
-      "randombar", "slide", "strips", "wedge", "wheel",
+      "barn",
+      "blinds",
+      "checkerboard",
+      "diamond",
+      "dissolve",
+      "plus",
+      "randombar",
+      "slide",
+      "strips",
+      "wedge",
+      "wheel",
     ]) {
       const none = await alpha(f, f === "wheel" ? "4" : null, 0);
       const all = await alpha(f, f === "wheel" ? "4" : null, 1);
