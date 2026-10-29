@@ -33,6 +33,7 @@
 pub mod effect_stack;
 pub mod fitting;
 pub mod image_bytes;
+pub mod vector_effect;
 pub mod winding;
 pub mod word_field;
 pub use word_field::{WordField, WordFieldKind};
@@ -1114,6 +1115,13 @@ pub struct Group {
     /// groups serialises (and hashes) as before the field existed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub clip: bool,
+    /// Engine ADR 1042 — the group's live vector effects: a Pathfinder
+    /// shape mode (Illustrator's compound shape) combining the members
+    /// into one outline, and the other vector effects acting on that
+    /// outline. Vector entries only; empty for every imported group, and
+    /// skipped when empty so documents serialise as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
 }
 
 impl Group {

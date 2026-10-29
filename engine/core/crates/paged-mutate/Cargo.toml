@@ -19,6 +19,9 @@ schema = ["dep:schemars"]
 paged-model = { path = "../paged-model" }
 paged-scene = { path = "../paged-scene" }
 paged-template = { path = "../paged-template" }
+# The path kernels (outline, offset, simplify, booleans, the arrangement)
+# live in paged-geom since ADR 1042; their modules are re-exported here.
+paged-geom = { path = "../paged-geom" }
 serde = { workspace = true }
 # Lossless style-delete undo serialises the captured StyleDef to JSON
 # (the def is Serialize+Deserialize) and restores it verbatim.

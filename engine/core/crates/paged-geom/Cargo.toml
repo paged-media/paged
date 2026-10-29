@@ -1,0 +1,22 @@
+[package]
+name = "paged-geom"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Path geometry kernels shared by the mutation engine and the build pipeline: the PathAnchor <-> kurbo/flo_curves converters, outline stroke, offset, simplify, contour orientation, the Pathfinder booleans and the planar arrangement. Moved out of paged-mutate (plan C8) so the renderer reaches them without the editor's mutation engine."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-model = { path = "../paged-model" }
+# Held at 0.11: kurbo 0.12's new stroker and offsetter change the geometry
+# outline stroke and offset path produce (docs/migration/rust-majors.md).
+kurbo = "0.11.3"
+# Not pinned with `=`: the workspace patches this to a build carrying the
+# upstream total-order fix (C-21, see the root Cargo.toml), and an exact pin
+# would exclude it. `Cargo.lock` is tracked, so the exact build stays
+# reproducible without the `=`.
+flo_curves = "0.8"

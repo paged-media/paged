@@ -334,6 +334,24 @@ pub enum Effect {
     Noise(NoiseParams),
     /// A colour adjustment of everything painted so far.
     ColorAdjust(ColorAdjustParams),
+    // Live vector effects (engine ADR 1042): they change the item's
+    // geometry before anything paints it, in their order among
+    // themselves; the paint and raster entries above act on the result.
+    Roughen(crate::vector_effect::RoughenParams),
+    ZigZag(crate::vector_effect::ZigZagParams),
+    PuckerBloat(crate::vector_effect::PuckerBloatParams),
+    Twist(crate::vector_effect::TwistParams),
+    Tweak(crate::vector_effect::TweakParams),
+    TransformCopies(crate::vector_effect::TransformCopiesParams),
+    FreeDistort(crate::vector_effect::FreeDistortParams),
+    Warp(crate::vector_effect::WarpParams),
+    OffsetPath(crate::vector_effect::OffsetPathParams),
+    OutlinePath(crate::vector_effect::OutlinePathParams),
+    RoundCorners(crate::vector_effect::RoundCornersParams),
+    Scribble(crate::vector_effect::ScribbleParams),
+    ConvertToShape(crate::vector_effect::ConvertToShapeParams),
+    /// On a group only: its members combined into one outline.
+    Pathfinder(crate::vector_effect::PathfinderParams),
 }
 
 /// The stack-only effect kinds, by their serialised names.
@@ -379,6 +397,20 @@ impl Effect {
             Effect::SoftEdge(_) => "softEdge",
             Effect::Noise(_) => "noise",
             Effect::ColorAdjust(_) => "colorAdjust",
+            Effect::Roughen(_) => "roughen",
+            Effect::ZigZag(_) => "zigZag",
+            Effect::PuckerBloat(_) => "puckerBloat",
+            Effect::Twist(_) => "twist",
+            Effect::Tweak(_) => "tweak",
+            Effect::TransformCopies(_) => "transformCopies",
+            Effect::FreeDistort(_) => "freeDistort",
+            Effect::Warp(_) => "warp",
+            Effect::OffsetPath(_) => "offsetPath",
+            Effect::OutlinePath(_) => "outlinePath",
+            Effect::RoundCorners(_) => "roundCorners",
+            Effect::Scribble(_) => "scribble",
+            Effect::ConvertToShape(_) => "convertToShape",
+            Effect::Pathfinder(_) => "pathfinder",
             _ => unreachable!("InDesign kinds return above"),
         }
     }
@@ -470,9 +502,64 @@ impl Effect {
             "softEdge" => Effect::SoftEdge(SoftEdgeParams::default()),
             "noise" => Effect::Noise(NoiseParams::default()),
             "colorAdjust" => Effect::ColorAdjust(ColorAdjustParams::default()),
+            _ => return Self::vector_default(kind),
+        })
+    }
+
+    /// A vector effect (engine ADR 1042) with its default parameters, by
+    /// kind name.
+    pub fn vector_default(kind: &str) -> Option<Self> {
+        use crate::vector_effect as v;
+        Some(match kind {
+            "roughen" => Effect::Roughen(v::RoughenParams::default()),
+            "zigZag" => Effect::ZigZag(v::ZigZagParams::default()),
+            "puckerBloat" => Effect::PuckerBloat(v::PuckerBloatParams::default()),
+            "twist" => Effect::Twist(v::TwistParams::default()),
+            "tweak" => Effect::Tweak(v::TweakParams::default()),
+            "transformCopies" => Effect::TransformCopies(v::TransformCopiesParams::default()),
+            "freeDistort" => Effect::FreeDistort(v::FreeDistortParams::default()),
+            "warp" => Effect::Warp(v::WarpParams::default()),
+            "offsetPath" => Effect::OffsetPath(v::OffsetPathParams::default()),
+            "outlinePath" => Effect::OutlinePath(v::OutlinePathParams::default()),
+            "roundCorners" => Effect::RoundCorners(v::RoundCornersParams::default()),
+            "scribble" => Effect::Scribble(v::ScribbleParams::default()),
+            "convertToShape" => Effect::ConvertToShape(v::ConvertToShapeParams::default()),
+            "pathfinder" => Effect::Pathfinder(v::PathfinderParams::default()),
             _ => return None,
         })
     }
+
+    /// Whether this entry changes the item's geometry (engine ADR 1042)
+    /// rather than painting over, under or through it.
+    pub fn is_vector(&self) -> bool {
+        matches!(
+            self,
+            Effect::Roughen(_)
+                | Effect::ZigZag(_)
+                | Effect::PuckerBloat(_)
+                | Effect::Twist(_)
+                | Effect::Tweak(_)
+                | Effect::TransformCopies(_)
+                | Effect::FreeDistort(_)
+                | Effect::Warp(_)
+                | Effect::OffsetPath(_)
+                | Effect::OutlinePath(_)
+                | Effect::RoundCorners(_)
+                | Effect::Scribble(_)
+                | Effect::ConvertToShape(_)
+                | Effect::Pathfinder(_)
+        )
+    }
+}
+
+/// The enabled vector entries of a stack, in order (engine ADR 1042).
+pub fn vector_entries(stack: &[EffectEntry]) -> impl Iterator<Item = &EffectEntry> {
+    stack.iter().filter(|e| e.enabled && e.effect.is_vector())
+}
+
+/// Whether a stack carries any vector entry, enabled or not.
+pub fn has_vector(stack: &[EffectEntry]) -> bool {
+    stack.iter().any(|e| e.effect.is_vector())
 }
 
 fn yes() -> bool {
@@ -737,6 +824,9 @@ pub enum StackError {
     NoSlot(&'static str),
     /// Stack-only effects are drawn on the object target (ADR 1008).
     ObjectOnly(&'static str),
+    /// The Pathfinder effect combines a group's members; a page item has
+    /// none (ADR 1042).
+    GroupOnly(&'static str),
 }
 
 impl std::fmt::Display for StackError {
@@ -747,6 +837,7 @@ impl std::fmt::Display for StackError {
             StackError::ObjectOnly(k) => {
                 write!(f, "`{k}` is applied to the object target only")
             }
+            StackError::GroupOnly(k) => write!(f, "`{k}` is applied to a group only"),
         }
     }
 }
@@ -948,6 +1039,9 @@ impl<'a> SlotsMut<'a> {
                 }
                 None if self.target != EffectTarget::Object => {
                     return Err(StackError::ObjectOnly(e.effect.kind_name()));
+                }
+                None if matches!(e.effect, Effect::Pathfinder(_)) => {
+                    return Err(StackError::GroupOnly(e.effect.kind_name()));
                 }
                 None => {}
             }
