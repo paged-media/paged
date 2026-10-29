@@ -139,6 +139,17 @@ function draggedIds(data: DataTransfer | null): ElementId[] | null {
   }
 }
 
+/** Run `work`, then `done` whatever happened. Outside the component: the
+ *  React Compiler does not lower a `try` with a `finally` (or with value
+ *  blocks inside it) yet. */
+async function settle(work: () => Promise<void>, done: () => void) {
+  try {
+    await work();
+  } finally {
+    done();
+  }
+}
+
 export function AssetExportPanel() {
   const strings = useStrings();
   const paged = usePaged();
@@ -157,16 +168,17 @@ export function AssetExportPanel() {
 
   const run = async (all: boolean) => {
     setProgress({ done: 0, total: 0 });
-    try {
-      const result = await runAssetExport(
-        paged,
-        { onProgress: (done, total) => setProgress({ done, total }) },
-        all ? undefined : chosen,
-      );
-      setLast(result);
-    } finally {
-      setProgress(null);
-    }
+    await settle(
+      async () => {
+        const result = await runAssetExport(
+          paged,
+          { onProgress: (done, total) => setProgress({ done, total }) },
+          all ? undefined : chosen,
+        );
+        setLast(result);
+      },
+      () => setProgress(null),
+    );
   };
 
   const toggle = (id: string, extend: boolean) =>
