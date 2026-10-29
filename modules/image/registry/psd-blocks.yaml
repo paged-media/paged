@@ -267,7 +267,7 @@
     - "Adobe Photoshop File Formats specification — Additional Layer Information: Lr16 / Lr32 (the layer info of a 16- / 32-bit document) [PUB]"
     - "Photoshop 27.10 (psd-containers/sixteen-bit): the layer info sub-block is empty, the layers live in Lr16 (its length odd, padded to four outside it), channels ZIP with prediction, the composite RAW [OBS]"
   tests:
-    rust: ["image-psd/tests/it/layer_list.rs (a_sixteen_bit_documents_layers_are_read_from_its_lr16_block)", "image-js/tests/it/psd_write.rs", "image-conformance/tests/it/psd_write_photoshop.rs"]
+    rust: ["image-psd/tests/it/layer_list.rs (a_sixteen_bit_documents_layers_are_read_from_its_lr16_block)", "image-js/tests/it/psd_write.rs", "image-conformance/tests/it/psd_write_photoshop.rs", "image-conformance/tests/it/mode_conversions_photoshop.rs (a_16bit_psd_opens_and_saves_its_layers_at_16_bits: the layers imported at full depth, LayerPlate::rgba16, and an edit's 16-bit samples written back, ADR 479)"]
 
 - id: image.psd.addl.vmsk
   state_row: image.psd.roundtrip

@@ -176,7 +176,7 @@ async fn recomposite(
     w: u32,
     h: u32,
 ) -> Result<DecodedHandle, JsValue> {
-    let rgba = stack.composite(ctx, None).await.map_err(ingest_err)?;
+    let rgba = stack.composite_px(ctx, None).await.map_err(ingest_err)?;
     set_image_pixels(handle, rgba)?;
     Ok(DecodedHandle {
         handle,

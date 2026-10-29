@@ -1433,12 +1433,58 @@ pub async fn adjust_rgba8(
     Ok(out)
 }
 
+/// THE adjustment chain at the image's own depth: an 8-bit image through
+/// [`adjust_rgba8`] (its 8-bit lanes, unchanged), a 16-bit one through
+/// [`adjust_f16`] on its 16-bit samples, read back at 16 bits — what
+/// Bake writes into a 16-bit layer, so an adjustment costs a 16-bit
+/// document no levels beyond f16's.
+pub async fn adjust_px(
+    ctx: &GpuContext,
+    image: &DecodedImage,
+    params: &AdjustParams,
+    selection: Option<Arc<SelectionCoverage>>,
+) -> Result<crate::pixels::Pixels, IngestError> {
+    if !image.rgba.is_16bit() {
+        let out = adjust_rgba8(ctx, image, params, selection).await?;
+        return Ok(crate::pixels::Pixels::from_rgba8(Arc::from(
+            out.into_boxed_slice(),
+        )));
+    }
+    if params.is_identity() {
+        return Ok(image.rgba.clone());
+    }
+    let out = adjust_f16(
+        ctx,
+        image.width,
+        image.height,
+        &image.rgba.to_f16(),
+        params,
+        selection,
+    )
+    .await?;
+    Ok(crate::pixels::Pixels::from_f16(&out, SampleDepth::U16))
+}
+
 pub(crate) async fn adjust_rgba8_uncached(
     ctx: &GpuContext,
     image: &DecodedImage,
     params: &AdjustParams,
     selection: Option<Arc<SelectionCoverage>>,
 ) -> Result<Vec<u8>, IngestError> {
+    // A 16-bit image runs the chain at f16 on its own samples and is
+    // narrowed only for this 8-bit result (the panel's preview).
+    if image.rgba.is_16bit() {
+        let out = adjust_f16(
+            ctx,
+            image.width,
+            image.height,
+            &image.rgba.to_f16(),
+            params,
+            selection,
+        )
+        .await?;
+        return Ok(crate::fill::f16_to_rgba8(&out));
+    }
     // The GPU kernel chain (skipped wholesale when only a curve is set).
     let mut pixels = if params.has_gpu_stage() {
         let mut pipe = Pipeline::new();
