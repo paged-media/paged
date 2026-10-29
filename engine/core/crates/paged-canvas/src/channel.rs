@@ -794,6 +794,15 @@ export type WorkerToMain = WorkerToMainKind & {
 //   the viewer session's `PageRect.xPt`. A new Mutation kind an older worker
 //   cannot apply, hence the bump; it rides the unpublished v77 (added
 //   before first consumer sync, governance rule 4).
+// v77 (rider) — Word's review (engine ADRs 1037 and 1020): the mutations
+//   recordChange, acceptChange, rejectChange, insertComment, replyComment,
+//   resolveComment, deleteComment and editComment; the PropertyPaths
+//   documentTrackChanges, documentTrackChangesAuthor and documentMarkupView;
+//   the `comments` collection; additive fields on TrackedChangeSummary
+//   (id, kind, end, paragraph), RunContent (change, formatChange, comments),
+//   ParagraphContent (markChange, propsChange) and StoryContent (comments).
+//   While documentTrackChanges is on, insertText / deleteRange and range
+//   formatting record changes. New mutations an older worker refuses.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -3236,9 +3245,13 @@ pub enum CollectionName {
     XmlElements,
     /// D-01 — the document's tracked changes, one row per change in story
     /// order: its story, the story offset of its place, its kind, author,
-    /// date and text. Deletions today; tracked insertions read as the
-    /// story's text and are not listed yet.
+    /// date and text. Engine ADR 1037: Word's changes too (insertions,
+    /// deletions, formatting and paragraph changes, paragraph marks), one
+    /// row per story and change id with its range.
     TrackedChanges,
+    /// Engine ADR 1020 — the document's comments, threads in story order
+    /// (each root followed by its replies).
+    Comments,
     /// Concept 2 — the Ink Manager's ink list (one row per spot
     /// swatch, carrying its output-time settings).
     Inks,
@@ -3305,6 +3318,7 @@ impl CollectionName {
             Self::TemplateFindings => "templateFindings",
             Self::XmlElements => "xmlElements",
             Self::TrackedChanges => "trackedChanges",
+            Self::Comments => "comments",
             Self::Endnotes => "endnotes",
             Self::Inks => "inks",
             Self::Sections => "sections",
@@ -3347,6 +3361,7 @@ impl CollectionName {
             "templateFindings" => Self::TemplateFindings,
             "xmlElements" => Self::XmlElements,
             "trackedChanges" => Self::TrackedChanges,
+            "comments" => Self::Comments,
             "endnotes" => Self::Endnotes,
             "inks" => Self::Inks,
             "sections" => Self::Sections,
@@ -4178,6 +4193,85 @@ pub struct TrackedChangeSummary {
     pub date: Option<String>,
     /// The text it inserted or deleted, paragraphs separated by U+000D.
     pub text: String,
+    /// Engine ADR 1037 — the change's id (absent for an InDesign deletion,
+    /// which is addressed by its offset). Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Engine ADR 1037 — `insert`, `delete`, `format`, `paraProps`,
+    /// `insertMark` or `deleteMark`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Engine ADR 1037 — the story char offset past the change's last
+    /// character (`offset` is its first).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<u32>,
+    /// Engine ADR 1037 — the paragraph a paragraph or mark change is on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paragraph: Option<u32>,
+}
+
+/// Engine ADR 1020 — one comment. Backs `documentCollection:comments`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentSummary {
+    pub id: String,
+    pub story_id: String,
+    /// The thread's root, for a reply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// The story char range the thread covers (a root's; a reply reports
+    /// its root's). Absent when the commented text is gone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<u32>,
+    /// The commented text.
+    pub anchor_text: String,
+    /// The comment's text, paragraphs separated by `\n`.
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initials: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    pub resolved: bool,
+}
+
+/// Engine ADR 1037 — a tracked change as the content read names it.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeContent {
+    pub id: String,
+    /// `insert`, `delete`, `format` or `paraProps`.
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+}
+
+/// Engine ADR 1037 — a run's tracked formatting change: the change and the
+/// run's formatting before it (`before.text` is empty).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FormatChangeContent {
+    pub change: ChangeContent,
+    pub before: Box<RunContent>,
+}
+
+/// Engine ADR 1037 — a paragraph's tracked formatting change: the change
+/// and the paragraph style it had before.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PropsChangeContent {
+    pub change: ChangeContent,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_paragraph_style: Option<String>,
 }
 
 /// SDK Phase 5 (v1 sweep) — one `<ConditionSet>` definition. Backs
@@ -4448,6 +4542,10 @@ pub struct StoryContent {
     /// Additive on 77.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub text_anchors: Vec<TextAnchorContent>,
+    /// Engine ADR 1020 — the story's comments (`storyId` is this story).
+    /// Additive on 77.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<CommentSummary>,
 }
 
 /// Engine ADR 1022 — one named text anchor of a story (a
@@ -4477,6 +4575,13 @@ pub struct ParagraphContent {
     /// entry of (`Paragraph.toc`), when it is one. Additive on 77.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toc: Option<String>,
+    /// Engine ADR 1037 — the paragraph mark's tracked insertion or
+    /// deletion. Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark_change: Option<ChangeContent>,
+    /// Engine ADR 1037 — the paragraph's tracked formatting change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub props_change: Option<PropsChangeContent>,
 }
 
 /// DOC-03 — one run's text + its applied character style + its DIRECT character
@@ -4521,6 +4626,16 @@ pub struct RunContent {
     /// is the field's result. Additive on 77.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field_code: Option<String>,
+    /// Engine ADR 1037 — the tracked insertion or deletion this run is.
+    /// Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<ChangeContent>,
+    /// Engine ADR 1037 — the run's tracked formatting change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_change: Option<FormatChangeContent>,
+    /// Engine ADR 1020 — the comment threads whose range covers the run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<String>,
 }
 
 /// Inspector P1 — one node in the scene tree. Children are nested

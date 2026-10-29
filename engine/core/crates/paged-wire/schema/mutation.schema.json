@@ -4559,6 +4559,318 @@
           ]
         },
         {
+          "description": "Engine ADR 1037 — record tracked change `change` over story chars\n`[start, end)` (contiguous, as `applyStyle` counts them; of `cell`\nwhen set), or on paragraph `paragraph` for the paragraph kinds\n(`paraProps`, `insertMark`, `deleteMark`). What an importer writes\nfor Word's `w:ins`, `w:del`, `w:rPrChange` and `w:pPrChange`. The\nreply's `createdId` is the change's id. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "recordChange"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "cell": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextCellAddr"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "paragraph": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
+                "change": {
+                  "$ref": "#/$defs/ChangeSpec"
+                }
+              },
+              "required": [
+                "storyId",
+                "start",
+                "end",
+                "change"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1037 — Accept: tracked change `id`, every change by\n`author`, or every change (in story `storyId` only when set). One\nundo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "acceptChange"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "author": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              }
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1037 — Reject, scoped as `acceptChange`. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "rejectChange"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "author": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              }
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1020 — New Comment on story chars `[start, end)` (not\nempty). The reply's `createdId` is the comment's id. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "insertComment"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "cell": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextCellAddr"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "comment": {
+                  "$ref": "#/$defs/CommentSpec"
+                }
+              },
+              "required": [
+                "storyId",
+                "start",
+                "end",
+                "comment"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1020 — Reply to comment `parentId` (a root, or a reply,\nwhose root the reply joins). `createdId` is the reply's id. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "replyComment"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "parentId": {
+                  "type": "string"
+                },
+                "comment": {
+                  "$ref": "#/$defs/CommentSpec"
+                }
+              },
+              "required": [
+                "parentId",
+                "comment"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1020 — Resolve (or reopen, `resolved: false`) the thread\nof comment `commentId`. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "resolveComment"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "commentId": {
+                  "type": "string"
+                },
+                "resolved": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "commentId",
+                "resolved"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1020 — delete comment `commentId`; a thread's root takes\nits replies and its range with it. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "deleteComment"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "commentId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "commentId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1020 — rewrite comment `commentId`'s text. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "editComment"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "commentId": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "commentId",
+                "text"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local\n`bounds` `(top, left, bottom, right)`; the model resolves the\nhost spread and mints the self id (mirrors `InsertFrame`).",
           "type": "object",
           "properties": {
@@ -8086,6 +8398,21 @@
           "description": "Word's \"show field codes\" (Alt+F9), on `NodeId::Document`:\n`Value::Bool`, default false. Every Word field sets its code in\nbraces instead of its result (engine ADR 1022). A whole-document\nreflow.",
           "type": "string",
           "const": "documentShowFieldCodes"
+        },
+        {
+          "description": "Word's Track Changes (engine ADR 1037), on `NodeId::Document`:\n`Value::Bool`, default false. While on, text and formatting edits on\nstory ranges are recorded as tracked changes.",
+          "type": "string",
+          "const": "documentTrackChanges"
+        },
+        {
+          "description": "The author tracked changes are recorded under: `Value::Text`.",
+          "type": "string",
+          "const": "documentTrackChangesAuthor"
+        },
+        {
+          "description": "How tracked changes and comments show (engine ADR 1037):\n`Value::Text` `simple` / `all` / `none` / `original`, default `all`.\nA whole-document reflow.",
+          "type": "string",
+          "const": "documentMarkupView"
         }
       ]
     },
@@ -9778,6 +10105,141 @@
         "style",
         "level"
       ]
+    },
+    "ChangeSpec": {
+      "description": "Engine ADR 1037 — one tracked change to record over a range or on a\nparagraph. `id` absent: the change joins an adjacent change of the same\nkind and author, else the engine mints one.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ChangeSpecKind"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "author": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "date": {
+          "description": "ISO 8601, as Word's `w:date`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "beforeCharacterStyle": {
+          "description": "`format`: the run's applied character style before the change (its\nother properties are taken as they are now).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "beforeParagraphStyle": {
+          "description": "`paraProps`: the paragraph's applied style before the change.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "ChangeSpecKind": {
+      "description": "Engine ADR 1037 — what [`Operation::RecordChange`] records.",
+      "oneOf": [
+        {
+          "description": "The range's text was inserted (`w:ins`).",
+          "type": "string",
+          "const": "insert"
+        },
+        {
+          "description": "The range's text was deleted (`w:del`); it stays in the story.",
+          "type": "string",
+          "const": "delete"
+        },
+        {
+          "description": "The range's character formatting changed (`w:rPrChange`).",
+          "type": "string",
+          "const": "format"
+        },
+        {
+          "description": "The paragraph's formatting changed (`w:pPrChange`).",
+          "type": "string",
+          "const": "paraProps"
+        },
+        {
+          "description": "The paragraph's mark was inserted (`w:pPr/w:rPr/w:ins`).",
+          "type": "string",
+          "const": "insertMark"
+        },
+        {
+          "description": "The paragraph's mark was deleted (`w:pPr/w:rPr/w:del`).",
+          "type": "string",
+          "const": "deleteMark"
+        }
+      ]
+    },
+    "CommentSpec": {
+      "description": "Engine ADR 1020 — one comment of a thread on the wire. `parentId` makes\nit a reply; `id` absent: the engine mints one.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "author": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "initials": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "text": {
+          "description": "Paragraphs separated by `\\n`.",
+          "type": "string",
+          "default": ""
+        },
+        "resolved": {
+          "type": "boolean",
+          "default": false
+        },
+        "parentId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
     },
     "GuideOrientationSpec": {
       "description": "W0.5 — wire mirror of `paged_model::GuideOrientation`\n(which is `Deserialize` but lives in the parse crate; kept here so\nthe operation wire type doesn't depend on the parser's\nserialization shape).",

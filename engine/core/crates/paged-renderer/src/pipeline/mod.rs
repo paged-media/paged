@@ -65,6 +65,7 @@ mod placed_eps;
 mod placed_pdf;
 mod placed_svg;
 mod resume;
+mod review;
 mod ruby;
 /// C-26 — the inline-image cache key is shared with `paged-canvas`'s
 /// `placed_asset_bytes` door on purpose. Two copies of this format

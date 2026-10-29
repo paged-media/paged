@@ -155,6 +155,7 @@ is not written yet.
 | [1017](1017-styled-field-values-and-alternates.md) | A text field takes the styles and breaks its author allows; alternates choose a frame | Accepted 2026-10-24 |
 | [1018](1018-word-paragraph-character-and-list-model.md) | Word's paragraph, character and list model: highlight, hidden text, underline kinds, double strike, direct shading and borders, list levels, based-on, Next Style | Accepted 2026-10-24 |
 | [1019](1019-geometry-kernels-walk-the-arrangement.md) | The planar arrangement is a face walk; offsets and variable width work on whole paths | Accepted 2026-10-25 |
+| [1020](1020-range-comments-with-threads.md) | Range comments with threads: a comment's range is the runs that name it (extends 172) | Accepted 2026-10-29 |
 | [1021](1021-find-and-replace.md) | Find and replace: the caret space, Word's specials and wildcards on `regress`, Replace All as one undo step | Accepted 2026-10-24 |
 | [1022](1022-word-document-structure.md) | Word document structure: section first / odd / even masters and odd/even starts (amends 026), Word fields and F9, creating tables of contents, cross-references, bookmarks and index markers | Accepted 2026-10-25 |
 | [1030](1030-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
@@ -162,6 +163,7 @@ is not written yet.
 | [1032](1032-one-cms-with-intents-and-bpc.md) | One colour API with explicit intents and black-point compensation on every backend | Accepted 2026-10-24 |
 | [1033](1033-an-eps-is-drawn-from-its-postscript.md) | An EPS is drawn from its PostScript, by `paged-ps` | Accepted 2026-10-24 |
 | [1036](1036-a-snippet-carries-opacity-masks-and-names.md) | A snippet carries its opacity masks and item names; an inline PDF is readable | Accepted 2026-10-27 |
+| [1037](1037-word-change-tracking.md) | Word's change tracking: changes carried by what they changed, recorded while typing, accepted and rejected as each other's opposite, shown by the markup view (amends 184) | Accepted 2026-10-29 |
 | [1038](1038-the-remaining-codecs-and-the-layered-tiff.md) | The remaining codecs: GIF, BMP, TGA, JPEG XL and AVIF encode, HDR and OpenEXR floats, and the layered TIFF | Accepted 2026-10-28 |
 
 Decisions made in other repositories that this engine's code rests on are listed in

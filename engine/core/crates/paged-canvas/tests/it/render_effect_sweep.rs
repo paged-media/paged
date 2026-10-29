@@ -3603,6 +3603,131 @@ fn style_cases(c: &mut Vec<Case>) {
             tab_position: None,
         }
     }));
+    // Engine ADRs 1037 / 1020 — All Markup draws a change in its author's
+    // colour and shades commented text; a thread's replies and its
+    // resolved state print nothing.
+    fn sweep_change(kind: paged_mutate::ChangeSpecKind, id: &str) -> paged_mutate::ChangeSpec {
+        paged_mutate::ChangeSpec {
+            kind,
+            id: Some(id.into()),
+            author: Some("Author A".into()),
+            date: None,
+            before_character_style: None,
+            before_paragraph_style: None,
+        }
+    }
+    fn sweep_comment(id: &str) -> paged_mutate::CommentSpec {
+        paged_mutate::CommentSpec {
+            id: Some(id.into()),
+            author: Some("Author A".into()),
+            text: "Sweep".into(),
+            ..Default::default()
+        }
+    }
+    c.push(paints("RecordChange", "styles-cascade", |m| {
+        Mutation::RecordChange {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            paragraph: None,
+            change: sweep_change(paged_mutate::ChangeSpecKind::Insert, "1"),
+        }
+    }));
+    c.push(paints("AcceptChange", "styles-cascade", |m| {
+        m.apply_mutation(&Mutation::RecordChange {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            paragraph: None,
+            change: sweep_change(paged_mutate::ChangeSpecKind::Delete, "1"),
+        })
+        .expect("seed a deletion");
+        Mutation::AcceptChange {
+            story_id: None,
+            id: Some("1".into()),
+            author: None,
+        }
+    }));
+    c.push(paints("RejectChange", "styles-cascade", |m| {
+        m.apply_mutation(&Mutation::RecordChange {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            paragraph: None,
+            change: sweep_change(paged_mutate::ChangeSpecKind::Insert, "1"),
+        })
+        .expect("seed an insertion");
+        Mutation::RejectChange {
+            story_id: None,
+            id: None,
+            author: Some("Author A".into()),
+        }
+    }));
+    c.push(paints("InsertComment", "styles-cascade", |m| {
+        Mutation::InsertComment {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            comment: sweep_comment("1"),
+        }
+    }));
+    fn seed_comment(m: &mut CanvasModel) {
+        m.apply_mutation(&Mutation::InsertComment {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            comment: sweep_comment("1"),
+        })
+        .expect("seed a comment");
+    }
+    c.push(paints("DeleteComment", "styles-cascade", |m| {
+        seed_comment(m);
+        Mutation::DeleteComment {
+            comment_id: "1".into(),
+        }
+    }));
+    c.push(inert(
+        "ReplyComment",
+        "styles-cascade",
+        "a reply has no range of its own: it joins the thread whose range is already shaded",
+        |m| {
+            seed_comment(m);
+            Mutation::ReplyComment {
+                parent_id: "1".into(),
+                comment: sweep_comment("2"),
+            }
+        },
+    ));
+    c.push(inert(
+        "ResolveComment",
+        "styles-cascade",
+        "resolving a thread changes its state in the margin band, not a character of the page",
+        |m| {
+            seed_comment(m);
+            Mutation::ResolveComment {
+                comment_id: "1".into(),
+                resolved: true,
+            }
+        },
+    ));
+    c.push(inert(
+        "EditComment",
+        "styles-cascade",
+        "a comment's text is shown in the margin band, not on the page",
+        |m| {
+            seed_comment(m);
+            Mutation::EditComment {
+                comment_id: "1".into(),
+                text: "Edited".into(),
+                date: None,
+            }
+        },
+    ));
     c.push(paints("UpdateFields", "styles-cascade", |m| {
         let story_id = m.scene().stories[0].self_id.clone();
         m.apply_mutation(&Mutation::InsertField {

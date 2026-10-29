@@ -70,6 +70,7 @@ pub mod stroke_kernel;
 pub use apply::apply;
 pub use apply::apply_checked;
 pub use apply::is_locked;
+pub use apply::review::{comment_story, next_change_id, next_comment_id, resolve_changes};
 pub use apply::{duplicate_demand, duplicate_roots, DuplicateDemand};
 pub use apply::{
     extract_snippet, parse_snippet, snippet_demand, snippet_roots, ItemSnippet, SnippetResources,
@@ -79,11 +80,12 @@ pub use error::OperationError;
 pub use history::{History, DEFAULT_HISTORY_CAPACITY};
 pub use notify::Notifier;
 pub use operation::{
-    AppliedOperation, ColorGroupSpec, FaceSelectMode, FieldKind, GradientSpec, GradientStopSpec,
-    GroupSpec, GuideOrientationSpec, InvalidationHint, NestedParent, NodeId, NodeSpec,
-    NumberingLevelSpec, NumberingListSpec, OpacityMaskMode, Operation, ParagraphListState,
-    PathPointAddress, PathPointRole, PathfinderKind, PathfinderRegionVerb, PropertyPath,
-    StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec, Value, ZOrderTarget,
+    AppliedOperation, ChangeSpec, ChangeSpecKind, ColorGroupSpec, CommentSpec, FaceSelectMode,
+    FieldKind, GradientSpec, GradientStopSpec, GroupSpec, GuideOrientationSpec, InvalidationHint,
+    NestedParent, NodeId, NodeSpec, NumberingLevelSpec, NumberingListSpec, OpacityMaskMode,
+    Operation, ParagraphListState, PathPointAddress, PathPointRole, PathfinderKind,
+    PathfinderRegionVerb, PropertyPath, StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec,
+    TextPathSpec, Value, ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
 
