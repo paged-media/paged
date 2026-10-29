@@ -391,6 +391,19 @@ describe("draw conformance — live symbols (WP6.8) [plugin-draw.symbols]", () =
     ).toEqual([`instance:${String(placed[2]!.id)}`]);
   });
 
+  it("Select Same ▸ Symbol instance selects every instance of the reference's symbol", async () => {
+    await h.host.selection.set([placed[0]!]);
+    await h.objects.invoke(`${C}.selectSameSymbolInstance`, {
+      targets: [`instance:${String(placed[0]!.id)}`],
+    });
+    expect(
+      h.host.selection
+        .get()
+        .map((e) => String(e.id))
+        .sort(),
+    ).toEqual(placed.map((p) => String(p.id)).sort());
+  });
+
   it("the object model lists the engine's symbols and instances", async () => {
     const D = "media.paged.draw";
     const symbols = await h.objects.query(`plugin:${D}/symbol`);
