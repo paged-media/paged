@@ -391,6 +391,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@paged-media/plugin-api": "workspace:*",
+        "@paged-media/plugin-sdk": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
@@ -604,6 +605,7 @@
       "version": "0.1.0-canary.0",
       "dependencies": {
         "@paged-media/plugin-api": "workspace:*",
+        "@paged-media/plugin-sdk": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
@@ -731,7 +733,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.74.3-canary.44",
+      "version": "0.74.3-canary.45",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -741,7 +743,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.74.3-canary.44",
+      "version": "0.74.3-canary.45",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },
@@ -789,8 +791,10 @@
     "platform/shared/helpers": {
       "name": "@paged-media/helpers",
       "version": "0.0.0",
-      "devDependencies": {
+      "dependencies": {
         "@paged-media/plugin-sdk": "workspace:*",
+      },
+      "devDependencies": {
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
