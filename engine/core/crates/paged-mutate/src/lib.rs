@@ -271,6 +271,7 @@ mod tests {
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
             effects: None,
+            effect_stack: Vec::new(),
             gradient_fill_angle: None,
             gradient_fill_length: None,
             gradient_fill_start: None,

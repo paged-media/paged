@@ -872,6 +872,63 @@ pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<String> {
     out
 }
 
+/// Engine ADR 1008 — what an item's effect stack says that IDML cannot:
+/// an effect InDesign does not have (it rides the item's
+/// `paged:effectStack` label, which InDesign keeps and does not draw, so a
+/// paged reader restores it), and an order of InDesign's own effects that
+/// differs from the fixed one InDesign draws them in. Declared from the
+/// model: the twin reads the label back, so it cannot see the loss.
+pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
+    use paged_model::effect_stack::{EffectBearing, EffectTarget};
+    let mut out = Vec::new();
+    let mut check = |kind: &str, id: Option<&str>, item: &dyn EffectBearing| {
+        let id = id.unwrap_or("?");
+        for target in EffectTarget::ALL {
+            let slots = item.effect_slots(target);
+            let on = match target {
+                EffectTarget::Object => "",
+                EffectTarget::Fill => " (fill)",
+                EffectTarget::Stroke => " (stroke)",
+                EffectTarget::Content => " (content)",
+            };
+            for e in slots.stack.iter().filter(|e| e.enabled) {
+                if e.effect.indesign().is_none() {
+                    out.push(format!(
+                        "effect `{}` on {kind} `{id}`{on} has no IDML form — InDesign has its \
+                         nine effects only; it is kept in the item's `paged:effectStack` label, \
+                         which InDesign preserves and does not draw. Save as `.paged` to keep \
+                         it visible everywhere.",
+                        e.effect.kind_name()
+                    ));
+                }
+            }
+            if slots.indesign_order_differs() {
+                out.push(format!(
+                    "the order of the InDesign effects on {kind} `{id}`{on} differs from \
+                     InDesign's fixed order — InDesign draws them in its own; the order is \
+                     kept in the item's `paged:effectStack` label."
+                ));
+            }
+        }
+    };
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        for f in &sp.text_frames {
+            check("text frame", f.self_id.as_deref(), f);
+        }
+        for f in &sp.rectangles {
+            check("rectangle", f.self_id.as_deref(), f);
+        }
+        for f in &sp.ovals {
+            check("oval", f.self_id.as_deref(), f);
+        }
+        for f in &sp.polygons {
+            check("polygon", f.self_id.as_deref(), f);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

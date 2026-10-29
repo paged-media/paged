@@ -257,6 +257,21 @@ pub fn write_idml_with(
     original: &[u8],
     opts: &ExportOptions,
 ) -> Result<IdmlExport, WriteError> {
+    // Engine ADR 1008: IDML carries InDesign's effects in their slots
+    // and nothing else; an item's effect stacks ride its label.
+    use paged_model::effect_stack::label;
+    if doc.spreads.iter().any(|p| label::any(&p.spread))
+        || doc.master_spreads.values().any(|p| label::any(&p.spread))
+    {
+        let mut stamped = doc.clone();
+        for p in stamped.spreads.iter_mut() {
+            label::stamp(&mut p.spread);
+        }
+        for p in stamped.master_spreads.values_mut() {
+            label::stamp(&mut p.spread);
+        }
+        return write_package(&stamped, original, false, opts);
+    }
     write_package(doc, original, false, opts)
 }
 

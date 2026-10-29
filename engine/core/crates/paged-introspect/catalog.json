@@ -1728,6 +1728,10 @@
     "frameDropShadowKnockedOut",
     "frameDropShadowUseGlobalLight",
     "frameGradientFeather",
+    "frameEffectStack",
+    "frameFillEffectStack",
+    "frameStrokeEffectStack",
+    "frameContentEffectStack",
     "cellFillColor",
     "cellFillTint",
     "cellInsetTop",
@@ -6561,6 +6565,58 @@
       },
       "wire": "gradientFeather",
       "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameFillEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameStrokeEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameContentEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
       "access": "readWrite",
       "bindable": true
     },
@@ -20091,6 +20147,74 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "gradientFeather"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameFillEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameStrokeEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameContentEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
       },
       {
         "addressKind": "frame",

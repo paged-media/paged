@@ -147,6 +147,7 @@ is not written yet.
 | [1004](1004-a-follow-up-write-can-join-the-step-that-provoked-it.md) | A follow-up write can join the undo step that provoked it | Accepted 2026-10-23 |
 | [1005](1005-a-raster-is-read-by-paged-raster.md) | A raster is read by `paged-raster`, and a TIFF through `tiff` | Accepted 2026-10-24; note 2026-10-24 (the frame's intent, ADR 1032); note 2026-10-28 (the remaining codecs, ADR 1038) |
 | [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
+| [1008](1008-an-items-effects-are-an-ordered-stack.md) | An item's effects are an ordered stack | Accepted 2026-10-25 |
 | [1010](1010-a-group-can-clip-and-be-pasted-in.md) | A group can clip, and a group can be pasted into a frame | Accepted 2026-10-24 |
 | [1011](1011-a-page-has-a-place-on-the-canvas.md) | A page has a place on the canvas (artboards) | Accepted 2026-10-25 |
 | [1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md) | Bindings live in labels, and the engine reads and applies them | Accepted 2026-10-24 |

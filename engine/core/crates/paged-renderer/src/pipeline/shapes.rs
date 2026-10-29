@@ -46,7 +46,51 @@ pub(super) const SUBSTITUTED_HIGHLIGHT_B: f32 = 0.604;
 /// with the rest (asked of InDesign, `transparency-targets` case 13).
 pub(super) type ContentPainter<'p> = &'p mut dyn FnMut(&mut BuiltPage);
 
+/// An oval, with its effect stack applied (engine ADR 1008).
 pub(super) fn emit_oval_into(
+    page: &mut BuiltPage,
+    oval: &Oval,
+    document: &Document,
+    palette: &Graphic,
+    fallback: Paint,
+    color_ctx: ColorCtx<'_>,
+    content: ContentPainter<'_>,
+) {
+    let Some(mode) = crate::module::effect_stack::stack_mode(&oval.effect_stack) else {
+        return emit_oval_body(page, oval, document, palette, fallback, color_ctx, content);
+    };
+    let stripped;
+    let base = if mode == crate::module::effect_stack::StackMode::Ordered {
+        stripped = Oval {
+            effects: None,
+            drop_shadow: None,
+            ..oval.clone()
+        };
+        &stripped
+    } else {
+        oval
+    };
+    let start = page.list.commands.len();
+    emit_oval_body(page, base, document, palette, fallback, color_ctx, content);
+    let mut resolved = ResolvedFrame::from_oval(oval);
+    let style = crate::module::resolve_applied_style(&resolved, document);
+    if let Some(s) = &style {
+        crate::module::object_style_cascade(&mut resolved, s);
+    }
+    finish_effect_stack(
+        page,
+        start,
+        None,
+        &oval.effect_stack,
+        mode,
+        &resolved,
+        oval.effects.as_ref(),
+        palette,
+        color_ctx,
+    );
+}
+
+pub(super) fn emit_oval_body(
     page: &mut BuiltPage,
     oval: &Oval,
     document: &Document,
@@ -932,7 +976,100 @@ fn emit_rectangle_polygon_path(
     }
 }
 
+/// A rectangle, with its effect stack applied (engine ADR 1008); see
+/// [`emit_rectangle_body`] for the frame itself.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_rectangle_into(
+    page: &mut BuiltPage,
+    rect: &Rectangle,
+    document: &Document,
+    palette: &Graphic,
+    fallback: Paint,
+    color_ctx: ColorCtx<'_>,
+    drop_shadow: Option<DropShadow>,
+    content: ContentPainter<'_>,
+) {
+    let Some(mode) = crate::module::effect_stack::stack_mode(&rect.effect_stack) else {
+        return emit_rectangle_body(
+            page,
+            rect,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            drop_shadow,
+            content,
+        );
+    };
+    let stripped;
+    let base = if mode == crate::module::effect_stack::StackMode::Ordered {
+        stripped = Rectangle {
+            effects: None,
+            drop_shadow: None,
+            ..rect.clone()
+        };
+        &stripped
+    } else {
+        rect
+    };
+    let start = page.list.commands.len();
+    emit_rectangle_body(
+        page,
+        base,
+        document,
+        palette,
+        fallback,
+        color_ctx,
+        drop_shadow,
+        content,
+    );
+    let mut resolved = ResolvedFrame::from_rectangle(rect);
+    let style = crate::module::resolve_applied_style(&resolved, document);
+    if let Some(s) = &style {
+        crate::module::object_style_cascade(&mut resolved, s);
+    }
+    finish_effect_stack(
+        page,
+        start,
+        None,
+        &rect.effect_stack,
+        mode,
+        &resolved,
+        rect.effects.as_ref(),
+        palette,
+        color_ctx,
+    );
+}
+
+/// Apply a frame's effect stack to the run its body emitted from `start`
+/// (engine ADR 1008). Returns the frame's text slot, moved.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn finish_effect_stack(
+    page: &mut BuiltPage,
+    start: usize,
+    slot: Option<usize>,
+    stack: &[paged_model::effect_stack::EffectEntry],
+    mode: crate::module::effect_stack::StackMode,
+    resolved: &ResolvedFrame<'_>,
+    effects: Option<&paged_model::FrameEffects>,
+    palette: &Graphic,
+    color_ctx: ColorCtx<'_>,
+) -> Option<usize> {
+    let outer = frame_outer_transform(page, resolved.item_transform);
+    let Some(geom) = crate::module::effect_stack::StackGeometry::new(page, resolved, outer) else {
+        return slot;
+    };
+    let source = crate::module::effect_stack::IndesignSource {
+        frame: resolved,
+        effects,
+        drop_shadow: resolved.drop_shadow,
+    };
+    crate::module::effect_stack::apply(
+        page, start, slot, stack, mode, &geom, &source, palette, color_ctx,
+    )
+}
+
+pub(super) fn emit_rectangle_body(
     page: &mut BuiltPage,
     rect: &Rectangle,
     document: &Document,

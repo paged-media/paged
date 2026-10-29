@@ -226,7 +226,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 246: ADR 1010 added a group's clip flag.
         // 257: ADR 1018 added Word's character and paragraph additions.
         // 258: ADR 1031 added the gradient fill's start.
-        258,
+        // 262: ADR 1008 added the effect stack of each target.
+        262,
         "the advertised roster changed; move the count with the decision"
     );
 }

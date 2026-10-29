@@ -131,6 +131,7 @@ impl From<Value> for AuthoredValue {
             // length list, so it collapses to `None` here.
             | Value::Lengths(_)
             | Value::GradientStops(_)
+            | Value::EffectStack { .. }
             | Value::SwatchColor(_) => AuthoredValue::None,
         }
     }

@@ -894,6 +894,11 @@ property_paths! {
         // apply arm takes the same node kinds as the others and the
         // bridge already encodes its spec. PROMOTED 2026-09-09.
         FrameGradientFeather => "frameGradientFeather" : structure("GradientFeatherSpec", Wire::GradientFeather),
+        // Engine ADR 1008 — the ordered effect stack per target.
+        FrameEffectStack => "frameEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameFillEffectStack => "frameFillEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameStrokeEffectStack => "frameStrokeEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameContentEffectStack => "frameContentEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         CellFillColor => "cellFillColor" : color().idml(idml![attr(Cell | CellStyle, FillColor)]),
         CellFillTint => "cellFillTint" : pct().default_num(100.0).idml(idml![attr(Cell | CellStyle, FillTint)]),
         CellInsetTop => "cellInsetTop" : length_pos().idml(idml![attr(Cell, TextTopInset)]),
@@ -1463,7 +1468,10 @@ mod tests {
         // paragraph's own shading and border (six).
         //
         // 257 -> 258: ADR 1031 — where a frame's gradient fill starts.
-        assert_eq!(cat.settable_paths.len(), 258, "settable path count drifted");
+        //
+        // 258 -> 262: ADR 1008 — the effect stack of each transparency
+        // target.
+        assert_eq!(cat.settable_paths.len(), 262, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

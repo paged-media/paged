@@ -553,6 +553,9 @@ enum FrameKind {
         knockout_base: Option<Vec<u8>>,
         /// Pixel σ of a Gaussian-blur layer, 0 for none.
         blur_sigma_px: f32,
+        /// A per-pixel layer effect (noise, colour adjustment) run on the
+        /// buffer when it pops (engine ADR 1008).
+        pixel_fx: Option<LayerEffect>,
         /// A `PushLayer` (an effect layer), not a `BeginBlendGroup`: a
         /// knockout parent does not knock it out.
         layer: bool,
@@ -872,6 +875,12 @@ impl Raster<'_> {
     }
 
     fn run(&mut self, options: &RasterOptions) {
+        self.run_range(options, 0..self.list.commands.len());
+    }
+
+    /// Draw the commands in `range` (indices into the whole list, so the
+    /// index-keyed side tables stay valid).
+    fn run_range(&mut self, options: &RasterOptions, range: std::ops::Range<usize>) {
         let list = self.list;
         let scale = self.scale;
         let infos = group_infos(list);
@@ -902,7 +911,13 @@ impl Raster<'_> {
         let glyph_fills = vello_map::glyph_fills(list);
         let mut fills = vello_map::Fills::default();
 
-        for (idx, cmd) in list.commands.iter().enumerate() {
+        for (idx, cmd) in list
+            .commands
+            .iter()
+            .enumerate()
+            .take(range.end)
+            .skip(range.start)
+        {
             if let Some(feather_idx) = feather_starts.get(&idx).copied() {
                 feather_backdrop = self.feather_snapshot(feather_idx);
             }
@@ -1462,6 +1477,7 @@ impl Raster<'_> {
                 } else {
                     0.0
                 },
+                pixel_fx: effect.filter(paged_compose::layer_fx::is_per_pixel),
                 layer: effect.is_some(),
             },
         });
@@ -1487,6 +1503,7 @@ impl Raster<'_> {
             return;
         };
         let Frame { surface, kind } = frame;
+        let mut pixel_fx = None;
         let (blend, opacity, backdrop_copied, blur_sigma_px, layer) = match kind {
             FrameKind::Direct { clip_floor } => {
                 let surface = self.active();
@@ -1507,8 +1524,12 @@ impl Raster<'_> {
                 backdrop_copied,
                 blur_sigma_px,
                 layer,
+                pixel_fx: fx,
                 ..
-            } => (blend, opacity, backdrop_copied, blur_sigma_px, layer),
+            } => {
+                pixel_fx = fx;
+                (blend, opacity, backdrop_copied, blur_sigma_px, layer)
+            }
         };
         let Some(mut group) = surface else {
             return;
@@ -1519,6 +1540,16 @@ impl Raster<'_> {
         if blur_sigma_px > 0.5 {
             let kernel = gaussian_kernel(blur_sigma_px);
             gaussian_blur_premul(pixmap.data_as_u8_slice_mut(), gw, gh, &kernel);
+        }
+        if let Some(fx) = pixel_fx {
+            paged_compose::layer_fx::apply_premul(
+                pixmap.data_as_u8_slice_mut(),
+                gw,
+                gh,
+                goff,
+                self.scale,
+                &fx,
+            );
         }
 
         // R-10: a member of a knockout group composites onto the group's
@@ -2298,6 +2329,115 @@ fn plain_page(list: &DisplayList) -> bool {
     })
 }
 
+/// One effect layer (`PushLayer` … `PopLayer`) drawn on its own, with its
+/// effect applied and NOT its blend mode or opacity: what a lane that
+/// cannot run the effect itself composites in its place (the GPU lane, the
+/// PDF writer; engine ADR 1008).
+#[derive(Debug, Clone)]
+pub struct LayerRaster {
+    /// The buffer's top-left, in page pixels at `px_per_pt`.
+    pub origin_px: (i32, i32),
+    pub w: u32,
+    pub h: u32,
+    pub px_per_pt: f32,
+    /// Premultiplied RGBA8, `w × h`.
+    pub rgba: Vec<u8>,
+}
+
+impl LayerRaster {
+    /// The buffer's extent on the page, in pt.
+    pub fn bounds_pt(&self) -> paged_compose::Rect {
+        let k = 1.0 / self.px_per_pt.max(1e-6);
+        paged_compose::Rect {
+            x: self.origin_px.0 as f32 * k,
+            y: self.origin_px.1 as f32 * k,
+            w: self.w as f32 * k,
+            h: self.h as f32 * k,
+        }
+    }
+}
+
+/// Draw the effect layer that opens at `push_idx` (a `PushLayer`) and
+/// closes at `end_idx` (its `PopLayer`) at `dpi`, apply its effect, and
+/// return the pixels. `None` when `push_idx` is not a `PushLayer` or the
+/// layer is empty.
+pub fn rasterize_layer(
+    list: &DisplayList,
+    push_idx: usize,
+    end_idx: usize,
+    dpi: f32,
+) -> Option<LayerRaster> {
+    let DisplayCommand::PushLayer { bounds, effect, .. } = list.commands.get(push_idx)? else {
+        return None;
+    };
+    let scale = dpi / 72.0;
+    let sigma_pt = effect.sigma_pt();
+    let pad_pt = 3.0 * sigma_pt + 1.0 / scale.max(1e-6);
+    let x0 = ((bounds.x - pad_pt) * scale).floor() as i32;
+    let y0 = ((bounds.y - pad_pt) * scale).floor() as i32;
+    let x1 = ((bounds.x + bounds.w + pad_pt) * scale).ceil() as i32;
+    let y1 = ((bounds.y + bounds.h + pad_pt) * scale).ceil() as i32;
+    let w = (x1 - x0).clamp(1, MAX_SIDE as i32) as u32;
+    let h = (y1 - y0).clamp(1, MAX_SIDE as i32) as u32;
+    let mut page = Surface::new(w, h, (x0, y0), scale, 0);
+    // The contents are clipped to the layer's bounds, as `begin_group`
+    // clips a layer that does not blur.
+    if sigma_pt <= 0.5 {
+        let clip = KRect::new(
+            bounds.x as f64,
+            bounds.y as f64,
+            (bounds.x + bounds.w) as f64,
+            (bounds.y + bounds.h) as f64,
+        )
+        .to_path(0.1);
+        page.push_clip(clip, Fill::NonZero);
+    }
+    let mut raster = Raster {
+        list,
+        scale,
+        px_w: w,
+        px_h: h,
+        paper: [0, 0, 0, 0],
+        res: Resources::new(),
+        scratch: Scratch { ctx: None },
+        page,
+        frames: Vec::new(),
+        planes: None,
+        want_planes: false,
+        next_id: 0,
+    };
+    let options = RasterOptions {
+        dpi,
+        background: ComposeColor::rgba(0.0, 0.0, 0.0, 0.0),
+        ..RasterOptions::new(1.0, 1.0)
+    };
+    raster.run_range(&options, push_idx + 1..end_idx.min(list.commands.len()));
+    while !raster.frames.is_empty() {
+        raster.end_group();
+    }
+    let Raster {
+        mut page, mut res, ..
+    } = raster;
+    page.flush(&mut res);
+    if !page.has_base {
+        return None;
+    }
+    let mut rgba = page.px.take_rgba8(ImageAlphaType::AlphaPremultiplied);
+    let sigma_px = sigma_pt * scale;
+    if sigma_px > 0.5 {
+        let kernel = gaussian_kernel(sigma_px);
+        gaussian_blur_premul(&mut rgba, w, h, &kernel);
+    }
+    paged_compose::layer_fx::apply_premul(&mut rgba, w, h, (x0, y0), scale, effect);
+    Some(LayerRaster {
+        origin_px: (x0, y0),
+        w,
+        h,
+        px_per_pt: scale,
+        rgba,
+    })
+}
+
 fn rasterize_inner(
     list: &DisplayList,
     options: &RasterOptions,
@@ -2380,6 +2520,87 @@ fn composite_over_paper(data: &mut [u8], paper: [u8; 4]) {
 mod tests {
     use super::*;
     use crate::rgb_to_naive_cmyk_8bit;
+
+    /// Engine ADR 1008 — `rasterize_layer` draws a layer exactly as the
+    /// page render draws it (the PDF writer and the GPU lane composite it
+    /// in place of their own), and the per-pixel effects run in it.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_layer_drawn_alone_matches_the_page_render__feat__effects_transparency_effect_stack() {
+        let red = Paint::Solid(Color::rgba(0.8, 0.1, 0.1, 1.0));
+        for effect in [
+            LayerEffect::GaussianBlur { sigma_pt: 3.0 },
+            LayerEffect::ColorAdjust {
+                brightness: 0.0,
+                contrast: 0.0,
+                saturation: -1.0,
+                hue_deg: 0.0,
+            },
+            LayerEffect::Noise {
+                amount: 0.3,
+                monochromatic: false,
+            },
+        ] {
+            let mut list = DisplayList::new();
+            list.commands
+                .push(paged_compose::DisplayCommand::PushLayer {
+                    bounds: Rect {
+                        x: 10.0,
+                        y: 10.0,
+                        w: 30.0,
+                        h: 20.0,
+                    },
+                    effect,
+                    blend_mode: BlendMode::Normal,
+                    opacity: 1.0,
+                    transform: paged_compose::Transform::IDENTITY,
+                });
+            paged_compose::emit_rect_transformed(
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 1.0,
+                    h: 1.0,
+                },
+                paged_compose::Transform([30.0, 0.0, 0.0, 20.0, 10.0, 10.0]),
+                red,
+                &mut list,
+            );
+            list.commands.push(paged_compose::DisplayCommand::PopLayer(
+                paged_compose::Transform::IDENTITY,
+            ));
+            let mut opts = RasterOptions::new(60.0, 50.0);
+            opts.dpi = 144.0;
+            opts.background = Color::rgba(0.0, 0.0, 0.0, 0.0);
+            let page = rasterize(&list, &opts);
+            let layer = rasterize_layer(&list, 0, 2, 144.0).expect("the layer paints");
+            let mut worst = 0u8;
+            for y in 0..layer.h {
+                for x in 0..layer.w {
+                    let (px, py) = (layer.origin_px.0 + x as i32, layer.origin_px.1 + y as i32);
+                    if px < 0 || py < 0 || px as u32 >= page.width() || py as u32 >= page.height() {
+                        continue;
+                    }
+                    let a = page.get_pixel(px as u32, py as u32).0;
+                    let i = ((y * layer.w + x) * 4) as usize;
+                    for (c, v) in a.iter().enumerate() {
+                        worst = worst.max(v.abs_diff(layer.rgba[i + c]));
+                    }
+                }
+            }
+            assert!(worst <= 2, "{effect:?}: worst channel delta {worst}");
+            // The effect ran: a grey layer, a soft edge, a grain.
+            let mid = (((layer.h / 2) * layer.w + layer.w / 2) * 4) as usize;
+            let m = &layer.rgba[mid..mid + 4];
+            match effect {
+                LayerEffect::ColorAdjust { .. } => assert!(m[0] == m[1] && m[1] == m[2], "{m:?}"),
+                LayerEffect::GaussianBlur { .. } => {
+                    assert!(layer.rgba.chunks(4).any(|p| p[3] > 0 && p[3] < 255))
+                }
+                _ => assert!(layer.rgba.chunks(4).any(|p| p[3] == 255 && p[1] > 40)),
+            }
+        }
+    }
 
     /// An object's opacity changes the object, not the antialiased
     /// edges of everything else on the page.

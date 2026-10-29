@@ -802,6 +802,19 @@ and the pages collection's `canvasOriginPt` / `canvasPlaced` / `boundsPt` —
 and the catalog the `pageCanvasOrigin` page path. An artboard's name is the
 page metadata entry `x-paged:paged.artboard` (`{"v":1,"data":{"name"}}`).
 
+`"document.effectStack@1"` (engine ADR 1008) says the vendored wire and
+catalog carry the ordered effect stack: `frameEffectStack` and its fill,
+stroke and content twins, written whole as `{ type: "effectStack", value:
+{ entries } }` (an `EffectEntrySpec` per effect: `kind`, `enabled`, and for
+a stack-only effect `blendMode`, `opacityPct` and its parameters), one
+write and one undo step per gesture. InDesign's nine effects keep their
+parameters on their per-field paths; the stack-only ones (Gaussian blur,
+outline stroke, colour and gradient overlays, reflection, soft edge,
+noise, colour adjustment) apply to the object target, and a target stack
+refuses them. Additive at protocol 76: an older engine refuses the path.
+A bundle that would otherwise bake an effect into its pixels (paged.draw's
+appearance, paged.image's layer styles placed on a page) asks it first.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers
