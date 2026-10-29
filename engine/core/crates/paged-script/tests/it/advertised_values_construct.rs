@@ -106,6 +106,15 @@ const STRUCTURED: &[(&str, &str)] = &[
         "frameContentEffectStack",
         "{ type: 'effectStack', value: { entries: [] } }",
     ),
+    // Engine ADR 1043 — the appearance, whole and by layer.
+    (
+        "frameAppearance",
+        "{ type: 'appearance', value: { layers: [{ kind: 'fill', color: 'Color/Black' }] } }",
+    ),
+    (
+        "frameAppearanceLayer",
+        "{ type: 'appearanceLayer', value: { index: 0, layer: { kind: 'fill', color: 'Color/Black' } } }",
+    ),
     (
         "pluginMetadata",
         "{ type: 'pluginMetadata', value: { key: 'x-paged:probe', value: '1' } }",

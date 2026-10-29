@@ -427,6 +427,20 @@ pub enum PropertyPath {
     FrameStrokeEffectStack,
     /// ADR 1008 — the content target's stack (InDesign effects only).
     FrameContentEffectStack,
+    /// Engine ADR 1043 — the item's appearance (`Value::Appearance`):
+    /// its extra fills and strokes, bottom to top, with the `frameFill` /
+    /// `frameStroke` placeholders putting them in order with its own fill
+    /// and stroke. Whole-list replacement: add, remove, reorder and any
+    /// layer field are one write each. The empty list is the item as it
+    /// always was. The inverse carries a snapshot (`prev`), so undo
+    /// restores the model exactly. Text frames, rectangles, ovals and
+    /// polygons. Paint-only.
+    FrameAppearance,
+    /// ADR 1043 — one layer of the appearance, by index
+    /// (`Value::AppearanceLayer`): the per-layer edit (a colour, an
+    /// opacity, a blend mode, a stroke weight, its effects). An index one
+    /// past the last layer appends. Undoes through `FrameAppearance`.
+    FrameAppearanceLayer,
     /// Editor-ops (Page tool) — a page's `GeometricBounds`
     /// `[top, left, bottom, right]` in the page's INNER coordinate
     /// system (`Value::Bounds`). Only `NodeId::Page` carries it.
@@ -1776,6 +1790,8 @@ impl PropertyPath {
             PropertyPath::FrameFillEffectStack => "frame.fillEffectStack",
             PropertyPath::FrameStrokeEffectStack => "frame.strokeEffectStack",
             PropertyPath::FrameContentEffectStack => "frame.contentEffectStack",
+            PropertyPath::FrameAppearance => "frame.appearance",
+            PropertyPath::FrameAppearanceLayer => "frame.appearanceLayer",
             PropertyPath::PageBounds => "page.bounds",
             PropertyPath::PageCanvasOrigin => "page.canvasOrigin",
             PropertyPath::FrameNonprinting => "frame.nonprinting",
@@ -3119,6 +3135,20 @@ pub enum Value {
         entries: Vec<EffectEntrySpec>,
         #[serde(default)]
         prev: Option<String>,
+    },
+    /// Engine ADR 1043 — an item's whole appearance. `prev` is the apply
+    /// layer's snapshot of the stored layers (JSON); an inverse carries it
+    /// so undo restores exactly. Wire callers leave it `None`.
+    Appearance {
+        layers: Vec<crate::appearance_wire::PaintLayerSpec>,
+        #[serde(default)]
+        prev: Option<String>,
+    },
+    /// Engine ADR 1043 — one layer of an item's appearance, at `index`
+    /// (one past the last appends).
+    AppearanceLayer {
+        index: u32,
+        layer: crate::appearance_wire::PaintLayerSpec,
     },
     /// W0.2 — whole paragraph rule struct (`RuleAbove` / `RuleBelow`).
     /// `None` clears the rule back to the all-`None` default. The

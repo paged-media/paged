@@ -260,6 +260,16 @@ rows with a value: [
     }
   },
   {
+    "path": "frameAppearance",
+    "value": {
+      "type": "appearance",
+      "value": {
+        "layers": [],
+        "prev": null
+      }
+    }
+  },
+  {
     "path": "frameDropShadowKnockedOut",
     "value": {
       "type": "bool",

@@ -142,6 +142,10 @@ pub enum Wire {
     PluginMetadata,
     /// Engine ADR 1008 — `Value::EffectStack`.
     EffectStack,
+    /// Engine ADR 1043 — `Value::Appearance`.
+    Appearance,
+    /// Engine ADR 1043 — `Value::AppearanceLayer`.
+    AppearanceLayer,
 }
 
 /// A schema default. Untagged, so it serialises as the bare value.
@@ -858,6 +862,10 @@ pub fn coerce(schema: &PropertySchema, input: Input<'_>) -> Result<Value, String
                     entries: Vec::new(),
                     prev: None,
                 },
+                Wire::Appearance => Value::Appearance {
+                    layers: Vec::new(),
+                    prev: None,
+                },
                 // A tri-state bool clears with `Text("")`.
                 Wire::Bool => Value::Text(String::new()),
                 other => return Err(format!("null has no {other:?} form")),
@@ -991,6 +999,10 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
                     entries: serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
                     prev: None,
                 },
+                Wire::Appearance => Value::Appearance {
+                    layers: serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
+                    prev: None,
+                },
                 Wire::Text => Value::Text(
                     items
                         .iter()
@@ -1007,6 +1019,22 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
             let spec: paged_mutate::SwatchColorSpec = serde_json::from_value(json.clone())
                 .map_err(|e| format!("a colour is {{ space, value, model?, tint? }}: {e}"))?;
             validate(schema, &Value::SwatchColor(spec))
+        }
+        J::Object(o) if schema.wire == Wire::AppearanceLayer && !o.contains_key("type") => {
+            #[derive(serde::Deserialize)]
+            struct At {
+                index: u32,
+                layer: paged_mutate::appearance_wire::PaintLayerSpec,
+            }
+            let at: At = serde_json::from_value(json.clone())
+                .map_err(|e| format!("an appearance layer is {{ index, layer }}: {e}"))?;
+            validate(
+                schema,
+                &Value::AppearanceLayer {
+                    index: at.index,
+                    layer: at.layer,
+                },
+            )
         }
         J::Object(_) => Err("an object must be a { type, value } wire value".to_string()),
     }
@@ -1065,6 +1093,8 @@ pub fn wire_of(value: &Value) -> Option<Wire> {
         Value::ParagraphRule(_) => Wire::ParagraphRule,
         Value::GradientFeather(_) => Wire::GradientFeather,
         Value::EffectStack { .. } => Wire::EffectStack,
+        Value::Appearance { .. } => Wire::Appearance,
+        Value::AppearanceLayer { .. } => Wire::AppearanceLayer,
         Value::GradientStops(_) => Wire::GradientStops,
         Value::SwatchColor(_) => Wire::SwatchColor,
         Value::FramePath { .. } => Wire::FramePath,

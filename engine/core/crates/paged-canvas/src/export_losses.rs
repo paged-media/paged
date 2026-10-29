@@ -929,6 +929,18 @@ pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
     out
 }
 
+/// Engine ADR 1043 — an item's appearance has no IDML form: the writer
+/// bakes it to a group of single-paint items and keeps the source in the
+/// carrier's `paged:appearance` label. Declared from the model: the twin
+/// reads the label back, so it cannot see the loss.
+pub(crate) fn appearance_losses(scene: &Document) -> Vec<String> {
+    scene
+        .spreads
+        .iter()
+        .flat_map(|p| paged_model::appearance::interchange::losses(&p.spread))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

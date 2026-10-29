@@ -3,6 +3,7 @@
 //! Each file in this directory is a module; nextest still runs every test in
 //! its own process. A new test file goes here and gets a `mod` line below.
 
+mod appearance_parity;
 mod svg_reference;
 mod symbol_parity;
 mod vello_effects;

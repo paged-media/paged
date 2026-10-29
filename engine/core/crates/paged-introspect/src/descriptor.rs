@@ -132,6 +132,8 @@ impl From<Value> for AuthoredValue {
             | Value::Lengths(_)
             | Value::GradientStops(_)
             | Value::EffectStack { .. }
+            | Value::Appearance { .. }
+            | Value::AppearanceLayer { .. }
             | Value::SwatchColor(_) => AuthoredValue::None,
         }
     }

@@ -44,6 +44,7 @@ use crate::module::{Geometry, ResolvedFrame};
 use crate::AssetResolver;
 
 mod anchored;
+mod appearance;
 mod auto_size;
 mod baseline_grid;
 mod blend_shadow;

@@ -176,6 +176,11 @@ pub(super) fn emit_polygon_into(
     color_ctx: ColorCtx<'_>,
     content: super::shapes::ContentPainter<'_>,
 ) {
+    if !poly.appearance.is_empty() {
+        return super::appearance::emit_polygon(
+            page, poly, document, palette, fallback, color_ctx, content,
+        );
+    }
     let Some(mode) = crate::module::effect_stack::stack_mode(&poly.effect_stack) else {
         return emit_polygon_body(page, poly, document, palette, fallback, color_ctx, content);
     };
