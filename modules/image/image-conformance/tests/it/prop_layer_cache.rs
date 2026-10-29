@@ -367,6 +367,37 @@ proptest! {
     }
 }
 
+/// The case the property found on the lavapipe lane (2026-10-29): a 16-bit
+/// stack with an adjustment layer and a transparent pixel layer above it,
+/// the pixel layer then clipped onto the adjustment. Kept as a fixed case
+/// so it runs every time, not only when the generator draws it.
+#[test]
+fn a_clipped_layer_over_an_adjustment_in_16_bit_folds_as_the_reference__feat__image_editor_layers()
+{
+    let Some(ctx) = device() else { return };
+    let (w, h) = (20, 13);
+    let gens = [
+        LayerGen::Adjust {
+            exposure: 0.0,
+            saturation: 0.0,
+        },
+        LayerGen::Pixel {
+            seed: 0,
+            alpha: 0,
+            smart: false,
+        },
+    ];
+    let mut s = build(w, h, true, &gens);
+    check(ctx, &s, "built").expect("built");
+    for (n, e) in [Edit::Paint(2, 0, 0), Edit::Clip(2, true)]
+        .iter()
+        .enumerate()
+    {
+        apply(&mut s, e, w, h);
+        check(ctx, &s, &format!("edit {n} {e:?}")).expect("agrees");
+    }
+}
+
 /// The one rewrite in the resident fold that is not a relocation: the
 /// final unpremultiply is no longer skipped over an opaque canvas. That
 /// is exact only if dividing an opaque texel by its alpha of one is the

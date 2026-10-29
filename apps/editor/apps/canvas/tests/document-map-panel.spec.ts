@@ -31,7 +31,7 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, expect, type Page } from "@playwright/test";
 
-import { openCanvas } from "./fidelity/canvas-driver";
+import { openCanvas, loadViaFileInput } from "./fidelity/canvas-driver";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -44,16 +44,7 @@ const LINKS_BROKEN_FIXTURE = `${REPO_ROOT}/corpus/idml/generated/links-broken.id
 const OVERSET_FIXTURE = `${REPO_ROOT}/corpus/idml/generated/text-overset.idml`;
 
 async function loadFixtureReact(page: Page, fixture: string = FIXTURE) {
-  await page.setInputFiles('input[type="file"]', fixture);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
-            .ready,
-      ),
-    )
-    .toBe(true);
+  await loadViaFileInput(page, fixture);
   // Design mode mounts the Document Map in the left dock.
   await page.evaluate(() => {
     (

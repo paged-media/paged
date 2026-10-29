@@ -103,6 +103,35 @@ export interface OpenCanvasOptions {
   answerReplacePrompts?: boolean;
 }
 
+/** Open `file` through the React file input (`useDocumentMeta` and the
+ *  panels see it as a user's open) and wait until THAT document is the
+ *  open one. `__canvas.ready` alone is already true for the document the
+ *  canvas booted with, so waiting for it returned before the load landed:
+ *  on a loaded runner a test then edited the old document, and the fixture
+ *  replaced it under the test (the Info panel's Dirty read "no"). */
+export async function loadViaFileInput(
+  page: Page,
+  file: string,
+): Promise<void> {
+  const docId = () =>
+    page.evaluate(() => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: { ready: boolean; handle?: { docId?: unknown } | null };
+        }
+      ).__canvas;
+      return c.ready ? String(c.handle?.docId ?? "") : "";
+    });
+  const before = await docId();
+  await page.setInputFiles('input[type="file"]', file);
+  await expect
+    .poll(async () => {
+      const now = await docId();
+      return now !== "" && now !== before;
+    })
+    .toBe(true);
+}
+
 /** Pages whose dialog listener `openCanvas` registered, and the options
  *  it answers with (the latest call's). */
 const dialogAnswered = new WeakSet<Page>();
