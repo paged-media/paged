@@ -67,6 +67,7 @@ pub mod layer_pixels;
 pub mod model;
 pub mod presets;
 pub mod reader;
+pub mod smart_object;
 pub mod vector_mask;
 pub mod vm_array;
 pub mod writer;
