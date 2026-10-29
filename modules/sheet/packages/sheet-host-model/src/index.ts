@@ -207,7 +207,7 @@ export {
   chartGeometryToMutations,
   chartGradientId,
   gradientMintOps,
-  nativeFxOps,
+  chartFxOps,
   estimateLabelMetrics,
   labelBox,
   labelJustification,

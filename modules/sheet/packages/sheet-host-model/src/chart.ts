@@ -76,6 +76,14 @@ import type {
   Value,
 } from "@paged-media/plugin-api";
 
+import {
+  nativeFxOps,
+  nativeGradientId,
+  nativeGradientMintOps,
+  type NativeFx,
+  type NativeGradient,
+} from "@paged-media/plugin-sdk";
+
 import { BINDING_KEY, withView, type Binding } from "./binding";
 import {
   distinctChartHexes,
@@ -97,66 +105,19 @@ export type TextAnchor = "start" | "middle" | "end";
 // ── Native effects (sheet ADR 527): sheet-chart/src/native.rs's serde ──────
 //
 // The role's DrawingML gradient, translucency and effects as the shared
-// mapper (`dml-native`) lowered them, colours as `#RRGGBB`.
+// mapper (`dml-native`) lowered them, colours as `#RRGGBB`: the lowering
+// kit's `NativeFx` (plugin-sdk, extensions ADR 347). A chart primitive's
+// fill and stroke ride the primitive itself, so its `fx` carries neither;
+// a gradient's start is in chart-content pt.
 
-/** A gradient fill. `stops` are `[location 0–100, #RRGGBB]`. */
-export interface NativeGradient {
-  kind: "linear" | "radial";
-  stops: [number, string][];
-  /** The engine's angle (counter-clockwise degrees); linear only. */
-  angle?: number;
-  /** The axis length (linear) or the radius (radial), pt. */
-  length?: number;
-  /** The axis start (linear) or the centre (radial), chart-content pt. */
-  start?: [number, number];
-}
-
-/** A drop shadow. */
-export interface NativeShadow {
-  xOffset: number;
-  yOffset: number;
-  size: number;
-  /** 0–100. */
-  opacity: number;
-  color: string;
-}
-
-/** An inner shadow, as the engine's editors address it. */
-export interface NativeInnerShadow {
-  /** Counter-clockwise degrees. */
-  angle: number;
-  distance: number;
-  size: number;
-  opacity: number;
-  color: string;
-}
-
-/** An outer glow. */
-export interface NativeGlow {
-  size: number;
-  opacity: number;
-  color: string;
-}
-
-/** A gradient feather: `stops` are `[location 0–100, opacity 0–100]`. */
-export interface NativeFeather {
-  gradientType: string;
-  angle?: number;
-  stops: [number, number][];
-}
-
-/** What a primitive carries beyond its solid fill and stroke. */
-export interface NativeFx {
-  gradient?: NativeGradient;
-  /** The item's opacity, 0–100. */
-  opacity?: number;
-  dropShadow?: NativeShadow;
-  innerShadow?: NativeInnerShadow;
-  outerGlow?: NativeGlow;
-  /** A soft edge's width, pt. */
-  feather?: number;
-  gradientFeather?: NativeFeather;
-}
+export type {
+  NativeFeather,
+  NativeFx,
+  NativeGlow,
+  NativeGradient,
+  NativeInnerShadow,
+  NativeShadow,
+} from "@paged-media/plugin-sdk";
 
 /** An axis-aligned rectangle (bars, plot frame, legend swatches). */
 export interface RectPrim {
@@ -701,19 +662,19 @@ function styleOps(
 
 // ── Native effects (sheet ADR 527) ──────────────────────────────────────────
 
-/** A location as an id segment: to the thousandth, `.` as `p`. */
-function idNumber(v: number): string {
-  return String(Math.round(v * 1000) / 1000).replace(".", "p");
-}
+/** The prefix of the chart's content-addressed gradient swatches. */
+const CHART_GRADIENT_PREFIX = "Gradient/uPagedSheetChart";
 
 /** The deterministic gradient-swatch id of a chart gradient, keyed by its
  *  kind and stops (content-addressed like the chart's colour swatches, so
  *  the same ramp across bars and re-lowers is ONE swatch). */
 export function chartGradientId(g: NativeGradient): string {
-  const stops = g.stops
-    .map(([at, hex]) => `${idNumber(at)}-${normalizeHex(hex) ?? "000000"}`)
-    .join("-");
-  return `Gradient/uPagedSheetChart${g.kind === "radial" ? "R" : "L"}-${stops}`;
+  return nativeGradientId(CHART_GRADIENT_PREFIX, g);
+}
+
+/** The chart swatch a `#RRGGBB` colour is painted with. */
+function chartColor(hex: string): string {
+  return swatchIdForHex(normalizeHex(hex) ?? "000000");
 }
 
 /** The createGradient ops for every distinct chart gradient the document
@@ -724,39 +685,27 @@ export function gradientMintOps(
   geom: ChartGeometry,
   knownSwatchIds?: KnownSwatchIds,
 ): Mutation[] {
-  if (knownSwatchIds === null) return [];
-  const seen = new Set<string>();
-  const ops: Mutation[] = [];
+  const gradients: NativeGradient[] = [];
   for (const prim of geom.prims) {
     if (prim.kind === "text" || prim.kind === "line") continue;
-    const g = prim.fx?.gradient;
-    if (!g || prim.fill == null) continue;
-    const id = chartGradientId(g);
-    if (seen.has(id) || knownSwatchIds?.has(id)) continue;
-    seen.add(id);
-    ops.push({
-      op: "createGradient",
-      args: {
-        spec: {
-          selfId: id,
-          name: `paged.sheet chart gradient ${seen.size}`,
-          kind: g.kind === "radial" ? "Radial" : "Linear",
-          stops: g.stops.map(([at, hex]) => ({
-            stopColor: swatchIdForHex(normalizeHex(hex) ?? "000000"),
-            locationPct: at,
-          })),
-        },
-      },
-    });
+    if (prim.fx?.gradient && prim.fill != null)
+      gradients.push(prim.fx.gradient);
   }
-  return ops;
+  return nativeGradientMintOps(gradients, {
+    prefix: CHART_GRADIENT_PREFIX,
+    color: chartColor,
+    name: (n) => `paged.sheet chart gradient ${n}`,
+    known: knownSwatchIds,
+  });
 }
 
-/** The ops that give a just-created path (`$created`, or `target`) the
- *  gradient's placement, the item's opacity and its effects. `[ox, oy]` is the chart's
- *  page-local origin; a gradient's start is written only with the page's
- *  origin in its spread (the engine reads it in spread coordinates). PURE. */
-export function nativeFxOps(
+/** The lowering kit's look ops for a chart item (`$created`, or `target`):
+ *  the gradient's placement (its fill is the role's, in `styleOps`), the
+ *  opacity and the effects, colours as chart swatches. `[ox, oy]` is the
+ *  chart's page-local origin; a gradient's start is written only with the
+ *  page's origin in its spread (the engine reads it in spread
+ *  coordinates). */
+export function chartFxOps(
   fx: NativeFx | undefined,
   ox: number,
   oy: number,
@@ -764,78 +713,12 @@ export function nativeFxOps(
   filled: boolean,
   target: ElementId = CREATED_POLYGON,
 ): Mutation[] {
-  if (!fx) return [];
-  const ops: Mutation[] = [];
-  const set = (path: PropertyPath, value: Value) =>
-    ops.push({
-      op: "setElementProperty",
-      args: { elementId: target, path, value },
-    });
-  const len = (v: number): Value => ({ type: "length", value: v });
-  const on: Value = { type: "bool", value: true };
-  const color = (hex: string): Value =>
-    colorRefValue(swatchIdForHex(normalizeHex(hex) ?? "000000"));
-  const g = filled ? fx.gradient : undefined;
-  if (g) {
-    if (g.angle != null) set("frameGradientFillAngle", len(g.angle));
-    if (g.length != null) set("frameGradientFillLength", len(g.length));
-    if (g.start && pageOrigin) {
-      set("frameGradientFillStart", {
-        type: "lengths",
-        value: [
-          pageOrigin[0] + ox + g.start[0],
-          pageOrigin[1] + oy + g.start[1],
-        ],
-      });
-    }
-  }
-  if (fx.opacity != null) set("frameOpacity", len(fx.opacity));
-  const d = fx.dropShadow;
-  if (d) {
-    set("frameDropShadow", on);
-    set("frameDropShadowXOffset", len(d.xOffset));
-    set("frameDropShadowYOffset", len(d.yOffset));
-    set("frameDropShadowSize", len(d.size));
-    set("frameDropShadowOpacity", len(d.opacity));
-    set("frameDropShadowColor", color(d.color));
-  }
-  const i = fx.innerShadow;
-  if (i) {
-    set("frameInnerShadowEnabled", on);
-    set("frameInnerShadowBlendMode", { type: "text", value: "Normal" });
-    set("frameInnerShadowAngle", len(i.angle));
-    set("frameInnerShadowDistance", len(i.distance));
-    set("frameInnerShadowSize", len(i.size));
-    set("frameInnerShadowOpacity", len(i.opacity));
-    set("frameInnerShadowColor", color(i.color));
-  }
-  const o = fx.outerGlow;
-  if (o) {
-    set("frameOuterGlowEnabled", on);
-    set("frameOuterGlowBlendMode", { type: "text", value: "Normal" });
-    set("frameOuterGlowSize", len(o.size));
-    set("frameOuterGlowOpacity", len(o.opacity));
-    set("frameOuterGlowColor", color(o.color));
-  }
-  if (fx.feather != null) {
-    set("frameFeatherEnabled", on);
-    set("frameFeatherWidth", len(fx.feather));
-  }
-  const gf = filled ? fx.gradientFeather : undefined;
-  if (gf) {
-    set("frameGradientFeather", {
-      type: "gradientFeather",
-      value: {
-        gradientType: gf.gradientType,
-        ...(gf.angle != null ? { angleDeg: gf.angle } : {}),
-        stops: gf.stops.map(([locationPct, alphaPct]) => ({
-          locationPct,
-          alphaPct,
-        })),
-      },
-    });
-  }
-  return ops;
+  return nativeFxOps(fx, {
+    target,
+    color: chartColor,
+    origin: pageOrigin ? [pageOrigin[0] + ox, pageOrigin[1] + oy] : undefined,
+    filled,
+  });
 }
 
 // ── The translator ──────────────────────────────────────────────────────────
@@ -931,7 +814,7 @@ export function chartGeometryToMutations(
             prim.strokeSwatchRef,
             prim.fx,
           ),
-          ...nativeFxOps(prim.fx, left, top, origin, prim.fill != null),
+          ...chartFxOps(prim.fx, left, top, origin, prim.fill != null),
         ]);
         break;
       case "line":
@@ -946,7 +829,7 @@ export function chartGeometryToMutations(
               undefined,
               prim.strokeSwatchRef,
             ),
-            ...nativeFxOps(prim.fx, left, top, origin, false),
+            ...chartFxOps(prim.fx, left, top, origin, false),
           ]);
         }
         break;
@@ -962,7 +845,7 @@ export function chartGeometryToMutations(
               prim.strokeSwatchRef,
               prim.fx,
             ),
-            ...nativeFxOps(prim.fx, left, top, origin, prim.fill != null),
+            ...chartFxOps(prim.fx, left, top, origin, prim.fill != null),
           ]);
         }
         break;
@@ -981,7 +864,7 @@ export function chartGeometryToMutations(
               prim.strokeSwatchRef,
               prim.fx,
             ),
-            ...nativeFxOps(prim.fx, left, top, origin, prim.fill != null),
+            ...chartFxOps(prim.fx, left, top, origin, prim.fill != null),
           ]);
         }
         break;
