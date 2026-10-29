@@ -419,7 +419,7 @@ describe("the review commands (review.tsx)", () => {
         args: {
           address: "doc",
           path: "documentMarkupView",
-          value: "original",
+          value: { type: "text", value: "original" },
         },
       },
     ]);
@@ -437,7 +437,9 @@ describe("the review commands (review.tsx)", () => {
     await c.commands.run("markupAll");
     await c.commands.run("markupNone");
     expect(
-      c.mutations.map((m) => (m.args as { value: unknown }).value),
+      c.mutations.map(
+        (m) => (m.args as { value: { value: unknown } }).value.value,
+      ),
     ).toEqual(["simple", "all", "none"]);
     // The change starting before the caret: the insertion it stands in.
     expect((await c.commands.run("previousChange")).id).toBe("1");

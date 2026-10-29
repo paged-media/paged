@@ -286,7 +286,10 @@ export function reviewCommands(
   ): Promise<ReviewResult> {
     const view = MARKUP_COMMAND[name];
     if (view) {
-      const out = await mutate(host, setDoc("documentMarkupView", view));
+      const out = await mutate(
+        host,
+        setDoc("documentMarkupView", { type: "text", value: view }),
+      );
       await store.refresh();
       return out;
     }

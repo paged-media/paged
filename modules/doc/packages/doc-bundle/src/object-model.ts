@@ -1367,7 +1367,7 @@ function reviewTypedCommands(
     (id) =>
       ({
         ...decl(id),
-        handler: async (args: ReviewArgs) => {
+        handler: async (_ctx: unknown, args: ReviewArgs) => {
           const out = await deps.reviewCommand?.(id, args ?? {});
           if (out === undefined || out === false)
             throw new Error(

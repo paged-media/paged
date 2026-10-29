@@ -189,13 +189,15 @@ describe.skipIf(!docxPresent)(
       expect((await invoke("nextChange")).applied).toBe(true);
       covers("command:media.paged.doc.command.review.previousChange");
       expect((await invoke("previousChange")).applied).toBe(true);
-      const [first, second] = await changes();
+      const listed = await changes();
+      const insertion = listed.find((c) => c.kind === "insert")!;
+      const deletion = listed.find((c) => c.kind === "delete")!;
       covers("command:media.paged.doc.command.review.acceptChange");
-      expect((await invoke("acceptChange", { id: first!.id })).applied).toBe(
+      expect((await invoke("acceptChange", { id: insertion.id })).applied).toBe(
         true,
       );
       covers("command:media.paged.doc.command.review.rejectChange");
-      expect((await invoke("rejectChange", { id: second!.id })).applied).toBe(
+      expect((await invoke("rejectChange", { id: deletion.id })).applied).toBe(
         true,
       );
       expect(await changes()).toEqual([]);
@@ -203,9 +205,9 @@ describe.skipIf(!docxPresent)(
       const texts = story!.paragraphs.map((p) =>
         p.runs.map((r) => r.text).join(""),
       );
-      // The deletion rejected, the insertion accepted (whichever came first
-      // in the list, both are resolved and the text reads as such).
+      // The deletion rejected, the insertion accepted.
       expect(texts.join("\n")).toContain("Dear «Name»,");
+      expect(texts.join("\n")).toContain("Very ");
     });
 
     it("accepts and rejects all, and by author", async () => {

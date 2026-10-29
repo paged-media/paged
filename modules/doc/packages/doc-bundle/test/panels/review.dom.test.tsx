@@ -142,7 +142,7 @@ describe("the Review panel", () => {
     expect(mutations[2]!.args).toEqual({
       address: "doc",
       path: "documentMarkupView",
-      value: "none",
+      value: { type: "text", value: "none" },
     });
   });
 
