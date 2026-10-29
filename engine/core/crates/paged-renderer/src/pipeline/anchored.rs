@@ -1022,6 +1022,7 @@ fn emit_anchored_rect_via_pipeline(
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
         gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
+        fill_mesh: None,
     };
     // `emit_rectangle_into` increments `page.stats.frames` internally.
     // An anchored frame's picture paints in its own pass (see
@@ -1127,6 +1128,7 @@ pub(super) fn emit_anchored_rect_image(
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
         gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
+        fill_mesh: None,
     };
     emit_rectangle_image(
         page,
@@ -1243,6 +1245,7 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
         gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
+        fill_mesh: None,
         effects: None,
         gradient_fill_angle: None,
         gradient_fill_length: None,

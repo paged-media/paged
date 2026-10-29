@@ -2240,6 +2240,7 @@ dependencies = [
  "paged-scene",
  "quick-xml 0.41.0",
  "serde",
+ "serde_json",
  "thiserror",
  "tracing",
  "zip",
@@ -3415,6 +3416,7 @@ version = "0.0.0"
 dependencies = [
  "bytes",
  "paged-color",
+ "paged-model",
  "paged-scene",
  "paged-text",
  "serde",
@@ -3606,6 +3608,7 @@ dependencies = [
  "paged-scene",
  "paged-test-resources",
  "pdf-writer",
+ "serde_json",
  "subsetter",
  "thiserror",
  "tracing",

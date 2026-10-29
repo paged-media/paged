@@ -119,6 +119,9 @@ pub(crate) struct ResolvedFrame<'a> {
     /// Engine ADR 1007 — how a gradient stroke maps onto the stroke
     /// (`module::stroke_gradient`).
     pub gradient_stroke_mode: paged_model::StrokeGradientMode,
+    /// Engine ADR 1040 — the gradient mesh or freeform gradient the
+    /// frame fills with instead of its swatch.
+    pub fill_mesh: Option<&'a paged_model::MeshFill>,
     pub geometry: Geometry<'a>,
 }
 
@@ -227,33 +230,9 @@ fn text_frame_is_rect_path(
     subpath_starts: &[usize],
     subpath_open: &[bool],
 ) -> bool {
-    if anchors.is_empty() {
-        return true;
-    }
-    // A compound or explicitly-open path is never a plain rect.
-    if subpath_starts.len() > 1 || subpath_open.iter().any(|&o| o) {
-        return false;
-    }
-    if anchors.len() != 4 {
-        return false;
-    }
-    let eq = |a: f32, b: f32| (a - b).abs() < 1e-3;
-    // Curved sides: any handle that doesn't sit on its own anchor means
-    // the outline bows away from the bounding box.
-    for a in anchors {
-        if !eq(a.left.0, a.anchor.0)
-            || !eq(a.left.1, a.anchor.1)
-            || !eq(a.right.0, a.anchor.0)
-            || !eq(a.right.1, a.anchor.1)
-        {
-            return false;
-        }
-    }
-    let mut xs: Vec<f32> = anchors.iter().map(|a| a.anchor.0).collect();
-    let mut ys: Vec<f32> = anchors.iter().map(|a| a.anchor.1).collect();
-    xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    ys.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    eq(xs[0], xs[1]) && eq(xs[2], xs[3]) && eq(ys[0], ys[1]) && eq(ys[2], ys[3])
+    // One definition, shared with the mutation layer (a box move carries
+    // a mesh fill only when the frame is drawn from its box).
+    paged_model::mesh::path_is_plain_box(anchors, subpath_starts, subpath_open)
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +366,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_stroke: frame.overprint_stroke,
             fill_rule: list_fill_rule(frame.fill_rule),
             gradient_stroke_mode: frame.gradient_stroke_mode,
+            fill_mesh: frame.fill_mesh.as_deref(),
             geometry,
         }
     }
@@ -443,6 +423,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_stroke: rect.overprint_stroke,
             fill_rule: list_fill_rule(rect.fill_rule),
             gradient_stroke_mode: rect.gradient_stroke_mode,
+            fill_mesh: rect.fill_mesh.as_deref(),
             geometry,
         }
     }
@@ -490,6 +471,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_stroke: oval.overprint_stroke,
             fill_rule: list_fill_rule(oval.fill_rule),
             gradient_stroke_mode: oval.gradient_stroke_mode,
+            fill_mesh: oval.fill_mesh.as_deref(),
             geometry: Geometry::Oval {
                 rect: rect_from_bounds(oval.bounds),
             },
@@ -552,6 +534,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_stroke: poly.overprint_stroke,
             fill_rule: list_fill_rule(poly.fill_rule),
             gradient_stroke_mode: poly.gradient_stroke_mode,
+            fill_mesh: poly.fill_mesh.as_deref(),
             geometry,
         }
     }
@@ -608,6 +591,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_stroke: line.overprint_stroke,
             fill_rule: list_fill_rule(line.fill_rule),
             gradient_stroke_mode: line.gradient_stroke_mode,
+            fill_mesh: None,
             geometry: Geometry::Line {
                 p0: (bounds.left, bounds.top),
                 p1: (bounds.right, bounds.bottom),
@@ -685,6 +669,7 @@ mod tests {
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
             gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
+            fill_mesh: None,
         }
     }
 
@@ -753,6 +738,7 @@ mod tests {
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
             gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
+            fill_mesh: None,
             effects: None,
             gradient_fill_angle: None,
             gradient_fill_length: None,

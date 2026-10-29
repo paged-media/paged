@@ -11,6 +11,7 @@ mod feathered_picture;
 mod feathered_stroke_and_text;
 mod fill_rule;
 mod links;
+mod mesh_fill;
 mod opacity_mask;
 mod paint_v2;
 mod pdf_fragments;

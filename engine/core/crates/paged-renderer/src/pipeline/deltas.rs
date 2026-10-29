@@ -200,6 +200,7 @@ pub(super) fn rebase_path_ids(cmd: &mut paged_compose::DisplayCommand, offset: i
         // commands are rebased by their own arms above and the
         // markers themselves carry no ids.
         Image { .. }
+        | MeshShade { .. }
         | PopClip(_)
         | BeginBlendGroup { .. }
         | EndBlendGroup(_)

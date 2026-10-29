@@ -226,7 +226,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 246: ADR 1010 added a group's clip flag.
         // 248: ADR 1007 added a frame's stroke gradient mode and its
         // gradient's start point.
-        248,
+        // 249: ADR 1040 added a frame's gradient mesh or freeform gradient.
+        249,
         "the advertised roster changed; move the count with the decision"
     );
 }

@@ -6547,6 +6547,8 @@ impl CanvasModel {
         // colours and gradient feathers; the rest is reported lost.
         let mut scene = self.export_scene();
         crate::paint_v2_export::lower_for_idml(&mut scene);
+        // Engine ADR 1040 — a mesh fill rides in its frame's label.
+        crate::mesh_fill_export::lower_for_idml(&mut scene);
         let out = idml_export::write_idml_with(
             &scene,
             &self.source_idml,
@@ -6702,6 +6704,10 @@ impl CanvasModel {
                         };
                         out.extend(crate::export_losses::diff(&self.scene, &twin, &ctx));
                         out.extend(crate::paint_v2_export::paint_v2_losses(
+                            &self.scene,
+                            Some(&twin),
+                        ));
+                        out.extend(crate::mesh_fill_export::mesh_fill_losses(
                             &self.scene,
                             Some(&twin),
                         ));
@@ -7310,6 +7316,15 @@ impl CanvasModel {
                                     f.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
                                 )),
                             },
+                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillMesh,
+                                value: Some(Value::FillMesh(
+                                    f.fill_mesh
+                                        .as_deref()
+                                        .map(paged_mutate::MeshFillSpec::from_model),
+                                )),
+                            },
                             // C-24 — a text frame's outline is stroked
                             // inside / centred / outside like any other
                             // closed shape, and the stroke's share insets
@@ -7680,6 +7695,15 @@ impl CanvasModel {
                                 path: PropertyPath::FrameGradientFillStart,
                                 value: Some(Value::Lengths(
                                     f.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
+                                )),
+                            },
+                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillMesh,
+                                value: Some(Value::FillMesh(
+                                    f.fill_mesh
+                                        .as_deref()
+                                        .map(paged_mutate::MeshFillSpec::from_model),
                                 )),
                             },
                             PropertyEntry {
@@ -8144,6 +8168,15 @@ impl CanvasModel {
                                     p.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
                                 )),
                             },
+                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillMesh,
+                                value: Some(Value::FillMesh(
+                                    p.fill_mesh
+                                        .as_deref()
+                                        .map(paged_mutate::MeshFillSpec::from_model),
+                                )),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
                                 value: Some(Value::Length(p.opacity)),
@@ -8519,6 +8552,15 @@ impl CanvasModel {
                                 path: PropertyPath::FrameGradientFillStart,
                                 value: Some(Value::Lengths(
                                     o.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
+                                )),
+                            },
+                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillMesh,
+                                value: Some(Value::FillMesh(
+                                    o.fill_mesh
+                                        .as_deref()
+                                        .map(paged_mutate::MeshFillSpec::from_model),
                                 )),
                             },
                             PropertyEntry {
@@ -14520,6 +14562,7 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameDirectionalFeatherNoise
             | P::FrameDirectionalFeatherChoke
             | P::FrameGradientFeather
+            | P::FrameFillMesh
     )
 }
 

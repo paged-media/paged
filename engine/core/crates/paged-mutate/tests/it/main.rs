@@ -18,6 +18,7 @@ mod item_snippet;
 mod kernel_direction;
 mod kernel_ops;
 mod line_effects;
+mod mesh_fill;
 mod object_style_corners;
 mod oval_bounds;
 mod pathfinder_oracle;

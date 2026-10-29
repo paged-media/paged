@@ -44,6 +44,7 @@ pub(crate) mod frame;
 pub(crate) mod geometry;
 pub(crate) mod glyph_shadow;
 pub(crate) mod group;
+pub(crate) mod mesh_fill;
 pub(crate) mod object_style;
 pub(crate) mod stroke_gradient;
 pub(crate) mod stroke_paint;

@@ -36,6 +36,11 @@
 //!   stops are translucent paints its colour shading under a
 //!   luminosity soft mask of the same geometry in DeviceGray, whose
 //!   value is the stops' alpha ([`ShadeChannels::Alpha`]).
+//! - Mesh shadings (engine ADR 1040) → a type-6 (Coons) or type-7
+//!   (tensor-product) patch shading, its colours sRGB-encoded; a freeform
+//!   gradient as the type-6 grid `FreeformShading::to_patches` samples
+//!   from the evaluator the rasterisers draw; translucent colours under
+//!   a luminosity soft mask of the same patches in DeviceGray.
 
 use paged_compose::{Color, GradientStop, LinearGradient, Paint, RadialGradient, SpotInk};
 use pdf_writer::{Content, Finish, Name, Ref};
@@ -758,6 +763,135 @@ fn write_shading(
     sh.extend([true, true]);
     sh.finish();
     shading_ref
+}
+
+/// How many patches a freeform gradient's type-6 grid has along each
+/// side (engine ADR 1040).
+pub const FREEFORM_PDF_GRID: usize = 32;
+
+/// Engine ADR 1040 — a mesh shading as a PDF patch shading in the
+/// shading's own (local) space: type 7 when any patch has its own
+/// interior points, type 6 otherwise. `None` when it paints nothing.
+pub fn write_mesh_shading(
+    state: &mut DocState,
+    mesh: &paged_compose::MeshShading,
+    channels: ShadeChannels,
+) -> Option<Ref> {
+    use paged_compose::MeshKind;
+    let owned;
+    let patches: &[paged_compose::ShadePatch] = match &mesh.kind {
+        MeshKind::Patches(p) => p,
+        MeshKind::Freeform(f) => {
+            owned = f.to_patches(FREEFORM_PDF_GRID);
+            &owned
+        }
+    };
+    if patches.is_empty() {
+        return None;
+    }
+    let tensor = patches.iter().any(|p| p.tensor);
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for p in patches {
+        for &(x, y) in p.points.iter().flatten() {
+            if x.is_finite() && y.is_finite() {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x);
+                y1 = y1.max(y);
+            }
+        }
+    }
+    if x0 > x1 || y0 > y1 {
+        return None;
+    }
+    // A degenerate side still needs a non-empty decode range.
+    let (x1, y1) = (x1.max(x0 + 1e-3), y1.max(y0 + 1e-3));
+    let data = mesh_stream(patches, tensor, [x0, x1, y0, y1], channels);
+    let compressed = {
+        use std::io::Write as _;
+        let mut enc = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        let _ = enc.write_all(&data);
+        enc.finish().unwrap_or_default()
+    };
+    let r = state.refs.alloc();
+    let mut sh = state.pdf.stream_shading(r, &compressed);
+    sh.filter(pdf_writer::Filter::FlateDecode);
+    sh.shading_type(if tensor {
+        pdf_writer::writers::StreamShadingType::TensorProductPatch
+    } else {
+        pdf_writer::writers::StreamShadingType::CoonsPatch
+    });
+    match channels {
+        ShadeChannels::Color => sh.color_space().device_rgb(),
+        ShadeChannels::Alpha => sh.color_space().device_gray(),
+    };
+    sh.bits_per_coordinate(32);
+    sh.bits_per_component(16);
+    sh.bits_per_flag(8);
+    sh.anti_alias(true);
+    let mut decode = vec![x0, x1, y0, y1];
+    decode.extend_from_slice(channels.range());
+    sh.decode(decode);
+    sh.finish();
+    Some(r)
+}
+
+/// The packed patch data of [`write_mesh_shading`]: per patch a flag
+/// byte (0, a free patch), the control points as 32-bit fractions of
+/// `decode`'s box — `p00 p01 p02 p03 p13 p23 p33 p32 p31 p30 p20 p10`,
+/// then `p11 p12 p22 p21` for type 7 — and the colours of `p00 p03 p33
+/// p30` as 16-bit components.
+pub(crate) fn mesh_stream(
+    patches: &[paged_compose::ShadePatch],
+    tensor: bool,
+    decode: [f32; 4],
+    channels: ShadeChannels,
+) -> Vec<u8> {
+    const ORDER: [(usize, usize); 16] = [
+        (0, 0),
+        (0, 1),
+        (0, 2),
+        (0, 3),
+        (1, 3),
+        (2, 3),
+        (3, 3),
+        (3, 2),
+        (3, 1),
+        (3, 0),
+        (2, 0),
+        (1, 0),
+        (1, 1),
+        (1, 2),
+        (2, 2),
+        (2, 1),
+    ];
+    let [x0, x1, y0, y1] = decode;
+    let q32 = |v: f32, lo: f32, hi: f32| -> u32 {
+        let t = (f64::from(v) - f64::from(lo)) / (f64::from(hi) - f64::from(lo));
+        (t.clamp(0.0, 1.0) * f64::from(u32::MAX)).round() as u32
+    };
+    let q16 = |v: f32| -> u16 { (v.clamp(0.0, 1.0) * 65535.0).round() as u16 };
+    let points = if tensor { 16 } else { 12 };
+    let mut out = Vec::with_capacity(patches.len() * (1 + points * 8 + 4 * 6));
+    for p in patches {
+        out.push(0u8);
+        let net = if tensor && !p.tensor {
+            paged_compose::mesh::coons_points(p)
+        } else {
+            p.points
+        };
+        for &(i, j) in &ORDER[..points] {
+            let (x, y) = net[i][j];
+            out.extend_from_slice(&q32(x, x0, x1).to_be_bytes());
+            out.extend_from_slice(&q32(y, y0, y1).to_be_bytes());
+        }
+        for c in [p.colors[0], p.colors[1], p.colors[3], p.colors[2]] {
+            for v in channels.values(c) {
+                out.extend_from_slice(&q16(v).to_be_bytes());
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
