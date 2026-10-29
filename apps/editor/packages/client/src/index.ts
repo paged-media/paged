@@ -36,6 +36,7 @@ export {
   type HostObjectsRound,
   type JournalDrain,
   type SnapshotBackendInfo,
+  type SnapshotOptions,
   type UndoLog,
 } from "./client";
 

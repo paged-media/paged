@@ -78,7 +78,7 @@ import {
   readRepeatLibrary,
   symbolInstanceOf,
 } from "../../src";
-import { openHost } from "../headless/host";
+import { openHost, withoutEngineSymbols } from "../headless/host";
 import { F4_OVERLAP, type CorpusFixture } from "../fixtures/corpus";
 
 // ------------------------------------------------------------- geometry
@@ -281,6 +281,9 @@ export async function openWorkload(
   const h = await openHost();
   await h.load(fixture.bytes());
   h.loadBundle(drawBundle);
+  // These specs pin the re-emitted symbols lane (draw ADR 356); the engine
+  // lane has its own (symbols-engine.spec.ts).
+  withoutEngineSymbols(h);
   return {
     h,
     pageId: fixture.pageId,

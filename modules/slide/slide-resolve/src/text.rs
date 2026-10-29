@@ -33,6 +33,9 @@ use pptx_core::{
 use crate::color::{resolve as resolve_color, ColorCtx, Rgba};
 use crate::model::{Bullet, Para, TextRun};
 
+/// A colour and its theme key (slide ADR 713).
+pub type KeyedColor = (Rgba, Option<String>);
+
 /// What text resolves against.
 pub struct TextCtx<'a> {
     /// List styles, lowest priority first.
@@ -45,8 +48,8 @@ pub struct TextCtx<'a> {
     pub colors: &'a ColorCtx<'a>,
     pub major: &'a FontSet,
     pub minor: &'a FontSet,
-    /// The shape style's `a:fontRef` (font slot, colour).
-    pub font_ref: Option<(String, Option<Rgba>)>,
+    /// The shape style's `a:fontRef` (font slot, colour and its theme key).
+    pub font_ref: Option<(String, Option<KeyedColor>)>,
     /// Paragraph style name prefix (`Title`, `Body`, `Other`).
     pub style_prefix: Option<&'static str>,
     /// `normAutofit` scales (font, line spacing) PowerPoint applied.
@@ -128,21 +131,32 @@ pub fn font_name(face: Option<&str>, ctx: &TextCtx) -> String {
     resolved.unwrap_or_else(|| "Calibri".to_string())
 }
 
-fn solid(fill: &Option<pptx_core::Fill>, ctx: &TextCtx) -> Option<Rgba> {
+/// A text fill's colour and its theme key (a gradient's first stop).
+fn solid(fill: &Option<pptx_core::Fill>, ctx: &TextCtx) -> Option<KeyedColor> {
+    let of = |c: &pptx_core::Color| (resolve_color(c, ctx.colors), ctx.colors.key(c));
     match fill {
-        Some(pptx_core::Fill::Solid(c)) => Some(resolve_color(c, ctx.colors)),
-        Some(pptx_core::Fill::Gradient(g)) => {
-            g.stops.first().map(|s| resolve_color(&s.color, ctx.colors))
-        }
+        Some(pptx_core::Fill::Solid(c)) => Some(of(c)),
+        Some(pptx_core::Fill::Gradient(g)) => g.stops.first().map(|s| of(&s.color)),
         _ => None,
     }
 }
 
+/// The theme font a typeface token names (`major`, `minor`), when the
+/// theme gives that font a Latin typeface.
+fn theme_font(face: Option<&str>, ctx: &TextCtx) -> Option<String> {
+    let (which, set) = match face {
+        Some("+mj-lt") | Some("+mj-ea") | Some("+mj-cs") => ("major", ctx.major),
+        Some("+mn-lt") | Some("+mn-ea") | Some("+mn-cs") | Some("") | None => ("minor", ctx.minor),
+        Some(_) => return None,
+    };
+    set.latin.as_ref().map(|_| which.to_string())
+}
+
 fn run(props: &RunProps, text: String, line_break: bool, ctx: &TextCtx) -> TextRun {
     let scale = ctx.shrink.map(|s| s.0).unwrap_or(1.0);
-    let rgba = solid(&props.fill, ctx)
-        .or_else(|| ctx.font_ref.as_ref().and_then(|(_, c)| *c))
-        .unwrap_or(Rgba::BLACK);
+    let (rgba, theme) = solid(&props.fill, ctx)
+        .or_else(|| ctx.font_ref.as_ref().and_then(|(_, c)| c.clone()))
+        .unwrap_or((Rgba::BLACK, None));
     let face = props
         .latin
         .as_deref()
@@ -157,6 +171,7 @@ fn run(props: &RunProps, text: String, line_break: bool, ctx: &TextCtx) -> TextR
         line_break,
         size,
         font: font_name(face, ctx),
+        theme_font: theme_font(face, ctx),
         bold: props.bold.unwrap_or(false),
         italic: props.italic.unwrap_or(false),
         underline: props.underline.as_deref().is_some_and(|u| u != "none"),
@@ -166,6 +181,7 @@ fn run(props: &RunProps, text: String, line_break: bool, ctx: &TextCtx) -> TextR
         baseline: props.baseline.unwrap_or(0) as f64 / 1000.0,
         rgb: rgba.bytes(),
         alpha: rgba.a,
+        theme,
         link: props.hyperlink.clone(),
         field: None,
     }

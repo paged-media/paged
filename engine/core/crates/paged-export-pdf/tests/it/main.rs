@@ -16,6 +16,7 @@ mod opacity_mask;
 mod pdf_fragments;
 mod placed_eps;
 mod placed_svg;
+mod symbols;
 mod tagged_styles;
 mod tagged_tables;
 mod transparency_groups;

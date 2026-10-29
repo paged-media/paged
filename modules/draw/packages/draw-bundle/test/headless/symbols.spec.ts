@@ -122,7 +122,7 @@ import {
 } from "../../src";
 import { symbolBatchFor, symbolHandle } from "../../src/commands/symbols";
 import { F6_RING_PAIR } from "../fixtures/corpus";
-import { openHost } from "./host";
+import { openHost, withoutEngineSymbols } from "./host";
 import { runThrough, type LaneName } from "./one-batch";
 
 /** Insert a plain 60 pt square at `x, y`. Answers its id. */
@@ -791,6 +791,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
     beforeAll(async () => {
       h = await openHost();
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
     });
     afterAll(() => h?.dispose());
 
@@ -1304,6 +1305,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
     beforeAll(async () => {
       h = await openHost();
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
     });
     afterAll(() => h?.dispose());
     beforeEach(async () => {

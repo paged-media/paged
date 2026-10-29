@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 785,
+    "command": 795,
     "keybinding": 164,
-    "menu": 557,
-    "panel": 141,
+    "menu": 562,
+    "panel": 142,
     "tool": 114
   },
   "features": [
@@ -2866,6 +2866,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.applyTheme",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.addComment",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2886,6 +2891,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.browseThemes",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.copyFormat",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2902,6 +2912,11 @@
     },
     {
       "id": "command:media.paged.slide.command.deleteSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.design",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3096,6 +3111,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.remapThemeReference",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.removeAnimation",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -3127,6 +3147,11 @@
     },
     {
       "id": "command:media.paged.slide.smartArtPoints",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.themes",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3202,6 +3227,26 @@
     },
     {
       "id": "command:paged.align.objects",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectMultiple",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectPages",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectSingle",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.exportAll",
       "kind": "command",
       "owner": "editor"
     },
@@ -3467,6 +3512,11 @@
     },
     {
       "id": "command:paged.effects.globalLight",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.assetExport",
       "kind": "command",
       "owner": "editor"
     },
@@ -4931,6 +4981,16 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "menu:Design/Browse for Themes…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Design/Themes",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Draw/Appearance/Add fill",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -5484,6 +5544,11 @@
       "id": "menu:File/Export PowerPoint deck…",
       "kind": "menu",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:File/Export/Asset Export…",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:File/Export/SVG (page)…",
@@ -6866,6 +6931,16 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Collect for Export/As Multiple Assets",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Collect for Export/As Single Asset",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Convert Placed PDF to Vectors",
       "kind": "menu",
       "owner": "media.paged.pdf"
@@ -7737,6 +7812,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.deck",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.design",
       "kind": "panel",
       "owner": "media.paged.slide"
     },
@@ -8836,18 +8916,5 @@
       "owner": "editor"
     }
   ],
-  "deprecated": [
-    {
-      "id": "menu:Object/Make clipping mask",
-      "replacement": "menu:Object/Clipping mask/Make",
-      "deprecatedIn": "0.76.0",
-      "removeIn": "0.78.0"
-    },
-    {
-      "id": "menu:Object/Release clipping mask",
-      "replacement": "menu:Object/Clipping mask/Release",
-      "deprecatedIn": "0.76.0",
-      "removeIn": "0.78.0"
-    }
-  ]
+  "deprecated": []
 }

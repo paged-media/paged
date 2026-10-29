@@ -239,6 +239,17 @@ import { insertPathMutationFor } from "../handlers/insert-path";
 import { resolveTargetPage } from "../target-page";
 import { SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
 import { announceRecipeChange, linkIndex } from "../link-index";
+import {
+  engineBreakSymbolLinks,
+  engineDefineSymbol,
+  engineDeleteSymbol,
+  enginePlaceSymbol,
+  engineRedefineSymbol,
+  engineRenameSymbol,
+  engineResetSymbolTransforms,
+  engineSymbols,
+  readEngineSymbols,
+} from "./symbols-engine";
 
 import { registerCommand } from "../command-registry";
 import {
@@ -1411,6 +1422,14 @@ export async function applyDefineSymbol(
   payload?: { name?: unknown; registration?: unknown },
 ): Promise<SymbolDefinition | null> {
   const label = DEFINE_SYMBOL_COMMAND_ID;
+  if (engineSymbols(host)) {
+    const name =
+      typeof payload?.name === "string" && payload.name.trim().length > 0
+        ? payload.name.trim()
+        : null;
+    const id = await engineDefineSymbol(host, label, name);
+    return id ? engineDefinition(host, id) : null;
+  }
   const sources = await captureSymbolSources(host, label);
   if (sources.length === 0) {
     host.log.warn(`${label}: nothing capturable in the selection — no-op`);
@@ -1437,6 +1456,24 @@ export async function applyDefineSymbol(
   return symbol;
 }
 
+/** An engine symbol in this module's definition shape: the engine keeps
+ *  the artwork, so it has no pieces here, and its registration point is
+ *  the centre (engine ADR 1039). */
+async function engineDefinition(
+  host: BundleHost,
+  id: string,
+): Promise<SymbolDefinition | null> {
+  const found = (await readEngineSymbols(host)).find((s) => s.id === id);
+  if (!found) return null;
+  return {
+    id: found.id,
+    name: found.name,
+    registration: "center",
+    origin: [0, 0],
+    pieces: [],
+  };
+}
+
 /** PLACE — emit one instance of `symbolId`. The payload may carry a page
  *  point `{ x, y }` (default: the definition's capture origin) and a
  *  `pageId` (default: the active page). Returns the created leaves. */
@@ -1449,6 +1486,9 @@ export async function applyPlaceSymbolInstance(
   if (typeof symbolId !== "string" || symbolId.length === 0) {
     host.log.warn(`${label}: no symbolId in the payload — no-op`);
     return [];
+  }
+  if (engineSymbols(host)) {
+    return enginePlaceSymbol(host, label, symbolId, payload ?? {});
   }
   const symbol = findSymbol(await readSymbolLibrary(host), symbolId);
   if (!symbol) {
@@ -1552,6 +1592,7 @@ export async function applyResetSymbolTransform(
   host: BundleHost,
 ): Promise<number> {
   const label = RESET_SYMBOL_TRANSFORM_COMMAND_ID;
+  if (engineSymbols(host)) return engineResetSymbolTransforms(host, label);
   const instances = await selectedSymbolInstances(host);
   if (instances.length === 0) {
     host.log.debug(`${label}: no symbol instance in the selection — no-op`);
@@ -1586,6 +1627,11 @@ export async function applyRedefineSymbol(
   if (typeof symbolId !== "string" || symbolId.length === 0) {
     host.log.warn(`${label}: no symbolId in the payload — no-op`);
     return null;
+  }
+  if (engineSymbols(host)) {
+    return (await engineRedefineSymbol(host, label, symbolId))
+      ? engineDefinition(host, symbolId)
+      : null;
   }
   const library = await readSymbolLibrary(host);
   const existing = findSymbol(library, symbolId);
@@ -1644,6 +1690,7 @@ async function unlinkTargets(
  *  step for the whole selection. */
 export async function applyBreakSymbolLink(host: BundleHost): Promise<number> {
   const label = BREAK_SYMBOL_LINK_COMMAND_ID;
+  if (engineSymbols(host)) return engineBreakSymbolLinks(host, label);
   const instances = await selectedSymbolInstances(host);
   if (instances.length === 0) {
     host.log.debug(`${label}: no symbol instance in the selection — no-op`);
@@ -1677,6 +1724,9 @@ export async function applyRenameSymbol(
     host.log.warn(`${label}: no (non-empty) name in the payload — no-op`);
     return false;
   }
+  if (engineSymbols(host)) {
+    return engineRenameSymbol(host, label, symbolId, next);
+  }
   const library = await readSymbolLibrary(host);
   if (!findSymbol(library, symbolId)) {
     host.log.warn(`${label}: no symbol "${symbolId}" in the library — no-op`);
@@ -1697,6 +1747,7 @@ export async function applyDeleteSymbol(
     host.log.warn(`${label}: no symbolId in the payload — no-op`);
     return false;
   }
+  if (engineSymbols(host)) return engineDeleteSymbol(host, label, symbolId);
   const library = await readSymbolLibrary(host);
   if (!findSymbol(library, symbolId)) {
     host.log.warn(`${label}: no symbol "${symbolId}" in the library — no-op`);

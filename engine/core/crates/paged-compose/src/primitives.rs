@@ -378,6 +378,8 @@ mod tests {
             DisplayCommand::FillPathOverprint { transform, .. } => *transform,
             DisplayCommand::StrokePathOverprint { transform, .. } => *transform,
             DisplayCommand::BeginSoftMask { transform, .. } => *transform,
+            DisplayCommand::BeginSymbol { transform, .. } => *transform,
+            DisplayCommand::EndSymbol(transform) => *transform,
             DisplayCommand::BeginMaskedContent(transform) => *transform,
             DisplayCommand::EndSoftMask(transform) => *transform,
         };

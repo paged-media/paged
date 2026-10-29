@@ -1,6 +1,6 @@
 # paged.slide — status
 
-Read from the code on 2026-10-28.
+Read from the code on 2026-10-29.
 
 ## Built
 
@@ -45,6 +45,27 @@ Read from the code on 2026-10-28.
   accent) and a deck's own styles, resolved cell by cell in PowerPoint's layer order and written
   as native table styles (region cell styles, alternating fills) with local values only where
   the native cascade differs. A table without a known style is drawn as No Style, Table Grid.
+- **Live theme** (ADR 713). Theme colours are swatches by key: the slot through the colour map
+  and the colour's transforms (`Color/accent1 lumMod60000 lumOff40000`, "Accent 1, Lighter
+  40%"), so `clrMap`/`clrMapOvr` resolve as swatch aliasing and `phClr` takes its style
+  reference's key. Import writes a "Theme" swatch group (the twelve slots and the colour picker's
+  five tints of each of ten), the theme's major and minor fonts on the root paragraph styles
+  `Title` and `Body` (runs in another theme font take the `Headings font` / `Body font`
+  character style), and the theme in the deck label. The Design panel (Design ▸ Themes) shows the
+  gallery: the deck's own theme, two themes read from OOXML packages in this repository (Office,
+  Office 2007 – 2010), four of paged's own; each with four derived variants (as it is, Dark,
+  Shifted, Muted). Browse for Themes… reads a `.thmx`, `.potx` or `.pptx`. Applying a theme or
+  variant is one batch, one undo step: every theme swatch takes its key's colour (computed by the
+  slide wasm), the root styles and theme-font styles take the fonts, the label names it. Typed
+  commands list the themes, apply one and remap a reference. Export writes a theme swatch as
+  `a:schemeClr` with its transforms and the masters' theme parts when the document's theme is not
+  the deck's; slides that were not edited keep their bytes.
+- **Document styles** (ADR 719). Placeholders map to the paragraph styles `Title`, `Body`,
+  `Body L1`–`L9` and `Other L1`–`L9` (the levels based on `Body`, each with its master text
+  style's size, colour, alignment, indents and spacing); table styles to the native table and
+  cell styles, whose fills name theme swatches; shape styles (`p:style`) to object styles named
+  after their references, whose fill and line are theme swatches. The theme's references the
+  document lost are shown as "N references missing · Remap" in the Design panel.
 - **SmartArt.** Each diagram's drawing (the shapes PowerPoint laid out) becomes a group of
   native shapes; text boxes and style text colours as PowerPoint draws them.
 - **SmartArt text pane** (ADR 717, amendment 2026-10-28). Import reads each diagram's data
@@ -129,7 +150,7 @@ Read from the code on 2026-10-28.
   select, Shift/Cmd+click, drag to move the selection, hide, set the transition, double-click to
   open a slide.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
-  `.ppsx` and `.potx`: one wasm call (`importPptx`; `slide_js_bg.wasm` is 5.33 MiB, with paged.sheet's workbook engine for live charts) returns the package and a report; the host opens the package, and the source deck and the report are kept as container
+  `.ppsx` and `.potx`: one wasm call (`importPptx`; `slide_js_bg.wasm` is 6.18 MiB, with paged.sheet's workbook engine for live charts) returns the package and a report; the host opens the package, and the source deck and the report are kept as container
   parts.
 - **Embedded fonts** (ADR 707). `pptx-fonts` decodes the faces PowerPoint embeds: Embedded
   OpenType (all three header versions, XOR obfuscation) and MicroType Express (LZCOMP and the
@@ -288,6 +309,13 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 
 ## Not built yet
 
+- Theme approximations (ADR 713): gradient stops, effect, bullet and pattern colours keep their
+  values; only the Latin theme fonts are live; the variants are derived; a gallery theme keeps the
+  deck's format scheme. Document styles (ADR 719): one set of placeholder styles per deck (the
+  first master's); text and shapes keep their own values, so a style edit reaches new text, not
+  existing paragraphs; object styles carry fill and line only, and export does not write
+  `p:style` back.
+
 - Editing layouts (master spreads) from the plugin, and layouts no slide uses (they are not
   imported).
 - PPTX export of what the native model cannot say yet, or what export does not write yet:
@@ -295,7 +323,8 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   text (shapes, formatting, added or removed points), a chart's formatting
   (only its data is live), added, removed or
   merged table rows and columns, cell fills and borders, font styles other than bold and italic,
-  palette edits (a swatch's new colour does not mark its shapes edited), a picture frame's
+  edits to a plain colour swatch (its new colour does not mark its shapes edited; a theme
+  slot's swatch is written into the theme part, ADR 713), a picture frame's
   reshaped outline, placeholders other than text ones on a slide made in the editor. Each is
   reported in the export's diagnostics, and the shape is written as the deck had it. A notes
   master for a deck that has none. Transitions, masters and layouts are still copied, not

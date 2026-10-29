@@ -5408,6 +5408,246 @@
           ]
         },
         {
+          "description": "v78 (engine ADR 1039) — make a SYMBOL named `name` from the page\nitems `element_ids` (copied whole, as a copy takes them: text with\nits story, gradients, placed images, groups). The centre of their\nbox is the symbol's registration point. With `replace` (the\ndefault) the items leave the page and one instance takes their\nplace, drawn where they were; the reply's `createdId` is that\ninstance. `symbol_id` names the symbol (absent: minted, `Symbol/<n>`).\n`nine_slice` sets 9-slice guides, `[left, top, right, bottom]`\ninsets. Refused, by name, for what a copy refuses and for an\ninstance among the items. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "createSymbol"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "elementIds": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ElementId"
+                  }
+                },
+                "symbolId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "replace": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "nineSlice": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number",
+                    "format": "float"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "default": null
+                }
+              },
+              "required": [
+                "name",
+                "elementIds"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v78 (engine ADR 1039) — edit the symbol `symbol_id`: new artwork\nfrom `element_ids` (when given; every instance draws it at once),\na new `name`, new 9-slice guides (`[]` removes them). With\n`replace` (default `true` when items are given) the items become an\ninstance. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "redefineSymbol"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "symbolId": {
+                  "type": "string"
+                },
+                "elementIds": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ElementId"
+                  },
+                  "default": []
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "nineSlice": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number",
+                    "format": "float"
+                  },
+                  "default": null
+                },
+                "replace": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "symbolId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v78 (engine ADR 1039) — place an instance of `symbol_id` on\n`page_id`, its registration point at `at` (page space; absent: the\npage's centre), scaled / rotated by `linear` (`[a, b, c, d]`, absent:\nidentity), on top of the spread's z-order. The reply's `createdId`\nis the instance (`instance:<id>` addresses it). One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "placeSymbolInstance"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "symbolId": {
+                  "type": "string"
+                },
+                "pageId": {
+                  "$ref": "#/$defs/PageId"
+                },
+                "at": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "format": "float"
+                    },
+                    {
+                      "type": "number",
+                      "format": "float"
+                    }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "default": null
+                },
+                "linear": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number",
+                    "format": "float"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "default": null
+                },
+                "nineSlice": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number",
+                    "format": "float"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "default": null
+                }
+              },
+              "required": [
+                "symbolId",
+                "pageId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v78 (engine ADR 1039) — Break Link to Symbol: the instance\n`element_id` becomes its symbol's artwork as ordinary page items,\nwhere it was, in its z slot (a group when there is more than one\nitem or the instance overrides opacity or blending). The reply's\n`minted` lists the new root. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "breakSymbolLink"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "elementId": {
+                  "$ref": "#/$defs/ElementId"
+                }
+              },
+              "required": [
+                "elementId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v78 (engine ADR 1039) — delete the symbol `symbol_id`; its\ninstances are broken into ordinary items first, so nothing on the\npage disappears. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "deleteSymbol"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "symbolId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "symbolId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — insert a `<Section>` anchored at `at_page`.",
           "type": "object",
           "properties": {
@@ -6287,6 +6527,23 @@
             "kind": {
               "type": "string",
               "const": "group"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        },
+        {
+          "description": "Engine ADR 1039 — a symbol instance. Rides v78 as an additive\nenum member.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "instance"
             },
             "id": {
               "type": "string"
@@ -7931,6 +8188,16 @@
           "description": "Engine ADR 1010 — the group is a clip group: its top-most member\nclips the others (`paged_model::Group::clip`), `Value::Bool`.\nSetting it refuses a group whose top-most member is not a\nRectangle, Oval or Polygon, or hosts pasted-in content. No IDML\nattribute: the writer lowers a clip group to paste-into.",
           "type": "string",
           "const": "groupClip"
+        },
+        {
+          "description": "Engine ADR 1039 — a symbol instance's colour tint:\n`Value::Lengths([r, g, b, amount])` (sRGB and amount `0..=1`); the\nempty list removes it. Only `NodeId::Instance` carries it. Native.",
+          "type": "string",
+          "const": "symbolInstanceTint"
+        },
+        {
+          "description": "Engine ADR 1039 — a symbol instance's 9-slice guides:\n`Value::Lengths([left, top, right, bottom])` insets in definition\nspace; the empty list falls back to the definition's. Only\n`NodeId::Instance` carries it. Native.",
+          "type": "string",
+          "const": "symbolInstanceNineSlice"
         },
         {
           "description": "`<DropShadowSetting BlendMode>`; `\"\"` is InDesign's `Multiply`.",

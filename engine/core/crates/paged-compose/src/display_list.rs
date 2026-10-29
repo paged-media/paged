@@ -1401,6 +1401,29 @@ pub enum DisplayCommand {
     /// C-28 — close the masked content, dropping the soft mask. See
     /// [`DisplayCommand::BeginSoftMask`].
     EndSoftMask(Transform),
+    /// Engine ADR 1039 — the commands up to the matching
+    /// [`DisplayCommand::EndSymbol`] are one copy of a symbol
+    /// definition's display list, `DisplayList::symbol_forms[form]`,
+    /// replayed under `transform` (definition list space → this list's
+    /// space). The rasterizers draw the copy and ignore the markers; the
+    /// PDF exporter writes the definition once as a form XObject and
+    /// draws the bracket as one reference to it.
+    BeginSymbol { form: u32, transform: Transform },
+    /// Engine ADR 1039 — closes a [`DisplayCommand::BeginSymbol`]. The
+    /// transform is unused.
+    EndSymbol(Transform),
+}
+
+/// Engine ADR 1039 — a symbol definition's display list, held once per
+/// list that replays it (see [`DisplayCommand::BeginSymbol`]). `key`
+/// identifies the definition revision (and tint) across lists, so a PDF
+/// writes one form per key for the whole document.
+#[derive(Debug, Clone)]
+pub struct SymbolForm {
+    pub key: u64,
+    pub list: std::sync::Arc<DisplayList>,
+    /// The definition list's extent in its own space: `[x, y, w, h]`.
+    pub bbox: [f32; 4],
 }
 
 /// C-28 — how a soft mask's artwork resolves to per-pixel coverage.
@@ -1449,7 +1472,9 @@ impl DisplayCommand {
             | DisplayCommand::StrokePathOverprint { transform, .. }
             | DisplayCommand::BeginSoftMask { transform, .. }
             | DisplayCommand::BeginMaskedContent(transform)
-            | DisplayCommand::EndSoftMask(transform) => transform,
+            | DisplayCommand::EndSoftMask(transform)
+            | DisplayCommand::BeginSymbol { transform, .. }
+            | DisplayCommand::EndSymbol(transform) => transform,
         }
     }
 }
@@ -1744,6 +1769,9 @@ pub struct DisplayList {
     /// `PipelineOptions::collect_link_regions`; rasterizers never read
     /// it.
     pub link_regions: Option<LinkRegionTable>,
+    /// Engine ADR 1039 — the symbol definitions this list replays, by
+    /// [`DisplayCommand::BeginSymbol::form`]. Rasterizers never read it.
+    pub symbol_forms: Vec<SymbolForm>,
 }
 
 impl DisplayList {
@@ -1840,6 +1868,7 @@ impl DisplayList {
             spot_inks: self.spot_inks.clone(),
             glyph_runs: None,
             link_regions: None,
+            symbol_forms: Vec::new(),
         };
         list.translate(dx, dy);
         list
@@ -2080,6 +2109,42 @@ mod tests {
             list.digest()
         };
         assert_ne!(digest(FillRule::NonZero), digest(FillRule::EvenOdd));
+    }
+
+    /// Engine ADR 1039 — the symbol markers are part of what a list draws
+    /// in the digest (ADR 101): a replayed definition digests differently
+    /// from the same commands drawn loose, and a translate moves the
+    /// marker's placement with the copy.
+    #[test]
+    #[allow(non_snake_case)]
+    fn symbol_markers_digest_and_translate__feat__frames_paths_symbol_instance() {
+        let build = |markers: bool| {
+            let mut list = DisplayList::new();
+            let path_id = list.paths.push_anon(PathData::default());
+            if markers {
+                list.push(DisplayCommand::BeginSymbol {
+                    form: 0,
+                    transform: Transform::translate(5.0, 6.0),
+                });
+            }
+            list.push(DisplayCommand::FillPath {
+                path_id,
+                paint: Paint::Solid(Color::BLACK),
+                transform: Transform::translate(5.0, 6.0),
+            });
+            if markers {
+                list.push(DisplayCommand::EndSymbol(Transform::IDENTITY));
+            }
+            list
+        };
+        assert_ne!(build(true).digest(), build(false).digest());
+        assert_eq!(build(true).digest(), build(true).digest());
+        let mut moved = build(true);
+        moved.translate(1.0, 2.0);
+        let DisplayCommand::BeginSymbol { transform, .. } = moved.commands[0] else {
+            panic!("the marker first");
+        };
+        assert_eq!(transform.0, [1.0, 0.0, 0.0, 1.0, 6.0, 8.0]);
     }
 
     #[test]

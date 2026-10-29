@@ -312,6 +312,13 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.applyMasterToPage", "(pageId, masterId?)", "bool", "write", "Apply a master to a page (omit/null detaches)."),
         f!("paged.movePage", "(pageId, afterPageId?)", "bool", "write", "Move a page to follow another (omit/null: to the front)."),
         f!("paged.placePage", "(pageId, [x, y]?)", "bool", "write", "Put a page (an artboard) at [x, y] pt on the canvas (omit/null: its default slot)."),
+        // --- symbols (engine ADR 1039) ---
+        f!("paged.symbols", "()", "SymbolSummary[] JSON", "read", "The document's symbols: id, name, revision, bounds, 9-slice guides, instances."),
+        f!("paged.createSymbol", "(name, elementIds, { symbolId?, replace?, nineSlice? }?)", "string | null", "write", "Make a symbol from page items; with replace (default) they become an instance, which is selected. Returns the symbol id."),
+        f!("paged.redefineSymbol", "(symbolId, { elementIds?, name?, nineSlice?, replace? })", "bool", "write", "New artwork, name or 9-slice guides ([] removes) for a symbol; every instance follows."),
+        f!("paged.placeSymbolInstance", "(symbolId, pageId, [x, y]?, [a, b, c, d]?)", "string | null", "write", "Place an instance, its registration point at [x, y] page pt (omit: the page centre); returns its instance:<id> address."),
+        f!("paged.breakSymbolLink", "(elementId)", "string | null", "write", "Break Link to Symbol: the instance becomes ordinary items; returns the new root's address."),
+        f!("paged.deleteSymbol", "(symbolId)", "bool", "write", "Delete a symbol; its instances become ordinary items first."),
         f!("paged.createMaster", "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })", "bool", "author", "Create a master spread: one page of the given size, or a copy of another master."),
         f!("paged.deleteMaster", "(masterId)", "bool", "author", "Delete a master no page applies."),
         f!("paged.renameMaster", "(masterId, name?)", "bool", "write", "Set (omit/null: clear) a master's name."),
@@ -883,6 +890,11 @@ property_paths! {
         GroupIsolateBlending => "groupIsolateBlending" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, IsolateBlending)]),
         GroupKnockout => "groupKnockout" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, KnockoutGroup)]),
         GroupClip => "groupClip" : bool_().default_bool(false),
+        // Engine ADR 1039 — a symbol instance's tint `[r, g, b, amount]`
+        // and 9-slice guides `[left, top, right, bottom]`; `[]` clears.
+        // Native: IDML has no symbol (the writer expands instances).
+        SymbolInstanceTint => "symbolInstanceTint" : lengths(),
+        SymbolInstanceNineSlice => "symbolInstanceNineSlice" : lengths(),
         // R-11 — the drop shadow's remaining attributes.
         FrameDropShadowBlendMode => "frameDropShadowBlendMode" : enum_open(BLEND_MODES).default_text("Multiply").idml(idml![attr(DropShadowSetting, BlendMode)]),
         FrameDropShadowSpread => "frameDropShadowSpread" : pct().default_num(0.0).idml(idml![attr(DropShadowSetting, Spread)]),
@@ -1471,7 +1483,9 @@ mod tests {
         //
         // 258 -> 262: ADR 1008 — the effect stack of each transparency
         // target.
-        assert_eq!(cat.settable_paths.len(), 262, "settable path count drifted");
+        //
+        // 262 -> 264: ADR 1039 — a symbol instance's tint and 9-slice guides.
+        assert_eq!(cat.settable_paths.len(), 264, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

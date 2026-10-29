@@ -815,6 +815,23 @@ refuses them. Additive at protocol 76: an older engine refuses the path.
 A bundle that would otherwise bake an effect into its pixels (paged.draw's
 appearance, paged.image's layer styles placed on a page) asks it first.
 
+`"document.symbols@1"` (engine ADR 1039, protocol 78) is the engine's
+symbol: a definition kept once in the document and instances that draw it
+(`FrameRef::Instance`, addressed `instance:<id>`). The doors are five wire
+ops — `createSymbol { name, elementIds, symbolId?, replace?, nineSlice? }`
+(the items become one instance unless `replace: false`; `createdId` is
+it), `redefineSymbol { symbolId, elementIds?, name?, nineSlice?, replace? }`
+(every instance follows), `placeSymbolInstance { symbolId, pageId, at?,
+linear?, nineSlice? }`, `breakSymbolLink { elementId }` and
+`deleteSymbol { symbolId }` — each one undo step, and the `symbols`
+collection lists the definitions with their instances. An instance's
+opacity, blend mode, transform, visibility and lock are the ordinary
+element paths; its tint and 9-slice guides are `symbolInstanceTint`
+(`[r, g, b, amount]`) and `symbolInstanceNineSlice` (`[left, top, right,
+bottom]`). STATIC: protocol 78's handshake proves the engine has them.
+paged.draw's Symbols panel uses them when the flag is up and keeps its
+re-emitted artwork (draw ADR 356) as the fallback for a host without it.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers
@@ -1551,7 +1568,7 @@ clears its missing flag.
 
 The sheets-mode grid's range copy/paste (cells + values) had nowhere to
 land (RFI §6 K-6). `host.clipboard` is the door: a read/write surface over
-the SYSTEM clipboard with a rich `{ text?, tabular? }` payload. The
+the SYSTEM clipboard with a rich `{ text?, tabular?, svg? }` payload. The
 manifest already declared a `clipboard` enum (`none | vector | full`) ahead
 of any surface; this change gives it teeth.
 
@@ -1612,6 +1629,20 @@ Wholly additive: a new `host.clipboard` member + `ClipboardSurface` /
 `capabilities.clipboard` manifest field (the enum itself is unchanged). No
 existing member changed; the gate / namespace rule / every other door are
 untouched.
+
+### 14.6 The svg half (extensions ADR 341 — `clipboard.svg@1`)
+
+`ClipboardPayload.svg` is an SVG document (UTF-8 text), the platform's
+vector interchange. On write the host puts it on the clipboard as
+`image/svg+xml` where the platform takes that type; on read it fills `svg`
+from plain text that IS an SVG document (Illustrator writes its source
+there; the browser's `image/svg+xml` is sanitised and loses `<style>`),
+else from the `image/svg+xml` flavour, and an SVG text is never read as a
+TSV grid. `"vector"` and `"full"` both carry it. A backend declares the
+half with `ClipboardBackend.svg: true`; without it the door strips `svg`
+both ways and `supports("clipboard.svg@1")` is false. The editor's backend
+and the harness's `inMemoryClipboard` declare it. What browsers can and
+cannot reach (no PDF anywhere) is recorded in editor ADR 289.
 
 ## 15. The capability-gated worker door (K-3 / S-07 / I-02 — `host.workers`)
 

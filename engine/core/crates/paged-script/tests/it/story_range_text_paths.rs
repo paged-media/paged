@@ -227,7 +227,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 257: ADR 1018 added Word's character and paragraph additions.
         // 258: ADR 1031 added the gradient fill's start.
         // 262: ADR 1008 added the effect stack of each target.
-        262,
+        // 264: ADR 1039 added a symbol instance's tint and 9-slice guides.
+        264,
         "the advertised roster changed; move the count with the decision"
     );
 }

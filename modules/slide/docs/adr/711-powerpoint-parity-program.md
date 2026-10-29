@@ -135,3 +135,11 @@ or on a shape and has replies and a status. So comments are kept by this plugin,
 - Not modelled: likes, assignment, due date, priority and title. They survive only while their
   comment is unchanged. Range comments and threads in the engine (engine ADR 1020) would let a
   later wave move slide comments into the document model.
+
+## Amendment (2026-10-29): theme colours and the theme part
+
+[ADR 713](713-live-theme.md): a theme colour is a swatch whose id is its key (slot and
+transforms), written as `a:schemeClr` with its transforms whatever its current value, not only
+"while the swatch still holds the theme colour". The theme the document shows (its slot swatches,
+the root styles' fonts) is written into the masters' theme parts when it is not the deck's, so an
+edit to a slot swatch is exported as a theme edit.

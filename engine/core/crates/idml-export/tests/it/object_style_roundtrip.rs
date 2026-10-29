@@ -108,6 +108,7 @@ fn open(package: &[u8]) -> Document {
         text_frame_index: Default::default(),
         styles: idml_import::parse_stylesheet(STYLES).expect("styles"),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     }
 }
 
