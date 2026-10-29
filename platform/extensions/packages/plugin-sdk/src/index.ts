@@ -24,6 +24,7 @@
 // them.
 
 export {
+  charToContent,
   contentToChar,
   paragraphTexts,
   wordAroundCaret,

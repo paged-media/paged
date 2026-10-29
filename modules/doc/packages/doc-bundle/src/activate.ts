@@ -663,6 +663,8 @@ function activateDoc(
     place: (name, bytes) => ingest(name, bytes, "place"),
     exportBytes: (state) => exportState(state),
     wordCommand: (id) => (word ? word.run(id) : Promise.resolve(false)),
+    reviewCommand: (id, args) =>
+      word ? word.runReview(id, args) : Promise.resolve(undefined),
     saveAsDocx: () => exportDocx(),
     pasteRtf,
   });

@@ -221,6 +221,8 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
 | `host.parts.write`, `host.document.setMetadata`                                        | store the original file and bind it to a frame                                                                              |
 | `host.diagnostics.set`                                                                 | lowering diagnostics on a place (`media.paged.doc`), and the `/styles`, `/open`, `/columns`, `/save-back` keys              |
 | `host.shell.pickFile`, `.openPanel`, `host.selection.set`, `host.supports`, `host.log` | pick a file; open the panel; the panel's "Select" button; probing optional doors; logging                                   |
+| `host.contribute.marginBand`, `.statusItem`, `.keybinding` (scoped)                    | doc ADR 613: the review balloons beside the page, the Track Changes status item, Cmd+Shift+E and Cmd+Alt+M                  |
+| `host.document.collection("trackedChanges" / "comments")`, `host.viewport.revealText`  | the Review panel's and the band's changes and threads; Next / Previous select the change or comment                         |
 
 After a standalone open the lowering's diagnostics are shown in the panel but not sent to
 `host.diagnostics`. The manifest declares `document` (read `broad`, write `scoped`,

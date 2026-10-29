@@ -86,6 +86,7 @@ import type {
   ExporterContribution,
   ControlBarGroupContribution,
   StatusItemContribution,
+  MarginBandContribution,
   TextSelection,
   ImporterContribution,
   KeybindingContribution,
@@ -174,6 +175,7 @@ export interface RecordedContribution {
     | "exporter"
     | "controlBarGroup"
     | "statusItem"
+    | "marginBand"
     | "presentation"
     | "view";
   id: string;
@@ -190,6 +192,7 @@ export interface RecordedContribution {
     | ExporterContribution
     | ControlBarGroupContribution
     | StatusItemContribution
+    | MarginBandContribution
     | PresentationContribution
     | ViewContribution;
 }
@@ -434,6 +437,9 @@ export interface HeadlessHost {
   controlBarGroupsContributed(): ControlBarGroupContribution[];
   /** Status-bar items registered through `contribute.statusItem`. */
   statusItemsContributed(): StatusItemContribution[];
+  /** Margin bands registered through `contribute.marginBand` (extensions
+   *  ADR 349 amendment 1). */
+  marginBandsContributed(): MarginBandContribution[];
   /** Presentations registered through `contribute.presentation`
    *  (extensions ADR 345). The harness wires a presenter that keeps the
    *  state and renders nothing (no DOM headlessly): `shell.present`
@@ -863,6 +869,9 @@ function makeEngineEditor(
       >("controlBarGroup"),
       statusItems: recordingRegistry<StatusItemContribution, "statusItem">(
         "statusItem",
+      ),
+      marginBands: recordingRegistry<MarginBandContribution, "marginBand">(
+        "marginBand",
       ),
       // Extensions ADR 345 — a presenter and a view registry that keep
       // state only: headlessly nothing is drawn.
@@ -1389,6 +1398,11 @@ export async function createHeadlessHost(
       return contributions
         .filter((c) => c.kind === "statusItem")
         .map((c) => c.value as StatusItemContribution);
+    },
+    marginBandsContributed() {
+      return contributions
+        .filter((c) => c.kind === "marginBand")
+        .map((c) => c.value as MarginBandContribution);
     },
     presentationsContributed() {
       return contributions

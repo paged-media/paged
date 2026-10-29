@@ -30,6 +30,32 @@ crate. That is the next lever if later waves outgrow the headroom.
 `opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
 fifth slower (see `Cargo.toml`).
 
+## W3 (UI): the Review panel and the markup margin band (2026-10-29)
+
+Doc ADR 613's chrome over engine ADRs 1037 (change tracking) and 1020 (range comments), contract
+C5 (extensions ADR 349 amendment 1) and editor ADR 300 (`src/word/review.tsx`,
+`src/word/review-model.ts`):
+
+- **Review panel** (`media.paged.doc.panel.review`): Track Changes on/off and the reviewer's
+  name, the markup view (Simple / All / No markup / Original), Previous / Next change, Accept
+  All / Reject All, accept or reject all by one author, each change with Accept / Reject, the
+  comment threads with reply, resolve / reopen and delete, New Comment.
+- **Margin band**: in All Markup a balloon per deletion, formatting change and comment thread
+  beside the page (insertions stay inline); in Simple Markup the threads only; none in No
+  markup and Original. Balloons carry their author's colour and the same buttons.
+- **Status bar**: "Track Changes: On/Off", a click toggles it.
+- **Keys** (scoped to `wordDocument`): Cmd+Shift+E toggles tracking, Cmd+Alt+M adds a comment
+  (a collapsed caret comments the word at the caret; an empty comment opens its balloon for
+  typing). Accepting or rejecting one change moves on to the next, as Word does.
+- **Commands**: 18 `media.paged.doc.command.review.*` commands, each with a typed twin in
+  `contributes.objectModel.commands` (ids, authors, text and `resolved` as typed arguments;
+  result `{ applied, id? }`).
+- Tests: `test/review.spec.ts` (the model, the band per view, every command's mutation),
+  `test/panels/review.dom.test.tsx` (the panel, the status item, a balloon's reply).
+- Not yet: a comment's text cannot be edited after its balloon closes (the engine's
+  `editComment` is wired for the new-comment balloon only); the author colours of the balloons
+  are the bundle's order of appearance and need not match the engine's text colours.
+
 ## W2: document structure (2026-10-28)
 
 Doc ADRs [611](adr/611-headers-footers-and-notes-placed.md) and [612](adr/612-fields-and-toc.md),

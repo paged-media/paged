@@ -678,6 +678,79 @@ export interface SubContextProviderContribution {
   ): SubContextSpec | null | Promise<SubContextSpec | null>;
 }
 
+// ------------------------------------------------------- margin bands
+
+/**
+ * Extensions ADR 349 amendment 1 (C5) — where a margin-band item is
+ * anchored: a range of a story's text in CONTENT offsets (UTF-8 bytes,
+ * one synthetic `"\n"` per paragraph boundary: what the caret,
+ * `viewport.revealText` and `host.text.selection` count). An empty range
+ * anchors at a point. `host.text.contentRange` converts the story
+ * characters the engine's collections report.
+ */
+export interface MarginBandAnchor {
+  storyId: string;
+  start: number;
+  end: number;
+}
+
+/** One balloon of a margin band: a tracked change or a comment thread. */
+export interface MarginBandItem {
+  /** Unique within its band; the host keys layout and measurement on it. */
+  id: string;
+  anchor: MarginBandAnchor;
+  /** What the balloon is, for the host's a11y label and data attribute
+   *  (`"insert"`, `"delete"`, `"format"`, `"paraProps"`, `"comment"`, …).
+   *  Free text: the host draws every kind the same way. */
+  kind?: string;
+  /** A CSS colour for the leader line and the balloon's edge (Word draws
+   *  each author in a colour of their own). */
+  color?: string;
+}
+
+/** What the host hands a {@link MarginBandContribution}'s component, once
+ *  per item. */
+export interface MarginBalloonProps {
+  item: MarginBandItem;
+  editContext: string;
+  /** The caret or the selection touches the item's anchor: Word's
+   *  "current" balloon, drawn emphasised. */
+  active: boolean;
+}
+
+/**
+ * Extensions ADR 349 amendment 1 (C5) — a MARKUP MARGIN BAND: a column
+ * beside each page holding balloons anchored to text ranges (Word's
+ * tracked-change balloons and threaded comments), shown while the edit
+ * context `scope` names is active (editor ADR 300). The host owns the
+ * geometry: it places each balloon level with its anchor's first line,
+ * pushes overlapping balloons down, draws a leader line from the anchor
+ * and keeps them there as the view scrolls and zooms and as the text
+ * reflows. The bundle owns the content: `render` draws one balloon (React
+ * in the host realm, like a panel). `items` is read again after
+ * `onDidChange` fires.
+ */
+export interface MarginBandContribution {
+  /** `<namespace>.<band>`, namespace-checked at register. */
+  id: string;
+  scope: { editContext: string };
+  /** The band's accessible name ("Markup"). */
+  title?: string;
+  /** The balloons' width in screen pixels. Default 240. */
+  width?: number;
+  /** Lower bands sit nearer the page. Default 100. */
+  order?: number;
+  items(): readonly MarginBandItem[];
+  /** Subscribe to "the items changed". */
+  onDidChange(listener: () => void): Disposable;
+  render: ComponentType<MarginBalloonProps>;
+}
+
+/** Margin bands (extensions ADR 349 amendment 1, C5). */
+export interface MarginBandRegistry {
+  register(contribution: MarginBandContribution): Disposable;
+}
+
 /** Sub-contexts (extensions ADR 349): the providers and the one shown. */
 export interface SubContextRegistry {
   register(
@@ -884,6 +957,9 @@ export interface ShellRegistries {
   /** Sub-contexts: a header, footer or note edited in place (extensions
    *  ADR 349, C6). Optional likewise (`shell.subContext@1`). */
   subContexts?: SubContextRegistry;
+  /** Markup margin bands (extensions ADR 349 amendment 1, C5). Optional
+   *  likewise (`shell.marginBand@1`). */
+  marginBands?: MarginBandRegistry;
 }
 
 // ---------------------------------------------------- overlay signals

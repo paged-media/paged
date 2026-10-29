@@ -99,6 +99,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [294](294-the-fill-presets-on-phones-and-tablets.md) | The fill presets on phones and tablets | Accepted 2026-10-24 |
 | [298](298-control-bar-groups-per-edit-context.md) | Control-bar groups and status items follow the edit context | Accepted 2026-10-24 |
 | [299](299-scoped-keybindings-over-text-input.md) | Keybindings scoped to an edit context win over the text input | Accepted 2026-10-24 |
+| [300](300-markup-margin-band.md) | The markup margin band: balloons beside the page follow their anchors | Accepted 2026-10-29 |
 | [301](301-in-place-header-footer-editing.md) | Headers, footers and notes are edited in place | Accepted 2026-10-28 |
 | [303](303-find-and-replace.md) | Find & Replace | Accepted 2026-10-25 |
 | [304](304-a-module-presentation-fills-the-screen.md) | A module's presentation fills the screen | Accepted 2026-10-25 |
