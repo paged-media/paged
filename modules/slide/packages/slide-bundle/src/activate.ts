@@ -71,7 +71,7 @@ import {
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeMenu } from "./menu.js";
-import { COMMENTS, DECK, NOTES, SHAPES, SLIDES } from "./messages.js";
+import { COMMENTS, DECK, MASTERS, NOTES, SHAPES, SLIDES } from "./messages.js";
 import {
   contributeSlideObjectModel,
   parseLabel,
@@ -89,6 +89,13 @@ import {
 } from "./show/contribute.js";
 import { SHOW } from "./messages.js";
 import { makeSlideSorter } from "./views/slide-sorter.js";
+import { makeSlideMaster } from "./views/slide-master.js";
+import {
+  contributeMasterCommands,
+  MASTER_VIEW,
+  masterTypedCommands,
+  type MasterDeps,
+} from "./masters-commands.js";
 import { adjustHandlesOverlay, HandlesModel } from "./adjust-handles.js";
 import { LiveFollower } from "./live-presets.js";
 import { makeShapesPanel } from "./panels/shapes-panel.js";
@@ -389,6 +396,12 @@ export function activate(host: BundleHost): BundleHandle {
       return true;
     },
   };
+  // Slide ADR 712 — masters and layouts.
+  const masterDeps: MasterDeps = {
+    activePage: () => store?.activePage() ?? null,
+    deckOpen: () => (store ? store.isDeck() : false),
+    views: host.supports("contribute.view@1") && host.supports("shell.views@1"),
+  };
   const model = contributeSlideObjectModel(host, {
     openDeck,
     exportDeck,
@@ -404,8 +417,10 @@ export function activate(host: BundleHost): BundleHandle {
       ),
       ...animationTypedCommands(() => animBinding),
       // Pictures, icons, the format painter and SmartArt text (slide ADR
-      // 717 amendment), last in the manifest.
+      // 717 amendment).
       ...contentTypedCommands(host, content, clipboard),
+      // Masters and layouts (slide ADR 712), last in the manifest.
+      ...masterTypedCommands(host, masterDeps),
     ],
     comments: () => comments,
     step,
@@ -679,6 +694,21 @@ export function activate(host: BundleHost): BundleHandle {
       playCustom = null;
       show.dispose();
     });
+  }
+
+  // Slide ADR 712 — View ▸ Slide Master (a module view) and Reset Slide.
+  if (store && host.supports("contribute.command@1")) {
+    if (masterDeps.views && host.supports("render.snapshot@1")) {
+      disposers.push(
+        host.contribute.view({
+          id: MASTER_VIEW,
+          title: t(MASTERS.slideMaster),
+          render: makeSlideMaster(host),
+        }).dispose,
+      );
+    } else masterDeps.views = false;
+    const cmds = contributeMasterCommands(host, masterDeps);
+    disposers.push(() => cmds.dispose());
   }
 
   // File ▸ Export… (a module view), Save as template, Custom Shows… and

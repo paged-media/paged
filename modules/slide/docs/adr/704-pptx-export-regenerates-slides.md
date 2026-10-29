@@ -33,3 +33,9 @@ of an exporter anyway.
 document did not change keeps its part, its relationships and its notes byte for byte, even when
 other slides were edited. Within an edited slide, an unchanged shape keeps its original XML.
 Export reads the document through `host.documents.exportPaged`.
+
+## Amendment (2026-10-29): masters and layouts written
+
+[ADR 712](712-two-level-masters-and-placeholders-as-overrides.md): masters and layouts are
+written where the document changed them (name, Preserve, shapes and placeholders, a
+placeholder's text style, a deleted layout), and kept byte for byte otherwise.

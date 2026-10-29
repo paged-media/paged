@@ -61,7 +61,9 @@
       "media.paged.slide.command.insertIcon",
       "media.paged.slide.command.copyFormat",
       "media.paged.slide.command.pasteFormat",
-      "media.paged.slide.command.smartArtText"
+      "media.paged.slide.command.smartArtText",
+      "media.paged.slide.command.slideMaster",
+      "media.paged.slide.command.resetSlide"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
     "exporters": [
@@ -69,7 +71,11 @@
       "media.paged.slide.exporter.potx"
     ],
     "presentations": ["media.paged.slide.show"],
-    "views": ["media.paged.slide.view.sorter", "media.paged.slide.view.export"],
+    "views": [
+      "media.paged.slide.view.sorter",
+      "media.paged.slide.view.export",
+      "media.paged.slide.view.master"
+    ],
     "editContexts": [
       {
         "type": "slideDeck",
@@ -448,6 +454,60 @@
           "id": "media.paged.slide.setSmartArtText",
           "title": "Set a SmartArt point's text",
           "args": "schema/set-smartart-text.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.slideMaster",
+          "title": "Slide master",
+          "args": "schema/empty.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.resetSlide",
+          "title": "Reset slide",
+          "args": "schema/slide-ref.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.layouts",
+          "title": "List the masters and layouts",
+          "args": "schema/empty.json",
+          "result": "schema/layouts.result.json"
+        },
+        {
+          "id": "media.paged.slide.renameLayout",
+          "title": "Rename a master or layout",
+          "args": "schema/rename-layout.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.setPreserve",
+          "title": "Preserve a master or layout",
+          "args": "schema/set-preserve.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.deleteLayout",
+          "title": "Delete a layout no slide uses",
+          "args": "schema/layout-ref.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.insertPlaceholder",
+          "title": "Insert a placeholder on a layout",
+          "args": "schema/insert-placeholder.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.setPlaceholderStyle",
+          "title": "Set a layout placeholder's text style",
+          "args": "schema/set-placeholder-style.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.changeLayout",
+          "title": "Change layout",
+          "args": "schema/change-layout.args.json",
           "result": "schema/applied.result.json"
         }
       ],

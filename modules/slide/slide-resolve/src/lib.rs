@@ -22,11 +22,14 @@
 //! every item in page points with absolute colours, resolved fonts and
 //! evaluated outlines, and no inheritance left.
 //!
-//! * **Masters.** The engine has one master level, so each USED layout
-//!   becomes one master page: the slide master's background and shapes
-//!   (when the layout shows master shapes), then the layout's own background
-//!   and shapes (ADR 700). Placeholders on masters and layouts are prompts,
-//!   not art, and are not drawn.
+//! * **Masters** (ADR 712). Each slide master is a master page (its
+//!   background and shapes, placeholders included), and each of its layouts,
+//!   used or not, a master page based on it (the engine's two-level
+//!   masters, engine ADR 1026). A layout hides the master's placeholders
+//!   (it has its own) and, when it hides master shapes, the master's art; a
+//!   layout with a background of its own draws the master's art again over
+//!   it. A slide hides every placeholder of its layout: its own placeholders
+//!   stand in for them.
 //! * **Placeholders.** A slide placeholder finds its layout placeholder by
 //!   `idx`, else by type, and the layout's finds the master's by type;
 //!   position, body properties, list styles and shape properties inherit
@@ -590,10 +593,10 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             if sp.nv.hidden {
                 return None;
             }
-            // On masters and layouts a placeholder is a prompt, not art.
-            if sp.nv.placeholder.is_some() && ctx.level != Level::Slide {
-                return None;
-            }
+            // On masters and layouts a placeholder is a prompt: an item of
+            // the layout (slide ADR 712) that every slide hides, as its own
+            // placeholder overrides it or it has none.
+            let prompt = sp.nv.placeholder.is_some() && ctx.level != Level::Slide;
             let chain = chain(sp, ctx);
             let x = chain.iter().find_map(|s| s.props.xfrm.clone())?;
             let (t, w, h) = space.place(&x);
@@ -633,7 +636,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 _ => o.text_rect,
             };
             let text = text_frame(&chain, text_rect, w, h, ctx);
-            if matches!(fill, Paint::None) && stroke.is_none() && text.is_none() {
+            if matches!(fill, Paint::None) && stroke.is_none() && text.is_none() && !prompt {
                 return None;
             }
             // The engine has no per-colour alpha, so a translucent colour
@@ -1045,26 +1048,15 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
         ..Default::default()
     };
 
-    // One master page per used layout, in first-use order.
+    // Slide ADR 712: one master spread per slide master, and one per
+    // layout based on it (every layout, used or not), in the deck's order.
     let mut master_ids: BTreeMap<String, String> = BTreeMap::new();
-    let mut order: Vec<&str> = Vec::new();
-    for s in &deck.slides {
-        if let Some(lp) = s.layout_part.as_deref() {
-            if !order.contains(&lp) {
-                order.push(lp);
-            }
-        }
-    }
-    for (i, lp) in order.iter().enumerate() {
-        let Some(layout) = deck.layout(lp) else {
-            continue;
-        };
-        let Some(master) = deck.master(&layout.master_part) else {
-            continue;
-        };
+    // Each layout's placeholder items: what a slide made from it hides.
+    let mut layout_placeholders: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut layout_no = 0usize;
+    for (mi, master) in deck.masters.iter().enumerate() {
         let theme = master.theme_part.as_deref().and_then(|t| deck.theme(t));
-        let id = format!("m{}", i + 1);
-        let mut items = Vec::new();
+        let mid = format!("M{}", mi + 1);
         let mctx = Ctx {
             deck,
             master,
@@ -1077,35 +1069,36 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
             part: &master.part,
             draw,
         };
-        let lctx = Ctx {
-            layout: Some(layout),
-            map: overlay(&master.color_map, layout.color_map_override.as_ref()),
-            level: Level::Layout,
-            part: &layout.part,
-            ..mctx
-        };
-        let bg = layout
+        let mut items = Vec::new();
+        let bg = master
             .background
             .as_ref()
-            .map(|b| (b, &lctx))
-            .or(master.background.as_ref().map(|b| (b, &mctx)));
-        if let Some((b, c)) = bg {
-            items.extend(background(b, c, w, h));
-        }
-        if layout.show_master_shapes {
-            items.extend(ordered(&master.shapes, &Space::PAGE, &mctx));
-        }
-        items.extend(ordered(&layout.shapes, &Space::PAGE, &lctx));
-        master_ids.insert(lp.to_string(), id.clone());
+            .and_then(|b| background(b, &mctx, w, h));
+        let bg_id = bg.as_ref().map(|b| b.id.clone());
+        items.extend(bg);
+        let shapes = ordered(&master.shapes, &Space::PAGE, &mctx);
+        let master_placeholders: Vec<String> = shapes
+            .iter()
+            .filter(|it| it.meta.placeholder.is_some())
+            .map(|it| it.id.clone())
+            .collect();
+        let master_art: Vec<String> = shapes
+            .iter()
+            .filter(|it| it.meta.placeholder.is_none())
+            .map(|it| it.id.clone())
+            .collect();
+        items.extend(shapes);
         out.masters.push(MasterPage {
-            id,
-            name: layout
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("Layout {}", i + 1)),
-            layout_part: lp.to_string(),
+            id: mid.clone(),
+            name: format!("Slide Master {}", mi + 1),
+            layout_part: String::new(),
             master_part: master.part.clone(),
             items,
+            is_master: true,
+            parent: None,
+            overrides: Vec::new(),
+            layout_type: None,
+            preserve: master.preserve,
         });
         if out.theme_colors.is_empty() {
             if let Some(t) = theme {
@@ -1120,6 +1113,69 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
                     .map(|(k, c)| (k.clone(), resolve_color(c, &cc).bytes()))
                     .collect();
             }
+        }
+        for lp in &master.layouts {
+            let Some(layout) = deck.layout(lp) else {
+                continue;
+            };
+            layout_no += 1;
+            let id = format!("m{layout_no}");
+            let lctx = Ctx {
+                layout: Some(layout),
+                map: overlay(&master.color_map, layout.color_map_override.as_ref()),
+                level: Level::Layout,
+                part: &layout.part,
+                ..mctx
+            };
+            let mut items = Vec::new();
+            // The master's placeholders are prompts the layout's own stand
+            // in for; its art goes where the layout hides master shapes.
+            let mut overrides = master_placeholders.clone();
+            if !layout.show_master_shapes {
+                overrides.extend(master_art.iter().cloned());
+            }
+            if let Some(b) = layout.background.as_ref() {
+                // The layout's background replaces the master's, under the
+                // master's art. The engine paints a master's items under
+                // the layout's, so that art is drawn again on the layout,
+                // over its background (a copy: an edit of the master's art
+                // does not reach it).
+                items.extend(background(b, &lctx, w, h));
+                overrides.extend(bg_id.iter().cloned());
+                if layout.show_master_shapes && !master_art.is_empty() {
+                    overrides.extend(master_art.iter().cloned());
+                    items.extend(
+                        ordered(&master.shapes, &Space::PAGE, &mctx)
+                            .into_iter()
+                            .filter(|it| it.meta.placeholder.is_none()),
+                    );
+                }
+            }
+            let own = ordered(&layout.shapes, &Space::PAGE, &lctx);
+            layout_placeholders.insert(
+                lp.to_string(),
+                own.iter()
+                    .filter(|it| it.meta.placeholder.is_some())
+                    .map(|it| it.id.clone())
+                    .collect(),
+            );
+            items.extend(own);
+            master_ids.insert(lp.to_string(), id.clone());
+            out.masters.push(MasterPage {
+                id,
+                name: layout
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Layout {layout_no}")),
+                layout_part: lp.to_string(),
+                master_part: master.part.clone(),
+                items,
+                is_master: false,
+                parent: Some(mid.clone()),
+                overrides,
+                layout_type: layout.layout_type.clone(),
+                preserve: layout.preserve,
+            });
         }
     }
 
@@ -1160,6 +1216,13 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
                 .layout_part
                 .as_ref()
                 .and_then(|lp| master_ids.get(lp).cloned()),
+            // Every placeholder of the layout: the slide's own stand in
+            // for some, and the others are not shown on a slide.
+            overrides: s
+                .layout_part
+                .as_ref()
+                .and_then(|lp| layout_placeholders.get(lp).cloned())
+                .unwrap_or_default(),
             show_master_items: s.show_master_shapes,
             items,
             hidden: s.hidden,
