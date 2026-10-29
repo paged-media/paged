@@ -768,6 +768,8 @@ impl<'a> Reader<'a> {
         }
         self.table_columns.sort_unstable();
         let mut row = TableRow {
+            height_rule: Default::default(),
+            cant_split: false,
             cells: Vec::new(),
             is_header: self.row_header,
             height: self.row_height.filter(|h| *h != 0).map(i32::abs),
@@ -1439,6 +1441,7 @@ impl<'a> Reader<'a> {
                 def.name.clone()
             };
             styles.push(Style {
+                table: None,
                 style_id: id,
                 name: Some(name),
                 kind: def.kind.unwrap_or_default(),
