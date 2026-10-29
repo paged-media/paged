@@ -47,6 +47,7 @@ import {
   type VectorEngine,
   type VectorWasm,
 } from "./vector-engine";
+import { type SmartEngine, type SmartWasm, wrapSmart } from "./smart-engine";
 import type { HistorySource } from "./brush-dynamics";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
@@ -1341,14 +1342,16 @@ export interface FilterMask {
 }
 
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
- *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`. */
+ *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`;
+ *  smart objects (ADR 482) in `smart-engine.ts`. */
 export interface ImageEngine
   extends
     MaskingEngine,
     ModeEngine,
     RetouchEngine<DecodedInfo>,
     FilterEngine,
-    VectorEngine<DecodedInfo> {
+    VectorEngine<DecodedInfo>,
+    SmartEngine<DecodedInfo> {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2416,7 +2419,13 @@ interface DecodedHandleWasm {
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
 export interface ImageWasmModule
-  extends MaskingWasm, ModeWasm, RetouchWasm, FilterWasm, VectorWasm {
+  extends
+    MaskingWasm,
+    ModeWasm,
+    RetouchWasm,
+    FilterWasm,
+    VectorWasm,
+    SmartWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -3229,6 +3238,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     ...wrapRetouch(wasm, decodedInfoOf),
     ...filterEngineOf(wasm, decodedInfoOf),
     ...wrapVectors(wasm, decodedInfoOf),
+    ...wrapSmart(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,

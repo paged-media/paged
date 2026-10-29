@@ -114,6 +114,8 @@ export async function layeredPsdBytes(names: string[]): Promise<Uint8Array> {
 }
 
 export function makeFakeEditor() {
+  /** Scripted replies to a `client.send` kind (`onSend`). */
+  const sendHandlers = new Map<string, (payload: unknown) => unknown>();
   const panels = fakeRegistry();
   const commands = fakeRegistry();
   const importers = fakeRegistry();
@@ -264,6 +266,8 @@ export function makeFakeEditor() {
       // C-5 — the requestPlacedAssetBytes wire pair, answered from the
       // fake placed store (found:false otherwise, the honest miss).
       send: async (msg: { kind: string; payload?: { elementId?: string } }) => {
+        const scripted = sendHandlers.get(msg.kind);
+        if (scripted) return scripted(msg.payload);
         if (msg.kind === "requestPlacedAssetBytes") {
           const id = msg.payload?.elementId ?? "";
           const bytes = placed.get(id);
@@ -383,6 +387,11 @@ export function makeFakeEditor() {
     await new Promise((r) => setTimeout(r, 0));
   };
   return {
+    /** Script the reply to one `client.send` kind (`null` removes it). */
+    onSend(kind: string, handler: ((payload: unknown) => unknown) | null) {
+      if (handler) sendHandlers.set(kind, handler);
+      else sendHandlers.delete(kind);
+    },
     parts,
     metadata,
     editor: editor as unknown as PagedEditor,

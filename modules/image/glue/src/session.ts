@@ -173,6 +173,12 @@ import {
   type VectorController,
 } from "./vector-session";
 import {
+  createSmartController,
+  SO,
+  type SmartController,
+} from "./smart-session";
+import type { SmartInfo } from "./smart-engine";
+import {
   createBrushMachine,
   type BrushMachine,
   type BrushSample,
@@ -349,7 +355,9 @@ export type ImageDialog =
   /** Edit ▸ Presets ▸ Preset Manager (image ADR 477), on a kind's tab. */
   | { kind: "presetManager"; tab: PresetKind }
   /** History Options (image ADR 477). */
-  | { kind: "historyOptions" };
+  | { kind: "historyOptions" }
+  /** Layer ▸ Smart objects ▸ Transform… (image ADR 482). */
+  | { kind: "smartTransform" };
 
 /** The pane the Layer Style dialog shows: an effect, or Blending Options. */
 export type LayerStylePane = EffectKind | "blending";
@@ -426,6 +434,11 @@ export interface ImageSessionState {
   /** The last revision committed to the document for this frame (the
    *  marker's `rev`), or null before the first commit. */
   committedRev: number | null;
+  /** Edit Contents (image ADR 482): the smart object whose contents the
+   *  session shows now, innermost, or null for the document itself. */
+  smartNested: string | null;
+  /** The active layer's smart-object state (ADR 482), or null. */
+  smartInfo: SmartInfo | null;
   /** Pixel edits since ingest, reopen or the last commit — what a
    *  commit would write. */
   uncommitted: boolean;
@@ -628,6 +641,9 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   /** Vectors inside the image: the paths the Pen and the shape tools
    *  draw, vector masks and shape layers (image ADR 476). */
   vectors(): VectorController;
+  /** Smart objects in full (image ADR 482): transform, smart filters,
+   *  Edit Contents, links, vector smart objects. */
+  smart(): SmartController;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -865,7 +881,9 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   applyAverage(): Promise<boolean>;
   /** Show one of the Image dialogs (Image Size, Trim, Arbitrary
    *  rotation) on top of the panel. */
-  openDialog(kind: "imageSize" | "trim" | "rotate" | "exportAs"): boolean;
+  openDialog(
+    kind: "imageSize" | "trim" | "rotate" | "exportAs" | "smartTransform",
+  ): boolean;
   /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
    *  active one by default): fill opacity, knockout and Blend If. */
   openBlendingOptions(index?: number): boolean;
@@ -2078,6 +2096,7 @@ export function createImageSession(host: BundleHost): ImageSession {
   // Selection and masking (created below, once `api` helpers exist).
   let maskingRef: MaskingController | null = null;
   let vectorsRef: VectorController | null = null;
+  let smartRef: SmartController | null = null;
   // The paint interaction machine (pointer sampling only — the stroke's
   // base snapshot + coverage live engine-side).
   let brushMachineRef: BrushMachine | null = null;
@@ -2112,6 +2131,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     editingAdjustment: null,
     gradientKind: "linear",
     committedRev: null,
+    smartNested: null,
+    smartInfo: null,
     uncommitted: false,
     saveBack: null,
     sourceMetadata: null,
@@ -2478,6 +2499,11 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       state.layers = engine.layers();
       state.history = engine.layersHistory();
+      const act = state.layers.layers.find(
+        (l) => l.index === state.layers.active,
+      );
+      state.smartInfo =
+        act?.kind === "smart" ? engine.smartInfo(act.index) : null;
       historyOps.afterLayersRead();
       state.globalLight = engine.globalLight();
       const styled =
@@ -2507,6 +2533,11 @@ export function createImageSession(host: BundleHost): ImageSession {
    *  slider steps costs at most two folds, each of the CURRENT stack. */
   const recompositeNow = async (): Promise<boolean> => {
     if (!engine || !state.source) return false;
+    // Smart filters an undo, a canvas op or a reopen left to run (ADR
+    // 482) land first, so the fold shows them.
+    if (state.gpu && engine.smartPending().length > 0) {
+      await smartRef?.passPending();
+    }
     try {
       await engine.layersComposite();
     } catch (err) {
@@ -3722,9 +3753,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     const values = { ...d.values };
     const eng = engine;
     const ctx = filterCtx(state.source.width, state.source.height, values);
-    const ok = await api.applyEffect(def.label, (h) =>
-      def.run(eng, h, values, ctx),
-    );
+    const ok = smart.isSmart()
+      ? await smart.addFilter(state.layers.active, d.id, values)
+      : await api.applyEffect(def.label, (h) => def.run(eng, h, values, ctx));
     // The dialog may have closed (or moved on) while the pass ran.
     if (openFilter() !== d) {
       if (ok) await historyStep(true);
@@ -4043,6 +4074,34 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
   }));
 
+  const smart = (smartRef = createSmartController({
+    host,
+    engine: () => engine,
+    source: () => state.source,
+    adoptSource(info, nestedName) {
+      // Edit Contents: the session now addresses the open contents (or,
+      // closing them, the parent again). Neither handle is freed here —
+      // the engine owns both (the parent is parked, the contents are
+      // freed when they close).
+      const src = state.source;
+      if (!src) return;
+      releaseTiles();
+      src.handle = info.handle;
+      src.width = info.width;
+      src.height = info.height;
+      bumpTiles();
+      state.selection = null;
+      state.smartNested = nestedName;
+    },
+    layers: () => state.layers,
+    gpu: () => state.gpu,
+    setStatus,
+    emit,
+    refreshLayers,
+    recomposite: () => recomposite(),
+    filterContext: (w, h, values) => filterCtx(w, h, values),
+  }));
+
   const presetCtx = {
     host,
     state,
@@ -4097,6 +4156,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     ...retouch,
     masking: () => masking,
     vectors: () => vectors,
+    smart: () => smart,
     state: () => state,
 
     onDidChange(listener) {
@@ -4504,6 +4564,8 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.filterNeedsAnImage, { label: t(def.label) }));
         return false;
       }
+      // On a smart object a filter is a SMART FILTER (ADR 482).
+      if (smart.isSmart()) return smart.addFilter(state.layers.active, id, v);
       const src = state.source;
       const ctx = filterCtx(src?.width ?? 1, src?.height ?? 1, v);
       return api.applyEffect(def.label, (h) => def.run(eng, h, v, ctx));
@@ -4516,6 +4578,11 @@ export function createImageSession(host: BundleHost): ImageSession {
     openDialog(kind) {
       if (!state.source) {
         setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (kind === "smartTransform" && !smart.isSmart()) {
+        setStatus(t(SO.notSmart));
+        emit();
         return false;
       }
       if (openFilter()) void cancelFilter();
@@ -5123,6 +5190,10 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async psdExportBytes() {
       if (psdHandle === null || !engine || !state.psd) return null;
+      // The retained PSD is the parent's: open contents close first.
+      if (state.smartNested !== null && !(await smart.closeAll(true))) {
+        return null;
+      }
       // PRESERVATION FIRST: an unedited export must stay byte-identical,
       // so the save-back only runs when the panel is off identity OR the
       // pixels changed since ingest. Identity alone is not enough: a
@@ -5439,6 +5510,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       host.supports("widgets.colorPicker@1") ? host.widgets.ColorPicker : null,
 
     async commitToDocument() {
+      // Open contents are saved into their smart objects first: the
+      // document holds the parent (ADR 482).
+      if (state.smartNested !== null && !(await smart.closeAll(true))) {
+        return false;
+      }
       const src = state.source;
       if (!src || !engine || !src.elementId || !sourceRef) {
         setStatus(t(S.commitNeedsAnImageIngestedFrom));

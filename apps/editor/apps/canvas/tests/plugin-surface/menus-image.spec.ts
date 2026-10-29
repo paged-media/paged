@@ -274,6 +274,187 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
+  test("Image/Layer/Smart objects/Edit contents — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Edit contents");
+    await expectGreyedAndInert(bare, "Image/Layer/Smart objects/Edit contents");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Edit contents",
+      "media.paged.image.command.smartEditContents",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Smart objects/Save and close contents — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Save and close contents");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Smart objects/Save and close contents",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Save and close contents",
+      "media.paged.image.command.smartSaveContents",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Smart objects/Close contents without saving — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Close contents without saving");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Smart objects/Close contents without saving",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Close contents without saving",
+      "media.paged.image.command.smartCloseContents",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Smart objects/Transform… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Transform…");
+    await expectGreyedAndInert(bare, "Image/Layer/Smart objects/Transform…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Transform…",
+      "media.paged.image.command.smartTransform",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Smart objects/Replace contents… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Replace contents…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Smart objects/Replace contents…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Replace contents…",
+      "media.paged.image.command.smartReplaceContents",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Smart objects/Relink to file… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Relink to file…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Smart objects/Relink to file…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Relink to file…",
+      "media.paged.image.command.smartRelink",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Smart objects/Update from file… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Update from file…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Smart objects/Update from file…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Update from file…",
+      "media.paged.image.command.smartUpdateLinked",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Smart objects/Embed linked — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Embed linked");
+    await expectGreyedAndInert(bare, "Image/Layer/Smart objects/Embed linked");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Embed linked",
+      "media.paged.image.command.smartEmbed",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Smart objects/Export contents… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Export contents…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Smart objects/Export contents…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Export contents…",
+      "media.paged.image.command.smartExportContents",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Smart objects/Place selected page items — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Smart objects/Place selected page items");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Smart objects/Place selected page items",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Smart objects/Place selected page items",
+      "media.paged.image.command.smartPlacePageItems",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no smart object to touch").toBe(
+      out.before,
+    );
+  });
+
   test("Image/Layer/New/Layer via copy — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/New/Layer via copy");
     await expectGreyedAndInert(bare, "Image/Layer/New/Layer via copy");
@@ -1612,6 +1793,38 @@ test.describe.serial("plugin menus — paged.image", () => {
       live,
       "Image/Trim…",
       "media.paged.image.command.trim",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the dialog opens nothing").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Filter/Convert for smart filters — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Filter/Convert for smart filters");
+    await expectGreyedAndInert(bare, "Image/Filter/Convert for smart filters");
+    const out = await clickEntry(
+      live,
+      "Image/Filter/Convert for smart filters",
+      "media.paged.image.command.convertForSmartFilters",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image there is no layer to convert").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Filter/Blur/Gaussian blur… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Filter/Blur/Gaussian blur…");
+    await expectGreyedAndInert(bare, "Image/Filter/Blur/Gaussian blur…");
+    const out = await clickEntry(
+      live,
+      "Image/Filter/Blur/Gaussian blur…",
+      "media.paged.image.command.filterGaussianBlur",
     );
     expect(out.shell).toEqual([
       { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
