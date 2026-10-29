@@ -895,6 +895,8 @@ property_paths! {
         // Native: IDML has no symbol (the writer expands instances).
         SymbolInstanceTint => "symbolInstanceTint" : lengths(),
         SymbolInstanceNineSlice => "symbolInstanceNineSlice" : lengths(),
+        // Draw ADR 365 — the symbol an instance draws (Replace Symbol).
+        SymbolInstanceSymbol => "symbolInstanceSymbol" : text(),
         // R-11 — the drop shadow's remaining attributes.
         FrameDropShadowBlendMode => "frameDropShadowBlendMode" : enum_open(BLEND_MODES).default_text("Multiply").idml(idml![attr(DropShadowSetting, BlendMode)]),
         FrameDropShadowSpread => "frameDropShadowSpread" : pct().default_num(0.0).idml(idml![attr(DropShadowSetting, Spread)]),
@@ -1485,7 +1487,9 @@ mod tests {
         // target.
         //
         // 262 -> 264: ADR 1039 — a symbol instance's tint and 9-slice guides.
-        assert_eq!(cat.settable_paths.len(), 264, "settable path count drifted");
+        //
+        // 264 -> 265: draw ADR 365 — the symbol an instance draws.
+        assert_eq!(cat.settable_paths.len(), 265, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

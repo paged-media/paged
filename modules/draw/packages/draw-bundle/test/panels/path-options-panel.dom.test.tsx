@@ -933,9 +933,14 @@ describe("Path options panel — rendered against the engine", () => {
           id.slice(MENU_COMMAND_PREFIX.length + 1),
         ),
       );
-      // The two "…" rows whose parameters live in a panel of their own
-      // (WP6.6 Image Trace, WP6.5 Recolor Artwork).
-      const ownPanel = new Set(["imageTraceOptions", "recolorArtworkOptions"]);
+      // The "…" rows whose parameters live in a panel of their own
+      // (WP6.6 Image Trace, WP6.5 Recolor Artwork, WP6.8 Symbol Options —
+      // the Symbols panel's options section).
+      const ownPanel = new Set([
+        "imageTraceOptions",
+        "recolorArtworkOptions",
+        "symbolOptions",
+      ]);
       const ellipsis = MENU_ENTRIES.filter(([path]) => path.endsWith("…"));
       expect(ellipsis.map(([path]) => path)).toEqual([
         "Draw/Path/Outline stroke options…",
@@ -944,6 +949,7 @@ describe("Path options panel — rendered against the engine", () => {
         "Draw/Transform/Reflect…",
         "Draw/Stroke/Dashes…",
         "Draw/Stroke/Width profile…",
+        "Draw/Symbol/Symbol options…",
         "Object/Insert arc…",
         "Object/Insert spiral…",
         "Object/Insert rectangular grid…",

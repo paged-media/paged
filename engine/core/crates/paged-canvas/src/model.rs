@@ -6286,6 +6286,7 @@ impl CanvasModel {
                     | (K::Oval, paged_mutate::NodeId::Oval(_))
                     | (K::Polygon, paged_mutate::NodeId::Polygon(_))
                     | (K::GraphicLine, paged_mutate::NodeId::GraphicLine(_))
+                    | (K::Instance, paged_mutate::NodeId::Instance(_))
                     | (K::Frame, _)
             );
             return matches.then_some(node);
@@ -6330,6 +6331,14 @@ impl CanvasModel {
                 .any(|o| o.self_id.as_deref() == Some(frame_id))
             {
                 return Some(paged_mutate::NodeId::Oval(frame_id.to_string()));
+            }
+            // Draw ADR 365 — a symbol instance deletes like a frame (the
+            // Symbol Sprayer's Alt-drag, a script's `deleteFrame`).
+            if s.instances
+                .iter()
+                .any(|i| i.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(paged_mutate::NodeId::Instance(frame_id.to_string()));
             }
         }
         None
@@ -8900,6 +8909,10 @@ impl CanvasModel {
                                         .map(|n| vec![n.left, n.top, n.right, n.bottom])
                                         .unwrap_or_default(),
                                 )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceSymbol,
+                                value: Some(Value::Text(f.symbol.clone())),
                             },
                         ];
                         entries.extend(transform_decompose_entries(Some(f.item_transform)));

@@ -828,7 +828,10 @@ collection lists the definitions with their instances. An instance's
 opacity, blend mode, transform, visibility and lock are the ordinary
 element paths; its tint and 9-slice guides are `symbolInstanceTint`
 (`[r, g, b, amount]`) and `symbolInstanceNineSlice` (`[left, top, right,
-bottom]`). STATIC: protocol 78's handshake proves the engine has them.
+bottom]`), and the symbol it draws is `symbolInstanceSymbol` (a symbol id:
+Replace Symbol, keeping the instance's id, transform and overrides; draw
+ADR 365). `deleteFrame` removes an instance by its id or address. STATIC:
+protocol 78's handshake proves the engine has them.
 paged.draw's Symbols panel uses them when the flag is up and keeps its
 re-emitted artwork (draw ADR 356) as the fallback for a host without it.
 
