@@ -10094,7 +10094,7 @@
           ]
         },
         {
-          "description": "Unsharp mask: `amount` (1 = 100 %) of the difference from a\nGaussian blur of `radius` pixels (σ). `conv.unsharp`.",
+          "description": "Unsharp mask: `amount` (1 = 100 %) of the difference from a\nGaussian blur of `radius` pixels (σ, at most 64). `conv.unsharp`.",
           "type": "object",
           "properties": {
             "op": {
@@ -10117,7 +10117,7 @@
           ]
         },
         {
-          "description": "Gaussian blur of `radius` pixels (σ). `conv.gaussian_h`/`_v`.",
+          "description": "Gaussian blur of `radius` pixels (σ, at most 64: a wide blur runs\nas several passes). `conv.gaussian_h`/`_v`.",
           "type": "object",
           "properties": {
             "op": {
