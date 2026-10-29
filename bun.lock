@@ -731,7 +731,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.74.3-canary.43",
+      "version": "0.74.3-canary.44",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -741,7 +741,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.74.3-canary.43",
+      "version": "0.74.3-canary.44",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },

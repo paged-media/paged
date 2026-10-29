@@ -230,6 +230,45 @@ export interface PropertySchema {
   heavy?: boolean;
 }
 
+/** Editor ADR 309 / plan C16 — one effect kind of the ordered stack
+ *  (engine ADR 1008), as core's catalog describes it (`effectKinds`). The
+ *  Effects and Appearance panels and the Effect menu list from these rows,
+ *  so a kind core adds appears without a change to a host or plugin. */
+export interface EffectKindDescriptor {
+  /** The wire kind of an `EffectEntrySpec` (`gaussianBlur`). */
+  kind: string;
+  /** An English name; a host translates it by `kind`. */
+  title: string;
+  /** The Effect menu group, one of `effectCategories`. */
+  category: string;
+  /** One of InDesign's nine: its parameters are the per-field paths in
+   *  `fieldPaths`, not entry fields. */
+  indesign: boolean;
+  /** The transparency targets whose stack takes it. */
+  targets: readonly ("object" | "fill" | "stroke" | "content")[];
+  /** How often one stack may hold it; absent = without limit. */
+  maxPerStack?: number;
+  /** The entry carries its own `blendMode` and `opacityPct`. */
+  blend: boolean;
+  /** The entry's own parameters (`EffectEntrySpec` fields), in form order. */
+  params: readonly EffectParamDescriptor[];
+  /** InDesign kinds: the path that switches it on the object target. */
+  enablePath?: string;
+  /** InDesign kinds: its per-field paths on the object target. */
+  fieldPaths?: readonly string[];
+}
+
+/** One parameter of a stack-only effect kind. */
+export interface EffectParamDescriptor {
+  /** The `EffectEntrySpec` field (`radiusPt`). */
+  field: string;
+  /** An English label; a host translates it by `field`. */
+  title: string;
+  type: ValueType;
+  range?: { min?: number; max?: number };
+  default?: unknown;
+}
+
 /** One IDML spelling of a core property: `attribute` on `element` (an XML
  *  attribute, or a child of its `<Properties>`). */
 export interface IdmlSpelling {
