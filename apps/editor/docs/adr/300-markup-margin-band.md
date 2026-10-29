@@ -33,6 +33,9 @@ for itself would have to re-derive the page geometry, the camera and the text's 
   measured (`ResizeObserver`) so a thread that grows pushes the next one. A leader line runs
   from the anchor's line end across the page edge to the balloon, in the item's colour, solid
   for the current balloon.
+- **Kept on screen.** A balloon never leaves the canvas to the right: when the page is wider
+  than the view, the column is moved left to the canvas's edge (it may then cover the page's
+  margin), so the panels beside the canvas never hide a balloon.
 - **Screen-constant size.** Balloons scale by the camera's inverse (as the sub-context bar,
   ADR 301), so they stay readable at any zoom; their place is in document space, so they pan
   and zoom with the page.

@@ -58,6 +58,9 @@ test.describe("journey · Word track changes", () => {
       page.locator('[data-control-bar="contributed"] [data-word-home]'),
     ).toBeVisible({ timeout: 10_000 });
 
+    // The margin band stands beside the page: zoomed out, page and band
+    // both fit the canvas, as a reviewer sets the view.
+    for (let i = 0; i < 3; i++) await invoke(page, "paged.view.zoomOut");
     covers(
       "keybinding:cmd+shift+e→media.paged.doc.command.review.toggleTrackChanges",
     );
@@ -77,7 +80,7 @@ test.describe("journey · Word track changes", () => {
 
     // A forward Delete over "A " keeps the text, struck through, and the
     // caret steps past it: the next Delete takes the next character.
-    await select(page, at + "New ".length, at + "New A".length);
+    await select(page, at + "New ".length, at + "New A ".length);
     await page.keyboard.press("Delete");
     await expect
       .poll(async () => (await changes()).map((c) => c.kind))

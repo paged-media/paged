@@ -28,6 +28,7 @@ import { covers } from "@paged-media/test-kit";
 
 import {
   collection,
+  invoke,
   offsetOf,
   openStructure,
   select,
@@ -56,6 +57,9 @@ test.describe("journey · Word comments", () => {
       page.locator('[data-control-bar="contributed"] [data-word-home]'),
     ).toBeVisible({ timeout: 10_000 });
 
+    // The margin band stands beside the page: zoomed out, page and band
+    // both fit the canvas, as a reviewer sets the view.
+    for (let i = 0; i < 3; i++) await invoke(page, "paged.view.zoomOut");
     covers("keybinding:cmd+alt+m→media.paged.doc.command.review.newComment");
     await page.keyboard.press("Meta+Alt+m");
     const edit = page.locator("[data-review-edit]");
@@ -82,6 +86,8 @@ test.describe("journey · Word comments", () => {
       )
       .toEqual(["It is fine."]);
 
+    // Next Comment brings the thread (and its balloon) into view.
+    await invoke(page, "media.paged.doc.command.review.nextComment");
     covers("command:media.paged.doc.command.review.resolveComment");
     await page
       .locator(`[data-margin-balloon] [data-review-resolve="${root!.id}"]`)

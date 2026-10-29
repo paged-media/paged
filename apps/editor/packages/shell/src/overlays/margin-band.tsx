@@ -321,6 +321,23 @@ export function MarginBandView(
       }),
   );
 
+  // The canvas's width on screen: a balloon is kept inside it, so a page
+  // wider than the view leaves its balloons on screen, over the page's
+  // edge, instead of under the panels beside the canvas.
+  const groupRef = useRef<SVGGElement>(null);
+  const [viewWidthPx, setViewWidthPx] = useState<number | null>(null);
+  const hasBands = editContext !== null && bands.length > 0;
+  useEffect(() => {
+    const svg = groupRef.current?.ownerSVGElement;
+    if (!svg) return;
+    const read = () => setViewWidthPx(svg.clientWidth || null);
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(read);
+    ro.observe(svg);
+    return () => ro.disconnect();
+  }, [hasBands]);
+
   if (editContext === null || bands.length === 0) return null;
   const inv = 1 / props.camera.scale;
   const gapPt = BALLOON_GAP_PX * inv;
@@ -343,7 +360,7 @@ export function MarginBandView(
   }
   const tops = layoutBalloons(inputs, gapPt);
   return (
-    <g data-margin-band={editContext}>
+    <g ref={groupRef} data-margin-band={editContext}>
       {items.map((it) => {
         const anchor = anchors.get(it.key);
         const top = tops.get(it.key);
@@ -352,7 +369,13 @@ export function MarginBandView(
           : undefined;
         if (!anchor || top === undefined || !pr) return null;
         const widthPx = it.band.width ?? BALLOON_WIDTH_PX;
-        const bx = pr.x + pr.w + (columns.get(it.band.id) ?? gapPt);
+        const beside = pr.x + pr.w + (columns.get(it.band.id) ?? gapPt);
+        // The rightmost place on screen, in page space.
+        const maxX =
+          viewWidthPx === null
+            ? Infinity
+            : (viewWidthPx - widthPx - BALLOON_GAP_PX - props.camera.tx) * inv;
+        const bx = Math.max(pr.x, Math.min(beside, maxX));
         const by = pr.y + top;
         const hPx = heights.get(it.key) ?? BALLOON_HEIGHT_PX;
         const ax = pr.x + anchor.leftPt + anchor.widthPt;
