@@ -45,7 +45,7 @@ import type {
   MutationInput,
 } from "@paged-media/plugin-api";
 
-import { resolveTargetPage } from "../io/svg";
+import { resolveTargetPage } from "../target-page";
 
 /** The flag the engine lane rides. */
 export const ENGINE_SYMBOLS_FEATURE = "document.symbols@1";
