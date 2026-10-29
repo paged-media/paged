@@ -49,7 +49,8 @@ pub enum Paint {
     Solid {
         rgb: Rgb,
         alpha: f64,
-        /// The scheme slot, when the colour is one untransformed.
+        /// The theme colour it names ([`SchemeColors::theme_key`]): by
+        /// default the scheme slot, when the colour is one untransformed.
         theme: Option<String>,
     },
     Linear {
@@ -218,7 +219,7 @@ pub fn paint(fill: &Fill, schemes: &dyn SchemeColors, note: &mut dyn FnMut(Strin
             Paint::Solid {
                 rgb,
                 alpha,
-                theme: c.plain_scheme().map(str::to_string),
+                theme: schemes.theme_key(c),
             }
         }
         Fill::Gradient(g) => {

@@ -48,6 +48,7 @@ pub mod model;
 mod table;
 pub mod table_styles;
 pub mod text;
+pub mod theme;
 
 use color::{resolve as resolve_color, ColorCtx, Rgba};
 use model::*;
@@ -182,7 +183,13 @@ struct Ctx<'a> {
     diagnostics: &'a std::cell::RefCell<Vec<String>>,
     part: &'a str,
     draw: &'a ChartDrawer<'a>,
+    /// The theme's prefix in theme colour keys, when it is not the deck's
+    /// first theme (slide ADR 713).
+    theme_tag: Option<String>,
 }
+
+/// A style reference's colour (`phClr`): its value and its theme key.
+pub(crate) type Ph = (Rgba, Option<String>);
 
 /// Draws a chart frame: the chart part, the frame's width and height (pt)
 /// → the chart's primitives in the frame's points, or `None` for
@@ -201,24 +208,33 @@ impl Ctx<'_> {
             .borrow_mut()
             .push(format!("{}: {}", self.part, what.into()));
     }
-    fn colors(&self, placeholder: Option<Rgba>) -> ColorCtx<'_> {
+    fn colors(&self, placeholder: Option<Ph>) -> ColorCtx<'_> {
+        let (placeholder, placeholder_key) = match placeholder {
+            Some((c, k)) => (Some(c), k),
+            None => (None, None),
+        };
         ColorCtx {
             theme: self.theme,
             map: &self.map,
             placeholder,
+            placeholder_key,
+            theme_tag: self.theme_tag.as_deref(),
         }
+    }
+    /// A style reference's colour as `phClr`.
+    fn ph(&self, c: &pptx_core::Color) -> Ph {
+        let cc = self.colors(None);
+        (resolve_color(c, &cc), cc.key(c))
     }
 }
 
 // ─── paint ──────────────────────────────────────────────────────────
 
-fn style_color(ctx: &Ctx, r: &Option<pptx_core::StyleRef>) -> Option<Rgba> {
-    r.as_ref()
-        .and_then(|r| r.color.as_ref())
-        .map(|c| resolve_color(c, &ctx.colors(None)))
+fn style_color(ctx: &Ctx, r: &Option<pptx_core::StyleRef>) -> Option<Ph> {
+    r.as_ref().and_then(|r| r.color.as_ref()).map(|c| ctx.ph(c))
 }
 
-fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Rgba>) -> Paint {
+fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Ph>) -> Paint {
     resolved::paint(fill, &ctx.colors(ph), &mut |n| ctx.note(n))
 }
 
@@ -351,6 +367,60 @@ fn effects(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Effects
     };
     fx.map(|fx| resolved::effects(&fx, &ctx.colors(ph), &mut |n| ctx.note(n)))
         .unwrap_or_default()
+}
+
+/// A shape style as an object style (slide ADR 719): its references as
+/// text, a name, and the fill and line it gives a shape with no fill or
+/// line of its own.
+fn shape_style_look(st: &ShapeStyle, ctx: &Ctx) -> ShapeStyleLook {
+    let key = |c: Option<&pptx_core::Color>| -> String {
+        match c {
+            Some(c) => ctx
+                .colors(None)
+                .key(c)
+                .unwrap_or_else(|| format!("#{:06X}", resolve_color(c, &ctx.colors(None)).hex())),
+            None => "-".into(),
+        }
+    };
+    let r = |name: &str, r: &Option<pptx_core::StyleRef>| match r {
+        Some(r) => format!("{name}{}:{}", r.idx, key(r.color.as_ref())),
+        None => format!("{name}-"),
+    };
+    let font = match &st.font_ref {
+        Some((idx, c)) => format!("font:{idx}:{}", key(c.as_ref())),
+        None => "font-".into(),
+    };
+    let refs = format!(
+        "{} {} {} {font}",
+        r("line", &st.line_ref),
+        r("fill", &st.fill_ref),
+        r("effect", &st.effect_ref)
+    );
+    // Named by the fill's colour, as PowerPoint's Shape Styles gallery
+    // names its rows (`Colored Fill - Accent 1`).
+    let colour = st
+        .fill_ref
+        .as_ref()
+        .and_then(|f| f.color.as_ref())
+        .or(st.line_ref.as_ref().and_then(|l| l.color.as_ref()))
+        .and_then(|c| ctx.colors(None).key(c))
+        .and_then(|k| theme::Key::parse(&k))
+        .map(|k| k.name())
+        .unwrap_or_else(|| "Custom".into());
+    let n = |r: &Option<pptx_core::StyleRef>| r.as_ref().map(|r| r.idx).unwrap_or(0);
+    let name = format!(
+        "Shape Style: {colour} (fill {}, line {}, effect {})",
+        n(&st.fill_ref),
+        n(&st.line_ref),
+        n(&st.effect_ref)
+    );
+    let bare = ShapeProps::default();
+    ShapeStyleLook {
+        refs,
+        name,
+        fill: shape_fill(&bare, Some(st), ctx),
+        stroke: shape_stroke(&bare, Some(st), ctx),
+    }
 }
 
 // ─── placeholders ───────────────────────────────────────────────────
@@ -542,7 +612,7 @@ fn text_frame(
     let font_ref = chain
         .iter()
         .find_map(|sp| sp.style.as_ref().and_then(|s| s.font_ref.clone()))
-        .map(|(idx, c)| (idx, c.map(|c| resolve_color(&c, &colors))));
+        .map(|(idx, c)| (idx, c.map(|c| ctx.ph(&c))));
     let tctx = text::TextCtx {
         lists,
         inherited,
@@ -700,6 +770,9 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                         }
                     }),
                     model_id: sp.model_id.clone(),
+                    shape_style: style
+                        .filter(|_| sp.nv.placeholder.is_none())
+                        .map(|st| shape_style_look(st, ctx)),
                     ..Default::default()
                 },
             })
@@ -991,7 +1064,7 @@ fn background(bg: &Background, ctx: &Ctx, w: f64, h: f64) -> Option<Item> {
     let fill = match bg {
         Background::Fill(f) => paint(f, ctx, None),
         Background::StyleRef { idx, color } => {
-            let ph = color.as_ref().map(|c| resolve_color(c, &ctx.colors(None)));
+            let ph = color.as_ref().map(|c| ctx.ph(c));
             let i = idx.checked_sub(1001)? as usize;
             let f = ctx.theme?.background_fill_styles.get(i)?;
             paint(f, ctx, ph)
@@ -1026,6 +1099,103 @@ fn overlay(base: &ColorMap, over: Option<&ColorMap>) -> ColorMap {
     }
 }
 
+/// The paragraph styles placeholders map to (slide ADR 719), from the
+/// master whose theme is the deck's first: `Title` and `Body` (the roots,
+/// with the theme's major and minor fonts), `Title`'s look, and `Body L1`–
+/// `L9` and `Other L1`–`L9` based on `Body`, each with its level's look.
+fn paragraph_styles(
+    deck: &Presentation,
+    primary_theme: &Option<String>,
+    next_id: &std::cell::Cell<u32>,
+    diagnostics: &std::cell::RefCell<Vec<String>>,
+    draw: &ChartDrawer,
+) -> Vec<ParagraphStyle> {
+    let Some(master) = deck
+        .masters
+        .iter()
+        .find(|m| m.theme_part == *primary_theme)
+        .or(deck.masters.first())
+    else {
+        return Vec::new();
+    };
+    let theme = master.theme_part.as_deref().and_then(|t| deck.theme(t));
+    let ctx = Ctx {
+        deck,
+        master,
+        layout: None,
+        theme,
+        map: master.color_map.clone(),
+        level: Level::Master,
+        next_id,
+        diagnostics,
+        part: &master.part,
+        draw,
+        theme_tag: None,
+    };
+    let colors = ctx.colors(None);
+    let (major, minor) = match theme {
+        Some(t) => (&t.major_font, &t.minor_font),
+        None => (&EMPTY_FONTS, &EMPTY_FONTS),
+    };
+    let look = |prefix: &'static str, list: Option<&ListStyle>, lvl: u8| -> Para {
+        let mut lists: Vec<&ListStyle> = Vec::new();
+        match list {
+            Some(l) => lists.push(l),
+            None => lists.extend(deck.default_text_style.as_ref()),
+        }
+        let tctx = text::TextCtx {
+            inherited: lists.len(),
+            lists,
+            colors: &colors,
+            major,
+            minor,
+            font_ref: None,
+            style_prefix: Some(prefix),
+            shrink: None,
+        };
+        let p = pptx_core::Paragraph {
+            props: pptx_core::ParagraphProps {
+                level: Some(lvl),
+                ..Default::default()
+            },
+            runs: vec![pptx_core::Run {
+                kind: pptx_core::RunKind::Text("x".into()),
+                props: Default::default(),
+            }],
+            ..Default::default()
+        };
+        text::paragraph(&p, &tctx)
+    };
+    let mut out = vec![
+        ParagraphStyle {
+            name: "Body".into(),
+            based_on: None,
+            theme_font: Some("minor".into()),
+            level: None,
+        },
+        ParagraphStyle {
+            name: "Title".into(),
+            based_on: None,
+            theme_font: Some("major".into()),
+            level: Some(look("Title", master.title_style.as_ref(), 0)),
+        },
+    ];
+    for (prefix, list) in [
+        ("Body", master.body_style.as_ref()),
+        ("Other", master.other_style.as_ref()),
+    ] {
+        for lvl in 0..9u8 {
+            out.push(ParagraphStyle {
+                name: format!("{prefix} L{}", lvl + 1),
+                based_on: Some("Body".into()),
+                theme_font: None,
+                level: Some(look(prefix, list, lvl)),
+            });
+        }
+    }
+    out
+}
+
 /// Resolve a deck.
 pub fn resolve(deck: &Presentation) -> Deck {
     resolve_with(deck, &|_, _, _| None)
@@ -1039,6 +1209,24 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
     );
     let next_id = std::cell::Cell::new(0u32);
     let diagnostics = std::cell::RefCell::new(Vec::new());
+    // The deck's first theme (the first used layout's master's): its
+    // colours' keys carry no prefix; another theme's are prefixed with its
+    // part's name (slide ADR 713).
+    let primary_theme = deck
+        .slides
+        .iter()
+        .filter_map(|s| s.layout_part.as_deref())
+        .find_map(|lp| deck.layout(lp))
+        .and_then(|l| deck.master(&l.master_part))
+        .and_then(|m| m.theme_part.clone());
+    let theme_tag = |m: &Master| -> Option<String> {
+        let part = m.theme_part.as_deref()?;
+        if Some(part) == primary_theme.as_deref() {
+            return None;
+        }
+        let stem = part.rsplit('/').next()?.trim_end_matches(".xml");
+        Some(stem.to_string())
+    };
     let mut out = Deck {
         width: w,
         height: h,
@@ -1076,8 +1264,10 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
             diagnostics: &diagnostics,
             part: &master.part,
             draw,
+            theme_tag: theme_tag(master),
         };
         let lctx = Ctx {
+            theme_tag: theme_tag(master),
             layout: Some(layout),
             map: overlay(&master.color_map, layout.color_map_override.as_ref()),
             level: Level::Layout,
@@ -1113,7 +1303,11 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
                     theme: Some(t),
                     map: &master.color_map,
                     placeholder: None,
+                    placeholder_key: None,
+                    theme_tag: None,
                 };
+                out.theme = Some(theme::ThemeIr::of(t));
+                out.theme_part = master.theme_part.clone();
                 out.theme_colors = t
                     .colors
                     .iter()
@@ -1122,6 +1316,8 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
             }
         }
     }
+
+    out.paragraph_styles = paragraph_styles(deck, &primary_theme, &next_id, &diagnostics, draw);
 
     for (i, s) in deck.slides.iter().enumerate() {
         let layout = s.layout_part.as_deref().and_then(|lp| deck.layout(lp));
@@ -1145,6 +1341,7 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
             diagnostics: &diagnostics,
             part: &s.part,
             draw,
+            theme_tag: theme_tag(master),
         };
         let mut items = Vec::new();
         if let Some(b) = &s.background {
