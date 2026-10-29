@@ -122,6 +122,8 @@ const SHAPES_PANEL = "media.paged.slide.panel.shapes";
 const CUSTOM_SHOWS_PANEL = "media.paged.slide.panel.customShows";
 const ANIMATIONS_PANEL = "media.paged.slide.panel.animations";
 const SMARTART_PANEL = "media.paged.slide.panel.smartart";
+/** Design ▸ Themes (slide ADRs 713, 719). */
+const DESIGN_PANEL = "media.paged.slide.panel.design";
 const IMPORTER = "media.paged.slide.importer.pptx";
 const EXPORTER = "media.paged.slide.exporter.pptx";
 /** Save as template's exporter (slide ADR 720). */
@@ -152,6 +154,10 @@ const DELETE_SECTION = "media.paged.slide.deleteSection";
 /** SmartArt's text, for scripts (slide W4, `src/content-commands.ts`). */
 const SMARTART_POINTS = "media.paged.slide.smartArtPoints";
 const SET_SMARTART_TEXT = "media.paged.slide.setSmartArtText";
+/** The live theme, for scripts (slide ADR 713, `src/design.ts`). */
+const THEMES = "media.paged.slide.themes";
+const APPLY_THEME = "media.paged.slide.applyTheme";
+const REMAP_THEME_REFERENCE = "media.paged.slide.remapThemeReference";
 /** The animations' typed twins (slide ADR 714, `src/anim/contribute.ts`). */
 const ADD_ANIMATION = "media.paged.slide.addAnimation";
 const REMOVE_ANIMATION = "media.paged.slide.removeAnimation";
@@ -181,6 +187,9 @@ const PALETTE = {
   "media.paged.slide.command.copyFormat": "Slide/Copy formatting",
   "media.paged.slide.command.pasteFormat": "Slide/Paste formatting",
   "media.paged.slide.command.smartArtText": "Slide/SmartArt text pane",
+  // Slide W3: Design ▸ Themes opens the Design panel (ADR 713).
+  "media.paged.slide.command.design": "Design/Themes",
+  "media.paged.slide.command.browseThemes": "Design/Browse for Themes…",
 } as const;
 
 /** The slide show's commands (slide ADR 716, `src/show/contribute.ts`):
@@ -264,6 +273,7 @@ const DECLARED = {
     CUSTOM_SHOWS_PANEL,
     ANIMATIONS_PANEL,
     SMARTART_PANEL,
+    DESIGN_PANEL,
   ],
   importers: [IMPORTER],
   exporters: [EXPORTER, TEMPLATE_EXPORTER],
@@ -311,6 +321,12 @@ const DECLARED = {
     "media.paged.slide.command.smartArtText",
     SMARTART_POINTS,
     SET_SMARTART_TEXT,
+    // Design ▸ Themes' palette twins and the live theme, for scripts.
+    "media.paged.slide.command.design",
+    "media.paged.slide.command.browseThemes",
+    THEMES,
+    APPLY_THEME,
+    REMAP_THEME_REFERENCE,
   ],
   /** The deck's document context (editor ADR 307): no frame is entered;
    *  and a chart frame's data (slide ADR 715), entered by double-click. */
@@ -343,6 +359,7 @@ const PANEL_TITLES: Record<string, string> = {
   [CUSTOM_SHOWS_PANEL]: "Custom shows",
   [ANIMATIONS_PANEL]: "Animations",
   [SMARTART_PANEL]: "Text Pane",
+  [DESIGN_PANEL]: "Design",
 };
 const SCHEMA_PANELS = [
   SLIDE_PANEL,
@@ -660,7 +677,7 @@ test.describe("plugin surface · paged.slide", () => {
 
   // ── 2. PANELS ────────────────────────────────────────────────────
 
-  test("all eleven panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
+  test("all twelve panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
     page,
   }) => {
     await bootBlank(page);
@@ -679,19 +696,23 @@ test.describe("plugin surface · paged.slide", () => {
     expect(byId[SHAPES_PANEL].defaultDock).toBe("right");
     expect(byId[CUSTOM_SHOWS_PANEL].defaultDock).toBe("right");
     expect(byId[ANIMATIONS_PANEL].defaultDock).toBe("right");
-    // The six React panels carry their own glyph for the panel rail.
+    expect(byId[DESIGN_PANEL].defaultDock).toBe("right");
+    // The seven React panels carry their own glyph for the panel rail.
     expect(byId[SLIDES_PANEL].iconSvg).toBe(true);
     expect(byId[NOTES_PANEL].iconSvg).toBe(true);
     expect(byId[COMMENTS_PANEL].iconSvg).toBe(true);
     expect(byId[SHAPES_PANEL].iconSvg).toBe(true);
     expect(byId[CUSTOM_SHOWS_PANEL].iconSvg).toBe(true);
     expect(byId[ANIMATIONS_PANEL].iconSvg).toBe(true);
+    expect(byId[DESIGN_PANEL].iconSvg).toBe(true);
     // The Shapes panel never joins the rail: Insert ▸ Shapes… opens it.
     expect(byId[SHAPES_PANEL].rail).toBe(false);
     // Nor does Custom shows: Slide Show ▸ Custom Shows… opens it (ADR 720).
     expect(byId[CUSTOM_SHOWS_PANEL].rail).toBe(false);
     // Nor does Animations: Animations ▸ Animation Pane opens it (ADR 714).
     expect(byId[ANIMATIONS_PANEL].rail).toBe(false);
+    // Nor does Design: Design ▸ Themes opens it (ADR 713).
+    expect(byId[DESIGN_PANEL].rail).toBe(false);
     for (const id of SCHEMA_PANELS)
       expect(byId[id].defaultDock, id).toBe("right");
 
@@ -772,8 +793,14 @@ test.describe("plugin surface · paged.slide", () => {
     await expect(page.locator("[data-animations-panel]")).toBeVisible({
       timeout: 15_000,
     });
+    // The Design panel: outside a deck there is no theme, and it says so.
+    await openPanel(page, DESIGN_PANEL);
+    await expect(page.locator('[data-design-panel="empty"]')).toContainText(
+      "Open a PowerPoint deck",
+      { timeout: 15_000 },
+    );
 
-    // The real menu bar: Plugins ▸ Slide lists all eleven, none greyed
+    // The real menu bar: Plugins ▸ Slide lists all twelve, none greyed
     // (paged.slide has no edit context, so no context withholds them),
     // and picking one opens it.
     await page.keyboard.press("Escape");
@@ -1241,6 +1268,78 @@ test.describe("plugin surface · paged.slide", () => {
 
   // ── 7. AUDIT — is any of this REACHABLE? ─────────────────────────
 
+  test("Design ▸ Themes applies a gallery theme and a variant, one undo step each @feat:plugin-slide.import-native @feat:plugin-slide.object-model @level:happy", async ({
+    page,
+  }) => {
+    const designer = await bootBlank(page);
+    await openDeck(page, designer);
+    const themes = () =>
+      page.evaluate(
+        async (id) =>
+          (await (
+            globalThis as unknown as CanvasGlobal
+          ).__canvas.objects!.invoke(id, {})) as {
+            themes: { id: string; variants: string[] }[];
+            current: string | null;
+            variant: string | null;
+            missing: string[];
+          },
+        THEMES,
+      );
+    const before = await themes();
+    expect(before.current).toBe("Office");
+    expect(before.themes[0]!.id, "the deck's own theme first").toBe("deck");
+    expect(before.themes.map((t) => t.id)).toContain("paper");
+    expect(before.missing).toEqual([]);
+
+    // Design ▸ Themes opens the panel; a card applies its theme.
+    await page.evaluate(() =>
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke("media.paged.slide.command.design"),
+    );
+    const panel = page.locator('[data-design-panel="ready"]');
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+    await expect(panel.locator("[data-design-theme]").first()).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await panel.locator('[data-design-theme="paper"]').click();
+    await expect(panel.locator("[data-design-current]")).toContainText(
+      "Paper",
+      {
+        timeout: 15_000,
+      },
+    );
+    await panel.locator('[data-design-variant="1"]').click();
+    await expect(panel.locator("[data-design-current]")).toContainText("Dark", {
+      timeout: 15_000,
+    });
+    expect((await themes()).variant).toBe("Dark");
+
+    // Each is one undo step.
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
+    );
+    await expect.poll(async () => (await themes()).variant).not.toBe("Dark");
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
+    );
+    await expect.poll(async () => (await themes()).current).toBe("Office");
+
+    // The typed twin applies one for a script.
+    const applied = await page.evaluate(
+      (id) =>
+        (globalThis as unknown as CanvasGlobal).__canvas.objects!.invoke(id, {
+          theme: "harbour",
+          variant: "Muted",
+        }),
+      APPLY_THEME,
+    );
+    expect(applied).toEqual({ applied: true });
+    expect((await themes()).current).toBe("Harbour");
+  });
+
   test("AUDIT — paged.slide's verbs are in the palette and the menu bar, offered where they apply; a key each, no tool @feat:editor-shell.plugin-bundles @level:edge", async ({
     page,
   }) => {
@@ -1330,6 +1429,8 @@ test.describe("plugin surface · paged.slide", () => {
       "media.paged.slide.command.copyFormat": "Copy formatting",
       "media.paged.slide.command.pasteFormat": "Paste formatting",
       "media.paged.slide.command.smartArtText": "SmartArt text pane",
+      "media.paged.slide.command.design": "Design",
+      "media.paged.slide.command.browseThemes": "Browse for Themes…",
       ...Object.fromEntries(
         Object.entries(SHOW).map(([id, [title]]) => [id, title]),
       ),

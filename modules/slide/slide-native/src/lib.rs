@@ -53,6 +53,7 @@ use slide_geom::SubPath;
 pub mod live;
 
 use slide_resolve::model::*;
+use slide_resolve::theme::{self as live_theme, Key, ThemeIr};
 
 /// What a deck became: the `.paged` package, and what the bundle needs
 /// beside it.
@@ -257,6 +258,21 @@ pub fn deck_label(
     fonts: &[String],
     custom_shows: &[slide_resolve::model::CustomShowPages],
 ) -> String {
+    deck_label_with_theme(name, width, height, fonts, custom_shows, None)
+}
+
+/// [`deck_label`] with the deck's theme (slide ADR 713): `theme` is the
+/// theme the document shows (changed by Design ▸ Themes, in the same undo
+/// step as its swatches and styles), `deckTheme` the deck's own, which the
+/// gallery keeps offering.
+pub fn deck_label_with_theme(
+    name: &str,
+    width: f64,
+    height: f64,
+    fonts: &[String],
+    custom_shows: &[slide_resolve::model::CustomShowPages],
+    theme: Option<&ThemeIr>,
+) -> String {
     let mut data = serde_json::json!({
         "deck": {
             "name": name,
@@ -265,6 +281,10 @@ pub fn deck_label(
             "fonts": fonts,
         },
     });
+    if let Some(t) = theme {
+        data["theme"] = serde_json::to_value(t).unwrap_or_default();
+        data["deckTheme"] = serde_json::to_value(t).unwrap_or_default();
+    }
     if !custom_shows.is_empty() {
         data["customShows"] = custom_shows
             .iter()
@@ -465,6 +485,19 @@ const NORMAL_PARA_STYLE: &str = "ParagraphStyle/$ID/NormalParagraphStyle";
 const NO_OBJECT_STYLE: &str = "ObjectStyle/$ID/[None]";
 const NO_CELL_STYLE: &str = "CellStyle/$ID/[None]";
 const NO_TABLE_STYLE: &str = "TableStyle/$ID/[No table style]";
+/// The character styles a run in a theme font takes when its paragraph's
+/// style is not rooted in that font (slide ADR 713).
+pub const HEADINGS_FONT_STYLE: &str = "CharacterStyle/Headings font";
+pub const BODY_FONT_STYLE: &str = "CharacterStyle/Body font";
+/// The root paragraph styles the theme fonts live on.
+pub const TITLE_STYLE: &str = "ParagraphStyle/Title";
+pub const BODY_STYLE: &str = "ParagraphStyle/Body";
+
+/// The swatch a theme colour key fills with (slide ADR 713).
+fn theme_namer(key: &str) -> Option<(String, String)> {
+    let k = Key::parse(key)?;
+    Some((k.swatch_id(), k.name()))
+}
 /// The interchange DOM version the model records. The engine reads it
 /// only to report it; it is kept so a deck reads as it did.
 const DOM_VERSION: &str = "20.0";
@@ -654,6 +687,9 @@ struct Builder<'a> {
     page_of_part: BTreeMap<String, String>,
     /// Text hyperlinks: (number, destination).
     links: Vec<(usize, paged_model::HyperlinkDestinationKind)>,
+    /// Object styles from shape styles (slide ADR 719): references → id,
+    /// and each one's definition.
+    object_styles: Vec<(String, ObjectStyleDef)>,
     diagnostics: Vec<String>,
 }
 
@@ -673,8 +709,40 @@ impl Builder<'_> {
             .or_insert_with(|| (kind, id.to_string()));
     }
 
-    fn color(&mut self, rgb: Rgb) -> String {
-        self.dml.color(rgb)
+    /// A text run's colour: its theme colour's swatch, else a plain one.
+    fn run_color(&mut self, rgb: Rgb, theme: Option<&str>) -> String {
+        match theme.and_then(theme_namer) {
+            Some((id, name)) => self.dml.palette.themed(&id, &name, rgb),
+            None => self.dml.palette.literal(rgb),
+        }
+    }
+
+    /// The object style a shape style maps to (slide ADR 719), made the
+    /// first time it is met.
+    fn object_style(&mut self, look: &ShapeStyleLook) -> String {
+        if let Some(i) = self.object_styles.iter().position(|(r, _)| *r == look.refs) {
+            return self.object_styles[i].1.self_id.clone();
+        }
+        let mut id = format!("ObjectStyle/{}", clean_name(&look.name));
+        let taken =
+            |id: &str, all: &[(String, ObjectStyleDef)]| all.iter().any(|(_, d)| d.self_id == id);
+        let mut n = 2;
+        while taken(&id, &self.object_styles) {
+            id = format!("ObjectStyle/{} {n}", clean_name(&look.name));
+            n += 1;
+        }
+        let fill = self.paint(&look.fill);
+        let sf = self.stroke(look.stroke.as_ref());
+        let def = ObjectStyleDef {
+            self_id: id.clone(),
+            name: Some(id["ObjectStyle/".len()..].to_string()),
+            fill_color: Some(fill),
+            stroke_color: sf.color,
+            stroke_weight: sf.weight,
+            ..ObjectStyleDef::default()
+        };
+        self.object_styles.push((look.refs.clone(), def));
+        id
     }
 
     /// The swatch a paint fills with.
@@ -767,7 +835,21 @@ impl Builder<'_> {
                         stroke.as_ref().map(|s| &s.paint)
                     };
                     let tr = self.transparency(it.opacity, &it.effects, feather);
-                    self.polygon(sb, it, &pid, Some(fc.clone()), &sf, &gp, &paths, tr, label);
+                    // A shape with a style (`p:style`) takes the object style
+                    // it maps to; its own fill and line stay (slide ADR 719).
+                    let os = it.meta.shape_style.as_ref().map(|l| self.object_style(l));
+                    self.polygon(
+                        sb,
+                        it,
+                        &pid,
+                        Some(fc.clone()),
+                        &sf,
+                        &gp,
+                        &paths,
+                        tr,
+                        label,
+                        os.as_deref(),
+                    );
                     let details: Vec<SubPath> = outline
                         .iter()
                         .filter(|s| !s.filled && s.stroked)
@@ -787,6 +869,7 @@ impl Builder<'_> {
                             &details,
                             tr,
                             label,
+                            None,
                         );
                     }
                 }
@@ -884,6 +967,7 @@ impl Builder<'_> {
         paths: &[SubPath],
         tr: Transparency,
         label: Option<&str>,
+        object_style: Option<&str>,
     ) {
         sb.name(id, &it.name);
         sb.label(id, label);
@@ -907,7 +991,7 @@ impl Builder<'_> {
             gradient_fill_angle: gp.angle,
             gradient_fill_length: gp.length,
             gradient_fill_start: gp.start,
-            applied_object_style: Some(NO_OBJECT_STYLE.into()),
+            applied_object_style: Some(object_style.unwrap_or(NO_OBJECT_STYLE).into()),
             opacity: tr.opacity,
             drop_shadow: tr.shadow,
             effects: tr.effects,
@@ -1368,6 +1452,14 @@ impl Builder<'_> {
     fn paragraphs(&mut self, paras: &[Para]) -> Vec<Paragraph> {
         let mut out = Vec::with_capacity(paras.len());
         for p in paras {
+            // The theme font the paragraph's style is rooted in: a run in
+            // that font takes it from the style, a run in the other theme
+            // font from its character style (slide ADR 713).
+            let root_font = match p.style.as_deref() {
+                Some("Title") => Some("major"),
+                Some(_) => Some("minor"),
+                None => None,
+            };
             let style = match &p.style {
                 Some(name) => {
                     self.para_styles.insert(name.clone());
@@ -1404,7 +1496,16 @@ impl Builder<'_> {
             }
             // An empty paragraph's line is its size alone: no run.
             for r in &p.runs {
-                let color = self.color(r.rgb);
+                let color = self.run_color(r.rgb, r.theme.as_deref());
+                let (font, character_style) = match r.theme_font.as_deref() {
+                    Some(f) if Some(f) == root_font => (None, NO_CHAR_STYLE),
+                    Some("major") => (None, HEADINGS_FONT_STYLE),
+                    Some(_) => (None, BODY_FONT_STYLE),
+                    None => (
+                        Some(clean_value(&r.font)).filter(|f| !f.is_empty()),
+                        NO_CHAR_STYLE,
+                    ),
+                };
                 let text = if r.line_break {
                     "\u{2028}".to_string()
                 } else if r.field.as_deref() == Some("slidenum") {
@@ -1423,8 +1524,8 @@ impl Builder<'_> {
                     0.0
                 };
                 para.runs.push(CharacterRun {
-                    character_style: Some(NO_CHAR_STYLE.into()),
-                    font: Some(clean_value(&r.font)).filter(|f| !f.is_empty()),
+                    character_style: Some(character_style.into()),
+                    font,
                     font_style: Some(
                         match (r.bold, r.italic) {
                             (true, true) => "Bold Italic",
@@ -1475,7 +1576,7 @@ pub fn slide_key(it: &Item) -> String {
 pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) -> Built {
     let mut w = Builder {
         images,
-        dml: Mapper::new(&deck.theme_colors),
+        dml: Mapper::with_theme_keys(&deck.theme_colors, theme_namer),
         stories: Vec::new(),
         story_of: BTreeMap::new(),
         para_styles: BTreeSet::new(),
@@ -1488,6 +1589,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             .map(|s| (s.part.clone(), s.id.clone()))
             .collect(),
         links: Vec::new(),
+        object_styles: Vec::new(),
         diagnostics: Vec::new(),
     };
     const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
@@ -1557,6 +1659,65 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         });
     }
 
+    // The theme (slide ADR 713): every slot and the colour picker's tints
+    // as swatches, whether the deck's art uses them or not, so a colour
+    // picked from the "Theme" group stays a theme colour.
+    let theme_table: Vec<(String, Rgb)> = deck
+        .theme
+        .as_ref()
+        .map(ThemeIr::rgb_table)
+        .unwrap_or_else(|| deck.theme_colors.clone());
+    if !theme_table.is_empty() {
+        for k in live_theme::group_keys(&theme_table) {
+            if let Some(rgb) = k.rgb(&theme_table) {
+                w.dml.palette.themed(&k.swatch_id(), &k.name(), rgb);
+            }
+        }
+    }
+    // The paragraph styles placeholders map to (slide ADR 719): the roots
+    // carry the theme fonts, each level its master text style's look.
+    let (major, minor) = deck
+        .theme
+        .as_ref()
+        .map(|t| (t.major.clone(), t.minor.clone()))
+        .unwrap_or_default();
+    let font_of = |which: &str| {
+        let f = if which == "major" { &major } else { &minor };
+        Some(clean_value(f)).filter(|f| !f.is_empty())
+    };
+    let mut para_defs: Vec<ParagraphStyleDef> = Vec::new();
+    for ps in &deck.paragraph_styles {
+        let id = format!("ParagraphStyle/{}", ps.name);
+        let mut def = ParagraphStyleDef {
+            self_id: id.clone(),
+            name: Some(ps.name.clone()),
+            based_on: ps.based_on.as_ref().map(|b| format!("ParagraphStyle/{b}")),
+            font: ps.theme_font.as_deref().and_then(font_of),
+            ..ParagraphStyleDef::default()
+        };
+        if let Some(p) = &ps.level {
+            if let Some(r) = p.runs.first() {
+                def.point_size = Some(n(r.size));
+                def.fill_color = Some(w.run_color(r.rgb, r.theme.as_deref()));
+                if r.theme_font.is_none() && ps.theme_font.is_none() {
+                    def.font = Some(clean_value(&r.font)).filter(|f| !f.is_empty());
+                }
+            }
+            def.justification = Some(match p.align.as_str() {
+                "ctr" => Justification::CenterAlign,
+                "r" => Justification::RightAlign,
+                "just" => Justification::LeftJustified,
+                "dist" => Justification::FullyJustified,
+                _ => Justification::LeftAlign,
+            });
+            def.left_indent = Some(n(p.margin_left));
+            def.first_line_indent = Some(n(p.indent));
+            def.space_before = Some(n(p.space_before));
+            def.space_after = Some(n(p.space_after));
+        }
+        para_defs.push(def);
+    }
+
     // Resources (after the items, which registered colours and styles).
     let mut palette = Graphic::default();
     let mut color = |id: &str, name: &str, space: ColorSpace, value: Vec<f32>| {
@@ -1596,6 +1757,27 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             color_ref: None,
         },
     );
+    // The "Theme" swatch group: the slots, their tints, then any other
+    // theme colour the deck's art names (slide ADR 713).
+    if !theme_table.is_empty() {
+        let mut members: Vec<String> = live_theme::group_keys(&theme_table)
+            .iter()
+            .map(Key::swatch_id)
+            .collect();
+        for (id, _) in w.dml.palette.named() {
+            if Key::of_swatch(id).is_some() && !members.contains(id) {
+                members.push(id.clone());
+            }
+        }
+        palette.color_groups.insert(
+            live_theme::GROUP_ID.into(),
+            paged_model::ColorGroupEntry {
+                self_id: live_theme::GROUP_ID.into(),
+                name: Some(live_theme::GROUP_NAME.into()),
+                members,
+            },
+        );
+    }
 
     let mut styles = StyleSheet::default();
     styles.character_styles.insert(
@@ -1620,6 +1802,22 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
     para_style(NORMAL_PARA_STYLE.into(), "$ID/NormalParagraphStyle".into());
     for s in &w.para_styles {
         para_style(format!("ParagraphStyle/{s}"), s.clone());
+    }
+    for def in para_defs {
+        styles.paragraph_styles.insert(def.self_id.clone(), def);
+    }
+    // The theme fonts as character styles, for runs in a theme font their
+    // paragraph's style is not rooted in.
+    for (id, which) in [(HEADINGS_FONT_STYLE, "major"), (BODY_FONT_STYLE, "minor")] {
+        styles.character_styles.insert(
+            id.to_string(),
+            CharacterStyleDef {
+                self_id: id.to_string(),
+                name: Some(id["CharacterStyle/".len()..].to_string()),
+                font: font_of(which),
+                ..CharacterStyleDef::default()
+            },
+        );
     }
     let mut cell_style = |id: &str, name: &str, fill: Option<String>| {
         styles.cell_styles.insert(
@@ -1655,6 +1853,9 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             ..ObjectStyleDef::default()
         },
     );
+    for (_, def) in w.object_styles.drain(..) {
+        styles.object_styles.insert(def.self_id.clone(), def);
+    }
 
     let mut hyperlinks = Vec::new();
     let mut hyperlink_destinations = Vec::new();
@@ -1692,12 +1893,13 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         document_name: Some(name.to_string()),
         labels: vec![(
             SLIDE_LABEL_KEY.to_string(),
-            deck_label(
+            deck_label_with_theme(
                 name,
                 deck.width,
                 deck.height,
                 &deck.fonts,
                 &deck.custom_shows,
+                deck.theme.as_ref(),
             ),
         )],
         document_preference: DocumentPreference {

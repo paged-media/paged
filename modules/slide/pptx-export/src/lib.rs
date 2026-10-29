@@ -54,6 +54,7 @@ pub mod probe;
 pub mod slide;
 pub mod smartart;
 pub mod text;
+pub mod theme;
 pub mod timing;
 pub mod xml;
 
@@ -1380,6 +1381,19 @@ pub fn export_with(
                 c.part
             )),
         }
+    }
+
+    // The theme the document shows (slide ADR 713), when it is not the
+    // deck's: every slide master's theme part.
+    if let (Some(cur), Some(d)) = (&model, &deck) {
+        theme::write_themes(
+            &pkg,
+            &ir,
+            cur,
+            d.theme_part.as_deref(),
+            &mut out_parts,
+            &mut diagnostics,
+        );
     }
 
     let mut ct = ct_orig.clone();

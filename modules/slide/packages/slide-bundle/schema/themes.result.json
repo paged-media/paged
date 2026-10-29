@@ -1,0 +1,19 @@
+{
+  "kind": "struct",
+  "fields": {
+    "themes": {
+      "kind": "list",
+      "of": {
+        "kind": "struct",
+        "fields": {
+          "id": { "kind": "text" },
+          "name": { "kind": "text" },
+          "variants": { "kind": "list", "of": { "kind": "text" } }
+        }
+      }
+    },
+    "current": { "kind": "text", "optional": true },
+    "variant": { "kind": "text", "optional": true },
+    "missing": { "kind": "list", "of": { "kind": "text" } }
+  }
+}
