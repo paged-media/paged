@@ -59,7 +59,7 @@ import {
 } from "@paged-media/draw-geometry";
 
 import { insertPathMutationFor } from "../handlers/insert-path";
-import { resolveTargetPage } from "../io/svg";
+import { resolveTargetPage } from "../target-page";
 import { batchMutationFor, bindCreatedMutationFor } from "./batch-handles";
 import { bindMinted, mutateMinting } from "./minted";
 import { parentGroupOf } from "./parentage";
