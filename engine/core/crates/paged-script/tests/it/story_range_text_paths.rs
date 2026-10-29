@@ -227,7 +227,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 248: ADR 1007 added a frame's stroke gradient mode and its
         // gradient's start point.
         // 249: ADR 1040 added a frame's gradient mesh or freeform gradient.
-        249,
+        // 250: ADR 1041 added a frame's own pattern transform.
+        250,
         "the advertised roster changed; move the count with the decision"
     );
 }
