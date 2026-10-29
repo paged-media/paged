@@ -5011,7 +5011,7 @@ mod wasm {
             // A CMYK file's layers keep its own inks, which the ink fold
             // composites and the layered save writes (image ADR 481).
             if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
-                let through = |f: &dyn Fn(&[u8; 4]) -> [u8; 3]| {
+                let through = |f: fn(&[u8; 4]) -> [u8; 3]| {
                     move |ink: &[u8]| -> Vec<u8> {
                         ink.as_chunks::<4>()
                             .0
@@ -5023,8 +5023,8 @@ mod wasm {
                             .collect()
                     }
                 };
-                let cmy = file.layer_plates_rgba8_via(&through(&|p| [p[0], p[1], p[2]]));
-                let k = file.layer_plates_rgba8_via(&through(&|p| [p[3]; 3]));
+                let cmy = file.layer_plates_rgba8_via(&through(|p| [p[0], p[1], p[2]]));
+                let k = file.layer_plates_rgba8_via(&through(|p| [p[3]; 3]));
                 if let (Ok(cmy), Ok(k)) = (cmy, k) {
                     stack.attach_inks(&cmy, &k);
                 }
