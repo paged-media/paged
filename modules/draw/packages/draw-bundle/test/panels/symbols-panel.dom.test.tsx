@@ -455,14 +455,17 @@ describe("Symbols panel — rendered against the engine", () => {
     it("chooses a symbol, replaces the selected instance's symbol and applies its options, one step each", async () => {
       await h.host.selection.set([poly("s1")]);
       const panel = await mountPanel(h, makeSymbolsPanel);
+      const ids = () =>
+        panel.all("[data-draw-symbol-row]").map((r) =>
+          r.getAttribute("data-draw-symbol-row"),
+        );
+      const had = new Set(ids());
       await panel.click("[data-draw-symbol-define]");
       await h.host.selection.set([poly("s2")]);
       await panel.click("[data-draw-symbol-define]");
-      const rows = panel.all("[data-draw-symbol-row]");
-      expect(rows).toHaveLength(2);
-      const [first, second] = rows.map((r) =>
-        r.getAttribute("data-draw-symbol-row"),
-      );
+      const made = ids().filter((id) => !had.has(id));
+      expect(made).toHaveLength(2);
+      const [first, second] = made;
       await panel.click(
         `[data-draw-symbol-row="${first}"] [data-draw-symbol-place]`,
       );
