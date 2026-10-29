@@ -95,7 +95,6 @@ import type {
   RenderRect,
   RenderStory,
   RenderStoryOptions,
-  PageId,
   ViewContribution,
   SubContextProviderContribution,
   SubContextState,
@@ -4145,6 +4144,8 @@ export function createBundleHost(
         },
       };
     });
+  }
+
   // Extensions ADR 342 — the story door, on the snapshot request. The
   // engine lays the story out in a copy of the document; this side only
   // validates and maps the reply.

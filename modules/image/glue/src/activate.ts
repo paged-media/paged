@@ -1475,6 +1475,7 @@ export function activate(host: BundleHost): BundleHandle {
       "scaleEffects",
       CMD.scaleEffects,
       () => session.openStyleDialog("scaleEffects"),
+    ],
     // TYPE LAYERS (WP5.10).
     [
       "rasterizeType",
