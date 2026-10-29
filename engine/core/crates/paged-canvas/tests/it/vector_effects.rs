@@ -425,3 +425,26 @@ fn paged_canvas_test_idml_spread(idml: &[u8]) -> String {
         .unwrap();
     out
 }
+
+#[test]
+fn the_effects_survive_a_paged_round_trip() {
+    let mut m = load();
+    set(&mut m, &r1(), "frameEffectStack", vec![zig()]).unwrap();
+    set(
+        &mut m,
+        &el(ElementId::Group("g1".into())),
+        "groupEffectStack",
+        vec![EffectEntrySpec::new(EffectKind::Pathfinder)],
+    )
+    .unwrap();
+    m.refresh_model_part().expect("refresh model part");
+    let bytes = m
+        .export_paged(paged_canvas::channel::PROTOCOL_VERSION.0)
+        .expect("export .paged");
+    let back = CanvasModel::load("back", &bytes, CanvasOptions::default()).expect("reload");
+    assert_eq!(stack(&back, &r1(), "frameEffectStack")[0].kind, EffectKind::ZigZag);
+    assert_eq!(
+        stack(&back, &el(ElementId::Group("g1".into())), "groupEffectStack")[0].kind,
+        EffectKind::Pathfinder
+    );
+}
