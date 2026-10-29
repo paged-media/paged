@@ -4803,6 +4803,10 @@ pub enum Operation {
         mask_type: OpacityMaskMode,
         #[serde(default)]
         invert: bool,
+        /// Illustrator's Clip (`paged_model::OpacityMask::clip`); on by
+        /// default.
+        #[serde(default = "crate::operation::default_true")]
+        clip: bool,
     },
     /// C-28 — the inverse gesture: drop the mask relation and pop the
     /// artwork back to top level, world transform preserved (the
@@ -6073,6 +6077,11 @@ pub fn recompose_transform(t: &TransformDecomp) -> [f32; 6] {
     let c = cos * pre_cx - sin * sy;
     let d = sin * pre_cx + cos * sy;
     [a, b, c, d, t.translate[0], t.translate[1]]
+}
+
+/// Serde default for a switch that is on unless a payload says otherwise.
+pub(crate) fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]
