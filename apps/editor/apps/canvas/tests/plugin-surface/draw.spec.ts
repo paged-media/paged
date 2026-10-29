@@ -56,6 +56,7 @@ import { expect, test } from "@playwright/test";
 import { covers } from "@paged-media/test-kit";
 
 import { mutate } from "../e2e/harness/ui";
+import { dragMouse, screenPoint } from "../e2e/harness/viewport";
 import { Designer } from "../journey/driver/designer";
 
 type Page = import("@playwright/test").Page;
@@ -105,6 +106,16 @@ const TOOLS = [
   "media.paged.draw.tool.puppetWarp",
   "media.paged.draw.tool.perspectiveGrid",
   "media.paged.draw.tool.perspectiveSelect",
+  // WP6.8 — keyless: the Symbolism flyout (Sprayer, six modifiers and the
+  // 9-Slice Guides tool), draw ADR 365.
+  "media.paged.draw.tool.symbolSprayer",
+  "media.paged.draw.tool.symbolShifter",
+  "media.paged.draw.tool.symbolScruncher",
+  "media.paged.draw.tool.symbolSizer",
+  "media.paged.draw.tool.symbolSpinner",
+  "media.paged.draw.tool.symbolStainer",
+  "media.paged.draw.tool.symbolScreener",
+  "media.paged.draw.tool.symbolNineSlice",
 ] as const;
 
 // "Vector stroke" (`panel.stroke`) and "Vector fill" (`panel.fill`) are
@@ -195,6 +206,9 @@ const COMMANDS = [
   "media.paged.draw.command.resetSymbolTransform",
   "media.paged.draw.command.renameSymbol",
   "media.paged.draw.command.deleteSymbol",
+  // WP6.8 — Replace Symbol and Symbol Options (engine symbols).
+  "media.paged.draw.command.replaceSymbol",
+  "media.paged.draw.command.symbolOptions",
   "media.paged.draw.command.makeLivePaintGroup",
   "media.paged.draw.command.fillLivePaintFace",
   "media.paged.draw.command.regenerateLivePaint",
@@ -360,6 +374,14 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.puppetWarp": "transform",
   "media.paged.draw.tool.perspectiveGrid": "perspective",
   "media.paged.draw.tool.perspectiveSelect": "perspective",
+  "media.paged.draw.tool.symbolSprayer": "symbolism",
+  "media.paged.draw.tool.symbolShifter": "symbolism",
+  "media.paged.draw.tool.symbolScruncher": "symbolism",
+  "media.paged.draw.tool.symbolSizer": "symbolism",
+  "media.paged.draw.tool.symbolSpinner": "symbolism",
+  "media.paged.draw.tool.symbolStainer": "symbolism",
+  "media.paged.draw.tool.symbolScreener": "symbolism",
+  "media.paged.draw.tool.symbolNineSlice": "symbolism",
 };
 
 /** Root DOM marker each panel renders. The SCHEMA panel ("Draw
@@ -634,7 +656,14 @@ async function idsOfKind(page: Page, kind: string): Promise<string[]> {
 /** Total page items across the kinds paged.draw mints. */
 async function artworkCount(page: Page): Promise<number> {
   let n = 0;
-  for (const kind of ["polygon", "rectangle", "oval", "graphicLine"]) {
+  // A symbol instance is a page item of its own (engine ADR 1039).
+  for (const kind of [
+    "polygon",
+    "rectangle",
+    "oval",
+    "graphicLine",
+    "instance",
+  ]) {
     n += (await idsOfKind(page, kind)).length;
   }
   return n;
@@ -652,7 +681,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     const reg = await registrySnapshot(page);
 
-    // TOOLS — all 37 registered.
+    // TOOLS — all 45 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
     expect(missingTools, "every declared tool is in the tool registry").toEqual(
       [],
@@ -672,7 +701,7 @@ test.describe("plugin surface · paged.draw", () => {
       "Vector stroke / Vector fill are no longer registered",
     ).toEqual([]);
 
-    // COMMANDS — all 149 registered.
+    // COMMANDS — all 151 registered.
     const missingCommands = COMMANDS.filter((id) => !reg.commands.includes(id));
     expect(
       missingCommands,
@@ -711,14 +740,14 @@ test.describe("plugin surface · paged.draw", () => {
 
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(37);
+    expect(TOOLS).toHaveLength(45);
     expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(149);
+    expect(COMMANDS).toHaveLength(151);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
 
-  test("all 37 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
+  test("all 45 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);
@@ -1091,6 +1120,145 @@ test.describe("plugin surface · paged.draw", () => {
       .toBeGreaterThan(itemsBefore);
   });
 
+  // ── 7a. WP6.8 — the Symbolism tools on the canvas ─────────────────
+
+  test("the Symbolism tools spray, shift, scrunch, size, spin, stain and screen instances, and the 9-Slice Guides tool drags a guide @feat:plugin-draw.symbols @level:gesture", async ({
+    page,
+  }) => {
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+    const source = await designer.drawRectangle({
+      x0: 100,
+      y0: 100,
+      x1: 160,
+      y1: 160,
+    });
+    await designer.applyFill("rectangle", source);
+    await designer.selectElement("rectangle", source);
+    await designer.runCommand("media.paged.draw.command.defineSymbol");
+    type Row = { id: string; instances: string[]; nineSlice: number[] | null };
+    const rows = async () =>
+      (await designer.collection("symbols")) as unknown as Row[];
+    await expect.poll(async () => (await rows()).length).toBe(1);
+    const symbolId = (await rows())[0]!.id;
+    await page.evaluate(
+      async ([id]) => {
+        await (
+          globalThis as unknown as {
+            __canvas: {
+              registries: {
+                commands: { invoke: (id: string, p: unknown) => Promise<void> };
+              };
+            };
+          }
+        ).__canvas.registries.commands.invoke(
+          "media.paged.draw.command.placeSymbolInstance",
+          { symbolId: id, x: 300, y: 300 },
+        );
+      },
+      [symbolId],
+    );
+    await expect.poll(async () => (await rows())[0]!.instances.length).toBe(1);
+    const instance = (await rows())[0]!.instances[0]!.slice("instance:".length);
+    // What the instance carries now: its transform, tint and opacity.
+    const carried = () =>
+      page.evaluate(async (id) => {
+        const props = await (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                elementProperties: (id: unknown) => Promise<{
+                  entries: { path: string; value: { value: unknown } }[];
+                } | null>;
+              };
+            };
+          }
+        ).__canvas.client.elementProperties({ kind: "instance", id });
+        const v = (path: string) =>
+          props?.entries.find((e) => e.path === path)?.value?.value ?? null;
+        return {
+          t: v("frameTransform") as number[],
+          tint: v("symbolInstanceTint") as number[],
+          opacity: v("frameOpacity") as number | null,
+        };
+      }, instance);
+    const stroke = async (from: [number, number], to: [number, number]) => {
+      const a = await screenPoint(page, from[0], from[1]);
+      const b = await screenPoint(page, to[0], to[1]);
+      await dragMouse(page, a, b, { steps: 8 });
+    };
+    const S = "media.paged.draw.tool.symbol";
+
+    covers(`tool:${S}Sprayer`);
+    await activateToolCommand(page, `${S}Sprayer`);
+    await stroke([150, 450], [260, 450]);
+    // The first write on a cold dev server can take a while.
+    await expect
+      .poll(async () => (await rows())[0]!.instances.length, {
+        timeout: 30_000,
+      })
+      .toBeGreaterThan(1);
+
+    const cases: [
+      string,
+      [number, number],
+      [number, number],
+      (
+        b: Awaited<ReturnType<typeof carried>>,
+        a: Awaited<ReturnType<typeof carried>>,
+      ) => boolean,
+    ][] = [
+      ["Shifter", [300, 300], [320, 300], (b, a) => a.t[4]! > b.t[4]!],
+      ["Scruncher", [320, 300], [322, 300], (b, a) => a.t[4]! !== b.t[4]!],
+      ["Sizer", [300, 300], [302, 300], (b, a) => a.t[0]! > b.t[0]!],
+      [
+        "Spinner",
+        [300, 300],
+        [300, 330],
+        (b, a) => Math.abs(a.t[1]! - b.t[1]!) > 1e-4,
+      ],
+      ["Stainer", [300, 300], [302, 300], (_b, a) => a.tint.length === 4],
+      ["Screener", [300, 300], [302, 300], (_b, a) => (a.opacity ?? 100) < 100],
+    ];
+    for (const [name, from, to, changed] of cases) {
+      covers(`tool:${S}${name}`);
+      await designer.selectElements([{ kind: "instance", id: instance }]);
+      const before = await carried();
+      await activateToolCommand(page, `${S}${name}`);
+      const t = before.t;
+      // Follow the instance: it may have moved under the earlier tools.
+      const dx = t[4]! - 300;
+      const dy = t[5]! - 300;
+      await stroke([from[0] + dx, from[1] + dy], [to[0] + dx, to[1] + dy]);
+      await expect
+        .poll(async () => changed(before, await carried()), { timeout: 10_000 })
+        .toBe(true);
+    }
+
+    // The 9-Slice Guides tool: the left guide of the selected instance's
+    // symbol is drawn a quarter in; a drag sets the symbol's guides.
+    covers(`tool:${S}NineSlice`);
+    await designer.selectElements([{ kind: "instance", id: instance }]);
+    await activateToolCommand(page, `${S}NineSlice`);
+    const now = await carried();
+    const [a, b, c, d, e, f] = now.t;
+    const sx = Math.hypot(a!, b!);
+    // The definition is the 60 pt square centred on its origin: its left
+    // edge at −30, the default guide 15 in, both through the instance.
+    const at = (x: number, y: number): [number, number] => [
+      a! * x + c! * y + e!,
+      b! * x + d! * y + f!,
+    ];
+    const guide = at((-30 * sx + 15) / sx, 0);
+    await stroke(guide, [guide[0] + 4, guide[1]]);
+    await expect
+      .poll(async () => (await rows())[0]!.nineSlice !== null, {
+        timeout: 10_000,
+      })
+      .toBe(true);
+  });
+
   // ── 7b. Select same past paint, and Global Edit ───────────────────
 
   test("Select same by opacity, blending mode, appearance, graphic style, symbol and shape kind, and Global Edit, select exactly the matches @feat:plugin-draw.select-same @level:happy", async ({
@@ -1256,29 +1424,35 @@ test.describe("plugin surface · paged.draw", () => {
     );
 
     // SYMBOL — two instances of a symbol defined from r1 select each
-    // other; the source r1 is not an instance. An instance re-emits the
-    // definition through insertPath, so its leaf is a path.
+    // other; the source r1 is not an instance. On the engine's symbols
+    // (engine ADR 1039) an instance is one `instance` page item.
     await designer.selectElements([rect(r1)]);
     await designer.runCommand(`${C}.defineSymbol`);
+    await expect
+      .poll(async () => (await designer.collection("symbols")).length)
+      .toBe(1);
+    const symbolId = (
+      (await designer.collection("symbols")) as unknown as { id: string }[]
+    )[0]!.id;
     const placed: string[] = [];
     for (const x of [300, 450]) {
-      const ids = await idsOfKind(page, "polygon");
+      const ids = await idsOfKind(page, "instance");
       await runWithPayload(page, `${C}.placeSymbolInstance`, {
-        symbolId: "sym-1",
+        symbolId,
         x,
         y: 400,
       });
       await expect
-        .poll(async () => (await idsOfKind(page, "polygon")).length, {
-          message: "placing an instance re-emits its geometry as a path",
+        .poll(async () => (await idsOfKind(page, "instance")).length, {
+          message: "placing an instance adds an instance page item",
         })
         .toBe(ids.length + 1);
       placed.push(
-        (await idsOfKind(page, "polygon")).find((id) => !ids.includes(id))!,
+        (await idsOfKind(page, "instance")).find((id) => !ids.includes(id))!,
       );
     }
     await selects(
-      [{ kind: "polygon", id: placed[0]! }],
+      [{ kind: "instance", id: placed[0]! }],
       `${C}.selectSameSymbolInstance`,
       placed,
       "same symbol: both instances, not the source",

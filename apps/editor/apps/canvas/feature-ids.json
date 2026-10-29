@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 733,
+    "command": 735,
     "keybinding": 154,
-    "menu": 538,
+    "menu": 540,
     "panel": 138,
-    "tool": 113
+    "tool": 121
   },
   "features": [
     {
@@ -1016,6 +1016,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.replaceSymbol",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.resetSymbolTransform",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1172,6 +1177,11 @@
     },
     {
       "id": "command:media.paged.draw.command.strokeDashSolid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.symbolOptions",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -4941,7 +4951,17 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Symbol/Replace symbol",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Symbol/Reset transform",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Symbol/Symbol options…",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -8002,6 +8022,46 @@
     },
     {
       "id": "tool:media.paged.draw.tool.star",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolNineSlice",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolScreener",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolScruncher",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolShifter",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolSizer",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolSpinner",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolSprayer",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolStainer",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
