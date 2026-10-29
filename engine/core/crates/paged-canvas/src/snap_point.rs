@@ -398,67 +398,123 @@ struct LeafPath<'a> {
     bounds: Bounds,
     item_transform: Option<[f32; 6]>,
     item_layer: Option<&'a str>,
+    anchors: std::borrow::Cow<'a, [PathAnchor]>,
+    starts: std::borrow::Cow<'a, [usize]>,
+    open: std::borrow::Cow<'a, [bool]>,
+    oval: bool,
+    /// Engine ADR 1042 — the path is the item's effected outline (its
+    /// live vector effects), not its anchors: snap to what is drawn, but
+    /// it names no anchor the editor could move.
+    effected: bool,
+}
+
+/// The outline an item draws: its effected outline when it has vector
+/// effects (`paged_vector_fx`), else its own anchors.
+fn drawn<'a>(
+    fx: Option<std::sync::Arc<paged_vector_fx::Effected>>,
     anchors: &'a [PathAnchor],
     starts: &'a [usize],
     open: &'a [bool],
-    oval: bool,
+) -> (
+    std::borrow::Cow<'a, [PathAnchor]>,
+    std::borrow::Cow<'a, [usize]>,
+    std::borrow::Cow<'a, [bool]>,
+    bool,
+) {
+    use std::borrow::Cow;
+    match fx {
+        Some(fx) if !fx.shape.contours.is_empty() => {
+            let (a, s, o) = fx.shape.to_anchors();
+            (Cow::Owned(a), Cow::Owned(s), Cow::Owned(o), true)
+        }
+        _ => (
+            Cow::Borrowed(anchors),
+            Cow::Borrowed(starts),
+            Cow::Borrowed(open),
+            false,
+        ),
+    }
 }
 
 fn leaves_of(spread: &Spread) -> Vec<LeafPath<'_>> {
     let mut out = Vec::new();
     for f in &spread.text_frames {
         if let Some(id) = f.self_id.as_ref() {
+            let (anchors, starts, open, effected) = drawn(
+                paged_vector_fx::bake::text_frame_effected(f),
+                &f.anchors,
+                &f.subpath_starts,
+                &f.subpath_open,
+            );
             out.push(LeafPath {
                 id: ElementId::TextFrame(id.clone()),
                 bounds: f.bounds,
                 item_transform: f.item_transform,
                 item_layer: f.item_layer.as_deref(),
-                anchors: &f.anchors,
-                starts: &f.subpath_starts,
-                open: &f.subpath_open,
+                anchors,
+                starts,
+                open,
                 oval: false,
+                effected,
             });
         }
     }
     for f in &spread.rectangles {
         if let Some(id) = f.self_id.as_ref() {
+            let (anchors, starts, open, effected) = drawn(
+                paged_vector_fx::bake::rectangle_effected(f),
+                &f.anchors,
+                &f.subpath_starts,
+                &f.subpath_open,
+            );
             out.push(LeafPath {
                 id: ElementId::Rectangle(id.clone()),
                 bounds: f.bounds,
                 item_transform: f.item_transform,
                 item_layer: f.item_layer.as_deref(),
-                anchors: &f.anchors,
-                starts: &f.subpath_starts,
-                open: &f.subpath_open,
+                anchors,
+                starts,
+                open,
                 oval: false,
+                effected,
             });
         }
     }
     for f in &spread.ovals {
         if let Some(id) = f.self_id.as_ref() {
+            let (anchors, starts, open, effected) =
+                drawn(paged_vector_fx::bake::oval_effected(f), &[], &[], &[]);
             out.push(LeafPath {
                 id: ElementId::Oval(id.clone()),
                 bounds: f.bounds,
                 item_transform: f.item_transform,
                 item_layer: f.item_layer.as_deref(),
-                anchors: &[],
-                starts: &[],
-                open: &[],
-                oval: true,
+                anchors,
+                starts,
+                open,
+                oval: !effected,
+                effected,
             });
         }
     }
     for f in &spread.polygons {
         if let Some(id) = f.self_id.as_ref() {
+            let (anchors, starts, open, effected) = drawn(
+                paged_vector_fx::bake::polygon_effected(f),
+                &f.anchors,
+                &f.subpath_starts,
+                &f.subpath_open,
+            );
             out.push(LeafPath {
                 id: ElementId::Polygon(id.clone()),
                 bounds: f.bounds,
                 item_transform: f.item_transform,
                 item_layer: f.item_layer.as_deref(),
-                anchors: &f.anchors,
-                starts: &f.subpath_starts,
-                open: &f.subpath_open,
+                anchors,
+                starts,
+                open,
                 oval: false,
+                effected,
             });
         }
     }
@@ -469,10 +525,11 @@ fn leaves_of(spread: &Spread) -> Vec<LeafPath<'_>> {
                 bounds: f.bounds,
                 item_transform: f.item_transform,
                 item_layer: f.item_layer.as_deref(),
-                anchors: &f.anchors,
-                starts: &f.subpath_starts,
-                open: &f.subpath_open,
+                anchors: std::borrow::Cow::Borrowed(&f.anchors),
+                starts: std::borrow::Cow::Borrowed(&f.subpath_starts),
+                open: std::borrow::Cow::Borrowed(&f.subpath_open),
                 oval: false,
+                effected: false,
             });
         }
     }
@@ -564,7 +621,7 @@ fn element_targets(leaf: &LeafPath<'_>, origin: (f32, f32)) -> ElementTargets {
                 leaf.starts.to_vec()
             },
             leaf.open.to_vec(),
-            true,
+            !leaf.effected,
             SnapSource::AnchorPoint,
         )
     };
@@ -1238,10 +1295,11 @@ mod tests {
                 bounds: b,
                 item_transform: None,
                 item_layer: None,
-                anchors: &[],
-                starts: &[],
-                open: &[],
+                anchors: std::borrow::Cow::Borrowed(&[]),
+                starts: std::borrow::Cow::Borrowed(&[]),
+                open: std::borrow::Cow::Borrowed(&[]),
                 oval: false,
+                effected: false,
             },
             (0.0, 0.0),
         )
@@ -1386,10 +1444,11 @@ mod tests {
             bounds: b(0.0, 0.0, 100.0, 200.0),
             item_transform: Some([1.0, 0.0, 0.0, 1.0, 300.0, 300.0]),
             item_layer: None,
-            anchors: &[],
-            starts: &[],
-            open: &[],
+            anchors: std::borrow::Cow::Borrowed(&[]),
+            starts: std::borrow::Cow::Borrowed(&[]),
+            open: std::borrow::Cow::Borrowed(&[]),
             oval: true,
+            effected: false,
         };
         let idx = page_with(vec![element_targets(&leaf, (0.0, 0.0))]);
         let r = resolve(&idx, &SnapSettings::default(), &q(401.0, 299.0));
@@ -1484,10 +1543,11 @@ mod tests {
             bounds: b(0.0, 0.0, 10.0, 10.0),
             item_transform: Some([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]),
             item_layer: None,
-            anchors: &[],
-            starts: &[],
-            open: &[],
+            anchors: std::borrow::Cow::Borrowed(&[]),
+            starts: std::borrow::Cow::Borrowed(&[]),
+            open: std::borrow::Cow::Borrowed(&[]),
             oval: false,
+            effected: false,
         };
         let idx = page_with(vec![
             element_targets(&leaf, (0.0, 0.0)),

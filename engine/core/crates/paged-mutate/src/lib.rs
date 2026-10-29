@@ -65,6 +65,7 @@ pub use paged_geom::planar;
 #[cfg(feature = "schema")]
 pub mod schema;
 pub use paged_geom::stroke_kernel;
+mod vector_effect_spec;
 
 pub use apply::apply;
 pub use apply::apply_checked;

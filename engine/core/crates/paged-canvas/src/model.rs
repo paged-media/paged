@@ -5754,6 +5754,12 @@ impl CanvasModel {
                     nine_slice: *nine_slice,
                 })
             }
+            // Engine ADR 1042 — the item becomes what its vector effects
+            // describe; the kernel bakes and refuses.
+            Mutation::ExpandAppearance { element_id } => Some(Operation::ExpandAppearance {
+                node: element_to_node_id(element_id),
+                restore: None,
+            }),
             Mutation::RedefineSymbol {
                 symbol_id,
                 element_ids,
@@ -7446,6 +7452,7 @@ impl CanvasModel {
         ));
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
         out.extend(crate::export_losses::effect_stack_losses(&self.scene));
+        out.extend(crate::export_losses::vector_effect_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -8834,6 +8841,18 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::GroupClip,
                                 value: Some(Value::Bool(g.clip)),
+                            },
+                            // Engine ADR 1042 — its vector effects.
+                            PropertyEntry {
+                                path: PropertyPath::GroupEffectStack,
+                                value: Some(Value::EffectStack {
+                                    entries: g
+                                        .effect_stack
+                                        .iter()
+                                        .map(paged_mutate::operation::EffectEntrySpec::from_model)
+                                        .collect(),
+                                    prev: None,
+                                }),
                             },
                         ];
                         // C-18 / E-1 — a `<Group>` carries the corner

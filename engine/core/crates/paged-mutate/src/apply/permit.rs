@@ -339,6 +339,9 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
             item(P::ItemDelete, &NodeId::Instance(instance.clone())),
         ],
         O::SetGroupTransform { group, .. } => vec![req(P::ItemMove, Target::Item(group.clone()))],
+        // Engine ADR 1042 — the item's geometry is rewritten (an oval or a
+        // group is replaced by a polygon of the same id).
+        O::ExpandAppearance { node, .. } => vec![item(P::ItemResize, node), item(P::ItemDelete, node)],
         O::PathfinderBoolean { kept, others, .. } => std::iter::once(item(P::ItemResize, kept))
             .chain(others.iter().map(|o| item(P::ItemDelete, o)))
             .collect(),

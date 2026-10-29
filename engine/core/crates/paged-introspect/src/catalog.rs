@@ -890,6 +890,8 @@ property_paths! {
         GroupIsolateBlending => "groupIsolateBlending" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, IsolateBlending)]),
         GroupKnockout => "groupKnockout" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, KnockoutGroup)]),
         GroupClip => "groupClip" : bool_().default_bool(false),
+        // Engine ADR 1042 — a group's vector effects (Pathfinder and the rest).
+        GroupEffectStack => "groupEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         // Engine ADR 1039 — a symbol instance's tint `[r, g, b, amount]`
         // and 9-slice guides `[left, top, right, bottom]`; `[]` clears.
         // Native: IDML has no symbol (the writer expands instances).
@@ -1485,7 +1487,9 @@ mod tests {
         // target.
         //
         // 262 -> 264: ADR 1039 — a symbol instance's tint and 9-slice guides.
-        assert_eq!(cat.settable_paths.len(), 264, "settable path count drifted");
+        //
+        // 264 -> 265: ADR 1042 — a group's vector effects.
+        assert_eq!(cat.settable_paths.len(), 265, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

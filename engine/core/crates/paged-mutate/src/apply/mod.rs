@@ -333,6 +333,9 @@ pub(crate) fn apply_inner(
             story_ids,
             added,
         } => apply_remove_snippet(doc, snippet, spread, *dx, *dy, ids, story_ids, added),
+        Operation::ExpandAppearance { node, restore } => {
+            expand_appearance::apply_expand_appearance(doc, node, restore.as_deref())
+        }
         Operation::CreateSymbol {
             symbol_id,
             name,
@@ -1057,7 +1060,12 @@ fn apply_pathfinder(
         .iter()
         .map(PathAnchorSpec::from_parse)
         .collect();
-    let mut batch_children: Vec<Operation> = Vec::with_capacity(1 + others.len());
+    let mut batch_children: Vec<Operation> = Vec::with_capacity(2 + others.len());
+    // Engine ADR 1042 — the kept item's vector effects are spent: their
+    // outline went into the result.
+    if let Some(spend) = expand_appearance::spend_vector_entries(doc, kept) {
+        batch_children.push(spend);
+    }
     batch_children.push(Operation::SetProperty {
         node: kept.clone(),
         path: PropertyPath::FramePath,
@@ -1103,6 +1111,10 @@ fn read_path(
     node: &NodeId,
 ) -> Result<(Vec<paged_model::PathAnchor>, Vec<usize>), OperationError> {
     use paged_model::PathAnchor;
+    // Engine ADR 1042 — a boolean reads the outline the item draws.
+    if let Some(path) = expand_appearance::effected_path(doc, node) {
+        return Ok(path);
+    }
     let raw = node.self_id();
     for parsed in &doc.spreads {
         match node {
@@ -1296,6 +1308,7 @@ mod character;
 mod conditions;
 mod duplicate_nodes;
 pub(crate) mod effect_stack;
+mod expand_appearance;
 pub use duplicate_nodes::{duplicate_demand, duplicate_roots, DuplicateDemand};
 mod snippet;
 mod symbol;

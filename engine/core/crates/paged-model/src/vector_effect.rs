@@ -560,3 +560,400 @@ pub struct PathfinderParams {
     #[serde(default)]
     pub op: PathfinderOp,
 }
+
+/// The IDML side of the live vector effects (engine ADR 1042).
+///
+/// IDML has no live vector effect, so the writer BAKES them: an item is
+/// written as the item its effected outline describes, an oval as a
+/// polygon, a group with a Pathfinder effect as one polygon in the
+/// group's place. What the bake replaced rides the written item's label
+/// under [`SOURCE_KEY`] (InDesign keeps labels and does not draw them;
+/// a group's outline is a polygon member of the group, which stays):
+/// the source item (or the group and its members) and a fingerprint of
+/// the baked outline. The reader's [`lift`] puts the source back when
+/// the outline it reads is still the one written; an outline InDesign
+/// changed meanwhile stays, and the item's vector entries are dropped
+/// (the edit wins).
+///
+/// This half carries no geometry kernel (the reader must not reach one):
+/// the bake is `paged-vector-fx`'s, run by the writer.
+pub mod label {
+    use serde::{Deserialize, Serialize};
+
+    use crate::effect_stack::EffectEntry;
+    use crate::{
+        FrameRef, GraphicLine, Group, Oval, PathAnchor, Polygon, Rectangle, Spread, TextFrame,
+    };
+
+    /// The label key.
+    pub const SOURCE_KEY: &str = "paged:vectorSource";
+
+    /// What a baked item replaced.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(tag = "kind", rename_all = "camelCase")]
+    pub enum Source {
+        Rectangle {
+            item: Box<Rectangle>,
+            fingerprint: String,
+        },
+        Polygon {
+            item: Box<Polygon>,
+            fingerprint: String,
+        },
+        TextFrame {
+            item: Box<TextFrame>,
+            fingerprint: String,
+        },
+        /// An oval, written as a polygon.
+        Oval {
+            item: Box<Oval>,
+            fingerprint: String,
+        },
+        /// A group with a Pathfinder effect, written as one polygon; its
+        /// members back first.
+        Group {
+            group: Box<Group>,
+            members: Vec<Member>,
+            fingerprint: String,
+        },
+    }
+
+    /// One member of a baked group.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(tag = "kind", rename_all = "camelCase")]
+    pub enum Member {
+        Rectangle { item: Box<Rectangle> },
+        Oval { item: Box<Oval> },
+        Polygon { item: Box<Polygon> },
+        TextFrame { item: Box<TextFrame> },
+        GraphicLine { item: Box<GraphicLine> },
+    }
+
+    /// The fingerprint of an outline: its anchor count and its anchors'
+    /// box, to 0.01 pt. What survives InDesign's round trip unchanged
+    /// when nobody edits the path (InDesign rewrites coordinates in its
+    /// own number format, never moves them).
+    pub fn fingerprint(anchors: &[PathAnchor]) -> String {
+        let mut b = [
+            f32::INFINITY,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NEG_INFINITY,
+        ];
+        for a in anchors {
+            for p in [a.anchor, a.left, a.right] {
+                b[0] = b[0].min(p.0);
+                b[1] = b[1].min(p.1);
+                b[2] = b[2].max(p.0);
+                b[3] = b[3].max(p.1);
+            }
+        }
+        if anchors.is_empty() {
+            return "0".to_string();
+        }
+        let r = |v: f32| (v * 100.0).round() as i64;
+        format!(
+            "{}:{}:{}:{}:{}",
+            anchors.len(),
+            r(b[0]),
+            r(b[1]),
+            r(b[2]),
+            r(b[3])
+        )
+    }
+
+    fn same_kind(a: &FrameRef, b: &FrameRef) -> bool {
+        std::mem::discriminant(a) == std::mem::discriminant(b)
+    }
+
+    fn index(r: &FrameRef) -> usize {
+        match *r {
+            FrameRef::TextFrame(i)
+            | FrameRef::Rectangle(i)
+            | FrameRef::Oval(i)
+            | FrameRef::GraphicLine(i)
+            | FrameRef::Polygon(i)
+            | FrameRef::Group(i)
+            | FrameRef::Instance(i) => i,
+        }
+    }
+
+    fn with_index(r: &FrameRef, i: usize) -> FrameRef {
+        match r {
+            FrameRef::TextFrame(_) => FrameRef::TextFrame(i),
+            FrameRef::Rectangle(_) => FrameRef::Rectangle(i),
+            FrameRef::Oval(_) => FrameRef::Oval(i),
+            FrameRef::GraphicLine(_) => FrameRef::GraphicLine(i),
+            FrameRef::Polygon(_) => FrameRef::Polygon(i),
+            FrameRef::Group(_) => FrameRef::Group(i),
+            FrameRef::Instance(_) => FrameRef::Instance(i),
+        }
+    }
+
+    /// Every list of the spread that names page items.
+    fn for_each_list(spread: &mut Spread, mut f: impl FnMut(&mut Vec<FrameRef>)) {
+        f(&mut spread.frames_in_order);
+        for g in spread.groups.iter_mut() {
+            f(&mut g.members);
+        }
+        for v in spread.nested_children.values_mut() {
+            f(v);
+        }
+    }
+
+    /// Put `to` wherever a list names `from`.
+    pub fn replace_ref(spread: &mut Spread, from: FrameRef, to: FrameRef) {
+        for_each_list(spread, |l| {
+            for r in l.iter_mut() {
+                if *r == from {
+                    *r = to;
+                }
+            }
+        });
+    }
+
+    /// Take the item `r` out of its kind's list and out of every list
+    /// that names it; later items of the kind step down.
+    pub fn remove_item(spread: &mut Spread, r: FrameRef) {
+        let i = index(&r);
+        match r {
+            FrameRef::TextFrame(_) if i < spread.text_frames.len() => {
+                spread.text_frames.remove(i);
+            }
+            FrameRef::Rectangle(_) if i < spread.rectangles.len() => {
+                spread.rectangles.remove(i);
+            }
+            FrameRef::Oval(_) if i < spread.ovals.len() => {
+                spread.ovals.remove(i);
+            }
+            FrameRef::GraphicLine(_) if i < spread.graphic_lines.len() => {
+                spread.graphic_lines.remove(i);
+            }
+            FrameRef::Polygon(_) if i < spread.polygons.len() => {
+                spread.polygons.remove(i);
+            }
+            FrameRef::Group(_) if i < spread.groups.len() => {
+                spread.groups.remove(i);
+            }
+            FrameRef::Instance(_) if i < spread.instances.len() => {
+                spread.instances.remove(i);
+            }
+            _ => return,
+        }
+        for_each_list(spread, |l| {
+            l.retain(|x| *x != r);
+            for x in l.iter_mut() {
+                if same_kind(x, &r) && index(x) > i {
+                    *x = with_index(x, index(x) - 1);
+                }
+            }
+        });
+    }
+
+    fn push_label(spread: &mut Spread, id: &str, value: String) {
+        let entries = spread.labels.entry(id.to_string()).or_default();
+        entries.retain(|(k, _)| k != SOURCE_KEY);
+        entries.push((SOURCE_KEY.to_string(), value));
+    }
+
+    /// Record `source` on the written item `id`.
+    pub fn stamp(spread: &mut Spread, id: &str, source: &Source) {
+        if let Ok(v) = serde_json::to_string(source) {
+            push_label(spread, id, v);
+        }
+    }
+
+    fn take(spread: &mut Spread, id: &Option<String>) -> Option<Source> {
+        let entries = spread.labels.get_mut(id.as_deref()?)?;
+        let at = entries.iter().position(|(k, _)| k == SOURCE_KEY)?;
+        let v = entries.remove(at).1;
+        serde_json::from_str(&v).ok()
+    }
+
+    fn strip_vector(stack: &mut Vec<EffectEntry>) {
+        stack.retain(|e| !e.effect.is_vector());
+        if crate::effect_stack::is_canonical(stack) {
+            stack.clear();
+        }
+    }
+
+    fn member_ref(spread: &mut Spread, m: Member) -> FrameRef {
+        match m {
+            Member::Rectangle { item } => {
+                spread.rectangles.push(*item);
+                FrameRef::Rectangle(spread.rectangles.len() - 1)
+            }
+            Member::Oval { item } => {
+                spread.ovals.push(*item);
+                FrameRef::Oval(spread.ovals.len() - 1)
+            }
+            Member::Polygon { item } => {
+                spread.polygons.push(*item);
+                FrameRef::Polygon(spread.polygons.len() - 1)
+            }
+            Member::TextFrame { item } => {
+                spread.text_frames.push(*item);
+                FrameRef::TextFrame(spread.text_frames.len() - 1)
+            }
+            Member::GraphicLine { item } => {
+                spread.graphic_lines.push(*item);
+                FrameRef::GraphicLine(spread.graphic_lines.len() - 1)
+            }
+        }
+    }
+
+    /// Restore every baked item on `spread` whose outline is still the
+    /// one written (see the module doc). Returns how many came back.
+    pub fn lift(spread: &mut Spread) -> usize {
+        if !spread
+            .labels
+            .values()
+            .any(|v| v.iter().any(|(k, _)| k == SOURCE_KEY))
+        {
+            return 0;
+        }
+        let mut restored = 0;
+        // In-place kinds first: no list moves.
+        for i in 0..spread.rectangles.len() {
+            let id = spread.rectangles[i].self_id.clone();
+            if let Some(Source::Rectangle {
+                item,
+                fingerprint: fp,
+            }) = take(spread, &id)
+            {
+                let cur = &mut spread.rectangles[i];
+                if fingerprint(&cur.anchors) == fp {
+                    let bytes = cur.image_bytes.take();
+                    *cur = *item;
+                    cur.image_bytes = bytes;
+                    restored += 1;
+                } else {
+                    strip_vector(&mut cur.effect_stack);
+                }
+            }
+        }
+        for i in 0..spread.text_frames.len() {
+            let id = spread.text_frames[i].self_id.clone();
+            if let Some(Source::TextFrame {
+                item,
+                fingerprint: fp,
+            }) = take(spread, &id)
+            {
+                let cur = &mut spread.text_frames[i];
+                if fingerprint(&cur.anchors) == fp {
+                    *cur = *item;
+                    restored += 1;
+                } else {
+                    strip_vector(&mut cur.effect_stack);
+                }
+            }
+        }
+        // Polygons: in place, or the oval / group they stand for.
+        let mut i = 0;
+        while i < spread.polygons.len() {
+            let id = spread.polygons[i].self_id.clone();
+            let Some(source) = take(spread, &id) else {
+                i += 1;
+                continue;
+            };
+            let matches =
+                |fp: &str, spread: &Spread| fingerprint(&spread.polygons[i].anchors) == fp;
+            match source {
+                Source::Polygon { item, fingerprint } => {
+                    if matches(&fingerprint, spread) {
+                        let cur = &mut spread.polygons[i];
+                        let bytes = cur.image_bytes.take();
+                        *cur = *item;
+                        cur.image_bytes = bytes;
+                        restored += 1;
+                    } else {
+                        strip_vector(&mut spread.polygons[i].effect_stack);
+                    }
+                    i += 1;
+                }
+                Source::Oval { item, fingerprint } if matches(&fingerprint, spread) => {
+                    let mut oval = *item;
+                    oval.image_bytes = spread.polygons[i].image_bytes.take();
+                    spread.ovals.push(oval);
+                    let to = FrameRef::Oval(spread.ovals.len() - 1);
+                    replace_ref(spread, FrameRef::Polygon(i), to);
+                    move_labels(spread, &id, &to_id(spread, to));
+                    // The polygon is no longer named; take it out.
+                    spread.polygons.remove(i);
+                    step_down(spread, FrameRef::Polygon(i));
+                    restored += 1;
+                }
+                Source::Group {
+                    group,
+                    members,
+                    fingerprint,
+                } if matches(&fingerprint, spread) => {
+                    let refs: Vec<FrameRef> =
+                        members.into_iter().map(|m| member_ref(spread, m)).collect();
+                    let mut g = *group;
+                    g.members = refs;
+                    // The writer kept the group, the outline its one
+                    // member; else the group comes back in its place.
+                    let host = spread.groups.iter().position(|h| {
+                        h.self_id == g.self_id && h.members == [FrameRef::Polygon(i)]
+                    });
+                    match host {
+                        Some(h) => spread.groups[h] = g,
+                        None => {
+                            spread.groups.push(g);
+                            let to = FrameRef::Group(spread.groups.len() - 1);
+                            replace_ref(spread, FrameRef::Polygon(i), to);
+                            move_labels(spread, &id, &to_id(spread, to));
+                        }
+                    }
+                    spread.polygons.remove(i);
+                    step_down(spread, FrameRef::Polygon(i));
+                    restored += 1;
+                }
+                // InDesign changed the outline: the polygon stays, as
+                // drawn, without the effects that made it.
+                _ => {
+                    strip_vector(&mut spread.polygons[i].effect_stack);
+                    i += 1;
+                }
+            }
+        }
+        spread.labels.retain(|_, v| !v.is_empty());
+        restored
+    }
+
+    fn to_id(spread: &Spread, r: FrameRef) -> Option<String> {
+        match r {
+            FrameRef::Oval(i) => spread.ovals.get(i)?.self_id.clone(),
+            FrameRef::Group(i) => spread.groups.get(i)?.self_id.clone(),
+            _ => None,
+        }
+    }
+
+    /// The written polygon's other labels belong to the item it stands
+    /// for.
+    fn move_labels(spread: &mut Spread, from: &Option<String>, to: &Option<String>) {
+        let (Some(from), Some(to)) = (from, to) else {
+            return;
+        };
+        if from == to {
+            return;
+        }
+        if let Some(rest) = spread.labels.remove(from) {
+            spread.labels.entry(to.clone()).or_default().extend(rest);
+        }
+    }
+
+    /// Later items of `removed`'s kind step down by one in every list.
+    fn step_down(spread: &mut Spread, removed: FrameRef) {
+        let i = index(&removed);
+        for_each_list(spread, |l| {
+            l.retain(|x| *x != removed);
+            for x in l.iter_mut() {
+                if same_kind(x, &removed) && index(x) > i {
+                    *x = with_index(x, index(x) - 1);
+                }
+            }
+        });
+    }
+}
