@@ -115,6 +115,10 @@ appearance is plan WP6.3.
 - `crates/paged-store/tests/it/appearance.rs`: a layered item round-trips; an item without one
   writes no key and hashes alike.
 
+- The Illustrator probe `modules/draw/scripts/illustrator/probes/appearance.jsx` (several fills
+  and strokes through the Appearance panel's commands, PNG per case, Expand Appearance part by
+  part) is written; its recording and pixel replay are pending.
+
 Tests named `*__feat__frames_paths_native_appearance` are the evidence of the feature row
 `frames-paths.native-appearance`.
 
