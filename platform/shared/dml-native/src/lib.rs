@@ -682,6 +682,24 @@ pub struct MappedPicture {
     pub adjustments: Vec<RasterOp>,
 }
 
+/// The loss a lane that cannot hold an image filter stack (engine ADR
+/// 1037) reports for one of its ops: the DrawingML element it came from,
+/// and the op it became on the mutation lane.
+pub fn picture_adjustment_loss(op: &RasterOp) -> String {
+    let element = match op {
+        RasterOp::BrightnessContrast { .. } => "a:lum",
+        RasterOp::Duotone { .. } => "a:duotone",
+        RasterOp::BlackWhite { .. } => "a:grayscl",
+        RasterOp::Threshold { .. } => "a:biLevel",
+        RasterOp::HueSaturation { .. } => "a:hsl",
+        _ => "a picture effect",
+    };
+    format!(
+        "{element} (picture adjustment {}) is not carried on the native lane",
+        op.name()
+    )
+}
+
 /// A gradient feather for a gradient whose stops differ in alpha: the
 /// engine's gradient swatches carry no alpha, so the fade rides on the
 /// item instead. `None` for any other paint.

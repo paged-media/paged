@@ -298,8 +298,13 @@ impl Lowering {
     pub fn picture(&mut self, blip: &Blip, sp: &ShapeProperties, w: f64, h: f64) -> NativeFx {
         let pic = resolved::picture(blip, &self.slots);
         // The filter stack (engine ADR 1037) is carried by the mutation
-        // lane's mapping; the native form keeps the opacity.
-        let alpha = self.mapper.picture(&pic).opacity;
+        // lane's mapping; the native form keeps the opacity and reports
+        // each adjustment it cannot hold.
+        let mapped = self.mapper.picture(&pic);
+        for op in &mapped.adjustments {
+            self.mapper.lose(crate::picture_adjustment_loss(op));
+        }
+        let alpha = mapped.opacity;
         let mut out = self.shape(sp, w, h);
         if alpha < 0.999 {
             // The picture's alpha multiplies whatever the fill gave.
