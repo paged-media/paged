@@ -10,6 +10,8 @@ import type { Mutation } from "@paged-media/plugin-api";
 import type {
   LoweredBlock,
   LoweredCell,
+  LoweredChange,
+  LoweredComment,
   LoweredDoc,
   LoweredParagraph,
   LoweredStyle,
@@ -180,7 +182,13 @@ function poured(
   /** UTF-8 bytes of the finished pour (text, breaks and atomics). */
   bytes: number;
   breaks: number;
+  /** Doc ADR 613 — the tracked changes over the text. */
+  changes: ChangeAt[];
+  /** Doc ADR 613 — each comment's range over the text. */
+  comments: Map<string, { start: number; end: number }>;
 } {
+  const changes: ChangeAt[] = [];
+  const comments = new Map<string, { start: number; end: number }>();
   const ranges: Range[] = [];
   const images: ImageAt[] = [];
   const links: LinkAt[] = [];
@@ -310,6 +318,36 @@ function poured(
       if (run.hyperlinkUrl && offset > runStart) {
         links.push({ start: runStart, end: offset, url: run.hyperlinkUrl });
       }
+      // Doc ADR 613 — the run's tracked changes and comment ranges.
+      if (offset > runStart) {
+        if (run.change) {
+          const prev = changes[changes.length - 1];
+          if (
+            prev &&
+            prev.paragraph === undefined &&
+            prev.change.id === run.change.id &&
+            prev.change.kind === run.change.kind &&
+            prev.end === runStart
+          ) {
+            prev.end = offset;
+          } else {
+            changes.push({ start: runStart, end: offset, change: run.change });
+          }
+        }
+        if (run.formatChange) {
+          changes.push({
+            start: runStart,
+            end: offset,
+            change: run.formatChange.change,
+            before: run.formatChange.beforeCharStyleId ?? undefined,
+          });
+        }
+        for (const id of run.comments ?? []) {
+          const r = comments.get(id);
+          if (r) r.end = offset;
+          else comments.set(id, { start: runStart, end: offset });
+        }
+      }
     }
     // Breaks at the paragraph's very end (an empty trailing part).
     for (const at of cuts) {
@@ -352,6 +390,27 @@ function poured(
         );
       }
     });
+    // Doc ADR 613 — the paragraph's property change on its first native
+    // paragraph, its mark's on its last (the one the Word mark ends).
+    if (paraBase !== undefined) {
+      if (para.propsChange) {
+        changes.push({
+          start: paraStart,
+          end: paraStart,
+          paragraph: paraBase + firstIndex,
+          change: para.propsChange.change,
+          before: para.propsChange.beforeParaStyleId ?? undefined,
+        });
+      }
+      if (para.markChange) {
+        changes.push({
+          start: offset,
+          end: offset,
+          paragraph: paraBase + breaks,
+          change: para.markChange,
+        });
+      }
+    }
     // An inline picture is a character of its line (core 17d3d3d places the
     // frame AT its offset): where the lowering says it sits in the paragraph.
     for (const img of para.images ?? []) {
@@ -386,7 +445,100 @@ function poured(
     length: offset - base,
     bytes,
     breaks,
+    changes,
+    comments,
   };
+}
+
+/** Doc ADR 613 — one tracked change over a poured range: a run's (char
+ *  range) or a paragraph's (`paragraph`). */
+interface ChangeAt {
+  start: number;
+  end: number;
+  paragraph?: number;
+  change: LoweredChange;
+  /** A format change's character style before, or a property change's
+   *  paragraph style before. */
+  before?: string;
+}
+
+/** Doc ADR 613 — the `recordChange` that marks one change. */
+function recordChangeOp(
+  storyId: string,
+  c: ChangeAt,
+  cell?: { tableId: string; row: number; col: number },
+): Mutation {
+  const kind = c.change.kind;
+  return {
+    op: "recordChange",
+    args: {
+      storyId,
+      start: c.start,
+      end: c.end,
+      ...(cell ? { cell } : {}),
+      ...(c.paragraph !== undefined ? { paragraph: c.paragraph } : {}),
+      change: {
+        kind,
+        id: c.change.id,
+        ...(c.change.author ? { author: c.change.author } : {}),
+        ...(c.change.date ? { date: c.change.date } : {}),
+        ...(kind === "format" && c.before
+          ? { beforeCharacterStyle: c.before }
+          : {}),
+        ...(kind === "paraProps" && c.before
+          ? { beforeParagraphStyle: c.before }
+          : {}),
+      },
+    },
+  } as unknown as Mutation;
+}
+
+/** Doc ADR 613 — the comment mutations of one story: each thread's first
+ *  comment over the range its runs poured as (`ranges`), its replies after
+ *  it. A thread whose range is not in this story is left to the story that
+ *  holds it. */
+export function buildCommentMutations(
+  storyId: string,
+  comments: readonly LoweredComment[],
+  ranges: ReadonlyMap<string, { start: number; end: number }>,
+): Mutation[] {
+  const spec = (c: LoweredComment) => ({
+    id: c.id,
+    ...(c.author ? { author: c.author } : {}),
+    ...(c.initials ? { initials: c.initials } : {}),
+    ...(c.date ? { date: c.date } : {}),
+    text: c.text,
+    ...(c.resolved ? { resolved: true } : {}),
+  });
+  const ops: Mutation[] = [];
+  for (const root of comments.filter((c) => !c.parentId)) {
+    const r = ranges.get(root.id);
+    if (!r || r.end <= r.start) continue;
+    ops.push({
+      op: "insertComment",
+      args: { storyId, start: r.start, end: r.end, comment: spec(root) },
+    } as unknown as Mutation);
+    for (const reply of comments.filter((c) => c.parentId === root.id)) {
+      ops.push({
+        op: "replyComment",
+        args: { parentId: root.id, comment: spec(reply) },
+      } as unknown as Mutation);
+    }
+  }
+  return ops;
+}
+
+/** Doc ADR 613 — turn the engine's change tracking on: the last write of a
+ *  document Word tracked changes in, so the pour itself is not tracked. */
+export function trackChangesMutation(): Mutation {
+  return {
+    op: "set",
+    args: {
+      address: "doc",
+      path: "documentTrackChanges",
+      value: { type: "bool", value: true },
+    },
+  } as unknown as Mutation;
 }
 
 /** A zero-length paragraph-style range: a CARET, which styles the empty
@@ -433,6 +585,10 @@ export function buildTextPour(
   byteLength: number;
   carets: Mutation[];
   breaks: number;
+  /** Doc ADR 613 — each comment's range over the poured text. */
+  comments: Map<string, { start: number; end: number }>;
+  /** Doc ADR 613 — the `recordChange`s of the poured text. */
+  changes: Mutation[];
 } {
   // Notes are placed only when the caller has their text (a document
   // opened standalone); anywhere else their references are left out.
@@ -514,8 +670,19 @@ export function buildTextPour(
   // points) for the caller's running text offset — of the finished pour, the
   // fields' results and the note markers included.
   // (U+2028, Word's line break, is 3 bytes here and 1 char in `length`.)
+  // Doc ADR 613 — the tracked changes, recorded in a step of their own
+  // once the whole story stands (an engine without them keeps the text).
+  const changes = body.changes.map((c) => recordChangeOp(storyId, c));
   const byteLength = lead + body.bytes;
-  return { mutations: ops, length, byteLength, carets, breaks };
+  return {
+    mutations: ops,
+    length,
+    byteLength,
+    carets,
+    breaks,
+    comments: body.comments,
+    changes,
+  };
 }
 
 /** The mutation that inserts a field or a note reference (doc ADRs 611 /
@@ -818,6 +985,51 @@ export function buildTableCells(
   return { op: "batch", args: { ops } } as Mutation;
 }
 
+/** Doc ADR 613 — the `recordChange`s of a table's cell runs, cell-local,
+ *  for the story's review step. */
+export function buildTableCellChanges(
+  table: LoweredTable,
+  storyId: string,
+  tableId: string,
+): Mutation[] {
+  const ops: Mutation[] = [];
+  for (const cell of table.cells) {
+    const addr = { tableId, row: cell.row, col: cell.col };
+    let offset = 0;
+    for (const para of cell.paragraphs) {
+      for (const run of para.runs) {
+        const runStart = offset;
+        offset += codePointLen(run.text);
+        if (offset === runStart) continue;
+        if (run.change) {
+          ops.push(
+            recordChangeOp(
+              storyId,
+              { start: runStart, end: offset, change: run.change },
+              addr,
+            ),
+          );
+        }
+        if (run.formatChange) {
+          ops.push(
+            recordChangeOp(
+              storyId,
+              {
+                start: runStart,
+                end: offset,
+                change: run.formatChange.change,
+                before: run.formatChange.beforeCharStyleId ?? undefined,
+              },
+              addr,
+            ),
+          );
+        }
+      }
+    }
+  }
+  return ops;
+}
+
 /** The carets that style a table's BLANK cell lines (empty Word paragraphs
  *  inside a cell), in the cell's OWN contiguous offset space (`insertText`
  *  with a `cell` address restarts at 0, and so do the cell's style ranges).
@@ -910,7 +1122,9 @@ export function endsEmpty(p: LoweredParagraph): boolean {
 /** Split the story's blocks into executable steps: consecutive paragraph blocks
  *  coalesce into one text step; each table becomes a table step. */
 export function buildStory(ir: LoweredDoc, storyId: string): StoryStep[] {
-  return buildStoryBlocks(ir.story.blocks, storyId);
+  return buildStoryBlocks(ir.story.blocks, storyId, {
+    comments: ir.comments ?? [],
+  });
 }
 
 /** ADR 029 — the story's blocks split per native STORY of the standalone
@@ -984,9 +1198,20 @@ export function buildStoryBlocks(
   storyId: string,
   /** `notes`: the notes' text, to place each note at its reference (doc
    *  ADR 611, a standalone open); without it references are left out. */
-  opts: { notes?: NoteTexts } = {},
+  opts: {
+    notes?: NoteTexts;
+    /** Doc ADR 613 — the document's comments: those whose range is in
+     *  these blocks are inserted over it in a last step. */
+    comments?: readonly LoweredComment[];
+  } = {},
 ): StoryStep[] {
   const notes = opts.notes;
+  // Doc ADR 613 — each comment's range, filled in as the text steps run.
+  const commentRanges = new Map<string, { start: number; end: number }>();
+  let hasReview = false;
+  // Each text step's and table's tracked changes, filled in as they run.
+  const changesByStep: Mutation[][] = [];
+  const cellChanges: Mutation[][] = [];
   const steps: StoryStep[] = [];
   let pending: LoweredParagraph[] = [];
   // Each text step's carets, filled in when the pour runs it (the style base
@@ -1010,6 +1235,7 @@ export function buildStoryBlocks(
     const probe = buildTextPour(paras, storyId, 0, 0, { leadingBreak, notes });
     const slot = caretsByStep.length;
     caretsByStep.push([]);
+    changesByStep.push([]);
     const paraBase = last + 1;
     last = paraBase + probe.breaks;
     endsInTable = false;
@@ -1026,10 +1252,17 @@ export function buildStoryBlocks(
           notes,
         });
         caretsByStep[slot] = out.carets;
+        changesByStep[slot] = out.changes;
+        for (const [id, r] of out.comments) {
+          const had = commentRanges.get(id);
+          if (had) had.end = r.end;
+          else commentRanges.set(id, { ...r });
+        }
         return out.mutations;
       },
     });
     if (probe.carets.length > 0) hasCarets = true;
+    if (probe.comments.size > 0 || probe.changes.length > 0) hasReview = true;
   };
   for (const block of blocks) {
     if (block.kind === "table" && block.flow && block.flow.length > 0) {
@@ -1048,6 +1281,9 @@ export function buildStoryBlocks(
       const table: LoweredTable = block;
       const slot = cellCarets.length;
       cellCarets.push([]);
+      cellChanges.push([]);
+      if (buildTableCellChanges(table, storyId, "").length > 0)
+        hasReview = true;
       if (buildTableCellCarets(table, storyId, "").length > 0) hasCarets = true;
       steps.push({
         kind: "table",
@@ -1056,6 +1292,7 @@ export function buildStoryBlocks(
         insert: buildTableInsert(table, storyId),
         cells: (tableId) => {
           cellCarets[slot] = buildTableCellCarets(table, storyId, tableId);
+          cellChanges[slot] = buildTableCellChanges(table, storyId, tableId);
           return buildTableCells(table, storyId, tableId);
         },
       });
@@ -1077,6 +1314,19 @@ export function buildStoryBlocks(
         // so there the last caret of a group wins for all of them.
         return [...caretsByStep.flat(), ...cellCarets.flat()];
       },
+    });
+  }
+  if (hasReview) {
+    const all = opts.comments ?? [];
+    steps.push({
+      kind: "text",
+      length: 0,
+      byteLength: 0,
+      mutations: () => [
+        ...changesByStep.flat(),
+        ...cellChanges.flat(),
+        ...buildCommentMutations(storyId, all, commentRanges),
+      ],
     });
   }
   return steps;
@@ -1108,6 +1358,8 @@ export interface StoryContentLike {
   paragraphs: Array<
     { runs: Array<{ text: string }> } & Record<string, unknown>
   >;
+  /** Doc ADR 613 — the story's comments, as the engine reads them back. */
+  comments?: Array<{ id: string } & Record<string, unknown>>;
 }
 
 /**
@@ -1126,13 +1378,22 @@ export function mergeSectionContents(
   const isEmpty = (p: { runs: Array<{ text: string }> }) =>
     p.runs.every((r) => r.text === "");
   const paragraphs: StoryContentLike["paragraphs"] = [];
+  const comments: NonNullable<StoryContentLike["comments"]> = [];
   contents.forEach((c, k) => {
     const ps = [...c.paragraphs];
     const expected = pouredParagraphs[k] ?? ps.length;
     while (ps.length > expected && isEmpty(ps[ps.length - 1])) ps.pop();
     paragraphs.push(...ps);
+    // Doc ADR 613 — every story's comments (each listed once).
+    for (const m of c.comments ?? []) {
+      if (!comments.some((x) => x.id === m.id)) comments.push(m);
+    }
   });
-  return { selfId: contents[0]?.selfId, paragraphs };
+  return {
+    selfId: contents[0]?.selfId,
+    paragraphs,
+    ...(comments.length > 0 ? { comments } : {}),
+  };
 }
 
 /** Where each block of one story's blocks was poured: the index of the

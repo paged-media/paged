@@ -32,6 +32,7 @@ mod edit;
 mod native;
 pub mod notes;
 mod overlay;
+pub mod review;
 mod rpr;
 mod splice;
 pub mod structure;
@@ -47,8 +48,9 @@ pub use native::{native_document, NativeDocIn, PageIn};
 pub use overlay::{
     add_canvas_colors, overlay_cells, overlay_cells_known, overlay_story_content,
     overlay_story_content_in, overlay_story_content_known, overlay_story_content_with,
-    overlay_tables, CellContentIn, ParagraphContentIn, RunContentIn, StoryContentIn,
-    TableContentIn, TableParagraphs,
+    overlay_tables, CellContentIn, ChangeContentIn, CommentContentIn, FormatChangeContentIn,
+    ParagraphContentIn, PropsChangeContentIn, RunContentIn, StoryContentIn, TableContentIn,
+    TableParagraphs,
 };
 pub use styles::{
     plan_styles, splice_styles, CreatedStyle, ModifiedStyle, StyleEntryIn, StyleIn, StylePlan,

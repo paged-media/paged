@@ -82,6 +82,46 @@ export interface LoweredRun {
    *  engine's marker character, which `insertFootnote` / `insertEndnote`
    *  writes. */
   note?: LoweredNoteRef | null;
+  /** Doc ADR 613 — the tracked insertion or deletion the run's text is. */
+  change?: LoweredChange | null;
+  /** Doc ADR 613 — the run's tracked format change. */
+  formatChange?: LoweredFormatChange | null;
+  /** Doc ADR 613 — the comments (`docx-c<w:id>`) whose range covers it. */
+  comments?: string[];
+}
+
+/** Doc ADR 613 — one tracked change, as `recordChange` records it. */
+export interface LoweredChange {
+  id: string;
+  /** `insert` / `delete` / `format` / `paraProps` / `insertMark` /
+   *  `deleteMark`. */
+  kind: string;
+  author?: string | null;
+  date?: string | null;
+}
+
+/** Doc ADR 613 — a run's format change and its look before. */
+export interface LoweredFormatChange {
+  change: LoweredChange;
+  beforeCharStyleId?: string | null;
+}
+
+/** Doc ADR 613 — a paragraph's property change and its style before. */
+export interface LoweredPropsChange {
+  change: LoweredChange;
+  beforeParaStyleId?: string | null;
+}
+
+/** Doc ADR 613 — one comment: a thread's first comment, or a reply. */
+export interface LoweredComment {
+  id: string;
+  parentId?: string | null;
+  author?: string | null;
+  initials?: string | null;
+  date?: string | null;
+  /** Paragraphs separated by `\n`. */
+  text: string;
+  resolved?: boolean;
 }
 
 export interface LoweredField {
@@ -135,6 +175,10 @@ export interface LoweredParagraph {
   /** The Word list this paragraph is an item of (`w:numId`) and its level.
    *  Absent when it is not a list item. */
   list?: LoweredListRef;
+  /** Doc ADR 613 — the paragraph mark's tracked insertion or deletion. */
+  markChange?: LoweredChange | null;
+  /** Doc ADR 613 — the tracked change of the paragraph's properties. */
+  propsChange?: LoweredPropsChange | null;
 }
 
 /** A list paragraph's list identity. */
@@ -392,6 +436,10 @@ export interface LoweredDoc {
   notes?: LoweredNote[];
   /** Doc ADR 612 — the tables of contents in the body. */
   tocs?: LoweredToc[];
+  /** Doc ADR 613 — the comments, threads in order. */
+  comments?: LoweredComment[];
+  /** Doc ADR 613 — Word records changes in this document. */
+  trackChanges?: boolean;
 }
 
 /** Parse the JSON string `docx-js` produces into a typed [`LoweredDoc`]. */
