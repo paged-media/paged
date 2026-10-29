@@ -815,6 +815,22 @@ refuses them. Additive at protocol 76: an older engine refuses the path.
 A bundle that would otherwise bake an effect into its pixels (paged.draw's
 appearance, paged.image's layer styles placed on a page) asks it first.
 
+`"document.appearance@1"` (engine ADR 1043) says the vendored wire and
+catalog carry native appearance: an item's extra fills and strokes, bottom
+to top, in order with its own fill and stroke. `frameAppearance` is the
+whole list, written as `{ type: "appearance", value: { layers } }` (a
+`PaintLayerSpec` per layer: `kind` — `fill`, `stroke`, or the placeholders
+`frameFill` / `frameStroke` that place the item's own paint — `enabled`,
+`color`, `tint`, the gradient geometry, `opacityPct`, `blendMode`,
+`effects` (stack-only `EffectEntrySpec`s) and, for a stroke, `weight`,
+`alignment`, `endCap`, `endJoin`, `miterLimit`, `strokeType`, `dash`);
+`frameAppearanceLayer` replaces one layer, `{ index, layer }` (one past the
+end appends). Each write is one undo step; the empty list is the item as it
+always was. `host.objects` reads and writes `frameAppearance` as its list of
+layers. IDML gets a group of single-paint items with the source in the
+item's `paged:appearance` label (and a loss line); a paged reader restores
+it. Additive at protocol 78: an older engine refuses the paths.
+
 `"document.symbols@1"` (engine ADR 1039, protocol 78) is the engine's
 symbol: a definition kept once in the document and instances that draw it
 (`FrameRef::Instance`, addressed `instance:<id>`). The doors are five wire

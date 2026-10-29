@@ -789,6 +789,10 @@ export const CORE_PATHS: Record<
   frameFillEffectStack: V71,
   frameStrokeEffectStack: V71,
   frameContentEffectStack: V71,
+  // The appearance is protocol 78 (engine ADR 1043): the layer list, and
+  // the per-layer edit, an operation.
+  frameAppearance: V71,
+  frameAppearanceLayer: OP,
   nextTextFrame: {
     scope: "frame",
     wire: "text",
