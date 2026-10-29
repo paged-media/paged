@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-sdk",
-  "version": "0.74.3-canary.40",
+  "version": "0.74.3-canary.41",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
