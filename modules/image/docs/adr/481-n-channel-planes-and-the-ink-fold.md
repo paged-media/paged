@@ -98,11 +98,16 @@ blended square Photoshop blends in L*a*b* and the stack in RGB: 10 ΔE under a 7
   derived through the profile (the journal holds pixels).
 - An edit in a CMYK document with a profile is projected into its gamut (ADR 479) — CMYK files
   now open in their mode, so this applies to them too.
+- The compute wasm is 8,472,888 bytes (8,440,812 after ADR 480), within the 9 MiB cap.
 - The import's `cmyk-blend` and `cmyk-composite` gates are unchanged here: they judge the RGB
   blend the importer's own check still uses; lifting them for separable files is the next step.
 
 ## Deferred
 
+- **32-bit float documents.** `paged-raster` decodes EXR and Radiance HDR to f32 on main
+  (engine ADR 1038), not yet on this branch; a float document needs `SampleDepth::F32` in the
+  layer store with the compiler-guided migration ADR 479 made for 16 bits, a tone-mapped view
+  and the float writers. Not started here.
 - **Indexed, Duotone and Multichannel.** `Planes` carries them (a Duotone's one to four inks, a
   Multichannel document's N channels), but each needs its own mode transform (a colour table
   and dither; ink curves; spot colours), its PSD encoding and an oracle; none is offered in
