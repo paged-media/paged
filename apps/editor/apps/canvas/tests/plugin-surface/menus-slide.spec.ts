@@ -19,8 +19,8 @@
 
 // PLUGIN MENUS — paged.slide (modules/slide/packages/slide-bundle/src/menu.ts).
 //
-// Eleven entries: File ▸ Open PowerPoint deck… and File ▸ Export PowerPoint
-// deck…, Insert ▸ Shapes…, and eight slide verbs under the Slide menu (New,
+// Thirteen entries: File ▸ Open PowerPoint deck… and File ▸ Export PowerPoint
+// deck…, Insert ▸ Shapes…, Design ▸ Themes and Browse for Themes…, and eight slide verbs under the Slide menu (New,
 // Duplicate, Delete, Move up / down, Previous / Next slide, New comment),
 // which the bar folds into Plugins ▸ Slide beside the panels.
 //
@@ -72,6 +72,8 @@ const PREVIOUS = "Slide/Previous slide";
 const NEXT = "Slide/Next slide";
 const COMMENT = "Slide/New comment";
 const SHAPES = "Insert/Shapes…";
+const THEMES = "Design/Themes";
+const BROWSE_THEMES = "Design/Browse for Themes…";
 const SLIDE_VERBS = [NEW, DUPLICATE, DELETE, UP, DOWN, PREVIOUS, NEXT, COMMENT];
 
 interface CanvasProbe {
@@ -225,6 +227,37 @@ test.describe.serial("plugin menus — paged.slide", () => {
     await expect(live.locator("[data-shapes-panel]")).toBeVisible({
       timeout: 10_000,
     });
+  });
+
+  test("Design/Themes — opens the Design panel with the deck's theme gallery", async () => {
+    covers("menu:Design/Themes");
+    covers("command:media.paged.slide.command.design");
+    await expectGreyedAndInert(bare, THEMES);
+    await toFirstSlide(live);
+    const out = await clickEntry(live, THEMES, `${C}.design`);
+    expect(out.after, "opening the panel edits nothing").toBe(out.before);
+    await expect(live.locator('[data-design-panel="ready"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      live.locator('[data-design-theme="deck"][aria-pressed="true"]'),
+    ).toBeVisible();
+  });
+
+  test("Design/Browse for Themes… — asks for a .thmx / .potx / .pptx file", async () => {
+    covers("menu:Design/Browse for Themes…");
+    covers("command:media.paged.slide.command.browseThemes");
+    await expectGreyedAndInert(bare, BROWSE_THEMES);
+    const out = await clickEntry(live, BROWSE_THEMES, `${C}.browseThemes`);
+    expect(out.shell).toEqual([
+      {
+        door: "pickFile",
+        arg: '{"accept":[".thmx",".potx",".pptx"],"multiple":false}',
+      },
+    ]);
+    expect(out.after, "a cancelled pick leaves the document alone").toBe(
+      out.before,
+    );
   });
 
   test("Slide/New slide — adds a slide after the active one; one Undo removes it", async () => {

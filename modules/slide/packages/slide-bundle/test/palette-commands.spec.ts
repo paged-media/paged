@@ -52,6 +52,7 @@ import { ANIM_CMD, ANIM_MENU } from "../src/anim/contribute";
 import { SHOW_CMD, SHOW_MENU } from "../src/show/contribute";
 import { OUTPUT_CMD, OUTPUT_MENU } from "../src/output/commands";
 import { CONTENT_CMD, CONTENT_MENU } from "../src/content-commands";
+import { DESIGN_CMD, DESIGN_MENU } from "../src/design";
 import { SHAPES_PANEL_ID } from "../src/shapes";
 import {
   DUPLICATE_SLIDE_COMMAND,
@@ -255,6 +256,7 @@ describe("paged.slide palette commands", () => {
       ...Object.values(OUTPUT_CMD),
       ...Object.values(ANIM_CMD),
       ...Object.values(CONTENT_CMD),
+      ...Object.values(DESIGN_CMD),
     ]);
     const verbs = MANIFEST.contributes.commands.filter((c) => !show.has(c));
     expect([...s.commands.keys()].sort()).toEqual([...verbs].sort());
@@ -625,7 +627,8 @@ describe("paged.slide palette commands", () => {
         SHOW_MENU.length +
         OUTPUT_MENU.length +
         ANIM_MENU.length +
-        CONTENT_MENU.length -
+        CONTENT_MENU.length +
+        DESIGN_MENU.length -
         2,
     );
     h.dispose();
