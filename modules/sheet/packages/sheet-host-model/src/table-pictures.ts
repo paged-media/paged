@@ -24,8 +24,14 @@
 
 import type { Mutation, PageId } from "@paged-media/plugin-api";
 
+import { nativeFxOps } from "./chart";
 import type { LoweredContent, LoweredPicture } from "./lowered";
 import { columnOrder } from "./lower-to-table";
+import {
+  normalizePaletteHex,
+  swatchMintOps,
+  type KnownSwatchIds,
+} from "./palette";
 
 /** A picture's page box `[top, left, bottom, right]` over a table whose
  *  content box starts at `origin` (`[top, left]`), or null when its anchor
@@ -53,14 +59,19 @@ export function tablePictureBox(
 }
 
 /** The ops that place `content`'s pictures over its table: per picture an
- *  `insertFrame` bound to a handle and its `placeImage`. */
+ *  `insertFrame` bound to a handle, its `placeImage`, and (sheet ADR 527)
+ *  the opacity and effects its DrawingML asks for — their colours minted
+ *  first as chart swatches the document lacks (`knownSwatchIds`, the same
+ *  read-first ruling as every mint: `null`, a failed read, mints none). */
 export function tablePictureOps(
   content: LoweredContent,
   widths: readonly number[],
   pageId: PageId,
   origin: [number, number],
+  knownSwatchIds?: KnownSwatchIds,
 ): Mutation[] {
   const ops: Mutation[] = [];
+  const hexes = new Set<string>();
   (content.pictures ?? []).forEach((p, i) => {
     const box = tablePictureBox(content, widths, origin, p);
     if (!box || box[2] <= box[0] || box[3] <= box[1]) return;
@@ -76,7 +87,24 @@ export function tablePictureOps(
           fit: p.inCell ? "Proportionally" : "ContentToFrame",
         },
       },
+      ...nativeFxOps(p.fx, 0, 0, undefined, false, {
+        kind: "rectangle",
+        id: `$h:${handle}`,
+      }),
     );
+    for (const c of [
+      p.fx?.dropShadow?.color,
+      p.fx?.innerShadow?.color,
+      p.fx?.outerGlow?.color,
+    ]) {
+      const h = c == null ? null : normalizePaletteHex(c);
+      if (h != null) hexes.add(h);
+    }
   });
-  return ops;
+  return [...swatchMintOps("chart", [...hexes], knownSwatchIds), ...ops];
+}
+
+/** What the page cannot hold of `content`'s pictures, one line per kind. */
+export function tablePictureLosses(content: LoweredContent): string[] {
+  return [...new Set((content.pictures ?? []).flatMap((p) => p.losses ?? []))];
 }

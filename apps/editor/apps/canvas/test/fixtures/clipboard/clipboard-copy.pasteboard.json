@@ -1,0 +1,59 @@
+{
+  "recorded": "2026-10-28",
+  "items": [
+    {
+      "types": [
+        {
+          "type": "com.adobe.illustrator.aicb",
+          "bytes": 44578,
+          "head": "%!PS-Adobe-3.0 EPSF-3.0.%%Creator: Adobe Illustrator(R) 8.0.%%AI"
+        },
+        {
+          "type": "dyn.ah62d4rv4gu81q5xef341g3bptmy1a",
+          "bytes": null
+        },
+        {
+          "type": "com.adobe.svg",
+          "bytes": null
+        },
+        {
+          "type": "public.svg-image",
+          "bytes": 386,
+          "head": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>.<svg id=\"Ebene_1\" data-na"
+        },
+        {
+          "type": "com.adobe.pdf",
+          "bytes": 39979,
+          "head": "%PDF-1.6.%......1 0 obj.<</Metadata 2 0 R/OCProperties<</D<</ON[",
+          "pdf": true
+        },
+        {
+          "type": "com.adobe.illustrator.svgm",
+          "bytes": 404,
+          "head": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>.<svg id=\"Ebene_1\" data-na"
+        },
+        {
+          "type": "com.adobe.illustrator.svg",
+          "bytes": 404,
+          "head": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>.<svg id=\"Ebene_1\" data-na"
+        },
+        {
+          "type": "public.utf8-plain-text",
+          "bytes": 404,
+          "head": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>.<svg id=\"Ebene_1\" data-na"
+        },
+        {
+          "type": "public.png",
+          "bytes": 6572,
+          "head": ".PNG........IHDR...B..........Rv.....pHYs...#...#.x.?v...^IDATx."
+        },
+        {
+          "type": "com.adobe.illustrator.pgf.14.0",
+          "bytes": 30780,
+          "head": "%AI24_ZStandard_Data(./..XlA.....3.D$P...B.xE.8,....a........\".."
+        }
+      ]
+    }
+  ],
+  "svgFlavour": "public.svg-image"
+}

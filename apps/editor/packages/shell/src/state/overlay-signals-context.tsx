@@ -131,13 +131,31 @@ export interface ToolPreviewText {
   background?: boolean;
 }
 
+/**
+ * Extensions ADR 339 — a HANDLE drawn at a constant screen size (the
+ * Free Transform box, a bundle's handle set). Mirrors the plugin-api
+ * `ToolPreviewHandle`: centre in page-local pt, `shape` square / round /
+ * centre (a reference point) / rotateZone (no paint), `sizePx` the
+ * visible size in screen px (default 8), `active` the dragged one.
+ */
+export interface ToolPreviewHandle {
+  kind: "handle";
+  pageId: PageId;
+  x: number;
+  y: number;
+  shape: "square" | "round" | "centre" | "rotateZone";
+  sizePx?: number;
+  active?: boolean;
+}
+
 /** What a tool handler can publish as its in-progress preview. */
 export type ToolPreviewShape =
   | MarqueeRectPageLocal
   | ToolPreviewPolyline
   | ToolPreviewGrid
   | ToolPreviewPath
-  | ToolPreviewText;
+  | ToolPreviewText
+  | ToolPreviewHandle;
 
 /**
  * K-9 — what the tool-preview SLOT holds: one shape (every built-in

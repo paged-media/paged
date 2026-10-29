@@ -592,6 +592,79 @@ fn a_selection_exports_alone_fitted_to_what_it_draws() {
     );
 }
 
+/// Editor ADR 289 (the vector clipboard copies a selection through this
+/// export): the items of the page's master are not the selection. The
+/// master pass of the build drew a master item the filtered build had
+/// hidden, so every copied selection carried the master's artwork.
+#[test]
+#[allow(non_snake_case)]
+fn a_selection_exports_without_its_pages_master_items__feat__editor_shell_vector_clipboard() {
+    let sample = paged_gen::samples::build("masters").expect("masters sample");
+    let bytes = paged_gen::write_idml(&sample).expect("write");
+    let mut m = CanvasModel::load("svg", &bytes, CanvasOptions::default()).expect("load");
+    // A page that shows a master rectangle: its whole-page export draws
+    // more than the one item imported below.
+    let mut masters: Vec<String> = m
+        .scene()
+        .master_spreads
+        .iter()
+        .filter(|(_, ms)| !ms.spread.rectangles.is_empty())
+        .map(|(id, _)| id.clone())
+        .collect();
+    masters.sort();
+    let page = masters
+        .iter()
+        .flat_map(|master| {
+            m.scene()
+                .spreads
+                .iter()
+                .flat_map(|s| s.spread.pages.iter())
+                .filter(move |p| {
+                    p.applied_master
+                        .as_deref()
+                        .is_some_and(|a| a.rsplit('/').next() == Some(master.as_str()))
+                })
+        })
+        .filter_map(|p| p.self_id.clone().map(PageId))
+        .find(|page| {
+            m.export_svg(page, &[], &SvgExportOptions::default())
+                .is_ok_and(|(_, r)| r.items > 0)
+        })
+        .expect("a page draws its master's rectangle");
+    let o = SvgImportOptions {
+        group: Some(false),
+        ..at_origin()
+    };
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
+        <rect x="30" y="40" width="50" height="20" fill="#00ff00"/></svg>"##;
+    import(&mut m, &page, svg, &o);
+    let green = m
+        .scene()
+        .spreads
+        .iter()
+        .flat_map(|s| s.spread.polygons.iter())
+        .find(|p| p.fill_color.as_deref() == Some("Color/svg-00ff00"))
+        .and_then(|p| p.self_id.clone())
+        .expect("the green rectangle");
+    let (out, report) = m
+        .export_svg(
+            &page,
+            &[ElementId::Polygon(green)],
+            &SvgExportOptions::default(),
+        )
+        .unwrap();
+    assert_eq!(
+        report.items, 1,
+        "the selection alone, no master item: {out}"
+    );
+    assert!(out.contains("viewBox=\"30 40 50 20\""), "{out}");
+    // The whole page still draws its master.
+    let (page_out, page_report) = m
+        .export_svg(&page, &[], &SvgExportOptions::default())
+        .unwrap();
+    assert!(page_report.items > 1, "{page_out}");
+}
+
 #[test]
 #[allow(non_snake_case)]
 fn text_exports_as_text_naming_its_font() {

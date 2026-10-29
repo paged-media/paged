@@ -50,6 +50,7 @@ pub mod channels;
 pub mod clone_source;
 pub mod cmyk;
 // Engine work counters (thread-local, always on) — budgets count these.
+pub mod color_mode;
 pub mod content_aware;
 pub mod counters;
 pub mod display;
@@ -429,6 +430,75 @@ mod wasm {
             height,
             display,
             depth_reduced,
+        })
+    }
+
+    /// [`ingest_rgba8`]'s 16-bit twin: straight RGBA at 16 bits per
+    /// sample, `width*height*4` samples — what the decode worker hands
+    /// over for a 16-bit source, so the off-thread decode keeps the depth
+    /// the main-thread one does (image ADR 479).
+    #[wasm_bindgen]
+    pub fn ingest_rgba16(
+        width: u32,
+        height: u32,
+        samples: Vec<u16>,
+    ) -> Result<DecodedHandle, JsValue> {
+        if width == 0 || height == 0 || samples.len() != width as usize * height as usize * 4 {
+            return Err(JsValue::from_str(&format!(
+                "ingest_rgba16: {} samples for {width}×{height} (expected {})",
+                samples.len(),
+                width as usize * height as usize * 4
+            )));
+        }
+        let img = DecodedImage {
+            width,
+            height,
+            rgba: crate::pixels::Pixels::from_rgba16(&samples),
+            display: crate::display::DisplayTreatment::AssumedSrgb,
+            depth_reduced: false,
+        };
+        let handle = NEXT_HANDLE.with(|n| {
+            let h = n.get();
+            n.set(h + 1);
+            h
+        });
+        let display = display_code(img.display);
+        IMAGES.with(|m| m.borrow_mut().insert(handle, img));
+        Ok(DecodedHandle {
+            handle,
+            width,
+            height,
+            display,
+            depth_reduced: false,
+        })
+    }
+
+    /// An engine-held image's samples at 16 bits (an 8-bit image widened
+    /// exactly) — the decode worker's hand-off of a 16-bit source.
+    #[wasm_bindgen]
+    pub fn image_samples16(handle: u32) -> Result<Vec<u16>, JsValue> {
+        IMAGES.with(|m| {
+            let map = m.borrow();
+            let img = map
+                .get(&handle)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+            let px = &img.rgba;
+            Ok((0..px.pixel_count() * 4)
+                .map(|i| px.sample16(i / 4, i % 4))
+                .collect())
+        })
+    }
+
+    /// Bits per channel an engine-held image holds: 8 or 16 (Image ▸
+    /// Mode's checked depth).
+    #[wasm_bindgen]
+    pub fn image_bits(handle: u32) -> Result<u8, JsValue> {
+        IMAGES.with(|m| {
+            let map = m.borrow();
+            let img = map
+                .get(&handle)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+            Ok(if img.rgba.is_16bit() { 16 } else { 8 })
         })
     }
 
@@ -1679,9 +1749,10 @@ mod wasm {
                     .any(|c| matches!(c.kind, crate::masking::ChannelKind::Spot { .. }))
             })
         });
+        let proofing = PROOF.with(|p| p.borrow().is_some());
         VIEW.with(|v| {
             let v = v.borrow();
-            v.view != crate::masking::View::Composite || (v.spots && has_spots)
+            v.view != crate::masking::View::Composite || (v.spots && has_spots) || proofing
         })
     }
 
@@ -1739,8 +1810,112 @@ mod wasm {
                     None => rgba.to_vec(),
                 },
             };
+            // Proof Colors / Gamut Warning (ADR 479): over the composite
+            // view only — a channel shown as grey has no colours to proof.
+            let base = if view == View::Composite {
+                PROOF.with(|p| match p.borrow().as_ref() {
+                    Some(proof) => proof.apply_rgba8(&base),
+                    None => base,
+                })
+            } else {
+                base
+            };
             Ok(base)
         })
+    }
+
+    thread_local! {
+        static PROOF: RefCell<Option<crate::color_mode::Proof>> = const { RefCell::new(None) };
+    }
+
+    /// VIEW ▸ PROOF COLORS and GAMUT WARNING on the image preview:
+    /// `target` is `off`, `gray` (Gray Gamma 2.2) or `cmyk` (through
+    /// `cmyk_profile`; empty: the document's own CMYK profile, refused
+    /// when it has none). `colors` simulates the output, `gamut` paints
+    /// the colours it cannot reproduce grey. A display transform, applied
+    /// by `view_apply` — the document is untouched.
+    #[wasm_bindgen]
+    pub fn view_set_proof(
+        target: &str,
+        colors: bool,
+        gamut: bool,
+        cmyk_profile: &[u8],
+    ) -> Result<(), JsValue> {
+        if target == "off" || (!colors && !gamut) {
+            PROOF.with(|p| *p.borrow_mut() = None);
+            return Ok(());
+        }
+        let mode = crate::color_mode::ColorMode::from_name(target)
+            .ok_or_else(|| JsValue::from_str(&format!("unknown proof target {target:?}")))?;
+        let own = LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .and_then(|d| d.stack.mode().cmyk_profile.clone())
+        });
+        let profile: Option<&[u8]> = if cmyk_profile.is_empty() {
+            own.as_deref()
+        } else {
+            Some(cmyk_profile)
+        };
+        let proof =
+            crate::color_mode::Proof::new(mode, profile, colors, gamut).map_err(ingest_err)?;
+        PROOF.with(|p| *p.borrow_mut() = Some(proof));
+        Ok(())
+    }
+
+    /// The bound document's colour mode: `rgb`, `gray`, `cmyk` or `lab`
+    /// (`rgb` with no stack open).
+    #[wasm_bindgen]
+    pub fn image_mode() -> String {
+        LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .map_or("rgb", |d| d.stack.mode().mode.name())
+                .to_string()
+        })
+    }
+
+    /// IMAGE ▸ MODE ▸ Grayscale / RGB Color / CMYK Color / Lab Color over
+    /// the bound stack (`LayerStack::set_mode`, one undo step), the
+    /// composite landing in `handle`. `cmyk_profile` is the press a CMYK
+    /// document converts through (empty: none, the plain ink formula,
+    /// which changes no colour). Answers whether anything changed.
+    #[wasm_bindgen]
+    pub async fn image_set_mode(
+        handle: u32,
+        mode: &str,
+        cmyk_profile: Vec<u8>,
+    ) -> Result<bool, JsValue> {
+        let mode = crate::color_mode::ColorMode::from_name(mode)
+            .ok_or_else(|| JsValue::from_str(&format!("unknown colour mode {mode:?}")))?;
+        if LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) != Some(handle) {
+            return Err(JsValue::from_str(
+                "no layer stack open on this image (layers_open first)",
+            ));
+        }
+        let doc_mode = crate::color_mode::DocMode {
+            mode,
+            cmyk_profile: (mode == crate::color_mode::ColorMode::Cmyk && !cmyk_profile.is_empty())
+                .then(|| Arc::from(cmyk_profile.into_boxed_slice())),
+        };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        with_stack_async(|mut doc| async move {
+            let result = async {
+                if !doc.stack.set_mode(doc_mode).map_err(ingest_err)? {
+                    return Ok(false);
+                }
+                let rgba = doc
+                    .stack
+                    .composite_px(ctx.as_deref(), None)
+                    .await
+                    .map_err(ingest_err)?;
+                set_image_pixels(doc.handle, rgba)?;
+                Ok(true)
+            }
+            .await;
+            (doc, result)
+        })
+        .await
     }
 
     // ── Quick Mask ──────────────────────────────────────────────────
@@ -3061,7 +3236,7 @@ mod wasm {
                     .map_err(ingest_err)?;
                 let rgba = doc
                     .stack
-                    .composite(ctx.as_deref(), None)
+                    .composite_px(ctx.as_deref(), None)
                     .await
                     .map_err(ingest_err)?;
                 set_image_pixels(doc.handle, rgba)?;
@@ -3126,7 +3301,7 @@ mod wasm {
                     .map_err(ingest_err)?;
                 let rgba = doc
                     .stack
-                    .composite(ctx.as_deref(), None)
+                    .composite_px(ctx.as_deref(), None)
                     .await
                     .map_err(ingest_err)?;
                 set_image_pixels(doc.handle, rgba)?;
@@ -3534,6 +3709,47 @@ mod wasm {
         let radius = (img.width.min(img.height) as f32) / 2.0;
         let params = WarpBackwardParams::new(k, amount, cx, cy, radius).with_frequency(frequency);
         apply_point_kernel(handle, &GEOM_WARP_BACKWARD, params.as_bytes()).await
+    }
+
+    /// FREE TRANSFORM of the active layer (`geom.warp_projective`; WP5.6,
+    /// editor ADR 295). `matrix` is the FORWARD 3×3 map in image px
+    /// (row-major: where each source pixel goes), as the host's transform
+    /// box reports it seen through the frame's fit; it is inverted here in
+    /// f64. `interp` 0 bilinear, 1 bicubic. What the layer no longer covers
+    /// is transparent. With a selection only the selected pixels move (the
+    /// rest stay), as one journaled edit — one undo step either way. The
+    /// kernel reads ASSOCIATED alpha, so the upload associates even an
+    /// opaque layer: its new edges are interpolated against transparent
+    /// black, which is exact only premultiplied.
+    #[wasm_bindgen]
+    pub async fn apply_projective(
+        handle: u32,
+        matrix: Vec<f32>,
+        interp: u32,
+    ) -> Result<DecodedHandle, JsValue> {
+        use image_kernels::families::geom::{
+            WarpInterp, WarpProjectiveParams, GEOM_WARP_PROJECTIVE,
+        };
+        if matrix.len() != 9 {
+            return Err(JsValue::from_str(
+                "a projective matrix is 9 numbers (3×3, row-major)",
+            ));
+        }
+        let interp = match interp {
+            0 => WarpInterp::Bilinear,
+            1 => WarpInterp::Bicubic,
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown interpolation {other} (0 bilinear | 1 bicubic)"
+                )))
+            }
+        };
+        let m: [f64; 9] = std::array::from_fn(|i| f64::from(matrix[i]));
+        let masked = SELECTION.with(|s| s.borrow().mask_for(handle)).is_some();
+        let params = WarpProjectiveParams::from_forward(m, interp, masked).ok_or_else(|| {
+            JsValue::from_str("the transform is singular (it folds the layer flat)")
+        })?;
+        apply_point_kernel_inner(handle, &GEOM_WARP_PROJECTIVE, params.as_bytes(), None, true).await
     }
 
     /// STYLIZE — emboss. `angle_deg` is the light direction, `height`
@@ -4391,6 +4607,21 @@ mod wasm {
         params: &[u8],
         mask_override: Option<Arc<SelectionCoverage>>,
     ) -> Result<DecodedHandle, JsValue> {
+        apply_point_kernel_inner(handle, def, params, mask_override, false).await
+    }
+
+    /// [`apply_point_kernel_masked`], optionally ASSOCIATING alpha even
+    /// for an opaque image (`force_associate`): a kernel that reads outside
+    /// the image as transparent (the projective warp) makes new partial
+    /// alpha at the edges, which only premultiplied interpolation keeps
+    /// free of a dark fringe, and whose result must then be unassociated.
+    async fn apply_point_kernel_inner(
+        handle: u32,
+        def: &'static image_kernels::KernelDef,
+        params: &[u8],
+        mask_override: Option<Arc<SelectionCoverage>>,
+        force_associate: bool,
+    ) -> Result<DecodedHandle, JsValue> {
         use half::f16;
         let (img, ctx, sel, layered) = fill_prelude(handle)?;
         let sel = mask_override.or(sel);
@@ -4423,7 +4654,7 @@ mod wasm {
         // Alpha association is a question about the ALPHA, so ask the
         // buffer at its own depth rather than a narrowed copy.
         let n_px = img.rgba.pixel_count();
-        let associate = (0..n_px).any(|i| img.rgba.sample16(i, 3) != u16::MAX);
+        let associate = force_associate || (0..n_px).any(|i| img.rgba.sample16(i, 3) != u16::MAX);
         // DEPTH-AGNOSTIC upload. `sample16` widens an 8-bit sample as
         // `(v << 8) | v`, which maps 255 to 65535 exactly, so an 8-bit
         // image produces byte-identical f16 to the old `/ 255.0` path
@@ -4585,7 +4816,12 @@ mod wasm {
     /// the bound image's (an undo or redo across a canvas operation): the
     /// image takes `w`x`h`, and when that changed, the selection is
     /// re-bound to it as a canvas operation does.
-    fn set_image_extent(handle: u32, w: u32, h: u32, rgba: Arc<[u8]>) -> Result<(), JsValue> {
+    fn set_image_extent(
+        handle: u32,
+        w: u32,
+        h: u32,
+        rgba: crate::pixels::Pixels,
+    ) -> Result<(), JsValue> {
         let resized = IMAGES.with(|m| {
             let mut map = m.borrow_mut();
             let img = map
@@ -4594,7 +4830,7 @@ mod wasm {
             let resized = (img.width, img.height) != (w, h);
             img.width = w;
             img.height = h;
-            img.rgba = crate::pixels::Pixels::from_rgba8(rgba);
+            img.rgba = rgba;
             Ok::<bool, JsValue>(resized)
         })?;
         PYRAMIDS.with(|p| p.borrow_mut().remove(&handle));
@@ -4616,18 +4852,22 @@ mod wasm {
         })
     }
 
-    fn set_image_pixels(handle: u32, rgba: Arc<[u8]>) -> Result<(), JsValue> {
+    /// Write a composite back into the bound image AT ITS DEPTH (a 16-bit
+    /// document's composite keeps 16 bits in the image the adjust chain,
+    /// export and save read).
+    fn set_image_pixels(handle: u32, rgba: crate::pixels::Pixels) -> Result<(), JsValue> {
         IMAGES.with(|m| {
             let mut map = m.borrow_mut();
             let img = map
                 .get_mut(&handle)
                 .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
-            if rgba.len() != img.rgba.len() {
+            // The extent must match; the depth may not (Image ▸ Mode).
+            if rgba.pixel_count() != img.rgba.pixel_count() {
                 return Err(JsValue::from_str(
                     "internal: composite extent does not match the bound image",
                 ));
             }
-            img.rgba = crate::pixels::Pixels::from_rgba8(rgba);
+            img.rgba = rgba;
             Ok(())
         })?;
         PYRAMIDS.with(|p| {
@@ -4694,11 +4934,64 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
-        let stack = LayerStack::from_image(img.width, img.height, img.rgba.raw_arc())
+        // At the image's own depth: a 16-bit image opens a 16-bit
+        // Background layer (its pixels shared, not copied).
+        let stack = LayerStack::from_image_px(img.width, img.height, img.rgba.clone())
             .map_err(ingest_err)?;
         LAYERS.with(|l| *l.borrow_mut() = Some(LayerDoc { handle, stack }));
         note_selection(None, None);
         Ok(())
+    }
+
+    /// IMAGE ▸ MODE ▸ 8 or 16 Bits/Channel (`bits` 8 | 16). With a layer
+    /// stack bound to `handle`, every layer converts as one undo step
+    /// (`LayerStack::set_depth`) and the composite lands at the new depth;
+    /// without one the image itself converts. Answers whether anything
+    /// changed. Narrowing rounds to the nearest level, widening is exact.
+    #[wasm_bindgen]
+    pub async fn image_set_bits(handle: u32, bits: u8) -> Result<bool, JsValue> {
+        let depth = match bits {
+            8 => image_core::SampleDepth::U8,
+            16 => image_core::SampleDepth::U16,
+            b => {
+                return Err(JsValue::from_str(&format!(
+                    "image_set_bits: {b} bits per channel (8 or 16)"
+                )))
+            }
+        };
+        let bound = LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) == Some(handle);
+        if !bound {
+            return IMAGES.with(|m| {
+                let mut map = m.borrow_mut();
+                let img = map
+                    .get_mut(&handle)
+                    .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+                if img.rgba.depth() == depth {
+                    return Ok(false);
+                }
+                img.rgba = img.rgba.at_depth(depth);
+                PYRAMIDS.with(|p| p.borrow_mut().remove(&handle));
+                Ok(true)
+            });
+        }
+        let ctx = GPU.with(|g| g.borrow().clone());
+        with_stack_async(|mut doc| async move {
+            let result = async {
+                if !doc.stack.set_depth(depth).map_err(ingest_err)? {
+                    return Ok(false);
+                }
+                let rgba = doc
+                    .stack
+                    .composite_px(ctx.as_deref(), None)
+                    .await
+                    .map_err(ingest_err)?;
+                set_image_pixels(doc.handle, rgba)?;
+                Ok(true)
+            }
+            .await;
+            (doc, result)
+        })
+        .await
     }
 
     /// OPEN a layer stack from a retained PSD parse instead of from the
@@ -5919,9 +6212,11 @@ mod wasm {
             if let Err(e) = doc.stack.refresh_fills(ctx.as_deref()).await {
                 return (doc, Err(ingest_err(e)));
             }
-            let result = match doc.stack.composite(ctx.as_deref(), None).await {
-                Ok(rgba) => set_image_pixels(doc.handle, Arc::clone(&rgba))
-                    .map(|()| js_sys::Uint8Array::from(&rgba[..])),
+            let result = match doc.stack.composite_px(ctx.as_deref(), None).await {
+                Ok(rgba) => {
+                    let view = js_sys::Uint8Array::from(&rgba.to_rgba8()[..]);
+                    set_image_pixels(doc.handle, rgba).map(|()| view)
+                }
                 Err(e) => Err(ingest_err(e)),
             };
             (doc, result)
@@ -6037,7 +6332,7 @@ mod wasm {
                     .map_err(ingest_err)?;
                 let rgba = doc
                     .stack
-                    .composite(ctx.as_deref(), None)
+                    .composite_px(ctx.as_deref(), None)
                     .await
                     .map_err(ingest_err)?;
                 let (w, h) = (doc.stack.width(), doc.stack.height());
@@ -6048,7 +6343,7 @@ mod wasm {
                     })?;
                     img.width = w;
                     img.height = h;
-                    img.rgba = crate::pixels::Pixels::from_rgba8(rgba);
+                    img.rgba = rgba;
                     Ok::<(), JsValue>(())
                 })?;
                 PYRAMIDS.with(|p| p.borrow_mut().remove(&doc.handle));
@@ -6120,7 +6415,7 @@ mod wasm {
                     ));
                 }
                 let rgba = stack
-                    .composite(ctx.as_deref(), None)
+                    .composite_px(ctx.as_deref(), None)
                     .await
                     .map_err(ingest_err)?;
                 set_image_pixels(doc.handle, rgba)?;
@@ -6386,23 +6681,21 @@ mod wasm {
             display: crate::display::DisplayTreatment::AssumedSrgb,
             depth_reduced: false,
         };
-        let out = adjust_rgba8(ctx, &src, &params, selection)
+        // At the layer's depth: a 16-bit layer bakes at 16 bits.
+        let out = crate::ingest::adjust_px(ctx, &src, &params, selection)
             .await
             .map_err(ingest_err)?;
         doc.stack
-            .edit_active(
-                "Bake adjustments",
-                image_core::Region::new(0, 0, w, h),
-                crate::pixels::Pixels::from_rgba8(Arc::from(out.into_boxed_slice())),
-            )
+            .edit_active("Bake adjustments", image_core::Region::new(0, 0, w, h), out)
             .map_err(ingest_err)?;
         let rgba = doc
             .stack
-            .composite(Some(ctx), None)
+            .composite_px(Some(ctx), None)
             .await
             .map_err(ingest_err)?;
-        set_image_pixels(doc.handle, Arc::clone(&rgba))?;
-        Ok(js_sys::Uint8Array::from(&rgba[..]))
+        let view = js_sys::Uint8Array::from(&rgba.to_rgba8()[..]);
+        set_image_pixels(doc.handle, rgba)?;
+        Ok(view)
     }
 
     /// UNDO the newest journaled pixel edit (paint / fill / bake),
@@ -6449,7 +6742,7 @@ mod wasm {
         // takes the extent with the pixels — the 4x2 image came back
         // from an undone 90 degree turn as its bytes read as 2x4.
         let (w, h) = (doc.stack.width(), doc.stack.height());
-        let result = match doc.stack.composite(ctx.as_deref(), None).await {
+        let result = match doc.stack.composite_px(ctx.as_deref(), None).await {
             Ok(rgba) => set_image_extent(doc.handle, w, h, rgba).map(|()| label),
             Err(e) => Err(ingest_err(e)),
         };
@@ -6975,6 +7268,9 @@ mod wasm {
         }
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|doc| async move {
+            // The stroke paints 8-bit; the fold takes the override at
+            // its own depth beside 16-bit layers.
+            let painted = crate::pixels::Pixels::from_rgba8(painted);
             let out = doc
                 .stack
                 .composite(ctx.as_deref(), Some(&painted))
@@ -7158,7 +7454,11 @@ mod wasm {
         doc.stack
             .edit_active(label, damage, pixels.into())
             .map_err(ingest_err)?;
-        let rgba = doc.stack.composite(ctx, None).await.map_err(ingest_err)?;
+        let rgba = doc
+            .stack
+            .composite_px(ctx, None)
+            .await
+            .map_err(ingest_err)?;
         set_image_pixels(doc.handle, rgba)?;
         Ok(DecodedHandle {
             handle: doc.handle,
@@ -7185,7 +7485,11 @@ mod wasm {
         doc.stack
             .edit_active_mask("Paint mask", damage, mask)
             .map_err(ingest_err)?;
-        let rgba = doc.stack.composite(ctx, None).await.map_err(ingest_err)?;
+        let rgba = doc
+            .stack
+            .composite_px(ctx, None)
+            .await
+            .map_err(ingest_err)?;
         set_image_pixels(doc.handle, rgba)?;
         Ok(DecodedHandle {
             handle: doc.handle,

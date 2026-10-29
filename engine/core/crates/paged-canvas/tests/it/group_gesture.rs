@@ -287,6 +287,7 @@ fn rotate_group_composes_same_rotation_onto_group_and_members() {
         page_id: PageId("p1".to_string()),
         point_in_page: (110.0, 25.0), // the box's east handle, right of its centre
         pivot_in_page: None,
+        shear_axis: None,
     };
 
     let handle = model
@@ -366,6 +367,7 @@ fn scale_group_composes_same_scale_onto_group_and_members() {
         page_id: PageId("p1".to_string()),
         point_in_page: (110.0, 25.0),
         pivot_in_page: None,
+        shear_axis: None,
     };
 
     let handle = model
@@ -488,6 +490,7 @@ fn a_turned_group_resizes_along_its_own_axes() {
         page_id: PageId("p1".to_string()),
         point_in_page: (110.0, 25.0),
         pivot_in_page: None,
+        shear_axis: None,
     };
     let h = model
         .begin_gesture(

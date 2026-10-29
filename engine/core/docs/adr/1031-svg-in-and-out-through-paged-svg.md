@@ -110,3 +110,22 @@ bevel, satin, feather), `image.undecoded`, `text.outlined`, `list.unbalanced`.
   read) is made once, in `walk.rs`, for drawing, the vector lane and the import alike.
 - Clip groups (ADR 1010), per-stop opacity and conic paints (ADR 1007) and symbols (ADR 1012)
   will replace the per-leaf clips, the feather and the reported losses; the codes say where.
+
+## Amendment — 2026-10-28 (draw ADR 364)
+
+paged.draw's TypeScript SVG reader and writer are deleted: the module's SVG, DXF and EPS
+importers ride `document.importSvg`, its SVG and DXF exporters `document.exportSvg`, and a host
+without the doors gets no importer rather than a second reader. Two things moved into this crate
+with them:
+
+- **`paint`** — every colour a document declares (`fill`, `stroke`, `stop-color`,
+  `flood-color`, `lighting-color`, `color`, as attributes, inside `style`, and in `<style>`
+  rules), found in the SOURCE with its byte range (roxmltree, simplecss and svgtypes, usvg's own
+  parsers at its versions), and a rewrite that replaces those ranges and copies every other byte.
+  It serves paged.draw's `recolor` action, which used to flatten a file to one solid path per
+  shape; gradients, CSS, `<use>` and text now come through. Its own feature-free part of the
+  crate, so paged.draw's wasm links it (and the walk, for its DXF writer) without the mutation
+  engine or the text shaper; `paged_svg::usvg` re-exports the usvg the walk is written against.
+- **Named groups** — a `<g>` with an `id` names the group it becomes (`ItemName`): Illustrator's
+  layers and groups, and the layers of a DXF that paged.draw writes as SVG, arrive named. No
+  wire change.

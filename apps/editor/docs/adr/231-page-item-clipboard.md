@@ -30,3 +30,9 @@ sheet cells did. InDesign's Edit menu has Cut, Copy, Paste, Paste in Place, Dupl
 5. **Several documents.** The editor holds one document at a time, so "between two open
    documents" is copy, open the other, paste — which works, the snippet carrying the styles and
    swatches the target lacks.
+
+## Amendment (2026-10-28): vectors
+
+ADR 289 adds the vector forms: Copy also writes the selection as `image/svg+xml` (and, with no
+frame text, as the `text/plain` form); Paste of an SVG document from elsewhere imports it as
+native page items, one undo step. Decisions 2 and 3 above stand for everything else.

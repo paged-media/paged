@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 792,
+    "command": 808,
     "keybinding": 166,
-    "menu": 546,
+    "menu": 560,
     "panel": 142,
-    "tool": 113
+    "tool": 114
   },
   "features": [
     {
@@ -2156,6 +2156,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.freeTransform",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.gamutWarning",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.globalLight",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2292,6 +2302,36 @@
     },
     {
       "id": "command:media.paged.image.command.minimum",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeBits16",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeBits8",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeCmyk",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeGray",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeLab",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeRgb",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2437,6 +2477,21 @@
     },
     {
       "id": "command:media.paged.image.command.presetManager",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.proofColors",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.proofSetupCmyk",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.proofSetupGray",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -3241,6 +3296,26 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.assetExport.collectMultiple",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectPages",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectSingle",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.exportAll",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.chrome.toggleAll",
       "kind": "command",
       "owner": "editor"
@@ -3502,6 +3577,11 @@
     },
     {
       "id": "command:paged.effects.globalLight",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.assetExport",
       "kind": "command",
       "owner": "editor"
     },
@@ -5401,6 +5481,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Edit/Free transform",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Edit/Go to page…",
       "kind": "menu",
       "owner": "editor"
@@ -5524,6 +5609,11 @@
       "id": "menu:File/Export PowerPoint deck…",
       "kind": "menu",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:File/Export/Asset Export…",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:File/Export/SVG (page)…",
@@ -6636,6 +6726,36 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Mode/16 bits per channel",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/8 bits per channel",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/CMYK colour",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/Greyscale",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/Lab colour",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/RGB colour",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Open image panel",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -6657,6 +6777,26 @@
     },
     {
       "id": "menu:Image/Presets/Preset manager…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Proof/Gamut warning",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Proof/Proof colours",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Proof/Working CMYK",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Proof/Working grey",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6852,6 +6992,16 @@
     },
     {
       "id": "menu:Object/Clipping mask/Release",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Collect for Export/As Multiple Assets",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Collect for Export/As Single Asset",
       "kind": "menu",
       "owner": "editor"
     },
@@ -8672,6 +8822,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.spotHeal",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.transform",
       "kind": "tool",
       "owner": "media.paged.image"
     },

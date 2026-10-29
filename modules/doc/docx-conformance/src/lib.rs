@@ -3043,3 +3043,126 @@ pub fn tracked_changes_no_moves_docx() -> Vec<u8> {
         r#"<w:p><w:del w:id="3" w:author="Reviewer"><w:r><w:delText xml:space="preserve">moved </w:delText></w:r></w:del><w:r><w:t xml:space="preserve">Stay </w:t></w:r><w:ins w:id="4" w:author="Reviewer"><w:r><w:t>moved</w:t></w:r></w:ins></w:p>"#,
     )
 }
+
+/// Doc ADR 618 — pictures with a DrawingML look, each one paragraph after a
+/// line of text, 144 × 96 pt, with the theme of [`theme_package`]:
+///
+/// - P1 (inline): Word's "Simple Frame, White" outline (7 pt white,
+///   square cap, miter) and a drop shadow (black, 70 %, blur 55 000 EMU,
+///   18 000 EMU down).
+/// - P2 (floating, `wp:anchor`): `a:alphaModFix amt="60000"`, a glow in
+///   Accent 1 at 40 % (5 pt) and a 2.5 pt soft edge.
+/// - P3 (inline): an inner shadow, a reflection and `a:grayscl` (the
+///   reflection and the picture effect are what the engine cannot hold).
+/// - P4 (inline): a plain picture.
+/// - P5 (inline): a vertical gradient (Accent 1 to white at 0 % alpha)
+///   behind the image, a 1 pt Accent 2 dashed outline.
+pub fn picture_effects_docx() -> Vec<u8> {
+    const NS: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture""#;
+    const CX: i64 = 1_828_800;
+    const CY: i64 = 1_219_200;
+    let pic = |id: u32, blip: &str, sp: &str| {
+        format!(
+            r#"<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="{id}" name="image{id}.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rImg">{blip}</a:blip><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{CX}" cy="{CY}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>{sp}</pic:spPr></pic:pic></a:graphicData></a:graphic>"#
+        )
+    };
+    let inline = |id: u32, blip: &str, sp: &str| {
+        format!(
+            r#"<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="{CX}" cy="{CY}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="{id}" name="Picture {id}"/><wp:cNvGraphicFramePr/>{}</wp:inline></w:drawing>"#,
+            pic(id, blip, sp)
+        )
+    };
+    let para = |text: &str, drawing: &str| {
+        format!(r#"<w:p><w:r><w:t>{text}</w:t></w:r></w:p><w:p><w:r>{drawing}</w:r></w:p>"#)
+    };
+    let p1 = inline(
+        1,
+        "",
+        r#"<a:ln w="88900" cap="sq"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:miter lim="800000"/></a:ln><a:effectLst><a:outerShdw blurRad="55000" dist="18000" dir="5400000" algn="tl" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="70000"/></a:srgbClr></a:outerShdw></a:effectLst>"#,
+    );
+    let p2 = format!(
+        r#"<w:drawing><wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="251659264" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="{CX}" cy="{CY}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapTopAndBottom/><wp:docPr id="2" name="Picture 2"/><wp:cNvGraphicFramePr/>{}</wp:anchor></w:drawing>"#,
+        pic(
+            2,
+            r#"<a:alphaModFix amt="60000"/>"#,
+            r#"<a:effectLst><a:glow rad="63500"><a:schemeClr val="accent1"><a:alpha val="40000"/></a:schemeClr></a:glow><a:softEdge rad="31750"/></a:effectLst>"#,
+        )
+    );
+    let p3 = inline(
+        3,
+        "<a:grayscl/>",
+        r#"<a:effectLst><a:innerShdw blurRad="63500" dist="50800" dir="2700000"><a:prstClr val="black"><a:alpha val="50000"/></a:prstClr></a:innerShdw><a:reflection blurRad="6350" stA="50000" endA="300" endPos="55000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/></a:effectLst>"#,
+    );
+    let p4 = inline(4, "", "");
+    let p5 = inline(
+        5,
+        "",
+        r#"<a:gradFill><a:gsLst><a:gs pos="0"><a:schemeClr val="accent1"/></a:gs><a:gs pos="100000"><a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill><a:ln w="12700"><a:solidFill><a:schemeClr val="accent2"/></a:solidFill><a:prstDash val="dash"/></a:ln>"#,
+    );
+    let body = [
+        para("P1 a white frame with a drop shadow.", &p1),
+        para("P2 a translucent floating picture with a glow.", &p2),
+        para("P3 an inner shadow, a reflection, greyscale.", &p3),
+        para("P4 a plain picture.", &p4),
+        para("P5 a gradient behind, a dashed outline.", &p5),
+    ]
+    .concat();
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {NS}><w:body>{body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>"#
+    );
+    let content_types = THEME_CONTENT_TYPES.replace(
+        r#"<Default Extension="xml" ContentType="application/xml"/>"#,
+        r#"<Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>"#,
+    );
+    let rels = THEME_DOC_RELS.replace(
+        "</Relationships>",
+        r#"  <Relationship Id="rImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>
+</Relationships>"#,
+    );
+    let settings = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:clrSchemeMapping w:bg1="light1" w:t1="dark1" w:bg2="light2" w:t2="dark2" w:accent1="accent1" w:accent2="accent2" w:accent3="accent3" w:accent4="accent4" w:accent5="accent5" w:accent6="accent6" w:hyperlink="hyperlink" w:followedHyperlink="followedHyperlink"/></w:settings>"#;
+    zip_parts(&[
+        ("[Content_Types].xml", content_types.as_bytes()),
+        ("_rels/.rels", ROOT_RELS.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+        ("word/_rels/document.xml.rels", rels.as_bytes()),
+        ("word/styles.xml", THEME_STYLES.as_bytes()),
+        ("word/settings.xml", settings.as_bytes()),
+        ("word/theme/theme1.xml", THEME_XML.as_bytes()),
+        ("word/media/image1.png", &tiny_png()),
+    ])
+}
+
+/// A real 2 × 2 RGB PNG (Word refuses a picture whose bytes are not an
+/// image), through flate2's zlib and CRC.
+fn tiny_png() -> Vec<u8> {
+    fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+        out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        let mut crc = flate2::Crc::new();
+        crc.update(kind);
+        crc.update(data);
+        out.extend_from_slice(kind);
+        out.extend_from_slice(data);
+        out.extend_from_slice(&crc.sum().to_be_bytes());
+    }
+    // Two rows: filter byte 0, then two RGB pixels each.
+    let raw: Vec<u8> = [
+        [0u8, 0xC0, 0x40, 0x40, 0x40, 0x80, 0xC0],
+        [0u8, 0x40, 0xC0, 0x40, 0xF0, 0xF0, 0x40],
+    ]
+    .concat();
+    let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    z.write_all(&raw).unwrap();
+    let z = z.finish().unwrap();
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut ihdr = Vec::new();
+    ihdr.extend_from_slice(&2u32.to_be_bytes());
+    ihdr.extend_from_slice(&2u32.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 2, 0, 0, 0]);
+    chunk(&mut out, b"IHDR", &ihdr);
+    chunk(&mut out, b"IDAT", &z);
+    chunk(&mut out, b"IEND", &[]);
+    out
+}

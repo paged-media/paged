@@ -3540,6 +3540,7 @@ dependencies = [
  "paged-introspect",
  "paged-model",
  "paged-mutate",
+ "paged-raster",
  "paged-renderer",
  "paged-scene",
  "paged-store",
@@ -4228,8 +4229,11 @@ dependencies = [
  "paged-compose",
  "paged-mutate",
  "paged-wire",
+ "roxmltree",
  "serde",
  "serde_json",
+ "simplecss",
+ "svgtypes",
  "tsify-next",
  "usvg",
  "wasm-bindgen",
@@ -4271,6 +4275,10 @@ dependencies = [
  "unicode-bidi",
  "unicode-segmentation",
 ]
+
+[[package]]
+name = "paged-warp"
+version = "0.0.0"
 
 [[package]]
 name = "paged-wire"

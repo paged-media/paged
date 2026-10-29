@@ -65,6 +65,11 @@
 //! global altitude, u32 pattern count, per pattern {str name, u32 width,
 //! u32 height, f32 scale, f32 angle, u32 tile slot}.
 //!
+//! Version 6 (colour modes, image ADR 479) appends, after the style state,
+//! the document's colour mode: u8 mode (0 RGB, 1 Grayscale, 2 CMYK, 3 Lab)
+//! and i64 profile slot (−1: none) — the CMYK profile the mode converts
+//! through.
+//!
 //! The history is not persisted: a reopened stack starts with none.
 
 use std::sync::Arc;
@@ -80,7 +85,7 @@ use super::{
 use crate::ingest::{AdjustParams, IngestError};
 
 const MAGIC: &[u8; 4] = b"PGIL";
-const VERSION: u32 = 5;
+const VERSION: u32 = 6;
 
 struct W(Vec<u8>);
 
@@ -539,6 +544,17 @@ impl LayerStack {
                 w.u32(s);
             }
         }
+        // The colour mode (ADR 479).
+        if version >= 6 {
+            w.u8(self.mode.mode.code());
+            match &self.mode.cmyk_profile {
+                Some(p) => {
+                    let s = slot(Arc::clone(p));
+                    w.i64(i64::from(s));
+                }
+                None => w.i64(-1),
+            }
+        }
         // Channels and paths (ADR 470): a trailing block older readers
         // skip; nothing at all without masking state.
         if version >= 3 {
@@ -908,6 +924,17 @@ impl LayerStack {
                 }));
             }
         }
+        let mut mode = crate::color_mode::DocMode::default();
+        if version >= 6 {
+            let code = r.u8()?;
+            mode.mode = crate::color_mode::ColorMode::from_code(code).ok_or_else(|| {
+                IngestError::Decode(format!("layer manifest: colour mode {code}"))
+            })?;
+            let at = r.i64()?;
+            if at >= 0 {
+                mode.cmyk_profile = Some(buffer(at as u32)?);
+            }
+        }
         if layers.is_empty() || active >= layers.len() {
             return Err(IngestError::Decode(
                 "layer manifest: no layers, or active out of range".into(),
@@ -938,6 +965,7 @@ impl LayerStack {
             snapshots: Vec::new(),
             next_snapshot_id: 1,
             next_step_id: 1,
+            mode,
         };
         stack.masking.doc = masking;
         Ok(stack)

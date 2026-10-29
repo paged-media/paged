@@ -81,7 +81,6 @@ import {
 } from "../../src/commands/image-trace";
 import { TRACE_DEFAULTS } from "../../src/trace-engine";
 import { applyCreateOutlines } from "../../src/commands/create-outlines";
-import { importSvg } from "../../src/io/svg";
 import {
   pageOriginOf,
   spreadTableOf,
@@ -402,40 +401,9 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       nearPoint(centreOf(engine.pageOutline("o2", VERSO)), [100, 300]);
     });
 
-    it("SVG import: a ring in page coordinates lands on its page — one compound where the row says the origin [plugin-draw.svg-io]", async () => {
-      const svg =
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 612 792">` +
-        `<path d="M100 100h100v100h-100Z M130 130v40h40v-40Z" fill="#cc3300"/>` +
-        `</svg>`;
-      const ids = await importSvg(fakeHost(engine), {
-        name: "ring.svg",
-        bytes: new TextEncoder().encode(svg),
-        mimeType: "image/svg+xml",
-      });
-      const OUT: Vec[] = [
-        [100, 100],
-        [200, 100],
-        [200, 200],
-        [100, 200],
-      ];
-      const IN: Vec[] = [
-        [130, 130],
-        [130, 170],
-        [170, 170],
-        [170, 130],
-      ];
-      if (shape === "page") {
-        // The row reports the origin: ONE element, both contours on VERSO.
-        expect(ids).toHaveLength(1);
-        near(engine.pageOutline(String(ids[0]!.id), VERSO), [OUT, IN]);
-      } else {
-        // No origin to write a spread-space table with: one element per
-        // contour, each still where the file put it.
-        expect(ids).toHaveLength(2);
-        near(engine.pageOutline(String(ids[0]!.id), VERSO), [OUT]);
-        near(engine.pageOutline(String(ids[1]!.id), VERSO), [IN]);
-      }
-    });
+    // SVG import on a page that does not start at its spread's origin is
+    // the engine's lowering since ADR 364 (paged-svg), pinned on the real
+    // engine by `headless/page-space.spec.ts`.
 
     it.if(shape === "page")(
       "the ARTBOARD fit measures against the path's page where it sits in the spread",

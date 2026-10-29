@@ -81,7 +81,7 @@ pub async fn filter_land(handle: u32, result: u32) -> Result<DecodedHandle, JsVa
                 .map_err(ingest_err)?;
             let rgba = doc
                 .stack
-                .composite(ctx.as_deref(), None)
+                .composite_px(ctx.as_deref(), None)
                 .await
                 .map_err(ingest_err)?;
             set_image_pixels(doc.handle, rgba)?;

@@ -30,6 +30,9 @@ on:
       - "platform/shared/ooxml/**"
       # The shared DrawingML chart reader, a path dependency (slide ADR 709).
       - "platform/shared/dml-chart/**"
+      # The shared DrawingML paint and effect mapper and the engine model it
+      # lowers onto, path dependencies of sheet-chart (sheet ADR 527).
+      - "platform/shared/dml-native/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -71,6 +74,9 @@ on:
       - "platform/shared/ooxml/**"
       # The shared DrawingML chart reader, a path dependency (slide ADR 709).
       - "platform/shared/dml-chart/**"
+      # The shared DrawingML paint and effect mapper and the engine model it
+      # lowers onto, path dependencies of sheet-chart (sheet ADR 527).
+      - "platform/shared/dml-native/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"

@@ -186,7 +186,7 @@ import {
   MAX_PLANAR_INPUTS,
   type PlanarRegionsWire,
 } from "../handlers/planar-regions";
-import { resolveTargetPage } from "../io/svg";
+import { resolveTargetPage } from "../target-page";
 import { announceRecipeChange, linkIndex } from "../link-index";
 
 import { registerCommand } from "../command-registry";

@@ -70,3 +70,24 @@ read and then dropped, and pattern fills were drawn as their foreground colour.
 - `platform/shared/dml-native/tests/map.rs`
 - `modules/slide/pptx-export/tests/regenerate.rs`
   (`shadows_glow_soft_edge_and_dashes_set_in_the_editor_read_back__feat__plugin_slide_native_effects`)
+
+## Amendment 2026-10-28 — a linear gradient states its start
+
+`placement` gave a linear gradient its angle and length but no start, and the engine starts
+an unplaced linear gradient at the box's bottom-left corner. That is where PowerPoint starts
+it only for an axis running up or right (0° to 90° in the engine's counter-clockwise
+angles). A vertical (`a:lin ang="5400000"`, top to bottom) or down-diagonal gradient began
+below the box, so most of the shape showed its first stop. `slide-native` now states the
+start for every fill gradient through `dml_native::axis_start` (added for sheet ADR 527): the
+start of the axis Office runs through the box's centre, in the item's local box `(0, 0)` to
+`(w, h)`, which is the outline's coordinate space (`transform` places it), so a rotated or
+flipped shape keeps its gradient. A radial gradient keeps the centre it already stated. The
+item tables' background frames take the same placement.
+
+doc's pictures read and lower their looks through the same reader and mapper (doc ADR 618),
+through the mapper's new wire form `dml_native::native`.
+
+Evidence: `modules/slide/slide-native/tests/effects.rs`
+(`a_vertical_or_down_diagonal_gradient_starts_where_powerpoint_starts_it__feat__plugin_slide_native_effects`),
+`platform/shared/dml-native/tests/map.rs`
+(`a_linear_axis_starts_where_office_centres_it__feat__sheet_chart_native_effects`).

@@ -1,0 +1,46 @@
+name: history / guard
+
+# On 2026-10-29 main's history was rewritten to remove a third-party file
+# that had been committed by mistake (c120a5555 of the old history). Every
+# commit from that one on got a new id. A branch made before the rewrite
+# still carries the old commits, and merging it brings them, and the file,
+# back. This job fails when the old history is reachable from the pushed
+# commit: rebase or re-create such a branch on the current main instead of
+# merging it.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  guard:
+    name: no pre-rewrite history
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: the removed file and the old commits are absent
+        run: |
+          # The removed file's blob, and the first rewritten commit as it
+          # was before the rewrite: a full clone has neither unless the old
+          # history came back.
+          for object in \
+            4601d7a6c6d71b10924a221f06597a7405bee203 \
+            c120a5555a73de8ebd832d744ffdc872884dad87; do
+            if git cat-file -e "$object" 2>/dev/null; then
+              echo "::error::$object is in this history: a branch from before the 2026-10-29 rewrite was merged. Rebase it on the current main instead."
+              exit 1
+            fi
+          done
+          echo "history guard: no pre-rewrite object"

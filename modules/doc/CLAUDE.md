@@ -68,9 +68,10 @@ Rules for every code change in this repo:
   via side channels. In Rust ONE crate reaches the engine: `docx-skeleton` builds
   the standalone-open skeleton with the engine's model crates (`paged-model`,
   `paged-scene`, `paged-store`, path dependencies at the same commit, ADR 606).
-  Everything else stays engine-free: `docx-lower` is pure model→IR with **no
-  core dependency**, and the open document is reached only through the host
-  (`host.document.mutate`, `host.nativeDocument.open`). Rust guard: `deny.toml`
+  Everything else stays engine-free: `docx-lower` is pure model→IR and reaches
+  the engine's model crate only for its value types, through the shared
+  DrawingML mapper `dml-native` (doc ADR 618); the open document is reached
+  only through the host (`host.document.mutate`, `host.nativeDocument.open`). Rust guard: `deny.toml`
   `[sources]`. TS guard: the contract-import lint rule (`/bunfig.toml`, PM-0003).
   SDK gaps become RFI entries, not engine changes made from here.
 - **PURE LOWERING.** `docx-lower` is pure `docx-core → LoweredDoc`;

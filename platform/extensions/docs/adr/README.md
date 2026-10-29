@@ -59,6 +59,8 @@ and each one names the plugins that follow it and those that do not.
 | [336](336-document-style-reads-for-bundles.md) | Document style reads for bundles | Accepted 2026-10-23 |
 | [337](337-a-follow-up-write-joins-the-edits-undo-step.md) | A follow-up write joins the undo step of the edit that provoked it | Accepted 2026-10-23 |
 | [338](338-items-render-to-pixels.md) | Items render to pixels: a region, the named items alone, raw RGBA, a transparent ground | Accepted 2026-10-24 |
+| [339](339-handle-sets-and-the-transform-box.md) | Handle sets and a host-drawn transform box | Accepted 2026-10-24 |
+| [341](341-the-clipboard-carries-svg.md) | The clipboard carries SVG: `ClipboardPayload.svg`, `clipboard.svg@1` | Accepted 2026-10-28 |
 | [343](343-the-data-door.md) | The data door: one bundle serves the document's data, any bundle reads, writes and binds it | Accepted 2026-10-24 |
 | [344](344-the-actions-door.md) | The actions door: named pure steps, registered by any bundle, run and cached by any | Accepted 2026-10-24 |
 | [345](345-presentations-and-module-views.md) | Presentations and module views: a bundle's surface on the screen, a second window, in place of the canvas | Accepted 2026-10-25 |

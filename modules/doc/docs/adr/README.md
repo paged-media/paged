@@ -28,6 +28,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [613](613-tracked-changes-and-comments.md) | Tracked changes and comments: Word's revisions as engine changes, comment threads over runs, review markup saved back as Word's (paragraphs written whole, the comment parts made when missing) | Accepted 2026-10-29 |
 | [616](616-files.md) | Files: templates as new documents, macros carried, RTF and OpenDocument read onto docx-core, .doc refused, "Save as .docx" | Accepted 2026-10-25 |
 | [617](617-pagination-policy.md) | Pagination policy: Word's rules, the engine's first-fit composer | Accepted 2026-10-24, amended 2026-10-25 |
+| [618](618-picture-looks-through-the-shared-drawingml-mapper.md) | Pictures' DrawingML looks (fill, outline, alpha, effects) read and lowered through the shared reader and mapper; carried in the IR, reported until anchored frames hold them (amends 606) | Accepted 2026-10-28 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

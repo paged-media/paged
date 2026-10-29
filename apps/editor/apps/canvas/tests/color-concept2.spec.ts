@@ -30,7 +30,11 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, expect, type Page } from "@playwright/test";
 
-import { openCanvas, openPanel } from "./fidelity/canvas-driver";
+import {
+  openCanvas,
+  openPanel,
+  loadViaFileInput,
+} from "./fidelity/canvas-driver";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,16 +45,7 @@ const FIXTURE_FALLBACK = `${REPO_ROOT}/corpus/idml/generated/geometry-groups.idm
 async function loadFixture(page: Page) {
   const { existsSync } = await import("node:fs");
   const path = existsSync(FIXTURE) ? FIXTURE : FIXTURE_FALLBACK;
-  await page.setInputFiles('input[type="file"]', path);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
-            .ready,
-      ),
-    )
-    .toBe(true);
+  await loadViaFileInput(page, path);
 }
 
 test.describe("Concept 2 — colour engine + panels", () => {

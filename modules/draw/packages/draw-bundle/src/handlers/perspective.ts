@@ -73,7 +73,7 @@ import {
 } from "../tool-options";
 import { polyShape, squareShape, tableShapes } from "./preview-shapes";
 import { serial } from "./serial";
-import { resolveTargetPage } from "../io/svg";
+import { resolveTargetPage } from "../target-page";
 
 const PICK_PX = 7;
 const HANDLE_PX = 4;

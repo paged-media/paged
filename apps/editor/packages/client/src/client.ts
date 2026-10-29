@@ -121,6 +121,30 @@ export interface SnapshotBackendInfo {
   last: "gpu" | "cpu" | null;
 }
 
+/** What {@link CanvasClient.requestSnapshot} draws besides the page at a
+ *  size (extensions ADR 338; editor ADR 288 for the file formats). */
+export interface SnapshotOptions {
+  /** Draw the canvas's editor-only markers (ADR 205). */
+  markers?: boolean;
+  /** Draw nothing but these items, on an otherwise empty page. */
+  only?: readonly ElementId[];
+  /** Draw this page region (page pt) alone; the reply's `region` is the
+   *  region drawn, grown to whole pixels. */
+  clip?: { x: number; y: number; width: number; height: number };
+  /** `"png"` (the default, `pngBytes`), `"rgba"` (`rgba`), or a file
+   *  `paged-raster` writes into `bytes`: `"jpeg"`, `"webp"` (lossless),
+   *  `"tiff"`, `"gif"`, `"bmp"`, `"tga"`, `"jxl"` (lossless). */
+  format?:
+    "png" | "rgba" | "jpeg" | "webp" | "tiff" | "gif" | "bmp" | "tga" | "jxl";
+  /** `"paper"` (white, the default) or `"transparent"`. A JPEG has no
+   *  alpha: the engine flattens it onto white. */
+  background?: "paper" | "transparent";
+  /** On a transparent ground, crop to the pixels something was drawn on. */
+  trim?: boolean;
+  /** JPEG quality, 1 to 100 (the engine's default: 90). */
+  quality?: number;
+}
+
 /** ADR 025 — what one worker-journal drain hands back. */
 export interface JournalDrain {
   entries: JournalEntry[];
@@ -732,12 +756,17 @@ export class CanvasClient {
    * substitute face, the cross over EPS/PDF content that cannot be drawn)
    * and without the soft proof. `{ markers: true }` draws the page as the
    * canvas shows it — for a view of the canvas, such as a page thumbnail.
+   *
+   * The other options are extensions ADR 338's (`only`, `clip`,
+   * `background`, `trim`, `format: "rgba"`) and editor ADR 288's file
+   * formats: `format: "jpeg" | "webp" | "tiff"` answers the file, encoded
+   * by the engine's `paged-raster`, in `bytes` (`quality` 1–100 for JPEG).
    */
   async requestSnapshot(
     pageId: PageId,
     targetWidthPx: number,
     dpi?: number,
-    options?: { markers?: boolean },
+    options?: SnapshotOptions,
   ): Promise<SnapshotPng> {
     const reply = await this.send({
       kind: "requestSnapshot",
@@ -746,6 +775,18 @@ export class CanvasClient {
         targetWidthPx,
         dpi: dpi ?? null,
         ...(options?.markers ? { markers: true } : {}),
+        ...(options?.only?.length ? { only: [...options.only] } : {}),
+        ...(options?.clip ? { clip: { ...options.clip } } : {}),
+        ...(options?.format && options.format !== "png"
+          ? { format: options.format }
+          : {}),
+        ...(options?.background === "transparent"
+          ? { background: "transparent" as const }
+          : {}),
+        ...(options?.trim ? { trim: true } : {}),
+        ...(options?.quality !== undefined
+          ? { quality: Math.round(Math.min(Math.max(options.quality, 1), 100)) }
+          : {}),
       },
     });
     if (reply.kind === "snapshotReady") {

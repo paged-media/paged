@@ -216,6 +216,7 @@ version = "0.0.0"
 dependencies = [
  "paged-model",
  "paged-ooxml",
+ "serde",
 ]
 
 [[package]]
@@ -744,6 +745,7 @@ name = "sheet-chart"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "dml-native",
  "paged-ooxml",
  "plotters",
  "plotters-backend",

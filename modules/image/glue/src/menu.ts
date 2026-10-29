@@ -66,6 +66,7 @@ defineMessages("menu", {
   Filter: "Filter",
   "Shape blur": "Shape blur",
   "Apply crop": "Apply crop",
+  "Free transform": "Free transform",
   "Set type": "Set type",
   "Load brush library (.abr)…": "Load brush library (.abr)…",
   "Commit edits to the document": "Commit edits to the document",
@@ -96,6 +97,18 @@ defineMessages("menu", {
   "High pass…": "High pass…",
   "Image rotation": "Image rotation",
   "Image size…": "Image size…",
+  Mode: "Mode",
+  "8 bits per channel": "8 bits per channel",
+  "16 bits per channel": "16 bits per channel",
+  Greyscale: "Greyscale",
+  "RGB colour": "RGB colour",
+  "CMYK colour": "CMYK colour",
+  "Lab colour": "Lab colour",
+  Proof: "Proof",
+  "Proof colours": "Proof colours",
+  "Gamut warning": "Gamut warning",
+  "Working CMYK": "Working CMYK",
+  "Working grey": "Working grey",
   "Lens blur…": "Lens blur…",
   "Maximum…": "Maximum…",
   "Median…": "Median…",
@@ -296,6 +309,19 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Image/Flip vertical", "flipVertical", "canvas"],
   ["Image/Image rotation/Arbitrary…", "rotateArbitrary", "canvas"],
   ["Image/Image size…", "imageSize", "canvas-size"],
+
+  // Image ▸ Mode (ADR 479): the colour modes, then the depths, as
+  // Photoshop groups them; the proof view beside it.
+  ["Image/Mode/Greyscale", "modeGray", "mode-color"],
+  ["Image/Mode/RGB colour", "modeRgb", "mode-color"],
+  ["Image/Mode/CMYK colour", "modeCmyk", "mode-color"],
+  ["Image/Mode/Lab colour", "modeLab", "mode-color"],
+  ["Image/Mode/8 bits per channel", "modeBits8", "mode-depth"],
+  ["Image/Mode/16 bits per channel", "modeBits16", "mode-depth"],
+  ["Image/Proof/Proof colours", "proofColors", "proof"],
+  ["Image/Proof/Gamut warning", "gamutWarning", "proof"],
+  ["Image/Proof/Working CMYK", "proofSetupCmyk", "proof-setup"],
+  ["Image/Proof/Working grey", "proofSetupGray", "proof-setup"],
   ["Image/Trim…", "trim", "canvas-size"],
 
   ["Image/Layer/Add", "addLayer", "layer"],
@@ -939,6 +965,7 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // These two convert between the DOCUMENT's paths and the image's
   // selection, so they belong beside the host's selection verbs rather
   // than buried three levels into a plugin menu.
+  ["Edit/Free transform", "freeTransform", "img-transform"],
   ["Edit/Selection to path", "selectionToPath", "img-sel-conv"],
   ["Edit/Path to selection", "pathToSelection", "img-sel-conv"],
 

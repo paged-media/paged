@@ -177,6 +177,12 @@ import {
   type ActionBackend,
   type DataBackend,
 } from "./doors-data-actions.js";
+import {
+  createHandleSets,
+  createTransformBoxes,
+  hostDrawsHandles,
+  wrapToolGesture,
+} from "./overlay-handles.js";
 import { documentChangeOf } from "./document-change.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
@@ -859,7 +865,7 @@ export interface SecretStoreBackend {
  * thin read/write pair over the REAL system clipboard (`navigator.clipboard`
  * in-browser; a fake in the headless harness). The SDK adapter owns the
  * capability gate + the `"vector"` tabular-stripping; this backend only does
- * the raw IO. `read` recovers a `{ text?, tabular? }` payload (or `null` when
+ * the raw IO. `read` recovers a `{ text?, tabular?, svg? }` payload (or `null` when
  * the platform offers nothing / refuses); `write` puts a payload on the
  * clipboard (the editor backend lays down BOTH `text/plain` TSV and a
  * `text/html` `<table>` so a paste into Excel/Sheets/Word lands a real grid).
@@ -867,6 +873,11 @@ export interface SecretStoreBackend {
 export interface ClipboardBackend {
   read(): Promise<ClipboardPayload | null>;
   write(payload: ClipboardPayload): Promise<void>;
+  /** The backend carries the `svg` half (extensions ADR 341): it writes
+   *  it as `image/svg+xml` where the platform takes that type and reads
+   *  the clipboard's SVG back. Absent/false: the door strips `svg` from a
+   *  write and a read, and `supports("clipboard.svg@1")` is false. */
+  readonly svg?: boolean;
 }
 
 /**
@@ -1847,6 +1858,24 @@ export function createBundleHost(
   const lists = (arr: readonly string[] | undefined, id: string): boolean =>
     arr?.includes(id) ?? false;
 
+  // Extensions ADR 339 — the pointer-answering overlay doors: handle sets
+  // and the transform box. Created up front because the TOOL door wraps
+  // every contributed gesture handler with their router.
+  const overlayDoorDeps = {
+    getEditor,
+    manifestId: manifest.id,
+    requireOverlay: (door: string) =>
+      requireDeclared(
+        hasRendering("overlay"),
+        door,
+        'capabilities.rendering must include "overlay"',
+      ),
+    warn: (message: string) => log.warn(message),
+  };
+  const handleSets = createHandleSets(overlayDoorDeps);
+  const transformBoxes = createTransformBoxes(overlayDoorDeps);
+  store.add(toDisposable(() => transformBoxes.disposeAll()));
+
   /** W3.2 — an edit-context / object-type `type` is DECLARED when the
    *  manifest's `contributes.editContexts[]` / `contributes.objectTypes[]`
    *  lists an entry with that `type`. (These are object arrays keyed by
@@ -2011,7 +2040,20 @@ export function createBundleHost(
         "contribute.tool",
         `contributes.tools[] must include "${c.id}"`,
       );
-      return store.add(getEditor().registries.tools.register(c));
+      // ADR 339 — the bundle's own tools hear the handle sets and the
+      // transform box: the router wraps each handler the factory makes.
+      const gesture = c.gesture;
+      return store.add(
+        getEditor().registries.tools.register(
+          gesture
+            ? {
+                ...c,
+                gesture: () =>
+                  wrapToolGesture(gesture(), handleSets, transformBoxes),
+              }
+            : c,
+        ),
+      );
     },
     panel(c) {
       assertNamespaced(c.id, "panel");
@@ -2218,6 +2260,10 @@ export function createBundleHost(
       const stamped: EditContextContribution = {
         ...c,
         metadataKey: metadataKey(manifest),
+        // ADR 339 — an open transform box is a sub-edit: Esc and Enter
+        // end the BOX (through the bundle's tool), not the context.
+        isDirty: () =>
+          transformBoxes.surface.active() !== null || (c.isDirty?.() ?? false),
         ...(bindingRegistry
           ? {
               onEnter: (ctx) => {
@@ -4349,6 +4395,10 @@ export function createBundleHost(
       store.add(handle);
       return handle;
     },
+    // ADR 339 — retained handle sets the host draws and hit-tests.
+    handles(id?: string) {
+      return store.add(handleSets.handles(id));
+    },
   };
 
   // ------------------------------------------------------- storage
@@ -5434,7 +5484,7 @@ export function createBundleHost(
 
   // ----------------------------------------------------- clipboard
   // The capability-gated SYSTEM-clipboard door (K-6 / S-14). Read/write a
-  // `{ text?, tabular? }` payload through the injected backend. The gate
+  // `{ text?, tabular?, svg? }` payload through the injected backend. The gate
   // is a READ-AND-WRITE door: it THROWS in 'enforce' (a manifest bug —
   // the bundle used a door it didn't declare), warns+proceeds in 'warn',
   // like every other gated door. The TIER decides tabular: `"full"` ⇒
@@ -5443,6 +5493,7 @@ export function createBundleHost(
   // wired → read answers `null`, write no-ops (the honest no-clipboard
   // door); supports("clipboard@1") is false.
   const clipboardBackend = options?.clipboard;
+  const clipboardSvg = clipboardBackend?.svg === true;
   const clipboardGate = (door: string): "full" | "vector" => {
     const grant = clipboardGrant();
     requireDeclared(
@@ -5468,6 +5519,11 @@ export function createBundleHost(
         return null;
       }
       if (!payload) return null;
+      // A backend without the svg half never surfaces one (ADR 341).
+      if (!clipboardSvg && payload.svg !== undefined) {
+        const { svg: _dropped, ...rest } = payload;
+        payload = rest;
+      }
       // A "vector" grant never receives the tabular half.
       if (tier === "vector" && payload.tabular !== undefined) {
         const { tabular: _dropped, ...rest } = payload;
@@ -5487,6 +5543,11 @@ export function createBundleHost(
             'is "vector" (text only); declare "full" to copy a cell grid',
         );
         const { tabular: _dropped, ...rest } = payload;
+        toWrite = rest;
+      }
+      // The svg half goes only to a backend that carries it.
+      if (!clipboardSvg && toWrite.svg !== undefined) {
+        const { svg: _dropped, ...rest } = toWrite;
         toWrite = rest;
       }
       try {
@@ -5839,6 +5900,13 @@ export function createBundleHost(
     // `historySteps` (see the option).
     featureSet.add("editContext.historySteps@1");
   }
+  if (hostDrawsHandles(getEditor())) {
+    // ADR 339 — the host draws the handle primitive on the same layer
+    // sink, so handle sets and transform boxes are visible. Without it
+    // both still answer hits and route (pure geometry) but draw nothing.
+    featureSet.add("overlay.handles@1");
+    featureSet.add("host.transformBox@1");
+  }
   if (options?.editContextEnterPoint === true) {
     // W-19 — the host shell vouches that a pointer entry carries the
     // entering point (see the option).
@@ -6005,6 +6073,9 @@ export function createBundleHost(
     // means a real system-clipboard backend is wired, so a bundle can
     // actually read/write the clipboard (K-6 / S-14).
     featureSet.add("clipboard@1");
+    // Extensions ADR 341 — the backend carries the `svg` half
+    // (`image/svg+xml`, the vector interchange).
+    if (options.clipboard.svg === true) featureSet.add("clipboard.svg@1");
   }
   // Extensions ADR 348 amendment 1 — find and replace go to the engine
   // (`RequestFindText`, `findReplace`), which every host of this contract
@@ -6152,6 +6223,7 @@ export function createBundleHost(
     render,
     text,
     overlay,
+    transformBox: transformBoxes.surface,
     shell,
     storage,
     blob,

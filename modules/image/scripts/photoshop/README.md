@@ -19,6 +19,7 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-render.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-stylize.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/filters-pixelate.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/adjustments-ext.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/mode-conversions.jsx
 # vector-paths opens a PSD paged wrote: stage it first (see below)
 PAGED_PROBE_STAGE=<dir> bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-paths.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/adjustment-layers-ext.jsx
@@ -81,6 +82,10 @@ classified `agreement` / `convention` / `defect` / `no-counterpart`) and
 `image-conformance/tests/it/psd_composite_photoshop.rs` (the layered PSDs) and
 `image-conformance/tests/it/psd_cmyk_photoshop.rs` (the CMYK PSDs, each with
 Photoshop's own sRGB conversions under three intent/BPC settings).
+`image-conformance/tests/it/mode_conversions_photoshop.rs` (image ADR 479: Image ▸ Mode — the
+`colour-sweep` stimulus converted to CMYK (Coated FOGRA39, named), Gray Gamma 2.2 and Lab and back
+to sRGB at 16 and 8 bits, each converted document saved as a PSD; and a Levels gamma on the
+`deep-ramp` stimulus, 16384 levels, at 16 and 8 bits).
 `image-conformance/tests/it/psd_vector_masks_photoshop.rs` (vector masks: the
 merged composite, and the render Photoshop caches in each masked layer's
 channel −2).

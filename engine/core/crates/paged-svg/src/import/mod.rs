@@ -680,6 +680,12 @@ impl<'a> Lower<'a> {
         if items.len() > 1 && !flat {
             let mut group = self.make_group(&items);
             let id = group.id();
+            // A named `<g>` (Illustrator's layers and groups, a DXF
+            // layer, draw ADR 364) names the group it becomes.
+            if !g.id().is_empty() {
+                self.ops
+                    .push(set(&id, PropertyPath::ItemName, text(g.id())));
+            }
             if opacity < 1.0 {
                 self.ops
                     .push(set(&id, PropertyPath::FrameOpacity, pct(opacity)));

@@ -119,5 +119,6 @@ export type {
   ToolPreviewPolyline,
   ToolPreviewPath,
   ToolPreviewText,
+  ToolPreviewHandle,
   MarqueeRectPageLocal,
 } from "./editor.js";

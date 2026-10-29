@@ -868,6 +868,19 @@ const TABLE: &[Row] = &[
               ("cx", V::F(HALF_OUT)), ("cy", V::F(HALF_OUT)),
               ("radius", V::F(HALF_OUT)), ("frequency", V::F(4.0))]),
           note: "amount 0 is the documented identity for every warp kind" },
+    Row { id: "geom.warp_projective",
+          identity: Identity::Params(P::Fields(&[
+              ("h0", V::F(1.0)), ("h1", V::F(0.0)), ("h2", V::F(0.0)),
+              ("h3", V::F(0.0)), ("h4", V::F(1.0)), ("h5", V::F(0.0)),
+              ("h6", V::F(0.0)), ("h7", V::F(0.0)), ("h8", V::F(1.0)),
+              ("interp", V::U(0)), ("masked", V::U(0))])),
+          stress: P::Fields(&[
+              ("h0", V::F(0.9)), ("h1", V::F(0.1)), ("h2", V::F(1.5)),
+              ("h3", V::F(-0.05)), ("h4", V::F(1.1)), ("h5", V::F(-0.5)),
+              ("h6", V::F(0.002)), ("h7", V::F(0.001)), ("h8", V::F(1.0)),
+              ("interp", V::U(1)), ("masked", V::U(1))]),
+          note: "the identity homography reads each texel at its own centre: fx = fy = 0. \
+                 The stress runs the SELECTION lane (masked = 1), the one a mask is bound for" },
     Row { id: "geom.mosaic",
           identity: Identity::Params(P::Fields(&[("cell_px", V::F(1.0))])),
           stress: P::Fields(&[("cell_px", V::F(8.0))]),
@@ -1166,13 +1179,24 @@ fn style_bevel_light() -> Vec<u8> {
 
 /// Kernels exempt from the HALF-mask property, with the reason. The
 /// all-zero-mask property still applies to them.
-const HALF_MASK_EXEMPT: &[(&str, &str)] = &[(
-    "geom.move_selection",
-    "reads the mask at BOTH p and p−d (m_dst decides what leaves, m_src \
+const HALF_MASK_EXEMPT: &[(&str, &str)] = &[
+    (
+        "geom.move_selection",
+        "reads the mask at BOTH p and p−d (m_dst decides what leaves, m_src \
      decides what arrives), so content deliberately LANDS outside the \
      selection. `masked-out ⇒ untouched` is not this kernel's contract; \
      the all-zero-mask property still pins the no-op case",
-)];
+    ),
+    (
+        "geom.warp_projective",
+        "Free Transform of a selection: the selected pixels float through the \
+     homography and LAND wherever it sends them, outside the selection \
+     included, as Photoshop's floating selection does; what is left behind \
+     is emptied. `masked-out ⇒ untouched` is not this kernel's contract; the \
+     all-zero-mask property pins the no-op case (nothing selected moves \
+     nothing)",
+    ),
+];
 
 // ─────────────────────── param-block assembly ────────────────────────
 

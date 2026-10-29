@@ -234,8 +234,16 @@
       "media.paged.draw.command.recolorArtworkOptions",
       "media.paged.draw.command.applyGuideColor"
     ],
-    "importers": ["media.paged.draw.importer.svg"],
-    "exporters": ["media.paged.draw.exporter.svg"],
+    "importers": [
+      "media.paged.draw.importer.svg",
+      "media.paged.draw.importer.dxf",
+      "media.paged.draw.importer.ai",
+      "media.paged.draw.importer.eps"
+    ],
+    "exporters": [
+      "media.paged.draw.exporter.svg",
+      "media.paged.draw.exporter.dxf"
+    ],
     "partTypes": [
       {
         "type": "graphicStyleLibrary",

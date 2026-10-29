@@ -29,11 +29,14 @@
 //     and refuses with the decoder's own sentence where they do not (Node,
 //     the headless host). A picture over the trace budget is downsampled
 //     first; the SVG is written at the picture's own pixel size either way.
-//   · recolor — an SVG in, an SVG out: its solid fill and stroke colours
-//     reduced to N, moved to a harmony, or mapped. The document is read and
-//     written by draw-geometry's SVG reader/writer, so the output is that
-//     writer's flattening: one path per shape, solid paints only (gradients,
-//     text, images and `<use>` are not carried; see svg-doc.ts).
+//   · recolor — an SVG in, an SVG out: its declared colours reduced to N,
+//     moved to a harmony, or mapped. The colours are found and replaced IN
+//     THE SOURCE by the engine's SVG paint reader (`paged-svg::paint`, in
+//     the draw wasm; draw ADR 364): fills, strokes, gradient stops and
+//     the colours of `style` attributes and `<style>` rules, every other
+//     byte of the file kept — gradients, text, `<use>` and the author's
+//     structure come through, where the old TypeScript reader flattened
+//     the file to one solid path per shape.
 //
 // Recolouring a PLACED RASTER is not here: that is pixel work and belongs to
 // the image module's kernels.
@@ -48,19 +51,19 @@ import {
   harmonyOf,
   isNeutral,
   parseCssColor,
-  parseSvgDocument,
   recolorToHarmony,
   reduceColors,
   rgbToHex,
   rotateHues,
-  serializeSvgDocument,
+  serializePathData,
   HARMONY_RULES,
-  type DrawShape,
+  type AnchorTable,
   type HarmonyRule,
   type Rgb,
   type WeightedColor,
 } from "@paged-media/draw-geometry";
 
+import { bootInterchange } from "./interchange-wasm";
 import { decodeRasterBytes } from "./io/raster-decode";
 import { SVG_MIME } from "./io/svg";
 import {
@@ -110,13 +113,23 @@ const scaled = (p: readonly [number, number], k: number): [number, number] => [
   p[1] * k,
 ];
 
-/** A trace result as SVG shapes, in the SOURCE picture's pixels (`k` undoes
+/** One traced path: its contours and its one paint. */
+export interface TracedPath {
+  anchors: AnchorTable;
+  /** A region's fill, even-odd (its outer boundary and its holes). */
+  fill?: string;
+  /** A centreline's stroke. */
+  stroke?: string;
+  strokeWidth?: number;
+}
+
+/** A trace result as paths, in the SOURCE picture's pixels (`k` undoes
  *  the decoder's downsample). Each region is one even-odd path — its outer
  *  boundary and its holes; each centreline one stroked open path. */
-export function traceShapes(result: TraceResult, k = 1): DrawShape[] {
-  const shapes: DrawShape[] = [];
+export function traceShapes(result: TraceResult, k = 1): TracedPath[] {
+  const shapes: TracedPath[] = [];
   for (const region of result.regions) {
-    const anchors: DrawShape["anchors"]["anchors"][number][] = [];
+    const anchors: AnchorTable["anchors"][number][] = [];
     const subpathStarts: number[] = [];
     for (const contour of region.contours) {
       if (contour.anchors.length === 0) continue;
@@ -131,7 +144,7 @@ export function traceShapes(result: TraceResult, k = 1): DrawShape[] {
     if (anchors.length === 0) continue;
     shapes.push({
       anchors: { anchors, subpathStarts },
-      style: { fill: rgbToHex(region.color), fillRule: "evenodd" },
+      fill: rgbToHex(region.color),
     });
   }
   for (const stroke of result.strokes ?? []) {
@@ -146,14 +159,39 @@ export function traceShapes(result: TraceResult, k = 1): DrawShape[] {
         subpathStarts: [0],
         subpathOpen: [!stroke.closed],
       },
-      style: {
-        fill: null,
-        stroke: rgbToHex(stroke.color),
-        strokeWidth: stroke.width * k,
-      },
+      stroke: rgbToHex(stroke.color),
+      strokeWidth: stroke.width * k,
     });
   }
   return shapes;
+}
+
+/** A trace's SVG document, `width` × `height` pixels. The trace's own
+ *  output, not a document writer: every path is either an even-odd fill
+ *  or an unfilled stroke, its data the path-data writer's
+ *  (`serializePathData`). */
+export function traceSvg(
+  paths: readonly TracedPath[],
+  width: number,
+  height: number,
+): string {
+  const body = paths
+    .map((p) => {
+      const d = serializePathData(p.anchors, 3);
+      if (!d) return null;
+      const paint =
+        p.fill !== undefined
+          ? `fill="${p.fill}" fill-rule="evenodd"`
+          : `fill="none" stroke="${p.stroke}" stroke-width="${p.strokeWidth}"`;
+      return `  <path d="${d}" ${paint}/>`;
+    })
+    .filter((p): p is string => p !== null);
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n` +
+    body.join("\n") +
+    (body.length ? "\n" : "") +
+    `</svg>\n`
+  );
 }
 
 const svgAsset = (svg: string): ActionAsset => ({
@@ -213,51 +251,30 @@ export function recolorPalette(
   throw new Error(`${id}: mode is "reduce", "harmony" or "map"`);
 }
 
-/** Recolour an SVG document's solid fills and strokes. */
-export function recolorSvg(
+/** Recolour an SVG document's declared colours (the engine's paint
+ *  reader finds and rewrites them in place). */
+export async function recolorSvg(
   svg: string,
   params: Readonly<Record<string, unknown>>,
   id: string = DRAW_ACTION_IDS.recolor,
-): string {
-  const doc = parseSvgDocument(svg);
-  if (!doc) throw new Error(`${id}: the asset is not an SVG document`);
-  // One entry per distinct colour, weighted by how many paints use it.
-  const index = new Map<string, number>();
-  const colors: WeightedColor[] = [];
-  const slot = (paint: string | null | undefined): number | null => {
-    if (typeof paint !== "string") return null;
-    const rgb = parseCssColor(paint);
-    if (!rgb) return null;
-    const hex = rgbToHex(rgb);
-    let i = index.get(hex);
-    if (i === undefined) {
-      i = colors.length;
-      index.set(hex, i);
-      colors.push({ rgb, weight: 0 });
-    }
-    colors[i]!.weight++;
-    return i;
-  };
-  const slots = doc.shapes.map((s) => ({
-    fill: slot(s.style.fill),
-    stroke: slot(s.style.stroke),
+): Promise<string> {
+  const engine = await bootInterchange();
+  let declared;
+  try {
+    declared = engine.svgColors(svg);
+  } catch {
+    throw new Error(`${id}: the asset is not an SVG document`);
+  }
+  // One entry per distinct colour, weighted by how many places declare it.
+  const colors: WeightedColor[] = declared.map((c) => ({
+    rgb: c.rgb,
+    weight: c.count,
   }));
   const next = recolorPalette(colors, params, id);
-  const shapes = doc.shapes.map((s, i): DrawShape => {
-    const { fill, stroke } = slots[i]!;
-    return {
-      anchors: s.anchors,
-      style: {
-        ...s.style,
-        ...(fill !== null ? { fill: rgbToHex(next[fill]!) } : {}),
-        ...(stroke !== null ? { stroke: rgbToHex(next[stroke]!) } : {}),
-      },
-    };
-  });
-  return serializeSvgDocument(shapes, {
-    width: doc.viewBox?.[2] ?? doc.width,
-    height: doc.viewBox?.[3] ?? doc.height,
-  });
+  const map = colors
+    .map((c, i) => [c.rgb, next[i]!] as const)
+    .filter(([from, to]) => rgbToHex(from) !== rgbToHex(to));
+  return map.length === 0 ? svg : engine.svgRecolor(svg, map);
 }
 
 /** The action definitions for one host (the trace runs through its
@@ -307,10 +324,11 @@ export function drawActions(host: BundleHost): ActionDefinition[] {
             options,
           );
           return svgAsset(
-            serializeSvgDocument(traceShapes(result, 1 / raster.scale), {
-              width: raster.sourceWidth,
-              height: raster.sourceHeight,
-            }),
+            traceSvg(
+              traceShapes(result, 1 / raster.scale),
+              raster.sourceWidth,
+              raster.sourceHeight,
+            ),
           );
         } finally {
           session.close();
@@ -331,13 +349,13 @@ export function drawActions(host: BundleHost): ActionDefinition[] {
         recolorNeutrals: false,
         map: {},
       },
-      run(input, params) {
+      async run(input, params) {
         const id = DRAW_ACTION_IDS.recolor;
         const a = assetOf(input, id);
         if (a.mediaType && a.mediaType !== SVG_MIME)
           throw new Error(`${id}: takes ${SVG_MIME}, not ${a.mediaType}`);
         return svgAsset(
-          recolorSvg(new TextDecoder().decode(a.bytes), params, id),
+          await recolorSvg(new TextDecoder().decode(a.bytes), params, id),
         );
       },
     },

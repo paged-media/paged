@@ -9,6 +9,7 @@ members = [
     "crates/paged-text",
     "crates/paged-color",
     "crates/paged-pixel",
+    "crates/paged-warp",
     "crates/paged-psd",
     "crates/paged-resample",
     "crates/paged-raster",

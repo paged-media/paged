@@ -275,10 +275,22 @@
       "media.paged.image.command.vectorMaskDelete",
       "media.paged.image.command.vectorMaskToggle",
       "media.paged.image.command.vectorMaskInvert",
-      "media.paged.image.command.vectorMaskRasterize"
+      "media.paged.image.command.vectorMaskRasterize",
+      "media.paged.image.command.freeTransform",
+      "media.paged.image.command.modeBits8",
+      "media.paged.image.command.modeBits16",
+      "media.paged.image.command.modeGray",
+      "media.paged.image.command.modeRgb",
+      "media.paged.image.command.modeCmyk",
+      "media.paged.image.command.modeLab",
+      "media.paged.image.command.proofColors",
+      "media.paged.image.command.gamutWarning",
+      "media.paged.image.command.proofSetupCmyk",
+      "media.paged.image.command.proofSetupGray"
     ],
     "tools": [
       "media.paged.image.tool.crop",
+      "media.paged.image.tool.transform",
       "media.paged.image.tool.move",
       "media.paged.image.tool.marqueeRect",
       "media.paged.image.tool.marqueeEllipse",
@@ -411,6 +423,14 @@
         {
           "id": "media.paged.image.command.claimTiles",
           "title": "Serve image tiles to the renderer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.freeTransform",
+          "title": "Free transform",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -2288,6 +2308,86 @@
         {
           "id": "media.paged.image.command.vectorMaskRasterize",
           "title": "Rasterize vector mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeBits8",
+          "title": "Mode: 8 bits per channel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeBits16",
+          "title": "Mode: 16 bits per channel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeGray",
+          "title": "Mode: greyscale (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeRgb",
+          "title": "Mode: RGB colour (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeCmyk",
+          "title": "Mode: CMYK colour (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeLab",
+          "title": "Mode: Lab colour (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.proofColors",
+          "title": "Proof colours (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.gamutWarning",
+          "title": "Gamut warning (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.proofSetupCmyk",
+          "title": "Proof setup: working CMYK (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.proofSetupGray",
+          "title": "Proof setup: working grey (image)",
           "args": {
             "kind": "struct",
             "fields": {}

@@ -816,12 +816,25 @@ offsets land → host-frame render moves → undo byte-identical).
 grows a page-level geometry accessor for inline-anchored objects, a
 direct rect read; the InDesign "object anchor" badge on the host line.
 
-### Object Export Options — `paged.object-export` ○
+### Asset Export — `paged.object-export` ✓
 
-Alt Text | Tagged PDF | EPUB & HTML tabs (live local switcher) over seam
-fields (alt-text source + textarea, tag role, conversion, CSS class).
-**Target** — per-object alt text, tagged-PDF role, EPUB/HTML conversion —
-feeds accessible PDF + EPUB output.
+Editor ADR 288 (it replaced the Object Export Options concept in the same
+dock slot). Assets are page items, artboards (a page with an
+`x-paged:paged.artboard` name, engine ADR 1011) and pages, collected by
+Add selection (one asset per item, or all as one), Add all artboards and
+pages, Object ▸ Collect for Export, or a Layers-panel row dropped on the
+list; each row's file name is editable. Export settings are rows of scale
+(0.5x–4x or custom), suffix and format: PNG, JPEG (quality), WebP, TIFF —
+pixels from `requestSnapshot` (`only` + `clip` + `trim` for items),
+encoded by the engine's `paged-raster` — SVG (`paged-svg`) and PDF (the
+page's own; an object's PDF is refused by name). Several files go out as
+one ZIP (`@paged-media/helpers`' writer). Commands: File ▸ Export ▸ Asset
+Export…, Object ▸ Collect for Export ▸ As Multiple / As Single Asset,
+Collect All Artboards and Pages, Export All Assets. Specs:
+`asset-export-panel.dom.test.tsx`, `e2e/asset-export.spec.ts`.
+**Target** — a PDF of some items (an item-filtered PDF export); a lossy
+WebP; the tagged-PDF alt text the concept sketched belongs to Export
+Tagging's model.
 
 ### Export Tagging — `paged.export-tagging` ○
 
@@ -936,7 +949,7 @@ gallery seams; several extend gaps above):
     today), per-paragraph list LEVEL nesting, restart scope, and
     position.)_
 23. **Export metadata** — per-object alt text/role/conversion + per-style
-    HTML/CSS/PDF tagging (Object Export Options, Export Tagging).
+    HTML/CSS/PDF tagging (Export Tagging).
 24. **Tint swatch children** + mixed-ink swatches (Swatches parity).
 25. **Condition ops** — `SetConditionVisible`, `ActivateConditionSet`;
     **master apply** — `ApplyMasterToPage`; **page duplicate**.

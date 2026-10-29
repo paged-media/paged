@@ -247,6 +247,8 @@ import { makeImageTracePanel } from "./panels/image-trace-panel";
 import { makeRecolorPanel } from "./panels/recolor-panel";
 import { makeColorGuidePanel } from "./panels/color-guide-panel";
 import { contributeSvgIo } from "./io/svg";
+import { contributeDxfIo } from "./io/dxf";
+import { contributeVectorFileImporters } from "./io/vector-files";
 import { registerDrawActions } from "./actions";
 import { contributeDrawObjectModel } from "./object-model";
 import {
@@ -692,11 +694,14 @@ export function activate(host: BundleHost): BundleHandle {
         layersProvider.provider,
       )
     : null;
-  // Phase 8 — SVG interchange (K-2): an `.svg` importer (parse → insert
-  // the shapes through the existing insertPath lane) + an `.svg` exporter
-  // (selection → SVG bytes). Capability-gated; degrades honestly when the
-  // host predates the importer/exporter doors.
+  // Interchange (K-2, draw ADR 364): `.svg` in and out through the
+  // engine's paged-svg doors, `.dxf` in and out through the same doors
+  // and the draw wasm's DXF reader/writer, `.ai` through paged.pdf's
+  // placement and `.eps` through the engine's PostScript interpreter.
+  // Capability-gated; degrades honestly when the host lacks a door.
   const svgIoSub = contributeSvgIo(host);
+  const dxfIoSub = contributeDxfIo(host);
+  const vectorFilesSub = contributeVectorFileImporters(host);
   // F1 — the menu bar.
   const menuSub = contributeMenu(host);
   // ADR 323 — the OBJECT MODEL: ten kinds (path geometry, appearance
@@ -779,6 +784,8 @@ export function activate(host: BundleHost): BundleHandle {
       propertyListsSub?.dispose();
       objectModelHandle?.dispose();
       svgIoSub.dispose();
+      dxfIoSub.dispose();
+      vectorFilesSub.dispose();
       menuSub.dispose();
       imageTraceCommandSub.dispose();
       liveRetraceSub.dispose();

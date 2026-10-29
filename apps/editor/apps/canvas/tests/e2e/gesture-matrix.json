@@ -470,6 +470,10 @@
       ]
     },
     {
+      "tool": "paged.tool.freeTransform",
+      "unspecified": "not specified yet: each arm is pinned by its handler tests (packages/tools/test/free-transform-tool.test.ts) and the e2e free-transform.spec.ts"
+    },
+    {
       "tool": "paged.tool.shear",
       "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
     },
@@ -716,6 +720,10 @@
     {
       "tool": "media.paged.image.tool.crop",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.transform",
+      "unspecified": "module tool: hosts the host transform box inside the raster edit context; matrix rows are the follow-up"
     },
     {
       "tool": "media.paged.image.tool.move",

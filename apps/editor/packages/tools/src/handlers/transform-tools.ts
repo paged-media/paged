@@ -56,6 +56,7 @@ import type {
   PagedEditor,
 } from "@paged-media/shell";
 
+import type { GestureType } from "@paged-media/client";
 import { layoutPageRects } from "@paged-media/shell";
 
 import { CLICK_DRAG_THRESHOLD_PX } from "./shared";
@@ -88,17 +89,6 @@ const selectionKeyOf = (
   ids: readonly { kind: string; id: unknown }[],
 ): string => ids.map((id) => `${id.kind}:${String(id.id)}`).join("|");
 
-interface TransformDrag {
-  handle: number | null;
-  pendingDelta: [number, number];
-  startDoc: [number, number];
-  /** Pointer released / Escape fired before begin resolved. */
-  abandoned: boolean;
-  /** Commit requested before begin resolved. */
-  commitOnResolve: boolean;
-  lastModifiers: { shift: boolean; alt: boolean };
-}
-
 /** The anchor a gesture begins with: a page and the press in its space. */
 interface Anchor {
   pageId: string;
@@ -114,7 +104,7 @@ interface Anchor {
  * (GT-4). Pages are laid out as the canvas lays them out
  * (`layoutPageRects`).
  */
-async function pasteboardAnchor(
+export async function pasteboardAnchor(
   paged: PagedEditor,
   targets: readonly { kind: string; id: unknown }[],
   docPoint: readonly [number, number],
@@ -146,11 +136,133 @@ async function pasteboardAnchor(
   return { pageId, pointInPage: [docPoint[0] - rect.x, docPoint[1] - rect.y] };
 }
 
+/** Modifier state a worker gesture update carries. */
+export interface WorkerGestureModifiers {
+  shift: boolean;
+  alt: boolean;
+}
+
+/** One worker gesture in flight (`runWorkerGesture`). */
+export interface WorkerGestureRun {
+  /** Stream the CUMULATIVE doc-space delta since the press. */
+  update(delta: [number, number], modifiers: WorkerGestureModifiers): void;
+  /** Release: commit (one undo step) or cancel. Idempotent. */
+  end(commit: boolean): void;
+}
+
+/**
+ * Begin a worker gesture and drive it to its end — the begin / buffer /
+ * flush dance every matrix-transform tool shares (Rotate, Scale, Shear and
+ * each arm of Free Transform): deltas that arrive before `beginGesture`
+ * resolves are buffered and flushed when the handle lands; a release
+ * before then commits (or cancels) as soon as it does, so worker state
+ * stays clean. `anchor` may resolve to null (no page to name the press
+ * on): the gesture then never begins. `onSettled` runs after the commit
+ * or cancel reached the worker (the selection chrome is refreshed first).
+ */
+export function runWorkerGesture(
+  paged: PagedEditor,
+  targets: readonly { kind: string; id: unknown }[],
+  spec: GestureType,
+  anchor: Promise<Record<string, unknown> | null>,
+  options: {
+    label: string;
+    modifiers: WorkerGestureModifiers;
+    onSettled?: (committed: boolean) => void;
+  },
+): WorkerGestureRun {
+  let handle: number | null = null;
+  let pendingDelta: [number, number] = [0, 0];
+  let lastModifiers = options.modifiers;
+  let abandoned = false;
+  let commitOnResolve = false;
+  let ended = false;
+
+  const refreshSelectionChrome = () => {
+    const ids = paged.selection.elementSelection;
+    if (ids.length === 0) return;
+    void paged.client
+      .elementGeometry(ids)
+      .then((items) => paged.selection.setElementGeometry(items))
+      .catch(() => {});
+  };
+  const finish = (h: number, commit: boolean) => {
+    const done = commit
+      ? paged.client.commitGesture(h).then(() => undefined)
+      : paged.client.cancelGesture(h).then(() => undefined);
+    void done
+      .then(refreshSelectionChrome)
+      .then(() => options.onSettled?.(commit))
+      .catch(() => {});
+  };
+
+  void anchor
+    .then((a) => {
+      if (!a) throw new Error("no page to anchor the gesture on");
+      return paged.client.beginGesture(
+        targets.slice() as never,
+        spec as never,
+        a as never,
+      );
+    })
+    .then((h) => {
+      if (abandoned) {
+        // Released as a click (or Escape) before the worker confirmed.
+        finish(h, false);
+        return;
+      }
+      if (commitOnResolve) {
+        // The drag finished before begin resolved: flush, then commit.
+        void paged.client
+          .updateGesture(h, pendingDelta, lastModifiers, "sab")
+          .catch(() => {})
+          .then(() => finish(h, true));
+        return;
+      }
+      handle = h;
+      const [dx, dy] = pendingDelta;
+      if (dx !== 0 || dy !== 0) {
+        void paged.client
+          .updateGesture(h, pendingDelta, lastModifiers, "sab")
+          .catch(() => {});
+      }
+    })
+    .catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn(`${options.label} beginGesture failed:`, err);
+      ended = true;
+    });
+
+  return {
+    update(delta, modifiers) {
+      if (ended) return;
+      lastModifiers = modifiers;
+      if (handle === null) {
+        pendingDelta = delta;
+        return;
+      }
+      void paged.client
+        .updateGesture(handle, delta, modifiers, "sab")
+        .catch(() => {});
+    },
+    end(commit) {
+      if (ended) return;
+      ended = true;
+      if (handle === null) {
+        if (commit) commitOnResolve = true;
+        else abandoned = true;
+        return;
+      }
+      finish(handle, commit);
+    },
+  };
+}
+
 export function createTransformGestureHandler(
   kind: TransformGestureKind,
 ): GestureHandler {
   let paged: PagedEditor | null = null;
-  let drag: TransformDrag | null = null;
+  let drag: { run: WorkerGestureRun; startDoc: [number, number] } | null = null;
   let pivot: Pivot | null = null;
   /** The page + point of the pointer-down, for a click to set the pivot. */
   let down: { pageId: string; point: [number, number] } | null = null;
@@ -194,29 +306,8 @@ export function createTransformGestureHandler(
     return pivot.pageId === pageId ? pivot : null;
   };
 
-  const refreshSelectionChrome = () => {
-    if (!paged) return;
-    const ids = paged.selection.elementSelection;
-    if (ids.length === 0) return;
-    void paged.client
-      .elementGeometry(ids)
-      .then((items) => paged?.selection.setElementGeometry(items))
-      .catch(() => {});
-  };
-
-  const finish = (handle: number | null, commit: boolean) => {
-    if (!paged || handle === null) return;
-    const done = commit
-      ? paged.client.commitGesture(handle).then(() => undefined)
-      : paged.client.cancelGesture(handle).then(() => undefined);
-    void done.then(refreshSelectionChrome).catch(() => {});
-  };
-
   const cancel = () => {
-    if (drag) {
-      if (drag.handle !== null) finish(drag.handle, false);
-      else drag.abandoned = true;
-    }
+    drag?.run.end(false);
     drag = null;
   };
 
@@ -246,91 +337,36 @@ export function createTransformGestureHandler(
       down = onPage
         ? { pageId: onPage.pageId, point: onPage.pointInPage }
         : null;
-      const state: TransformDrag = {
-        handle: null,
-        pendingDelta: [0, 0],
-        startDoc: e.docPoint,
-        abandoned: false,
-        commitOnResolve: false,
-        lastModifiers: { shift: e.modifiers.shift, alt: e.modifiers.alt },
-      };
-      drag = state;
       const editor = paged;
-      void (
+      const anchor = (
         onPage
           ? Promise.resolve(onPage)
           : pasteboardAnchor(editor, targets, e.docPoint)
-      )
-        .then((anchor) => {
-          if (!anchor) throw new Error("no page to anchor the gesture on");
-          const set = livePivot(anchor.pageId);
-          return editor.client.beginGesture(targets, GESTURE_SPEC[kind], {
-            pageId: anchor.pageId,
-            pointInPage: anchor.pointInPage,
-            // Protocol 66 — ahead of the pinned wire type, hence the spread.
-            ...(set ? { pivotInPage: set.point } : {}),
-          });
-        })
-        .then((handle) => {
-          if (state.abandoned) {
-            // Released as a click (or Escape) before the worker
-            // confirmed — cancel immediately.
-            finish(handle, false);
-            return;
-          }
-          if (state.commitOnResolve) {
-            // Full drag finished before begin resolved: flush the
-            // final delta, then commit.
-            void paged!.client
-              .updateGesture(
-                handle,
-                state.pendingDelta,
-                state.lastModifiers,
-                "sab",
-              )
-              .catch(() => {})
-              .then(() => finish(handle, true));
-            return;
-          }
-          if (drag !== state) {
-            // Tool switched away mid-begin.
-            finish(handle, false);
-            return;
-          }
-          state.handle = handle;
-          const [dx, dy] = state.pendingDelta;
-          if (dx !== 0 || dy !== 0) {
-            void paged!.client
-              .updateGesture(
-                handle,
-                state.pendingDelta,
-                state.lastModifiers,
-                "sab",
-              )
-              .catch(() => {});
-          }
-        })
-        .catch((err) => {
-          // eslint-disable-next-line no-console
-          console.warn(`${kind} beginGesture failed:`, err);
-          if (drag === state) drag = null;
-        });
+      ).then((a) => {
+        if (!a) return null;
+        const set = livePivot(a.pageId);
+        return {
+          pageId: a.pageId,
+          pointInPage: a.pointInPage,
+          // Protocol 66 — ahead of the pinned wire type, hence the spread.
+          ...(set ? { pivotInPage: set.point } : {}),
+        };
+      });
+      drag = {
+        run: runWorkerGesture(editor, targets, GESTURE_SPEC[kind], anchor, {
+          label: kind,
+          modifiers: { shift: e.modifiers.shift, alt: e.modifiers.alt },
+        }),
+        startDoc: e.docPoint,
+      };
     },
     onPointerMove(e: CanvasPointerEvent) {
       if (!paged || !drag) return;
       if (e.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
-      const delta: [number, number] = [
-        e.docPoint[0] - drag.startDoc[0],
-        e.docPoint[1] - drag.startDoc[1],
-      ];
-      drag.lastModifiers = { shift: e.modifiers.shift, alt: e.modifiers.alt };
-      if (drag.handle === null) {
-        drag.pendingDelta = delta;
-        return;
-      }
-      void paged.client
-        .updateGesture(drag.handle, delta, drag.lastModifiers, "sab")
-        .catch(() => {});
+      drag.run.update(
+        [e.docPoint[0] - drag.startDoc[0], e.docPoint[1] - drag.startDoc[1]],
+        { shift: e.modifiers.shift, alt: e.modifiers.alt },
+      );
     },
     onPointerUp(e: CanvasPointerEvent) {
       const wasDrag = e.maxDelta > CLICK_DRAG_THRESHOLD_PX;
@@ -345,25 +381,15 @@ export function createTransformGestureHandler(
       }
       down = null;
       if (!drag) return;
-      if (drag.handle === null) {
-        // Begin hasn't resolved. A click (no real drag) abandons; a
-        // drag records the final delta and commits once the handle
-        // lands (the begin-resolver flushes + commits).
-        if (wasDrag) {
-          drag.pendingDelta = [
-            e.docPoint[0] - drag.startDoc[0],
-            e.docPoint[1] - drag.startDoc[1],
-          ];
-          drag.commitOnResolve = true;
-        } else {
-          drag.abandoned = true;
-        }
-        drag = null;
-        return;
+      if (wasDrag) {
+        // The release's own delta, in case no move carried it.
+        drag.run.update(
+          [e.docPoint[0] - drag.startDoc[0], e.docPoint[1] - drag.startDoc[1]],
+          { shift: e.modifiers.shift, alt: e.modifiers.alt },
+        );
       }
-      const handle = drag.handle;
+      drag.run.end(wasDrag);
       drag = null;
-      finish(handle, wasDrag);
     },
     onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {

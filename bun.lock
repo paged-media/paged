@@ -22,6 +22,7 @@
       "devDependencies": {
         "@paged-media/ai": "workspace:*",
         "@paged-media/data": "workspace:*",
+        "@paged-media/helpers": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
         "@types/bun": "catalog:",
@@ -730,7 +731,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.74.3-canary.38",
+      "version": "0.74.3-canary.41",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -740,7 +741,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.74.3-canary.38",
+      "version": "0.74.3-canary.41",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },

@@ -1418,6 +1418,27 @@ pub(super) fn build_document_inner(
         }
         let master_order = master_paint_order(&master.spread);
         let mut emit_master = |fr: paged_model::FrameRef| {
+            // A hidden master item draws nowhere, as a hidden body item
+            // does not (`Visible="false"`, and the items an export of
+            // some items alone hides: `build_page_filtered`).
+            let s = &master.spread;
+            let hidden = match fr {
+                paged_model::FrameRef::TextFrame(i) => {
+                    s.text_frames.get(i).is_some_and(|f| !f.visible)
+                }
+                paged_model::FrameRef::Rectangle(i) => {
+                    s.rectangles.get(i).is_some_and(|f| !f.visible)
+                }
+                paged_model::FrameRef::Oval(i) => s.ovals.get(i).is_some_and(|f| !f.visible),
+                paged_model::FrameRef::GraphicLine(i) => {
+                    s.graphic_lines.get(i).is_some_and(|f| !f.visible)
+                }
+                paged_model::FrameRef::Polygon(i) => s.polygons.get(i).is_some_and(|f| !f.visible),
+                paged_model::FrameRef::Group(_) => false,
+            };
+            if hidden {
+                return;
+            }
             match fr {
                 paged_model::FrameRef::TextFrame(idx) => {
                     let Some(frame) = master.spread.text_frames.get(idx) else {

@@ -124,6 +124,66 @@ fn every_created_item_is_bound_right_after_its_creating_child() {
     }
 }
 
+/// Draw ADR 364 — a shape of several contours is ONE compound element,
+/// its holes cut: the bug of the TypeScript reader this import replaced
+/// (a compound split into one element per contour, holes painted).
+#[test]
+fn a_ring_is_one_compound_element_with_its_hole() {
+    for (rule, even_odd) in [("evenodd", true), ("nonzero", false)] {
+        let p = plan(&format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+            <path fill-rule="{rule}" fill="#000" d="M0 0 H100 V100 H0 Z M25 25 V75 H75 V25 Z"/></svg>"##
+        ));
+        let ops = ops(&p);
+        let inserts = ops
+            .iter()
+            .filter(|o| matches!(o, Mutation::InsertPath { .. }))
+            .count();
+        assert_eq!(inserts, 1, "{rule}: one element");
+        let starts = ops.iter().find_map(|o| match o {
+            Mutation::SetElementProperty {
+                value: paged_mutate::Value::FramePath { subpath_starts, .. },
+                ..
+            } => Some(subpath_starts.clone()),
+            _ => None,
+        });
+        assert_eq!(starts, Some(vec![0, 4]), "{rule}: both contours on it");
+        let has_rule = ops.iter().any(|o| {
+            matches!(
+                o,
+                Mutation::SetElementProperty {
+                    path: paged_mutate::PropertyPath::FrameFillRule,
+                    ..
+                }
+            )
+        });
+        assert_eq!(has_rule, even_odd, "{rule}");
+        assert_eq!(p.report.items, 1);
+    }
+}
+
+/// Draw ADR 364 — a named `<g>` (a layer) names the group it becomes.
+#[test]
+fn a_named_group_names_its_group() {
+    let p = plan(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+        <g id="Walls"><rect width="10" height="10"/><rect x="20" width="10" height="10"/></g>
+        <g><rect y="20" width="10" height="10"/><rect x="20" y="20" width="10" height="10"/></g></svg>"##,
+    );
+    let names: Vec<String> = ops(&p)
+        .iter()
+        .filter_map(|o| match o {
+            Mutation::SetElementProperty {
+                path: paged_mutate::PropertyPath::ItemName,
+                value: paged_mutate::Value::Text(t),
+                ..
+            } => Some(t.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names, vec!["Walls".to_string()]);
+}
+
 fn square() -> PathData {
     PathData::new(vec![
         PathSegment::MoveTo { x: 0.0, y: 0.0 },
