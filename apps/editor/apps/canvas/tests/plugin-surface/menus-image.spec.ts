@@ -276,6 +276,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Edit contents — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Edit contents");
+    covers("command:media.paged.image.command.smartEditContents");
     await expectGreyedAndInert(bare, "Image/Layer/Smart objects/Edit contents");
     const out = await clickEntry(
       live,
@@ -292,6 +293,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Save and close contents — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Save and close contents");
+    covers("command:media.paged.image.command.smartSaveContents");
     await expectGreyedAndInert(
       bare,
       "Image/Layer/Smart objects/Save and close contents",
@@ -311,6 +313,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Close contents without saving — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Close contents without saving");
+    covers("command:media.paged.image.command.smartCloseContents");
     await expectGreyedAndInert(
       bare,
       "Image/Layer/Smart objects/Close contents without saving",
@@ -330,6 +333,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Transform… — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Transform…");
+    covers("command:media.paged.image.command.smartTransform");
     await expectGreyedAndInert(bare, "Image/Layer/Smart objects/Transform…");
     const out = await clickEntry(
       live,
@@ -346,6 +350,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Replace contents… — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Replace contents…");
+    covers("command:media.paged.image.command.smartReplaceContents");
     await expectGreyedAndInert(
       bare,
       "Image/Layer/Smart objects/Replace contents…",
@@ -365,6 +370,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Relink to file… — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Relink to file…");
+    covers("command:media.paged.image.command.smartRelink");
     await expectGreyedAndInert(
       bare,
       "Image/Layer/Smart objects/Relink to file…",
@@ -384,6 +390,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Update from file… — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Update from file…");
+    covers("command:media.paged.image.command.smartUpdateLinked");
     await expectGreyedAndInert(
       bare,
       "Image/Layer/Smart objects/Update from file…",
@@ -403,6 +410,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Embed linked — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Embed linked");
+    covers("command:media.paged.image.command.smartEmbed");
     await expectGreyedAndInert(bare, "Image/Layer/Smart objects/Embed linked");
     const out = await clickEntry(
       live,
@@ -419,6 +427,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Export contents… — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Export contents…");
+    covers("command:media.paged.image.command.smartExportContents");
     await expectGreyedAndInert(
       bare,
       "Image/Layer/Smart objects/Export contents…",
@@ -438,6 +447,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Layer/Smart objects/Place selected page items — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Layer/Smart objects/Place selected page items");
+    covers("command:media.paged.image.command.smartPlacePageItems");
     await expectGreyedAndInert(
       bare,
       "Image/Layer/Smart objects/Place selected page items",
@@ -1804,6 +1814,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Filter/Convert for smart filters — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Filter/Convert for smart filters");
+    covers("command:media.paged.image.command.convertForSmartFilters");
     await expectGreyedAndInert(bare, "Image/Filter/Convert for smart filters");
     const out = await clickEntry(
       live,
@@ -1820,6 +1831,7 @@ test.describe.serial("plugin menus — paged.image", () => {
 
   test("Image/Filter/Blur/Gaussian blur… — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Filter/Blur/Gaussian blur…");
+    covers("command:media.paged.image.command.filterGaussianBlur");
     await expectGreyedAndInert(bare, "Image/Filter/Blur/Gaussian blur…");
     const out = await clickEntry(
       live,
