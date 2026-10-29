@@ -456,9 +456,9 @@ describe("Symbols panel — rendered against the engine", () => {
       await h.host.selection.set([poly("s1")]);
       const panel = await mountPanel(h, makeSymbolsPanel);
       const ids = () =>
-        panel.all("[data-draw-symbol-row]").map((r) =>
-          r.getAttribute("data-draw-symbol-row"),
-        );
+        panel
+          .all("[data-draw-symbol-row]")
+          .map((r) => r.getAttribute("data-draw-symbol-row"));
       const had = new Set(ids());
       await panel.click("[data-draw-symbol-define]");
       await h.host.selection.set([poly("s2")]);
