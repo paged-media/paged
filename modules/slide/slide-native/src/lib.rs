@@ -884,7 +884,9 @@ impl Builder<'_> {
                 crop,
                 image_effects,
             } => {
-                self.dml.picture(&Picture {
+                // Engine ADR 1037 — the blip's picture effects the engine
+                // models ride the frame's filter stack; the rest are reported.
+                let mapped = self.dml.picture(&Picture {
                     opacity: it.opacity,
                     effects: image_effects.clone(),
                 });
@@ -940,6 +942,7 @@ impl Builder<'_> {
                     opacity: tr.opacity,
                     drop_shadow: tr.shadow,
                     effects: tr.effects,
+                    image_adjustments: mapped.adjustments,
                     ..Rectangle::new(it.id.clone(), path.bounds())
                 };
                 if !path.is_plain_box() {

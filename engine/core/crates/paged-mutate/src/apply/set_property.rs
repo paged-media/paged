@@ -3383,6 +3383,36 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // Engine ADR 1037 — the picture's filter stack, replaced whole. Every
+        // op is range-checked; the inverse carries the stack it replaced.
+        (
+            NodeId::Rectangle(_) | NodeId::Oval(_) | NodeId::Polygon(_),
+            PropertyPath::FrameImageAdjustments,
+        ) => {
+            let Value::ImageAdjustments(ops) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "ImageAdjustments".to_string(),
+                });
+            };
+            if let Some(bad) = ops.iter().find(|op| !op.is_valid()) {
+                return Err(OperationError::InvalidValue {
+                    node: node.clone(),
+                    path,
+                    reason: format!("the {} op has a value out of its range", bad.name()),
+                });
+            }
+            let slot = find_image_adjustments_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = std::mem::replace(slot, ops.clone());
+            (
+                Value::ImageAdjustments(prev),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
         (
             NodeId::Rectangle(_) | NodeId::Polygon(_) | NodeId::GraphicLine(_),
             PropertyPath::FrameStrokeMiterLimit,
