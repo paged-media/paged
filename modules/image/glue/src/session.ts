@@ -732,6 +732,13 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
     shadow: readonly [number, number, number],
     highlight: readonly [number, number, number],
   ): Promise<boolean>;
+  /** FREE TRANSFORM (Edit ▸ Free Transform): resample the active layer —
+   *  or the selection's pixels — through the forward image-px `matrix`
+   *  (`geom.warp_projective`). One undo step. */
+  transformLayer(
+    matrix: readonly number[],
+    interp?: "bilinear" | "bicubic",
+  ): Promise<boolean>;
   /** A parametric distortion (geom.warp_backward). */
   applyWarp(
     kind: WarpKindName,
@@ -1911,6 +1918,7 @@ const PICK = defineMessages("image.curvesPick", {
  *  status line reports them (message keys; `applyEffect` and `layerOp`
  *  read them through `t`). */
 const E = defineMessages("image.effect", {
+  freeTransform: "Free transform",
   redEye: "Red eye",
   patch: "Patch",
   median: "Median",
@@ -5252,6 +5260,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
 
+    async transformLayer(matrix, interp = "bicubic") {
+      return this.applyEffect(E.freeTransform, (h) =>
+        engine!.applyProjective(h, matrix, interp),
+      );
+    },
     async applyWarp(kind, amount, frequency = 1) {
       return this.applyEffect(
         t(E.distort, { kind: warpKindLabel(kind) }),

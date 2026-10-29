@@ -272,6 +272,7 @@ fn the_rotate_gesture_turns_the_nested_group_once() {
         page_id: PageId("p1".to_string()),
         point_in_page: (200.0, 100.0),
         pivot_in_page: Some((100.0, 100.0)),
+        shear_axis: None,
     };
     let handle = m
         .begin_gesture(

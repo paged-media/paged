@@ -276,6 +276,7 @@
       "media.paged.image.command.vectorMaskToggle",
       "media.paged.image.command.vectorMaskInvert",
       "media.paged.image.command.vectorMaskRasterize",
+      "media.paged.image.command.freeTransform",
       "media.paged.image.command.modeBits8",
       "media.paged.image.command.modeBits16",
       "media.paged.image.command.modeGray",
@@ -289,6 +290,7 @@
     ],
     "tools": [
       "media.paged.image.tool.crop",
+      "media.paged.image.tool.transform",
       "media.paged.image.tool.move",
       "media.paged.image.tool.marqueeRect",
       "media.paged.image.tool.marqueeEllipse",
@@ -421,6 +423,14 @@
         {
           "id": "media.paged.image.command.claimTiles",
           "title": "Serve image tiles to the renderer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.freeTransform",
+          "title": "Free transform",
           "args": {
             "kind": "struct",
             "fields": {}

@@ -150,6 +150,58 @@ export function renderPreviewShape(
   // `kind` exists only on the text variant today, so the presence check
   // alone narrows BOTH branches (a compound `p.kind === "text"` check
   // would leave the rect fallback un-narrowed).
+  // Extensions ADR 339 — the HANDLE primitive: a marker at a constant
+  // screen size (translate to its centre, scale by 1/camera), in the
+  // selection chrome's look — white with the selection stroke, filled
+  // with it while dragged. Never a hit target itself: the tool (or the
+  // SDK for a bundle's handle set) answers hits from geometry.
+  if ("kind" in p && p.kind === "handle") {
+    if (p.shape === "rotateZone") return null;
+    const inv = 1 / props.camera.scale;
+    const size = Math.min(24, Math.max(4, p.sizePx ?? 8));
+    const fill = p.active ? "var(--overlay-selection)" : "white";
+    return (
+      <g
+        transform={`translate(${pr.x + p.x}, ${pr.y + p.y}) scale(${inv})`}
+        pointerEvents="none"
+        data-preview-handle={p.shape}
+      >
+        {p.shape === "square" ? (
+          <rect
+            x={-size / 2}
+            y={-size / 2}
+            width={size}
+            height={size}
+            fill={fill}
+            stroke="var(--overlay-selection)"
+            strokeWidth={1}
+          />
+        ) : p.shape === "round" ? (
+          <circle
+            r={size / 2}
+            fill={fill}
+            stroke="var(--overlay-selection)"
+            strokeWidth={1}
+          />
+        ) : (
+          <>
+            <circle
+              r={size / 2}
+              fill="white"
+              fillOpacity={0.6}
+              stroke="var(--overlay-selection)"
+              strokeWidth={1}
+            />
+            <path
+              d={`M ${-size} 0 H ${size} M 0 ${-size} V ${size}`}
+              stroke="var(--overlay-selection)"
+              strokeWidth={1}
+            />
+          </>
+        )}
+      </g>
+    );
+  }
   if ("kind" in p) {
     const label = sanitizePreviewText(p.text);
     if (!label) return null;
