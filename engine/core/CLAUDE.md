@@ -105,6 +105,13 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
   `interpret` returns the art (fills, strokes, clips, images, gradients) in default user
   space; the renderer's `pipeline/placed_eps.rs` lays it into the display list. Geometry on
   kurbo, decode filters from `paged-raster::filters`, colour maths from `paged-color::math`.
+- `crates/paged-geom/` — the path kernels (outline stroke, offset, simplify, the
+  Pathfinder booleans, the planar arrangement, the `PathAnchor` ↔ kurbo/flo_curves
+  converters), moved out of `paged-mutate` (which re-exports each module under its
+  old path) so the renderer reaches them (plan C8, ADR 1042).
+  `crates/paged-vector-fx/` — live vector effects (ADR 1042): the stack's vector
+  entries run on an item's source outline, cached by hash; `bake` is the item the
+  renderer draws, IDML export writes and `expandAppearance` keeps.
 - `crates/paged-psd/` — PSD/PSB model, parser, preservation writer, composite decode,
   layer records (also of a layered TIFF's tag 37724). `crates/paged-pixel/` — the frozen
   pixel types (`PixelFormat`, tiles, regions). Both moved from paged.image (PM-0014,
