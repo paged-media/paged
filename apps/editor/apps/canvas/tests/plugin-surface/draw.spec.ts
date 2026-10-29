@@ -1190,7 +1190,7 @@ test.describe("plugin surface · paged.draw", () => {
     };
     const S = "media.paged.draw.tool.symbol";
 
-    covers(`tool:${S}Sprayer`);
+    covers("tool:media.paged.draw.tool.symbolSprayer");
     await activateToolCommand(page, `${S}Sprayer`);
     await stroke([150, 450], [260, 450]);
     // The first write on a cold dev server can take a while.
@@ -1200,6 +1200,12 @@ test.describe("plugin surface · paged.draw", () => {
       })
       .toBeGreaterThan(1);
 
+    covers("tool:media.paged.draw.tool.symbolShifter");
+    covers("tool:media.paged.draw.tool.symbolScruncher");
+    covers("tool:media.paged.draw.tool.symbolSizer");
+    covers("tool:media.paged.draw.tool.symbolSpinner");
+    covers("tool:media.paged.draw.tool.symbolStainer");
+    covers("tool:media.paged.draw.tool.symbolScreener");
     const cases: [
       string,
       [number, number],
@@ -1222,7 +1228,6 @@ test.describe("plugin surface · paged.draw", () => {
       ["Screener", [300, 300], [302, 300], (_b, a) => (a.opacity ?? 100) < 100],
     ];
     for (const [name, from, to, changed] of cases) {
-      covers(`tool:${S}${name}`);
       await designer.selectElements([{ kind: "instance", id: instance }]);
       const before = await carried();
       await activateToolCommand(page, `${S}${name}`);
@@ -1238,7 +1243,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     // The 9-Slice Guides tool: the left guide of the selected instance's
     // symbol is drawn a quarter in; a drag sets the symbol's guides.
-    covers(`tool:${S}NineSlice`);
+    covers("tool:media.paged.draw.tool.symbolNineSlice");
     await designer.selectElements([{ kind: "instance", id: instance }]);
     await activateToolCommand(page, `${S}NineSlice`);
     const now = await carried();

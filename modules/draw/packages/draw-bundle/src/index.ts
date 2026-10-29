@@ -1742,6 +1742,8 @@ export {
 } from "./handlers/preview-shapes";
 export {
   LIQUIFY_OPTIONS,
+  SYMBOLISM_OPTIONS,
+  SYMBOL_SPRAYER_OPTIONS,
   WARP_OPTIONS,
   TWIRL_OPTIONS,
   PUCKER_OPTIONS,

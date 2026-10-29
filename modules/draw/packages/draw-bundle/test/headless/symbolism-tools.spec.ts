@@ -197,20 +197,32 @@ describe("draw conformance — live symbols (WP6.8) [plugin-draw.symbols]", () =
     expect((await readEngineSymbols(h.host))[0]!.instances.length).toBe(before);
   });
 
+  // Each row's id is written out: the coverage gate reads covers() statically.
   const MODIFIERS = [
-    ["shifter", (b: number[], a: number[]) => a[4]! > b[4]!],
-    ["scruncher", (b: number[], a: number[]) => a[4]! !== b[4]!],
-    ["sizer", (b: number[], a: number[]) => a[0]! > b[0]!],
+    [
+      "shifter",
+      (b: number[], a: number[]) => a[4]! > b[4]!,
+      () => covers("tool:media.paged.draw.tool.symbolShifter"),
+    ],
+    [
+      "scruncher",
+      (b: number[], a: number[]) => a[4]! !== b[4]!,
+      () => covers("tool:media.paged.draw.tool.symbolScruncher"),
+    ],
+    [
+      "sizer",
+      (b: number[], a: number[]) => a[0]! > b[0]!,
+      () => covers("tool:media.paged.draw.tool.symbolSizer"),
+    ],
     [
       "spinner",
       (b: number[], a: number[]) => Math.abs(a[1]!) > 1e-6 && b[1] === 0,
+      () => covers("tool:media.paged.draw.tool.symbolSpinner"),
     ],
   ] as const;
-  for (const [kind, moved] of MODIFIERS) {
+  for (const [kind, moved, cover] of MODIFIERS) {
     it(`the Symbol ${kind} changes only the instances under the brush, in ONE undo step`, async () => {
-      covers(
-        `tool:media.paged.draw.tool.symbol${kind[0]!.toUpperCase()}${kind.slice(1)}`,
-      );
+      cover();
       const before = await picture(h);
       const far = (await states(h)).find(
         (s) => String(s.id.id) === String(placed[2]!.id),
@@ -339,7 +351,7 @@ describe("draw conformance — live symbols (WP6.8) [plugin-draw.symbols]", () =
   });
 
   it("Symbol Options sets the name and the 9-slice guides, and [] removes them — one undo step each", async () => {
-    covers(`command:${C}.symbolOptions`);
+    covers("command:media.paged.draw.command.symbolOptions");
     await h.objects.invoke(`${C}.symbolOptions`, {
       symbol: square,
       name: "Tile",
@@ -367,7 +379,7 @@ describe("draw conformance — live symbols (WP6.8) [plugin-draw.symbols]", () =
   });
 
   it("Replace Symbol points the selected instances at another symbol, keeping their ids, ONE undo step", async () => {
-    covers(`command:${C}.replaceSymbol`);
+    covers("command:media.paged.draw.command.replaceSymbol");
     await h.host.selection.set([poly("b")]);
     const small = (await applyDefineSymbol(h.host, { name: "Small" }))!.id;
     await h.host.selection.set([placed[0]!, placed[1]!]);
