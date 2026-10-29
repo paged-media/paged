@@ -49,11 +49,19 @@
 //!   shadow, effects and dash pattern back as the neutral IR, which
 //!   `paged_ooxml::drawingml::write` writes as DrawingML.
 //!
+//! - **For a module that places items through mutations** ([`native`]):
+//!   [`native::Lowering`] runs the whole chain for a shape's or a
+//!   picture's authored DrawingML and restates the result as
+//!   [`native::NativeFx`], serialisable, colours as `#RRGGBB` (doc ADR
+//!   618).
+//!
 //! What the engine cannot hold is never dropped silently: it goes to
 //! [`Mapper::losses`], one line per kind of loss, for the module's
 //! diagnostics.
 
 use std::collections::BTreeMap;
+
+pub mod native;
 
 use paged_model::{
     ArrowheadType, ColorEntry, ColorModel, ColorSpace, DropShadowSetting, FeatherParams,

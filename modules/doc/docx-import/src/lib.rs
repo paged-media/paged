@@ -29,9 +29,9 @@ use docx_core::{
     Block, BodyHeld, BreakKind, CellPath, DocxDocument, Float, FloatPosition, FloatWrap,
     HeaderFooter, HeaderFooterKind, HeaderFooterRef, HeaderFooterSet, Image, Justification,
     LineRule, LineSpacing, ListKind, ListMarker, MergeField, Note, NoteProps, NoteRestart,
-    ParaProps, Paragraph, ParagraphHeld, PositionalTab, PtabAlignment, PtabBase, Run, RunBreak,
-    RunProps, RunSource, RunSymbol, Section, SectionKind, Style, StyleCatalog, StyleKind, TabStop,
-    VertAlign, LINE_BREAK, SOFT_HYPHEN,
+    ParaProps, Paragraph, ParagraphHeld, PictureLook, PositionalTab, PtabAlignment, PtabBase, Run,
+    RunBreak, RunProps, RunSource, RunSymbol, Section, SectionKind, Style, StyleCatalog, StyleKind,
+    TabStop, VertAlign, LINE_BREAK, SOFT_HYPHEN,
 };
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_office_word as w10;
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_vml as vml;
@@ -66,9 +66,29 @@ struct ImportCtx<'a> {
     hidden_styles: std::collections::HashSet<String>,
     /// The document theme, for theme colours and fonts (doc ADR 609).
     theme: Option<Theme>,
+    /// The DrawingML look of the pictures of the part being mapped, by
+    /// `wp:docPr/@id`, in document order (doc ADR 618): read once through
+    /// the shared DrawingML reader, which works on the element tree.
+    looks: std::cell::RefCell<Looks>,
 }
 
+/// Pictures' looks by `wp:docPr/@id`, each id's in document order (an id
+/// Word should keep unique may repeat in a hand-made file).
+type Looks = std::collections::HashMap<u32, std::collections::VecDeque<Option<PictureLook>>>;
+
 impl ImportCtx<'_> {
+    /// Read the looks of the pictures in `part` (the part about to be
+    /// mapped), replacing the previous part's.
+    fn load_looks(&self, part: &[u8]) {
+        *self.looks.borrow_mut() = picture_looks(part);
+    }
+
+    /// The look of the next picture whose `wp:docPr` is `id`.
+    fn take_look(&self, id: u32) -> Option<Box<PictureLook>> {
+        let look = self.looks.borrow_mut().get_mut(&id)?.pop_front()??;
+        Some(Box::new(look))
+    }
+
     fn bump(&self, f: impl FnOnce(&mut BodyHeld)) {
         let mut h = self.held.get();
         f(&mut h);
@@ -355,6 +375,7 @@ pub fn import_docx_with_package(
             held: std::cell::Cell::new(BodyHeld::default()),
             hidden_styles: wml_styles.as_ref().map(hidden_styles).unwrap_or_default(),
             theme: theme.clone(),
+            looks: std::cell::RefCell::new(picture_looks(doc_bytes)),
             images: ImageResolver {
                 rels: doc_rels,
                 package: &pkg,
@@ -414,10 +435,10 @@ fn map_notes(pkg: &OpcPackage, main_part: &str, ctx: &ImportCtx) -> Vec<Note> {
     let mut out = Vec::new();
 
     if let Some(name) = note_part(pkg, main_part, "/footnotes") {
-        if let Some(parsed) = pkg
-            .part(&name)
-            .and_then(|b| parse_root::<wml::Footnotes>(&name, b).ok())
-        {
+        if let Some(parsed) = pkg.part(&name).and_then(|b| {
+            ctx.load_looks(b);
+            parse_root::<wml::Footnotes>(&name, b).ok()
+        }) {
             for f in &parsed.footnote {
                 if is_separator(&f.r#type) {
                     continue;
@@ -431,10 +452,10 @@ fn map_notes(pkg: &OpcPackage, main_part: &str, ctx: &ImportCtx) -> Vec<Note> {
         }
     }
     if let Some(name) = note_part(pkg, main_part, "/endnotes") {
-        if let Some(parsed) = pkg
-            .part(&name)
-            .and_then(|b| parse_root::<wml::Endnotes>(&name, b).ok())
-        {
+        if let Some(parsed) = pkg.part(&name).and_then(|b| {
+            ctx.load_looks(b);
+            parse_root::<wml::Endnotes>(&name, b).ok()
+        }) {
             for e in &parsed.endnote {
                 if is_separator(&e.r#type) {
                     continue;
@@ -596,6 +617,7 @@ fn header_footer_paragraphs(
     bytes: &[u8],
     ctx: &ImportCtx,
 ) -> Vec<Paragraph> {
+    ctx.load_looks(bytes);
     if footer {
         parse_root::<wml::Footer>(name, bytes)
             .ok()
@@ -2045,10 +2067,25 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
 /// (Typed navigation avoids linking `ooxmlsdk`'s serializer, keeping the wasm
 /// lean — `to_xml()` would pull in the whole schema's `write_to` codegen.)
 fn map_drawing(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Image> {
-    let (width_emu, height_emu, graphic, float) = match d.drawing_choice.as_ref()? {
-        wml::DrawingChoice::Inline(i) => (i.extent.cx, i.extent.cy, &i.graphic, None),
-        wml::DrawingChoice::Anchor(a) => (a.extent.cx, a.extent.cy, &a.graphic, Some(map_float(a))),
+    let (width_emu, height_emu, graphic, float, doc_pr) = match d.drawing_choice.as_ref()? {
+        wml::DrawingChoice::Inline(i) => (
+            i.extent.cx,
+            i.extent.cy,
+            &i.graphic,
+            None,
+            Some(i.doc_properties.id),
+        ),
+        wml::DrawingChoice::Anchor(a) => (
+            a.extent.cx,
+            a.extent.cy,
+            &a.graphic,
+            Some(map_float(a)),
+            a.doc_properties.as_ref().map(|p| p.id),
+        ),
     };
+    // The look is taken before anything can fail, so a drawing that is not
+    // placed still consumes its own.
+    let look = doc_pr.and_then(|id| ctx.take_look(id));
     let embed_id = blip_embed(graphic)?;
     let (bytes, mime) = ctx.images.resolve(embed_id)?;
     Some(Image {
@@ -2058,7 +2095,59 @@ fn map_drawing(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Image> {
         height_emu,
         float,
         band_offset_emu: None,
+        look,
     })
+}
+
+/// The WordprocessingML drawing namespace (`wp:`).
+const NS_WP: &[u8] = b"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
+
+/// Every DrawingML picture's look in a part (doc ADR 618), by its
+/// `wp:docPr/@id`: `pic:spPr` (fill, outline, effect list) and the
+/// `a:blip` (alpha, picture effects), read by the shared DrawingML reader
+/// over the `wp:inline` / `wp:anchor` subtrees alone. A drawing that is not
+/// a picture, or a plain one, holds `None`.
+fn picture_looks(part: &[u8]) -> Looks {
+    use paged_ooxml::drawingml;
+    use paged_ooxml::tree::{self, Ns};
+    let mut out = Looks::new();
+    let Ok(drawings) = tree::subtrees(part, |uri, local| {
+        uri == NS_WP && (local == "inline" || local == "anchor")
+    }) else {
+        return out;
+    };
+    let no_rels = |_: &str| None;
+    for d in &drawings {
+        let Some(id) = d
+            .children
+            .iter()
+            .find(|c| c.local == "docPr")
+            .and_then(|p| p.attr_u32("id"))
+        else {
+            continue;
+        };
+        let pic = d
+            .path(&[(Ns::A, "graphic"), (Ns::A, "graphicData")])
+            .and_then(|g| g.children.iter().find(|c| c.local == "pic"));
+        let look = pic.map(|pic| PictureLook {
+            shape: pic
+                .children
+                .iter()
+                .find(|c| c.local == "spPr")
+                .map(|sp| drawingml::shape_properties(sp, &no_rels))
+                .unwrap_or_default(),
+            blip: pic
+                .children
+                .iter()
+                .find(|c| c.local == "blipFill")
+                .map(|b| drawingml::blip(b, &no_rels))
+                .unwrap_or_default(),
+        });
+        out.entry(id)
+            .or_default()
+            .push_back(look.filter(|l| !l.is_plain()));
+    }
+    out
 }
 
 /// A `wp:anchor`'s position and wrap (thoughts ADR 035), as written.
@@ -2221,6 +2310,7 @@ fn map_pict(p: &wml::Picture, ctx: &ImportCtx) -> Option<Image> {
             height_emu,
             float: None,
             band_offset_emu,
+            look: None,
         })
     })
 }

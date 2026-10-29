@@ -27,6 +27,7 @@
 //! lowering and the engine see concrete values while save-back can write
 //! the reference again.
 
+use paged_ooxml::colour::{hsl_to_rgb, rgb_to_hsl};
 use serde::{Deserialize, Serialize};
 
 /// A reference to a theme colour, as Word writes it on `w:color`, `w:shd`
@@ -145,6 +146,36 @@ impl Theme {
             .map(|(_, c)| c.as_str())
     }
 
+    /// The colour scheme as DrawingML's scheme slots, for the shared
+    /// DrawingML resolver (doc ADR 618): each slot by its `a:clrScheme`
+    /// element name (`dk1`, `accent1`, `hlink`, …), and `tx1`, `bg1`,
+    /// `tx2`, `bg2` through `w:clrSchemeMapping`.
+    pub fn drawingml_slots(&self) -> Vec<(String, paged_ooxml::drawingml::Rgba)> {
+        let rgba = |hex: &str| {
+            u32::from_str_radix(hex, 16)
+                .ok()
+                .map(paged_ooxml::drawingml::Rgba::from_hex)
+        };
+        let mut out: Vec<(String, paged_ooxml::drawingml::Rgba)> = SCHEME_SLOTS
+            .iter()
+            .filter_map(|(word, element)| {
+                let (_, hex) = self.colors.iter().find(|(s, _)| s == word)?;
+                Some((element.to_string(), rgba(hex)?))
+            })
+            .collect();
+        for (alias, word) in [
+            ("tx1", "text1"),
+            ("bg1", "background1"),
+            ("tx2", "text2"),
+            ("bg2", "background2"),
+        ] {
+            if let Some(c) = self.base_color(word).and_then(rgba) {
+                out.push((alias.to_string(), c));
+            }
+        }
+        out
+    }
+
     /// The family a theme font value names (`minorHAnsi`, `majorEastAsia`,
     /// `minorBidi`, …).
     pub fn font(&self, slot: &str) -> Option<&str> {
@@ -207,59 +238,6 @@ pub fn tinted(rgb: &str, tint: Option<u8>, shade: Option<u8>) -> Option<String> 
     let (r, g, b) = hsl_to_rgb(h, s, l.clamp(0.0, 1.0));
     let byte = |v: f64| (v * 255.0).round().clamp(0.0, 255.0) as u8;
     Some(format!("{:02X}{:02X}{:02X}", byte(r), byte(g), byte(b)))
-}
-
-fn rgb_to_hsl(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let l = (max + min) / 2.0;
-    if (max - min).abs() < 1e-12 {
-        return (0.0, 0.0, l);
-    }
-    let d = max - min;
-    let s = if l > 0.5 {
-        d / (2.0 - max - min)
-    } else {
-        d / (max + min)
-    };
-    let h = if max == r {
-        (g - b) / d + if g < b { 6.0 } else { 0.0 }
-    } else if max == g {
-        (b - r) / d + 2.0
-    } else {
-        (r - g) / d + 4.0
-    };
-    (h / 6.0, s, l)
-}
-
-fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (f64, f64, f64) {
-    if s <= 0.0 {
-        return (l, l, l);
-    }
-    let q = if l < 0.5 {
-        l * (1.0 + s)
-    } else {
-        l + s - l * s
-    };
-    let p = 2.0 * l - q;
-    let hue = |mut t: f64| {
-        if t < 0.0 {
-            t += 1.0;
-        }
-        if t > 1.0 {
-            t -= 1.0;
-        }
-        if t < 1.0 / 6.0 {
-            p + (q - p) * 6.0 * t
-        } else if t < 0.5 {
-            q
-        } else if t < 2.0 / 3.0 {
-            p + (q - p) * (2.0 / 3.0 - t) * 6.0
-        } else {
-            p
-        }
-    };
-    (hue(h + 1.0 / 3.0), hue(h), hue(h - 1.0 / 3.0))
 }
 
 #[cfg(test)]
