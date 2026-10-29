@@ -36,6 +36,9 @@
 // UX F-14 (object commands enabled with nothing selected) is SH-8, fixed
 // (ADR 249); the View toggles' checked state is SH-4, fixed.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { expect, test, type Page } from "@playwright/test";
 
 import { covers } from "@paged-media/test-kit";
@@ -58,6 +61,7 @@ import {
   setMode,
   type MenuRow,
 } from "./harness/shell-surface";
+import { REPO_ROOT } from "./harness/fixtures";
 
 const HOST_MENU = [
   "Help/Documentation",
@@ -190,7 +194,43 @@ const HOST_MENU = [
   "Data/Data sources…",
   "Data/Bindings…",
   "Data/Dataset preview…",
+  // Editor ADR 309 — the Transparency and Appearance panels beside Effects….
+  "Object/Effects/Transparency…",
+  "Object/Effects/Appearance…",
+  // …and Object ▸ Effects ▸ <group> ▸ <effect>, one row per kind core's
+  // catalog describes (EFFECT_ROWS below).
 ] as const;
+
+/** The Effect menu's rows: one per core effect kind (effect-menu.ts). */
+const EFFECT_ROWS: readonly string[] = (
+  JSON.parse(
+    readFileSync(
+      join(
+        REPO_ROOT,
+        "../../platform/extensions/packages/plugin-api/src/catalog.json",
+      ),
+      "utf8",
+    ),
+  ) as { effectKinds: Array<{ title: string; category: string }> }
+).effectKinds.map(
+  (k) =>
+    `Object/Effects/${
+      (
+        {
+          stylize: "Stylize",
+          blur: "Blur",
+          noise: "Noise",
+          color: "Color",
+          distortAndTransform: "Distort & Transform",
+          path: "Path",
+          pathfinder: "Pathfinder",
+          warp: "Warp",
+          convertToShape: "Convert to Shape",
+          rasterize: "Rasterize",
+        } as Record<string, string>
+      )[k.category] ?? k.category
+    }/${k.title}`,
+);
 
 const HOST_TOPS = [
   "File",
@@ -292,7 +332,7 @@ test.describe("the host menu bar", () => {
   }) => {
     await openShell(page, { doc: true });
     const live = hostRows(await liveMenu(page)).map((r) => r.path);
-    expect([...live].sort()).toEqual([...HOST_MENU].sort());
+    expect([...live].sort()).toEqual([...HOST_MENU, ...EFFECT_ROWS].sort());
   });
 
   for (const ctx of CONTEXTS) {

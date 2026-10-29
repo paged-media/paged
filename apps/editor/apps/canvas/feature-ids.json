@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 795,
+    "command": 796,
     "keybinding": 164,
-    "menu": 562,
-    "panel": 142,
+    "menu": 565,
+    "panel": 144,
     "tool": 114
   },
   "features": [
@@ -3511,6 +3511,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.effect.add.*",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.effects.globalLight",
       "kind": "command",
       "owner": "editor"
@@ -6951,12 +6956,27 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Effects/*/*",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Effects/Appearance…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Effects/Effects…",
       "kind": "menu",
       "owner": "editor"
     },
     {
       "id": "menu:Object/Effects/Global light…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Effects/Transparency…",
       "kind": "menu",
       "owner": "editor"
     },
@@ -7886,6 +7906,11 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.appearance",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.artboards",
       "kind": "panel",
       "owner": "editor"
@@ -8337,6 +8362,11 @@
     },
     {
       "id": "panel:paged.text-wrap",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.transparency",
       "kind": "panel",
       "owner": "editor"
     },
