@@ -59,6 +59,7 @@ mod reads;
 mod selection;
 mod styles;
 mod swatches;
+mod symbols;
 mod tables;
 mod text;
 mod word_structure;
@@ -77,6 +78,7 @@ const ROW_SOURCES: &[&str] = &[
     include_str!("selection.rs"),
     include_str!("styles.rs"),
     include_str!("swatches.rs"),
+    include_str!("symbols.rs"),
     include_str!("tables.rs"),
     include_str!("text.rs"),
     include_str!("word_structure.rs"),

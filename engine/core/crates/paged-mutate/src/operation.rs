@@ -75,6 +75,8 @@ pub enum NodeId {
     Polygon(String),
     GraphicLine(String),
     Group(String),
+    /// Engine ADR 1039 — a symbol instance (`Spread::instances`).
+    Instance(String),
     // Structural parents — addressable so InsertNode / MoveNode can
     // name where a node lands.
     Spread(String),
@@ -149,6 +151,7 @@ impl NodeId {
             | NodeId::Polygon(s)
             | NodeId::GraphicLine(s)
             | NodeId::Group(s)
+            | NodeId::Instance(s)
             | NodeId::Spread(s)
             | NodeId::Page(s)
             | NodeId::Story(s)
@@ -170,6 +173,7 @@ impl NodeId {
             NodeId::Polygon(_) => "Polygon",
             NodeId::GraphicLine(_) => "GraphicLine",
             NodeId::Group(_) => "Group",
+            NodeId::Instance(_) => "Instance",
             NodeId::Spread(_) => "Spread",
             NodeId::Page(_) => "Page",
             NodeId::Story(_) => "Story",
@@ -1535,6 +1539,15 @@ pub enum PropertyPath {
     /// Rectangle, Oval or Polygon, or hosts pasted-in content. No IDML
     /// attribute: the writer lowers a clip group to paste-into.
     GroupClip,
+    /// Engine ADR 1039 — a symbol instance's colour tint:
+    /// `Value::Lengths([r, g, b, amount])` (sRGB and amount `0..=1`); the
+    /// empty list removes it. Only `NodeId::Instance` carries it. Native.
+    SymbolInstanceTint,
+    /// Engine ADR 1039 — a symbol instance's 9-slice guides:
+    /// `Value::Lengths([left, top, right, bottom])` insets in definition
+    /// space; the empty list falls back to the definition's. Only
+    /// `NodeId::Instance` carries it. Native.
+    SymbolInstanceNineSlice,
 
     // ---- R-11 — drop-shadow attributes and the global light -------
     /// `<DropShadowSetting BlendMode>`; `""` is InDesign's `Multiply`.
@@ -2016,6 +2029,8 @@ impl PropertyPath {
             PropertyPath::GroupIsolateBlending => "group.isolateBlending",
             PropertyPath::GroupKnockout => "group.knockout",
             PropertyPath::GroupClip => "group.clip",
+            PropertyPath::SymbolInstanceTint => "symbolInstance.tint",
+            PropertyPath::SymbolInstanceNineSlice => "symbolInstance.nineSlice",
             PropertyPath::FrameDropShadowBlendMode => "frame.dropShadowBlendMode",
             PropertyPath::FrameDropShadowSpread => "frame.dropShadowSpread",
             PropertyPath::FrameDropShadowNoise => "frame.dropShadowNoise",
@@ -3968,6 +3983,84 @@ pub enum Operation {
         story_ids: Vec<String>,
         #[serde(default)]
         added: Vec<String>,
+    },
+    /// Engine ADR 1039 — make a symbol definition `symbol_id` named `name`
+    /// from the page items `sources` (copied whole, as a snippet copies
+    /// them, into definition space: the centre of their union box becomes
+    /// the registration point). With `replace` the sources leave the page
+    /// and an instance `instance_id` takes their place, drawn exactly where
+    /// they were (Illustrator's New Symbol). `instance_id: None` ⇒ the
+    /// applier mints one; the applied op carries it.
+    /// Inverse: `RestoreSymbolState`.
+    CreateSymbol {
+        symbol_id: String,
+        name: String,
+        sources: Vec<NodeId>,
+        #[serde(default)]
+        replace: bool,
+        #[serde(default)]
+        instance_id: Option<String>,
+        #[serde(default)]
+        nine_slice: Option<[f32; 4]>,
+    },
+    /// Engine ADR 1039 — edit the definition `symbol_id`: new artwork from
+    /// `sources` (when non-empty; the revision moves on and every instance
+    /// draws the new artwork, its registration point where the old one
+    /// was), a new `name`, new 9-slice guides (`Some([])` clears them). With
+    /// `replace` the sources become an instance, as for `CreateSymbol`.
+    /// Inverse: `RestoreSymbolState`.
+    RedefineSymbol {
+        symbol_id: String,
+        #[serde(default)]
+        sources: Vec<NodeId>,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        nine_slice: Option<Vec<f32>>,
+        #[serde(default)]
+        replace: bool,
+        #[serde(default)]
+        instance_id: Option<String>,
+    },
+    /// Engine ADR 1039 — place an instance `instance_id` of `symbol_id` on
+    /// the spread `spread` (its `Self`), on top of its z-order:
+    /// `transform` maps definition space to spread space.
+    /// Inverse: `RestoreSymbolState`.
+    PlaceSymbolInstance {
+        symbol_id: String,
+        spread: String,
+        transform: [f32; 6],
+        #[serde(default)]
+        instance_id: Option<String>,
+        #[serde(default)]
+        nine_slice: Option<[f32; 4]>,
+    },
+    /// Engine ADR 1039 — Break Link to Symbol: the instance `instance`
+    /// becomes the definition's artwork as native page items at the
+    /// instance's place in the z-order (one group when there is more than
+    /// one root or the instance overrides opacity or blending), under the
+    /// ids `ids` / `story_ids` (pre-order: the wrapping group first, then
+    /// each root's subtree; empty ⇒ minted).
+    /// Inverse: `RestoreSymbolState`.
+    BreakSymbolLink {
+        instance: String,
+        #[serde(default)]
+        ids: Vec<String>,
+        #[serde(default)]
+        story_ids: Vec<String>,
+    },
+    /// Engine ADR 1039 — remove the definition `symbol_id`; every instance
+    /// of it is broken into native items first (so nothing disappears).
+    /// Inverse: `RestoreSymbolState`.
+    DeleteSymbol {
+        symbol_id: String,
+    },
+    /// Engine ADR 1039, inverse-only — put back the symbol store, the
+    /// spreads and the stories a symbol op changed. `state` is the JSON of
+    /// the captured state (`apply/symbol.rs`); its inverse is the state it
+    /// replaced.
+    RestoreSymbolState {
+        state: String,
     },
     /// W1.20 (groups v2) — move/scale/rotate a group AS A UNIT. Unlike
     /// the v1 `SetProperty(Group, FrameTransform)` arm (which stores

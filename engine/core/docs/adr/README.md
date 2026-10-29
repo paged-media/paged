@@ -161,6 +161,7 @@ is not written yet.
 | [1032](1032-one-cms-with-intents-and-bpc.md) | One colour API with explicit intents and black-point compensation on every backend | Accepted 2026-10-24 |
 | [1033](1033-an-eps-is-drawn-from-its-postscript.md) | An EPS is drawn from its PostScript, by `paged-ps` | Accepted 2026-10-24 |
 | [1036](1036-a-snippet-carries-opacity-masks-and-names.md) | A snippet carries its opacity masks and item names; an inline PDF is readable | Accepted 2026-10-27 |
+| [1039](1039-a-symbol-is-drawn-by-its-instances.md) | A symbol is kept once and drawn by its instances: 9-slice, overrides, one PDF form, IDML through labels | Accepted 2026-10-28 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

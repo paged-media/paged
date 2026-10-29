@@ -118,6 +118,9 @@ pub struct SnippetResources {
     pub stroke_styles: BTreeMap<String, paged_model::StrokeStyleDef>,
     #[serde(default)]
     pub conditions: BTreeMap<String, paged_model::ConditionDef>,
+    /// Engine ADR 1039 — the symbol definitions the copied instances draw.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbols: Vec<paged_model::SymbolDefinition>,
 }
 
 // ------------------------------------------------------------------ copy
@@ -173,7 +176,7 @@ pub fn extract_snippet(doc: &Document, sources: &[NodeId]) -> Result<ItemSnippet
         }
     }
 
-    let bounds = union_box(&mini, &mini.frames_in_order.clone()).unwrap_or([0.0; 4]);
+    let bounds = union_box(&mini, &doc.symbols, &mini.frames_in_order.clone()).unwrap_or([0.0; 4]);
     let (page_id, page_origin) = page_under(src, bounds);
     let resources = collect_resources(doc, &mini, &stories);
     let text = mini
@@ -257,6 +260,7 @@ pub fn snippet_roots(op: &Operation) -> Vec<NodeId> {
             FrameRef::GraphicLine(_) => NodeId::GraphicLine(id.clone()),
             FrameRef::Polygon(_) => NodeId::Polygon(id.clone()),
             FrameRef::Group(_) => NodeId::Group(id.clone()),
+            FrameRef::Instance(_) => NodeId::Instance(id.clone()),
         });
         let mut d = DuplicateDemand::default();
         count_subtree(&snippet.spread, &snippet.stories, *r, &mut d);
@@ -265,7 +269,12 @@ pub fn snippet_roots(op: &Operation) -> Vec<NodeId> {
     roots
 }
 
-fn count_subtree(spread: &Spread, stories: &[ParsedStory], r: FrameRef, d: &mut DuplicateDemand) {
+pub(super) fn count_subtree(
+    spread: &Spread,
+    stories: &[ParsedStory],
+    r: FrameRef,
+    d: &mut DuplicateDemand,
+) {
     d.items += 1;
     for sid in own_stories(spread, r) {
         if stories.iter().any(|s| s.self_id == sid) {
@@ -486,6 +495,18 @@ impl<'a> Graft<'a> {
                 dst.polygons.push(clone);
                 FrameRef::Polygon(dst.polygons.len() - 1)
             }
+            // Engine ADR 1039 — an instance copies as an instance of the
+            // same symbol (a paste into another document carries the
+            // definition along in the resources).
+            FrameRef::Instance(i) => {
+                let mut clone = src.instances[i].clone();
+                clone.self_id = new_id.clone();
+                clone.item_transform[4] += dx;
+                clone.item_transform[5] += dy;
+                clone.item_layer = self.layer(clone.item_layer.take());
+                dst.instances.push(clone);
+                FrameRef::Instance(dst.instances.len() - 1)
+            }
         };
         // The side maps keyed by `Self`.
         if let (Some(source_id), Some(new_id)) = (source_id, new_id) {
@@ -548,6 +569,42 @@ impl<'a> Graft<'a> {
     }
 }
 
+/// Engine ADR 1039 — copy `items`' roots (and everything they hold) onto
+/// the spread at `si` under the ids `ids` / `story_ids` (pre-order per
+/// root, as a paste takes them), the stories into the document. Returns
+/// the copies' roots, listed nowhere yet. An item on a layer the document
+/// lacks goes to the default layer. The caller has validated the ids.
+pub(super) fn graft_roots(
+    doc: &mut Document,
+    si: usize,
+    items: &Spread,
+    stories: &[ParsedStory],
+    ids: &[String],
+    story_ids: &[String],
+) -> Vec<FrameRef> {
+    let layers: HashSet<String> = doc
+        .designmap
+        .layers
+        .iter()
+        .map(|l| l.self_id.clone())
+        .collect();
+    let mut graft = Graft {
+        dx: 0.0,
+        dy: 0.0,
+        ids: Some(ids.iter()),
+        story_ids: Some(story_ids.iter()),
+        layers: Some(layers),
+        copied: Vec::new(),
+    };
+    let (spreads, doc_stories) = (&mut doc.spreads, &mut doc.stories);
+    let target = &mut spreads[si].spread;
+    items
+        .frames_in_order
+        .iter()
+        .map(|r| graft.graft(items, target, stories, doc_stories, *r, true))
+        .collect()
+}
+
 // ------------------------------------------------------------------ paste
 
 /// The resources a paste added, as `<kind>:<id>` (for its undo).
@@ -579,6 +636,12 @@ fn add_resources(doc: &mut Document, res: &SnippetResources) -> Vec<String> {
     merge!(res.object_styles, doc.styles.object_styles, "objectStyle");
     merge!(res.stroke_styles, doc.styles.stroke_styles, "strokeStyle");
     merge!(res.conditions, doc.styles.conditions, "condition");
+    for def in &res.symbols {
+        if doc.symbol(&def.id).is_none() {
+            doc.symbols.push(def.clone());
+            added.push(format!("symbol:{}", def.id));
+        }
+    }
     added
 }
 
@@ -612,12 +675,13 @@ fn remove_resources(doc: &mut Document, added: &[String]) {
             "condition" => {
                 doc.styles.conditions.remove(id);
             }
+            "symbol" => doc.symbols.retain(|d| d.id != id),
             _ => {}
         }
     }
 }
 
-fn spread_index(doc: &Document, spread: &str) -> Option<usize> {
+pub(super) fn spread_index(doc: &Document, spread: &str) -> Option<usize> {
     doc.spreads
         .iter()
         .position(|p| p.spread.self_id.as_deref() == Some(spread))
@@ -626,7 +690,7 @@ fn spread_index(doc: &Document, spread: &str) -> Option<usize> {
 
 /// The page-item and story ids a direct kernel caller did not supply,
 /// on the canvas minter's two number lines.
-fn mint(doc: &Document, demand: DuplicateDemand) -> (Vec<String>, Vec<String>) {
+pub(super) fn mint(doc: &Document, demand: DuplicateDemand) -> (Vec<String>, Vec<String>) {
     let base = crate::ids::highest_u_hex_id(doc) + 1;
     let ids = (0..demand.items as u64)
         .map(|k| format!("u{:x}", base + k))
@@ -638,7 +702,7 @@ fn mint(doc: &Document, demand: DuplicateDemand) -> (Vec<String>, Vec<String>) {
     (ids, story_ids)
 }
 
-fn page_item_ids(doc: &Document) -> HashSet<&str> {
+pub(super) fn page_item_ids(doc: &Document) -> HashSet<&str> {
     let mut out = HashSet::new();
     for p in &doc.spreads {
         let s = &p.spread;
@@ -886,7 +950,7 @@ fn paint_order(spread: &Spread) -> Vec<FrameRef> {
 }
 
 /// The story ids an item itself names (a text frame's, its text paths').
-fn own_stories(spread: &Spread, r: FrameRef) -> Vec<String> {
+pub(super) fn own_stories(spread: &Spread, r: FrameRef) -> Vec<String> {
     match r {
         FrameRef::TextFrame(i) => spread
             .text_frames
@@ -924,12 +988,12 @@ fn own_stories(spread: &Spread, r: FrameRef) -> Vec<String> {
                     .collect()
             })
             .unwrap_or_default(),
-        FrameRef::Oval(_) | FrameRef::Group(_) => Vec::new(),
+        FrameRef::Oval(_) | FrameRef::Group(_) | FrameRef::Instance(_) => Vec::new(),
     }
 }
 
 /// Every story an item's subtree names, in paint order.
-fn frame_stories(spread: &Spread, r: FrameRef) -> Vec<String> {
+pub(super) fn frame_stories(spread: &Spread, r: FrameRef) -> Vec<String> {
     let mut out = own_stories(spread, r);
     if let FrameRef::Group(gi) = r {
         if let Some(g) = spread.groups.get(gi) {
@@ -995,7 +1059,11 @@ fn mapped_box(b: paged_model::Bounds, m: Option<[f32; 6]>) -> [f32; 4] {
     [t, l, bo, r]
 }
 
-fn item_box(spread: &Spread, r: FrameRef) -> Option<[f32; 4]> {
+fn item_box(
+    spread: &Spread,
+    defs: &[paged_model::SymbolDefinition],
+    r: FrameRef,
+) -> Option<[f32; 4]> {
     match r {
         FrameRef::TextFrame(i) => spread
             .text_frames
@@ -1019,15 +1087,26 @@ fn item_box(spread: &Spread, r: FrameRef) -> Option<[f32; 4]> {
             .map(|f| mapped_box(f.bounds, f.item_transform)),
         FrameRef::Group(gi) => {
             let g = spread.groups.get(gi)?;
-            union_box(spread, &g.members)
+            union_box(spread, defs, &g.members)
+        }
+        // Engine ADR 1039 — an instance's box is its definition's, mapped.
+        FrameRef::Instance(i) => {
+            let inst = spread.instances.get(i)?;
+            let def = defs.iter().find(|d| d.id == inst.symbol)?;
+            let b = inst.spread_bounds(def.bounds);
+            Some([b.top, b.left, b.bottom, b.right])
         }
     }
 }
 
-fn union_box(spread: &Spread, refs: &[FrameRef]) -> Option<[f32; 4]> {
+fn union_box(
+    spread: &Spread,
+    defs: &[paged_model::SymbolDefinition],
+    refs: &[FrameRef],
+) -> Option<[f32; 4]> {
     let mut acc: Option<[f32; 4]> = None;
     for r in refs {
-        if let Some(b) = item_box(spread, *r) {
+        if let Some(b) = item_box(spread, defs, *r) {
             acc = Some(match acc {
                 None => b,
                 Some(a) => [
@@ -1087,6 +1166,19 @@ fn collect_resources(doc: &Document, mini: &Spread, stories: &[ParsedStory]) -> 
         strings_in(&v, &mut names);
     }
     let mut res = SnippetResources::default();
+    // Engine ADR 1039 — the definitions the instances name, and what
+    // their artwork names in turn.
+    for inst in &mini.instances {
+        if res.symbols.iter().any(|d| d.id == inst.symbol) {
+            continue;
+        }
+        if let Some(def) = doc.symbol(&inst.symbol) {
+            if let Ok(v) = serde_json::to_value(def) {
+                strings_in(&v, &mut names);
+            }
+            res.symbols.push(def.clone());
+        }
+    }
     loop {
         let mut grew = false;
         macro_rules! take {

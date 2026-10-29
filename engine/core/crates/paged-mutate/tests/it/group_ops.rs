@@ -53,7 +53,7 @@ fn node_for(spread: &paged_model::Spread, r: FrameRef) -> Option<NodeId> {
             NodeId::GraphicLine(spread.graphic_lines.get(i)?.self_id.clone()?)
         }
         FrameRef::Polygon(i) => NodeId::Polygon(spread.polygons.get(i)?.self_id.clone()?),
-        FrameRef::Group(_) => return None,
+        FrameRef::Group(_) | FrameRef::Instance(_) => return None,
     })
 }
 

@@ -992,6 +992,9 @@ impl<'a> Writer<'a> {
                         self.emit_group(i, f);
                     }
                 }
+                // Engine ADR 1039 — the copy between the markers is drawn
+                // inline, as the rasterizers draw it.
+                DisplayCommand::BeginSymbol { .. } | DisplayCommand::EndSymbol(_) => {}
                 DisplayCommand::DropShadow {
                     path_id,
                     transform,

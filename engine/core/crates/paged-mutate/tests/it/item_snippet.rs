@@ -143,6 +143,7 @@ fn id_of(doc: &Document, si: usize, r: FrameRef) -> String {
         FrameRef::GraphicLine(i) => s.graphic_lines[i].self_id.clone(),
         FrameRef::Polygon(i) => s.polygons[i].self_id.clone(),
         FrameRef::Group(i) => s.groups[i].self_id.clone(),
+        FrameRef::Instance(i) => s.instances[i].self_id.clone(),
     }
     .expect("an item with an id")
 }
@@ -179,6 +180,7 @@ fn transform_of(doc: &Document, id: &str) -> Option<[f32; 6]> {
         FrameRef::GraphicLine(i) => s.graphic_lines[i].item_transform,
         FrameRef::Polygon(i) => s.polygons[i].item_transform,
         FrameRef::Group(i) => s.groups[i].item_transform,
+        FrameRef::Instance(i) => Some(s.instances[i].item_transform),
     }
 }
 

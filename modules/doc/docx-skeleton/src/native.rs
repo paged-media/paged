@@ -117,6 +117,7 @@ pub fn skeleton_document(pages: &[SkeletonPage], name: &str) -> Document {
         text_frame_index: HashMap::new(),
         styles: styles(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     }
 }
 

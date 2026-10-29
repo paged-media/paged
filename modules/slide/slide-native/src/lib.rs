@@ -1685,6 +1685,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         text_frame_index: HashMap::new(),
         styles,
         anchors: Vec::new(),
+        symbols: Vec::new(),
     };
     Built {
         document,

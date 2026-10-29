@@ -120,6 +120,11 @@ pub fn highest_u_hex_id(doc: &Document) -> u64 {
             scan_u_hex_id(&mut max, Some(&dest.self_id));
         }
     }
+    // Engine ADR 1039 — a definition's items keep the ids they were
+    // captured under; a fresh mint must not hand one out again.
+    for def in &doc.symbols {
+        scan_spread(&mut max, &def.items);
+    }
     let dm = &doc.designmap;
     for layer in &dm.layers {
         scan_u_hex_id(&mut max, Some(&layer.self_id));
@@ -168,6 +173,10 @@ fn scan_spread(max: &mut u64, s: &paged_model::Spread) {
     }
     for g in &s.groups {
         scan_u_hex_id(max, g.self_id.as_deref());
+    }
+    // Engine ADR 1039 — instances are page items on the same line.
+    for i in &s.instances {
+        scan_u_hex_id(max, i.self_id.as_deref());
     }
 }
 

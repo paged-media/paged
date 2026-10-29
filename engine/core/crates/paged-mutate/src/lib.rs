@@ -70,6 +70,10 @@ pub use apply::apply_checked;
 pub use apply::is_locked;
 pub use apply::{duplicate_demand, duplicate_roots, DuplicateDemand};
 pub use apply::{
+    expand_symbols_for_interchange, restore_symbols_from_labels, symbol_break_demand,
+    symbol_break_root, SYMBOLS_LABEL, SYMBOL_INSTANCE_LABEL,
+};
+pub use apply::{
     extract_snippet, parse_snippet, snippet_demand, snippet_roots, ItemSnippet, SnippetResources,
     SNIPPET_FORMAT,
 };
@@ -314,6 +318,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -1897,6 +1902,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -2095,6 +2101,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -2211,6 +2218,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         };
         Project::new(doc)
     }
@@ -2380,6 +2388,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         };
         let mut project = Project::new(doc);
         let node = NodeId::GraphicLine("GraphicLine/l1".to_string());
@@ -2788,6 +2797,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -3150,6 +3160,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -3853,6 +3864,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         });
         // Two rectangles: A = [0..20, 0..20], B = [10..30, 10..30].
         // A \ B is an L-shape of 6 corner vertices.
@@ -4437,6 +4449,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         });
         // Insert a fresh rectangle (the InsertNode arm fills in the
         // full struct including default `end_cap: None`).
@@ -4499,6 +4512,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         });
         project
             .apply(Operation::InsertNode {
@@ -7781,6 +7795,7 @@ mod tests {
                 text_frame_index: HashMap::new(),
                 styles: StyleSheet::default(),
                 anchors: Vec::new(),
+                symbols: Vec::new(),
             }
         }
 
@@ -8740,6 +8755,7 @@ mod tests {
                 text_frame_index: HashMap::new(),
                 styles: StyleSheet::default(),
                 anchors: Vec::new(),
+                symbols: Vec::new(),
             }
         }
 

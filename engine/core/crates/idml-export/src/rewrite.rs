@@ -1944,6 +1944,7 @@ pub(crate) fn nested_ref_self_id(spread: &Spread, r: idml_import::FrameRef) -> O
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.as_deref(),
         FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.as_deref(),
         FrameRef::Group(i) => spread.groups.get(i)?.self_id.as_deref(),
+        FrameRef::Instance(i) => spread.instances.get(i)?.self_id.as_deref(),
     }
 }
 
@@ -1958,6 +1959,7 @@ fn group_item_layer<'a>(spread: &'a Spread, group: &idml_import::Group) -> Optio
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.item_layer.as_deref(),
         FrameRef::Polygon(i) => spread.polygons.get(i)?.item_layer.as_deref(),
         FrameRef::Group(i) => group_item_layer(spread, spread.groups.get(i)?),
+        FrameRef::Instance(i) => spread.instances.get(i)?.item_layer.as_deref(),
     })
 }
 
@@ -2550,6 +2552,11 @@ fn write_new_item(
                 write_new_group(writer, spread, g, parent_accum, None)?;
             }
         }
+        // Engine ADR 1039 — IDML has no symbol: the export expands every
+        // instance into native items before it writes
+        // (`paged_mutate::expand_symbols_for_interchange`), so none
+        // reaches the writer; a stray one writes nothing.
+        FrameRef::Instance(_) => {}
     }
     Ok(())
 }
@@ -3174,6 +3181,7 @@ fn collect_group_member_ids<'a>(
                     collect_group_member_ids(spread, sub, out);
                 }
             }
+            FrameRef::Instance(_) => {}
         }
     }
 }

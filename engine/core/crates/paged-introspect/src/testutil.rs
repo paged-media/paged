@@ -132,5 +132,6 @@ pub fn document_with_one_textframe(self_id: &str) -> Document {
         text_frame_index: HashMap::new(),
         styles: StyleSheet::default(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     }
 }

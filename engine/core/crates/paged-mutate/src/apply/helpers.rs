@@ -1057,6 +1057,15 @@ pub(super) fn node_exists(doc: &Document, node: &NodeId) -> bool {
             {
                 return true;
             }
+            NodeId::Instance(_)
+                if parsed
+                    .spread
+                    .instances
+                    .iter()
+                    .any(|i| i.self_id.as_deref() == Some(target)) =>
+            {
+                return true;
+            }
             _ => {}
         }
     }

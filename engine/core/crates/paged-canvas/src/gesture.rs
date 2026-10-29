@@ -1368,6 +1368,11 @@ impl CanvasModel {
                         .get(*idx)
                         .and_then(|g| g.self_id.clone())
                         .map(ElementId::Group),
+                    paged_model::FrameRef::Instance(idx) => s
+                        .instances
+                        .get(*idx)
+                        .and_then(|g| g.self_id.clone())
+                        .map(ElementId::Instance),
                 };
                 let Some(mid) = member_id else { continue };
                 if visited.contains(mid.raw_id()) {

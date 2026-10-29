@@ -81,6 +81,8 @@ mod numbering;
 mod shapes;
 mod span_columns;
 mod stroke_geom;
+mod symbols;
+pub use symbols::{BuiltSymbol, SymbolCache};
 mod tables;
 mod text_frame;
 mod text_path;
@@ -486,6 +488,10 @@ pub struct PipelineOptions<'a> {
     /// resolution-independent: this is a *hint* for which level of detail
     /// to assemble, not a geometry scale.
     pub render_scale: f32,
+    /// Engine ADR 1039 — the caller's cache of built symbol definitions,
+    /// kept across builds (`None`: each build compiles the definitions its
+    /// instances name).
+    pub symbol_cache: Option<&'a SymbolCache>,
 }
 
 /// C-6 — one frame's claimed image-resource entry on [`PipelineOptions`]:
@@ -673,6 +679,7 @@ impl Default for PipelineOptions<'_> {
             scene_fonts: None,
             resource_providers: None,
             render_scale: 1.0,
+            symbol_cache: None,
         }
     }
 }

@@ -1097,6 +1097,7 @@ fn top_level_ids(doc: &Document) -> Vec<String> {
                 }
                 paged_model::FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.clone(),
                 paged_model::FrameRef::Group(i) => spread.groups.get(i)?.self_id.clone(),
+                paged_model::FrameRef::Instance(i) => spread.instances.get(i)?.self_id.clone(),
             };
             id
         })
@@ -1124,6 +1125,7 @@ fn nested_ids_of(doc: &Document, host: &str) -> Vec<String> {
                     }
                     paged_model::FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.clone(),
                     paged_model::FrameRef::Group(i) => spread.groups.get(i)?.self_id.clone(),
+                    paged_model::FrameRef::Instance(i) => spread.instances.get(i)?.self_id.clone(),
                 })
                 .collect()
         })
@@ -1342,7 +1344,7 @@ fn paste_into_rejections_leave_the_document_untouched() {
                 .self_id
                 .clone()
                 .map(NodeId::GraphicLine),
-            paged_model::FrameRef::Group(_) => None,
+            paged_model::FrameRef::Group(_) | paged_model::FrameRef::Instance(_) => None,
         }
     };
     if let Some(grouped_node) = grouped_node {
