@@ -6,6 +6,14 @@
 // the semantics were decided in `docx-lower` (Rust).
 
 import type { Mutation } from "@paged-media/plugin-api";
+import {
+  nativeFxColors,
+  nativeFxOps,
+  nativeGradientId,
+  nativeGradientMintOps,
+  type NativeFx,
+  type NativeGradient,
+} from "@paged-media/plugin-sdk";
 
 import type {
   LoweredBlock,
@@ -45,6 +53,9 @@ export function buildStyleMutations(ir: LoweredDoc): Mutation[] {
       },
     } as Mutation);
   }
+  // Doc ADR 619 — the picture looks' gradients, once their stops' swatches
+  // exist.
+  ops.push(...lookGradientMintOps(ir));
   // Doc ADR 609 — the "Word theme" group, once its swatches exist.
   for (const group of ir.colorGroups ?? []) {
     ops.push({
@@ -69,6 +80,58 @@ export function buildStyleMutations(ir: LoweredDoc): Mutation[] {
     }
   }
   return ops;
+}
+
+/** The swatch a picture look's `#RRGGBB` colour is painted with: the one
+ *  `docx-lower` minted for it (`Color/docx-RRGGBB`, doc ADR 619). */
+export function lookSwatch(hex: string): string {
+  return `Color/docx-${hex.replace(/^#/, "")}`;
+}
+
+/** The prefix of the content-addressed gradient swatches of picture looks. */
+const LOOK_GRADIENT_PREFIX = "Gradient/docx-";
+
+/** The ops that give the anchored frame `$h:<handle>` a picture's look
+ *  (doc ADR 619): the lowering kit's translation, colours as the document
+ *  swatches `docx-lower` minted, a gradient's start in the frame's own box. */
+export function pictureLookOps(fx: NativeFx, handle: string): Mutation[] {
+  return nativeFxOps(fx, {
+    target: { kind: "rectangle", id: `$h:${handle}` },
+    color: lookSwatch,
+    gradient: (g) => nativeGradientId(LOOK_GRADIENT_PREFIX, g),
+    origin: [0, 0],
+  });
+}
+
+/** Every picture look's gradient in `ir`, in document order. */
+function lookGradients(ir: LoweredDoc): NativeGradient[] {
+  const out: NativeGradient[] = [];
+  const walk = (blocks: readonly LoweredBlock[]) => {
+    for (const b of blocks) {
+      if (b.kind !== "paragraph") continue;
+      for (const img of b.images ?? []) {
+        if (img.fx?.gradient) out.push(img.fx.gradient);
+      }
+    }
+  };
+  walk(ir.story.blocks);
+  return out;
+}
+
+/** The `createGradient` ops of the picture looks' gradients (doc ADR 619),
+ *  after the swatches their stops name. */
+export function lookGradientMintOps(ir: LoweredDoc): Mutation[] {
+  return nativeGradientMintOps(lookGradients(ir), {
+    prefix: LOOK_GRADIENT_PREFIX,
+    color: lookSwatch,
+    name: (n) => `docx picture gradient ${n}`,
+  });
+}
+
+/** Every colour a picture look paints with, as the swatch it names:
+ *  what `docx-lower` minted (a test of the hand-over). */
+export function lookSwatchIds(fx: NativeFx): string[] {
+  return nativeFxColors(fx).map(lookSwatch);
 }
 
 function createStyleOp(style: LoweredStyle): Mutation {
@@ -108,6 +171,8 @@ interface ImageAt {
   widthPt: number;
   heightPt: number;
   uri: string;
+  /** Doc ADR 618 — the picture's look, painted on its frame (doc ADR 619). */
+  fx?: NativeFx;
 }
 
 /** A hyperlink span: the `[start, end)` story offsets of a linked run + target. */
@@ -367,6 +432,7 @@ function poured(
         widthPt: img.widthPt,
         heightPt: img.heightPt,
         uri: img.uri,
+        ...(img.fx ? { fx: img.fx } : {}),
       });
     }
     // Separator text for insertText, but NOT an offset advance (contiguous).
@@ -472,7 +538,7 @@ export function buildTextPour(
   for (const r of ranges.filter((r) => r.scope === "character")) {
     ops.push(applyStyleOp(storyId, r.start, r.end, r.style, "character"));
   }
-  for (const img of images) {
+  images.forEach((img, k) => {
     // `insertAnchoredFrame` is a v52 wire op (core protocol 52); it postdates the
     // published plugin-api Mutation union, so cast via `unknown`. The host applies
     // it once running the v52+ canvas-wasm; older hosts reject it (honest degrade).
@@ -487,7 +553,15 @@ export function buildTextPour(
         ...(img.paragraph !== undefined ? { paragraph: img.paragraph } : {}),
       },
     } as unknown as Mutation);
-  }
+    // Doc ADR 619 — the picture's look on the frame just minted, named by
+    // a handle (C-15) and written through the lowering kit (engine ADR
+    // 1045: the free frames' paths reach an anchored frame).
+    if (img.fx) {
+      const handle = `docxPicture${k}`;
+      ops.push({ op: "bindCreated", args: { handle } } as Mutation);
+      ops.push(...pictureLookOps(img.fx, handle));
+    }
+  });
   for (const link of links) {
     // `insertHyperlink` is a v53 wire op (core protocol 53) — like
     // insertAnchoredFrame it postdates the published Mutation union, so cast via

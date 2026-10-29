@@ -167,64 +167,17 @@ export interface LoweredImage {
   float?: LoweredFloat;
   /** Doc ADR 618 — the picture's DrawingML look as the shared mapper
    *  (`dml-native`) lowered it: fill, outline, opacity and effects, colours
-   *  as `#RRGGBB`. Carried for when the engine's anchored frames hold it;
-   *  not applied yet (a diagnostic says so). Absent for a plain picture. */
+   *  as `#RRGGBB`. Painted on the picture's anchored frame (doc ADR 619).
+   *  Absent for a plain picture. */
   fx?: NativeFx;
   /** What the engine cannot hold of the look, one line per kind. */
   losses?: string[];
 }
 
-/** `dml_native::native::NativeFx` (doc ADR 618), each field omitted when
- *  unset. Colours are `#RRGGBB`; lengths pt; opacities 0–100. */
-export interface NativeFx {
-  fill?: string;
-  gradient?: {
-    kind: "linear" | "radial";
-    /** `[location 0–100, #RRGGBB]`, in position order. */
-    stops: [number, string][];
-    /** The engine's angle (counter-clockwise degrees); linear only. */
-    angle?: number;
-    /** The axis length (linear) or the radius (radial). */
-    length?: number;
-    /** The axis start (linear) or the centre (radial), from the item box's
-     *  top-left. */
-    start?: [number, number];
-  };
-  stroke?: {
-    color: string;
-    weight: number;
-    kind?: string;
-    dash?: number[];
-    cap?: string;
-    join?: string;
-    miterLimit?: number;
-  };
-  opacity?: number;
-  dropShadow?: {
-    xOffset: number;
-    yOffset: number;
-    size: number;
-    opacity: number;
-    color: string;
-  };
-  innerShadow?: {
-    /** Counter-clockwise degrees. */
-    angle: number;
-    distance: number;
-    size: number;
-    opacity: number;
-    color: string;
-  };
-  outerGlow?: { size: number; opacity: number; color: string };
-  /** A soft edge's width. */
-  feather?: number;
-  gradientFeather?: {
-    gradientType: string;
-    angle?: number;
-    /** `[location 0–100, opacity 0–100]`. */
-    stops: [number, number][];
-  };
-}
+/** `dml_native::native::NativeFx` (doc ADR 618): the lowering kit's own
+ *  type (plugin-sdk), colours `#RRGGBB`; lengths pt; opacities 0–100. */
+import type { NativeFx } from "@paged-media/plugin-sdk";
+export type { NativeFx };
 
 /** A floating drawing's position and wrap, in points, Word's vocabulary. */
 export interface LoweredFloat {

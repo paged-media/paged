@@ -286,6 +286,7 @@ async function newStyleOps(
     "paragraphStyles",
     "characterStyles",
     "swatches",
+    "gradients",
     "colorGroups",
   ] as const) {
     try {
@@ -303,7 +304,9 @@ async function newStyleOps(
       spec?: { selfId?: string | null };
     };
     const id =
-      op.op === "createSwatch" || op.op === "createColorGroup"
+      op.op === "createSwatch" ||
+      op.op === "createGradient" ||
+      op.op === "createColorGroup"
         ? args.spec?.selfId
         : op.op === "createParagraphStyle" || op.op === "createCharacterStyle"
           ? args.selfId
