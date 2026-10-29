@@ -70,7 +70,7 @@ interface Comment {
 }
 
 describe.skipIf(!docxPresent)(
-  "doc headless — review @feat:plugin-doc.review",
+  "doc headless — review @feat:plugin-doc.edit-context",
   () => {
     let h: HeadlessHost;
     const invoke = (name: keyof typeof REVIEW_COMMAND, args = {}) =>
@@ -118,7 +118,9 @@ describe.skipIf(!docxPresent)(
         REVIEW_BAND,
       ]);
       expect(
-        h.contributions.some((c) => c.kind === "panel" && c.id === REVIEW_PANEL),
+        h.contributions.some(
+          (c) => c.kind === "panel" && c.id === REVIEW_PANEL,
+        ),
       ).toBe(true);
       const bound = h.contributions
         .filter((c) => c.kind === "keybinding")
@@ -235,12 +237,16 @@ describe.skipIf(!docxPresent)(
       expect(made.applied).toBe(true);
       const id = made.id!;
       expect(await comments()).toContainEqual(
-        expect.objectContaining({ id, text: "Formal enough?", author: "Author" }),
+        expect.objectContaining({
+          id,
+          text: "Formal enough?",
+          author: "Author",
+        }),
       );
       covers("command:media.paged.doc.command.review.replyComment");
-      expect(
-        (await invoke("replyComment", { id, text: "Yes." })).applied,
-      ).toBe(true);
+      expect((await invoke("replyComment", { id, text: "Yes." })).applied).toBe(
+        true,
+      );
       expect(await comments()).toContainEqual(
         expect.objectContaining({ parentId: id, text: "Yes." }),
       );
