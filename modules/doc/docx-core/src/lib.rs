@@ -757,6 +757,31 @@ pub struct Image {
     /// `w10:wrap type="topAndBottom"` says it as CSS `margin-top`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub band_offset_emu: Option<i64>,
+    /// What a DrawingML picture paints beyond its image, as authored (doc
+    /// ADR 618): `pic:spPr`'s fill, outline and effect list and the
+    /// `a:blip`'s alpha and picture effects. `None` for a picture with
+    /// none of them, and for a legacy VML picture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<Box<PictureLook>>,
+}
+
+/// A picture's DrawingML look, as authored: theme colours are still slot
+/// names; the lowering resolves them against the document theme.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PictureLook {
+    /// `pic:spPr` (geometry and transform aside).
+    #[serde(default)]
+    pub shape: paged_ooxml::drawingml::ShapeProperties,
+    /// `pic:blipFill/a:blip` (`alphaModFix`, the picture effects).
+    #[serde(default)]
+    pub blip: paged_ooxml::drawingml::Blip,
+}
+
+impl PictureLook {
+    /// Nothing beyond the image itself.
+    pub fn is_plain(&self) -> bool {
+        self.shape.is_empty() && self.blip.alpha.is_none() && self.blip.effects.is_empty()
+    }
 }
 
 /// A floating drawing's placement (`wp:anchor`, thoughts ADR 035). Lengths in

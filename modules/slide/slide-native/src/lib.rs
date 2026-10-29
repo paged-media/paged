@@ -37,7 +37,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use dml_native::{
-    compound_type, placement, Mapper, Picture, Placement, StrokeFields, Transparency, NONE_SWATCH,
+    axis_start, compound_type, placement, Mapper, Picture, Placement, StrokeFields, Transparency,
+    NONE_SWATCH,
 };
 use paged_model::{
     ArrowheadType, AutoSizingReferencePoint, AutoSizingType, Bounds, CellStyleDef, CharacterRun,
@@ -130,6 +131,19 @@ const UNWRAPPED_WIDTH_PT: f64 = 4000.0;
 /// point, the precision a deck has always opened with.
 fn n(v: f64) -> f32 {
     dml_native::pt(v)
+}
+
+/// A fill gradient's placement on an item whose local box is `(0, 0)`–
+/// `(w, h)` (its outline's coordinates, which `transform` places): the
+/// start stated for a linear gradient too. The engine starts an unplaced
+/// linear gradient at the box's bottom-left corner, which is PowerPoint's
+/// start only for an axis running up or right; a vertical or down-diagonal
+/// one would draw mostly its first stop (slide ADR 722, amendment
+/// 2026-10-28).
+fn box_placement(p: &Paint, w: f64, h: f64) -> Placement {
+    let mut gp = placement(p, w, h);
+    gp.start = axis_start(&gp, w, h);
+    gp
 }
 
 fn matrix(m: &[f64; 6]) -> [f32; 6] {
@@ -736,7 +750,7 @@ impl Builder<'_> {
                 if has_fill || stroke.is_some() {
                     let fc = self.paint(fill);
                     let sf = self.stroke(stroke.as_ref());
-                    let gp = placement(fill, it.w, it.h);
+                    let gp = box_placement(fill, it.w, it.h);
                     // Item ids are `u` + hex, so derived ids take suffixes
                     // that are not hex digits (`p`, `s`, `t`, `i`).
                     let pid = if text.is_some() {
@@ -1044,7 +1058,7 @@ impl Builder<'_> {
         let bg = self.paint(&t.background);
         let h: f64 = t.rows.iter().map(|r| r.0).sum();
         let w: f64 = t.columns.iter().sum();
-        let gp = placement(&t.background, w, h);
+        let gp = box_placement(&t.background, w, h);
         let (dx, dy) = table_border_offset(t);
         let m = &it.transform;
         let shifted = [

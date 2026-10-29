@@ -65,7 +65,7 @@ import {
   handleElementId,
 } from "./batch-handles";
 import { groupMutationFor } from "./group";
-import { resolveTargetPage } from "../io/svg";
+import { resolveTargetPage } from "../target-page";
 import { graphicPaintFor, withGraphicPaint } from "../handlers/graphic-default";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { registerCommand } from "../command-registry";

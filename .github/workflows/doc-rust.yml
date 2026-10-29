@@ -26,6 +26,9 @@ on:
       - "platform/shared/test-resources/**"
       # The shared OOXML foundation, a path dependency of the Cargo workspace.
       - "platform/shared/ooxml/**"
+      # The shared DrawingML paint and effect mapper, a path dependency of
+      # docx-lower (doc ADR 618).
+      - "platform/shared/dml-native/**"
       # docx-skeleton path-depends on the engine's model crates (ADR 606), and
       # through them on more engine crates and engine/core's workspace
       # settings, so an engine change can break it.
@@ -46,6 +49,9 @@ on:
       - "platform/shared/test-resources/**"
       # The shared OOXML foundation, a path dependency of the Cargo workspace.
       - "platform/shared/ooxml/**"
+      # The shared DrawingML paint and effect mapper, a path dependency of
+      # docx-lower (doc ADR 618).
+      - "platform/shared/dml-native/**"
       # docx-skeleton path-depends on the engine's model crates (ADR 606), and
       # through them on more engine crates and engine/core's workspace
       # settings, so an engine change can break it.

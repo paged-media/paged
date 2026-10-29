@@ -292,12 +292,25 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   to sRGB without a profile"); a converted CMYK source is stated as converted, not as managed
   RGB. The profile of an RGB PSD and of a PNG kept at 16 bits is not applied ("sRGB assumed").
   There is no rendering-intent control. Kernels receive encoded values.
-- **Depth.** A 16-bit RGB or RGBA PNG decoded on the main thread is held at 16 bits. The
-  decode worker returns RGBA8, a 16-bit PSD is reduced to 8 bits, and a 16-bit greyscale
-  PNG is refused (`image-js/src/ingest.rs:812-831`; the PSD composite at `:745-765`).
-  `layers_open` (`image-js/src/lib.rs:3015`) and the panel's chain (`adjust_rgba8`,
-  `image-js/src/ingest.rs:1376`) take the held buffer as four bytes per pixel; `LayerStack::from_image_px`, which keeps the depth, is called only by tests.
-  The scene-layer item, tiles and PSD save-back are 8-bit. A curve is a 256-entry table.
+- **Depth.** A 16-bit RGB or RGBA source (PNG, TIFF, a 16-bit RGB PSD's layers) is held at 16
+  bits, through the decode worker too ([ADR 479](adr/479-depth-and-colour-modes.md)). The layer
+  stack, the fold, the panel's adjustment chain and Bake, undo, persistence, the layered PSD save
+  and the 16-bit exporters keep the depth; an 8-bit tool's edit on a 16-bit layer lands at 16 bits
+  inside its damage. Image ▸ Mode ▸ 8/16 Bits/Channel converts every layer as one undo step. The
+  kernels compute in f32 and store f16, so a 16-bit document keeps about 11 bits in the highlights
+  through a kernel (2826 distinct levels on a 16384-level ramp under a Levels gamma of 2.2, where
+  Photoshop keeps 16259 and an 8-bit document 184). The scene-layer item and tiles are 8-bit (the
+  display view). A 16-bit CMYK PSD, a 16-bit RLE layer channel and 32-bit sources are reduced to 8
+  bits and say so. A curve is a 256-entry table.
+- **Colour modes.** Image ▸ Mode ▸ Greyscale, RGB colour, CMYK colour and Lab colour convert every
+  layer through the engine's CMS (Gray Gamma 2.2, the session's CMYK profile, CIE Lab) and keep the
+  document inside that mode: a pixel edit lands projected inside its damage. The stack still works
+  in RGB — layers are not ink planes and blends are not subtractive, and Indexed, Duotone and
+  Multichannel are not offered. Against Photoshop: greyscale and 16-bit Lab within 0.05 of a level,
+  CMYK (Coated FOGRA39) and 8-bit Lab within 1.8 ΔE at the 99th percentile. CMYK without a profile
+  changes no colour, and the status says so. Image ▸ Proof shows Proof colours and the Gamut warning
+  (Gray Gamma 2.2 or the CMYK profile) on the preview without touching the document. The layered PSD
+  save keeps the file's own depth and mode.
 - **PSD.** The composite decode takes 8- and 16-bit RGB, greyscale or CMYK, raw or RLE (not
   16-bit RLE); other modes and depths are refused, and a transparent document's white-matted
   merged colour is un-matted (CMYK: matted against the paper). Layers are imported from RGB
@@ -389,7 +402,8 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   wasm built from the same commit; `glue/test/wasm-fresh.spec.ts` fails when the wasm was
   built from other sources.
 - **Manifest.** It declares `rendering: hitTest` and `workers.sharedMemory`, which the
-  bundle does not use, and caps the wasm at 8 MiB while the build script stops at 100 MB.
+  bundle does not use, and caps the wasm at 9 MiB (raised from 8 MiB by ADR 479, at 8.39 MB)
+  while the build script stops at 100 MB.
   The shipped `panels/image-adjustments.panel.json` is read by nothing.
 
 ## Not built

@@ -36,6 +36,10 @@
 //! clips and soft masks, images as data URIs, and text as `<text>` (the
 //! fonts named) or as outlines.
 //!
+//! **Paint** ([`paint`]) finds every colour a document declares, in its
+//! source, and rewrites them in place: a recolour that keeps the rest of
+//! the file byte for byte.
+//!
 //! **The walk** ([`walk`]) is the one traversal of a usvg tree the
 //! raster lane, the placed-SVG vector lane and the import share.
 //!
@@ -46,9 +50,14 @@
 pub mod export;
 #[cfg(feature = "import")]
 pub mod import;
+pub mod paint;
 #[cfg(any(feature = "import", feature = "export"))]
 pub mod report;
 pub mod walk;
+
+/// The usvg the walk is written against, for a caller that walks a tree
+/// itself (paged.draw's DXF writer, draw ADR 364).
+pub use usvg;
 
 #[cfg(feature = "export")]
 pub use export::{

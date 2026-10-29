@@ -236,7 +236,7 @@ import {
   handleElementId,
 } from "./batch-handles";
 import { insertPathMutationFor } from "../handlers/insert-path";
-import { resolveTargetPage } from "../io/svg";
+import { resolveTargetPage } from "../target-page";
 import { SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
 import { announceRecipeChange, linkIndex } from "../link-index";
 

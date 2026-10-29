@@ -163,6 +163,108 @@ impl Pixels {
     pub fn is_empty(&self) -> bool {
         self.bytes.is_empty()
     }
+
+    /// The same allocation at the same depth: identity, the way the fold's
+    /// caches key their textures (never a byte comparison).
+    pub fn same(&self, other: &Pixels) -> bool {
+        Arc::ptr_eq(&self.bytes, &other.bytes) && self.depth == other.depth
+    }
+
+    /// The bytes to write in place: this allocation when nothing else
+    /// holds it, else a copy (counted as a whole copy) that this value
+    /// then owns. The depth does not change.
+    pub fn make_mut(&mut self) -> &mut [u8] {
+        if Arc::get_mut(&mut self.bytes).is_none() {
+            crate::counters::whole_copy(self.bytes.len());
+            self.bytes = Arc::from(&self.bytes[..]);
+        }
+        Arc::get_mut(&mut self.bytes).expect("unique after the copy")
+    }
+
+    /// One pixel's alpha as 8 bits (the high byte at `U16`): what a
+    /// transparency test or a clip's coverage reads.
+    pub fn alpha8(&self, pixel: usize) -> u8 {
+        match self.depth {
+            SampleDepth::U16 => {
+                let i = pixel * 8 + 6;
+                u16::from_ne_bytes([self.bytes[i], self.bytes[i + 1]]).to_be_bytes()[0]
+            }
+            _ => self.bytes[pixel * 4 + 3],
+        }
+    }
+
+    /// Straight rgba16float bytes (little-endian halves), the working
+    /// window every kernel reads: `v / 255` at 8 bits, `v / 65535` at 16.
+    pub fn to_f16(&self) -> Vec<u8> {
+        match self.depth {
+            SampleDepth::U16 => {
+                let mut out = Vec::with_capacity(self.bytes.len());
+                for p in self.bytes.as_chunks::<2>().0 {
+                    let v = f32::from(u16::from_ne_bytes(*p)) / 65535.0;
+                    out.extend_from_slice(&half::f16::from_f32(v).to_le_bytes());
+                }
+                out
+            }
+            _ => crate::fill::rgba8_to_f16(&self.bytes),
+        }
+    }
+
+    /// Straight rgba16float bytes back to pixels at `depth` (clamped and
+    /// rounded; `U8` and `U16` only).
+    pub fn from_f16(bytes: &[u8], depth: SampleDepth) -> Pixels {
+        match depth {
+            SampleDepth::U16 => {
+                let s: Vec<u16> = bytes
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|p| {
+                        let v = half::f16::from_le_bytes(*p).to_f32();
+                        (v.clamp(0.0, 1.0) * 65535.0).round() as u16
+                    })
+                    .collect();
+                Pixels::from_rgba16(&s)
+            }
+            _ => Pixels::from_rgba8(Arc::from(
+                crate::fill::f16_to_rgba8(bytes).into_boxed_slice(),
+            )),
+        }
+    }
+
+    /// The same image at `depth` — Image ▸ Mode ▸ 8 or 16 Bits/Channel.
+    ///
+    /// Widening is the exact `v << 8 | v` of [`sample16`](Self::sample16)
+    /// (255 becomes 65535). Narrowing ROUNDS, `(v × 255 + 32767) / 65535`:
+    /// a conversion is a deliberate quantisation and rounds to the
+    /// nearest level, as Photoshop's does, where [`to_rgba8`](Self::to_rgba8)
+    /// keeps the high byte because it is a VIEW of the same samples.
+    /// The same depth is a clone of the handle.
+    pub fn at_depth(&self, depth: SampleDepth) -> Pixels {
+        match (self.depth, depth) {
+            (a, b) if a == b => self.clone(),
+            (SampleDepth::U8, SampleDepth::U16) => {
+                let s: Vec<u16> = self
+                    .bytes
+                    .iter()
+                    .map(|&v| (u16::from(v) << 8) | u16::from(v))
+                    .collect();
+                Pixels::from_rgba16(&s)
+            }
+            (SampleDepth::U16, SampleDepth::U8) => {
+                let b: Vec<u8> = self
+                    .bytes
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|p| ((u32::from(u16::from_ne_bytes(*p)) * 255 + 32767) / 65535) as u8)
+                    .collect();
+                Pixels::from_rgba8(Arc::from(b.into_boxed_slice()))
+            }
+            // F16/F32 are not a layer's store (the fold's and the
+            // chain's working windows are bytes, not `Pixels`).
+            _ => self.clone(),
+        }
+    }
 }
 
 /// Construction from 8-bit bytes is unambiguous and lossless, so it
@@ -349,6 +451,22 @@ impl LayerPixels {
         match self {
             LayerPixels::Canvas(p) => p.depth(),
             LayerPixels::Bounded(b) => b.px.depth(),
+        }
+    }
+
+    /// The same layer at `depth`, its shape kept (a bounded layer stays
+    /// bounded): [`Pixels::at_depth`] on what is stored.
+    pub fn at_depth(&self, depth: SampleDepth) -> LayerPixels {
+        match self {
+            LayerPixels::Canvas(p) => LayerPixels::Canvas(p.at_depth(depth)),
+            LayerPixels::Bounded(b) => {
+                match Bounded::new(b.rect, b.px.at_depth(depth), b.canvas_w, b.canvas_h) {
+                    Some(nb) => LayerPixels::Bounded(nb),
+                    // Unreachable: the rectangle and the pixel count are
+                    // unchanged, only the sample width.
+                    None => LayerPixels::Canvas(b.expand().at_depth(depth)),
+                }
+            }
         }
     }
 

@@ -299,8 +299,9 @@ fn stroke(
             }
         }
         painted = Arc::from(px.clone());
-        let got = pollster::block_on(s.composite(Some(ctx), Some(&painted)));
-        let want = pollster::block_on(s.composite_reference(Some(ctx), Some(&painted)));
+        let over = image_js::pixels::Pixels::from_rgba8(Arc::clone(&painted));
+        let got = pollster::block_on(s.composite(Some(ctx), Some(&over)));
+        let want = pollster::block_on(s.composite_reference(Some(ctx), Some(&over)));
         match (got, want) {
             (Ok(g), Ok(w)) => prop_assert!(agree(s, &g, &w), "stroke sample {n} differs"),
             (Err(_), Err(_)) => {}
@@ -322,6 +323,14 @@ fn stroke(
 /// transparent group the two may differ by one level (measured: 3 bytes
 /// of 1040, each by 1). Then one level is the bound.
 fn agree(s: &LayerStack, got: &[u8], want: &[u8]) -> bool {
+    // A 16-bit stack folds its 16-bit samples (image ADR 479) and its
+    // 8-bit view keeps the high byte, where the reference folds the high
+    // bytes and rounds.
+    // An adjustment over a 16-bit stack can stretch that sub-level
+    // difference (a saturation boost): three levels at most.
+    if s.depth() == image_core::SampleDepth::U16 {
+        return got.len() == want.len() && got.iter().zip(want).all(|(a, b)| a.abs_diff(*b) <= 3);
+    }
     if s.layers().iter().any(|l| l.rgba.bounded().is_some()) {
         got.len() == want.len() && got.iter().zip(want).all(|(a, b)| a.abs_diff(*b) <= 1)
     } else {
@@ -364,6 +373,37 @@ proptest! {
             }
             check(ctx, &s, &format!("edit {n} {e:?}"))?;
         }
+    }
+}
+
+/// The case the property found on the lavapipe lane (2026-10-29): a 16-bit
+/// stack with an adjustment layer and a transparent pixel layer above it,
+/// the pixel layer then clipped onto the adjustment. Kept as a fixed case
+/// so it runs every time, not only when the generator draws it.
+#[test]
+fn a_clipped_layer_over_an_adjustment_in_16_bit_folds_as_the_reference__feat__image_editor_layers()
+{
+    let Some(ctx) = device() else { return };
+    let (w, h) = (20, 13);
+    let gens = [
+        LayerGen::Adjust {
+            exposure: 0.0,
+            saturation: 0.0,
+        },
+        LayerGen::Pixel {
+            seed: 0,
+            alpha: 0,
+            smart: false,
+        },
+    ];
+    let mut s = build(w, h, true, &gens);
+    check(ctx, &s, "built").expect("built");
+    for (n, e) in [Edit::Paint(2, 0, 0), Edit::Clip(2, true)]
+        .iter()
+        .enumerate()
+    {
+        apply(&mut s, e, w, h);
+        check(ctx, &s, &format!("edit {n} {e:?}")).expect("agrees");
     }
 }
 

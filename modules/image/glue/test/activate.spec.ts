@@ -307,6 +307,16 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.vectorMaskToggle",
       "media.paged.image.command.vectorMaskInvert",
       "media.paged.image.command.vectorMaskRasterize",
+      "media.paged.image.command.modeBits8",
+      "media.paged.image.command.modeBits16",
+      "media.paged.image.command.modeGray",
+      "media.paged.image.command.modeRgb",
+      "media.paged.image.command.modeCmyk",
+      "media.paged.image.command.modeLab",
+      "media.paged.image.command.proofColors",
+      "media.paged.image.command.gamutWarning",
+      "media.paged.image.command.proofSetupCmyk",
+      "media.paged.image.command.proofSetupGray",
     ]);
     expect(fake.tools.ids()).toEqual([
       "media.paged.image.tool.crop",

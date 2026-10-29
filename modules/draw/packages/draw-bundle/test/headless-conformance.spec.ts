@@ -421,10 +421,15 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // W3.2 — the vectorGraphic edit context (B-02), recorded
         // through the harness's editContext registration hook.
         "editContext",
-        // Phase 8 — the SVG importer + exporter (K-2), recorded through
-        // the harness's recording importer/exporter registries.
+        // Interchange (K-2, ADR 364), recorded through the harness's
+        // recording importer/exporter registries: SVG in and out, DXF in
+        // and out, then the Illustrator and EPS importers.
         "importer",
         "exporter",
+        "importer",
+        "exporter",
+        "importer",
+        "importer",
         // ADR 323 — the Draw properties schema panel (property rows over
         // host.objects), registered after the object model.
         "panel",
@@ -453,22 +458,31 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
           metadata: null,
         }),
       ).toBe(true);
-      // Phase 8 — the SVG importer/exporter are recorded with their
-      // claimed extensions, and the registered ids match the manifest's
-      // contributes declaration.
+      // Interchange (ADR 364) — the importers/exporters are recorded with
+      // their claimed extensions, and the registered ids match the
+      // manifest's contributes declaration.
       const importers = harness.importersContributed();
       expect(importers.map((i) => i.id)).toEqual([
         "media.paged.draw.importer.svg",
+        "media.paged.draw.importer.dxf",
+        "media.paged.draw.importer.ai",
+        "media.paged.draw.importer.eps",
       ]);
-      expect(importers[0].extensions).toEqual([".svg"]);
+      expect(importers.map((i) => i.extensions)).toEqual([
+        [".svg"],
+        [".dxf"],
+        [".ai"],
+        [".eps", ".epsf"],
+      ]);
       expect(importers.map((i) => i.id)).toEqual(
         drawBundle.manifest.contributes?.importers,
       );
       const exporters = harness.exportersContributed();
       expect(exporters.map((e) => e.id)).toEqual([
         "media.paged.draw.exporter.svg",
+        "media.paged.draw.exporter.dxf",
       ]);
-      expect(exporters[0].extension).toBe(".svg");
+      expect(exporters.map((e) => e.extension)).toEqual([".svg", ".dxf"]);
       expect(exporters.map((e) => e.id)).toEqual(
         drawBundle.manifest.contributes?.exporters,
       );

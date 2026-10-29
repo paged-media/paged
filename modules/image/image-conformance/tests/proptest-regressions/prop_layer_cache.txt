@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 8750f5fffc37102a523308db2002eec6add76765b4ca917136c8f3d8aa676125 # shrinks to dims = (20, 13), sixteen = true, gens = [Adjust { exposure: 0.0, saturation: 0.0 }], edits = [Opacity(0, 0.0)]
+cc 177ecff9be9f448d8c2c52a73ab7ff97506a97c22afc13bc262856da18811cb6 # shrinks to dims = (33, 17), sixteen = true, gens = [Adjust { exposure: -0.7923122, saturation: 0.9412804 }, Adjust { exposure: -0.17766096, saturation: 1.7742249 }], edits = [Opacity(0, 0.0)]

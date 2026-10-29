@@ -44,6 +44,12 @@ export = [
 # so an import keeps text as text frames: the 0.9 MB the renderer declined for
 # placed SVGs (engine ADR 1031).
 usvg = { version = "0.48", default-features = false, features = ["svgz"] }
+# The paint reader (`paint`) works on the source text, so a recolour
+# copies every byte it does not change: the XML, CSS and colour parsers
+# usvg itself reads with, at usvg's versions (no new crate in the lock).
+roxmltree = "0.21"
+simplecss = "0.2"
+svgtypes = "0.16"
 # The import's output is the wire's own vocabulary.
 paged-wire = { path = "../paged-wire", optional = true }
 paged-mutate = { path = "../paged-mutate", optional = true }

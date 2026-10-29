@@ -122,3 +122,74 @@ fn alpha_stops_patterns_and_dashes_open_as_powerpoint_draws_them__feat__plugin_s
         );
     }
 }
+
+/// The fixture with its "alpha gradient" shape's linear angle set to
+/// `ang` (DrawingML 60 000ths of a degree, clockwise).
+fn built_with_angle(ang: &str) -> Document {
+    use std::io::{Read, Write};
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../slide-conformance/fixtures/effects.pptx");
+    let bytes = std::fs::read(p).unwrap();
+    let mut zin = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut out = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for i in 0..zin.len() {
+        let mut f = zin.by_index(i).unwrap();
+        let name = f.name().unwrap().to_string();
+        let mut data = Vec::new();
+        f.read_to_end(&mut data).unwrap();
+        if name == "ppt/slides/slide2.xml" {
+            let xml = String::from_utf8(data).unwrap();
+            assert!(xml.contains(r#"<a:lin ang="0" scaled="0"/>"#));
+            data = xml
+                .replace(
+                    r#"<a:lin ang="0" scaled="0"/>"#,
+                    &format!(r#"<a:lin ang="{ang}" scaled="0"/>"#),
+                )
+                .into_bytes();
+        }
+        out.start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        out.write_all(&data).unwrap();
+    }
+    let bytes = out.finish().unwrap().into_inner();
+    let ir = pptx_import::import_pptx(&bytes).unwrap();
+    let deck = slide_resolve::resolve(&ir);
+    let pkg = paged_ooxml::opc::OpcPackage::read(&bytes).unwrap();
+    let images = |p: &str| pkg.part(p).map(|b| b.to_vec());
+    slide_native::build(&deck, &images, "effects").document
+}
+
+/// A linear gradient's axis starts where PowerPoint centres it on the
+/// shape's 200 × 120 pt box, in the shape's local coordinates: the
+/// engine's own placement (the box's bottom-left corner) is right only
+/// for an axis running up or right.
+#[test]
+fn a_vertical_or_down_diagonal_gradient_starts_where_powerpoint_starts_it__feat__plugin_slide_native_effects(
+) {
+    let at = |ang: &str| {
+        let doc = built_with_angle(ang);
+        let s = shape(&doc, "alpha gradient");
+        (
+            s.gradient_fill_angle,
+            s.gradient_fill_length,
+            s.gradient_fill_start,
+        )
+    };
+    // Left to right: the middle of the left edge.
+    assert_eq!(at("0"), (Some(0.0), Some(200.0), Some([0.0, 60.0])));
+    // DrawingML 90° runs top to bottom: from the middle of the top edge.
+    assert_eq!(
+        at("5400000"),
+        (Some(-90.0), Some(120.0), Some([100.0, 0.0]))
+    );
+    // 45° runs down-right, from the top-left corner's projection.
+    let (a, l, s) = at("2700000");
+    assert_eq!(a, Some(-45.0));
+    let l = l.unwrap() as f64;
+    assert!((l - 320.0 / 2f64.sqrt()).abs() < 1e-2, "{l}");
+    let [x, y] = s.unwrap();
+    assert!(
+        (x - 20.0).abs() < 1e-2 && (y + 20.0).abs() < 1e-2,
+        "{x} {y}"
+    );
+}

@@ -17,7 +17,7 @@
 # cannot happen here.
 [workspace]
 resolver = "2"
-members = ["crates/draw-trace", "crates/trace-js"]
+members = ["crates/draw-trace", "crates/draw-dxf", "crates/trace-js"]
 
 [workspace.package]
 version = "0.0.0"
@@ -59,6 +59,13 @@ wasm-bindgen = "=0.2.129"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 console_error_panic_hook = "0.1"
+# DXF interchange (draw ADR 364). MIT. Reads ASCII and binary DXF, writes
+# ASCII; its own entity model, nothing else of ours depends on it.
+dxf = "0.6.2"
+# The engine's SVG crate, for its one walk over a usvg tree (engine ADR
+# 1031, plan item C9) and its paint reader: no default features, so
+# neither the mutation engine nor usvg's text shaper is linked.
+paged-svg = { path = "../../engine/core/crates/paged-svg", default-features = false }
 
 [workspace.lints.clippy]
 too_many_arguments = "allow"

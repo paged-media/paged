@@ -869,6 +869,7 @@ impl Odt<'_> {
             height_emu: i64::from(h.max(1)) * 635,
             float: None,
             band_offset_emu: None,
+            look: None,
         })
     }
 

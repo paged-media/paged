@@ -147,6 +147,12 @@ pub struct LayerPlate {
     /// layer record's rectangle clipped to the canvas (ADR 464); `None`
     /// means canvas-extent. Everything outside is transparent.
     pub rgba: Vec<u8>,
+    /// The same pixels at FULL DEPTH when the document is 16-bit RGB
+    /// (`rgba` is their high bytes), so a 16-bit document's layers can be
+    /// held at 16 bits (image ADR 479). `None` for an 8-bit or CMYK
+    /// document, an adjustment, and a channel stored as 16-bit RLE (read
+    /// at 8 bits only, see `ChannelData::decode`).
+    pub rgba16: Option<Vec<u16>>,
     /// The rectangle `rgba` covers, in canvas pixels; `None` = the whole
     /// canvas.
     pub rect: Option<paged_pixel::Region>,
@@ -378,6 +384,23 @@ fn crop_rgba(
     px: &[u8],
     to: paged_pixel::Region,
 ) -> (paged_pixel::Region, Vec<u8>) {
+    if to.w == 0 || to.h == 0 {
+        return (paged_pixel::Region::new(0, 0, 0, 0), Vec::new());
+    }
+    let mut out = Vec::with_capacity(to.w as usize * to.h as usize * 4);
+    for y in to.y..to.y + to.h as i32 {
+        let s = (((y - r.y) as usize) * r.w as usize + (to.x - r.x) as usize) * 4;
+        out.extend_from_slice(&px[s..s + to.w as usize * 4]);
+    }
+    (to, out)
+}
+
+/// [`crop_rgba`] for 16-bit samples.
+fn crop_rgba16(
+    r: paged_pixel::Region,
+    px: &[u16],
+    to: paged_pixel::Region,
+) -> (paged_pixel::Region, Vec<u16>) {
     if to.w == 0 || to.h == 0 {
         return (paged_pixel::Region::new(0, 0, 0, 0), Vec::new());
     }
@@ -737,6 +760,7 @@ impl PsdFile {
             return Err(PsdError::Unsupported(first.message));
         }
         let (cw, ch) = (h.width, h.height);
+        let sixteen_rgb = h.depth == 16 && h.color_mode == ColorMode::Rgb;
         let canvas_texels = (cw as usize)
             .checked_mul(ch as usize)
             .ok_or_else(|| PsdError::Unsupported("canvas extent overflows usize".into()))?;
@@ -751,7 +775,9 @@ impl PsdFile {
             let h = (i64::from(l.bottom).clamp(0, i64::from(ch))
                 - i64::from(l.top).clamp(0, i64::from(ch)))
             .max(0) as usize;
-            w * h * 4
+            // A 16-bit RGB document's plates are held twice during the
+            // import: their 8-bit view and their 16-bit samples.
+            w * h * if sixteen_rgb { 12 } else { 4 }
         };
         // Masks: a group's is canvas-extent, an adjustment's too (it says
         // where the adjustment applies); a pixel layer's is cut to its
@@ -788,6 +814,8 @@ impl PsdFile {
         }
 
         let mut layers = Vec::with_capacity(pixel_layers.len());
+        // Every pixel layer was read at 16 bits.
+        let mut all_deep = sixteen_rgb;
         for (layer, group) in pixel_layers {
             let adjustment = adjustment_of(layer)?;
             // An adjustment has no pixels of its own (its channels hold
@@ -810,6 +838,20 @@ impl PsdFile {
                     None => (r, px),
                 }
             };
+            // The same rectangle at 16 bits (a channel it cannot read at
+            // full depth leaves the layer at 8).
+            let rgba16 = if sixteen_rgb && adjustment.is_none() {
+                self.layer_bounded_rgba16(layer, cw, ch)
+                    .ok()
+                    .map(|(r, px)| match clip {
+                        Some(c) => crop_rgba16(r, &px, intersect(r, c)).1,
+                        None => px,
+                    })
+                    .filter(|px| px.len() == rgba.len())
+            } else {
+                None
+            };
+            all_deep &= adjustment.is_some() || rgba16.is_some();
             // The walk refused every style it does not model.
             let style = effects_of(layer)
                 .ok()
@@ -847,6 +889,7 @@ impl PsdFile {
                 // An adjustment has no pixels of its own (its channels
                 // hold an empty rect or a mask).
                 rgba,
+                rgba16,
                 rect: Some(rect),
                 group,
                 // A pixel layer's mask at its rectangle; an adjustment's
@@ -895,7 +938,10 @@ impl PsdFile {
         Ok(LayerImport {
             width: cw,
             height: ch,
-            depth_reduced: h.depth == 16,
+            // A 16-bit document whose every layer came with its 16-bit
+            // samples lost nothing; a CMYK one (converted through 8-bit
+            // ink) or one with a 16-bit RLE channel did.
+            depth_reduced: h.depth == 16 && !all_deep,
             converted_from_cmyk: h.color_mode == ColorMode::Cmyk,
             global_light: crate::effects::GlobalLight::of(self),
             layers,
@@ -1501,6 +1547,84 @@ impl PsdFile {
             enabled: flags & 0x02 == 0,
             rect: None,
         })
+    }
+
+    /// [`Self::layer_bounded_rgba8`] at 16 bits, for an RGB document of
+    /// depth 16: the R, G, B and transparency channels at full precision
+    /// (`ChannelData::decode_samples16`; a 16-bit RLE channel is an
+    /// error, and the caller keeps the layer at 8 bits).
+    fn layer_bounded_rgba16(
+        &self,
+        layer: &LayerRecord,
+        cw: u32,
+        ch: u32,
+    ) -> Result<(paged_pixel::Region, Vec<u16>)> {
+        let lw = (layer.right - layer.left).max(0) as u32;
+        let lh = (layer.bottom - layer.top).max(0) as u32;
+        let plane_len = (lw as usize) * (lh as usize);
+        let x0 = i64::from(layer.left).clamp(0, i64::from(cw));
+        let y0 = i64::from(layer.top).clamp(0, i64::from(ch));
+        let x1 = i64::from(layer.right).clamp(0, i64::from(cw));
+        let y1 = i64::from(layer.bottom).clamp(0, i64::from(ch));
+        let rect = paged_pixel::Region::new(
+            x0 as i32,
+            y0 as i32,
+            (x1 - x0).max(0) as u32,
+            (y1 - y0).max(0) as u32,
+        );
+        if plane_len == 0 || rect.w == 0 || rect.h == 0 {
+            return Ok((paged_pixel::Region::new(0, 0, 0, 0), Vec::new()));
+        }
+        let mut planes = vec![vec![0u16; plane_len]; 3];
+        let mut a = vec![u16::MAX; plane_len];
+        for (ci, info) in layer.channels.iter().enumerate() {
+            let dst = match info.id {
+                id @ 0..=2 => &mut planes[id as usize],
+                -1 => &mut a,
+                _ => continue,
+            };
+            let data = layer
+                .channel_data
+                .get(ci)
+                .ok_or_else(|| PsdError::Malformed {
+                    section: "layer channel image data",
+                    detail: format!("layer \"{}\" is missing channel {}", layer.name(), info.id),
+                })?;
+            let plane = data.decode_samples16(lh, lw)?;
+            if plane.len() != plane_len {
+                return Err(PsdError::Malformed {
+                    section: "layer channel image data",
+                    detail: format!(
+                        "layer \"{}\" channel {} decoded to {} samples, expected {plane_len}",
+                        layer.name(),
+                        info.id,
+                        plane.len()
+                    ),
+                });
+            }
+            dst.copy_from_slice(&plane);
+        }
+        let (cw2, ch2) = (rect.w, rect.h);
+        let mut out = vec![0u16; cw2 as usize * ch2 as usize * 4];
+        for ly in 0..lh as i64 {
+            let dy = layer.top as i64 + ly - i64::from(rect.y);
+            if dy < 0 || dy >= ch2 as i64 {
+                continue;
+            }
+            for lx in 0..lw as i64 {
+                let dx = layer.left as i64 + lx - i64::from(rect.x);
+                if dx < 0 || dx >= cw2 as i64 {
+                    continue;
+                }
+                let si = (ly * lw as i64 + lx) as usize;
+                let di = ((dy * cw2 as i64 + dx) as usize) * 4;
+                out[di] = planes[0][si];
+                out[di + 1] = planes[1][si];
+                out[di + 2] = planes[2][si];
+                out[di + 3] = a[si];
+            }
+        }
+        Ok((rect, out))
     }
 
     /// One layer's canvas-extent straight RGBA8: decode its modeled
