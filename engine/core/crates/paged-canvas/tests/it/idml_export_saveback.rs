@@ -1449,6 +1449,7 @@ fn created_swatch_saves_to_graphic_and_reparses() {
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                pattern: None,
             },
         })
         .expect("create swatch");
@@ -1499,6 +1500,7 @@ fn created_swatch_then_undo_round_trips_byte_identical() {
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                pattern: None,
             },
         })
         .unwrap();
@@ -1606,6 +1608,7 @@ fn created_frame_with_new_swatch_and_style_round_trips() {
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                pattern: None,
             },
         })
         .expect("swatch");

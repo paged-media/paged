@@ -153,6 +153,7 @@ is not written yet.
 | [1016](1016-word-first-fit-composer.md) | Word's first-fit is a composer of its own | Accepted 2026-10-24 |
 | [1017](1017-styled-field-values-and-alternates.md) | A text field takes the styles and breaks its author allows; alternates choose a frame | Accepted 2026-10-24 |
 | [1040](1040-gradient-mesh-and-freeform-gradient.md) | Gradient meshes and freeform gradients are native fills, drawn as a cached raster | Accepted 2026-10-29 |
+| [1041](1041-pattern-paint.md) | A pattern is a swatch: a tile of vector items, repeated as a cached raster and written as a PDF tiling pattern | Accepted 2026-10-29 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

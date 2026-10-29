@@ -114,6 +114,10 @@ pub enum Paint {
         rgb: Color,
         spot: Option<SpotInkId>,
     },
+    /// Engine ADR 1041 — a pattern: the tile in
+    /// `DisplayList::patterns`, repeated over the plane. Its placement is
+    /// relative to the path's local space, as a gradient's endpoints are.
+    Pattern(crate::pattern::PatternId),
 }
 
 /// Index into `DisplayList::gradients`, `DisplayList::radial_gradients`,
@@ -1664,6 +1668,9 @@ pub struct DisplayList {
     /// Engine ADR 1040 — the mesh shadings [`DisplayCommand::MeshShade`]
     /// draws, indexed by [`crate::mesh::MeshId`].
     pub meshes: Vec<crate::mesh::MeshShading>,
+    /// Engine ADR 1041 — the pattern uses [`Paint::Pattern`] names,
+    /// indexed by [`crate::pattern::PatternId`].
+    pub patterns: Vec<crate::pattern::PatternPaint>,
     /// Named spot inks the document references. Indexed by
     /// [`SpotInkId`]. Two `Paint::Cmyk` paints carrying the same spot
     /// name intern to the same id so the rasterizer can identify
@@ -1774,6 +1781,7 @@ impl DisplayList {
             sweep_gradients: self.sweep_gradients.clone(),
             images: self.images.clone(),
             meshes: self.meshes.clone(),
+            patterns: self.patterns.clone(),
             spot_inks: self.spot_inks.clone(),
             glyph_runs: None,
             link_regions: None,
@@ -1833,6 +1841,21 @@ impl DisplayList {
         let id = crate::mesh::MeshId(self.meshes.len() as u32);
         self.meshes.push(mesh);
         id
+    }
+
+    /// Append a pattern use and return its id.
+    pub fn push_pattern(
+        &mut self,
+        pattern: crate::pattern::PatternPaint,
+    ) -> crate::pattern::PatternId {
+        let id = crate::pattern::PatternId(self.patterns.len() as u32);
+        self.patterns.push(pattern);
+        id
+    }
+
+    /// The pattern use `id` names.
+    pub fn pattern(&self, id: crate::pattern::PatternId) -> Option<&crate::pattern::PatternPaint> {
+        self.patterns.get(id.0 as usize)
     }
 
     /// The mesh shading `id` names.
@@ -1912,6 +1935,9 @@ impl DisplayList {
         );
         for m in &self.meshes {
             let _ = write!(h, "m{:x}", m.hash);
+        }
+        for p in &self.patterns {
+            let _ = write!(h, "t{:x}{:?}", p.tile.hash, p.to_local);
         }
         for img in &self.images {
             let _ = write!(h, "i{}x{}", img.width, img.height);

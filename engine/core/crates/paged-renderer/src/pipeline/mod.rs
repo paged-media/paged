@@ -77,6 +77,7 @@ mod links;
 mod metrics;
 mod nested_styles;
 mod numbering;
+mod pattern_paint;
 mod shapes;
 mod span_columns;
 mod stroke_geom;
@@ -154,6 +155,7 @@ pub use numbering::story_list_labels;
 use numbering::{bullet_marker_character_style, list_prefix_with_levels, marker_run_attrs};
 #[cfg(test)]
 use numbering::{format_number, substitute_numbering_expression};
+pub(crate) use pattern_paint::rebase_to_box as rebase_pattern_to_box;
 pub use resume::{EditSpan, StoryResume, StoryResumeStore};
 pub(crate) use text_frame::paint_as_solid_with_icc;
 use text_frame::*;

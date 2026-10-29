@@ -1486,6 +1486,7 @@ pub(crate) fn new_text_frame(
         fill_rule: paged_model::FillRule::NonZero,
         gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
         fill_mesh: None,
+        pattern_transform: None,
         effects: None,
         fill_transparency: None,
         stroke_transparency: None,
@@ -1634,6 +1635,7 @@ pub(crate) fn new_rectangle(
         fill_rule: paged_model::FillRule::NonZero,
         gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
         fill_mesh: None,
+        pattern_transform: None,
     }
 }
 

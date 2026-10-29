@@ -31,6 +31,7 @@ pub mod glyph;
 pub mod gradient_sample;
 pub mod mask;
 pub mod mesh;
+pub mod pattern;
 pub mod perf;
 pub mod pixel_layer;
 pub mod primitives;
@@ -56,6 +57,7 @@ pub use mesh::{
     mesh_raster, FreeformShading, FreeformSource, MeshId, MeshKind, MeshRaster, MeshShading,
     ShadePatch,
 };
+pub use pattern::{PatternId, PatternPaint, PatternShape, PatternTile};
 pub use pixel_layer::{PixelLayer, PixelTile};
 pub use primitives::{
     emit_drop_shadow_rect, emit_drop_shadow_rect_transformed, emit_ellipse,

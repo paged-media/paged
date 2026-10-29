@@ -509,6 +509,7 @@ fn fresh_color(m: &mut CanvasModel) -> String {
             alternate_value: Vec::new(),
             tint: None,
             alpha: None,
+            pattern: None,
         },
     })
     .expect("mint a distinct swatch");
@@ -3003,6 +3004,7 @@ fn palette_cases(c: &mut Vec<Case>) {
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                pattern: None,
             },
         },
         |m| {
@@ -3025,6 +3027,7 @@ fn palette_cases(c: &mut Vec<Case>) {
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                pattern: None,
             },
         }
     }));

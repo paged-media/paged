@@ -296,6 +296,7 @@ fn build() -> (CanvasModel, Targets) {
                 alternate_value: vec![],
                 tint: None,
                 alpha: None,
+                pattern: None,
             },
         },
     );

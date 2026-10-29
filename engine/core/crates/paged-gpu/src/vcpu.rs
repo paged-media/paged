@@ -474,9 +474,70 @@ impl Surface {
 
 fn set_brush(ctx: &mut RenderContext, brush: PaintBrush) {
     match brush {
-        PaintBrush::Solid(c) => ctx.set_paint(c),
-        PaintBrush::Gradient(g) => ctx.set_paint(g),
+        PaintBrush::Solid(c) => {
+            ctx.reset_paint_transform();
+            ctx.set_paint(c)
+        }
+        PaintBrush::Gradient(g) => {
+            ctx.reset_paint_transform();
+            ctx.set_paint(g)
+        }
+        // Engine ADR 1041 — the pattern's period, repeated; the paint
+        // transform takes its pixels to page space (user space here).
+        PaintBrush::Pattern { raster, to_page } => {
+            let Some(pixmap) = pattern_pixmap(&raster) else {
+                ctx.reset_paint_transform();
+                ctx.set_paint(vello_cpu::peniko::Color::TRANSPARENT);
+                return;
+            };
+            ctx.set_paint(Image {
+                image: ImageSource::Pixmap(pixmap),
+                sampler: ImageSampler::new()
+                    .with_extend(Extend::Repeat)
+                    .with_quality(ImageQuality::Medium),
+            });
+            ctx.set_paint_transform(to_page);
+        }
     }
+}
+
+/// A pattern raster's cache key and its pixmap.
+type PatternPixmap = ((u64, i32), Arc<Pixmap>);
+
+thread_local! {
+    /// Engine ADR 1041 — the last pattern rasters as pixmaps, so a redraw
+    /// at the same scale copies nothing.
+    static PATTERN_PIXMAPS: std::cell::RefCell<Vec<PatternPixmap>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A pattern raster as a `vello_cpu` pixmap (premultiplied, as the GPU
+/// lane's image brush reads it).
+fn pattern_pixmap(raster: &crate::pattern_raster::PatternRaster) -> Option<Arc<Pixmap>> {
+    let (w, h) = (
+        u16::try_from(raster.width).ok()?,
+        u16::try_from(raster.height).ok()?,
+    );
+    PATTERN_PIXMAPS.with(|c| {
+        let mut c = c.borrow_mut();
+        if let Some(at) = c.iter().position(|(k, _)| *k == raster.key) {
+            let hit = c.remove(at);
+            let pixmap = hit.1.clone();
+            c.push(hit);
+            return Some(pixmap);
+        }
+        let pixmap = Arc::new(Pixmap::from_parts(
+            raster.rgba.as_ref().clone(),
+            w,
+            h,
+            PixelMetadata::new(ImageAlphaType::AlphaPremultiplied, true),
+        ));
+        if c.len() >= 8 {
+            c.remove(0);
+        }
+        c.push((raster.key, pixmap.clone()));
+        Some(pixmap)
+    })
 }
 
 fn nearest() -> ImageSampler {
@@ -760,13 +821,41 @@ impl Raster<'_> {
     fn splat(
         &mut self,
         paint: &Paint,
+        transform: &CTransform,
+        bbox_pt: KRect,
+        pad_pt: f64,
+        brush: PaintBrush,
+        draw: impl Fn(&mut RenderContext, PaintBrush),
+    ) {
+        if !self.want_planes || !self.on_page() {
+            return;
+        }
+        // Engine ADR 1041 — a pattern's CMYK items keep their inks: each
+        // item (its fill, its stroke) is drawn alone as a pattern of its
+        // own, through the same shape, and its coverage splats its paint,
+        // as the item would if it were drawn on the page. RGB items, like
+        // RGB paints, leave the planes alone.
+        if let Paint::Pattern(pid) = paint {
+            let xform = self.active().xform;
+            for (ink, brush) in vello_map::pattern_ink_brushes(self.list, *pid, transform, xform) {
+                self.splat_with(&ink, bbox_pt, pad_pt, |ctx| draw(ctx, brush));
+            }
+            return;
+        }
+        if !matches!(paint, Paint::Cmyk { .. }) {
+            return;
+        }
+        self.splat_with(paint, bbox_pt, pad_pt, |ctx| draw(ctx, brush));
+    }
+
+    /// Splat `paint` (a `Paint::Cmyk`) over the coverage `draw` renders.
+    fn splat_with(
+        &mut self,
+        paint: &Paint,
         bbox_pt: KRect,
         pad_pt: f64,
         draw: impl FnOnce(&mut RenderContext),
     ) {
-        if !self.want_planes || !self.on_page() || !matches!(paint, Paint::Cmyk { .. }) {
-            return;
-        }
         let Some((scratch, ox, oy)) = self.coverage_scratch(bbox_pt, pad_pt, draw) else {
             return;
         };
@@ -792,7 +881,8 @@ impl Raster<'_> {
         rule: Fill,
         stroke: Option<vello_cpu::kurbo::Stroke>,
     ) {
-        let Some(brush) = vello_map::resolve_paint(paint, self.list, transform) else {
+        let xform = self.active().xform;
+        let Some(brush) = vello_map::resolve_paint(paint, self.list, transform, xform) else {
             return;
         };
         let bbox = path.bounding_box();
@@ -921,7 +1011,8 @@ impl Raster<'_> {
                     let Some(path) = fills.path(list, *path_id, &transform, xform, glyph) else {
                         continue;
                     };
-                    let Some(brush) = vello_map::resolve_paint(paint, list, &transform) else {
+                    let Some(brush) = vello_map::resolve_paint(paint, list, &transform, xform)
+                    else {
                         continue;
                     };
                     let rule = vello_map::path_fill(list, *path_id);
@@ -929,10 +1020,17 @@ impl Raster<'_> {
                     let (surface, res, _) = self.split();
                     surface.fill(res, &path, rule, brush, vello_map::blend_to_peniko(blend));
                     if let Some(brush) = splat_brush {
-                        self.splat(paint, path.bounding_box(), 1.0, |ctx| {
-                            set_brush(ctx, brush);
-                            fill_with(ctx, &path, rule);
-                        });
+                        self.splat(
+                            paint,
+                            &transform,
+                            path.bounding_box(),
+                            1.0,
+                            brush,
+                            |ctx, b| {
+                                set_brush(ctx, b);
+                                fill_with(ctx, &path, rule);
+                            },
+                        );
                     }
                 }
                 DisplayCommand::StrokePath {
@@ -945,10 +1043,11 @@ impl Raster<'_> {
                         continue;
                     };
                     let path = vello_map::path_to_bez(data, transform);
-                    let Some(brush) = vello_map::resolve_paint(paint, list, transform) else {
+                    let xform = self.active().xform;
+                    let Some(brush) = vello_map::resolve_paint(paint, list, transform, xform)
+                    else {
                         continue;
                     };
-                    let xform = self.active().xform;
                     let (path, ks) = match vello_map::stroke_geometry(
                         path,
                         vello_map::kurbo_stroke(stroke),
@@ -963,21 +1062,35 @@ impl Raster<'_> {
                                 brush.clone(),
                                 PenikoBlendMode::default(),
                             );
-                            self.splat(paint, outline.bounding_box(), 1.0, |ctx| {
-                                set_brush(ctx, brush);
-                                ctx.fill_path(&outline);
-                            });
+                            self.splat(
+                                paint,
+                                transform,
+                                outline.bounding_box(),
+                                1.0,
+                                brush,
+                                |ctx, b| {
+                                    set_brush(ctx, b);
+                                    ctx.fill_path(&outline);
+                                },
+                            );
                             continue;
                         }
                         StrokeGeometry::Stroke(path, ks) => (path, ks),
                     };
                     self.active().stroke(&path, ks.clone(), brush.clone());
                     let pad = ks.width * 0.5 + 1.0;
-                    self.splat(paint, path.bounding_box(), pad, |ctx| {
-                        set_brush(ctx, brush);
-                        ctx.set_stroke(ks);
-                        ctx.stroke_path(&path);
-                    });
+                    self.splat(
+                        paint,
+                        transform,
+                        path.bounding_box(),
+                        pad,
+                        brush,
+                        |ctx, b| {
+                            set_brush(ctx, b);
+                            ctx.set_stroke(ks.clone());
+                            ctx.stroke_path(&path);
+                        },
+                    );
                 }
                 DisplayCommand::FillPathOverprint {
                     path_id,

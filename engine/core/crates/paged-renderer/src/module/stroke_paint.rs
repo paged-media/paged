@@ -79,6 +79,7 @@ pub(crate) fn stroke_paint_module(
     }) else {
         return;
     };
+    super::fill_paint::place_pattern(page, paint, frame, stroke_path.is_some());
     let start = page.list.commands.len();
     // Engine ADR 1007 — a gradient mapped along or across the stroke is
     // laid down as bands under the stroke's outline; `Within` (and every

@@ -14,6 +14,7 @@ mod links;
 mod mesh_fill;
 mod opacity_mask;
 mod paint_v2;
+mod pattern_paint;
 mod pdf_fragments;
 mod placed_svg;
 mod tagged_styles;

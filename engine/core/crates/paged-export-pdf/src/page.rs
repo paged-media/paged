@@ -1119,6 +1119,102 @@ impl Walker<'_, '_> {
         content.restore_state();
     }
 
+    /// Engine ADR 1041 — the pattern use `id`, drawn by a command whose
+    /// transform is `transform`, as a coloured tiling pattern
+    /// (`PatternType 1`, `PaintType 1`): its cell is the period, its
+    /// content every copy of the items that reaches into it in paint
+    /// order (the cell's BBox clips them), its matrix pattern space → the
+    /// page's default space. Item colours keep their native space (a CMYK
+    /// or spot swatch writes its inks). Returns the resource name.
+    fn tiling_pattern(
+        &mut self,
+        id: paged_compose::PatternId,
+        transform: &Transform,
+    ) -> Option<String> {
+        let list = self.list;
+        let p = list.pattern(id)?;
+        let tile = &p.tile;
+        if !tile.is_drawable() {
+            return None;
+        }
+        // The cell has resources of its own (the colour spaces its items
+        // name): sharing the page's dictionary would make the pattern
+        // list itself, which Illustrator refuses to open.
+        let mut cell_resources = PageResources::default();
+        let mut cell = Content::new();
+        for &(cx, cy) in &tile.copies {
+            for item in &tile.items {
+                cell.save_state();
+                cell.transform([1.0, 0.0, 0.0, 1.0, cx, cy]);
+                if let Some(fill) = &item.fill {
+                    crate::color::set_fill_paint(
+                        &mut cell,
+                        self.state,
+                        &mut cell_resources,
+                        self.input,
+                        &list.spot_inks,
+                        fill,
+                    );
+                    crate::path::emit_path(&mut cell, &item.path);
+                    crate::path::fill(&mut cell, &item.path);
+                }
+                if let Some((paint, stroke)) = &item.stroke {
+                    crate::color::set_stroke_paint(
+                        &mut cell,
+                        self.state,
+                        &mut cell_resources,
+                        self.input,
+                        &list.spot_inks,
+                        paint,
+                    );
+                    crate::path::emit_stroke_params(&mut cell, stroke);
+                    crate::path::emit_path(&mut cell, &item.path);
+                    cell.stroke();
+                }
+                cell.restore_state();
+            }
+        }
+        let data = flate(&cell.finish());
+        // A pattern maps to its parent stream's default space: the page's
+        // (under the page CTM) or, inside a captured group, the form's,
+        // which is invoked under the page CTM already.
+        let parent = if self.form_depth > 0 {
+            Transform::IDENTITY
+        } else {
+            Transform(self.base_ctm)
+        };
+        let matrix = parent.compose(transform).compose(&p.to_local).0;
+        if !matrix.iter().all(|v| v.is_finite()) {
+            return None;
+        }
+        let pat_ref = self.state.refs.alloc();
+        {
+            let mut pat = self.state.pdf.tiling_pattern(pat_ref, &data);
+            pat.filter(pdf_writer::Filter::FlateDecode);
+            pat.paint_type(pdf_writer::types::PaintType::Colored);
+            pat.tiling_type(pdf_writer::types::TilingType::ConstantSpacing);
+            pat.bbox(pdf_writer::Rect::new(
+                0.0,
+                0.0,
+                tile.period.0,
+                tile.period.1,
+            ));
+            pat.x_step(tile.period.0);
+            pat.y_step(tile.period.1);
+            pat.matrix(matrix);
+            let mut res = pat.resources();
+            if !cell_resources.color_spaces.is_empty() {
+                let mut d = res.color_spaces();
+                for (name, r) in &cell_resources.color_spaces {
+                    d.pair(Name(name.as_bytes()), *r);
+                }
+            }
+        }
+        let name = format!("P{}", self.resources.patterns.len());
+        self.resources.patterns.insert(name.clone(), pat_ref);
+        Some(name)
+    }
+
     fn emit_fill(
         &mut self,
         content: &mut Content,
@@ -1196,6 +1292,16 @@ impl Walker<'_, '_> {
             }
         }
         match paint {
+            // Engine ADR 1041 — a tiling pattern through `/Pattern`.
+            Paint::Pattern(id) => {
+                if let Some(name) = self.tiling_pattern(*id, transform) {
+                    content.set_fill_color_space(pdf_writer::types::ColorSpaceOperand::Pattern);
+                    content.set_fill_pattern(std::iter::empty(), Name(name.as_bytes()));
+                    content.transform(transform.0);
+                    crate::path::emit_path(content, path);
+                    crate::path::fill(content, path);
+                }
+            }
             Paint::SweepGradient(id) => {
                 if let Some(g) = list.sweep_gradient(*id) {
                     // Engine ADR 1007 — the sweep is defined in page
@@ -1380,7 +1486,17 @@ impl Walker<'_, '_> {
                 }
             }
         }
+        // Engine ADR 1041 — a pattern stroke paints through `/Pattern`.
+        let tiling = match paint {
+            Paint::Pattern(id) => self.tiling_pattern(*id, transform),
+            _ => None,
+        };
         match shading {
+            _ if tiling.is_some() => {
+                let name = tiling.unwrap_or_default();
+                content.set_stroke_color_space(pdf_writer::types::ColorSpaceOperand::Pattern);
+                content.set_stroke_pattern(std::iter::empty(), Name(name.as_bytes()));
+            }
             Some(sh_ref) => {
                 let pat_ref = self.state.refs.alloc();
                 {
@@ -1581,6 +1697,7 @@ fn paint_key(p: &Paint) -> u64 {
         Paint::LinearGradient(id) => 3 << 60 | id.0 as u64,
         Paint::RadialGradient(id) => 4 << 60 | id.0 as u64,
         Paint::SweepGradient(id) => 5 << 60 | id.0 as u64,
+        Paint::Pattern(id) => 6 << 60 | id.0 as u64,
     }
 }
 

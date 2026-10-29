@@ -118,6 +118,7 @@ pub(crate) fn fill_paint_module(
         }
         _ => fill,
     };
+    place_pattern(page, fill, frame, fill_path.is_some());
     match fill {
         Paint::LinearGradient(gid) => place_linear_at_start(page, gid, frame),
         Paint::RadialGradient(gid) => place_radial_at_start(page, gid, frame),
@@ -134,6 +135,53 @@ pub(crate) fn fill_paint_module(
         fill_path,
     );
     rewrite_tail_for_overprint(page, start, frame.overprint_fill, false);
+}
+
+/// Engine ADR 1041 — rebase a pattern paint from the frame's box space
+/// (top-left origin) onto the space its path is drawn in: the unit
+/// rectangle for a rectangle, text frame or oval drawn from its box, the
+/// frame's inner coordinates for an interned path (a polygon, a rounded
+/// or stroke-aligned rectangle). The frame's own `pattern_transform`
+/// applies after the pattern's placement.
+pub(crate) fn place_pattern(
+    page: &mut BuiltPage,
+    paint: Paint,
+    frame: &ResolvedFrame<'_>,
+    inner_path: bool,
+) {
+    let Paint::Pattern(pid) = paint else {
+        return;
+    };
+    let bbox = match frame.geometry {
+        Geometry::Rect { rect }
+        | Geometry::TextFrameRect { rect }
+        | Geometry::Oval { rect }
+        | Geometry::Polygon { bbox: rect, .. } => rect,
+        Geometry::Line { p0, p1 } => Rect {
+            x: p0.0.min(p1.0),
+            y: p0.1.min(p1.1),
+            w: (p1.0 - p0.0).abs(),
+            h: (p1.1 - p0.1).abs(),
+        },
+    };
+    let inner = inner_path
+        || matches!(
+            frame.geometry,
+            Geometry::Polygon { .. } | Geometry::Line { .. }
+        );
+    let box_to_local = if inner {
+        Transform::translate(bbox.x, bbox.y)
+    } else if bbox.w > 0.0 && bbox.h > 0.0 {
+        Transform::scale(1.0 / bbox.w, 1.0 / bbox.h)
+    } else {
+        return;
+    };
+    crate::pipeline::rebase_pattern_to_box(
+        &mut page.list,
+        pid,
+        box_to_local,
+        frame.pattern_transform,
+    );
 }
 
 /// Map the linear gradient's unit-rect endpoints onto `bbox` in

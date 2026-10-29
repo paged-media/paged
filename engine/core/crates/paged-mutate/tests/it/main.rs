@@ -22,6 +22,7 @@ mod mesh_fill;
 mod object_style_corners;
 mod oval_bounds;
 mod pathfinder_oracle;
+mod pattern_swatch;
 mod place_image;
 mod placeholder_fields;
 mod planar_ops;

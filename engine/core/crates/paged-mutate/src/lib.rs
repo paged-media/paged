@@ -81,8 +81,9 @@ pub use operation::{
     GradientStopSpec, GroupSpec, GuideOrientationSpec, InvalidationHint, MeshColorSpec,
     MeshFillSpec, MeshGridSpec, MeshNodeSpec, NestedParent, NodeId, NodeSpec, NumberingListSpec,
     OpacityMaskMode, Operation, PathPointAddress, PathPointRole, PathfinderKind,
-    PathfinderRegionVerb, PropertyPath, StopColorSpec, StyleCollection, StyleScope,
-    SwatchColorSpec, SwatchSpec, TextPathSpec, Value, ZOrderTarget,
+    PathfinderRegionVerb, PatternColorSpec, PatternItemSpec, PatternSpec, PropertyPath,
+    StopColorSpec, StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec, Value,
+    ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
 
@@ -271,6 +272,7 @@ mod tests {
             fill_rule: paged_model::FillRule::NonZero,
             gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
             fill_mesh: None,
+            pattern_transform: None,
             effects: None,
             gradient_fill_angle: None,
             gradient_fill_length: None,
@@ -588,6 +590,7 @@ mod tests {
             alternate_value: Vec::new(),
             tint: None,
             alpha: None,
+            pattern: None,
         }
     }
 
@@ -660,6 +663,7 @@ mod tests {
             alternate_value: vec![100.0, 75.0, 0.0, 0.0],
             tint: Some(80.0),
             alpha: None,
+            pattern: None,
         };
         project
             .apply(Operation::CreateSwatch { spec: spot })

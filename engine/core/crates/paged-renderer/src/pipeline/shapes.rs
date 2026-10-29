@@ -609,6 +609,19 @@ fn emit_line_body(
         })
         .or_else(|| color_id_to_paint("Color/Black", palette, color_ctx))
         .unwrap_or(Paint::Solid(Color::BLACK));
+    // Engine ADR 1041 — a pattern stroke sits on the line's box (inner
+    // coordinates, the space the anchor path is drawn in).
+    if let Paint::Pattern(pid) = stroke_paint {
+        super::rebase_pattern_to_box(
+            &mut page.list,
+            pid,
+            paged_compose::Transform::translate(
+                line.bounds.left.min(line.bounds.right),
+                line.bounds.top.min(line.bounds.bottom),
+            ),
+            resolved.pattern_transform,
+        );
+    }
     let stroke_width = resolved.effective_stroke_weight();
     if stroke_width <= 0.0 {
         return;

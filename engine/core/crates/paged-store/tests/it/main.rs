@@ -7,4 +7,5 @@ mod c62_line_ends_load;
 mod fill_rule;
 mod mesh_fill;
 mod paint_v2;
+mod pattern_paint;
 mod round_trip_render;
