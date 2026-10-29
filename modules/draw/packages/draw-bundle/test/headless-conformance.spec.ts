@@ -128,6 +128,15 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.puppetWarp",
         "media.paged.draw.tool.perspectiveGrid",
         "media.paged.draw.tool.perspectiveSelect",
+        // WP6.8 — the Symbolism flyout (draw ADR 365).
+        "media.paged.draw.tool.symbolSprayer",
+        "media.paged.draw.tool.symbolShifter",
+        "media.paged.draw.tool.symbolScruncher",
+        "media.paged.draw.tool.symbolSizer",
+        "media.paged.draw.tool.symbolSpinner",
+        "media.paged.draw.tool.symbolStainer",
+        "media.paged.draw.tool.symbolScreener",
+        "media.paged.draw.tool.symbolNineSlice",
       ]);
       // The contribution log holds the twenty tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
@@ -164,6 +173,15 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "tool",
         "tool",
         "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        // WP6.8 — the eight Symbolism tools (draw ADR 365).
         "tool",
         "tool",
         "tool",
@@ -226,8 +244,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // (registered among the rest; the kinds are what is counted);
         // Object ▸ Rasterize and its "…" raiser (extensions ADR 338);
         // WP6.7 — liquifyStroke, the two Puppet Warp commands and the
-        // twelve perspective-grid commands.
-        ...Array<string>(25).fill("command"),
+        // twelve perspective-grid commands; WP6.8 — Replace Symbol and
+        // Symbol Options (draw ADR 365).
+        ...Array<string>(27).fill("command"),
         "command",
         "command",
         "command",
@@ -735,7 +754,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(37);
+    expect(harness.toolsContributed()).toHaveLength(45);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

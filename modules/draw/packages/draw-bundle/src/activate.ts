@@ -111,6 +111,7 @@ import {
   contributeSymbolCommands,
   SYMBOLS_COMMAND_IDS,
 } from "./commands/symbols";
+import { installSymbolMigration } from "./commands/symbols-migrate";
 import {
   contributeLivePaintCommands,
   LIVE_PAINT_COMMAND_IDS,
@@ -554,6 +555,9 @@ export function activate(host: BundleHost): BundleHandle {
   // the text refusal and everything v0 deliberately does not build (the
   // eight symbol-SET tools, nine-slice scaling, 3D mapping).
   const symbolCommandsSub = contributeSymbolCommands(host);
+  // WP6.8 (draw ADR 365) — a v0 library moves onto the engine's symbols
+  // when the host keeps them, once per document, on open.
+  const symbolMigrationSub = installSymbolMigration(host);
   // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0 (make
   // group / fill face / regenerate / select faces / delete face /
   // release). Faces come from the B-22 planar arrangement, which is a
@@ -803,6 +807,7 @@ export function activate(host: BundleHost): BundleHandle {
       opacityMaskCommandsSub.dispose();
       livePaintCommandsSub.dispose();
       symbolCommandsSub.dispose();
+      symbolMigrationSub.dispose();
       graphicStyleCommandsSub.dispose();
       appearanceBakeCommandsSub.dispose();
       appearanceCommandsSub.dispose();

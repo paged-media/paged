@@ -46,6 +46,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { resolveTargetPage } from "../io/svg";
+import { pageOriginOf } from "../page-origin";
 
 /** The flag the engine lane rides. */
 export const ENGINE_SYMBOLS_FEATURE = "document.symbols@1";
@@ -276,4 +277,193 @@ export async function engineResetSymbolTransforms(
     args: { ops },
   } as Mutation);
   return done ? ops.length : 0;
+}
+
+// ------------------------------------------------------------- WP6.8
+// Draw ADR 365 — the live-symbol verbs on top of the engine node: the
+// symbol the Sprayer sprays, an instance read in PAGE space (what the
+// Symbolism tools act on), Replace Symbol, and Symbol Options (name and
+// 9-slice guides).
+
+/** The symbol the Sprayer sprays and Replace Symbol points at: the
+ *  Symbols panel's chosen row, per host. */
+const chosenSymbol = new WeakMap<BundleHost, string>();
+
+/** Choose `symbolId` (the Symbols panel's row click). */
+export function chooseSymbol(host: BundleHost, symbolId: string | null): void {
+  if (symbolId) chosenSymbol.set(host, symbolId);
+  else chosenSymbol.delete(host);
+}
+
+/** The chosen symbol when it still exists; else the symbol of the first
+ *  selected instance; else the document's first symbol. */
+export async function currentSymbol(
+  host: BundleHost,
+): Promise<EngineSymbol | null> {
+  const rows = await readEngineSymbols(host);
+  if (rows.length === 0) return null;
+  const chosen = chosenSymbol.get(host);
+  const hit = chosen ? rows.find((r) => r.id === chosen) : undefined;
+  if (hit) return hit;
+  const picked = new Set(
+    instancesIn(host.selection.get()).map((e) => `instance:${e.id}`),
+  );
+  return rows.find((r) => r.instances.some((i) => picked.has(i))) ?? rows[0]!;
+}
+
+/** Every instance of the document, as element ids. */
+export async function engineInstanceIds(
+  host: BundleHost,
+): Promise<ElementId[]> {
+  const out: ElementId[] = [];
+  for (const s of await readEngineSymbols(host)) {
+    for (const address of s.instances) {
+      const id = address.startsWith("instance:")
+        ? address.slice("instance:".length)
+        : address;
+      out.push({ kind: "instance", id } as unknown as ElementId);
+    }
+  }
+  return out;
+}
+
+/** One instance as the Symbolism tools see it — page space. */
+export interface InstanceState {
+  id: ElementId;
+  pageId: string;
+  /** The page's origin in its spread (`../page-origin.ts`). */
+  pageOrigin: readonly [number, number];
+  /** Definition space → page pt. */
+  matrix: [number, number, number, number, number, number];
+  /** The definition's box `[x0, y0, x1, y1]` in definition space. */
+  box: [number, number, number, number];
+  tint: [number, number, number, number] | null;
+  /** 0..100. */
+  opacity: number;
+  symbol: string | null;
+}
+
+type Entry = { path: string; value: unknown };
+
+const entryValue = (entries: readonly Entry[], path: string): unknown =>
+  (entries.find((e) => e.path === path)?.value as { value?: unknown } | null)
+    ?.value;
+
+/** Read `ids` that are instances (others, and unreadable ones, are
+ *  skipped). */
+export async function readInstanceStates(
+  host: BundleHost,
+  ids: readonly ElementId[],
+): Promise<InstanceState[]> {
+  const instances = instancesIn(ids);
+  if (instances.length === 0) return [];
+  // Which symbol each instance draws, from the store (an engine before
+  // `symbolInstanceSymbol` does not report it on the instance).
+  const owner = new Map<string, string>();
+  for (const row of await readEngineSymbols(host))
+    for (const a of row.instances)
+      owner.set(a.startsWith("instance:") ? a.slice(9) : a, row.id);
+  const geometry = await host.document
+    .elementGeometry(instances)
+    .catch(() => []);
+  const out: InstanceState[] = [];
+  for (const id of instances) {
+    const g = geometry.find((r) => String(r.id?.id) === String(id.id));
+    if (!g?.pageId || !g.bounds) continue;
+    const props = (await host.document
+      .elementProperties(id)
+      .catch(() => null)) as { entries?: Entry[] } | null;
+    const entries = props?.entries ?? [];
+    const t = (g.itemTransform ?? [1, 0, 0, 1, 0, 0]) as number[];
+    const [top, left, bottom, right] = g.bounds;
+    const tint = entryValue(entries, "symbolInstanceTint");
+    const opacity = entryValue(entries, "frameOpacity");
+    const symbol = entryValue(entries, "symbolInstanceSymbol");
+    out.push({
+      id,
+      pageId: g.pageId,
+      pageOrigin: pageOriginOf(g),
+      matrix: [t[0]!, t[1]!, t[2]!, t[3]!, t[4]!, t[5]!],
+      box: [left, top, right, bottom],
+      tint:
+        Array.isArray(tint) && tint.length === 4
+          ? (tint as [number, number, number, number])
+          : null,
+      opacity: typeof opacity === "number" ? opacity : 100,
+      symbol:
+        typeof symbol === "string" && symbol.length > 0
+          ? symbol
+          : (owner.get(String(id.id)) ?? null),
+    });
+  }
+  return out;
+}
+
+/** The stored (spread-space) transform of a page-space instance matrix. */
+export function storedInstanceTransform(
+  m: readonly number[],
+  pageOrigin: readonly [number, number],
+): [number, number, number, number, number, number] {
+  return [
+    m[0]!,
+    m[1]!,
+    m[2]!,
+    m[3]!,
+    m[4]! + pageOrigin[0],
+    m[5]! + pageOrigin[1],
+  ];
+}
+
+/** REPLACE SYMBOL — every selected instance draws `symbolId` from now on
+ *  (its id, transform and overrides kept), one batch. Answers how many. */
+export async function engineReplaceSymbol(
+  host: BundleHost,
+  label: string,
+  symbolId: string,
+): Promise<number> {
+  const instances = instancesIn(host.selection.get());
+  if (instances.length === 0) {
+    host.log.debug(`${label}: no symbol instance in the selection — no-op`);
+    return 0;
+  }
+  const done = await run(host, label, {
+    op: "batch",
+    args: {
+      ops: instances.map((elementId) => ({
+        op: "setElementProperty",
+        args: {
+          elementId,
+          path: "symbolInstanceSymbol",
+          value: { type: "text", value: symbolId },
+        },
+      })),
+    },
+  } as Mutation);
+  return done ? instances.length : 0;
+}
+
+/** SYMBOL OPTIONS — a symbol's name and its 9-slice guides (`null`
+ *  removes them; absent keeps them), one undo step. */
+export async function engineSymbolOptions(
+  host: BundleHost,
+  label: string,
+  symbolId: string,
+  options: {
+    name?: string;
+    nineSlice?: readonly [number, number, number, number] | null;
+  },
+): Promise<boolean> {
+  const args: Record<string, unknown> = { symbolId };
+  if (typeof options.name === "string" && options.name.trim().length > 0)
+    args["name"] = options.name.trim();
+  if (options.nineSlice !== undefined)
+    args["nineSlice"] =
+      options.nineSlice === null ? [] : [...options.nineSlice];
+  if (Object.keys(args).length === 1) return false;
+  return (
+    (await run(host, label, {
+      op: "redefineSymbol",
+      args,
+    } as Mutation)) !== null
+  );
 }

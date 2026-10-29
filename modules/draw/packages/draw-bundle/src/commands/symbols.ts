@@ -246,8 +246,12 @@ import {
   enginePlaceSymbol,
   engineRedefineSymbol,
   engineRenameSymbol,
+  engineReplaceSymbol,
   engineResetSymbolTransforms,
+  engineSymbolOptions,
   engineSymbols,
+  chooseSymbol,
+  currentSymbol,
   readEngineSymbols,
 } from "./symbols-engine";
 
@@ -268,6 +272,8 @@ const M = defineMessages("draw.symbols", {
   resetTransform: "Symbols: Reset transform (re-emit the definition in place)",
   rename: "Symbols: Rename symbol",
   delete: "Symbols: Delete symbol (the placed artwork stays)",
+  replace: "Symbols: Replace symbol of the selected instances",
+  options: "Symbols: Symbol options…",
 });
 export const SYMBOLS_COMMAND_CATEGORY = "Symbols";
 
@@ -282,6 +288,15 @@ export const RESET_SYMBOL_TRANSFORM_COMMAND_ID =
   "media.paged.draw.command.resetSymbolTransform";
 export const RENAME_SYMBOL_COMMAND_ID = "media.paged.draw.command.renameSymbol";
 export const DELETE_SYMBOL_COMMAND_ID = "media.paged.draw.command.deleteSymbol";
+/** WP6.8 (draw ADR 365) — Replace Symbol and Symbol Options, engine lane. */
+export const REPLACE_SYMBOL_COMMAND_ID =
+  "media.paged.draw.command.replaceSymbol";
+export const SYMBOL_OPTIONS_COMMAND_ID =
+  "media.paged.draw.command.symbolOptions";
+
+/** The published binding Symbol Options… raises the panel's options
+ *  section through (`shell.openPanel` takes a panel id and nothing else). */
+export const BIND_SYMBOL_OPTIONS_FOCUS = "media.paged.draw.symbols.options";
 
 /** The contributed command ids, in registration order. */
 export const SYMBOLS_COMMAND_IDS = [
@@ -292,6 +307,8 @@ export const SYMBOLS_COMMAND_IDS = [
   RESET_SYMBOL_TRANSFORM_COMMAND_ID,
   RENAME_SYMBOL_COMMAND_ID,
   DELETE_SYMBOL_COMMAND_ID,
+  REPLACE_SYMBOL_COMMAND_ID,
+  SYMBOL_OPTIONS_COMMAND_ID,
 ];
 
 /** The container part this library lives in, RELATIVE to this plugin's
@@ -349,6 +366,10 @@ export interface SymbolDefinition {
 export interface SymbolLibrary {
   v: number;
   symbols: SymbolDefinition[];
+  /** WP6.8 (draw ADR 365) — the symbols already moved onto the engine's
+   *  store, library id → engine symbol id (`commands/symbols-migrate.ts`):
+   *  a migrated library is kept, never migrated twice. */
+  migrated?: Record<string, string>;
 }
 
 /** The link an instance LEAF carries. Every leaf of an instance carries
@@ -471,7 +492,15 @@ export function parseSymbolLibrary(bytes: Uint8Array | null): SymbolLibrary {
       pieces,
     });
   }
-  return { v: SYMBOLS_LIBRARY_VERSION, symbols };
+  const migrated: Record<string, string> = {};
+  const m = (lib as { migrated?: unknown }).migrated;
+  if (m && typeof m === "object" && !Array.isArray(m)) {
+    for (const [k, v] of Object.entries(m as Record<string, unknown>))
+      if (typeof v === "string" && v.length > 0) migrated[k] = v;
+  }
+  return Object.keys(migrated).length > 0
+    ? { v: SYMBOLS_LIBRARY_VERSION, symbols, migrated }
+    : { v: SYMBOLS_LIBRARY_VERSION, symbols };
 }
 
 /** Serialize the library to the part's bytes — indented, because the
@@ -479,7 +508,13 @@ export function parseSymbolLibrary(bytes: Uint8Array | null): SymbolLibrary {
 export function serializeSymbolLibrary(library: SymbolLibrary): Uint8Array {
   return new TextEncoder().encode(
     `${JSON.stringify(
-      { v: SYMBOLS_LIBRARY_VERSION, symbols: library.symbols },
+      {
+        v: SYMBOLS_LIBRARY_VERSION,
+        symbols: library.symbols,
+        ...(library.migrated && Object.keys(library.migrated).length > 0
+          ? { migrated: library.migrated }
+          : {}),
+      },
       null,
       2,
     )}\n`,
@@ -1778,6 +1813,97 @@ const payloadOf = (payload: unknown): Record<string, unknown> =>
  *  define `{ name?, registration? }`, place `{ symbolId, x?, y?, pageId? }`,
  *  redefine/delete `{ symbolId }`, rename `{ symbolId, name }`,
  *  break link / reset transform — none. */
+/** REPLACE SYMBOL (engine lane) — every selected instance draws
+ *  `symbolId` (absent: the Symbols panel's chosen symbol) from now on,
+ *  keeping its id, transform and overrides. One undo step. Answers how
+ *  many instances changed. */
+export async function applyReplaceSymbol(
+  host: BundleHost,
+  symbolId?: unknown,
+): Promise<number> {
+  const label = "replaceSymbol";
+  if (!engineSymbols(host)) {
+    host.log.warn(`${label}: needs the engine's symbols (document.symbols@1)`);
+    return 0;
+  }
+  const id =
+    typeof symbolId === "string" && symbolId.length > 0
+      ? symbolId
+      : (await currentSymbol(host))?.id;
+  if (!id) {
+    host.log.warn(`${label}: the document has no symbol`);
+    return 0;
+  }
+  return engineReplaceSymbol(host, label, id);
+}
+
+/** SYMBOL OPTIONS — with values (`{ symbolId?, name?, nineSlice? }`,
+ *  `nineSlice` `[left, top, right, bottom]` insets, `null` or `[]` to
+ *  remove)
+ *  it applies them in one undo step; bare (a menu row) it raises the
+ *  Symbols panel at its options for the current symbol. */
+export async function applySymbolOptions(
+  host: BundleHost,
+  payload: unknown,
+): Promise<boolean> {
+  const label = "symbolOptions";
+  if (!engineSymbols(host)) {
+    host.log.warn(`${label}: needs the engine's symbols (document.symbols@1)`);
+    return false;
+  }
+  const p = payloadOf(payload) as {
+    symbolId?: unknown;
+    name?: unknown;
+    nineSlice?: unknown;
+  };
+  const symbol =
+    typeof p.symbolId === "string" && p.symbolId.length > 0
+      ? ((await readEngineSymbols(host)).find((s) => s.id === p.symbolId) ??
+        null)
+      : await currentSymbol(host);
+  if (!symbol) {
+    host.log.warn(`${label}: no such symbol`);
+    return false;
+  }
+  // `[]` (the typed twin's "none") removes the guides, as `null` does.
+  const nine =
+    Array.isArray(p.nineSlice) && p.nineSlice.length === 0 ? null : p.nineSlice;
+  const hasNine =
+    nine === null ||
+    (Array.isArray(nine) &&
+      nine.length === 4 &&
+      nine.every((v) => typeof v === "number" && Number.isFinite(v)));
+  if (typeof p.name !== "string" && !hasNine) {
+    chooseSymbol(host, symbol.id);
+    if (!host.supports("shell.openPanel@1")) {
+      host.log.info(
+        `${label}: this host cannot raise a panel — pass { name, nineSlice } to apply options`,
+      );
+      return false;
+    }
+    const last = host.bindings.get(BIND_SYMBOL_OPTIONS_FOCUS) as
+      { seq?: number } | undefined;
+    host.bindings.publish(BIND_SYMBOL_OPTIONS_FOCUS, {
+      symbolId: symbol.id,
+      seq: (typeof last?.seq === "number" ? last.seq : 0) + 1,
+    });
+    host.shell.openPanel(SYMBOLS_PANEL_ID);
+    return true;
+  }
+  return engineSymbolOptions(host, label, symbol.id, {
+    ...(typeof p.name === "string" ? { name: p.name } : {}),
+    ...(hasNine
+      ? {
+          nineSlice:
+            nine === null ? null : (nine as [number, number, number, number]),
+        }
+      : {}),
+  });
+}
+
+/** The Symbols panel's id (`../panels/symbols-panel.tsx` re-exports it). */
+export const SYMBOLS_PANEL_ID = "media.paged.draw.panel.symbols";
+
 export function contributeSymbolCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
@@ -1838,6 +1964,22 @@ export function contributeSymbolCommands(host: BundleHost): Disposable {
         applyDeleteSymbol(host, payloadOf(payload).symbolId).then(
           () => undefined,
         ),
+    }),
+    registerCommand(host, {
+      id: REPLACE_SYMBOL_COMMAND_ID,
+      title: M.replace,
+      category: SYMBOLS_COMMAND_CATEGORY,
+      handler: (_paged, payload) =>
+        applyReplaceSymbol(host, payloadOf(payload).symbolId).then(
+          () => undefined,
+        ),
+    }),
+    registerCommand(host, {
+      id: SYMBOL_OPTIONS_COMMAND_ID,
+      title: M.options,
+      category: SYMBOLS_COMMAND_CATEGORY,
+      handler: (_paged, payload) =>
+        applySymbolOptions(host, payload).then(() => undefined),
     }),
   ];
   return {

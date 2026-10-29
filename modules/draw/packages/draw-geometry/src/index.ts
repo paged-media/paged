@@ -59,6 +59,7 @@ export {
   invertAffine,
   affineScale,
   composeAffine,
+  fitAffine,
   IDENTITY_AFFINE,
   type Affine,
 } from "./affine";
@@ -325,3 +326,6 @@ export {
 // vector half): the liquify family, the constrained puppet mesh and its
 // ARAP solve, homographies and the perspective grid.
 export * from "./warp";
+// WP6.8 — the Symbolism tools' kernels (draw ADR 365) and 9-slice scaling.
+export * from "./symbolism";
+export * from "./nine-slice";

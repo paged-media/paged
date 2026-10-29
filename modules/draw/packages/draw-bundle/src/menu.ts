@@ -102,6 +102,8 @@ defineMessages("menu", {
   "Define from selection": "Define from selection",
   "Place instance": "Place instance",
   "Reset transform": "Reset transform",
+  "Replace symbol": "Replace symbol",
+  "Symbol options…": "Symbol options…",
   "Live paint": "Live paint",
   Regenerate: "Regenerate",
   Blend: "Blend",
@@ -251,6 +253,10 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Symbol/Redefine", "redefineSymbol", "sym"],
   ["Draw/Symbol/Break link", "breakSymbolLink", "sym"],
   ["Draw/Symbol/Reset transform", "resetSymbolTransform", "sym"],
+  // WP6.8 — engine symbols: Replace symbol (the selected instances draw the
+  // chosen symbol) and Symbol options… (raises the panel's options).
+  ["Draw/Symbol/Replace symbol", "replaceSymbol", "sym"],
+  ["Draw/Symbol/Symbol options…", "symbolOptions", "sym"],
 
   // ── Live paint ──
   ["Draw/Live paint/Make", "makeLivePaintGroup", "lp"],

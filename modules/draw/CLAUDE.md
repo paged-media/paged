@@ -284,6 +284,24 @@ Eyedropper) and `k` (a dead Measure). The current global picture:
   WP6.7's ten distortion tools (the Liquify flyout, Puppet Warp, the
   Perspective Grid / Selection pair) are KEYLESS for that reason: their
   Illustrator keys (`shift+r`, `shift+p`, `shift+v`) are all held.
+  WP6.8's eight Symbolism tools (the Sprayer, Shifter, Scruncher, Sizer,
+  Spinner, Stainer, Screener and the 9-Slice Guides tool, one `symbolism`
+  flyout) are KEYLESS too: Illustrator's `shift+s` is draw's already.
+
+**LIVE SYMBOLS (WP6.8, ADR 365) run on the engine's instance node**
+(`document.symbols@1`, engine ADR 1039). The Symbolism tools change only
+what an instance carries — `frameTransform`, `symbolInstanceTint`,
+`frameOpacity` — and the Sprayer places / deletes instances; one drag is one
+batch. Replace Symbol is the `symbolInstanceSymbol` path (so the
+`symbolChoice` template field keeps its target id), Symbol Options is the
+Symbols panel's options section (no dialog door) and a symbol's 9-slice
+guides are `redefineSymbol { nineSlice }`. The 9-slice mapping is the
+renderer's formula in `draw-geometry/src/nine-slice.ts`, held to Illustrator
+by `test/oracle/nine-slice.spec.ts` (setSymbol9SliceGrid's rectangle is
+read from the art's BOTTOM-LEFT, Y up — the probe's header). A v0 library
+(the second container part) moves onto the engine's store once, on open
+(`commands/symbols-migrate.ts`, one amended undo step), and keeps a
+`migrated` map; the v0 lane stays the fallback without the flag.
 
 **`.paged` CONTAINER PARTS: there are now EIGHT** — graphic styles,
 symbols, live paint, pattern, repeat, blend (`blend.json`), objects-on-
