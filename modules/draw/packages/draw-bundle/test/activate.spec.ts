@@ -155,6 +155,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.selectPatternTiles",
       "media.paged.draw.command.deletePatternTiles",
       "media.paged.draw.command.releasePatternField",
+      "media.paged.draw.command.savePatternSwatch",
       // Illustrator Phase 3 (§12.4) — REPEATS. The catalog's SIBLING of
       // pattern, not the same row: a pattern is a swatch-shaped fill, a
       // repeat is an object transform with expand/release.

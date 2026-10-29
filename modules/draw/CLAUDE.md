@@ -34,14 +34,13 @@ Shape-Builder pro tools; the Pencil is the host's, built on this repo's
 `PencilMachine`, ADR 359), the Stroke + Fill schema panels, the
 Appearance/Dash/Path-Ops/Select-Same/Live-Corners commands, the
 Compound-Path pair (Make / Release), PATTERN EDITING v1 (a re-editable
-tile FIELD — and read this before the feature name: "save as a pattern
-SWATCH" IS NOT BUILDABLE and is not faked. There is no pattern paint type
-in IDML, none in `paged_model::Graphic` and none on the wire —
-`SwatchSpec`/`GradientSpec` are the only two shapes
-`createSwatch`/`createGradient` accept — so a field produces ARTWORK, not
-a fill. Filed as RFI C-31: a new paint kind + renderer support in BOTH
-backends + an IDML representation decision, i.e. core work. What v1 DOES
-deliver is everything else the catalog row asks for, and each item was
+tile FIELD — pattern ARTWORK, the copies that preview a tile — and,
+since WP6.9 / draw ADR 365, the PATTERN SWATCH it saves: Save swatch /
+Done write the engine's pattern paint (engine ADR 1041, which closed RFI
+C-31) through `createSwatch` with a `pattern`, one undo step, behind
+`supports("document.patternPaint@1")`; the Swatches panel applies it as a
+fill or stroke. What v1 delivered before that is everything else the
+catalog row asks for, and each item was
 one of v0's measured ceilings: real parameters — grid/brick/hex
 lattices, tile size, spacing where NEGATIVE is a geometric overlap, copy
 counts, dimming as a real `frameOpacity` on the copies, and `overlap` =
@@ -57,8 +56,8 @@ tiles. The recipe is a `.paged` container part — the fourth in this
 repo, after graphic styles / symbols / live paint — with per-leaf links,
 so Release and un-bake work even on a host with no container writer
 (only the PARAMETERS are lost there). The Pattern Options React panel is
-where the not-a-swatch boundary is put in front of the user, and its
-wording is pinned by a test. A v0 `patternTile` stamp
+where artwork and swatch are told apart for the user (Save swatch /
+Done per field), and its wording is pinned by a test. A v0 `patternTile` stamp
 reads as the legacy field `""`: releasable and un-bakeable, not
 re-plannable. Two batch-ORDERING rules are measured and load-bearing —
 inserts go before deletes (a batch that deletes then inserts is refused
