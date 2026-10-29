@@ -1185,13 +1185,7 @@ pub(super) fn build_document_inner(
     // sides so the math composes cleanly with our existing Page
     // ItemTransform plumbing.
     for (i, geom) in page_geometries.iter().enumerate() {
-        let Some(master_ref) = geom.applied_master.as_deref() else {
-            continue;
-        };
-        let Some(master) = document.master_spread(master_ref) else {
-            continue;
-        };
-        if master.spread.pages.is_empty() {
+        if geom.applied_master.is_none() {
             continue;
         }
         let body_page = document.spreads[geom.host_spread_idx]
@@ -1201,410 +1195,419 @@ pub(super) fn build_document_inner(
         // `ShowMasterItems="false"` hides every master overlay item for
         // this page (InDesign's per-page "Hide Master Items"). Skipping
         // the whole loop body suppresses master frames, lines, and the
-        // master-story page-number text (all stamped below) at once.
+        // master-story page-number text (all stamped below) at once —
+        // of every master the page's own master is based on too.
         if body_page.and_then(|p| p.show_master_items) == Some(false) {
             continue;
         }
-        // Body-page OverrideList enumerates master items the body has
-        // replaced with its own copies — skip them here so we don't
-        // stamp the placeholder under the body's override.
-        let override_set: std::collections::HashSet<&str> = body_page
-            .map(|p| p.override_list.iter().map(String::as_str).collect())
-            .unwrap_or_default();
-
-        // Each master page in spread coords. Master items get routed
-        // to one of these by their own spread-coord centroid; the
-        // matching live page consumes only the items belonging to
-        // its same-ordinal master page. This is what InDesign's
-        // "Master Page Overlay" feature actually does — without
-        // routing, a master with both white-LEFT-page and navy-RIGHT-
-        // page rectangles would stamp both onto every live page.
-        let master_page_bounds: Vec<paged_model::Bounds> = master
-            .spread
-            .pages
-            .iter()
-            .map(|p| transform_bounds(p.bounds, p.item_transform))
-            .collect();
         let body_page_bounds: Vec<paged_model::Bounds> = document.spreads[geom.host_spread_idx]
             .spread
             .pages
             .iter()
             .map(|p| transform_bounds(p.bounds, p.item_transform))
             .collect();
-        let local_master_page_idx =
-            master_page_index(&body_page_bounds, geom.local_page_idx, &master_page_bounds);
-        let master_page_origin = (
-            master_page_bounds[local_master_page_idx].left,
-            master_page_bounds[local_master_page_idx].top,
+        // Engine ADR 1026 — the masters this page shows, nearest first.
+        let levels = master_levels(
+            document,
+            geom.applied_master.as_deref(),
+            body_page,
+            &body_page_bounds,
+            geom.local_page_idx,
         );
-        let target_origin = pages[i].spread_origin;
-        // MasterPageTransform sits between master-spread coords and
-        // live-page coords (for sample.idml it is identity). Build the
-        // full outer transform once for this page — `translate(live
-        // origin) ∘ MPT ∘ translate(-master origin)` — so a MPT carrying
-        // rotation/scale (not just translation) is honoured. With an
-        // identity MPT this collapses to the plain origin shift the
-        // common case relies on. Each master item below is stamped as
-        // `mpt_outer ∘ item_transform`.
-        let mpt = document.spreads[geom.host_spread_idx]
-            .spread
-            .pages
-            .get(geom.local_page_idx)
-            .and_then(|p| p.master_page_transform);
-        // W1.9 — the MASTER spread's own `<MasterSpread ItemTransform>`
-        // rotation/scale (linear part). Inserted between the
-        // MasterPageTransform and the master-page-origin re-base so it
-        // rotates/scales the master overlay about the master page origin,
-        // mirroring how the body spread's `spread_transform` rotates the
-        // body page. IDENTITY for the common (untransformed master) case,
-        // collapsing the chain to the historical translation-only stamp.
-        // (The body spread's own transform separately rides the live
-        // page's `spread_transform` in `frame_outer_transform`.)
-        let master_spread_linear = spread_linear_transform(master.spread.item_transform);
-        let mpt_outer = Transform::translate(target_origin.0, target_origin.1)
-            .compose(&Transform(mpt.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0])))
-            .compose(&master_spread_linear)
-            .compose(&Transform::translate(
-                -master_page_origin.0,
-                -master_page_origin.1,
-            ));
+        // The farthest master paints first: a master's items sit above the
+        // items of the master it is based on, as page items sit above
+        // master items.
+        for level in levels.into_iter().rev() {
+            let master = level.master;
+            let local_master_page_idx = level.page;
+            // Body-page OverrideList enumerates master items the body has
+            // replaced with its own copies — skip them here so we don't
+            // stamp the placeholder under the body's override. A master
+            // page's own OverrideList hides the items of the masters it is
+            // based on (on every page that shows it).
+            let override_set: &std::collections::HashSet<&str> = &level.overrides;
 
-        // Pick the master page index that contains the centroid of
-        // the given spread-coord bounds; falls back to the nearest
-        // page so items hugging the centre line don't get dropped.
-        let master_page_for = |b: paged_model::Bounds| -> usize {
-            let cx = (b.left + b.right) * 0.5;
-            let cy = (b.top + b.bottom) * 0.5;
-            for (idx, mb) in master_page_bounds.iter().enumerate() {
-                if cx >= mb.left && cx <= mb.right && cy >= mb.top && cy <= mb.bottom {
-                    return idx;
+            // Each master page in spread coords. Master items get routed
+            // to one of these by their own spread-coord centroid; the
+            // matching live page consumes only the items belonging to
+            // its same-ordinal master page. This is what InDesign's
+            // "Master Page Overlay" feature actually does — without
+            // routing, a master with both white-LEFT-page and navy-RIGHT-
+            // page rectangles would stamp both onto every live page.
+            let master_page_bounds = &level.page_bounds;
+            let master_page_origin = (
+                master_page_bounds[local_master_page_idx].left,
+                master_page_bounds[local_master_page_idx].top,
+            );
+            let target_origin = pages[i].spread_origin;
+            // MasterPageTransform sits between master-spread coords and
+            // live-page coords (for sample.idml it is identity). Build the
+            // full outer transform once for this page — `translate(live
+            // origin) ∘ MPT ∘ translate(-master origin)` — so a MPT carrying
+            // rotation/scale (not just translation) is honoured. With an
+            // identity MPT this collapses to the plain origin shift the
+            // common case relies on. Each master item below is stamped as
+            // `mpt_outer ∘ item_transform`.
+            let mpt = document.spreads[geom.host_spread_idx]
+                .spread
+                .pages
+                .get(geom.local_page_idx)
+                .and_then(|p| p.master_page_transform);
+            // W1.9 — the MASTER spread's own `<MasterSpread ItemTransform>`
+            // rotation/scale (linear part). Inserted between the
+            // MasterPageTransform and the master-page-origin re-base so it
+            // rotates/scales the master overlay about the master page origin,
+            // mirroring how the body spread's `spread_transform` rotates the
+            // body page. IDENTITY for the common (untransformed master) case,
+            // collapsing the chain to the historical translation-only stamp.
+            // (The body spread's own transform separately rides the live
+            // page's `spread_transform` in `frame_outer_transform`.)
+            let master_spread_linear = spread_linear_transform(master.spread.item_transform);
+            let mpt_outer = Transform::translate(target_origin.0, target_origin.1)
+                .compose(&Transform(mpt.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0])))
+                .compose(&master_spread_linear)
+                .compose(&Transform::translate(
+                    -master_page_origin.0,
+                    -master_page_origin.1,
+                ));
+
+            // Pick the master page index that contains the centroid of
+            // the given spread-coord bounds; falls back to the nearest
+            // page so items hugging the centre line don't get dropped.
+            let master_page_for = |b: paged_model::Bounds| -> usize {
+                let cx = (b.left + b.right) * 0.5;
+                let cy = (b.top + b.bottom) * 0.5;
+                for (idx, mb) in master_page_bounds.iter().enumerate() {
+                    if cx >= mb.left && cx <= mb.right && cy >= mb.top && cy <= mb.bottom {
+                        return idx;
+                    }
                 }
-            }
-            // Outside any master page (rare): pick by horizontal proximity.
-            master_page_bounds
-                .iter()
-                .enumerate()
-                .min_by(|(_, a), (_, b)| {
-                    let da = ((a.left + a.right) * 0.5 - cx).abs();
-                    let db = ((b.left + b.right) * 0.5 - cx).abs();
-                    da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .map(|(idx, _)| idx)
-                .unwrap_or(0)
-        };
+                // Outside any master page (rare): pick by horizontal proximity.
+                master_page_bounds
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| {
+                        let da = ((a.left + a.right) * 0.5 - cx).abs();
+                        let db = ((b.left + b.right) * 0.5 - cx).abs();
+                        da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .map(|(idx, _)| idx)
+                    .unwrap_or(0)
+            };
 
-        // Master items belong to the current live page when either
-        // (a) their centroid lands on the matching master page, or
-        // (b) they're "full-bleed-ish" — area ≥ 50% of a master page
-        //     AND the item's spread bounds intersect this master page.
-        // The second arm covers spread-spanning brand-colour
-        // backgrounds whose centroid lands across the page fold; the
-        // pure centroid test would route them to the wrong page or
-        // (for items straddling the gutter) to one page only.
-        let target_master = &master_page_bounds[local_master_page_idx];
-        let target_master_area = (target_master.right - target_master.left).max(0.0)
-            * (target_master.bottom - target_master.top).max(0.0);
-        let item_belongs = |b: paged_model::Bounds| -> bool {
-            if master_page_for(b) == local_master_page_idx {
-                return true;
-            }
-            let item_area = (b.right - b.left).max(0.0) * (b.bottom - b.top).max(0.0);
-            if target_master_area <= 0.0 || item_area < 0.5 * target_master_area {
-                return false;
-            }
-            // Intersection test against the target master page.
-            b.right > target_master.left
-                && b.left < target_master.right
-                && b.bottom > target_master.top
-                && b.top < target_master.bottom
-        };
+            // Master items belong to the current live page when either
+            // (a) their centroid lands on the matching master page, or
+            // (b) they're "full-bleed-ish" — area ≥ 50% of a master page
+            //     AND the item's spread bounds intersect this master page.
+            // The second arm covers spread-spanning brand-colour
+            // backgrounds whose centroid lands across the page fold; the
+            // pure centroid test would route them to the wrong page or
+            // (for items straddling the gutter) to one page only.
+            let target_master = &master_page_bounds[local_master_page_idx];
+            let target_master_area = (target_master.right - target_master.left).max(0.0)
+                * (target_master.bottom - target_master.top).max(0.0);
+            let item_belongs = |b: paged_model::Bounds| -> bool {
+                if master_page_for(b) == local_master_page_idx {
+                    return true;
+                }
+                let item_area = (b.right - b.left).max(0.0) * (b.bottom - b.top).max(0.0);
+                if target_master_area <= 0.0 || item_area < 0.5 * target_master_area {
+                    return false;
+                }
+                // Intersection test against the target master page.
+                b.right > target_master.left
+                    && b.left < target_master.right
+                    && b.bottom > target_master.top
+                    && b.top < target_master.bottom
+            };
 
-        // Master items paint in the master spread's own stacking order
-        // (`frames_in_order`, groups expanded to their members), exactly
-        // as body items do. Walking the backing vecs kind by kind put
-        // every polygon above every rectangle, so a full-page background
-        // polygon covered a master's placed picture. Items the walk does
-        // not reach (pasted-in children, mask sources) keep the legacy
-        // kind-by-kind order after it.
-        {
-            let verso = pages[i].binding_edge() == super::metrics::BindingEdge::Right;
-            let overridden = |id: Option<&str>| id.is_some_and(|id| override_set.contains(id));
-            let mut add = |src: WrapSource<'_>,
-                           wrap: Option<paged_model::TextWrap>,
-                           self_id: Option<&str>| {
-                let Some(wrap) = wrap else {
-                    return;
+            // Master items paint in the master spread's own stacking order
+            // (`frames_in_order`, groups expanded to their members), exactly
+            // as body items do. Walking the backing vecs kind by kind put
+            // every polygon above every rectangle, so a full-page background
+            // polygon covered a master's placed picture. Items the walk does
+            // not reach (pasted-in children, mask sources) keep the legacy
+            // kind-by-kind order after it.
+            {
+                let verso = pages[i].binding_edge() == super::metrics::BindingEdge::Right;
+                let overridden = |id: Option<&str>| id.is_some_and(|id| override_set.contains(id));
+                let mut add = |src: WrapSource<'_>,
+                               wrap: Option<paged_model::TextWrap>,
+                               self_id: Option<&str>| {
+                    let Some(wrap) = wrap else {
+                        return;
+                    };
+                    if wrap.apply_to_master_page_only == Some(true) || overridden(self_id) {
+                        return;
+                    }
+                    if !item_belongs(transform_bounds(src.bounds, src.item_transform)) {
+                        return;
+                    }
+                    let live = WrapSource {
+                        item_transform: Some(compose_outer_matrix(mpt_outer, src.item_transform)),
+                        ..src
+                    };
+                    if let Some(shape) = live.shape(wrap, verso) {
+                        master_wraps[i].push(shape);
+                    }
                 };
-                if wrap.apply_to_master_page_only == Some(true) || overridden(self_id) {
-                    return;
+                let styles = &document.styles;
+                let ms = &master.spread;
+                for f in &ms.text_frames {
+                    add(
+                        WrapSource {
+                            bounds: f.bounds,
+                            item_transform: f.item_transform,
+                            anchors: &f.anchors,
+                            subpath_starts: &f.subpath_starts,
+                            subpath_open: &f.subpath_open,
+                            oval: false,
+                            stroke_color: f.stroke_color.as_deref(),
+                            stroke_weight: f.stroke_weight,
+                        },
+                        styles.item_text_wrap(f.text_wrap, f.applied_object_style.as_deref()),
+                        f.self_id.as_deref(),
+                    );
                 }
-                if !item_belongs(transform_bounds(src.bounds, src.item_transform)) {
-                    return;
+                for r in &ms.rectangles {
+                    add(
+                        WrapSource {
+                            bounds: r.bounds,
+                            item_transform: r.item_transform,
+                            anchors: &r.anchors,
+                            subpath_starts: &r.subpath_starts,
+                            subpath_open: &r.subpath_open,
+                            oval: false,
+                            stroke_color: r.stroke_color.as_deref(),
+                            stroke_weight: r.stroke_weight,
+                        },
+                        styles.item_text_wrap(r.text_wrap, r.applied_object_style.as_deref()),
+                        r.self_id.as_deref(),
+                    );
                 }
-                let live = WrapSource {
-                    item_transform: Some(compose_outer_matrix(mpt_outer, src.item_transform)),
-                    ..src
-                };
-                if let Some(shape) = live.shape(wrap, verso) {
-                    master_wraps[i].push(shape);
+                for o in &ms.ovals {
+                    add(
+                        WrapSource {
+                            bounds: o.bounds,
+                            item_transform: o.item_transform,
+                            anchors: &[],
+                            subpath_starts: &[],
+                            subpath_open: &[],
+                            oval: true,
+                            stroke_color: o.stroke_color.as_deref(),
+                            stroke_weight: o.stroke_weight,
+                        },
+                        styles.item_text_wrap(o.text_wrap, o.applied_object_style.as_deref()),
+                        o.self_id.as_deref(),
+                    );
+                }
+                for p in &ms.polygons {
+                    add(
+                        WrapSource {
+                            bounds: p.bounds,
+                            item_transform: p.item_transform,
+                            anchors: &p.anchors,
+                            subpath_starts: &p.subpath_starts,
+                            subpath_open: &p.subpath_open,
+                            oval: false,
+                            stroke_color: p.stroke_color.as_deref(),
+                            stroke_weight: p.stroke_weight,
+                        },
+                        styles.item_text_wrap(p.text_wrap, p.applied_object_style.as_deref()),
+                        p.self_id.as_deref(),
+                    );
+                }
+            }
+            let master_order = master_paint_order(&master.spread);
+            let mut emit_master = |fr: paged_model::FrameRef| {
+                match fr {
+                    paged_model::FrameRef::TextFrame(idx) => {
+                        let Some(frame) = master.spread.text_frames.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(frame.bounds, frame.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if frame
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        // Master items live in master-spread coords. Compose an
+                        // outer translate(dx, dy) into the frame's existing
+                        // ItemTransform so the inner-coord rect ends up in the
+                        // *live* spread coords once frame_outer_transform applies.
+                        // Mutating bounds (inner coords) would be wrong now that
+                        // PathGeometry-derived shapes carry geometry in inner
+                        // space.
+                        let mut copy = frame.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        // A master frame's text is not moved into a slot, so
+                        // its own bracket stays in the glyph post-pass.
+                        let _ = emit_text_frame_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            None, // master items don't carry a drop shadow today.
+                            None, // master frames don't auto-size in our model.
+                        );
+                        // Stash a relocated copy so the master-story pass below
+                        // can flow this frame's hosted story (page-number footers,
+                        // running headers, etc.) onto this body page. Skipping it
+                        // when ParentStory is missing is fine — the rectangle was
+                        // still drawn above.
+                        if copy.parent_story.is_some() {
+                            let copy = text_area_frame(&copy, document).into_owned();
+                            master_text_emissions.push((i, copy));
+                        }
+                    }
+                    paged_model::FrameRef::Rectangle(idx) => {
+                        let Some(rect) = master.spread.rectangles.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(rect.bounds, rect.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if rect
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        let mut copy = rect.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        // A master's placed picture (a slide-master background
+                        // photo, a logo) paints on every page that applies it,
+                        // between the frame's fill and its stroke.
+                        let image_cache = &mut page_image_caches[i];
+                        emit_rectangle_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            None,
+                            &mut |page: &mut BuiltPage| {
+                                emit_rectangle_image(
+                                    page,
+                                    &copy,
+                                    options,
+                                    image_cache,
+                                    decoded_image_cache,
+                                    resolve_frame_shadow(
+                                        copy.content_drop_shadow.as_ref(),
+                                        None,
+                                        palette,
+                                        color_ctx,
+                                    ),
+                                    image_rendering(
+                                        options,
+                                        copy.self_id
+                                            .as_deref()
+                                            .and_then(|id| master.spread.image_metadata.get(id)),
+                                    ),
+                                )
+                            },
+                        );
+                    }
+                    paged_model::FrameRef::Polygon(idx) => {
+                        let Some(poly) = master.spread.polygons.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(poly.bounds, poly.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if poly
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        let mut copy = poly.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        emit_polygon_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            &mut |_: &mut BuiltPage| {},
+                        );
+                    }
+                    paged_model::FrameRef::Oval(idx) => {
+                        let Some(oval) = master.spread.ovals.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(oval.bounds, oval.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if oval
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        let mut copy = oval.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        emit_oval_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            &mut |_: &mut BuiltPage| {},
+                        );
+                    }
+                    paged_model::FrameRef::GraphicLine(idx) => {
+                        let Some(line) = master.spread.graphic_lines.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(line.bounds, line.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if line
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        let mut copy = line.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        emit_line_into(&mut pages[i], &copy, document, palette, color_ctx);
+                    }
+                    paged_model::FrameRef::Group(_) => {}
                 }
             };
-            let styles = &document.styles;
-            let ms = &master.spread;
-            for f in &ms.text_frames {
-                add(
-                    WrapSource {
-                        bounds: f.bounds,
-                        item_transform: f.item_transform,
-                        anchors: &f.anchors,
-                        subpath_starts: &f.subpath_starts,
-                        subpath_open: &f.subpath_open,
-                        oval: false,
-                        stroke_color: f.stroke_color.as_deref(),
-                        stroke_weight: f.stroke_weight,
-                    },
-                    styles.item_text_wrap(f.text_wrap, f.applied_object_style.as_deref()),
-                    f.self_id.as_deref(),
-                );
+            for &fr in &master_order {
+                emit_master(fr);
             }
-            for r in &ms.rectangles {
-                add(
-                    WrapSource {
-                        bounds: r.bounds,
-                        item_transform: r.item_transform,
-                        anchors: &r.anchors,
-                        subpath_starts: &r.subpath_starts,
-                        subpath_open: &r.subpath_open,
-                        oval: false,
-                        stroke_color: r.stroke_color.as_deref(),
-                        stroke_weight: r.stroke_weight,
-                    },
-                    styles.item_text_wrap(r.text_wrap, r.applied_object_style.as_deref()),
-                    r.self_id.as_deref(),
-                );
-            }
-            for o in &ms.ovals {
-                add(
-                    WrapSource {
-                        bounds: o.bounds,
-                        item_transform: o.item_transform,
-                        anchors: &[],
-                        subpath_starts: &[],
-                        subpath_open: &[],
-                        oval: true,
-                        stroke_color: o.stroke_color.as_deref(),
-                        stroke_weight: o.stroke_weight,
-                    },
-                    styles.item_text_wrap(o.text_wrap, o.applied_object_style.as_deref()),
-                    o.self_id.as_deref(),
-                );
-            }
-            for p in &ms.polygons {
-                add(
-                    WrapSource {
-                        bounds: p.bounds,
-                        item_transform: p.item_transform,
-                        anchors: &p.anchors,
-                        subpath_starts: &p.subpath_starts,
-                        subpath_open: &p.subpath_open,
-                        oval: false,
-                        stroke_color: p.stroke_color.as_deref(),
-                        stroke_weight: p.stroke_weight,
-                    },
-                    styles.item_text_wrap(p.text_wrap, p.applied_object_style.as_deref()),
-                    p.self_id.as_deref(),
-                );
-            }
-        }
-        let master_order = master_paint_order(&master.spread);
-        let mut emit_master = |fr: paged_model::FrameRef| {
-            match fr {
-                paged_model::FrameRef::TextFrame(idx) => {
-                    let Some(frame) = master.spread.text_frames.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(frame.bounds, frame.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if frame
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    // Master items live in master-spread coords. Compose an
-                    // outer translate(dx, dy) into the frame's existing
-                    // ItemTransform so the inner-coord rect ends up in the
-                    // *live* spread coords once frame_outer_transform applies.
-                    // Mutating bounds (inner coords) would be wrong now that
-                    // PathGeometry-derived shapes carry geometry in inner
-                    // space.
-                    let mut copy = frame.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    // A master frame's text is not moved into a slot, so
-                    // its own bracket stays in the glyph post-pass.
-                    let _ = emit_text_frame_into(
-                        &mut pages[i],
-                        &copy,
-                        document,
-                        palette,
-                        options.fallback_frame_fill,
-                        color_ctx,
-                        None, // master items don't carry a drop shadow today.
-                        None, // master frames don't auto-size in our model.
-                    );
-                    // Stash a relocated copy so the master-story pass below
-                    // can flow this frame's hosted story (page-number footers,
-                    // running headers, etc.) onto this body page. Skipping it
-                    // when ParentStory is missing is fine — the rectangle was
-                    // still drawn above.
-                    if copy.parent_story.is_some() {
-                        let copy = text_area_frame(&copy, document).into_owned();
-                        master_text_emissions.push((i, copy));
-                    }
-                }
-                paged_model::FrameRef::Rectangle(idx) => {
-                    let Some(rect) = master.spread.rectangles.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(rect.bounds, rect.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if rect
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    let mut copy = rect.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    // A master's placed picture (a slide-master background
-                    // photo, a logo) paints on every page that applies it,
-                    // between the frame's fill and its stroke.
-                    let image_cache = &mut page_image_caches[i];
-                    emit_rectangle_into(
-                        &mut pages[i],
-                        &copy,
-                        document,
-                        palette,
-                        options.fallback_frame_fill,
-                        color_ctx,
-                        None,
-                        &mut |page: &mut BuiltPage| {
-                            emit_rectangle_image(
-                                page,
-                                &copy,
-                                options,
-                                image_cache,
-                                decoded_image_cache,
-                                resolve_frame_shadow(
-                                    copy.content_drop_shadow.as_ref(),
-                                    None,
-                                    palette,
-                                    color_ctx,
-                                ),
-                                image_rendering(
-                                    options,
-                                    copy.self_id
-                                        .as_deref()
-                                        .and_then(|id| master.spread.image_metadata.get(id)),
-                                ),
-                            )
-                        },
-                    );
-                }
-                paged_model::FrameRef::Polygon(idx) => {
-                    let Some(poly) = master.spread.polygons.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(poly.bounds, poly.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if poly
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    let mut copy = poly.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    emit_polygon_into(
-                        &mut pages[i],
-                        &copy,
-                        document,
-                        palette,
-                        options.fallback_frame_fill,
-                        color_ctx,
-                        &mut |_: &mut BuiltPage| {},
-                    );
-                }
-                paged_model::FrameRef::Oval(idx) => {
-                    let Some(oval) = master.spread.ovals.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(oval.bounds, oval.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if oval
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    let mut copy = oval.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    emit_oval_into(
-                        &mut pages[i],
-                        &copy,
-                        document,
-                        palette,
-                        options.fallback_frame_fill,
-                        color_ctx,
-                        &mut |_: &mut BuiltPage| {},
-                    );
-                }
-                paged_model::FrameRef::GraphicLine(idx) => {
-                    let Some(line) = master.spread.graphic_lines.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(line.bounds, line.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if line
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    let mut copy = line.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    emit_line_into(&mut pages[i], &copy, document, palette, color_ctx);
-                }
-                paged_model::FrameRef::Group(_) => {}
-            }
-        };
-        for &fr in &master_order {
-            emit_master(fr);
         }
     }
 

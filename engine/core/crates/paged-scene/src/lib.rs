@@ -134,6 +134,11 @@ pub struct ParsedMasterSpread {
     pub name: Option<String>,
 }
 
+/// Engine ADR 1026 — how many masters stack on one page: the page's own
+/// master and up to three it is based on (a PowerPoint slide's layout and
+/// slide master use two).
+pub const MAX_MASTER_DEPTH: usize = 4;
+
 /// Cap on the number of AUTHORED `NextTextFrame` links followed.
 /// Real chains are 1–10 frames; the cap exists so a malformed
 /// document with a missed cycle can't make the resolver loop.
@@ -266,6 +271,51 @@ impl Document {
             .map(|(_, id)| id)
             .unwrap_or(reference);
         self.master_spreads.get(stripped)
+    }
+
+    /// Engine ADR 1026 — the master `reference` names, then the masters it
+    /// is based on, nearest first. A master is based on the master its
+    /// first page applies (`<MasterSpread>`'s pages carry `AppliedMaster`
+    /// as a page does: InDesign's "Based on Master", a PowerPoint layout's
+    /// slide master). At most [`MAX_MASTER_DEPTH`] masters; a master met
+    /// twice ends the chain, so a cycle draws each master once.
+    pub fn master_chain(&self, reference: &str) -> Vec<&ParsedMasterSpread> {
+        let mut out: Vec<&ParsedMasterSpread> = Vec::new();
+        let mut next = self.master_spread(reference);
+        while let Some(m) = next {
+            if out.len() == MAX_MASTER_DEPTH || out.iter().any(|o| o.self_id == m.self_id) {
+                break;
+            }
+            out.push(m);
+            next = m
+                .spread
+                .pages
+                .first()
+                .and_then(|p| p.applied_master.as_deref())
+                .and_then(|r| self.master_spread(r));
+        }
+        out
+    }
+
+    /// Engine ADR 1026 — whether master `master` may be based on `parent`:
+    /// both exist, the chain `parent` starts does not reach `master` (no
+    /// cycle), and `master` on top of it stays within [`MAX_MASTER_DEPTH`].
+    pub fn master_basis_allowed(&self, master: &str, parent: &str) -> bool {
+        let Some(m) = self.master_spread(master) else {
+            return false;
+        };
+        if self.master_spread(parent).is_none() {
+            return false;
+        }
+        let chain = self.master_chain(parent);
+        // A chain cut short by a cycle never reaches its own end.
+        let closed = chain
+            .last()
+            .and_then(|l| l.spread.pages.first())
+            .and_then(|p| p.applied_master.as_deref())
+            .and_then(|r| self.master_spread(r))
+            .is_none();
+        closed && chain.len() < MAX_MASTER_DEPTH && !chain.iter().any(|c| c.self_id == m.self_id)
     }
 
     /// The frame that hosts a story, looked up by the story's

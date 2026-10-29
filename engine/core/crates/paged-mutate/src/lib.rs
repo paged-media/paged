@@ -75,6 +75,7 @@ pub use apply::{
     extract_snippet, parse_snippet, snippet_demand, snippet_roots, ItemSnippet, SnippetResources,
     SNIPPET_FORMAT,
 };
+pub use apply::{override_copy, OverrideCopy};
 pub use error::OperationError;
 pub use history::{History, DEFAULT_HISTORY_CAPACITY};
 pub use notify::Notifier;
@@ -1809,6 +1810,26 @@ mod tests {
             Operation::RenameMaster {
                 master_id: "uM".to_string(),
                 name: None,
+            },
+            Operation::SetPageOverrides {
+                page: "Page/u1".to_string(),
+                overrides: vec!["u2".to_string()],
+            },
+            Operation::InsertItemHyperlink {
+                item_id: "u2".to_string(),
+                url: "https://paged.media".to_string(),
+                page: None,
+                name: None,
+                source_id: "HyperlinkPageItemSource/u3".to_string(),
+                dest_id: "HyperlinkURLDestination/u4".to_string(),
+                hyperlink_id: "Hyperlink/u5".to_string(),
+            },
+            Operation::OverrideMasterItems {
+                page: "Page/u1".to_string(),
+                items: vec!["u2".to_string()],
+                ids: Vec::new(),
+                story_ids: Vec::new(),
+                empty_text: false,
             },
             Operation::SetSpreadOrder {
                 spreads: vec![crate::operation::SpreadPlacement {

@@ -1351,6 +1351,7 @@ fn navigation_plan<'a>(
         sections,
         destinations,
         hyperlinks: &doc.designmap.hyperlinks,
+        item_sources: &doc.designmap.hyperlink_page_item_sources,
         bookmarks: &doc.designmap.bookmarks,
         bookmark_parents: &doc.designmap.bookmark_parents,
         conditions: &doc.styles.conditions,
