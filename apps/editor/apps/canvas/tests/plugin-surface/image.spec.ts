@@ -556,18 +556,18 @@ test.describe("plugin surface · paged.image", () => {
     await designer.runCommand("media.paged.image.command.setType");
     await expect(page.locator("[data-image-type-text]")).toHaveCount(1);
     await expect(page.locator("[data-image-type-note]")).toContainText(
-      "baseline",
+      "point type",
     );
-    // …and the section states its own ceiling where the designer stands:
-    // this is a raster type tool, not a second text engine. The statement
-    // sits in the Type section's collapsed "About" block (2026-10-11 panel
-    // pass); opening it shows it.
+    // …and the section says what a type layer is where the designer
+    // stands (WP5.10): editable text, laid out by the document's text
+    // engine, rasterized on request. The statement sits in the Type
+    // section's collapsed "About" block; opening it shows it.
     const typeAbout = page.locator("[data-image-type-section] details", {
       has: page.locator("summary", { hasText: "About" }),
     });
     await typeAbout.locator("summary").click();
     await expect(
-      typeAbout.getByText("This paints pixels, not a text object."),
+      typeAbout.getByText("A type layer keeps its text", { exact: false }),
     ).toBeVisible();
     expect(
       await status(page),

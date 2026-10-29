@@ -62,6 +62,7 @@ and each one names the plugins that follow it and those that do not.
 | [339](339-handle-sets-and-the-transform-box.md) | Handle sets and a host-drawn transform box | Accepted 2026-10-24 |
 | [340](340-the-workspace-and-readout-lanes.md) | The workspace and readout lanes: an edit context's rulers, guides, grid and Info rows | Accepted 2026-10-27 |
 | [341](341-the-clipboard-carries-svg.md) | The clipboard carries SVG: `ClipboardPayload.svg`, `clipboard.svg@1` | Accepted 2026-10-28 |
+| [342](342-a-story-the-document-does-not-hold.md) | A story the document does not hold, laid out and drawn by the engine | Accepted 2026-10-27 |
 | [343](343-the-data-door.md) | The data door: one bundle serves the document's data, any bundle reads, writes and binds it | Accepted 2026-10-24 |
 | [344](344-the-actions-door.md) | The actions door: named pure steps, registered by any bundle, run and cached by any | Accepted 2026-10-24 |
 | [345](345-presentations-and-module-views.md) | Presentations and module views: a bundle's surface on the screen, a second window, in place of the canvas | Accepted 2026-10-25 |

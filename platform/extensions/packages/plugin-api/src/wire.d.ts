@@ -1494,6 +1494,12 @@ export interface SnapshotPng {
      * exactly. Absent for a whole page.
      */
     region?: SnapshotClip;
+    /**
+     * Engine ADR 1035 — the request\'s `story` was drawn (alone). Absent
+     * when there was none, and from an engine that does not know the
+     * field (it drew the page instead).
+     */
+    story?: boolean;
 }
 
 /**
@@ -1750,6 +1756,30 @@ export interface AlternateMember {
 }
 
 /**
+ * One paragraph of a [`SnapshotStory`]. Every absent value is the
+ * document\'s default paragraph style\'s.
+ */
+export interface SnapshotParagraph {
+    runs: SnapshotRun[];
+    /**
+     * IDML\'s names: `LeftAlign`, `CenterAlign`, `RightAlign`,
+     * `LeftJustified`, `CenterJustified`, `RightJustified`,
+     * `FullyJustified`.
+     */
+    justification?: string;
+    firstLineIndent?: number;
+    leftIndent?: number;
+    rightIndent?: number;
+    spaceBefore?: number;
+    spaceAfter?: number;
+    hyphenation?: boolean;
+    /**
+     * `\"paragraph\"` (Adobe Paragraph Composer) or `\"single\"` (Single-line).
+     */
+    composer?: string;
+}
+
+/**
  * One part of a styled value: text, in a character style or the frame\'s
  * own, or a break.
  */
@@ -1798,6 +1828,56 @@ export interface TemplateFinding {
      * The finding in English.
      */
     message: string;
+}
+
+/**
+ * One run of a [`SnapshotParagraph`]: text in one set of character
+ * attributes. Absent values inherit (the paragraph style\'s).
+ */
+export interface SnapshotRun {
+    /**
+     * The text; a `\\n` or `\\r` inside it is a forced line break.
+     */
+    text: string;
+    /**
+     * Family name, as the document\'s fonts name it.
+     */
+    font?: string;
+    fontStyle?: string;
+    pointSize?: number;
+    /**
+     * Leading in pt; absent is auto.
+     */
+    leading?: number;
+    /**
+     * The fill, sRGB 0–255. Absent is the style\'s (black).
+     */
+    fillRgb?: [number, number, number];
+    /**
+     * 1/1000 em.
+     */
+    tracking?: number;
+    baselineShift?: number;
+    /**
+     * Percent (100 = none).
+     */
+    horizontalScale?: number;
+    verticalScale?: number;
+    /**
+     * Degrees.
+     */
+    skew?: number;
+    underline?: boolean;
+    strikethru?: boolean;
+    ligatures?: boolean;
+    /**
+     * IDML\'s `Normal`, `AllCaps`, `SmallCaps`, `CapToSmallCap`.
+     */
+    capitalization?: string;
+    /**
+     * IDML\'s `Normal`, `Superscript`, `Subscript`.
+     */
+    position?: string;
 }
 
 /**

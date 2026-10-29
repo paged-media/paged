@@ -47,8 +47,8 @@ use image_kernels::families::compose::COMPOSE_NORMAL;
 
 use super::{
     BlendIf, CompAppearance, CompEntry, FillLayer, FillSource, Knockout, Layer, LayerComp,
-    LayerExt, LayerGroup, LayerKind, LayerLocks, LayerMask, LayerStack, BACKGROUND_LAYER_NAME,
-    COLOR_LABELS,
+    LayerExt, LayerGroup, LayerKind, LayerLocks, LayerMask, LayerStack, TypeLayer, TypeSource,
+    BACKGROUND_LAYER_NAME, COLOR_LABELS,
 };
 use crate::ingest::IngestError;
 use crate::pixels::Pixels;
@@ -223,6 +223,78 @@ impl LayerStack {
         at
     }
 
+    // ─────────────────────────── type layers ───────────────────────────
+
+    /// A new TYPE layer of `source` above the active layer, its pixels
+    /// `px` (canvas-extent RGBA8, the engine's render), made active. An
+    /// empty `name` takes the text's first line, as Photoshop names it.
+    pub fn add_type_layer(
+        &mut self,
+        name: &str,
+        source: TypeSource,
+        px: Vec<u8>,
+    ) -> Result<usize, IngestError> {
+        self.check_canvas_rgba(&px)?;
+        let name = if name.is_empty() {
+            type_layer_name(&source.text)
+        } else {
+            name.to_string()
+        };
+        let group = self.layers[self.active].group;
+        let mut layer = self.plain_layer(
+            name,
+            Pixels::from_rgba8(Arc::from(px.into_boxed_slice())),
+            group,
+        );
+        layer.kind = LayerKind::Type(Box::new(TypeLayer {
+            source,
+            stale: false,
+            psd: None,
+        }));
+        let at = self.active + 1;
+        self.layers.insert(at, layer);
+        self.active = at;
+        self.edit_mask = false;
+        Ok(at)
+    }
+
+    /// A type layer's new source and render (an edit of its text, styles,
+    /// frame or warp): the layer is no longer the PSD's.
+    pub fn set_type(
+        &mut self,
+        index: usize,
+        source: TypeSource,
+        px: Vec<u8>,
+    ) -> Result<(), IngestError> {
+        self.check_canvas_rgba(&px)?;
+        let layer = self.layer_mut(index)?;
+        layer.appearance_editable()?;
+        match &mut layer.kind {
+            LayerKind::Type(t) => {
+                t.source = source;
+                t.stale = false;
+                t.psd = None;
+            }
+            _ => return Err(refuse(format!("layer {index} is not a type layer"))),
+        }
+        layer.rgba = Pixels::from_rgba8(Arc::from(px.into_boxed_slice())).into();
+        Ok(())
+    }
+
+    fn check_canvas_rgba(&self, px: &[u8]) -> Result<(), IngestError> {
+        let want = self.width as usize * self.height as usize * 4;
+        if px.len() == want {
+            Ok(())
+        } else {
+            Err(IngestError::Decode(format!(
+                "type render: {} bytes for a {}×{} canvas (expected {want})",
+                px.len(),
+                self.width,
+                self.height
+            )))
+        }
+    }
+
     /// Change a fill layer's source (its Properties); the render is due.
     pub fn set_fill(&mut self, index: usize, source: FillSource) -> Result<(), IngestError> {
         let layer = self.layer_mut(index)?;
@@ -244,12 +316,15 @@ impl LayerStack {
             LayerKind::Fill(f) if f.stale => Err(refuse(
                 "the fill layer is not rendered yet — composite first",
             )),
-            LayerKind::Fill(_) | LayerKind::Smart(_) => {
+            LayerKind::Type(t) if t.stale => Err(refuse(
+                "the type layer is not rendered yet — render it first",
+            )),
+            LayerKind::Fill(_) | LayerKind::Smart(_) | LayerKind::Type(_) => {
                 layer.kind = LayerKind::Pixels;
                 Ok(())
             }
             _ => Err(refuse(format!(
-                "layer {index} is not a fill layer or smart object"
+                "layer {index} is not a fill layer, smart object or type layer"
             ))),
         }
     }
@@ -879,12 +954,19 @@ impl LayerStack {
             crate::layers::follow_vector_mask(l, |p| [p[0] + fx, p[1] + fy], w, h);
         }
         match &mut l.kind {
-            LayerKind::Pixels => {
+            LayerKind::Pixels | LayerKind::Type(_) => {
                 let px = l.rgba.canvas().clone();
                 let bpp = px.bytes_per_pixel();
                 let clear = vec![0u8; bpp];
                 let moved = shift(px.raw(), w, h, bpp, dx, dy, Some(&clear));
                 l.rgba = Pixels::from_raw(Arc::from(moved.into_boxed_slice()), px.depth()).into();
+                // Type moves its frame too, and re-renders: what the shift
+                // pushed off the canvas comes back when it moves in again.
+                if let LayerKind::Type(t) = &mut l.kind {
+                    t.source.frame.translate(f64::from(dx), f64::from(dy));
+                    t.stale = true;
+                    t.psd = None;
+                }
             }
             LayerKind::Fill(f) => {
                 if let FillSource::Gradient(g) = &mut f.source {
@@ -983,5 +1065,17 @@ impl LayerStack {
             }
         }
         Ok(moved)
+    }
+}
+
+/// Photoshop names a new type layer after its text: the first line, cut
+/// at 30 characters.
+fn type_layer_name(text: &str) -> String {
+    let first = text.lines().next().unwrap_or("").trim();
+    let name: String = first.chars().take(30).collect();
+    if name.is_empty() {
+        "Type".into()
+    } else {
+        name
     }
 }

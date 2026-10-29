@@ -29,6 +29,7 @@ PAGED_PSD_READBACK_OUT=<stage>/psd-readback cargo nextest run -p image-conforman
   --run-ignored only write_psd_readback_inputs
 PAGED_PROBE_STAGE=<stage> bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/psd-readback.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/guides.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/warp-text.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -87,6 +88,9 @@ Photoshop's own sRGB conversions under three intent/BPC settings).
 `colour-sweep` stimulus converted to CMYK (Coated FOGRA39, named), Gray Gamma 2.2 and Lab and back
 to sRGB at 16 and 8 bits, each converted document saved as a PSD; and a Levels gamma on the
 `deep-ramp` stimulus, 16384 levels, at 16 and 8 bits).
+`image-conformance/tests/it/warp_text_photoshop.rs` (Warp Text: each style's
+PSD warp opens as the style that made it; paged-warp's meshes held to
+Photoshop's warped bounds as a recorded convention) and
 `image-conformance/tests/it/psd_vector_masks_photoshop.rs` (vector masks: the
 merged composite, and the render Photoshop caches in each masked layer's
 channel −2).

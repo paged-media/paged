@@ -125,3 +125,116 @@ fn photoshop_text_layers_composite_as_recorded__feat__image_psd_layer_import() {
         assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 }
+
+// ─────────────── WP5.10: the text stays editable ───────────────
+
+fn stack_of(file: &PsdFile) -> LayerStack {
+    let import = file.layer_plates_rgba8().expect("plates");
+    LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers)).expect("stack")
+}
+
+fn text_layer(stack: &LayerStack) -> &image_js::layers::TypeLayer {
+    stack
+        .layers()
+        .iter()
+        .find_map(|l| l.type_layer())
+        .expect("a type layer")
+}
+
+/// Photoshop's type layers open as TYPE layers: text, face, size, colour,
+/// alignment and the baseline origin come from the `TySh` block, and the
+/// pixels stay Photoshop's render.
+#[test]
+#[allow(non_snake_case)]
+fn photoshop_text_layers_open_as_editable_type__feat__image_layers_type() {
+    let cases: &[(&str, f64, [u8; 3])] = &[
+        ("black-on-white", 22.0, [0, 0, 0]),
+        ("white-on-dark", 22.0, [255, 255, 255]),
+        ("red-on-green", 16.0, [220, 30, 30]),
+        ("text-at-60", 22.0, [20, 40, 120]),
+        ("text-multiply", 22.0, [60, 120, 200]),
+    ];
+    for (id, size, rgb) in cases {
+        let bytes = std::fs::read(dir().join(format!("{id}.psd"))).expect("fixture");
+        let file = PsdFile::parse(&bytes).expect("parse");
+        let stack = stack_of(&file);
+        let t = text_layer(&stack);
+        let s = &t.source;
+        assert_eq!(s.text, "Ragged 0123", "{id}");
+        assert_eq!(
+            s.frame,
+            image_js::layers::TypeFrame::Point { x: 4.0, y: 40.0 },
+            "{id}: the probe's position"
+        );
+        let run = &s.runs[0];
+        assert_eq!(run.font, "Myriad Pro", "{id}");
+        assert_eq!(run.postscript.as_deref(), Some("MyriadPro-Regular"));
+        assert!((run.size - size).abs() < 1e-6, "{id}: size {}", run.size);
+        for (got, want) in run.color.iter().zip(rgb) {
+            assert!(got.abs_diff(*want) <= 1, "{id}: colour {:?}", run.color);
+        }
+        assert_eq!(s.paragraphs[0].align, "left");
+        assert_eq!(s.warp.style, "none");
+        assert!(!t.stale, "{id}: Photoshop's render is kept");
+        assert!(t.psd.is_some(), "{id}: and its TySh block");
+    }
+}
+
+/// Written back, an unedited type layer carries Photoshop's own `TySh`
+/// block byte for byte; an edited one carries the new text, which reads
+/// back as type.
+#[test]
+#[allow(non_snake_case)]
+fn type_layers_are_written_back_as_type__feat__image_layers_type() {
+    let bytes = std::fs::read(dir().join("black-on-white.psd")).expect("fixture");
+    let original = PsdFile::parse(&bytes).expect("parse");
+    let tysh = |f: &PsdFile| {
+        f.layer_mask
+            .layers
+            .iter()
+            .flat_map(|l| l.addl.iter())
+            .find(|a| &a.key == b"TySh")
+            .and_then(|a| a.raw_block.clone())
+            .expect("a TySh block")
+    };
+    let mut stack = stack_of(&original);
+    let composite = vec![0u8; (stack.width() * stack.height() * 4) as usize];
+
+    let mut out = PsdFile::parse(&bytes).expect("parse");
+    image_js::saveback::psd_write_stack(&mut out, &stack, &composite).expect("write");
+    let written = PsdFile::parse(&out.write().expect("bytes")).expect("re-parse");
+    assert_eq!(
+        tysh(&written),
+        tysh(&original),
+        "unedited: Photoshop's bytes"
+    );
+
+    let index = stack
+        .layers()
+        .iter()
+        .position(|l| l.type_layer().is_some())
+        .expect("type");
+    let mut source = stack.layers()[index].type_layer().unwrap().source.clone();
+    source.text = "Edited text".into();
+    source.runs[0].length = 11;
+    source.warp.style = "flag".into();
+    source.warp.bend = 0.3;
+    let px = stack.layers()[index].rgba.canvas().to_rgba8().into_owned();
+    stack
+        .recorded("Edit Type", None, |s| s.set_type(index, source, px))
+        .expect("edit");
+    let mut out = PsdFile::parse(&bytes).expect("parse");
+    image_js::saveback::psd_write_stack(&mut out, &stack, &composite).expect("write");
+    let written = PsdFile::parse(&out.write().expect("bytes")).expect("re-parse");
+    assert_ne!(tysh(&written), tysh(&original));
+    let back = stack_of(&written);
+    let t = text_layer(&back);
+    assert_eq!(t.source.text, "Edited text");
+    assert_eq!(t.source.runs[0].font, "Myriad Pro");
+    assert_eq!(t.source.warp.style, "flag");
+    assert!((t.source.warp.bend - 0.3).abs() < 1e-9);
+    assert_eq!(
+        t.source.frame,
+        image_js::layers::TypeFrame::Point { x: 4.0, y: 40.0 }
+    );
+}

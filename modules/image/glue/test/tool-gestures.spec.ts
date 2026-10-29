@@ -382,18 +382,19 @@ describe("retouching tools", () => {
   });
 });
 
-describe("raster type", () => {
-  it("type: a click sets a run at the clicked baseline with the session's text, family and size", async () => {
+describe("type", () => {
+  it("type: a click makes point type at the clicked baseline, a drag a text box", async () => {
     covers("tool:media.paged.image.tool.type");
     const k = await ingested();
-    const calls = spyOn(k.session, { paintText: true });
+    const calls = spyOn(k.session, { addTypeLayer: null });
     const g = gestures(k.toolTarget).tool(`${T}.type`).settle();
-    // No text yet: the click sets nothing.
+    // The frame holds 4×2 px at 50 pt each: (50, 50) pt is image (1, 1).
     await g.click([50, 50]).settle();
-    expect(calls).toEqual([]);
-    k.session.setType({ text: "Hi", family: "Test", sizePx: 20 });
-    await g.click([50, 50]).settle();
-    expect(calls).toEqual(['paintText([1,1],"Hi","Test",20)']);
+    expect(calls).toEqual(['addTypeLayer({"kind":"point","x":1,"y":1})']);
+    await g.down([0, 0]).move([100, 50]).up([200, 100]).settle();
+    expect(calls.at(-1)).toBe(
+      'addTypeLayer({"kind":"box","x":0,"y":0,"width":4,"height":2})',
+    );
     expect(k.docOps()).toEqual([]);
     k.dispose();
   });
