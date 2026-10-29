@@ -436,11 +436,9 @@ describe("the review commands (review.tsx)", () => {
     await c.commands.run("markupSimple");
     await c.commands.run("markupAll");
     await c.commands.run("markupNone");
-    expect(c.mutations.map((m) => (m.args as { value: unknown }).value)).toEqual([
-      "simple",
-      "all",
-      "none",
-    ]);
+    expect(
+      c.mutations.map((m) => (m.args as { value: unknown }).value),
+    ).toEqual(["simple", "all", "none"]);
     // The change starting before the caret: the insertion it stands in.
     expect((await c.commands.run("previousChange")).id).toBe("1");
     expect(c.revealed[0]).toEqual([
