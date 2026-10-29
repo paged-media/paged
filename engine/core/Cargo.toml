@@ -11,6 +11,7 @@ members = [
     "crates/paged-pixel",
     "crates/paged-warp",
     "crates/paged-psd",
+    "crates/paged-psd-fx",
     "crates/paged-resample",
     "crates/paged-raster",
     "crates/paged-sniff",

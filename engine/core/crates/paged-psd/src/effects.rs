@@ -1235,6 +1235,15 @@ pub const EFFECT_KEYS: &[&str] = &[
     "DrSh",
 ];
 
+/// A layer record's STYLE: its `lmfx` block (several instances of an
+/// effect) or else its `lfx2`, read; `None` without one or when it does
+/// not parse.
+pub fn layer_style(rec: &crate::model::LayerRecord) -> Option<LayerStyle> {
+    let block = |k: &[u8; 4]| rec.addl.iter().find(|a| &a.key == k);
+    let payload = block(b"lmfx").or_else(|| block(b"lfx2"))?.payload();
+    LayerStyle::parse(payload).ok()
+}
+
 impl LayerStyle {
     /// Is any effect drawn?
     pub fn draws(&self) -> bool {

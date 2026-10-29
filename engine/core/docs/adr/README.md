@@ -165,6 +165,7 @@ is not written yet.
 | [1036](1036-a-snippet-carries-opacity-masks-and-names.md) | A snippet carries its opacity masks and item names; an inline PDF is readable | Accepted 2026-10-27 |
 | [1038](1038-the-remaining-codecs-and-the-layered-tiff.md) | The remaining codecs: GIF, BMP, TGA, JPEG XL and AVIF encode, HDR and OpenEXR floats, and the layered TIFF | Accepted 2026-10-28 |
 | [1039](1039-a-symbol-is-drawn-by-its-instances.md) | A symbol is kept once and drawn by its instances: 9-slice, overrides, one PDF form, IDML through labels | Accepted 2026-10-28 |
+| [1044](1044-a-photoshop-layer-style-maps-onto-the-effect-stack.md) | A Photoshop layer style maps onto the effect stack: `paged-psd-fx`, losses named | Accepted 2026-10-29 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
