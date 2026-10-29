@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 790,
+    "command": 795,
     "keybinding": 164,
-    "menu": 559,
+    "menu": 562,
     "panel": 142,
     "tool": 114
   },
@@ -3231,6 +3231,26 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.assetExport.collectMultiple",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectPages",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectSingle",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.exportAll",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.chrome.toggleAll",
       "kind": "command",
       "owner": "editor"
@@ -3492,6 +3512,11 @@
     },
     {
       "id": "command:paged.effects.globalLight",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.assetExport",
       "kind": "command",
       "owner": "editor"
     },
@@ -5521,6 +5546,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:File/Export/Asset Export…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:File/Export/SVG (page)…",
       "kind": "menu",
       "owner": "editor"
@@ -6897,6 +6927,16 @@
     },
     {
       "id": "menu:Object/Clipping mask/Release",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Collect for Export/As Multiple Assets",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Collect for Export/As Single Asset",
       "kind": "menu",
       "owner": "editor"
     },

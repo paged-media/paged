@@ -5,7 +5,7 @@
   "counts": {
     "clientMembers": 103,
     "wireKinds": 67,
-    "exports": 91
+    "exports": 92
   },
   "wireKinds": [
     "amendMutation",
@@ -152,7 +152,7 @@
         {
           "name": "CanvasClient.requestSnapshot",
           "kind": "method",
-          "signature": "async requestSnapshot(pageId: PageId, targetWidthPx: number, dpi?: number, options?: { markers?: boolean }): Promise<SnapshotPng>",
+          "signature": "async requestSnapshot(pageId: PageId, targetWidthPx: number, dpi?: number, options?: SnapshotOptions): Promise<SnapshotPng>",
           "summary": "Render one page to a PNG."
         },
         {
@@ -765,6 +765,12 @@
           "name": "SnapshotBackendInfo",
           "kind": "type",
           "signature": "SnapshotBackendInfo",
+          "summary": null
+        },
+        {
+          "name": "SnapshotOptions",
+          "kind": "type",
+          "signature": "SnapshotOptions",
           "summary": null
         },
         {

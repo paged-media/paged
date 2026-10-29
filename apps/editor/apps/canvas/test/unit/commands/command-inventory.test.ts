@@ -51,6 +51,7 @@ import { buildInsertCommands } from "../../../src/insert-commands";
 import { buildObjectCommands } from "../../../src/object-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { buildSvgCommands } from "../../../src/svg-commands";
+import { buildAssetExportCommands } from "../../../src/asset-export/commands";
 import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { buildViewCommands } from "../../../src/view-commands";
@@ -162,6 +163,7 @@ function tableIds(): string[] {
     ...buildAppCommands(noop),
     ...buildClipboardCommands(noop),
     ...buildSvgCommands(noop),
+    ...buildAssetExportCommands(),
     CANVAS_CONTEXT_MENU_COMMAND,
     ...buildObjectCommands(noop),
     ...buildInsertCommands(noop),
@@ -247,6 +249,7 @@ describe("the host command inventory", () => {
       "aiCommands",
       "clipboardCommands",
       "svgCommands",
+      "buildAssetExportCommands()",
       "CANVAS_CONTEXT_MENU_COMMAND",
       "objectCommands",
       "insertCommands",

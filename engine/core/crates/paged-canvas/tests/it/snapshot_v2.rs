@@ -326,7 +326,7 @@ fn a_v1_request_reply_serializes_as_before() {
     let page = first_page(&m);
     let png = render_snapshot_request(&m, &SnapshotRequest::page(&page, 64)).unwrap();
     let json = serde_json::to_string(&png).unwrap();
-    for key in ["\"format\"", "\"rgba\"", "\"region\""] {
+    for key in ["\"format\"", "\"rgba\"", "\"region\"", "\"bytes\""] {
         assert!(!json.contains(key), "{key} leaked into a v1 reply: {json}");
     }
 }
@@ -413,4 +413,180 @@ fn a_hidden_text_frame_keeps_its_text_off_other_pages() {
         },
     );
     assert_eq!(plain.rgba, hiding.rgba);
+}
+
+/// Editor ADR 288 (asset export) — one request, the file `paged-raster`
+/// writes: its container, the snapshot's size, its pixels.
+fn encoded(m: &CanvasModel, req: SnapshotRequest<'_>, format: SnapshotFormat) -> SnapshotPng {
+    let snap = render_snapshot_request(m, &SnapshotRequest { format, ..req }).expect("snapshot");
+    assert_eq!(snap.format, format);
+    assert!(snap.png_bytes.is_empty() && snap.rgba.is_empty());
+    assert!(!snap.bytes.is_empty(), "the file is in `bytes`");
+    snap
+}
+
+/// Engine ADR 1038's encoders behind the same request: GIF, BMP, TGA and
+/// lossless JPEG XL. Each decodes at the snapshot's size; BMP, TGA and JPEG
+/// XL keep the pixels (GIF quantizes to its palette).
+#[test]
+#[allow(non_snake_case)]
+fn gif_bmp_tga_and_jxl_are_written_by_paged_raster__feat__editor_shell_panels_asset_export() {
+    let m = model("strokes-fills");
+    let page = first_page(&m);
+    let only = [ElementId::Rectangle(first_rect(&m))];
+    let req = SnapshotRequest {
+        only: &only,
+        background: SnapshotBackground::Transparent,
+        trim: true,
+        dpi: Some(72.0),
+        ..SnapshotRequest::page(&page, 0)
+    };
+    let raw = rgba(&m, req);
+    for format in [
+        SnapshotFormat::Gif,
+        SnapshotFormat::Bmp,
+        SnapshotFormat::Tga,
+        SnapshotFormat::Jxl,
+    ] {
+        let file = encoded(&m, req, format);
+        assert_eq!(
+            (file.width_px, file.height_px),
+            (raw.width_px, raw.height_px)
+        );
+        let back = paged_raster::decode_rgba8(&file.bytes, None).expect("decode");
+        assert_eq!(
+            (back.width, back.height),
+            (raw.width_px, raw.height_px),
+            "{format:?}"
+        );
+        if format != SnapshotFormat::Gif {
+            assert_eq!(back.data, raw.rgba, "{format:?} keeps the pixels");
+        }
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn jpeg_webp_and_tiff_are_written_by_paged_raster__feat__editor_shell_panels_asset_export() {
+    let m = model("strokes-fills");
+    let page = first_page(&m);
+    let only = [ElementId::Rectangle(first_rect(&m))];
+    let req = SnapshotRequest {
+        only: &only,
+        background: SnapshotBackground::Transparent,
+        trim: true,
+        dpi: Some(144.0),
+        ..SnapshotRequest::page(&page, 0)
+    };
+    let raw = rgba(&m, req);
+    for (format, sniffed) in [
+        (SnapshotFormat::Jpeg, paged_raster::Format::Jpeg),
+        (SnapshotFormat::Webp, paged_raster::Format::WebP),
+        (SnapshotFormat::Tiff, paged_raster::Format::Tiff),
+    ] {
+        let file = encoded(&m, req, format);
+        assert_eq!(
+            paged_raster::sniff(&file.bytes),
+            Some(sniffed),
+            "{format:?}"
+        );
+        assert_eq!(
+            (file.width_px, file.height_px),
+            (raw.width_px, raw.height_px)
+        );
+        assert_eq!(file.region, raw.region, "the region travels with the file");
+        let info = paged_raster::probe(&file.bytes).expect("probe");
+        assert_eq!((info.width, info.height), (raw.width_px, raw.height_px));
+        assert!(info.icc.is_some(), "{format:?} carries the sRGB profile");
+        let back = paged_raster::decode_rgba8(&file.bytes, None).expect("decode");
+        assert_eq!(back.data.len(), raw.rgba.len());
+        if format != SnapshotFormat::Jpeg {
+            // Lossless, alpha kept.
+            assert_eq!(back.data, raw.rgba, "{format:?} keeps the pixels");
+        }
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn a_jpeg_flattens_transparency_onto_white__feat__editor_shell_panels_asset_export() {
+    let m = model("strokes-fills");
+    let page = first_page(&m);
+    let only = [ElementId::Rectangle(first_rect(&m))];
+    // The whole page with one item on it: most of it is transparent.
+    let req = SnapshotRequest {
+        only: &only,
+        background: SnapshotBackground::Transparent,
+        ..SnapshotRequest::page(&page, 120)
+    };
+    let raw = rgba(&m, req);
+    let jpeg = encoded(
+        &m,
+        SnapshotRequest {
+            quality: Some(95),
+            ..req
+        },
+        SnapshotFormat::Jpeg,
+    );
+    let back = paged_raster::decode_rgba8(&jpeg.bytes, None).expect("decode");
+    let (mut clear, mut white) = (0, 0);
+    for (src, out) in raw.rgba.chunks(4).zip(back.data.chunks(4)) {
+        if src[3] == 0 {
+            clear += 1;
+            if out[..3].iter().all(|c| *c >= 250) {
+                white += 1;
+            }
+        }
+    }
+    assert!(clear > 0);
+    // JPEG ringing may tint a few pixels next to the item's edges.
+    assert!(
+        white * 100 >= clear * 95,
+        "{white} of {clear} clear pixels white"
+    );
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn jpeg_quality_changes_the_file__feat__editor_shell_panels_asset_export() {
+    let m = model("strokes-fills");
+    let page = first_page(&m);
+    let at = |quality| {
+        encoded(
+            &m,
+            SnapshotRequest {
+                quality: Some(quality),
+                ..SnapshotRequest::page(&page, 300)
+            },
+            SnapshotFormat::Jpeg,
+        )
+        .bytes
+        .len()
+    };
+    assert!(at(20) < at(100), "a lower quality writes a smaller file");
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn the_wire_reads_a_file_format_and_its_quality__feat__editor_shell_panels_asset_export() {
+    let json = r#"{"seq":1,"protocol":77,"kind":"requestSnapshot","payload":{"pageId":"p1","targetWidthPx":0,"dpi":144,"format":"jpeg","quality":80}}"#;
+    let msg: paged_canvas::MainToWorker = serde_json::from_str(json).expect("parses");
+    let paged_canvas::MainToWorkerKind::RequestSnapshot {
+        format, quality, ..
+    } = msg.kind
+    else {
+        panic!("a snapshot request");
+    };
+    assert_eq!((format, quality), (SnapshotFormat::Jpeg, Some(80)));
+    for (name, format) in [
+        ("webp", SnapshotFormat::Webp),
+        ("tiff", SnapshotFormat::Tiff),
+        ("gif", SnapshotFormat::Gif),
+        ("bmp", SnapshotFormat::Bmp),
+        ("tga", SnapshotFormat::Tga),
+        ("jxl", SnapshotFormat::Jxl),
+    ] {
+        let parsed: SnapshotFormat = serde_json::from_str(&format!("\"{name}\"")).unwrap();
+        assert_eq!(parsed, format);
+    }
 }

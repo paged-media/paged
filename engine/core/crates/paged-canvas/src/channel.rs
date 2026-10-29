@@ -1349,7 +1349,9 @@ pub enum MainToWorkerKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         clip: Option<crate::snapshot::SnapshotClip>,
         /// Extensions ADR 338 — `"png"` (the default) or `"rgba"`: raw
-        /// straight-alpha RGBA8 in `SnapshotPng.rgba`.
+        /// straight-alpha RGBA8 in `SnapshotPng.rgba`. Editor ADR 288 adds
+        /// `"jpeg"`, `"webp"` and `"tiff"`: the file in `SnapshotPng.bytes`,
+        /// encoded by `paged-raster`, drawn on the CPU rasterizer.
         #[serde(
             default,
             skip_serializing_if = "crate::snapshot::SnapshotFormat::is_png"
@@ -1365,6 +1367,10 @@ pub enum MainToWorkerKind {
         /// Nothing drawn answers `SnapshotError::NothingDrawn`.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         trim: bool,
+        /// Editor ADR 288 (asset export) — `format: "jpeg"`: the quality,
+        /// 1 to 100 (absent: 90). Other formats ignore it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quality: Option<u8>,
     },
     /// Replace the worker's current selection. Phase 3 Item 1 — the
     /// worker mirrors the main thread's `ContentSelection` so the
@@ -4961,6 +4967,7 @@ mod tests {
                 format: Default::default(),
                 background: Default::default(),
                 trim: false,
+                quality: None,
             },
         };
         let json = serde_json::to_string(&msg).unwrap();

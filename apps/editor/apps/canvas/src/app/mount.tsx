@@ -293,6 +293,10 @@ import {
 } from "../clipboard-commands";
 import { buildSvgCommands, SVG_MENU_ITEMS } from "../svg-commands";
 import {
+  ASSET_EXPORT_MENU_ITEMS,
+  buildAssetExportCommands,
+} from "../asset-export/commands";
+import {
   addPage,
   buildInsertCommands,
   INSERT_DIAGNOSTIC_SOURCE,
@@ -1551,6 +1555,8 @@ function CanvasAppIntegration() {
       ...aiCommands,
       ...clipboardCommands,
       ...svgCommands,
+      // Editor ADR 288 — Asset Export.
+      ...buildAssetExportCommands(),
       CANVAS_CONTEXT_MENU_COMMAND,
       ...objectCommands,
       ...insertCommands,
@@ -1573,6 +1579,7 @@ function CanvasAppIntegration() {
       ...FIND_MENU_ITEMS,
       ...CLIPBOARD_MENU_ITEMS,
       ...SVG_MENU_ITEMS,
+      ...ASSET_EXPORT_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
