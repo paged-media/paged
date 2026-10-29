@@ -66,6 +66,7 @@ mod psd_composite_photoshop;
 mod psd_ecosystem;
 mod psd_fixtures;
 mod psd_group_masks;
+mod psd_guides_photoshop;
 mod psd_layer_effects;
 mod psd_layer_import;
 mod psd_layer_styles;

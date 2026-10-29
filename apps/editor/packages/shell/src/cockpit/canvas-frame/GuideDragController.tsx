@@ -60,7 +60,13 @@ import type {
   SpreadSummary,
 } from "@paged-media/client";
 
+import {
+  useBindingProviderHost,
+  useContextWorkspace,
+  type ShellGuideEdit,
+} from "../../catalog/binding-providers";
 import { useCamera } from "../../state/camera-context";
+import { pageToBase, snapToGuideStep } from "../../state/context-workspace";
 import { useCanvasClient } from "../../state/canvas-client-context";
 import { useDocument } from "../../state/document-context";
 import {
@@ -154,6 +160,10 @@ export function GuideDragController() {
   const { camera } = useCamera();
   const { handle } = useDocument();
   const { drag, updateDrag, clearDrag, setGuides } = useGuideDrag();
+  // Extensions ADR 340 — a guide of the active context's WORKSPACE goes to
+  // its provider instead of the spread (one undo step in the context).
+  const bindings = useBindingProviderHost();
+  const contextWorkspace = useContextWorkspace();
 
   // The once-per-drag window listeners and the engine subscription read
   // the latest render's values through effect events, without
@@ -295,7 +305,41 @@ export function GuideDragController() {
   /** Commit the drag's terminal mutation (or none) + mirror it into
    *  the optimistic store. Exactly one of insertGuide / moveGuide /
    *  deleteGuide, or zero (cancel). */
+  const settleWorkspace = useEffectEvent(
+    async (d: GuideDragState, onRuler: boolean) => {
+      const ws = contextWorkspace?.workspace;
+      if (!ws || !bindings?.editGuide) return;
+      const axis = d.orientation === "vertical" ? "x" : "y";
+      const base = (pagePos: number) =>
+        snapToGuideStep(ws, pageToBase(ws, axis, pagePos));
+      let edit: ShellGuideEdit | null = null;
+      if (d.kind === "create") {
+        // Dropped back on the ruler, or off the workspace's page: cancel.
+        if (onRuler || d.previewPageId !== ws.pageId) return;
+        if (d.previewPosition == null) return;
+        edit = {
+          kind: "create",
+          orientation: d.orientation,
+          position: base(d.previewPosition),
+        };
+      } else if (d.guide) {
+        if (onRuler) {
+          edit = { kind: "delete", id: d.guide.id };
+        } else if (d.previewPosition != null && d.previewPageId === ws.pageId) {
+          const position = base(d.previewPosition);
+          if (position === base(d.guide.position)) return;
+          edit = { kind: "move", id: d.guide.id, position };
+        }
+      }
+      if (edit) await bindings.editGuide(edit).catch(() => null);
+    },
+  );
+
   const settle = useEffectEvent(async (d: GuideDragState, onRuler: boolean) => {
+    if (d.target === "workspace") {
+      await settleWorkspace(d, onRuler);
+      return;
+    }
     if (d.kind === "create") {
       // GD-01: dropped back over the ruler, or never over a page →
       // cancel (no insert).

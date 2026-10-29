@@ -61,6 +61,10 @@ import {
   type FilterEngine,
   type FilterWasm,
 } from "./engine-filters";
+  workspaceEngine,
+  type WorkspaceEngine,
+  type WorkspaceWasm,
+} from "./workspace-engine";
 
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
@@ -1341,14 +1345,16 @@ export interface FilterMask {
 }
 
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
- *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`. */
+ *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`;
+ *  the workspace (image ADR 475) in `workspace-engine.ts`. */
 export interface ImageEngine
   extends
     MaskingEngine,
     ModeEngine,
     RetouchEngine<DecodedInfo>,
     FilterEngine,
-    VectorEngine<DecodedInfo> {
+    VectorEngine<DecodedInfo>,
+    WorkspaceEngine {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2425,7 +2431,7 @@ interface DecodedHandleWasm {
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
 export interface ImageWasmModule
-  extends MaskingWasm, ModeWasm, RetouchWasm, FilterWasm, VectorWasm {
+  extends MaskingWasm, ModeWasm, RetouchWasm, FilterWasm, VectorWasm, WorkspaceWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -3243,6 +3249,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     ...wrapRetouch(wasm, decodedInfoOf),
     ...filterEngineOf(wasm, decodedInfoOf),
     ...wrapVectors(wasm, decodedInfoOf),
+    ...workspaceEngine(wasm),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,

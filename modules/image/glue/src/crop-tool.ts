@@ -55,8 +55,9 @@ export function makeCropGesture(
   let fit: FitTransform | null = null;
 
   const imageToPage = (p: [number, number]): [number, number] => toPage(fit, p);
+  // The crop frame snaps to the image's guides, edges and grid (WP5.12).
   const pageToImage = (p: [number, number]): [number, number] =>
-    toImage(fit, p);
+    session.workspace().snap(toImage(fit, p));
 
   /** Push the crop frame polyline to the overlay (or clear it). */
   const renderOverlay = () => {

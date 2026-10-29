@@ -317,6 +317,24 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.gamutWarning",
       "media.paged.image.command.proofSetupCmyk",
       "media.paged.image.command.proofSetupGray",
+      // WP5.12 — the workspace: rulers, guides, slices, notes, count, ruler.
+      "media.paged.image.command.rulerUnitPx",
+      "media.paged.image.command.rulerUnitIn",
+      "media.paged.image.command.rulerUnitCm",
+      "media.paged.image.command.rulerUnitMm",
+      "media.paged.image.command.toggleGuides",
+      "media.paged.image.command.toggleLockGuides",
+      "media.paged.image.command.toggleSnapGuides",
+      "media.paged.image.command.clearGuides",
+      "media.paged.image.command.newGuide",
+      "media.paged.image.command.slicesFromGuides",
+      "media.paged.image.command.clearSlices",
+      "media.paged.image.command.exportSlices",
+      "media.paged.image.command.clearNotes",
+      "media.paged.image.command.clearCount",
+      "media.paged.image.command.newCountGroup",
+      "media.paged.image.command.straightenToRuler",
+      "media.paged.image.command.clearRuler",
     ]);
     expect(fake.tools.ids()).toEqual([
       "media.paged.image.tool.crop",
@@ -382,6 +400,12 @@ describe("imageBundle.activate", () => {
       "media.paged.image.tool.polygonShape",
       "media.paged.image.tool.lineShape",
       "media.paged.image.tool.customShape",
+      // WP5.12 — Ruler, Count, Note (the eyedropper's slot) and Slice
+      // (the crop slot).
+      "media.paged.image.tool.ruler",
+      "media.paged.image.tool.count",
+      "media.paged.image.tool.note",
+      "media.paged.image.tool.slice",
     ]);
     expect(fake.importers.ids()).toEqual(["media.paged.image.importer.raster"]);
   });

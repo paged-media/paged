@@ -166,6 +166,8 @@ mod vector_ops;
 // Snapshots, the journal's bounds and past states (ADR 477).
 pub mod history;
 pub use history::{set_default_history_budget, SnapshotInfo};
+// Guides, count marks, notes and slices (image ADR 475).
+mod workspace_ops;
 pub use mask::{BoundedMask, LayerMask};
 pub use vector_ops::VectorMaskStart;
 
@@ -1048,6 +1050,9 @@ pub struct LayerStack {
     /// The document's COLOUR MODE (Image ▸ Mode, ADR 479): the colours
     /// its pixels may hold. Document state: in every snapshot, persisted.
     mode: crate::color_mode::DocMode,
+    /// Guides, count marks, notes and slices (image ADR 475,
+    /// `workspace.rs`). Document state: in every snapshot and persisted.
+    workspace: crate::workspace::Workspace,
 }
 
 /// What a document's layer styles share: the Global Light every effect
@@ -1124,6 +1129,8 @@ struct Snapshot {
     selection: Option<Arc<SelectionCoverage>>,
     styles: StyleDoc,
     mode: crate::color_mode::DocMode,
+    /// Guides, count marks, notes and slices.
+    workspace: crate::workspace::Workspace,
 }
 
 /// One undo step.
@@ -1228,6 +1235,7 @@ impl LayerStack {
             next_snapshot_id: 1,
             next_step_id: 1,
             mode: Default::default(),
+            workspace: Default::default(),
         })
     }
 
@@ -1493,6 +1501,7 @@ impl LayerStack {
             next_snapshot_id: 1,
             next_step_id: 1,
             mode: Default::default(),
+            workspace: Default::default(),
         };
         stack.styles.global_light = import.global_light;
         if let Some(deep) = stack
@@ -1648,9 +1657,10 @@ impl LayerStack {
         self.check_canvas_op(op)?;
         // Always recorded, for the reason `remove` is: older pixel steps
         // address the old extent and must not be reachable across it.
+        let (w, h) = (self.width, self.height);
         self.recorded(op.label(), None, |s| {
             s.transform_canvas_unrecorded(op);
-            s.after_canvas_op(op);
+            s.after_canvas_op(op, w, h);
             Ok(())
         })
     }
@@ -1660,7 +1670,14 @@ impl LayerStack {
     /// mirroring with a rotate or flip, as Photoshop's does), and a
     /// layer comp's recorded positions — pixels at the old extent — are
     /// dropped (its visibility and appearance still apply).
-    fn after_canvas_op(&mut self, op: CanvasOp) {
+    ///
+    /// The workspace (guides, count marks, notes, slices) moves with the
+    /// image through the same point map the paths take; `(w, h)` is the
+    /// extent BEFORE the op, `self` already has the new one.
+    fn after_canvas_op(&mut self, op: CanvasOp, w: u32, h: u32) {
+        let (ow, oh) = (self.width, self.height);
+        self.workspace
+            .map_canvas(|p| masking_ops::map_point(op, w, h, p), ow, oh);
         for layer in &mut self.layers {
             if let LayerKind::Fill(f) = &mut layer.kind {
                 f.stale = true;
@@ -1833,7 +1850,7 @@ impl LayerStack {
             s.masking.doc = masking;
             s.width = ow;
             s.height = oh;
-            s.after_canvas_op(op);
+            s.after_canvas_op(op, w, h);
             Ok(())
         })
     }
@@ -3021,6 +3038,7 @@ impl LayerStack {
             selection: self.masking.live_selection.clone(),
             styles: self.styles.clone(),
             mode: self.mode.clone(),
+            workspace: self.workspace.clone(),
         }
     }
 
@@ -3033,6 +3051,7 @@ impl LayerStack {
         self.next_id = s.next_id;
         self.comps = s.comps;
         self.masking.doc = s.masking;
+        self.workspace = s.workspace;
         self.restore_selection(s.selection);
         self.styles = s.styles;
         self.mode = s.mode;
