@@ -408,6 +408,12 @@ impl LayerStack {
             )));
         }
         l.pixels_editable()?;
+        if l.smart_source().is_some() {
+            return Err(refuse(format!(
+                "\"{}\" is a smart object — rasterize it to merge onto it",
+                l.name
+            )));
+        }
         if !u.visible {
             return Err(refuse(format!(
                 "\"{}\" is hidden; show it to merge it down",
@@ -850,18 +856,13 @@ impl LayerStack {
 
     /// Move `index` by whole pixels (exact): its pixels and mask move
     /// together; a gradient fill's offset follows; an adjustment layer's
-    /// mask moves. A smart object does not (its render follows its
-    /// source).
+    /// mask moves; a smart object's placement moves with its render (an
+    /// integer move of a render is its render at the moved placement,
+    /// image ADR 482).
     fn translate_one(&mut self, index: usize, dx: i32, dy: i32) -> Result<(), IngestError> {
         let (w, h) = (self.width, self.height);
         let l = &self.layers[index];
         l.position_editable()?;
-        if l.smart_source().is_some() {
-            return Err(refuse(format!(
-                "\"{}\" is a smart object, which is not moved by whole pixels",
-                l.name
-            )));
-        }
         let mask = l.mask.as_ref().map(|m| {
             let c = m.to_canvas();
             let data = shift(c.data(), w, h, 1, dx, dy, None);
@@ -877,6 +878,7 @@ impl LayerStack {
             let (fx, fy) = (dx as f32, dy as f32);
             crate::layers::follow_vector_mask(l, |p| [p[0] + fx, p[1] + fy], w, h);
         }
+        let mut rerender = false;
         match &mut l.kind {
             LayerKind::Pixels => {
                 let px = l.rgba.canvas().clone();
@@ -892,7 +894,43 @@ impl LayerStack {
                     f.stale = true;
                 }
             }
-            LayerKind::Adjustment(_) | LayerKind::Smart(_) => {}
+            LayerKind::Smart(src) => {
+                let px = l.rgba.canvas().clone();
+                let bpp = px.bytes_per_pixel();
+                let clear = vec![0u8; bpp];
+                let moved = shift(px.raw(), w, h, bpp, dx, dy, Some(&clear));
+                l.rgba = Pixels::from_raw(Arc::from(moved.into_boxed_slice()), px.depth()).into();
+                let q = src.quad();
+                let (fx, fy) = (f64::from(dx), f64::from(dy));
+                let moved_q = crate::smart::map_quad(&q, |(x, y)| (x + fx, y + fy));
+                // A render cut by the canvas edge is drawn again from the
+                // source, so what comes back into view is there.
+                let inside = |q: &crate::smart::Quad| {
+                    let (a, b, c, d) = image_psd::smart_object::quad_bounds(q);
+                    a >= 0.0 && b >= 0.0 && c <= f64::from(w) && d <= f64::from(h)
+                };
+                rerender = !src.warped && !(inside(&q) && inside(&moved_q));
+                src.placement = Some(moved_q);
+                // A filter mask not linked to the object stays where it is,
+                // so the filters land through it again.
+                let unlinked_mask = src
+                    .filters
+                    .as_deref()
+                    .is_some_and(|f| f.mask.is_some() && !f.mask_linked);
+                if let Some(f) = src.filters.as_mut().filter(|f| f.mask_linked) {
+                    if let Some(m) = &f.mask {
+                        let c = m.to_canvas();
+                        let data = shift(c.data(), w, h, 1, dx, dy, Some(&[255]));
+                        Arc::make_mut(f).mask = SelectionCoverage::from_data(w, h, data)
+                            .map(|c| LayerMask::Canvas(Arc::new(c)));
+                    }
+                }
+                src.pending_filters |= unlinked_mask && src.live_filters().is_some();
+            }
+            LayerKind::Adjustment(_) => {}
+        }
+        if rerender {
+            crate::smart::rerender(l, w, h)?;
         }
         Ok(())
     }

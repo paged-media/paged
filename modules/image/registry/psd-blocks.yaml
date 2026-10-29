@@ -251,13 +251,14 @@
 
 - id: image.psd.addl.smart-object
   state_row: image.psd.roundtrip
-  tier: preserved        # PlLd / SoLd / SoLE on the record and the sources in the document's lnk2 / lnkE blocks: carried through the layered save while the layer's PIXELS are unedited (opacity, blend, name, style, mask edits keep it a live smart object); new pixels rasterize it (WP5.15, ADR 478). The placement is not re-written for a transformed smart object (deferred, WP5.14)
-  oracle: photoshop      # Photoshop reopens an edited, paged-written smart object as a SMARTOBJECT layer (psd_write_photoshop.rs)
+  tier: mutatable        # PlLd / SoLd / SoLE READ into the smart object's placement (Trnf / nonAffineTransform), source size, warp and smart filters (filterFX), its source from the document's lnk2 / lnkD / lnk3 / lnkE (liFD embedded, liFE linked) and its filter mask from FEid (paged-psd smart_object.rs, image-js smart.rs; ADR 482). WRITTEN live: an unchanged object byte for byte; a transformed, re-filtered or re-contented one with SoLd patched (corners, size, uuid, filterFX), PlLd regenerated, a new liFD entry when its contents changed and a new FEid entry (unfiltered render + filter mask) when it has filters; an object made in paged gets both blocks and a one-layer PSB source (psd_write_smart.rs). A warp is read and kept, not drawn; a smart filter without a Photoshop counterpart rasterizes the layer on save and says so
+  oracle: photoshop      # Photoshop's stored render of each of 17 recorded smart objects (transforms, filters, Edit Contents) against paged's render from the embedded source; Photoshop reopens paged's transformed, perspective, filtered, re-contented and new smart objects live (smart_objects_photoshop.rs)
   provenance:
-    - "Adobe Photoshop File Formats specification — Placed Layer (PlLd), Placed Layer Data (SoLd / SoLE), Linked Layer (lnk2 / lnkE) [PUB]"
+    - "Adobe Photoshop File Formats specification — Placed Layer (PlLd), Placed Layer Data (SoLd / SoLE), Linked Layer (lnk2 / lnkE), Filter Effects (FEid / FXid), Filter Mask (FMsk) [PUB]"
     - "Photoshop 27.10's embedded smart object (scripts/photoshop/probes/psd-containers.jsx): PlLd + SoLd on the record and the file in lnk2 [OBS]; a linked one (SoLE + lnkE) was observed but not committed (lnkE holds the machine's absolute path)"
+    - "Photoshop 27.10's transformed and filtered smart objects (scripts/photoshop/probes/smart-objects.jsx): Trnf and nonAffineTransform carry the same corners for an affine transform; filterFX lists the filters bottom first, each Fltr a filter descriptor (GsnB Rds, MtnB Angl + Dstn, boxblur Rds with filterID 840, HghP, Mdn , Mxm , Mnm  Rds); FEid holds per placement id the unfiltered render (channels 0–2 and max+1, RLE with 4-byte row counts) and after the entry's framed part the filter mask (rect, RLE); the liFD entry is version 8 with a child-document id, an asset time, a lock flag and a contentID descriptor after the data; a new placed layer's PSB is zero-padded to 1 MiB until its contents are saved [OBS]"
   tests:
-    rust: ["image-js/tests/it/psd_write.rs (an_edited_smart_object_keeps_its_source_until_its_pixels_change)", "image-conformance/tests/it/psd_write_photoshop.rs"]
+    rust: ["engine/core/crates/paged-psd/src/smart_object.rs (unit)", "image-js/src/smart.rs (unit)", "image-js/src/layers/smart_ops.rs (unit)", "image-js/tests/it/psd_write.rs (an_edited_smart_object_keeps_its_source_until_its_pixels_change)", "image-conformance/tests/it/smart_objects_photoshop.rs", "image-conformance/tests/it/psd_write_photoshop.rs"]
 
 - id: image.psd.global.lr16
   state_row: image.psd.roundtrip

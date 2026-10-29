@@ -70,6 +70,11 @@
 //! and i64 profile slot (−1: none) — the CMYK profile the mode converts
 //! through.
 //!
+//! Version 7 (smart objects in full, image ADR 482) appends, after a
+//! smart object's source slot, u32 n + n bytes: its placement, file,
+//! filters with their mask, vector source, flags and PSD record
+//! (`write_smart`). A file-backed source's pixel slot is then empty.
+//!
 //! The history is not persisted: a reopened stack starts with none.
 
 use std::sync::Arc;
@@ -85,7 +90,7 @@ use super::{
 use crate::ingest::{AdjustParams, IngestError};
 
 const MAGIC: &[u8; 4] = b"PGIL";
-const VERSION: u32 = 6;
+const VERSION: u32 = 7;
 
 struct W(Vec<u8>);
 
@@ -103,6 +108,9 @@ impl W {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
     fn f32(&mut self, v: f32) {
+        self.0.extend_from_slice(&v.to_le_bytes());
+    }
+    fn f64(&mut self, v: f64) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
     fn str(&mut self, s: &str) {
@@ -150,6 +158,11 @@ impl R<'_> {
             self.take(4)?.try_into().expect("4 bytes"),
         ))
     }
+    fn f64(&mut self) -> Result<f64, IngestError> {
+        Ok(f64::from_le_bytes(
+            self.take(8)?.try_into().expect("8 bytes"),
+        ))
+    }
     fn str(&mut self) -> Result<String, IngestError> {
         let n = self.u32()? as usize;
         String::from_utf8(self.take(n)?.to_vec())
@@ -190,6 +203,171 @@ fn block<'a>(r: &mut R<'a>) -> Result<R<'a>, IngestError> {
         b: &r.b[at..at + n],
         at: 0,
     })
+}
+
+/// A smart object's version-7 block (image ADR 482): u8 placement
+/// present + 8 f64 (the corners); i64 file slot (−1: none), str name, u32
+/// file type, str uuid, u8 linked, str link path; str filters (JSON,
+/// empty: none) and the filter mask — i64 slot (−1: none), i32 x, i32 y,
+/// u32 w, u32 h, u8 outside (x = −1: canvas-sized); str vector source
+/// (JSON, empty: none); u8 flags (1 warped, 2 filters pending); i64 slot
+/// of the PSD placed-layer record (−1: none).
+fn write_smart(w: &mut W, s: &SmartSource, slot: &mut impl FnMut(Arc<[u8]>) -> u32) {
+    match s.placement {
+        Some(q) => {
+            w.u8(1);
+            for v in q {
+                w.f64(v);
+            }
+        }
+        None => w.u8(0),
+    }
+    match &s.file {
+        Some(f) => {
+            w.i64(i64::from(slot(Arc::clone(&f.bytes))));
+            w.str(&f.name);
+            w.u32(u32::from_be_bytes(f.file_type));
+            w.str(&f.uuid);
+            w.u8(u8::from(f.link.is_some()));
+            w.str(f.link.as_deref().unwrap_or(""));
+        }
+        None => w.i64(-1),
+    }
+    match &s.filters {
+        Some(f) => {
+            w.str(&f.to_json().to_string());
+            match &f.mask {
+                Some(m) => {
+                    let (data, rect, outside) = match m {
+                        super::LayerMask::Canvas(c) => (c.data().to_vec(), None, 0),
+                        super::LayerMask::Bounded(b) => (b.data.clone(), Some(b.rect), b.outside),
+                    };
+                    w.i64(i64::from(slot(Arc::from(data.into_boxed_slice()))));
+                    match rect {
+                        Some(r) => {
+                            w.i32(r.x);
+                            w.i32(r.y);
+                            w.u32(r.w);
+                            w.u32(r.h);
+                        }
+                        None => {
+                            w.i32(-1);
+                            w.i32(-1);
+                            w.u32(0);
+                            w.u32(0);
+                        }
+                    }
+                    w.u8(outside);
+                }
+                None => w.i64(-1),
+            }
+        }
+        None => w.str(""),
+    }
+    match &s.vector {
+        Some(v) => w.str(
+            &serde_json::json!({
+                "items": v.items, "region": v.region.to_vec(), "pxPerPt": v.px_per_pt,
+            })
+            .to_string(),
+        ),
+        None => w.str(""),
+    }
+    w.u8(u8::from(s.warped) | u8::from(s.pending_filters) << 1);
+    match &s.record {
+        Some(r) => w.i64(i64::from(slot(Arc::from(
+            r.to_payload().into_boxed_slice(),
+        )))),
+        None => w.i64(-1),
+    }
+}
+
+fn read_smart(
+    r: &mut R,
+    s: &mut SmartSource,
+    buffer: &dyn Fn(u32) -> Result<Arc<[u8]>, IngestError>,
+    cw: u32,
+    ch: u32,
+) -> Result<(), IngestError> {
+    let slot = |v: i64| -> Result<Option<Arc<[u8]>>, IngestError> {
+        u32::try_from(v).ok().map(buffer).transpose()
+    };
+    if r.u8()? != 0 {
+        let mut q = [0.0; 8];
+        for v in &mut q {
+            *v = r.f64()?;
+        }
+        s.placement = Some(q);
+    }
+    if let Some(bytes) = slot(r.i64()?)? {
+        let name = r.str()?;
+        let file_type = r.u32()?.to_be_bytes();
+        let uuid = r.str()?;
+        let linked = r.u8()? != 0;
+        let path = r.str()?;
+        s.file = Some(Arc::new(crate::smart::SmartFile::new(
+            uuid,
+            name,
+            file_type,
+            bytes,
+            linked.then_some(path),
+        )));
+    }
+    let filters = r.str()?;
+    if !filters.is_empty() {
+        let mut stack = crate::smart::SmartFilterStack::from_json(&filters, None)
+            .map_err(IngestError::Decode)?;
+        if let Some(data) = slot(r.i64()?)? {
+            let (x, y, w, h, outside) = (r.i32()?, r.i32()?, r.u32()?, r.u32()?, r.u8()?);
+            stack.mask = if x < 0 {
+                image_gpu::SelectionCoverage::from_data(cw, ch, data.to_vec())
+                    .map(|c| super::LayerMask::Canvas(Arc::new(c)))
+            } else {
+                super::BoundedMask::new(
+                    image_core::Region::new(x, y, w, h),
+                    outside,
+                    data.to_vec(),
+                    cw,
+                    ch,
+                )
+                .map(|b| super::LayerMask::Bounded(Arc::new(b)))
+            };
+        }
+        s.filters = Some(Arc::new(stack));
+    }
+    let vector = r.str()?;
+    if !vector.is_empty() {
+        let v: serde_json::Value =
+            serde_json::from_str(&vector).map_err(|e| IngestError::Decode(e.to_string()))?;
+        let mut region = [0.0; 4];
+        if let Some(a) = v.get("region").and_then(|x| x.as_array()) {
+            for (o, x) in region.iter_mut().zip(a) {
+                *o = x.as_f64().unwrap_or(0.0);
+            }
+        }
+        s.vector = Some(Arc::new(crate::smart::VectorSource {
+            items: v
+                .get("items")
+                .and_then(|i| i.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            region,
+            px_per_pt: v.get("pxPerPt").and_then(|x| x.as_f64()).unwrap_or(1.0),
+        }));
+    }
+    let flags = r.u8()?;
+    s.warped = flags & 1 != 0;
+    s.pending_filters = flags & 2 != 0;
+    if let Some(rec) = slot(r.i64()?)? {
+        s.record = image_psd::smart_object::PlacedLayer::parse(b"SoLd", &rec)
+            .ok()
+            .map(Arc::new);
+    }
+    Ok(())
 }
 
 /// A layer's VECTOR MASK at the end of its parity block (image ADR 476):
@@ -437,11 +615,23 @@ impl LayerStack {
                     w.u8(u8::from(f.stale));
                 }
                 LayerKind::Smart(src) => {
-                    w.u32(src.width);
-                    w.u32(src.height);
+                    // Before version 7 a file-backed source is stored as
+                    // its pixels (an older reader has no file).
+                    let (sw, sh, px) = match (version < 7, src.raster()) {
+                        (true, Ok(r)) => (r.width, r.height, Arc::clone(&r.rgba)),
+                        _ => (src.width, src.height, Arc::clone(&src.rgba)),
+                    };
+                    w.u32(sw);
+                    w.u32(sh);
                     w.f32(src.scale);
-                    let s = slot(Arc::clone(&src.rgba));
+                    let s = slot(px);
                     w.u32(s);
+                    if version >= 7 {
+                        let mut e = W(Vec::new());
+                        write_smart(&mut e, src, &mut slot);
+                        w.u32(e.0.len() as u32);
+                        w.0.extend_from_slice(&e.0);
+                    }
                 }
             }
             if version >= 4 {
@@ -753,17 +943,24 @@ impl LayerStack {
                 2 => {
                     let (sw, sh, scale) = (r.u32()?, r.u32()?, r.f32()?);
                     let src = buffer(r.u32()?)?;
-                    if src.len() != sw as usize * sh as usize * 4 {
+                    let mut smart = SmartSource {
+                        scale,
+                        // A stack stored before ADR 482: the top-left
+                        // corner at `scale`.
+                        placement: None,
+                        ..SmartSource::from_pixels(src, sw, sh)
+                    };
+                    if version >= 7 {
+                        let mut e = block(&mut r)?;
+                        read_smart(&mut e, &mut smart, &buffer, width, height)?;
+                    }
+                    let file_backed = smart.rgba.is_empty() && smart.file.is_some();
+                    if !file_backed && smart.rgba.len() != sw as usize * sh as usize * 4 {
                         return Err(IngestError::Decode(format!(
                             "layer \"{name}\": smart source is mis-sized"
                         )));
                     }
-                    LayerKind::Smart(Box::new(SmartSource {
-                        rgba: src,
-                        width: sw,
-                        height: sh,
-                        scale,
-                    }))
+                    LayerKind::Smart(Box::new(smart))
                 }
                 k => {
                     return Err(IngestError::Decode(format!(

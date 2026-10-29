@@ -28,6 +28,8 @@ image-psd = { workspace = true, features = ["serde"] }
 # `straighten_crop_image_cpu`; ADR 467) — a supported backend, not a
 # kernel twin: the GPU resample kernels stay the editor's path.
 paged-resample = { workspace = true }
+# The placement homography of a smart object (ADR 482).
+paged-warp = { workspace = true }
 # The Layer Style dialog's wire form (paged-psd's style model as JSON).
 serde_json = "1"
 # CIELAB (D50) for Match Color's statistics — the engine's one conversion,
