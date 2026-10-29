@@ -136,7 +136,7 @@ test("AB-02 — a corner handle resizes the board, the content staying put; one 
     .toEqual(before.pageSizesPt[0]);
 });
 
-test("AB-03 — the Artboards panel renames a board and exports one file per board, named after it @feat:layout-model.artboards @level:panel", async ({
+test("AB-03 — the Artboards panel renames a board and exports one file per board, named after it @feat:layout-model.artboards @level:happy", async ({
   page,
 }) => {
   covers("panel:paged.artboards");
