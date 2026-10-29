@@ -56,6 +56,13 @@ pub(super) fn emit_oval_into(
     color_ctx: ColorCtx<'_>,
     content: ContentPainter<'_>,
 ) {
+    // Engine ADR 1042 — an oval under vector effects is the polygon its
+    // effected outline describes.
+    if let Some(poly) = paged_vector_fx::bake::bake_oval(oval) {
+        return super::text_path::emit_polygon_into(
+            page, &poly, document, palette, fallback, color_ctx, content,
+        );
+    }
     let Some(mode) = crate::module::effect_stack::stack_mode(&oval.effect_stack) else {
         return emit_oval_body(page, oval, document, palette, fallback, color_ctx, content);
     };
@@ -989,6 +996,19 @@ pub(super) fn emit_rectangle_into(
     drop_shadow: Option<DropShadow>,
     content: ContentPainter<'_>,
 ) {
+    // Engine ADR 1042 — draw the rectangle its vector effects describe.
+    if let Some(baked) = paged_vector_fx::bake::bake_rectangle(rect) {
+        return emit_rectangle_into(
+            page,
+            &baked,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            drop_shadow,
+            content,
+        );
+    }
     let Some(mode) = crate::module::effect_stack::stack_mode(&rect.effect_stack) else {
         return emit_rectangle_body(
             page,

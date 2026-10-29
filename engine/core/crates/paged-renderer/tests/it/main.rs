@@ -107,6 +107,7 @@ mod text_on_path;
 mod text_z_order;
 mod transparency_targets;
 mod variables;
+mod vector_effects;
 mod vertical_text;
 mod word_decorations;
 mod word_fields;

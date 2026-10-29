@@ -944,6 +944,20 @@ pub(super) fn emit_text_frame_into(
     drop_shadow: Option<DropShadow>,
     auto_sized_bounds: Option<paged_model::Bounds>,
 ) -> Option<BodyTextSlot> {
+    // Engine ADR 1042 — the frame's body is drawn as its effected
+    // outline; its story still lays out in the source frame.
+    if let Some(baked) = paged_vector_fx::bake::bake_text_frame(frame) {
+        return emit_text_frame_into(
+            page,
+            &baked,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            drop_shadow,
+            None,
+        );
+    }
     let Some(mode) = crate::module::effect_stack::stack_mode(&frame.effect_stack) else {
         return emit_text_frame_body(
             page,
