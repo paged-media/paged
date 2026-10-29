@@ -627,24 +627,6 @@ impl LayerStack {
                 None => p.px.clone(),
             }
         };
-        // The clip base's pixels as the coverage reads them: straight RGBA8,
-        // one alpha byte in four. A 16-bit base's plate is its raw samples,
-        // eight bytes a pixel; read as RGBA8 its "alpha" was a colour
-        // byte of the wrong pixel, and a transparent layer clipped to it
-        // changed the picture. Narrowed by the high byte, as `to_rgba8`.
-        let canvas_texels = (self.width as usize) * (self.height as usize);
-        let clip_of = |base: (usize, &Plate)| -> Arc<[u8]> {
-            let px = canvas_of(base);
-            if px.len() == canvas_texels * 8 {
-                px.as_chunks::<2>()
-                    .0
-                    .iter()
-                    .map(|p| u16::from_ne_bytes([p[0], p[1]]).to_be_bytes()[0])
-                    .collect()
-            } else {
-                px
-            }
-        };
         // The open clipping group's base (blend, opacity, …).
         let mut clip_group: Option<OpenClip> = None;
         let close_clip = |steps: &mut Vec<Step>, g: &mut Option<OpenClip>| {
@@ -764,7 +746,7 @@ impl LayerStack {
                 // once, at its close; outside one (no base step to open
                 // it on) the clip falls back to confining coverage.
                 clip: if layer.clipped && clip_group.is_none() {
-                    clip_base.map(clip_of)
+                    clip_base.map(canvas_of)
                 } else {
                     None
                 },
