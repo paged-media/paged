@@ -1771,6 +1771,7 @@
     "groupClip",
     "symbolInstanceTint",
     "symbolInstanceNineSlice",
+    "symbolInstanceSymbol",
     "frameDropShadowBlendMode",
     "frameDropShadowSpread",
     "frameDropShadowNoise",
@@ -6504,6 +6505,17 @@
         "of": "length"
       },
       "wire": "lengths",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "symbolInstanceSymbol",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
       "nullable": true,
       "access": "readWrite",
       "bindable": true
@@ -20062,6 +20074,17 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "lengths"
+      },
+      {
+        "addressKind": "frame",
+        "path": "symbolInstanceSymbol",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
       },
       {
         "addressKind": "frame",
