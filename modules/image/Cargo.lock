@@ -945,6 +945,7 @@ version = "0.0.0"
 dependencies = [
  "bytemuck",
  "naga",
+ "paged-kernels",
  "paged-pixel",
  "paged-warp",
 ]
@@ -1617,6 +1618,13 @@ dependencies = [
  "qcms",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "paged-kernels"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
 ]
 
 [[package]]

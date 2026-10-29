@@ -1631,6 +1631,7 @@
     "frameAutoFit",
     "framePdfPage",
     "frameFillRule",
+    "frameImageAdjustments",
     "frameGradientFillStart",
     "frameStrokeType",
     "frameStrokeJoin",
@@ -3980,6 +3981,19 @@
       "wire": "text",
       "nullable": true,
       "default": "NonZero",
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameImageAdjustments",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "RasterOp"
+      },
+      "wire": "imageAdjustments",
+      "nullable": false,
       "access": "readWrite",
       "bindable": true
     },
@@ -17602,6 +17616,23 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameImageAdjustments",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "RasterOp",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "imageAdjustments"
       },
       {
         "addressKind": "frame",

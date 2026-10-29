@@ -67,6 +67,7 @@ import { ObjectStylesPanel } from "./object-styles-panel";
 import { ObjectTransformPanel } from "./object-transform-panel";
 import { AlignPanel } from "./align-panel";
 import { AttributesPanel } from "./attributes-panel";
+import { PictureAdjustmentsPanel } from "./picture-adjustments-panel";
 import { ControlPanel } from "./control-panel";
 import { PropertiesPanel } from "./properties-panel";
 import { PathfinderPanel } from "./pathfinder-panel";
@@ -204,6 +205,7 @@ const M = defineMessages("app.builtInPanels", {
   navigator: "Navigator",
   findResults: "Find results",
   attributes: "Attributes",
+  pictureAdjustments: "Picture adjustments",
   properties: "Properties",
   aiAssistant: "AI Assistant",
   control: "Control",
@@ -1085,6 +1087,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.attributes);
     },
     component: AttributesPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+  },
+  {
+    // Engine ADR 1037 — quick picture fixes on a placed image (the image
+    // frame's filter stack), in every module's context.
+    id: "paged.picture-adjustments",
+    get title() {
+      return t(M.pictureAdjustments);
+    },
+    component: PictureAdjustmentsPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
   },

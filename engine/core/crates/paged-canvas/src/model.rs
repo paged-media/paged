@@ -65,6 +65,10 @@ pub const INK_COVERAGE_DPI: f32 = 72.0;
 /// costs nothing.
 pub const INK_COVERAGE_LIMIT_PCT: f32 = 300.0;
 
+/// Engine ADR 1037 — the least display density (device px per pt) a live
+/// build evaluates an image filter stack for: a 2× (retina) screen at 100 %.
+const LIVE_IMAGE_ADJUST_PX_PER_PT: f32 = 2.0;
+
 /// The type size a run takes when nothing in its cascade names one: the
 /// renderer's own default (`PipelineOptions::default_point_size`), so a
 /// read reports the size the text is set at (ADR 206).
@@ -2795,6 +2799,8 @@ impl CanvasModel {
                 // EPS/PDF ghost-cross); export builds keep the default
                 // `false` so output stays pixel-faithful.
                 degraded_asset_markers: true,
+                // Engine ADR 1037 — the first build is a live one too.
+                image_adjust_px_per_pt: Some(LIVE_IMAGE_ADJUST_PX_PER_PT),
                 ..PipelineOptions::default()
             };
             // Phase 4 Step 1 — install an empty cache for the initial
@@ -7271,6 +7277,7 @@ impl CanvasModel {
         let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
         out.extend(crate::export_losses::effect_stack_losses(&self.scene));
+        out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -8262,6 +8269,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(f.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(f.image_adjustments.clone())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
                                 value: Some(Value::Length(f.opacity)),
@@ -8720,6 +8732,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(p.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(p.image_adjustments.clone())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
                                 value: Some(Value::Length(p.opacity)),
@@ -9087,6 +9104,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(o.fill_rule.as_str().into())),
+                            },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(o.image_adjustments.clone())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
@@ -13090,6 +13112,13 @@ impl CanvasModel {
                 build_generation: self.build_generation,
                 emission_prints: Some(&self.emission_prints),
                 render_scale: self.resource_render_scale,
+                // Engine ADR 1037 — an image filter stack is evaluated for
+                // the screen: at the camera's scale, at least a 2× (retina)
+                // display's 2 px per pt. The export evaluates at the
+                // picture's own pixels (the option's `None`).
+                image_adjust_px_per_pt: Some(
+                    self.resource_render_scale.max(LIVE_IMAGE_ADJUST_PX_PER_PT),
+                ),
                 // A5 — live rebuilds keep the degraded-asset markers on
                 // (mirrors the initial load); an export stays faithful.
                 degraded_asset_markers: true,

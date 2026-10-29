@@ -5111,6 +5111,52 @@ mod tests {
         }
     }
 
+    /// Engine ADR 1037 — an image frame's filter stack is evaluated once,
+    /// on the CPU, into an RGBA-only picture of the display list's pool
+    /// (no encoded bytes): both lanes draw that picture alike, scaled
+    /// up, so the adjusted picture is the same on the GPU and the CPU.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn an_adjusted_picture_matches_the_cpu_lane__feat__images_graphics_image_filter_stack() {
+        use paged_compose::{DecodedImage, DisplayCommand, Transform};
+        let mut list = DisplayList::new();
+        // A duotone-like ramp, as the stack would leave it: 16 × 16, a
+        // smooth gradient so both lanes' sampling meet on it.
+        let (w, h) = (16u32, 16u32);
+        let rgba: Vec<u8> = (0..w * h)
+            .flat_map(|i| {
+                let (x, y) = (i % w, i / w);
+                let t = (x + y) as f32 / 30.0;
+                let mix = |a: f32, b: f32| ((a + (b - a) * t) * 255.0).round() as u8;
+                [mix(0.1, 1.0), mix(0.1, 0.9), mix(0.3, 0.7), 255]
+            })
+            .collect();
+        let image_id = list.push_image(DecodedImage {
+            width: w,
+            height: h,
+            encoded: Vec::new().into(),
+            rgba: rgba.into(),
+            icc: None,
+            rendering: None,
+        });
+        list.commands.push(DisplayCommand::Image {
+            image_id,
+            transform: Transform([96.0, 0.0, 0.0, 96.0, 12.0, 12.0]),
+        });
+        let mut opts = RasterOptions::new(120.0, 120.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let Some((worst, ndiff)) = cpu_gpu_delta(&list, &opts) else {
+            return;
+        };
+        // Measured on Metal: no pixel over 2, worst 2.
+        assert!(
+            ndiff <= 8 && worst <= 8,
+            "lanes differ on {ndiff} pixels (worst {worst})"
+        );
+    }
+
     /// Engine ADR 1010 — a clip group nested in a paste-into is two
     /// `PushClip` brackets, one inside the other: both lanes intersect
     /// them alike (only the overlap of the two outlines paints).

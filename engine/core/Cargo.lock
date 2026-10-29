@@ -3943,6 +3943,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-kernels"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "paged-mcp"
 version = "0.0.0"
 dependencies = [
@@ -3955,8 +3962,11 @@ name = "paged-model"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "schemars",
  "serde",
  "serde_json",
+ "tsify-next",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -4079,11 +4089,14 @@ dependencies = [
  "paged-fmt",
  "paged-gen",
  "paged-gpu",
+ "paged-kernels",
  "paged-model",
  "paged-mutate",
+ "paged-pixel",
  "paged-ps",
  "paged-psd",
  "paged-raster",
+ "paged-resample",
  "paged-scene",
  "paged-store",
  "paged-svg",
