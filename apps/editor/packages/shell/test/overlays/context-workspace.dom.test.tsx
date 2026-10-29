@@ -23,6 +23,7 @@
 // one through the provider (not on the spread), and the grid covers it at
 // the image's resolution.
 
+import type { OverlayProps } from "../../src/registries/overlay";
 import { act, cleanup, render } from "@testing-library/react";
 import { useEffect, type ReactNode } from "react";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -157,7 +158,10 @@ function mount(
 }
 
 const pageRects = new Map([[PAGE, { x: 0, y: 0, w: 612, h: 792 }]]);
-const overlayProps = { camera: { scale: 1, tx: 0, ty: 0 }, pageRects } as never;
+const overlayProps = {
+  camera: { scale: 1, tx: 0, ty: 0 },
+  pageRects,
+} as unknown as OverlayProps;
 
 describe("the workspace geometry", () => {
   test("maps base units to the page and the document, and rounds guides", () => {

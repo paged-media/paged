@@ -223,6 +223,7 @@ import {
   type HistoryOps,
   type PresetOps,
 } from "./session-presets";
+import {
   createWorkspaceController,
   type WorkspaceController,
 } from "./workspace";

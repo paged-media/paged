@@ -61,6 +61,7 @@ import {
   type FilterEngine,
   type FilterWasm,
 } from "./engine-filters";
+import {
   workspaceEngine,
   type WorkspaceEngine,
   type WorkspaceWasm,
@@ -2431,7 +2432,13 @@ interface DecodedHandleWasm {
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
 export interface ImageWasmModule
-  extends MaskingWasm, ModeWasm, RetouchWasm, FilterWasm, VectorWasm, WorkspaceWasm {
+  extends
+    MaskingWasm,
+    ModeWasm,
+    RetouchWasm,
+    FilterWasm,
+    VectorWasm,
+    WorkspaceWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
