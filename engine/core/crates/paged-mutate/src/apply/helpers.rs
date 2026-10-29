@@ -98,6 +98,15 @@ pub(super) fn find_gradient_field_mut<'a>(
     node: &NodeId,
     path: PropertyPath,
 ) -> Option<&'a mut Option<f32>> {
+    // Engine ADR 1045 — an anchored frame's fill gradient placement.
+    if super::anchored_look::names_anchored(doc, node) {
+        let f = super::anchored_look::frame_mut(doc, node)?;
+        return match path {
+            PropertyPath::FrameGradientFillAngle => Some(&mut f.gradient_fill_angle),
+            PropertyPath::FrameGradientFillLength => Some(&mut f.gradient_fill_length),
+            _ => None,
+        };
+    }
     macro_rules! pick {
         ($item:expr) => {
             match path {
@@ -124,6 +133,10 @@ pub(super) fn find_gradient_start_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Option<[f32; 2]>> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.gradient_fill_start);
+    }
     match node {
         NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.gradient_fill_start),
         NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.gradient_fill_start),
@@ -160,29 +173,8 @@ pub(super) fn find_anchored_setting_mut<'a>(
     doc: &'a mut Document,
     self_id: &str,
 ) -> Option<&'a mut paged_model::AnchoredObjectSetting> {
-    fn in_frames<'b>(
-        frames: &'b mut [paged_model::AnchoredFrame],
-        self_id: &str,
-    ) -> Option<&'b mut paged_model::AnchoredObjectSetting> {
-        for frame in frames.iter_mut() {
-            if frame.self_id.as_deref() == Some(self_id) {
-                return Some(frame.setting.get_or_insert_with(Default::default));
-            }
-            // Anchored Groups can nest further anchored frames.
-            if let Some(found) = in_frames(&mut frame.children, self_id) {
-                return Some(found);
-            }
-        }
-        None
-    }
-    for parsed in &mut doc.stories {
-        for para in &mut parsed.story.paragraphs {
-            if let Some(found) = in_frames(&mut para.anchored_frames, self_id) {
-                return Some(found);
-            }
-        }
-    }
-    None
+    super::anchored_look::find_anchored_frame_mut(doc, self_id)
+        .map(|frame| frame.setting.get_or_insert_with(Default::default))
 }
 
 // ---- W0.3 — enum string round-trippers (parse `from_idml`s are
@@ -255,6 +247,10 @@ pub(super) fn find_stroke_type_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Option<String>> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.stroke_type);
+    }
     match node {
         NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.stroke_type),
         NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.stroke_type),
@@ -305,6 +301,10 @@ pub(super) fn find_miter_limit_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Option<f32>> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.miter_limit);
+    }
     match node {
         NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.miter_limit),
         NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.miter_limit),
@@ -351,6 +351,10 @@ pub(super) fn find_end_join_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Option<String>> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.end_join);
+    }
     match node {
         NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.end_join),
         NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.end_join),
@@ -367,6 +371,10 @@ pub(super) fn find_end_cap_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Option<String>> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.end_cap);
+    }
     match node {
         NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.end_cap),
         NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.end_cap),
@@ -404,6 +412,10 @@ pub(super) fn find_stroke_alignment_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Option<String>> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.stroke_alignment);
+    }
     match node {
         NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.stroke_alignment),
         NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.stroke_alignment),
@@ -435,6 +447,10 @@ pub(super) fn find_stroke_dash_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Vec<f32>> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.stroke_dash);
+    }
     match node {
         NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.stroke_dash),
         NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.stroke_dash),
@@ -580,6 +596,10 @@ pub(super) fn find_drop_shadow_slot_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Option<paged_model::DropShadowSetting>> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.drop_shadow);
+    }
     let raw = node.self_id();
     let hit = |id: &Option<String>| id.as_deref() == Some(raw);
     let items = doc.spreads.iter_mut().map(|p| &mut p.spread);
@@ -1062,6 +1082,11 @@ pub(super) fn find_frame_effects_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut paged_model::FrameEffects> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node)
+            .map(|f| f.effects.get_or_insert_with(Default::default));
+    }
     match node {
         NodeId::TextFrame(id) => {
             find_text_frame_mut(doc, id).map(|f| f.effects.get_or_insert_with(Default::default))
@@ -1177,6 +1202,15 @@ pub(super) fn find_target_slot_mut<'a>(
     node: &NodeId,
     target: TargetKind,
 ) -> Option<&'a mut Option<paged_model::TargetTransparency>> {
+    // Engine ADR 1045 — an anchored frame's three targets.
+    if super::anchored_look::names_anchored(doc, node) {
+        let f = super::anchored_look::frame_mut(doc, node)?;
+        return Some(match target {
+            TargetKind::Fill => &mut f.fill_transparency,
+            TargetKind::Stroke => &mut f.stroke_transparency,
+            TargetKind::Content => &mut f.content_transparency,
+        });
+    }
     use TargetKind as T;
     match (node, target) {
         (NodeId::TextFrame(id), T::Fill) => {
@@ -1222,6 +1256,10 @@ pub(super) fn find_blend_mode_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,
 ) -> Option<&'a mut Option<String>> {
+    // Engine ADR 1045 — an anchored frame, when `node` names one.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| &mut f.blend_mode);
+    }
     match node {
         NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.blend_mode),
         // R-10: a line's object blend mode.

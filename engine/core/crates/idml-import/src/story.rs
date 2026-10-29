@@ -405,6 +405,8 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
     // paragraph (see `anchor_here`), taken when it opens.
     let mut anchored_at: u32 = 0;
     let mut anchored_stack: Vec<AnchoredFrame> = Vec::new();
+    // Engine ADR 1045 — the open anchored frames' effect blocks.
+    let mut anchored_fx = crate::anchored_fx::AnchoredFx::default();
     // Suppressed-subtree depth. IDML uses `<HiddenText>` (authored
     // but not flowed), `<Note>` (sticky-note annotations), and
     // `<Index>` / `<IndexEntry>` (index markers — the marker is a
@@ -468,7 +470,19 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
         } else {
             None
         };
+        // Engine ADR 1045 — the stroke style and gradient placement, read
+        // as the spread reader reads them.
+        let common = crate::spread::read_common_attrs(e);
+        let stroke = crate::spread::read_stroke_style_attrs(e);
         AnchoredFrame {
+            gradient_fill_length: common.gradient_fill_length,
+            gradient_fill_start: common.gradient_fill_start,
+            stroke_type: common.stroke_type,
+            stroke_dash: common.stroke_dash,
+            stroke_alignment: stroke.stroke_alignment,
+            end_cap: stroke.end_cap,
+            end_join: stroke.end_join,
+            miter_limit: stroke.miter_limit,
             frame_kind: kind,
             self_id: attr(e, b"Self"),
             bounds,
@@ -484,6 +498,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
             image_link: None,
             image_item_transform: None,
             children: Vec::new(),
+            ..Default::default()
         }
     }
 
@@ -634,6 +649,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                     } else if name == b"PathPointType" {
                         anchored_extend_path_bounds(&e, &mut anchored_stack, &mut bounds_from_path);
                     }
+                    anchored_fx.element(&e, false, &mut anchored_stack);
                     // Always bump depth on Start so we stay
                     // inside the anchored body until the
                     // matching End fires.
@@ -1404,7 +1420,9 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                 // (Group child) or the host paragraph (outermost).
                 if anchored_depth > 0 {
                     anchored_depth -= 1;
+                    anchored_fx.end(name, anchored_stack.len());
                     if anchored_kind_from_name(name).is_some() {
+                        anchored_fx.finish(&mut anchored_stack);
                         finalise_anchored_top(
                             &mut anchored_stack,
                             &mut bounds_from_path,
@@ -1812,6 +1830,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                         let frame = make_anchored_frame(&e, kind);
                         bounds_from_path.push(frame.bounds.is_none());
                         anchored_stack.push(frame);
+                        anchored_fx.finish(&mut anchored_stack);
                         finalise_anchored_top(
                             &mut anchored_stack,
                             &mut bounds_from_path,
@@ -1827,6 +1846,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                     } else if name == b"PathPointType" {
                         anchored_extend_path_bounds(&e, &mut anchored_stack, &mut bounds_from_path);
                     }
+                    anchored_fx.element(&e, true, &mut anchored_stack);
                     // No depth bump — Empty events have no
                     // matching End.
                     buf.clear();

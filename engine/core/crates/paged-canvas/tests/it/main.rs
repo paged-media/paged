@@ -5,6 +5,7 @@
 
 mod address_grammar;
 mod amend_mutation;
+mod anchored_effects;
 mod apply_style_caret;
 mod artboards;
 mod batch_composition;

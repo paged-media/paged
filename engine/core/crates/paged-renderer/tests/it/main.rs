@@ -4,6 +4,7 @@
 //! its own process. A new test file goes here and gets a `mod` line below.
 
 mod anchored_custom;
+mod anchored_effects;
 mod anchors_in_text;
 mod applied_language;
 mod baseline_grid_pipeline;

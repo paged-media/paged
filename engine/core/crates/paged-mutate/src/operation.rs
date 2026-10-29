@@ -4965,6 +4965,12 @@ pub enum Operation {
         /// picture alone on its line) has no offset of its own otherwise.
         #[serde(default)]
         paragraph: Option<u32>,
+        /// Engine ADR 1045 — the frame whole, as JSON, when this insert is
+        /// a `RemoveAnchoredFrame`'s inverse: undo puts back the frame that
+        /// was removed (its look, its setting, its children), not a bare
+        /// picture box. A forward insert carries none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        restore: Option<String>,
     },
     /// v52 — inverse-only companion to `InsertAnchoredFrame`: remove the
     /// anchored frame `self_id` from whichever paragraph of `story_id` holds

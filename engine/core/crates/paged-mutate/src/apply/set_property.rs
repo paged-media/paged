@@ -136,6 +136,20 @@ pub(super) fn apply_set_property(
         }
         _ => {}
     }
+    // Engine ADR 1045 — an anchored frame's fill, stroke, tint and
+    // opacity (its other look paths reach it through the finders).
+    if let Some(result) = super::anchored_look::apply_paint(doc, node, path, value) {
+        let (previous, invalidation) = result?;
+        return Ok(AppliedOperation {
+            op: Operation::SetProperty {
+                node: node.clone(),
+                path,
+                value: value.clone(),
+            },
+            inverse: invert_set_property(node.clone(), path, previous),
+            invalidation,
+        });
+    }
     let (previous, invalidation) = match (node, path) {
         (NodeId::TextFrame(id), PropertyPath::FrameBounds) => {
             let new_bounds = expect_bounds(path, value)?;
