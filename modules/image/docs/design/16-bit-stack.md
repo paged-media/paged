@@ -1,5 +1,7 @@
 # The 16-bit stack — why it is not built, and the shape that makes it safe
 
+_Status note (2026-10-28): through the shipped wasm surface 16 bits now reach the layer stack, the fold, the adjustment chain, Bake and the decode worker ([ADR 479](../adr/479-depth-and-colour-modes.md)); the in-frame image and tiles are the 8-bit display view. The note of 2026-10-02 below described the surface before that. See `status.md`._
+
 _Status note (2026-10-02): the status line describes the engine's Rust API, which `image-js/tests/it/ingest_16bit.rs` exercises. Through the shipped wasm surface 16 bits are held only after a main-thread decode and kept only by the one-shot filter door; `layers_open`, the panel's adjustment chain, the in-frame image, tiles and save-back are 8-bit, and a 16-bit greyscale PNG is refused. See `status.md`._
 
 **Status:** **DONE 2026-08-09 — all five steps.** A 16-bit PNG opens at full depth and keeps every bit through an adjustment, a layer edit, and an undo. The only remaining narrowing is 16-bit Gray/GrayA, which has no widening arm and still says so via `depth_reduced`.
