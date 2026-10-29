@@ -1441,6 +1441,9 @@ pub(super) fn build_document_inner(
                 }
                 paged_model::FrameRef::Polygon(i) => s.polygons.get(i).is_some_and(|f| !f.visible),
                 paged_model::FrameRef::Group(_) => false,
+                paged_model::FrameRef::Instance(i) => {
+                    s.instances.get(i).is_some_and(|f| !f.visible)
+                }
             };
             if hidden {
                 return;
