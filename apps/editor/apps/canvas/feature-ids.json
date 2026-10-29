@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 774,
+    "command": 775,
     "keybinding": 164,
-    "menu": 546,
+    "menu": 547,
     "panel": 141,
-    "tool": 113
+    "tool": 114
   },
   "features": [
     {
@@ -2062,6 +2062,11 @@
     },
     {
       "id": "command:media.paged.image.command.focusArea",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.freeTransform",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -5299,6 +5304,11 @@
       "id": "menu:Edit/Find…",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Free transform",
+      "kind": "menu",
+      "owner": "media.paged.image"
     },
     {
       "id": "menu:Edit/Go to page…",
@@ -8567,6 +8577,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.spotHeal",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.transform",
       "kind": "tool",
       "owner": "media.paged.image"
     },
