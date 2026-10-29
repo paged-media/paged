@@ -39,9 +39,9 @@ fn diagonal(b: Rect) -> f64 {
     (b.width().powi(2) + b.height().powi(2)).sqrt()
 }
 
-/// One contour's points spread along it: every anchor, and `pieces(seg)
-/// - 1` points evenly spaced by arc length inside each segment. The
-/// points are the ORIGINAL ones; the effects displace them.
+/// One contour's points spread along it: every anchor, and
+/// `pieces(seg) − 1` points evenly spaced by arc length inside each
+/// segment. The points are the ORIGINAL ones; the effects displace them.
 fn sample(c: &Contour, mut pieces: impl FnMut(&CubicBez) -> usize) -> Vec<Point> {
     let segs = c.segments();
     let mut out = Vec::new();

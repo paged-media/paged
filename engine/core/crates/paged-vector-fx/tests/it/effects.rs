@@ -430,7 +430,7 @@ fn a_stack_runs_its_vector_entries_in_order_and_skips_the_rest() {
     let mut disabled = zig.clone();
     disabled.enabled = false;
     let ctx = Context::default();
-    assert!(apply_stack(&rect(), &[blur.clone()], &ctx).is_none());
+    assert!(apply_stack(&rect(), std::slice::from_ref(&blur), &ctx).is_none());
     assert!(apply_stack(&rect(), &[disabled], &ctx).is_none());
     let ab = apply_stack(&rect(), &[zig.clone(), blur.clone(), off.clone()], &ctx).unwrap();
     let ba = apply_stack(&rect(), &[off, zig], &ctx).unwrap();

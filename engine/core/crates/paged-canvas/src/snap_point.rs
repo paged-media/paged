@@ -408,6 +408,15 @@ struct LeafPath<'a> {
     effected: bool,
 }
 
+/// A leaf's path tables, borrowed or computed, and whether they are an
+/// effected outline.
+type DrawnPath<'a> = (
+    std::borrow::Cow<'a, [PathAnchor]>,
+    std::borrow::Cow<'a, [usize]>,
+    std::borrow::Cow<'a, [bool]>,
+    bool,
+);
+
 /// The outline an item draws: its effected outline when it has vector
 /// effects (`paged_vector_fx`), else its own anchors.
 fn drawn<'a>(
@@ -415,12 +424,7 @@ fn drawn<'a>(
     anchors: &'a [PathAnchor],
     starts: &'a [usize],
     open: &'a [bool],
-) -> (
-    std::borrow::Cow<'a, [PathAnchor]>,
-    std::borrow::Cow<'a, [usize]>,
-    std::borrow::Cow<'a, [bool]>,
-    bool,
-) {
+) -> DrawnPath<'a> {
     use std::borrow::Cow;
     match fx {
         Some(fx) if !fx.shape.contours.is_empty() => {
