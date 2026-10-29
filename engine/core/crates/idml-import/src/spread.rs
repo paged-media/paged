@@ -346,14 +346,14 @@ fn set_text_wrap_contour(
 /// `item_transform` is the *raw* parsed `[a b c d tx ty]` matrix —
 /// callers compose it with the surrounding `group_transforms` via
 /// [`effective_item_transform`] exactly like before.
-pub(crate) struct CommonAttrs {
+struct CommonAttrs {
     self_id: Option<String>,
     item_transform: Option<[f32; 6]>,
     fill_color: Option<String>,
     fill_tint: Option<f32>,
     gradient_fill_angle: Option<f32>,
-    pub(crate) gradient_fill_length: Option<f32>,
-    pub(crate) gradient_fill_start: Option<[f32; 2]>,
+    gradient_fill_length: Option<f32>,
+    gradient_fill_start: Option<[f32; 2]>,
     gradient_stroke_angle: Option<f32>,
     gradient_stroke_length: Option<f32>,
     stroke_color: Option<String>,
@@ -363,7 +363,7 @@ pub(crate) struct CommonAttrs {
     /// custom `<DashedStrokeStyle>` (cycle-3 4a). Lives on `CommonAttrs`
     /// rather than `StrokeStyleAttrs` so Oval / Polygon / GraphicLine /
     /// TextFrame all get it without each shape duplicating the read.
-    pub(crate) stroke_type: Option<String>,
+    stroke_type: Option<String>,
     /// `GapColor` reference for a dashed / striped stroke — the colour
     /// painted in the gaps between dashes. `Swatch/None` ⇒ transparent
     /// gaps (the IDML default). Lives on `CommonAttrs` like
@@ -378,7 +378,7 @@ pub(crate) struct CommonAttrs {
     /// absent attribute yields the empty vec (no per-frame override).
     /// Lives on `CommonAttrs` like `stroke_type` so every stroked
     /// page-item kind picks it up.
-    pub(crate) stroke_dash: Vec<f32>,
+    stroke_dash: Vec<f32>,
     applied_object_style: Option<String>,
     item_layer: Option<String>,
     /// `OverprintFill="true"` on the IDML element. Absent attribute
@@ -404,7 +404,7 @@ pub(crate) struct CommonAttrs {
     locked: bool,
 }
 
-pub(crate) fn read_common_attrs(e: &quick_xml::events::BytesStart) -> CommonAttrs {
+fn read_common_attrs(e: &quick_xml::events::BytesStart) -> CommonAttrs {
     CommonAttrs {
         self_id: attr(e, b"Self"),
         item_transform: attr(e, b"ItemTransform").and_then(|s| parse_matrix(&s)),
@@ -464,14 +464,14 @@ pub(crate) fn read_common_attrs(e: &quick_xml::events::BytesStart) -> CommonAttr
 /// read on `<Oval>`, `<Polygon>` and `<TextFrame>`, straight off the tag. `StrokeType` moved to
 /// [`CommonAttrs`] in cycle 4 so non-rectangle shapes can also
 /// honour custom dash patterns.
-pub(crate) struct StrokeStyleAttrs {
-    pub(crate) stroke_alignment: Option<String>,
-    pub(crate) end_cap: Option<String>,
-    pub(crate) end_join: Option<String>,
-    pub(crate) miter_limit: Option<f32>,
+struct StrokeStyleAttrs {
+    stroke_alignment: Option<String>,
+    end_cap: Option<String>,
+    end_join: Option<String>,
+    miter_limit: Option<f32>,
 }
 
-pub(crate) fn read_stroke_style_attrs(e: &quick_xml::events::BytesStart) -> StrokeStyleAttrs {
+fn read_stroke_style_attrs(e: &quick_xml::events::BytesStart) -> StrokeStyleAttrs {
     StrokeStyleAttrs {
         stroke_alignment: attr(e, b"StrokeAlignment"),
         end_cap: attr(e, b"EndCap"),

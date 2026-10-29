@@ -102,13 +102,8 @@ impl AnchoredFx {
             return;
         }
         if name == b"KeyValuePair" {
-            if let (Some(key), Some(value)) = (
-                crate::util::attr_unescaped(e, b"Key"),
-                crate::util::label_value(e),
-            ) {
-                if key == paged_model::effect_stack::label::KEY {
-                    self.labels.push((depth, value));
-                }
+            if let Some(value) = stack_label(e) {
+                self.labels.push((depth, value));
             }
             return;
         }
@@ -117,8 +112,7 @@ impl AnchoredFx {
         };
         match name {
             b"BlendingSetting" => {
-                let opacity = attr(e, b"Opacity").and_then(|s| s.parse::<f32>().ok());
-                let mode = attr(e, b"BlendMode");
+                let (opacity, mode) = blending(e);
                 let (o, m) = match target {
                     Target::Object => (&mut frame.opacity, &mut frame.blend_mode),
                     t => {
@@ -194,6 +188,22 @@ impl AnchoredFx {
         }
         self.labels.retain(|(d, _)| *d < depth);
     }
+}
+
+/// A `<KeyValuePair>`'s value when it is the effect stack's label.
+fn stack_label(e: &quick_xml::events::BytesStart) -> Option<String> {
+    let key = crate::util::attr_unescaped(e, b"Key")?;
+    (key == paged_model::effect_stack::label::KEY)
+        .then(|| crate::util::label_value(e))
+        .flatten()
+}
+
+/// A `<BlendingSetting>`'s opacity and blend mode.
+fn blending(e: &quick_xml::events::BytesStart) -> (Option<f32>, Option<String>) {
+    (
+        attr(e, b"Opacity").and_then(|s| s.parse::<f32>().ok()),
+        attr(e, b"BlendMode"),
+    )
 }
 
 fn target_slot(

@@ -470,19 +470,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
         } else {
             None
         };
-        // Engine ADR 1045 — the stroke style and gradient placement, read
-        // as the spread reader reads them.
-        let common = crate::spread::read_common_attrs(e);
-        let stroke = crate::spread::read_stroke_style_attrs(e);
-        AnchoredFrame {
-            gradient_fill_length: common.gradient_fill_length,
-            gradient_fill_start: common.gradient_fill_start,
-            stroke_type: common.stroke_type,
-            stroke_dash: common.stroke_dash,
-            stroke_alignment: stroke.stroke_alignment,
-            end_cap: stroke.end_cap,
-            end_join: stroke.end_join,
-            miter_limit: stroke.miter_limit,
+        let mut frame = AnchoredFrame {
             frame_kind: kind,
             self_id: attr(e, b"Self"),
             bounds,
@@ -499,7 +487,13 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
             image_item_transform: None,
             children: Vec::new(),
             ..Default::default()
+        };
+        // Engine ADR 1045 — a picture or box frame's stroke style and
+        // gradient placement.
+        if matches!(kind, AnchoredFrameKind::Rectangle) {
+            anchored_rectangle_attrs(e, &mut frame);
         }
+        frame
     }
 
     // Helper: classify an element name as a frame element (i.e.
@@ -2371,6 +2365,27 @@ fn parse_matrix_local(s: &str) -> Option<[f32; 6]> {
 /// `LinkResourceURI` (or `href`) and the image's pixel-to-frame
 /// `ItemTransform`. First-write-wins so the outer `<Image>` beats
 /// its nested `<Link>`.
+/// Engine ADR 1045 — an anchored rectangle's stroke style and gradient
+/// placement, in the spellings the spread reader takes.
+fn anchored_rectangle_attrs(e: &quick_xml::events::BytesStart, f: &mut AnchoredFrame) {
+    let list = |s: String| -> Vec<f32> {
+        s.split_ascii_whitespace()
+            .filter_map(|t| t.parse::<f32>().ok())
+            .collect()
+    };
+    f.gradient_fill_length = attr(e, b"GradientFillLength").and_then(|s| s.parse().ok());
+    f.gradient_fill_start = attr(e, b"GradientFillStart")
+        .map(list)
+        .filter(|v| v.len() == 2)
+        .map(|v| [v[0], v[1]]);
+    f.stroke_type = attr(e, b"StrokeType");
+    f.stroke_dash = attr(e, b"StrokeDashAndGap").map(list).unwrap_or_default();
+    f.stroke_alignment = attr(e, b"StrokeAlignment");
+    f.end_cap = attr(e, b"EndCap");
+    f.end_join = attr(e, b"EndJoin");
+    f.miter_limit = attr(e, b"MiterLimit").and_then(|s| s.parse().ok());
+}
+
 fn anchored_capture_image_attrs(
     e: &quick_xml::events::BytesStart,
     anchored_stack: &mut [AnchoredFrame],
