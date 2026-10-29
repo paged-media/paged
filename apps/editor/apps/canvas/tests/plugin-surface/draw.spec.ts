@@ -151,6 +151,7 @@ const COMMANDS = [
   "media.paged.draw.command.selectPatternTiles",
   "media.paged.draw.command.deletePatternTiles",
   "media.paged.draw.command.releasePatternField",
+  "media.paged.draw.command.savePatternSwatch",
   "media.paged.draw.command.makeRadialRepeat",
   "media.paged.draw.command.makeGridRepeat",
   "media.paged.draw.command.makeMirrorRepeat",
@@ -630,7 +631,7 @@ test.describe("plugin surface · paged.draw", () => {
       "Vector stroke / Vector fill are no longer registered",
     ).toEqual([]);
 
-    // COMMANDS — all 127 registered.
+    // COMMANDS — every one registered.
     const missingCommands = COMMANDS.filter((id) => !reg.commands.includes(id));
     expect(
       missingCommands,
@@ -671,7 +672,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(27);
     expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(134);
+    expect(COMMANDS).toHaveLength(135);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────

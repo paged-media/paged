@@ -811,6 +811,18 @@ test.describe.serial("plugin menus — paged.draw", () => {
     expect(out.after, "the selection holds no pattern field").toBe(out.before);
   });
 
+  test("Draw/Pattern/Save as pattern swatch — runs savePatternSwatch; the selection holds no pattern field, so it changes nothing", async () => {
+    covers("menu:Draw/Pattern/Save as pattern swatch");
+    await expectGreyedAndInert(bare, "Draw/Pattern/Save as pattern swatch");
+    const out = await clickEntry(
+      live,
+      "Draw/Pattern/Save as pattern swatch",
+      "media.paged.draw.command.savePatternSwatch",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after, "the selection holds no pattern field").toBe(out.before);
+  });
+
   test("Draw/Appearance/Add fill — adds a fill to the selection's appearance", async () => {
     covers("menu:Draw/Appearance/Add fill");
     await expectGreyedAndInert(bare, "Draw/Appearance/Add fill");
