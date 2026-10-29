@@ -773,6 +773,7 @@
   "app.colorPanel.newSwatch": "Neues Farbfeld",
   "app.colorPanel.noSelection": "Keine Auswahl – „Anwenden“ setzt die Standardfläche des Dokuments.",
   "app.colorPanel.openColorWheel": "Farbkreis öffnen",
+  "app.colorPanel.paintTarget": "„Anwenden“ färbt die Auswahl: {target}.",
   "app.colorPanel.rawWells": "Die Flächen- und Konturfelder sind die eigenen Farben dieses Inhalts (in einem Bild: Vorder- und Hintergrundfarbe). Ein Klick auf ein Farbfeld setzt die Fläche, Alt-Klick die Kontur.",
   "app.colorPanel.strokeWell": "Kontur",
   "app.colorSettingsPanel.addProfile": "Profil hinzufügen (.icc)…",

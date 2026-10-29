@@ -478,6 +478,10 @@
       "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
     },
     {
+      "tool": "paged.tool.mesh",
+      "unspecified": "not specified yet: covered by its handler tests (packages/tools/test/mesh-tool.test.ts) and tests/e2e/mesh-tool.spec.ts"
+    },
+    {
       "tool": "paged.tool.eyedropper",
       "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
     },

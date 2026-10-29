@@ -2126,6 +2126,9 @@ interface KeyOwnerState {
   contentSelection?: { contentSelection?: unknown } | null;
   selection?: { pathEditMode?: boolean } | null;
   tool?: { effectiveTool?: string } | null;
+  toolSettings?: {
+    getValue?: (toolId: string, key: string) => unknown;
+  } | null;
   overlaySignals?: { toolPreview?: unknown; marqueeRect?: unknown } | null;
 }
 
@@ -2160,17 +2163,34 @@ export const objectVerbApplies = (state: unknown): boolean => {
 /** The Page tool's id (`@paged-media/tools`), spelled here rather than
  *  imported: this module stays type-only so its pure half runs in Node. */
 const PAGE_TOOL_ID = "paged.tool.page";
+/** The Mesh tool and the Gradient Swatch tool (same reason). */
+const MESH_TOOL_ID = "paged.tool.mesh";
+const GRADIENT_SWATCH_TOOL_ID = "paged.tool.gradientSwatch";
+
+/** True while the tool in hand takes Backspace/Delete for its own parts:
+ *  the Page tool (the armed page), the Mesh tool (the selected mesh
+ *  point) and the Gradient Swatch tool in a freeform mode (the selected
+ *  gradient point; WP7.2). */
+function toolOwnsDeleteKeys(s: KeyOwnerState | null): boolean {
+  const tool = s?.tool?.effectiveTool;
+  if (tool === PAGE_TOOL_ID || tool === MESH_TOOL_ID) return true;
+  if (tool !== GRADIENT_SWATCH_TOOL_ID) return false;
+  const mode = s?.toolSettings?.getValue?.(GRADIENT_SWATCH_TOOL_ID, "mode");
+  return mode === "freeformPoints" || mode === "freeformLines";
+}
 
 /**
  * The Backspace/Delete KEYS, on top of `objectVerbApplies`: while the
  * Page tool is in hand those keys delete the armed PAGE (its `onKey`),
  * and one press must not take a page and the selected frames with it.
- * Keys only — choosing Object ▸ Delete from the menu with the Page tool
+ * The Mesh tool and the freeform Gradient tool remove their selected
+ * point with them, under the same rule (`toolOwnsDeleteKeys`).
+ * Keys only — choosing Object ▸ Delete from the menu with such a tool
  * active is unambiguous and still runs.
  */
 export const deleteKeyApplies = (state: unknown): boolean =>
   objectVerbApplies(state) &&
-  (state as KeyOwnerState | null)?.tool?.effectiveTool !== PAGE_TOOL_ID;
+  !toolOwnsDeleteKeys(state as KeyOwnerState | null);
 
 /**
  * The ARROW keys, on top of `objectVerbApplies`: while a tool is

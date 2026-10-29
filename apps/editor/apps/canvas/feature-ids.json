@@ -7,7 +7,7 @@
     "keybinding": 122,
     "menu": 375,
     "panel": 129,
-    "tool": 81
+    "tool": 82
   },
   "features": [
     {
@@ -6122,6 +6122,11 @@
     },
     {
       "id": "tool:paged.tool.line",
+      "kind": "tool",
+      "owner": "editor"
+    },
+    {
+      "id": "tool:paged.tool.mesh",
       "kind": "tool",
       "owner": "editor"
     },
