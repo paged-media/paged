@@ -526,6 +526,16 @@ export const HOST_FEATURES: readonly string[] = [
   // reads no row. A bundle that would otherwise bake a picture fix into
   // the pixels (paged.slide's DrawingML picture effects) asks it first.
   "document.imageAdjustments@1",
+  // Engine ADR 1007 — paint model v2. The vendored wire carries a gradient
+  // stop's `opacityPct` and inline `color` (`createGradient` /
+  // `editGradient`), the `"Conic"` kind, `frameGradientStrokeMode`
+  // ("Within" / "Along" / "Across") and `frameGradientFillStart`; the
+  // `gradientDetail` read answers them. STATIC, like `document.fillRule@1`:
+  // all additive at protocol 76, so the handshake does not prove the engine
+  // has it — an older engine drops the stop fields (an opaque, swatch-only
+  // ramp) and refuses the paths. paged.draw's SVG importer asks it before
+  // writing a gradient with inline, translucent stops.
+  "document.paint2@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never

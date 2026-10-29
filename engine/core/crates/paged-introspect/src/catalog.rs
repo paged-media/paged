@@ -791,7 +791,9 @@ property_paths! {
         // Engine ADR 1037 — the placed picture's filter stack; IDML has none
         // (the export keeps it in a label and reports it).
         FrameImageAdjustments => "frameImageAdjustments" : list_of("RasterOp", Wire::ImageAdjustments),
-        // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
+        // Engine ADR 1007 — how a gradient stroke maps onto the stroke; IDML has no attribute.
+        FrameGradientStrokeMode => "frameGradientStrokeMode" : enum_(STROKE_GRADIENT_MODES).default_text("Within"),
+        // Engine ADRs 1007 and 1031 — the gradient fill's start, `[x, y]` in inner coordinates ([] = default).
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
@@ -1476,7 +1478,10 @@ mod tests {
         // target.
         //
         // 262 -> 263: ADR 1037 — an image frame's filter stack.
-        assert_eq!(cat.settable_paths.len(), 263, "settable path count drifted");
+        //
+        // 263 -> 264: ADR 1007 — a frame's stroke gradient mode (its
+        // gradient's start point is ADR 1031's path).
+        assert_eq!(cat.settable_paths.len(), 264, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

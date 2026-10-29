@@ -7152,8 +7152,12 @@ impl CanvasModel {
         &self,
         link_base: Option<&str>,
     ) -> Result<(Vec<u8>, Vec<ExportedLink>), idml_export::WriteError> {
+        // Engine ADR 1007 — IDML says paint v2 only as unnamed stop
+        // colours and gradient feathers; the rest is reported lost.
+        let mut scene = self.export_scene();
+        crate::paint_v2_export::lower_for_idml(&mut scene);
         let out = idml_export::write_idml_with(
-            &self.export_scene(),
+            &scene,
             &self.source_idml,
             &self.idml_export_options(link_base),
         )?;
@@ -7308,6 +7312,10 @@ impl CanvasModel {
                                 .collect(),
                         };
                         out.extend(crate::export_losses::diff(&self.scene, &twin, &ctx));
+                        out.extend(crate::paint_v2_export::paint_v2_losses(
+                            &self.scene,
+                            Some(&twin),
+                        ));
                     }
                 }
             }
@@ -7901,6 +7909,18 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(f.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1007 — how a gradient stroke maps.
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeMode,
+                                value: Some(Value::Text(f.gradient_stroke_mode.as_str().into())),
+                            },
+                            // Engine ADR 1007 — the gradient's start point.
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    f.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
+                                )),
+                            },
                             // C-24 — a text frame's outline is stroked
                             // inside / centred / outside like any other
                             // closed shape, and the stroke's share insets
@@ -8273,6 +8293,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameImageAdjustments,
                                 value: Some(Value::ImageAdjustments(f.image_adjustments.clone())),
+                            },
+                            // Engine ADR 1007 — how a gradient stroke maps.
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeMode,
+                                value: Some(Value::Text(f.gradient_stroke_mode.as_str().into())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
@@ -8737,6 +8762,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameImageAdjustments,
                                 value: Some(Value::ImageAdjustments(p.image_adjustments.clone())),
                             },
+                            // Engine ADR 1007 — how a gradient stroke maps.
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeMode,
+                                value: Some(Value::Text(p.gradient_stroke_mode.as_str().into())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
                                 value: Some(Value::Length(p.opacity)),
@@ -8931,6 +8961,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(l.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1007 — how a gradient stroke maps.
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeMode,
+                                value: Some(Value::Text(l.gradient_stroke_mode.as_str().into())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
                                 value: Some(Value::Text(
@@ -9109,6 +9144,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameImageAdjustments,
                                 value: Some(Value::ImageAdjustments(o.image_adjustments.clone())),
+                            },
+                            // Engine ADR 1007 — how a gradient stroke maps.
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeMode,
+                                value: Some(Value::Text(o.gradient_stroke_mode.as_str().into())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
@@ -11667,6 +11707,7 @@ impl CanvasModel {
                 let kind = match g.kind {
                     GradientKind::Linear => "linear",
                     GradientKind::Radial => "radial",
+                    GradientKind::Conic => "conic",
                     GradientKind::Unknown => "unknown",
                 };
                 GradientSummary {
@@ -11688,6 +11729,7 @@ impl CanvasModel {
         let kind = match g.kind {
             GradientKind::Linear => "linear",
             GradientKind::Radial => "radial",
+            GradientKind::Conic => "conic",
             GradientKind::Unknown => "unknown",
         };
         let cmm = self.active_cmm();
@@ -11695,10 +11737,10 @@ impl CanvasModel {
             .stops
             .iter()
             .map(|s| {
-                let resolved_rgb_hex = self
-                    .scene
-                    .palette
-                    .resolve(&s.stop_color)
+                // Engine ADR 1007 — an inline colour wins over the swatch.
+                let resolved_rgb_hex = s
+                    .resolve_color(&self.scene.palette)
+                    .as_ref()
                     .and_then(working_color_of)
                     .map(|w| {
                         use paged_color::Cmm as _;
@@ -11711,6 +11753,14 @@ impl CanvasModel {
                     resolved_rgb_hex,
                     location_pct: s.location_pct,
                     midpoint_pct: s.midpoint_pct,
+                    opacity_pct: s.opacity_pct,
+                    color: s
+                        .inline_color
+                        .as_ref()
+                        .map(|c| paged_mutate::StopColorSpec {
+                            space: c.space.as_attr().to_string(),
+                            value: c.value.clone(),
+                        }),
                 }
             })
             .collect();

@@ -62,6 +62,7 @@ mod group_box;
 pub mod hit;
 pub mod model;
 pub mod mutate;
+mod paint_v2_export;
 pub mod resolve;
 pub mod resource_tiles;
 pub mod selection;

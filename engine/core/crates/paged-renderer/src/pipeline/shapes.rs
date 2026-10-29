@@ -709,7 +709,15 @@ fn emit_line_body(
         );
         let band_source = (line.effects.is_some()).then(|| path.clone());
         let (path_id, _) = page.list.paths.intern(cache_key, path);
-        paged_compose::dash_fit::push_stroke(&mut page.list, path_id, stroke, stroke_paint, outer);
+        crate::module::stroke_gradient::emit_mapped_stroke(
+            page,
+            resolved.gradient_stroke_mode,
+            stroke_paint,
+            stroke,
+            |page, paint, stroke| {
+                paged_compose::dash_fit::push_stroke(&mut page.list, path_id, stroke, paint, outer);
+            },
+        );
         if let Some(centreline) = band_source {
             crate::module::line_effects_module(
                 page,
@@ -772,12 +780,20 @@ fn emit_line_body(
         true,
     );
     let diagonal_id = page.list.paths.push_anon(diagonal.clone());
-    paged_compose::dash_fit::push_stroke(
-        &mut page.list,
-        diagonal_id,
-        stroke,
+    crate::module::stroke_gradient::emit_mapped_stroke(
+        page,
+        resolved.gradient_stroke_mode,
         stroke_paint,
-        Transform::IDENTITY,
+        stroke,
+        |page, paint, stroke| {
+            paged_compose::dash_fit::push_stroke(
+                &mut page.list,
+                diagonal_id,
+                stroke,
+                paint,
+                Transform::IDENTITY,
+            );
+        },
     );
     crate::module::line_effects_module(
         page,
@@ -1347,7 +1363,15 @@ pub(super) fn emit_rectangle_body(
                 // Frame opacity is applied at the transparency-group
                 // level by the orchestrator; per-paint scaling here
                 // would double-apply the alpha.
-                emit_stroke_rect_transformed(inset, outer, stroke, paint, &mut page.list);
+                crate::module::stroke_gradient::emit_mapped_stroke(
+                    page,
+                    resolved.gradient_stroke_mode,
+                    paint,
+                    stroke,
+                    |page, paint, stroke| {
+                        emit_stroke_rect_transformed(inset, outer, stroke, paint, &mut page.list);
+                    },
+                );
             }
         }
     }

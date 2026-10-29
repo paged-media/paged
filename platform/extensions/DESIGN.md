@@ -824,6 +824,13 @@ refuses them. Additive at protocol 76: an older engine refuses the path.
 A bundle that would otherwise bake an effect into its pixels (paged.draw's
 appearance, paged.image's layer styles placed on a page) asks it first.
 
+`"document.paint2@1"` (engine ADR 1007) is another property flag: the
+vendored wire carries a gradient stop's opacity (`opacityPct`) and inline
+colour (`color`), the `"Conic"` gradient kind, `frameGradientStrokeMode`
+("Within" / "Along" / "Across") and `frameGradientFillStart`. Additive at
+protocol 76 like the fill rule; the SVG importer asks it before
+lowering an SVG gradient with `stop-opacity` natively.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

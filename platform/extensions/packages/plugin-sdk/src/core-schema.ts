@@ -791,6 +791,8 @@ export const CORE_PATHS: Record<
   frameContentEffectStack: V71,
   // An image frame's filter stack is protocol 77 (engine ADR 1037).
   frameImageAdjustments: V71,
+  // Engine ADR 1007: "Within" / "Along" / "Across".
+  frameGradientStrokeMode: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",

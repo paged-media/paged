@@ -29,6 +29,7 @@ pub mod display_list;
 pub mod extent;
 pub mod glyph;
 pub mod layer_fx;
+pub mod gradient_sample;
 pub mod mask;
 pub mod perf;
 pub mod pixel_layer;

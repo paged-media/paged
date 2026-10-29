@@ -692,6 +692,8 @@ pub const UNDERLINE_KINDS: &[&str] = &[
     "wave",
     "doubleWave",
 ];
+/// Engine ADR 1007 — how a gradient stroke maps onto the stroke.
+pub const STROKE_GRADIENT_MODES: &[&str] = &["Within", "Along", "Across"];
 pub const TEXT_WRAP_MODES: &[&str] = &[
     "None",
     "BoundingBoxTextWrap",
