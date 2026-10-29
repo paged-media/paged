@@ -1479,7 +1479,9 @@ mod tests {
         // 257 -> 258: ADR 1031 — where a frame's gradient fill starts.
         //
         // 258 -> 260: ADR 1039 — a symbol instance's tint and 9-slice guides.
-        assert_eq!(cat.settable_paths.len(), 260, "settable path count drifted");
+        //
+        // 260 -> 261: draw ADR 365 — the symbol an instance draws.
+        assert_eq!(cat.settable_paths.len(), 261, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings
