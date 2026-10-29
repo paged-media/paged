@@ -270,14 +270,21 @@ pub fn layers_smart_replace(
     link: &str,
 ) -> Result<bool, JsValue> {
     let file_type = image_psd::smart_object::file_type_of(bytes);
-    let uuid = with_stack(|d| {
+    let current = with_stack(|d| {
         Ok(d.stack
             .layers()
             .get(index)
             .and_then(|l| l.smart_source())
-            .and_then(|s| s.file.as_ref().map(|f| f.uuid.clone())))
-    })?
-    .unwrap_or_else(|| crate::smart::new_uuid(name.as_bytes()));
+            .and_then(|s| s.file.as_ref().map(|f| (f.uuid.clone(), f.link.clone()))))
+    })?;
+    let uuid = current.as_ref().map_or_else(
+        || crate::smart::new_uuid(name.as_bytes()),
+        |(u, _)| u.clone(),
+    );
+    let same_link = current
+        .as_ref()
+        .and_then(|(_, l)| l.as_deref())
+        .is_some_and(|l| !link.is_empty() && l == link);
     let file = crate::smart::SmartFile::new(
         uuid,
         name,
@@ -287,10 +294,11 @@ pub fn layers_smart_replace(
     );
     // Decode up front: a file paged cannot read changes nothing.
     file.raster().map_err(ingest_err)?;
-    let label = if link.is_empty() {
-        "Replace Contents"
-    } else {
-        "Relink"
+    // Reading the same link again is Update Modified Content.
+    let label = match (link.is_empty(), same_link) {
+        (true, _) => "Replace Contents",
+        (false, true) => "Update Modified Content",
+        (false, false) => "Relink",
     };
     with_stack(|d| {
         d.stack

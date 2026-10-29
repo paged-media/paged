@@ -603,7 +603,8 @@ fn smart_filters_and_their_mask_are_written_as_photoshop_reads_them__feat__image
 
 #[test]
 #[allow(non_snake_case)]
-fn edited_contents_render_as_photoshop_rendered_its_own_edit__feat__image_layers_smart_objects_full() {
+fn edited_contents_render_as_photoshop_rendered_its_own_edit__feat__image_layers_smart_objects_full(
+) {
     // Photoshop edited the contents of a smart object at 75 % (a red
     // square at 40,40); paged makes the same edit to the source and
     // re-renders through the same corners.
