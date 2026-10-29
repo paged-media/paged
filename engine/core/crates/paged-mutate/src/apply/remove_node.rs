@@ -469,6 +469,23 @@ pub(super) fn remove_and_capture(
             }
             Err(OperationError::NodeNotFound(node.clone()))
         }
+        // Engine ADR 1039 — a symbol instance.
+        NodeId::Instance(id) => {
+            for parsed in &mut doc.spreads {
+                if let Some(pos) = parsed
+                    .spread
+                    .instances
+                    .iter()
+                    .position(|p| p.self_id.as_deref() == Some(id.as_str()))
+                {
+                    let inst = parsed.spread.instances.remove(pos);
+                    let (parent, z_slot, emptied) = release_home(parsed, FrameRef::Instance(pos));
+                    let spec = capture(parsed, node, &inst, None, emptied);
+                    return Ok((parent, pos, spec, z_slot));
+                }
+            }
+            Err(OperationError::NodeNotFound(node.clone()))
+        }
         // S-03 — remove a `<Table>` from its host story. Backs the undo
         // of an `InsertTable` (and a future table-delete op). Captures
         // the table's STRUCTURE into a `NodeSpec::Table` so the inverse

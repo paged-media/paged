@@ -37,7 +37,7 @@ import {
   symbolInstances,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost } from "./host";
+import { openHost, withoutEngineSymbols } from "./host";
 
 const D = "media.paged.draw";
 const RECT = { kind: "rectangle", id: "urect" } as ElementId;
@@ -102,6 +102,9 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
     h = await openHost();
     await h.load(F1_MULTI_SHAPE.bytes());
     h.loadBundle(drawBundle);
+    // The symbol field kind reads the re-emitted lane's library (draw ADR
+    // 356).
+    withoutEngineSymbols(h);
     expect(
       (await send(h, "setSessionPolicy", { policy: { role: "author" } })).kind,
     ).toBe("sessionPolicyApplied");

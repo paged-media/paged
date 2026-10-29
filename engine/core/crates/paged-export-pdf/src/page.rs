@@ -173,43 +173,7 @@ pub fn export_page(
 
     // Captured transparency groups / luminosity masks, written once
     // the page's resource set is complete (they share it by ref).
-    for form in pending_forms {
-        let compressed = flate(&form.data);
-        let mut x = state.pdf.form_xobject(form.form_ref, &compressed);
-        x.filter(pdf_writer::Filter::FlateDecode);
-        x.bbox(form.bbox);
-        x.pair(Name(b"Resources"), resources_ref);
-        let mut g = x.group();
-        g.transparency();
-        match form.group {
-            // Non-isolated (InDesign's default): blend modes inside
-            // interact with the page backdrop; the blending colour
-            // space is inherited from the parent group.
-            PendingFormGroup::TransparencyInherit => {}
-            PendingFormGroup::TransparencyFlags { isolated, knockout } => {
-                if isolated {
-                    g.isolated(true);
-                }
-                if knockout {
-                    g.knockout(true);
-                }
-            }
-            // Luminosity masks composite against a defined black
-            // backdrop in their OWN space.
-            PendingFormGroup::LuminosityGray => {
-                g.isolated(true);
-                g.color_space().device_gray();
-            }
-            // C-28 — an `/S /Alpha` mask reads the group's accumulated
-            // alpha, so it must be isolated (no parent backdrop
-            // leaking in) but needs no blending colour space.
-            PendingFormGroup::AlphaGroup => {
-                g.isolated(true);
-            }
-        }
-        g.finish();
-        x.finish();
-    }
+    write_pending_forms(state, pending_forms, resources_ref);
 
     // Write the content stream (Flate-compressed).
     let data = content.finish();
@@ -263,6 +227,52 @@ pub fn export_page(
     Ok(())
 }
 
+/// Write the transparency groups / soft masks a walk captured; they share
+/// the resources dictionary `resources_ref`.
+fn write_pending_forms(
+    state: &mut DocState,
+    pending_forms: Vec<PendingForm>,
+    resources_ref: pdf_writer::Ref,
+) {
+    for form in pending_forms {
+        let compressed = flate(&form.data);
+        let mut x = state.pdf.form_xobject(form.form_ref, &compressed);
+        x.filter(pdf_writer::Filter::FlateDecode);
+        x.bbox(form.bbox);
+        x.pair(Name(b"Resources"), resources_ref);
+        let mut g = x.group();
+        g.transparency();
+        match form.group {
+            // Non-isolated (InDesign's default): blend modes inside
+            // interact with the page backdrop; the blending colour
+            // space is inherited from the parent group.
+            PendingFormGroup::TransparencyInherit => {}
+            PendingFormGroup::TransparencyFlags { isolated, knockout } => {
+                if isolated {
+                    g.isolated(true);
+                }
+                if knockout {
+                    g.knockout(true);
+                }
+            }
+            // Luminosity masks composite against a defined black
+            // backdrop in their OWN space.
+            PendingFormGroup::LuminosityGray => {
+                g.isolated(true);
+                g.color_space().device_gray();
+            }
+            // C-28 — an `/S /Alpha` mask reads the group's accumulated
+            // alpha, so it must be isolated (no parent backdrop
+            // leaking in) but needs no blending colour space.
+            PendingFormGroup::AlphaGroup => {
+                g.isolated(true);
+            }
+        }
+        g.finish();
+        x.finish();
+    }
+}
+
 fn flate(data: &[u8]) -> Vec<u8> {
     use std::io::Write as _;
     let mut enc = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
@@ -291,6 +301,18 @@ fn find_group_end(commands: &[DisplayCommand], start: usize) -> usize {
     }
     // Unbalanced list — treat everything to the end as the group.
     commands.len()
+}
+
+/// Engine ADR 1039 — the `EndSymbol` closing the `BeginSymbol` at `start`
+/// (symbols do not nest; an unclosed one runs to the end).
+fn find_symbol_end(commands: &[DisplayCommand], start: usize) -> usize {
+    commands
+        .iter()
+        .enumerate()
+        .skip(start + 1)
+        .find(|(_, c)| matches!(c, DisplayCommand::EndSymbol(_)))
+        .map(|(i, _)| i)
+        .unwrap_or(commands.len())
 }
 
 /// C-28 — locate the `BeginMaskedContent` and `EndSoftMask` matching
@@ -361,7 +383,72 @@ struct Walker<'a, 'b> {
     form_depth: usize,
 }
 
-impl Walker<'_, '_> {
+impl<'a, 'b> Walker<'a, 'b> {
+    /// Engine ADR 1039 — the form XObject of a symbol definition, written
+    /// the first time any page draws it: the definition's own list walked
+    /// into a content stream with a resources dictionary of its own (so
+    /// one form serves every page), in the definition's space.
+    fn symbol_form(&mut self, sf: &'b paged_compose::SymbolForm) -> pdf_writer::Ref {
+        if let Some(r) = self.state.symbol_forms.get(&sf.key) {
+            return *r;
+        }
+        let form_ref = self.state.refs.alloc();
+        let resources_ref = self.state.refs.alloc();
+        self.state.symbol_forms.insert(sf.key, form_ref);
+        let list: &'b paged_compose::DisplayList = &sf.list;
+        let glyph_by_cmd: HashMap<u32, Vec<&GlyphRunEntry>> = match &list.glyph_runs {
+            Some(table) => {
+                let mut m: HashMap<u32, Vec<&GlyphRunEntry>> = HashMap::new();
+                for e in &table.entries {
+                    m.entry(e.command_index).or_default().push(e);
+                }
+                m
+            }
+            None => HashMap::new(),
+        };
+        let [x, y, w, h] = sf.bbox;
+        let bbox = pdf_writer::Rect::new(x, y, x + w, y + h);
+        let (data, resources, pending) = {
+            let mut inner = Walker {
+                state: &mut *self.state,
+                input: self.input,
+                list,
+                glyph_by_cmd,
+                outline_font: HashMap::new(),
+                upem_cache: HashMap::new(),
+                resources: PageResources::default(),
+                xobject_counter: 0,
+                feather_consumed: std::collections::HashSet::new(),
+                form_counter: 0,
+                pending_forms: Vec::new(),
+                // Transparency groups inside the definition span it.
+                content_bbox: bbox,
+                diagnostics: &mut *self.diagnostics,
+                base_ctm: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                mcids: Vec::new(),
+                form_depth: 1,
+            };
+            let mut content = Content::new();
+            let mut stack = StateStack::new();
+            inner.walk(&mut content, &mut stack, 0..list.commands.len());
+            stack.flush(&mut content);
+            (
+                content.finish().to_vec(),
+                inner.resources,
+                inner.pending_forms,
+            )
+        };
+        write_pending_forms(self.state, pending, resources_ref);
+        let compressed = flate(&data);
+        let mut x = self.state.pdf.form_xobject(form_ref, &compressed);
+        x.filter(pdf_writer::Filter::FlateDecode);
+        x.bbox(bbox);
+        x.pair(Name(b"Resources"), resources_ref);
+        x.finish();
+        self.state.symbol_resources.push((resources_ref, resources));
+        form_ref
+    }
+
     /// Borrow what the effect emitters need in one shape.
     fn effect_ctx(&mut self, input: &ExportInput<'_>) -> crate::effects::EffectCtx<'_> {
         crate::effects::EffectCtx {
@@ -779,6 +866,33 @@ impl Walker<'_, '_> {
                         stack.push(content, kind);
                     }
                 }
+                // Engine ADR 1039 — one instance of a symbol: a reference to
+                // the definition's form XObject, written once per document.
+                DisplayCommand::BeginSymbol { form, transform } => {
+                    if let Some(sf) = list.symbol_forms.get(*form as usize) {
+                        let form_ref = self.symbol_form(sf);
+                        let name = match self
+                            .resources
+                            .x_objects
+                            .iter()
+                            .find(|(_, r)| **r == form_ref)
+                        {
+                            Some((n, _)) => n.clone(),
+                            None => {
+                                let n = format!("Sy{}", self.form_counter);
+                                self.form_counter += 1;
+                                self.resources.x_objects.insert(n.clone(), form_ref);
+                                n
+                            }
+                        };
+                        content.save_state();
+                        content.transform(transform.0);
+                        content.x_object(Name(name.as_bytes()));
+                        content.restore_state();
+                        i = find_symbol_end(commands, i).min(range.end.saturating_sub(1));
+                    }
+                }
+                DisplayCommand::EndSymbol(_) => {}
                 DisplayCommand::EndBlendGroup(_) => {
                     stack.pop(content, FrameKind::BlendGroup);
                 }

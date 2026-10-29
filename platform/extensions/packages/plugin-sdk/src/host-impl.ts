@@ -365,6 +365,12 @@ export const HOST_FEATURES: readonly string[] = [
   // `mutate` and `host.objects.set/batch`. STATIC: the worker handshake
   // refuses an engine older than the pinned protocol, which answers them.
   "document.undoLog@1",
+  // Engine ADR 1039 (protocol 78) — symbols: `createSymbol`,
+  // `redefineSymbol`, `placeSymbolInstance`, `breakSymbolLink` and
+  // `deleteSymbol`, the `symbols` collection and `instance:<id>` items.
+  // STATIC: the worker handshake refuses an engine older than the pinned
+  // protocol, which applies them.
+  "document.symbols@1",
   "document.collection@1",
   "document.frameChain@1",
   "document.meta@1",

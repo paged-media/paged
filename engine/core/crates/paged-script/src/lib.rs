@@ -898,6 +898,24 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
         )
         .function(guarded(paged_move_page), js_string!("movePage"), 2)
         .function(guarded(paged_place_page), js_string!("placePage"), 2)
+        .function(guarded(paged_create_symbol), js_string!("createSymbol"), 3)
+        .function(
+            guarded(paged_redefine_symbol),
+            js_string!("redefineSymbol"),
+            2,
+        )
+        .function(
+            guarded(paged_place_symbol_instance),
+            js_string!("placeSymbolInstance"),
+            4,
+        )
+        .function(
+            guarded(paged_break_symbol_link),
+            js_string!("breakSymbolLink"),
+            1,
+        )
+        .function(guarded(paged_delete_symbol), js_string!("deleteSymbol"), 1)
+        .function(guarded(paged_symbols), js_string!("symbols"), 0)
         .function(guarded(paged_on_master), js_string!("onMaster"), 2)
         .function(guarded(paged_create_master), js_string!("createMaster"), 2)
         .function(guarded(paged_delete_master), js_string!("deleteMaster"), 1)
@@ -2289,6 +2307,233 @@ fn paged_place_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsR
         page: PageId(page),
         origin_pt,
     }))
+}
+
+/// `n` numbers from a JS array, or `None` when it is not one of that
+/// length.
+fn number_array<const N: usize>(value: &JsValue, ctx: &mut Context) -> Option<[f32; N]> {
+    let obj = value.as_object()?;
+    let len = obj
+        .get(js_string!("length"), ctx)
+        .ok()
+        .and_then(|v| v.as_number());
+    if len != Some(N as f64) {
+        return None;
+    }
+    let mut out = [0.0f32; N];
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = obj.get(i as u32, ctx).ok().and_then(|v| v.as_number())? as f32;
+    }
+    Some(out)
+}
+
+/// An optional string field of an options object.
+fn opt_field_string(
+    obj: Option<&JsObject>,
+    key: &str,
+    ctx: &mut Context,
+) -> JsResult<Option<String>> {
+    let Some(obj) = obj else { return Ok(None) };
+    let v = obj.get(js_string!(key), ctx)?;
+    if v.is_null_or_undefined() {
+        return Ok(None);
+    }
+    Ok(Some(v.to_string(ctx)?.to_std_string_escaped()))
+}
+
+/// `paged.createSymbol(name, [elementId, ...], { symbolId?, replace?,
+/// nineSlice? }?)` — make a symbol from page items (`Mutation::CreateSymbol`,
+/// v78, engine ADR 1039). With `replace` (the default) the items become an
+/// instance, which is selected. Returns the symbol's id, `null` when refused.
+fn paged_create_symbol(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let name = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_ids) =
+        strict_element_id_array(args.get_or_undefined(1), ctx).filter(|ids| !ids.is_empty())
+    else {
+        return Ok(JsValue::null());
+    };
+    let opts = args.get_or_undefined(2).as_object();
+    let symbol_id = opt_field_string(opts.as_ref(), "symbolId", ctx)?;
+    let replace = match &opts {
+        Some(o) => {
+            let v = o.get(js_string!("replace"), ctx)?;
+            (!v.is_null_or_undefined()).then(|| v.to_boolean())
+        }
+        None => None,
+    };
+    let nine_slice = match &opts {
+        Some(o) => {
+            let v = o.get(js_string!("nineSlice"), ctx)?;
+            if v.is_null_or_undefined() {
+                None
+            } else {
+                match number_array::<4>(&v, ctx) {
+                    Some(n) => Some(n),
+                    None => return Ok(JsValue::null()),
+                }
+            }
+        }
+        None => None,
+    };
+    let mutation = Mutation::CreateSymbol {
+        name,
+        element_ids,
+        symbol_id,
+        replace,
+        nine_slice,
+    };
+    let made = with_model(|m| match m.apply_mutation(&mutation) {
+        Ok(outcome) => {
+            if let Some(id) = &outcome.created_id {
+                m.element_selection.ids = vec![id.clone()];
+            }
+            m.symbols().last().map(|s| s.id.clone())
+        }
+        Err(_) => None,
+    });
+    Ok(match made {
+        Some(id) => JsValue::from(js_string!(id)),
+        None => JsValue::null(),
+    })
+}
+
+/// `paged.redefineSymbol(symbolId, { elementIds?, name?, nineSlice?,
+/// replace? })` — new artwork, name or 9-slice guides for a symbol
+/// (`Mutation::RedefineSymbol`); every instance follows. `nineSlice: []`
+/// removes the guides.
+fn paged_redefine_symbol(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let symbol_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let opts = args.get_or_undefined(1).as_object();
+    let name = opt_field_string(opts.as_ref(), "name", ctx)?;
+    let mut element_ids = Vec::new();
+    let mut nine_slice = None;
+    let mut replace = None;
+    if let Some(o) = &opts {
+        let ids = o.get(js_string!("elementIds"), ctx)?;
+        if !ids.is_null_or_undefined() {
+            match strict_element_id_array(&ids, ctx) {
+                Some(ids) => element_ids = ids,
+                None => return Ok(JsValue::from(false)),
+            }
+        }
+        let n = o.get(js_string!("nineSlice"), ctx)?;
+        if !n.is_null_or_undefined() {
+            let empty = n
+                .as_object()
+                .and_then(|a| a.get(js_string!("length"), ctx).ok())
+                .and_then(|l| l.as_number())
+                == Some(0.0);
+            nine_slice = if empty {
+                Some(Vec::new())
+            } else {
+                match number_array::<4>(&n, ctx) {
+                    Some(g) => Some(g.to_vec()),
+                    None => return Ok(JsValue::from(false)),
+                }
+            };
+        }
+        let r = o.get(js_string!("replace"), ctx)?;
+        if !r.is_null_or_undefined() {
+            replace = Some(r.to_boolean());
+        }
+    }
+    Ok(apply_bool(&Mutation::RedefineSymbol {
+        symbol_id,
+        element_ids,
+        name,
+        nine_slice,
+        replace,
+    }))
+}
+
+/// `paged.placeSymbolInstance(symbolId, pageId, [x, y]?, [a, b, c, d]?)`
+/// — place an instance, its registration point at `[x, y]` (page space;
+/// omitted: the page's centre), scaled / rotated by the linear part
+/// (`Mutation::PlaceSymbolInstance`). Selects it and returns its
+/// `instance:<id>` address, `null` when refused.
+fn paged_place_symbol_instance(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let symbol_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let page = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let at_v = args.get_or_undefined(2);
+    let at = if at_v.is_null_or_undefined() {
+        None
+    } else {
+        match number_array::<2>(at_v, ctx) {
+            Some([x, y]) => Some((x, y)),
+            None => return Ok(JsValue::null()),
+        }
+    };
+    let lin_v = args.get_or_undefined(3);
+    let linear = if lin_v.is_null_or_undefined() {
+        None
+    } else {
+        match number_array::<4>(lin_v, ctx) {
+            Some(l) => Some(l),
+            None => return Ok(JsValue::null()),
+        }
+    };
+    Ok(apply_insert(&Mutation::PlaceSymbolInstance {
+        symbol_id,
+        page_id: PageId(page),
+        at,
+        linear,
+        nine_slice: None,
+    }))
+}
+
+/// `paged.breakSymbolLink(elementId)` — the instance becomes its symbol's
+/// artwork as ordinary items (`Mutation::BreakSymbolLink`). Selects and
+/// returns the new root's address, `null` when refused.
+fn paged_break_symbol_link(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let s = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&s) else {
+        return Ok(JsValue::null());
+    };
+    Ok(apply_insert(&Mutation::BreakSymbolLink { element_id }))
+}
+
+/// `paged.deleteSymbol(symbolId)` — remove a symbol; its instances become
+/// ordinary items first (`Mutation::DeleteSymbol`).
+fn paged_delete_symbol(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let symbol_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteSymbol { symbol_id }))
+}
+
+/// `paged.symbols()` — the document's symbols (the `symbols` collection),
+/// as JSON.
+fn paged_symbols(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let json = with_model(|m| serde_json::to_string(&m.symbols()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(json)))
 }
 
 /// `paged.createMaster(masterId, { name?, widthPt?, heightPt?,
@@ -6187,7 +6432,15 @@ fn js_value_to_wire(
         // `[6, 3]` as nothing and `[a, b, c, d]` as BOUNDS, and a bare
         // `{ anchors }` failed the wrapper's decode — `paged.set` returned
         // false on paths the catalog advertises as settable.
-        if matches!(path, P::FramePath | P::FrameStrokeDashArray) {
+        // Engine ADR 1039 — an instance's tint and 9-slice guides are
+        // number lists too (`[]` clears).
+        if matches!(
+            path,
+            P::FramePath
+                | P::FrameStrokeDashArray
+                | P::SymbolInstanceTint
+                | P::SymbolInstanceNineSlice
+        ) {
             let json = value.to_json(ctx).ok()??;
             let is_wrapper = json.get("type").is_some() && json.get("value").is_some();
             if !is_wrapper {

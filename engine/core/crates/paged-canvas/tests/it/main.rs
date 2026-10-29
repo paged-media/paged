@@ -121,6 +121,7 @@ mod style_properties;
 mod svg_io;
 mod swatch_address_color_values;
 mod swatch_library;
+mod symbols;
 mod table_cells_after_rebuild;
 mod table_in_empty_story;
 mod table_pour_batch;

@@ -8876,18 +8876,5 @@
       "owner": "editor"
     }
   ],
-  "deprecated": [
-    {
-      "id": "menu:Object/Make clipping mask",
-      "replacement": "menu:Object/Clipping mask/Make",
-      "deprecatedIn": "0.76.0",
-      "removeIn": "0.78.0"
-    },
-    {
-      "id": "menu:Object/Release clipping mask",
-      "replacement": "menu:Object/Clipping mask/Release",
-      "deprecatedIn": "0.76.0",
-      "removeIn": "0.78.0"
-    }
-  ]
+  "deprecated": []
 }

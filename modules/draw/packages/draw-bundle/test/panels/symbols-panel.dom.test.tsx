@@ -48,7 +48,7 @@ import {
   SYMBOLS_NOTE,
   SYMBOLS_PANEL_ID,
 } from "../../src";
-import { openHost } from "../headless/host";
+import { openHost, withoutEngineSymbols } from "../headless/host";
 import {
   documentBurst,
   drive,
@@ -86,6 +86,7 @@ describe("Symbols panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(emptyDocument());
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
     });
     afterAll(() => h?.dispose());
     afterEach(() => teardownPanels(h));
@@ -137,6 +138,7 @@ describe("Symbols panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(seedRow("s", 3)));
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
     });
     afterAll(() => h?.dispose());
     afterEach(() => teardownPanels(h));
@@ -286,6 +288,7 @@ describe("Symbols panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(seedRow("s", RECORDS)));
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
       perLeaf = await metadataReadsPerLeaf(h.host);
       const panel = await mountPanel(h, makeSymbolsPanel);
       for (let k = 0; k <= RECORDS; k++) {
@@ -401,6 +404,50 @@ describe("Symbols panel — rendered against the engine", () => {
         // As found: 20.
         partReads: 1,
       });
+    });
+  });
+
+  describe("on the engine's symbols (document.symbols@1, engine ADR 1039)", () => {
+    let h: HeadlessHost;
+
+    beforeAll(async () => {
+      h = await openHost();
+      await h.load(panelDocument(seedRow("s", 3)));
+      h.loadBundle(drawBundle);
+    });
+    afterAll(() => h?.dispose());
+    afterEach(() => teardownPanels(h));
+
+    it("defines, places and breaks through the engine, one undo step each", async () => {
+      covers("panel:media.paged.draw.panel.symbols");
+      await h.host.selection.set([poly("s0")]);
+      const panel = await mountPanel(h, makeSymbolsPanel);
+      expect(panel.attr(PANEL, "data-draw-symbols-engine")).toBe("true");
+      panel.reset();
+      await panel.click("[data-draw-symbol-define]");
+      // One wire op, the engine's; no container part is written.
+      expect(panel.work.mutations.map((m) => m.op)).toEqual(["createSymbol"]);
+      expect(panel.work.count("parts.write")).toBe(0);
+      expect(panel.attr(PANEL, "data-draw-symbols-panel")).toBe("1");
+      const row = "[data-draw-symbol-row]";
+      expect(panel.attr(row, "data-draw-symbol-instance-count")).toBe("0");
+
+      panel.reset();
+      await panel.click(`${row} [data-draw-symbol-place]`);
+      expect(panel.work.mutations.map((m) => m.op)).toEqual([
+        "placeSymbolInstance",
+      ]);
+      expect(panel.attr(row, "data-draw-symbol-instance-count")).toBe("1");
+      expect(panel.disabled("[data-draw-symbol-break]")).toBe(false);
+      expect(panel.get("[data-draw-symbols-note]").textContent).toContain(
+        "kept by the document",
+      );
+
+      panel.reset();
+      await panel.click("[data-draw-symbol-break]");
+      expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+      expect(panel.attr(row, "data-draw-symbol-instance-count")).toBe("0");
+      await h.host.document.undo();
     });
   });
 });

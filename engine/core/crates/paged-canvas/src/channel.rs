@@ -794,7 +794,13 @@ export type WorkerToMain = WorkerToMainKind & {
 //   the viewer session's `PageRect.xPt`. A new Mutation kind an older worker
 //   cannot apply, hence the bump; it rides the unpublished v77 (added
 //   before first consumer sync, governance rule 4).
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
+// v78 — symbols (engine ADR 1039): the mutations createSymbol,
+//   redefineSymbol, placeSymbolInstance, breakSymbolLink and deleteSymbol;
+//   `FrameRef::Instance` page items. Additive with them: `ElementId::Instance`
+//   (`instance:<id>`), the element paths `symbolInstanceTint` /
+//   `symbolInstanceNineSlice`, the `symbols` collection. New Mutation kinds
+//   an older worker cannot apply, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
 
 /// A per-run script budget on the wire (v63). Every field is optional
 /// and falls back to the engine's default, so a caller overrides only
@@ -3275,6 +3281,9 @@ pub enum CollectionName {
     /// a caller should still treat it as an on-demand analysis rather
     /// than something to poll.
     InkCoverage,
+    /// Engine ADR 1039 — the document's symbol definitions
+    /// ([`SymbolSummary`]), in creation order. Additive (rides v78).
+    Symbols,
 }
 
 impl CollectionName {
@@ -3317,6 +3326,7 @@ impl CollectionName {
             Self::Stories => "stories",
             Self::NumberingLists => "numberingLists",
             Self::InkCoverage => "inkCoverage",
+            Self::Symbols => "symbols",
         }
     }
 
@@ -3359,6 +3369,7 @@ impl CollectionName {
             "stories" => Self::Stories,
             "numberingLists" => Self::NumberingLists,
             "inkCoverage" => Self::InkCoverage,
+            "symbols" => Self::Symbols,
             _ => return None,
         })
     }
@@ -4236,6 +4247,29 @@ pub struct ConditionSummary {
 /// `documentCollection:numberingLists`. The editor's list-definitions
 /// surface renders this; `continue_across_stories` is the flag that
 /// drives cross-story numbering continuity in the renderer.
+/// Engine ADR 1039 — one symbol definition, as the `symbols` collection
+/// lists it.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolSummary {
+    /// The id the symbol ops take (`Symbol/u1`).
+    pub id: String,
+    pub name: String,
+    /// Bumped by every redefinition of its artwork.
+    pub revision: u64,
+    /// The artwork's box in symbol space, `[top, left, bottom, right]`
+    /// pt (the registration point is the origin).
+    pub bounds: [f32; 4],
+    /// Its 9-slice guides, `[left, top, right, bottom]`, when set.
+    #[serde(default)]
+    pub nine_slice: Option<[f32; 4]>,
+    /// How many page items the artwork holds (roots).
+    pub item_count: u32,
+    /// The instances on the document's spreads, as `instance:<id>`.
+    pub instances: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
@@ -5340,8 +5374,8 @@ mod tests {
     /// release commitment, not a detail — the protocol-governance
     /// record exists because nine bumps once shipped untagged.
     #[test]
-    fn protocol_version_is_v77() {
-        assert_eq!(PROTOCOL_VERSION.0, 77);
+    fn protocol_version_is_v78() {
+        assert_eq!(PROTOCOL_VERSION.0, 78);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the

@@ -951,6 +951,18 @@ export const CORE_PATHS: Record<
   groupKnockout: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   // A clip group is protocol 76 (engine ADR 1010); a pre-71 engine has none.
   groupClip: V71,
+  // Engine ADR 1039 (protocol 78) — a symbol instance's tint
+  // `[r, g, b, amount]` and 9-slice guides `[left, top, right, bottom]`.
+  symbolInstanceTint: {
+    scope: "frame",
+    wire: "lengths",
+    type: { kind: "list", of: { kind: "number" } },
+  },
+  symbolInstanceNineSlice: {
+    scope: "frame",
+    wire: "lengths",
+    type: { kind: "list", of: { kind: "length" } },
+  },
   // Word's character and paragraph additions are protocol 76 (engine ADR
   // 1018); a pre-71 engine has none.
   characterHighlightColor: V71,

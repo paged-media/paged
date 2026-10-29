@@ -53,7 +53,7 @@ import {
 } from "@paged-media/test-kit";
 
 import { drawBundle } from "../../src";
-import { openHost } from "./host";
+import { openHost, withoutEngineSymbols } from "./host";
 
 /** A booted host with paged.draw activated, and a model channel over it. */
 export interface CommandRig {
@@ -69,6 +69,9 @@ export interface CommandRig {
 export async function commandRig(): Promise<CommandRig> {
   const h = await openHost();
   h.loadBundle(drawBundle);
+  // These specs pin the re-emitted symbols lane (draw ADR 356); the engine
+  // lane has its own (symbols-engine.spec.ts).
+  withoutEngineSymbols(h);
   const channel = drawModelChannel(h);
   const commandOf = (id: string): CommandContribution => {
     const rec = h.contributions.find(

@@ -606,6 +606,7 @@ impl<'a> Lowering<'a> {
             FrameRef::GraphicLine(i) => s.graphic_lines.get(i).and_then(|f| f.self_id.clone()),
             FrameRef::Polygon(i) => s.polygons.get(i).and_then(|f| f.self_id.clone()),
             FrameRef::Group(i) => s.groups.get(i).and_then(|f| f.self_id.clone()),
+            FrameRef::Instance(i) => s.instances.get(i).and_then(|f| f.self_id.clone()),
         }
     }
 
@@ -932,6 +933,11 @@ pub(crate) fn bounds_of_refs(spread: &Spread, refs: &[FrameRef]) -> Option<[f32;
                 for m in spread.groups[i].members.clone() {
                     walk(spread, m, add);
                 }
+            }
+            // Engine ADR 1039 — an instance's box is its definition's.
+            FrameRef::Instance(i) => {
+                let f = &spread.instances[i];
+                add(&f.bounds, Some(f.item_transform))
             }
         }
     }

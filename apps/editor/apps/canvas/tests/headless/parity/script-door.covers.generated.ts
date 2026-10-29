@@ -566,15 +566,9 @@ export function coversDoor(
       return;
     case "ui.command":
       break;
-    case "cli.invoke":
-      covers("cli:paged invoke");
-      return;
-    case "cli.script":
-      covers("cli:paged script");
-      return;
-    case "mcp.run_script":
-      covers("cli:paged mcp");
-      return;
+
+
+
     default:
       return;
   }
@@ -691,54 +685,7 @@ export function coversRead(door: string, fn: string): void {
       return;
     case "cli":
       switch (fn) {
-        case "paged.characterStyles":
-          covers("cli:paged read collection");
-          return;
-        case "paged.collection":
-          covers("cli:paged read collection");
-          return;
-        case "paged.colorGroups":
-          covers("cli:paged read collection");
-          return;
-        case "paged.conditionSets":
-          covers("cli:paged read collection");
-          return;
-        case "paged.conditions":
-          covers("cli:paged read collection");
-          return;
-        case "paged.get":
-          covers("cli:paged get");
-          return;
-        case "paged.gradients":
-          covers("cli:paged read collection");
-          return;
-        case "paged.inspect":
-          covers("cli:paged read element-properties");
-          return;
-        case "paged.layers":
-          covers("cli:paged read collection");
-          return;
-        case "paged.links":
-          covers("cli:paged read collection");
-          return;
-        case "paged.objectStyles":
-          covers("cli:paged read collection");
-          return;
-        case "paged.pages":
-          covers("cli:paged read collection");
-          return;
-        case "paged.paragraphStyles":
-          covers("cli:paged read collection");
-          return;
-        case "paged.query":
-          covers("cli:paged query");
-          return;
-        case "paged.stories":
-          covers("cli:paged read collection");
-          return;
-        case "paged.swatches":
-          covers("cli:paged read collection");
-          return;
+
       }
       return;
   }

@@ -802,6 +802,23 @@ and the pages collection's `canvasOriginPt` / `canvasPlaced` / `boundsPt` —
 and the catalog the `pageCanvasOrigin` page path. An artboard's name is the
 page metadata entry `x-paged:paged.artboard` (`{"v":1,"data":{"name"}}`).
 
+`"document.symbols@1"` (engine ADR 1039, protocol 78) is the engine's
+symbol: a definition kept once in the document and instances that draw it
+(`FrameRef::Instance`, addressed `instance:<id>`). The doors are five wire
+ops — `createSymbol { name, elementIds, symbolId?, replace?, nineSlice? }`
+(the items become one instance unless `replace: false`; `createdId` is
+it), `redefineSymbol { symbolId, elementIds?, name?, nineSlice?, replace? }`
+(every instance follows), `placeSymbolInstance { symbolId, pageId, at?,
+linear?, nineSlice? }`, `breakSymbolLink { elementId }` and
+`deleteSymbol { symbolId }` — each one undo step, and the `symbols`
+collection lists the definitions with their instances. An instance's
+opacity, blend mode, transform, visibility and lock are the ordinary
+element paths; its tint and 9-slice guides are `symbolInstanceTint`
+(`[r, g, b, amount]`) and `symbolInstanceNineSlice` (`[left, top, right,
+bottom]`). STATIC: protocol 78's handshake proves the engine has them.
+paged.draw's Symbols panel uses them when the flag is up and keeps its
+re-emitted artwork (draw ADR 356) as the fallback for a host without it.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

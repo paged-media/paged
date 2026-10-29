@@ -584,6 +584,12 @@ export function unitRig(
         }
       : {}),
   });
+  // The recording fake answers no engine symbol op: these specs run the
+  // re-emitted lane (draw ADR 356), as a host without the flag does.
+  const supports = host.supports.bind(host);
+  (host as { supports: (feature: string) => boolean }).supports = (
+    feature: string,
+  ) => feature !== "document.symbols@1" && supports(feature);
   // The automatic recipe update rebuilds in the background after a commit
   // (a timer, not the command's own promise), so in a rig that counts a
   // command's exact writes it is a race: off here. Its own spec runs it on

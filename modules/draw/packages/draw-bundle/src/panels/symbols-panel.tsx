@@ -55,6 +55,11 @@ import {
   SYMBOLS_FEATURE,
   type SymbolDefinition,
 } from "../commands/symbols";
+import {
+  engineSymbols,
+  instancesIn,
+  readEngineSymbols,
+} from "../commands/symbols-engine";
 import { usePanelReload } from "./use-panel-reload";
 import {
   About,
@@ -100,6 +105,8 @@ const M = defineMessages("draw.symbolsPanel", {
   deleteHint:
     "Delete the symbol and unlink its instances (the placed artwork stays). Cannot be undone.",
   title: "Symbols",
+  noteEngine:
+    "Symbols are kept by the document: an instance draws its symbol, text, gradients and placed images included, and Redefine updates every instance at once. Reset transform returns the selected instance to the symbol's own size and angle where it is. Break link turns an instance back into ordinary artwork. Every action can be undone. IDML has no symbols: an exported file carries the artwork, and reopening it in paged brings the instances back.",
 });
 
 export const SYMBOLS_PANEL_ID = "media.paged.draw.panel.symbols";
@@ -152,8 +159,9 @@ const mutedStyle: React.CSSProperties = {
 export function symbolRowLabel(
   symbol: SymbolDefinition,
   instances: number,
+  pieceCount?: number,
 ): string {
-  const pieces = symbol.pieces.length;
+  const pieces = pieceCount ?? symbol.pieces.length;
   return t(M.rowLabel, {
     pieces,
     registration: tokenLabel(symbol.registration).toLowerCase(),
@@ -173,6 +181,12 @@ export function makeSymbolsPanel(host: BundleHost): {
     const [selected, setSelected] = React.useState<string[]>([]);
     const [hasSelection, setHasSelection] = React.useState(false);
     const [portable, setPortable] = React.useState(true);
+    // Engine ADR 1039 — the engine keeps the symbols (`document.symbols@1`);
+    // the rows then come from its `symbols` collection.
+    const [engine, setEngine] = React.useState(false);
+    const [pieceCounts, setPieceCounts] = React.useState<
+      Record<string, number>
+    >({});
 
     // WHAT A RELOAD COSTS (`test/panels/symbols-panel.dom.test.tsx`, and it
     // may only go down): the library part once, and the document's links
@@ -183,6 +197,38 @@ export function makeSymbolsPanel(host: BundleHost): {
       host,
       "symbols",
       async ({ live, selection }) => {
+        if (engineSymbols(host)) {
+          const rows = await readEngineSymbols(host);
+          if (!live()) return;
+          const picked = new Set(
+            instancesIn(selection).map((e) => `instance:${e.id}`),
+          );
+          setEngine(true);
+          setPortable(true);
+          setSymbols(
+            rows.map((r) => ({
+              id: r.id,
+              name: r.name,
+              registration: "center",
+              origin: [0, 0],
+              pieces: [],
+            })),
+          );
+          setPieceCounts(
+            Object.fromEntries(rows.map((r) => [r.id, r.itemCount])),
+          );
+          setCounts(
+            Object.fromEntries(rows.map((r) => [r.id, r.instances.length])),
+          );
+          setHasSelection(selection.length > 0);
+          setSelected(
+            rows
+              .filter((r) => r.instances.some((i) => picked.has(i)))
+              .map((r) => r.id),
+          );
+          return;
+        }
+        setEngine(false);
         const library = await readSymbolLibrary(host);
         if (!live()) return;
         const tally: Record<string, number> = {};
@@ -214,6 +260,7 @@ export function makeSymbolsPanel(host: BundleHost): {
         style={{ padding: 12 }}
         data-draw-symbols-panel={symbols.length}
         data-draw-symbols-portable={portable ? "true" : "false"}
+        data-draw-symbols-engine={engine ? "true" : "false"}
         data-draw-symbol-selected={selected[0] ?? ""}
       >
         <PanelIntro
@@ -290,7 +337,11 @@ export function makeSymbolsPanel(host: BundleHost): {
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
                   }}
-                  title={symbolRowLabel(symbol, instances)}
+                  title={symbolRowLabel(
+                    symbol,
+                    instances,
+                    engine ? pieceCounts[symbol.id] : undefined,
+                  )}
                 >
                   {symbol.name}
                 </span>
@@ -336,7 +387,9 @@ export function makeSymbolsPanel(host: BundleHost): {
           })
         )}
 
-        <About attr="data-draw-symbols-note">{s.t(SYMBOLS_NOTE)}</About>
+        <About attr="data-draw-symbols-note">
+          {s.t(engine ? M.noteEngine : SYMBOLS_NOTE)}
+        </About>
       </div>
     );
   };

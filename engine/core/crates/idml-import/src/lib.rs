@@ -335,6 +335,7 @@ pub fn import_idml_archive(archive: &SourceArchive) -> Result<paged_scene::Docum
         text_frame_index: HashMap::new(),
         styles,
         anchors: Vec::new(),
+        symbols: Vec::new(),
     };
     document.rebuild_indexes();
     Ok(document)

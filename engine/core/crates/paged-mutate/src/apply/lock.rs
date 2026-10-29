@@ -112,6 +112,7 @@ fn own_lock(spread: &Spread, r: FrameRef) -> bool {
         FrameRef::Oval(i) => spread.ovals.get(i).is_some_and(|f| f.locked),
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i).is_some_and(|f| f.locked),
         FrameRef::Polygon(i) => spread.polygons.get(i).is_some_and(|f| f.locked),
+        FrameRef::Instance(i) => spread.instances.get(i).is_some_and(|f| f.locked),
         FrameRef::Group(_) => false,
     }
 }

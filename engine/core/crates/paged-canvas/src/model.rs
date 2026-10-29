@@ -422,8 +422,43 @@ fn page_item_element_id(
         NodeId::GraphicLine(id) => ElementId::GraphicLine(id.clone()),
         NodeId::Polygon(id) => ElementId::Polygon(id.clone()),
         NodeId::Group(id) => ElementId::Group(id.clone()),
+        NodeId::Instance(id) => ElementId::Instance(id.clone()),
         _ => return None,
     })
+}
+
+/// Engine ADR 1039 — the page item `id` names, by its kind.
+fn element_of_id(
+    doc: &paged_scene::Document,
+    id: &str,
+) -> Option<crate::element_selection::ElementId> {
+    use crate::element_selection::ElementId;
+    let is = |s: &Option<String>| s.as_deref() == Some(id);
+    for p in &doc.spreads {
+        let s = &p.spread;
+        if s.text_frames.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::TextFrame(id.to_string()));
+        }
+        if s.rectangles.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Rectangle(id.to_string()));
+        }
+        if s.ovals.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Oval(id.to_string()));
+        }
+        if s.graphic_lines.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::GraphicLine(id.to_string()));
+        }
+        if s.polygons.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Polygon(id.to_string()));
+        }
+        if s.groups.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Group(id.to_string()));
+        }
+        if s.instances.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Instance(id.to_string()));
+        }
+    }
+    None
 }
 
 /// The element an operation created, or the LAST of them. `doc` is the
@@ -621,6 +656,19 @@ fn created_element_id(
     if let paged_mutate::Operation::CreateGroup { spec } = op {
         return spec.self_id.clone().map(ElementId::Group);
     }
+    // Engine ADR 1039 — the instance a symbol op placed, or the root a
+    // broken link left.
+    match op {
+        paged_mutate::Operation::CreateSymbol { instance_id, .. }
+        | paged_mutate::Operation::RedefineSymbol { instance_id, .. }
+        | paged_mutate::Operation::PlaceSymbolInstance { instance_id, .. } => {
+            return instance_id.clone().map(ElementId::Instance);
+        }
+        paged_mutate::Operation::BreakSymbolLink { .. } => {
+            return paged_mutate::symbol_break_root(op).and_then(|id| element_of_id(doc, id));
+        }
+        _ => {}
+    }
     // v52 — an inserted anchored frame is a Rectangle; report its minted id so
     // the caller can address it (e.g. offset the anchor after placement).
     if let paged_mutate::Operation::InsertAnchoredFrame { self_id, .. } = op {
@@ -747,6 +795,7 @@ fn path_node_id_for(id: &crate::element_selection::ElementId) -> Option<paged_mu
         // gestures never target them.
         ElementId::Oval(_)
         | ElementId::Group(_)
+        | ElementId::Instance(_)
         | ElementId::StoryRange { .. }
         | ElementId::Table { .. }
         | ElementId::TableCell { .. } => None,
@@ -864,6 +913,7 @@ fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate:
         ElementId::Polygon(s) => NodeId::Polygon(s.clone()),
         ElementId::GraphicLine(s) => NodeId::GraphicLine(s.clone()),
         ElementId::Group(s) => NodeId::Group(s.clone()),
+        ElementId::Instance(s) => NodeId::Instance(s.clone()),
         ElementId::StoryRange {
             story_id,
             start,
@@ -979,6 +1029,14 @@ fn frame_to_tree_node_at(
             let id = f.self_id.clone()?;
             Some(leaf(id.clone(), "GraphicLine", ElementId::GraphicLine(id)))
         }),
+        // Engine ADR 1039 — an instance is a leaf; the symbol it draws
+        // rides its label.
+        FrameRef::Instance(i) => spread.instances.get(i).and_then(|f| {
+            let id = f.self_id.clone()?;
+            let mut node = leaf(id.clone(), "Instance", ElementId::Instance(id.clone()));
+            node.label = format!("Instance {id} ({})", f.symbol);
+            Some(node)
+        }),
         FrameRef::Group(i) => spread.groups.get(i).map(|g| {
             let id = g.self_id.clone().unwrap_or_else(|| format!("group#{i}"));
             let children = g
@@ -1022,6 +1080,10 @@ fn group_union_aabb(spread: &paged_model::Spread, group_idx: usize) -> Option<pa
                 .get(i)
                 .map(|f| (f.bounds, f.item_transform)),
             FrameRef::Polygon(i) => spread.polygons.get(i).map(|f| (f.bounds, f.item_transform)),
+            FrameRef::Instance(i) => spread
+                .instances
+                .get(i)
+                .map(|f| (f.bounds, Some(f.item_transform))),
             FrameRef::Group(_) => None,
         }?;
         // `transform_bbox` returns the axis-aligned bbox of the
@@ -1978,6 +2040,9 @@ pub struct CanvasModel {
     /// in the current test harness; this stays as forward-looking
     /// infra for when asset resolvers wire up.
     image_decode_cache: std::cell::RefCell<HashMap<String, paged_compose::DecodedImage>>,
+    /// Engine ADR 1039 — built symbol definitions, per revision, kept
+    /// across rebuilds.
+    symbol_cache: paged_renderer::pipeline::SymbolCache,
     /// ADR 026 — generated-page counts per growing story, carried
     /// from one build to the next so an edit starts from the pages it had
     /// (usually one build) instead of growing from zero.
@@ -2682,6 +2747,11 @@ impl CanvasModel {
             let opened =
                 paged_renderer::container::open_document(bytes).map_err(LoadError::Parse)?;
             let mut doc = opened.document;
+            // Engine ADR 1039 — an IDML this engine wrote carries its
+            // symbols as labelled artwork; bring the instances back.
+            if !opened.from_model_part {
+                paged_mutate::restore_symbols_from_labels(&mut doc);
+            }
             if opened.from_model_part {
                 // The IDML parts beside the model keep each next /
                 // previous page number in a range of its own; cut the
@@ -2856,6 +2926,7 @@ impl CanvasModel {
             // above; subsequent rebuild_after_mutation calls share
             // this RefCell so decode cost amortises.
             image_decode_cache,
+            symbol_cache: paged_renderer::pipeline::SymbolCache::default(),
             grow_hint,
             // Perf-FontTable — built once above and reused by every
             // rebuild_after_mutation.
@@ -5641,6 +5712,89 @@ impl CanvasModel {
             } => self
                 .lower_paste(snippet, page_id, *center, mint_offset)
                 .ok(),
+            // Engine ADR 1039 — symbols. The ids are minted here, on the
+            // inserts' number lines; the kernel validates.
+            Mutation::CreateSymbol {
+                name,
+                element_ids,
+                symbol_id,
+                replace,
+                nine_slice,
+            } => {
+                let replace = replace.unwrap_or(true);
+                Some(Operation::CreateSymbol {
+                    symbol_id: symbol_id
+                        .clone()
+                        .unwrap_or_else(|| self.mint_symbol_id(*mint_offset)),
+                    name: name.clone(),
+                    sources: element_ids.iter().map(element_to_node_id).collect(),
+                    replace,
+                    instance_id: replace.then(|| self.mint_page_item_id_with_offset(mint_offset)),
+                    nine_slice: *nine_slice,
+                })
+            }
+            Mutation::RedefineSymbol {
+                symbol_id,
+                element_ids,
+                name,
+                nine_slice,
+                replace,
+            } => {
+                let replace = !element_ids.is_empty() && replace.unwrap_or(true);
+                Some(Operation::RedefineSymbol {
+                    symbol_id: symbol_id.clone(),
+                    sources: element_ids.iter().map(element_to_node_id).collect(),
+                    name: name.clone(),
+                    nine_slice: nine_slice.clone(),
+                    replace,
+                    instance_id: replace.then(|| self.mint_page_item_id_with_offset(mint_offset)),
+                })
+            }
+            Mutation::PlaceSymbolInstance {
+                symbol_id,
+                page_id,
+                at,
+                linear,
+                nine_slice,
+            } => {
+                let (spread_id, (ox, oy), _) = self.page_insert_context(page_id)?;
+                let (x, y) = match at {
+                    Some(p) => *p,
+                    None => {
+                        let page = self
+                            .scene
+                            .spreads
+                            .iter()
+                            .flat_map(|s| s.spread.pages.iter())
+                            .find(|p| p.self_id.as_deref() == Some(page_id.as_str()))?;
+                        (page.bounds.width() / 2.0, page.bounds.height() / 2.0)
+                    }
+                };
+                let [a, b, c, d] = linear.unwrap_or([1.0, 0.0, 0.0, 1.0]);
+                Some(Operation::PlaceSymbolInstance {
+                    symbol_id: symbol_id.clone(),
+                    spread: spread_id,
+                    transform: [a, b, c, d, x + ox, y + oy],
+                    instance_id: Some(self.mint_page_item_id_with_offset(mint_offset)),
+                    nine_slice: *nine_slice,
+                })
+            }
+            Mutation::BreakSymbolLink { element_id } => {
+                let instance = element_id.raw_id().to_string();
+                let demand = paged_mutate::symbol_break_demand(&self.scene, &instance)?;
+                let ids = (0..demand.items)
+                    .map(|_| self.mint_page_item_id_with_offset(mint_offset))
+                    .collect();
+                let story_ids = self.mint_story_ids(demand.stories, *mint_offset);
+                Some(Operation::BreakSymbolLink {
+                    instance,
+                    ids,
+                    story_ids,
+                })
+            }
+            Mutation::DeleteSymbol { symbol_id } => Some(Operation::DeleteSymbol {
+                symbol_id: symbol_id.clone(),
+            }),
             Mutation::SetFlowGrowRule {
                 story_id,
                 grow,
@@ -6003,6 +6157,18 @@ impl CanvasModel {
             if !taken.contains(id.as_str()) {
                 return id;
             }
+        }
+    }
+
+    /// Engine ADR 1039 — a fresh symbol id, `Symbol/u<n>`.
+    fn mint_symbol_id(&self, offset: u64) -> String {
+        let mut n = self.scene.symbols.len() + 1 + offset as usize;
+        loop {
+            let id = format!("Symbol/u{n}");
+            if self.scene.symbol(&id).is_none() {
+                return id;
+            }
+            n += 1;
         }
     }
 
@@ -7125,8 +7291,13 @@ impl CanvasModel {
         &self,
         link_base: Option<&str>,
     ) -> Result<(Vec<u8>, Vec<ExportedLink>), idml_export::WriteError> {
+        // Engine ADR 1039 — IDML has no symbols: the export writes each
+        // instance as its artwork, labelled, with the store in a document
+        // label (`restore_symbols_from_labels` undoes it on reopen).
+        let mut scene = self.export_scene();
+        paged_mutate::expand_symbols_for_interchange(&mut scene);
         let out = idml_export::write_idml_with(
-            &self.export_scene(),
+            &scene,
             &self.source_idml,
             &self.idml_export_options(link_base),
         )?;
@@ -7248,6 +7419,10 @@ impl CanvasModel {
     /// drop is loud rather than silent.
     pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<String> {
         let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
+        // Engine ADR 1039 — every symbol instance is written as artwork.
+        out.extend(paged_mutate::expand_symbols_for_interchange(
+            &mut self.scene.clone(),
+        ));
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
@@ -8648,6 +8823,60 @@ impl CanvasModel {
                         // recompose, and its name.
                         entries.extend(transform_decompose_entries(g.item_transform));
                         entries.push(item_name_entry(spread, raw));
+                        entries
+                    }),
+                // Engine ADR 1039 — a symbol instance: its box (the
+                // definition's), its transform and the overrides it carries.
+                ElementId::Instance(_) => spread
+                    .instances
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        let b = f.bounds;
+                        let o = &f.overrides;
+                        let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameBounds,
+                                value: Some(Value::Bounds([b.top, b.left, b.bottom, b.right])),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTransform,
+                                value: Some(Value::Transform(Some(f.item_transform))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOpacity,
+                                value: Some(Value::Length(o.opacity)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameBlendMode,
+                                value: Some(Value::Text(o.blend_mode.clone().unwrap_or_default())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ElementVisible,
+                                value: Some(Value::Bool(f.visible)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ElementLocked,
+                                value: Some(Value::Bool(f.locked)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceTint,
+                                value: Some(Value::Lengths(
+                                    o.tint
+                                        .map(|t| vec![t.color[0], t.color[1], t.color[2], t.amount])
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceNineSlice,
+                                value: Some(Value::Lengths(
+                                    f.nine_slice
+                                        .map(|n| vec![n.left, n.top, n.right, n.bottom])
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                        ];
+                        entries.extend(transform_decompose_entries(Some(f.item_transform)));
                         entries
                     }),
                 // Punch-list (rides v35) — Polygon / GraphicLine surface
@@ -10374,6 +10603,14 @@ impl CanvasModel {
                         let (bounds, transform) = crate::group_box::group_box(spread, i)?;
                         (ElementId::Group(id(&g.self_id)?), bounds, transform)
                     }
+                    FrameRef::Instance(i) => {
+                        let f = spread.instances.get(i)?;
+                        (
+                            ElementId::Instance(id(&f.self_id)?),
+                            f.bounds,
+                            Some(f.item_transform),
+                        )
+                    }
                 };
                 Some(crate::channel::SpreadMemberSummary {
                     id: element,
@@ -11381,6 +11618,30 @@ impl CanvasModel {
     /// The editor's list-definitions surface renders this;
     /// `continue_across_stories` drives cross-story numbering
     /// continuity in the renderer.
+    /// Engine ADR 1039 — the `symbols` collection.
+    pub fn symbols(&self) -> Vec<crate::channel::SymbolSummary> {
+        self.scene
+            .symbols
+            .iter()
+            .map(|d| crate::channel::SymbolSummary {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                revision: d.revision,
+                bounds: [d.bounds.top, d.bounds.left, d.bounds.bottom, d.bounds.right],
+                nine_slice: d.nine_slice.map(|n| [n.left, n.top, n.right, n.bottom]),
+                item_count: d.items.frames_in_order.len() as u32,
+                instances: self
+                    .scene
+                    .spreads
+                    .iter()
+                    .flat_map(|p| p.spread.instances.iter())
+                    .filter(|i| i.symbol == d.id)
+                    .filter_map(|i| i.self_id.as_ref().map(|id| format!("instance:{id}")))
+                    .collect(),
+            })
+            .collect()
+    }
+
     pub fn numbering_lists(&self) -> Vec<crate::channel::NumberingListSummary> {
         use crate::channel::NumberingListSummary;
         self.scene
@@ -11912,6 +12173,7 @@ impl CanvasModel {
             Sections => json(self.sections()),
             Stories => json(self.stories()),
             NumberingLists => json(self.numbering_lists()),
+            Symbols => json(self.symbols()),
             InkCoverage => json(self.ink_coverage()),
         }
     }
@@ -12215,6 +12477,13 @@ impl CanvasModel {
                                 stack.push(nested);
                             }
                         }
+                        paged_model::FrameRef::Instance(i) => {
+                            if let Some(f) = spread.instances.get(i) {
+                                if let Some(id) = f.self_id.as_deref() {
+                                    out.push(ElementId::Instance(id.to_string()));
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -12503,6 +12772,13 @@ impl CanvasModel {
                         .position(|g| g.self_id.as_deref() == Some(raw))
                         .and_then(|gi| crate::group_box::group_box(spread, gi))
                         .map(|(bounds, transform)| (bounds, transform, false)),
+                    // Engine ADR 1039 — an instance's box is its
+                    // definition's, oriented by its transform.
+                    ElementId::Instance(_) => spread
+                        .instances
+                        .iter()
+                        .find(|f| f.self_id.as_deref() == Some(raw))
+                        .map(|f| (f.bounds, Some(f.item_transform), false)),
                     // StoryRange is a property-address, not a
                     // geometric element — its bounds are the host
                     // frame's. The caret/selection-rect surface
@@ -12820,7 +13096,7 @@ impl CanvasModel {
                             f.subpath_open.as_slice(),
                         )
                     }),
-                ElementId::Group(_) => None,
+                ElementId::Group(_) | ElementId::Instance(_) => None,
                 // StoryRange doesn't carry path anchors.
                 ElementId::StoryRange { .. } => None,
                 // W3.A1 — tables / cells have no path-anchor array.
@@ -13006,6 +13282,7 @@ impl CanvasModel {
             // Perf-S — the decode cache is content-addressed (URI →
             // DecodedImage), not positional, so every build may share it.
             image_decode_cache: Some(&self.image_decode_cache),
+            symbol_cache: Some(&self.symbol_cache),
             grow_hint: Some(&self.grow_hint),
             // Perf-FontTable — reuse the shaping table built at load
             // (saves the ~225ms harvest+resolve walk).
@@ -15853,6 +16130,7 @@ fn frame_self_id(spread: &paged_model::Spread, fr: paged_model::FrameRef) -> Opt
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.clone(),
         FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.clone(),
         FrameRef::Group(i) => spread.groups.get(i)?.self_id.clone(),
+        FrameRef::Instance(i) => spread.instances.get(i)?.self_id.clone(),
     }
 }
 
