@@ -38,6 +38,12 @@
 #   PAGED_PROBE_STAGE          where the concatenated script and the raw
 #                              reply are kept (default: a mktemp dir, removed
 #                              on success, KEPT on failure for diagnosis)
+#   PAGED_PROBE_INPUTS         a directory of input files a probe opens (the
+#                              probe reads it as PROBE_INPUTS; PROBE_STAGE is
+#                              the staging directory it may write into)
+#   PAGED_PROBE_WRITER         the judge in lib/ (default write-fixture.mjs;
+#                              write-render-fixture.mjs for a probe whose
+#                              answer is files: it copies them beside <out>)
 #
 # Exit codes: 0 recorded · 2 usage · 3 Illustrator did not answer ·
 #             4 Illustrator answered with something that is not a recording.
@@ -64,7 +70,7 @@ mkdir -p "$(dirname "$2")"
 OUT="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
 LIB="$ROOT/scripts/illustrator/lib/probe-lib.jsx"
 [ -f "$LIB" ] || die 2 "missing $LIB"
-WRITER="$ROOT/scripts/illustrator/lib/write-fixture.mjs"
+WRITER="$ROOT/scripts/illustrator/lib/${PAGED_PROBE_WRITER:-write-fixture.mjs}"
 [ -f "$WRITER" ] || die 2 "missing $WRITER"
 
 APP="${ILLUSTRATOR_APP:-Adobe Illustrator}"
@@ -97,7 +103,12 @@ RAW="$STAGE/$NAME.raw.json"
 ERR="$STAGE/$NAME.osascript.err"
 
 # --- 0. the script Illustrator will be handed --------------------------------
+# Two variables lead the text: where the probe may write (the stage) and
+# where its input files are. Only a render probe reads them.
+INPUTS="${PAGED_PROBE_INPUTS:-}"
+[ -z "$INPUTS" ] || INPUTS="$(cd "$INPUTS" && pwd)"
 {
+  printf 'var PROBE_STAGE = "%s";\nvar PROBE_INPUTS = "%s";\n' "$STAGE" "$INPUTS"
   cat "$LIB"
   printf '\n'
   cat "$PROBE"
@@ -227,7 +238,7 @@ DOCS_AFTER="$(ping_app "String(app.documents.length)")" ||
 # --- 4 + 6. judge the artifact, then write the fixture ----------------------
 SHA="$(cat "$SRC" | shasum -a 256 | cut -d' ' -f1)"
 bun "$WRITER" \
-  "$RAW" "$OUT" "$NAME" "${PROBE#"$ROOT"/}" "$SHA" "$(sw_vers -productVersion)" ||
+  "$RAW" "$OUT" "$NAME" "${PROBE#"$ROOT"/}" "$SHA" "$(sw_vers -productVersion)" "$STAGE" ||
   die 4 "Illustrator's reply was refused; nothing was written to $OUT" \
     "Raw reply kept: $RAW"
 

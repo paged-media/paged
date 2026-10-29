@@ -35,6 +35,29 @@ Recorded with **Adobe Illustrator 30.1.0** (build 136R, de_DE, macOS
 | `pathfinder-region`  | 9     | Divide: one piece per face, the overlap in the FRONT fill. Trim: front whole (with the crossing points inserted), back minus front. Merge: Trim, unless the fills are equal. Crop: back clipped to front, in the BACK fill. Outline: open zero-weight strokes cut at the crossings. Minus Back: FRONT minus back. |
 | `compound-path`      | 9     | Make Compound Path keeps the fill rule NON-ZERO and rewrites direction by PAINT ORDER: the backmost path clockwise, every other counter-clockwise, whatever the inputs were. So overlaps are knocked out, and a shape nested three levels deep is solid again (31600, where even-odd would give 31200).           |
 
+**Render probes.** `probes/mesh-render.jsx` answers in FILES, not paths:
+it opens the engine's PDF patch shadings (`PAGED_PROBE_INPUTS`), exports
+Illustrator's rendering as a PNG (1 px = 1 pt) and its own PDF into the
+stage (`PROBE_STAGE`), and `lib/write-render-fixture.mjs` copies both beside
+the fixture with their sha256. It is replayed by the ENGINE (engine ADR
+1040), not by draw-bundle:
+
+```bash
+(cd ../../engine/core && cargo test -p paged-export-pdf --test it \
+  write_illustrator_oracle_inputs -- --ignored)       # the input PDFs
+PAGED_PROBE_INPUTS=../../engine/core/crates/paged-export-pdf/tests/fixtures/mesh-oracle \
+PAGED_PROBE_WRITER=write-render-fixture.mjs \
+  bash scripts/illustrator/run-probe.sh scripts/illustrator/probes/mesh-render.jsx \
+  ../../engine/core/crates/paged-export-pdf/tests/fixtures/mesh-oracle/mesh-render.illustrator.json
+```
+
+Recorded 2026-10-29: the engine's raster agrees with Illustrator's within
+2–4 levels on a curved grid and a tensor patch, and within 8 on a bilinear
+patch near a corner (Illustrator's coarser tessellation; the exact value
+is the engine's). Illustrator writes the meshes back as shading types 6
+and 7, as the engine does. A freeform gradient cannot be created by
+script, so it has no probe.
+
 Each fixture's `script_sha256` identifies the exact text (library + probe)
 that produced it. The library has grown since the first recording (stroke,
 paint and fill-rule fields), so older fixtures carry fewer fields; re-record
