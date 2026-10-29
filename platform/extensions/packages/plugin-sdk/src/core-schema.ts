@@ -780,6 +780,9 @@ export const CORE_PATHS: Record<
   // gradient's start as [x, y] in the frame's inner coordinates.
   frameGradientStrokeMode: V71,
   frameGradientFillStart: V71,
+  // Engine ADR 1040 (protocol 76): the frame's gradient mesh or freeform
+  // gradient, whole (`{ type: "fillMesh", value: MeshFillSpec | null }`).
+  frameFillMesh: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",
