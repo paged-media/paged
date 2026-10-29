@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 785,
+    "command": 790,
     "keybinding": 164,
-    "menu": 557,
-    "panel": 141,
+    "menu": 559,
+    "panel": 142,
     "tool": 114
   },
   "features": [
@@ -2866,6 +2866,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.applyTheme",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.addComment",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2886,6 +2891,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.browseThemes",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.copyFormat",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2902,6 +2912,11 @@
     },
     {
       "id": "command:media.paged.slide.command.deleteSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.design",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3096,6 +3111,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.remapThemeReference",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.removeAnimation",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -3127,6 +3147,11 @@
     },
     {
       "id": "command:media.paged.slide.smartArtPoints",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.themes",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -4929,6 +4954,16 @@
       "id": "menu:Data/Refresh from sources",
       "kind": "menu",
       "owner": "media.paged.data"
+    },
+    {
+      "id": "menu:Design/Browse for Themes…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Design/Themes",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:Draw/Appearance/Add fill",
@@ -7737,6 +7772,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.deck",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.design",
       "kind": "panel",
       "owner": "media.paged.slide"
     },
