@@ -133,3 +133,10 @@ refused without one).
 - [ADR 464](464-layers-at-their-own-bounds.md) — bounded layers keep their bounds through a depth
   or mode change
 - [ADR 478](478-psd-write-depth.md) — the 16-bit layered save the 16-bit import now feeds
+
+## Amendment, 2026-10-29 (ADRs 480, 481)
+
+Of the deferred half: the fold past the texture limit and on the CPU is ADR 480; N-channel
+planes (the PixelFormat amendment), a CMYK document folded in its inks, and the layered save
+in a converted document's mode and depth are ADR 481. 32-bit float, Indexed, Duotone and
+Multichannel, and Lab blending in L*a*b* remain open (ADR 481, Deferred).

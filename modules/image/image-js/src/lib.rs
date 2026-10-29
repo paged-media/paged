@@ -67,6 +67,7 @@ pub mod mip;
 pub mod patchmatch;
 pub mod paths;
 pub mod pixels;
+pub mod planes;
 pub mod preset_files;
 pub mod psd_layer_ext;
 pub mod psd_source;
@@ -4999,8 +5000,35 @@ mod wasm {
             }
             // The records too: blending ranges, fill opacity, locks and
             // fill content live there, not on the plates.
-            let stack = LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
-                .map_err(ingest_err)?;
+            let mut stack =
+                LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
+                    .map_err(ingest_err)?;
+            // The document keeps the file's mode, so an edit lands in its
+            // colours and the layered save writes the mode back.
+            if let Some(mode) = crate::color_mode::DocMode::of_psd(file) {
+                stack.adopt_mode(mode);
+            }
+            // A CMYK file's layers keep its own inks, which the ink fold
+            // composites and the layered save writes (image ADR 481).
+            if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
+                let through = |f: &dyn Fn(&[u8; 4]) -> [u8; 3]| {
+                    move |ink: &[u8]| -> Vec<u8> {
+                        ink.as_chunks::<4>()
+                            .0
+                            .iter()
+                            .flat_map(|p| {
+                                let c = f(p);
+                                [c[0], c[1], c[2], 255]
+                            })
+                            .collect()
+                    }
+                };
+                let cmy = file.layer_plates_rgba8_via(&through(&|p| [p[0], p[1], p[2]]));
+                let k = file.layer_plates_rgba8_via(&through(&|p| [p[3]; 3]));
+                if let (Ok(cmy), Ok(k)) = (cmy, k) {
+                    stack.attach_inks(&cmy, &k);
+                }
+            }
             Ok::<_, JsValue>((import, stack))
         })?;
         let smart = import.layers.iter().any(|p| p.smart);

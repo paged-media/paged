@@ -635,3 +635,201 @@ fn blending_converted_cmyk_layers_in_rgb_is_measured_per_mode__feat__image_psd_l
     println!("{}", report.join("\n"));
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
+
+// ─────────────────────────── 4. the ink fold ──────────────────────────
+
+/// A CMYK document opened as the app opens it (image ADR 481): its mode
+/// and profile adopted, every layer's own inks kept, so the composite
+/// folds in inks. The import lifts the `cmyk-blend` blocker (the ink fold
+/// is what it was waiting for); a non-separable layer is removed, so the
+/// stack folds in inks (`keep` decides by layer name).
+fn ink_stack(file: &PsdFile, keep: &dyn Fn(&str) -> bool) -> LayerStack {
+    let ink = image_js::ingest::psd_ink_transform(file);
+    let convert = |cmyk: &[u8]| ink.to_rgba8(cmyk);
+    let import = file
+        .layer_plates_rgba8_via_measuring_cmyk_blends(&convert)
+        .expect("imports");
+    let mut stack =
+        LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers)).expect("stack");
+    stack.adopt_mode(image_js::color_mode::DocMode::of_psd(file).expect("a CMYK document"));
+    let through = |f: fn(&[u8; 4]) -> [u8; 3]| {
+        move |ink: &[u8]| -> Vec<u8> {
+            ink.as_chunks::<4>()
+                .0
+                .iter()
+                .flat_map(|p| {
+                    let c = f(p);
+                    [c[0], c[1], c[2], 255]
+                })
+                .collect()
+        }
+    };
+    let cmy = file
+        .layer_plates_rgba8_via_measuring_cmyk_blends(&through(|p| [p[0], p[1], p[2]]))
+        .expect("cmy");
+    let k = file
+        .layer_plates_rgba8_via_measuring_cmyk_blends(&through(|p| [p[3]; 3]))
+        .expect("k");
+    let kept = stack.attach_inks(&cmy, &k);
+    assert_eq!(kept, import.layers.len(), "every layer keeps its own inks");
+    for i in (0..stack.len()).rev() {
+        if !keep(&stack.layers()[i].name) {
+            stack.remove(i).expect("remove");
+        }
+    }
+    stack
+}
+
+/// The ink fold against Photoshop's own CMYK composite (through our
+/// transform, so only the blend is judged), per `blend-modes` tile, for
+/// every separable mode — the modes the RGB fold missed by 46 to 225
+/// levels ([`TILES`]) — and on `normal-stack`, whose 60 % layer, 50 %
+/// group and feathered edges the RGB fold missed by 61. Max levels and
+/// ΔE00 p95 per tile, measured 2026-10-29 (Photoshop 27.10's recording):
+/// the p95 is the two CMMs' own difference (0.6 everywhere, as the
+/// merged composite's conversion is); the largest single texels sit on
+/// singular points — Color Dodge where the source is full brightness
+/// (one texel class 205 levels: Photoshop's dodge by paper white is not
+/// the formula's limit), Overlay and Hard Light at the 50 % switch.
+const INK_TILES: &[(&str, u8, f64)] = &[
+    ("normal-100", 3, 0.75),
+    ("normal-50", 2, 0.75),
+    ("multiply", 3, 0.8),
+    ("screen", 2, 0.65),
+    ("overlay", 7, 0.8),
+    ("darken", 4, 0.8),
+    ("lighten", 2, 0.7),
+    ("color-burn", 3, 0.8),
+    ("color-dodge", 205, 0.75),
+    ("soft-light", 3, 0.75),
+    ("hard-light", 6, 0.7),
+    ("difference", 5, 1.2),
+    ("exclusion", 2, 1.0),
+    ("linear-burn", 4, 0.8),
+    ("linear-dodge", 2, 0.75),
+    ("multiply-50", 2, 0.8),
+];
+
+#[test]
+#[allow(non_snake_case)]
+fn a_cmyk_document_composites_in_its_inks_as_photoshop_does__feat__image_io_depth_color_modes() {
+    let file = psd("blend-modes");
+    let nonsep = ["hue", "saturation", "color", "luminosity"];
+    let stack = ink_stack(&file, &|name| {
+        !nonsep.iter().any(|n| name.eq_ignore_ascii_case(n))
+    });
+    assert_eq!(
+        stack.ink_fold_declines(),
+        None,
+        "a separable plan folds in inks"
+    );
+    let ctx = image_conformance::device::test_device();
+    let ours = pollster::block_on(stack.composite(ctx, None))
+        .expect("the ink fold")
+        .to_vec();
+    let theirs = ours_converted_merged(&file);
+    let w = file.header.width as usize;
+    let pick = |buf: &[u8], x0: usize, y0: usize| -> Vec<u8> {
+        (y0..y0 + 32)
+            .flat_map(|y| buf[(y * w + x0) * 4..(y * w + x0 + 32) * 4].to_vec())
+            .collect()
+    };
+    let mut report = Vec::new();
+    let mut problems = Vec::new();
+    for (i, &(id, _, _, _)) in TILES.iter().enumerate() {
+        let Some(&(_, max, de)) = INK_TILES.iter().find(|t| t.0 == id) else {
+            continue;
+        };
+        let (x0, y0) = ((i % 5) * 32, (i / 5) * 32);
+        let d = compare_rgba8(
+            &pick(&ours, x0, y0),
+            &pick(&theirs, x0, y0),
+            Reference::Straight,
+        );
+        let m = d.channels[..3].iter().map(|c| c.max).max().unwrap_or(0);
+        report.push(format!(
+            "{id:<13} max {m:>3}  dE00 p95 {:>5.2}",
+            d.delta_e_p95
+        ));
+        if m > max || d.delta_e_p95 > de {
+            problems.push(format!(
+                "{id}: max {m} dE00 p95 {:.2}, stated {max} / {de}",
+                d.delta_e_p95
+            ));
+        }
+    }
+    let file = psd("normal-stack");
+    let stack = ink_stack(&file, &|_| true);
+    let ours = pollster::block_on(stack.composite(ctx, None)).expect("the ink fold");
+    let (m, mean) = dist(&ours, &ours_converted_merged(&file));
+    report.push(format!("normal-stack  max {m:>3}  mean {mean:.3}"));
+    if m > NORMAL_STACK_INK_MAX {
+        problems.push(format!(
+            "normal-stack: max {m}, stated {NORMAL_STACK_INK_MAX}"
+        ));
+    }
+    println!("{}", report.join("\n"));
+    assert!(
+        problems.is_empty(),
+        "{}\n{}",
+        problems.join("\n"),
+        report.join("\n")
+    );
+}
+
+/// `normal-stack` folded in inks (measured 2; the RGB fold: 61 levels).
+const NORMAL_STACK_INK_MAX: u8 = 3;
+
+/// What is not separable folds in RGB, and says so; an edit keeps the
+/// file's inks outside its damage and takes the profile's inside it.
+#[test]
+#[allow(non_snake_case)]
+fn the_ink_fold_names_what_it_declines_and_an_edit_keeps_the_inks__feat__image_io_depth_color_modes(
+) {
+    let all = ink_stack(&psd("blend-modes"), &|_| true);
+    assert_eq!(all.ink_fold_declines(), Some("a non-separable blend mode"));
+
+    let mut s = ink_stack(&psd("normal-stack"), &|_| true);
+    let i = 1;
+    let before = s.layers()[i].ext.inks.0.clone().expect("the file's inks");
+    let before_cmy = before.cmy.canvas().to_rgba8().into_owned();
+    s.set_active(i).expect("active");
+    let (w, h) = (s.width(), s.height());
+    let mut px = s.layers()[i].rgba.canvas().to_rgba8().into_owned();
+    let damage = image_core::Region::new(20, 12, 6, 5);
+    for y in 12..17 {
+        for x in 20..26 {
+            let o = ((y * w + x) * 4) as usize;
+            px[o..o + 4].copy_from_slice(&[10, 200, 30, 255]);
+        }
+    }
+    s.edit_active(
+        "paint",
+        damage,
+        image_js::pixels::Pixels::from_rgba8(std::sync::Arc::from(px)),
+    )
+    .expect("edit");
+    let after = s.layers()[i].ext.inks.0.clone().expect("inks carried");
+    assert!(
+        after.of(&s.layers()[i].rgba),
+        "the inks are the new pixels'"
+    );
+    let after_cmy = after.cmy.canvas().to_rgba8().into_owned();
+    let inside = |x: u32, y: u32| (20..26).contains(&x) && (12..17).contains(&y);
+    let mut changed_inside = false;
+    for y in 0..h {
+        for x in 0..w {
+            let o = ((y * w + x) * 4) as usize;
+            if inside(x, y) {
+                changed_inside |= after_cmy[o..o + 3] != before_cmy[o..o + 3];
+            } else {
+                assert_eq!(
+                    after_cmy[o..o + 4],
+                    before_cmy[o..o + 4],
+                    "({x},{y}) outside the damage"
+                );
+            }
+        }
+    }
+    assert!(changed_inside, "the damage takes the new pixels' inks");
+}

@@ -1492,7 +1492,16 @@ impl LayerStack {
             snapshots: Vec::new(),
             next_snapshot_id: 1,
             next_step_id: 1,
-            mode: Default::default(),
+            // A CMYK document stays one (its profile, when the caller has
+            // the file, comes with `adopt_mode`).
+            mode: if import.converted_from_cmyk {
+                crate::color_mode::DocMode {
+                    mode: crate::color_mode::ColorMode::Cmyk,
+                    cmyk_profile: None,
+                }
+            } else {
+                Default::default()
+            },
         };
         stack.styles.global_light = import.global_light;
         if let Some(deep) = stack
@@ -2897,7 +2906,22 @@ impl LayerStack {
                 .or_insert_with(|| Arc::clone(&before));
             self.history_states.previous.insert(id, before);
         }
+        // A CMYK layer's own inks (ADR 481) are kept outside the damage.
+        let old_inks = {
+            let l = &self.layers[self.active];
+            l.ext.inks.0.clone().filter(|i| i.of(&l.rgba))
+        };
         self.layers[self.active].rgba = pixels.into();
+        let inks = match (old_inks, self.ink_transform()?) {
+            (Some(old), Some(t)) => Some(Arc::new(old.carried(
+                &t,
+                self.layers[self.active].rgba.canvas(),
+                clipped,
+                self.width,
+            ))),
+            _ => None,
+        };
+        self.layers[self.active].ext.inks = InkCell(inks);
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
             self.push_pixel_step();
         }
@@ -3404,6 +3428,60 @@ impl LayerStack {
         &self.mode
     }
 
+    /// Keep a CMYK file's own INKS on the layers read from it (image ADR
+    /// 481): `cmy` and `k` are the same import read through transforms
+    /// that hand the ink through (`PsdFile::layer_plates_rgba8_via`). The
+    /// layers read from records pair with the import's plates in order; a
+    /// layer whose shape is not its plate's keeps none (its inks are then
+    /// its pixels through the profile). Answers how many layers kept theirs.
+    pub fn attach_inks(
+        &mut self,
+        cmy: &image_psd::LayerImport,
+        k: &image_psd::LayerImport,
+    ) -> usize {
+        let from_records: Vec<usize> = (0..self.layers.len())
+            .filter(|&i| self.layers[i].ext.source.is_some())
+            .collect();
+        if from_records.len() != cmy.layers.len() || cmy.layers.len() != k.layers.len() {
+            return 0;
+        }
+        let mut kept = 0;
+        for (n, &i) in from_records.iter().enumerate() {
+            let (c, kp) = (&cmy.layers[n], &k.layers[n]);
+            let l = &mut self.layers[i];
+            if !l.is_pixels() || l.rgba.is_16bit() {
+                continue;
+            }
+            // The plate at the layer's shape: its own rectangle, or the
+            // canvas (a plate may name the whole canvas as its rectangle).
+            let (w, h) = (cmy.width, cmy.height);
+            let at_shape = |p: &image_psd::LayerPlate| -> Option<Vec<u8>> {
+                match (l.rgba.bounded(), p.rect) {
+                    (Some(b), Some(r)) if b.rect == r => Some(p.rgba.clone()),
+                    (None, None) => Some(p.rgba.clone()),
+                    (None, Some(_)) => Some(p.canvas_rgba8(w, h)),
+                    _ => None,
+                }
+            };
+            let (Some(ci), Some(ki)) = (at_shape(c), at_shape(kp)) else {
+                continue;
+            };
+            if let Some(inks) = crate::planes::InkPlanes::from_ink_rgba8(&l.rgba, &ci, &ki) {
+                l.ext.inks = InkCell(Some(Arc::new(inks)));
+                kept += 1;
+            }
+        }
+        kept
+    }
+
+    /// Take the mode a document was OPENED in (a CMYK, Grayscale or Lab
+    /// file): its pixels already are that mode's colours, so nothing is
+    /// projected and nothing is recorded — the layered save then writes
+    /// the file's own mode back (image ADR 481).
+    pub fn adopt_mode(&mut self, mode: crate::color_mode::DocMode) {
+        self.mode = mode;
+    }
+
     /// Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color:
     /// every layer's pixels (each at its bounds, its alpha kept) put
     /// through the new mode's space and back ([`crate::color_mode`]), and
@@ -3506,6 +3584,11 @@ impl LayerStack {
                 return Ok(px.at_depth(depth));
             }
             _ => {}
+        }
+        // A CMYK document folds in its inks (ADR 481) when its plan is
+        // separable; otherwise in RGB, as below.
+        if let Some(px) = self.composite_inks(ctx, &plates, depth).await? {
+            return Ok(px);
         }
         // Without a device the fold runs on the CPU twins (ADR 480):
         // pixel, adjustment, group and clipping layers; a style needs one.

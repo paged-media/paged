@@ -66,6 +66,11 @@ use crate::psd_layer_ext::raw_block;
 use crate::psd_source::{state_of, KindState, PsdSource};
 use crate::saveback::PsdSaveBackShape;
 
+/// The image resource that holds the document's ICC profile.
+const ICC_PROFILE_ID: u16 = 1039;
+/// The image resource that marks a document UNTAGGED (its profile ignored).
+const ICC_UNTAGGED_ID: u16 = 1041;
+
 fn err(e: image_psd::PsdError) -> IngestError {
     IngestError::Decode(e.to_string())
 }
@@ -130,55 +135,122 @@ fn unwritable(l: &Layer, a: &crate::layers::Adjustment) -> IngestError {
 
 // ─────────────────────────── the document's store ──────────────────────────
 
+/// How the document stores its colours.
+enum Kind {
+    Rgb,
+    /// The file's own CMYK (`Some(profile)` when it embeds one): inks
+    /// through `paged_raster::srgb8_to_cmyk8`, as ADR 478 writes them.
+    Cmyk(Option<Vec<u8>>),
+    /// A mode the document was CONVERTED to in paged (Image ▸ Mode, ADR
+    /// 479): the stack's pixels, already projected into that mode, written
+    /// as its device values through the same transform (image ADR 481).
+    Device(
+        crate::color_mode::ColorMode,
+        crate::color_mode::ModeTransform,
+    ),
+}
+
 /// How the document stores its pixels.
 struct Store {
     container: Container,
     sixteen: bool,
-    /// `Some(profile)` for a CMYK document.
-    cmyk: Option<Option<Vec<u8>>>,
+    kind: Kind,
     width: u32,
     height: u32,
+    /// The document's mode differs from the file's (Image ▸ Mode).
+    remode: bool,
+    /// Its depth does (Image ▸ Mode ▸ 8/16 Bits/Channel).
+    redepth: bool,
+}
+
+/// The PSD colour mode of a document mode.
+fn psd_mode(m: crate::color_mode::ColorMode) -> ColorMode {
+    use crate::color_mode::ColorMode as M;
+    match m {
+        M::Rgb => ColorMode::Rgb,
+        M::Gray => ColorMode::Grayscale,
+        M::Cmyk => ColorMode::Cmyk,
+        M::Lab => ColorMode::Lab,
+    }
 }
 
 impl Store {
-    fn of(file: &PsdFile, width: u32, height: u32) -> Result<Store, IngestError> {
+    /// The store the save writes: the file's own depth and mode, or —
+    /// when the stack was converted (Image ▸ Mode) — the stack's.
+    fn of(file: &PsdFile, stack: &LayerStack) -> Result<Store, IngestError> {
+        let (width, height) = (stack.width(), stack.height());
         let h = &file.header;
-        if h.depth != 8 && h.depth != 16 {
-            return Err(IngestError::Unsupported(format!(
-                "a layered PSD save at depth {} (8- and 16-bit documents are written)",
-                h.depth
-            )));
-        }
-        let cmyk = match h.color_mode {
-            ColorMode::Rgb => None,
-            ColorMode::Cmyk => Some(file.resources.icc_profile().map(<[u8]>::to_vec)),
-            other => {
-                return Err(IngestError::Unsupported(format!(
-                    "a layered PSD save in colour mode {other:?} (RGB and CMYK are written)"
-                )))
-            }
-        };
         if h.width != width || h.height != height {
             return Err(IngestError::Unsupported(format!(
                 "layered PSD save: the layers are {width}×{height}, the file is {}×{}",
                 h.width, h.height
             )));
         }
+        let sixteen = stack.depth() == image_core::SampleDepth::U16;
+        let mode = stack.mode();
+        let kind = if psd_mode(mode.mode) == h.color_mode {
+            match h.color_mode {
+                ColorMode::Rgb => Kind::Rgb,
+                ColorMode::Cmyk => Kind::Cmyk(file.resources.icc_profile().map(<[u8]>::to_vec)),
+                _ => Self::device(mode)?,
+            }
+        } else {
+            match mode.mode {
+                crate::color_mode::ColorMode::Rgb => Kind::Rgb,
+                _ => Self::device(mode)?,
+            }
+        };
         Ok(Store {
             container: file.container,
-            sixteen: h.depth == 16,
-            cmyk,
+            sixteen,
+            remode: psd_mode(mode.mode) != h.color_mode,
+            redepth: h.depth != if sixteen { 16 } else { 8 },
+            kind,
             width,
             height,
         })
     }
 
-    /// Colour channel ids: R, G, B — or C, M, Y, K.
+    /// Every record's channels must be written anew: they were stored at
+    /// another depth or in another mode.
+    fn reencode(&self) -> bool {
+        self.remode || self.redepth
+    }
+
+    fn device(mode: &crate::color_mode::DocMode) -> Result<Kind, IngestError> {
+        match crate::color_mode::ModeTransform::new(mode)? {
+            Some(t) => Ok(Kind::Device(mode.mode, t)),
+            // A CMYK mode without a profile holds every sRGB colour; its
+            // inks are the plain formula's, as the file's own CMYK
+            // without a profile writes them.
+            None => Ok(Kind::Cmyk(None)),
+        }
+    }
+
+    /// Does the document store inks (an adjustment layer would apply to
+    /// them, not to the RGB the stack evaluates)?
+    fn inks(&self) -> bool {
+        matches!(
+            self.kind,
+            Kind::Cmyk(_) | Kind::Device(crate::color_mode::ColorMode::Cmyk, _)
+        )
+    }
+
+    /// The PSD colour mode written.
+    fn psd_mode(&self) -> ColorMode {
+        match &self.kind {
+            Kind::Rgb => ColorMode::Rgb,
+            Kind::Cmyk(_) => ColorMode::Cmyk,
+            Kind::Device(m, _) => psd_mode(*m),
+        }
+    }
+
+    /// Colour channel ids: R, G, B — C, M, Y, K — grey — L, a, b.
     fn colour_ids(&self) -> &'static [i16] {
-        if self.cmyk.is_some() {
-            &[0, 1, 2, 3]
-        } else {
-            &[0, 1, 2]
+        match self.psd_mode() {
+            ColorMode::Cmyk => &[0, 1, 2, 3],
+            ColorMode::Grayscale => &[0],
+            _ => &[0, 1, 2],
         }
     }
 
@@ -216,7 +288,24 @@ impl Store {
         let colours = self.colour_ids().len();
         let mut planes = vec![vec![0u16; n]; colours];
         let mut alpha = vec![0u16; n];
-        if let Some(profile) = &self.cmyk {
+        if let Kind::Device(mode, t) = &self.kind {
+            let full = if self.sixteen { 65535.0 } else { 255.0 };
+            let rgb: Vec<f32> = (0..n)
+                .flat_map(|i| (0..3).map(move |c| f32::from(px.sample16(i, c)) / 65535.0))
+                .collect();
+            let dev = t.device_of(&rgb);
+            let k = colours;
+            for i in 0..n {
+                let d = &dev[i * k..i * k + k];
+                for (c, plane) in planes.iter_mut().enumerate() {
+                    plane[i] = device_sample(*mode, c, d[c], self.sixteen);
+                }
+                let a = f32::from(px.sample16(i, 3)) / 65535.0;
+                alpha[i] = (a * full).round() as u16;
+            }
+            return (planes, alpha);
+        }
+        if let Kind::Cmyk(profile) = &self.kind {
             let rgba = px.to_rgba8();
             let rgb: Vec<[u8; 3]> = rgba
                 .as_chunks::<4>()
@@ -551,8 +640,11 @@ fn built_record(store: &Store, l: &Layer) -> Result<LayerRecord, IngestError> {
     let mut addl = Vec::new();
     let (rect, mut channels, mut channel_data) = match &l.kind {
         LayerKind::Adjustment(a) => {
-            if store.cmyk.is_some() {
+            if store.inks() {
                 return Err(cmyk_adjustment(l));
+            }
+            if store.remode {
+                return Err(converted_adjustment(l));
             }
             addl.extend(adjustment_blocks(a).ok_or_else(|| unwritable(l, a))?);
             let (i, d) = store.empty_channels()?;
@@ -628,6 +720,33 @@ fn built_record(store: &Store, l: &Layer) -> Result<LayerRecord, IngestError> {
     })
 }
 
+fn converted_adjustment(l: &Layer) -> IngestError {
+    IngestError::Unsupported(format!(
+        "adjustment layer \"{}\" is in a document converted to another colour mode: the stack \
+         evaluates it in RGB, Photoshop would apply it to the new mode's channels",
+        l.name
+    ))
+}
+
+/// A device value (the mode's own number: grey or ink 0–1, L* 0–100, a* b*
+/// ±128) as the sample a PSD of that mode stores: grey as is, ink
+/// INVERTED (the maximum is no ink), L* over the full range, a* and b*
+/// offset to the middle (+128 at 8 bits; 256 per unit about 32768 at 16,
+/// as Photoshop writes them — measured on its own Lab documents of
+/// `mode-conversions`).
+fn device_sample(mode: crate::color_mode::ColorMode, channel: usize, v: f32, sixteen: bool) -> u16 {
+    use crate::color_mode::ColorMode as M;
+    let full = if sixteen { 65535.0 } else { 255.0 };
+    let s = match (mode, channel) {
+        (M::Cmyk, _) => (1.0 - v.clamp(0.0, 1.0)) * full,
+        (M::Lab, 0) => v.clamp(0.0, 100.0) / 100.0 * full,
+        (M::Lab, _) if sixteen => v * 256.0 + 32768.0,
+        (M::Lab, _) => v + 128.0,
+        _ => v.clamp(0.0, 1.0) * full,
+    };
+    s.round().clamp(0.0, full) as u16
+}
+
 fn cmyk_adjustment(l: &Layer) -> IngestError {
     IngestError::Unsupported(format!(
         "adjustment layer \"{}\" is new or edited in a CMYK document: the stack evaluates it in \
@@ -648,11 +767,26 @@ fn source_record(
 ) -> Result<LayerRecord, IngestError> {
     let now = state_of(l);
     let was = &src.imported;
-    if now == *was && first {
+    if now == *was && first && !store.reencode() {
         return Ok(src.record.clone());
     }
     let mut rec = src.record.clone();
     rec.extra_raw = None;
+    if store.remode {
+        // An adjustment applies to the mode's channels in Photoshop, and
+        // Blend If's ranges are per channel: neither carries over.
+        if let LayerKind::Adjustment(_) = &l.kind {
+            return Err(converted_adjustment(l));
+        }
+        if l.live_blend_if().is_some() {
+            return Err(IngestError::Unsupported(format!(
+                "layer \"{}\" has Blend If ranges, which are per channel: they do not carry \
+                 over to another colour mode",
+                l.name
+            )));
+        }
+        rec.blend_ranges = BlendRanges::default();
+    }
     if !first {
         rec.addl.retain(|a| &a.key != b"lyid");
     }
@@ -714,7 +848,7 @@ fn source_record(
     if now.kind != was.kind {
         match (&l.kind, &was.kind) {
             (LayerKind::Adjustment(a), KindState::Adjustment(_)) => {
-                if store.cmyk.is_some() {
+                if store.inks() {
                     return Err(cmyk_adjustment(l));
                 }
                 let blocks = adjustment_blocks(a).ok_or_else(|| unwritable(l, a))?;
@@ -746,9 +880,11 @@ fn source_record(
             _ => {}
         }
     }
+    // Another depth or mode: every channel is written anew.
     let pixels_changed = now.pixels != was.pixels
-        || (now.kind != was.kind && !matches!(l.kind, LayerKind::Adjustment(_)));
-    let mask_changed = now.mask != was.mask;
+        || (now.kind != was.kind && !matches!(l.kind, LayerKind::Adjustment(_)))
+        || store.reencode();
+    let mask_changed = now.mask != was.mask || store.reencode();
     if pixels_changed || mask_changed {
         // Keep the channels that did not change, in their order.
         let mut kept: Vec<(ChannelInfo, ChannelData)> = rec
@@ -823,7 +959,7 @@ pub fn psd_write_stack(
     composite: &[u8],
 ) -> Result<PsdSaveBackShape, IngestError> {
     let (width, height) = (stack.width(), stack.height());
-    let store = Store::of(file, width, height)?;
+    let store = Store::of(file, stack)?;
     let n = width as usize * height as usize;
     if composite.len() != n * 4 {
         return Err(IngestError::Decode(
@@ -904,6 +1040,33 @@ pub fn psd_write_stack(
     // The merged composite (with transparency), and a header that says so.
     file.composite = store.composite(composite)?;
     file.header.channels = store.colour_ids().len() as u16 + 1;
+    if store.reencode() {
+        file.header.depth = if store.sixteen { 16 } else { 8 };
+    }
+    if store.remode {
+        // The new mode's header and the profile its values are in: the
+        // document's CMYK profile, Gray Gamma 2.2, sRGB — Lab needs none.
+        file.header.color_mode = store.psd_mode();
+        file.color_mode.raw.clear();
+        let icc = match &store.kind {
+            Kind::Rgb => paged_color::cms::moxcms_srgb_icc().ok(),
+            Kind::Cmyk(p) => p.clone(),
+            Kind::Device(crate::color_mode::ColorMode::Cmyk, _) => {
+                stack.mode().cmyk_profile.as_deref().map(<[u8]>::to_vec)
+            }
+            Kind::Device(crate::color_mode::ColorMode::Gray, _) => {
+                paged_color::cms::moxcms_gray_icc(crate::color_mode::GRAY_GAMMA).ok()
+            }
+            Kind::Device(..) => None,
+        };
+        file.resources.blocks.retain(|b| b.id != ICC_PROFILE_ID);
+        if let Some(icc) = icc {
+            // A file that was UNTAGGED says so (1041); the converted one
+            // is tagged with the profile its values are in.
+            file.resources.blocks.retain(|b| b.id != ICC_UNTAGGED_ID);
+            file.resources.set_data(ICC_PROFILE_ID, &icc);
+        }
+    }
     file.layer_mask.layers = records;
     file.layer_mask.transparency_in_merged = true;
     // A 16-bit document keeps its layers in its `Lr16` block, as

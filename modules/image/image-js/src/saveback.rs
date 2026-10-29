@@ -901,6 +901,156 @@ mod tests {
         }
     }
 
+    /// The colour records of a written file, top-level pixel layers only:
+    /// (record, the decoded planes by channel id).
+    fn pixel_planes(f: &PsdFile, rec: usize) -> Vec<(i16, Vec<u16>)> {
+        let r = &f.layer_mask.layers[rec];
+        let (rows, cols) = ((r.bottom - r.top) as u32, (r.right - r.left) as u32);
+        r.channels
+            .iter()
+            .zip(&r.channel_data)
+            .filter(|(c, _)| c.id >= -1)
+            .map(|(c, d)| {
+                let v: Vec<u16> = if f.header.depth == 16 {
+                    d.decode_samples16(rows, cols).expect("16-bit plane")
+                } else {
+                    d.decode(f.container, rows, cols, 8)
+                        .expect("8-bit plane")
+                        .into_iter()
+                        .map(u16::from)
+                        .collect()
+                };
+                (c.id, v)
+            })
+            .collect()
+    }
+
+    /// Image ▸ Mode, then the layered save: the file is written in the
+    /// document's NEW mode and depth — header, every layer's channels as
+    /// that mode's samples, the profile its values are in (image ADR 481).
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_converted_document_is_saved_in_its_new_mode_and_depth__feat__image_io_depth_color_modes() {
+        use crate::color_mode::{ColorMode as M, DocMode, ModeTransform};
+        use image_core::SampleDepth;
+        use image_psd::model::ColorMode as P;
+        for (mode, depth, psd, ids) in [
+            (M::Gray, SampleDepth::U8, P::Grayscale, vec![-1, 0]),
+            (M::Gray, SampleDepth::U16, P::Grayscale, vec![-1, 0]),
+            (M::Lab, SampleDepth::U8, P::Lab, vec![-1, 0, 1, 2]),
+            (M::Lab, SampleDepth::U16, P::Lab, vec![-1, 0, 1, 2]),
+            (M::Rgb, SampleDepth::U16, P::Rgb, vec![-1, 0, 1, 2]),
+        ] {
+            let mut s = layered_stack();
+            s.set_depth(depth).expect("depth");
+            let doc = DocMode {
+                mode,
+                cmyk_profile: None,
+            };
+            s.set_mode(doc.clone()).expect("mode");
+            let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+            assert_eq!(
+                psd_write_stack(&mut f, &s, &[90u8; 32]).expect("written"),
+                PsdSaveBackShape::Layered
+            );
+            let f = PsdFile::parse(&f.write().expect("bytes")).expect("reparse");
+            let sixteen = depth == SampleDepth::U16;
+            assert_eq!(f.header.color_mode, psd, "{mode:?}");
+            assert_eq!(f.header.depth, if sixteen { 16 } else { 8 });
+            assert_eq!(f.header.channels as usize, ids.len());
+            assert_eq!(f.layer_mask.deep_key.is_some(), sixteen);
+            match mode {
+                M::Gray => assert_eq!(
+                    &f.resources.icc_profile().expect("grey ICC")[16..20],
+                    b"GRAY"
+                ),
+                M::Lab => assert!(
+                    f.resources.icc_profile().is_none(),
+                    "Lab carries no profile"
+                ),
+                _ => assert!(f.resources.icc_profile().is_none()),
+            }
+            // The painted layer ("Grain ✓", 200 grey) in every channel.
+            let rec = f
+                .layer_mask
+                .layers
+                .iter()
+                .position(|r| r.name_legacy.raw.windows(5).any(|w| w == b"Grain"))
+                .expect("the painted layer's record");
+            let planes = pixel_planes(&f, rec);
+            let got: Vec<i16> = planes.iter().map(|(id, _)| *id).collect();
+            assert_eq!(got, ids, "{mode:?} channel ids");
+            let px = s.layers()[1].rgba.canvas().clone();
+            let full = if sixteen { 65535.0 } else { 255.0 };
+            let rgb: Vec<f32> = (0..3)
+                .map(|c| f32::from(px.sample16(0, c)) / 65535.0)
+                .collect();
+            let want: Vec<f32> = match ModeTransform::new(&doc).expect("t") {
+                Some(t) => {
+                    let d = t.device_of(&rgb);
+                    match mode {
+                        M::Lab if sixteen => {
+                            vec![
+                                d[0] / 100.0 * full,
+                                d[1] * 256.0 + 32768.0,
+                                d[2] * 256.0 + 32768.0,
+                            ]
+                        }
+                        M::Lab => vec![d[0] / 100.0 * full, d[1] + 128.0, d[2] + 128.0],
+                        _ => vec![d[0] * full],
+                    }
+                }
+                None => rgb.iter().map(|v| v * full).collect(),
+            };
+            for (k, w) in want.iter().enumerate() {
+                let v = f32::from(planes[k + 1].1[0]);
+                assert!(
+                    (v - w).abs() <= 1.0,
+                    "{mode:?} {depth:?} channel {k}: {v} vs {w}"
+                );
+            }
+        }
+    }
+
+    /// What the stack evaluates in RGB is refused in a converted mode, so
+    /// the caller flattens and says why: an adjustment layer (Photoshop
+    /// applies it to the mode's channels) and Blend If (per channel).
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_converted_document_refuses_what_rgb_evaluates__feat__image_io_depth_color_modes() {
+        use crate::color_mode::{ColorMode as M, DocMode};
+        let gray = DocMode {
+            mode: M::Gray,
+            cmyk_profile: None,
+        };
+        let mut s = layered_stack();
+        s.add_adjustment_layer(
+            "",
+            crate::layers::Adjustment::default_for("vibrance").expect("kind"),
+            None,
+        );
+        s.set_mode(gray.clone()).expect("mode");
+        let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+        let err = psd_write_stack(&mut f, &s, &[0u8; 32]).expect_err("refused");
+        assert!(
+            err.to_string().contains("converted to another colour mode"),
+            "{err}"
+        );
+        // Only the depth changed: an adjustment layer is written.
+        let mut s = layered_stack();
+        s.add_adjustment_layer(
+            "",
+            crate::layers::Adjustment::default_for("vibrance").expect("kind"),
+            None,
+        );
+        s.set_depth(image_core::SampleDepth::U16).expect("depth");
+        let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+        assert_eq!(
+            psd_write_stack(&mut f, &s, &[0u8; 32]).expect("written"),
+            PsdSaveBackShape::Layered
+        );
+    }
+
     /// A GROUP's mask is written on its folder record and read back,
     /// switch included.
     #[test]

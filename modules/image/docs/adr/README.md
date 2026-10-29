@@ -42,6 +42,7 @@ stood, for decisions made earlier; their status says so.
 | [478](478-psd-write-depth.md) | The layered PSD save writes what it reads | Accepted 2026-10-28 (WP5.15) |
 | [479](479-depth-and-colour-modes.md) | 16 bits end to end, colour modes as a projection, and the proof view | Accepted 2026-10-28 (WP5.13; amends 455) |
 | [480](480-tiles-past-the-device-and-the-cpu-fold.md) | The fold tile by tile past the device's limits, and on the CPU without one | Accepted 2026-10-29 (WP5.13; amends 450, 454 and 465) |
+| [481](481-n-channel-planes-and-the-ink-fold.md) | N-channel planes, the ink fold, and a converted document saved in its mode | Accepted 2026-10-29 (WP5.13; amends 455, 478 and 479; PixelFormat amendment 1) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

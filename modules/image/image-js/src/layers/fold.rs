@@ -50,6 +50,7 @@
 //! exhaustively over f16 by the same test file).
 
 mod cpu;
+mod ink;
 mod tiled;
 pub(super) use cpu::CPU_TILE_SIDE;
 pub(super) use tiled::TILE_SIDE;
@@ -532,6 +533,8 @@ pub(super) struct FoldCache {
     /// Fold in tiles of this side whatever the canvas's size (ADR 480;
     /// `None`: only past the device's limits).
     tile: Option<u32>,
+    /// The ink planes derived for the last ink fold (ADR 481).
+    inks: ink::InkCache,
 }
 
 impl FoldCache {

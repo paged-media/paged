@@ -86,3 +86,11 @@ of its own layer of the same parameters.
   patching here.
 - `registry/psd-blocks.yaml` marks the adjustment, effect, fill, descriptor, record, `Lr16`,
   ZIP and PSB rows `mutatable`.
+
+## Amendment, 2026-10-29 (ADR 481)
+
+The layered save writes the DOCUMENT's mode and depth: a document converted with Image ▸ Mode
+(Grayscale, Lab, CMYK, RGB; 8 or 16 bits) is written in that mode, every record's channels
+anew, with the profile its values are in. An adjustment layer or Blend If in a document
+converted to another mode is refused (the flatten fallback says why). A CMYK file's document
+stays CMYK on open, so it is still written as CMYK.

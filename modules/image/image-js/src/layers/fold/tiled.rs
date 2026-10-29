@@ -458,8 +458,23 @@ impl LayerStack {
         depth: image_core::SampleDepth,
         side: u32,
     ) -> Result<Pixels, IngestError> {
-        let (cw, ch) = (self.width, self.height);
         let (steps, _) = self.plan_fold(plates);
+        self.fold_steps_tiled(ctx, steps, depth, side, true).await
+    }
+
+    /// Fold a plan tile by tile (see the module docs). `keep`: compare with
+    /// and keep the last result (the document's own composite); a plan of
+    /// substituted plates (the ink planes, ADR 481) neither reads nor
+    /// replaces it.
+    pub(in crate::layers) async fn fold_steps_tiled(
+        &self,
+        ctx: Option<&GpuContext>,
+        steps: Vec<Step>,
+        depth: image_core::SampleDepth,
+        side: u32,
+        keep: bool,
+    ) -> Result<Pixels, IngestError> {
+        let (cw, ch) = (self.width, self.height);
         if ctx.is_none() {
             super::cpu::supported(&steps)?;
         }
@@ -485,7 +500,11 @@ impl LayerStack {
             None => side,
         };
 
-        let mut cache = std::mem::take(&mut *self.fold.lock().expect("fold cache lock"));
+        let mut cache = if keep {
+            std::mem::take(&mut *self.fold.lock().expect("fold cache lock"))
+        } else {
+            FoldCache::default()
+        };
         cache.bind_to(ctx);
         // What to fold: everything, or the damage since the last result.
         let (mut out, dirty) = match cache.last.take() {
@@ -493,7 +512,9 @@ impl LayerStack {
                 match damage(&last_steps, &steps, cw, ch) {
                     Some(None) => {
                         cache.last = Some((steps, last.clone()));
-                        *self.fold.lock().expect("fold cache lock") = cache;
+                        if keep {
+                            *self.fold.lock().expect("fold cache lock") = cache;
+                        }
                         return Ok(last);
                     }
                     Some(Some(r)) => {
@@ -546,10 +567,12 @@ impl LayerStack {
             }
         }
         crate::counters::bump(|c| c.fold_tiles += folded);
-        cache.retain(&[]);
-        cache.checkpoint = None;
-        cache.last = Some((steps, out.clone()));
-        *self.fold.lock().expect("fold cache lock") = cache;
+        if keep {
+            cache.retain(&[]);
+            cache.checkpoint = None;
+            cache.last = Some((steps, out.clone()));
+            *self.fold.lock().expect("fold cache lock") = cache;
+        }
         Ok(out)
     }
 

@@ -304,13 +304,19 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   bits and say so. A curve is a 256-entry table.
 - **Colour modes.** Image ▸ Mode ▸ Greyscale, RGB colour, CMYK colour and Lab colour convert every
   layer through the engine's CMS (Gray Gamma 2.2, the session's CMYK profile, CIE Lab) and keep the
-  document inside that mode: a pixel edit lands projected inside its damage. The stack still works
-  in RGB — layers are not ink planes and blends are not subtractive, and Indexed, Duotone and
-  Multichannel are not offered. Against Photoshop: greyscale and 16-bit Lab within 0.05 of a level,
+  document inside that mode: a pixel edit lands projected inside its damage. A CMYK document with
+  a profile composites in its INKS — every layer as two ink planes, a CMYK file's layers with the
+  file's own inks — so separable blends agree with Photoshop's CMYK composite within 0.7 ΔE00 at
+  the 95th percentile, where blending the RGB conversions was 10–50 off; a non-separable mode,
+  Blend If, an adjustment layer or a style composites in RGB
+  ([ADR 481](adr/481-n-channel-planes-and-the-ink-fold.md)). Grey and Lab documents still blend
+  in RGB; Indexed, Duotone and Multichannel are not offered. Against Photoshop: greyscale and 16-bit Lab within 0.05 of a level,
   CMYK (Coated FOGRA39) and 8-bit Lab within 1.8 ΔE at the 99th percentile. CMYK without a profile
   changes no colour, and the status says so. Image ▸ Proof shows Proof colours and the Gamut warning
   (Gray Gamma 2.2 or the CMYK profile) on the preview without touching the document. The layered PSD
-  save keeps the file's own depth and mode.
+  save writes the document's mode and depth (ADR 481): Photoshop reopens a converted Grayscale,
+  Lab, CMYK or 16-bit document with live layers; an adjustment layer or Blend If in a document
+  converted to another mode makes the save flatten, saying why.
 - **PSD.** The composite decode takes 8- and 16-bit RGB, greyscale or CMYK, raw or RLE (not
   16-bit RLE); other modes and depths are refused, and a transparent document's white-matted
   merged colour is un-matted (CMYK: matted against the paper). Layers are imported from RGB
