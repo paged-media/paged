@@ -742,6 +742,19 @@ in the frame's inner coordinates, whole-value with an exact inverse.
 Additive at protocol 76 like the paint v2 flag; an older engine refuses
 the path. IDML carries it only in a label, which a paged import restores.
 
+`"document.patternPaint@1"` (engine ADR 1041) is the pattern swatch:
+`SwatchSpec` gains `pattern` (a `PatternSpec` — the tile rectangle, its
+items as paths with a swatch or inline colour each, the tile type `Grid` /
+`BrickByRow` / `BrickByColumn` / `HexByColumn` / `HexByRow`, the brick
+offset, spacing, overlap order and the placement), which `createSwatch` and
+`editSwatch` keep under a `Pattern/…` id with exact inverses; a malformed
+pattern is refused (`invalidSwatch`). A frame applies it as it applies a
+colour, through `frameFillColor` / `frameStrokeColor`, and
+`framePatternTransform` (`transform`) moves it for that frame alone. The
+`swatches` collection lists it with kind `"pattern"`. Additive at protocol
+76; IDML carries it only in the frame's label, which a paged import
+restores.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

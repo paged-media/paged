@@ -149,6 +149,16 @@ export interface ModuleField {
 }
 
 /**
+ * A pattern item\'s colour: a palette swatch (`swatch`), or its own
+ * colour (`space` + `value`, as a swatch\'s).
+ */
+export interface PatternColorSpec {
+    swatch?: string;
+    space?: string;
+    value?: number[];
+}
+
+/**
  * A per-run script budget on the wire (v63). Every field is optional
  * and falls back to the engine\'s default, so a caller overrides only
  * what it means to.
@@ -988,6 +998,48 @@ export interface StopColorSpec {
 export type MeshFillSpec = { kind: "mesh"; grids: MeshGridSpec[] } | { kind: "freeform"; points: FreeformPointSpec[]; lines?: number[][] };
 
 /**
+ * Engine ADR 1041 — a pattern swatch on the wire, the mirror of
+ * `paged_model::PatternEntry`: the tile rectangle `0..width × 0..height`
+ * in pattern units, its items (paths in the same space), the lattice and
+ * the placement. Carried by `SwatchSpec::pattern`.
+ */
+export interface PatternSpec {
+    width: number;
+    height: number;
+    items: PatternItemSpec[];
+    /**
+     * `\"Grid\"` (default) | `\"BrickByRow\"` | `\"BrickByColumn\"` |
+     * `\"HexByColumn\"` | `\"HexByRow\"`.
+     */
+    tileType?: string;
+    /**
+     * A brick row\'s (column\'s) shift as a fraction of the pitch, 0..1;
+     * absent is 0.5.
+     */
+    brickOffset?: number;
+    /**
+     * Extra space between columns / rows; negative overlaps.
+     */
+    hSpacing?: number;
+    vSpacing?: number;
+    /**
+     * `\"LeftInFront\"` (default) | `\"RightInFront\"`.
+     */
+    hOverlap?: string;
+    /**
+     * `\"TopInFront\"` (default) | `\"BottomInFront\"`.
+     */
+    vOverlap?: string;
+    /**
+     * Placement on the frame\'s box: offset `[x, y]`, scale `[sx, sy]`,
+     * rotation in degrees (clockwise on the page).
+     */
+    offset?: [number, number];
+    scale?: [number, number];
+    rotationDeg?: number;
+}
+
+/**
  * Every object in a document, by one name. See the module docs for the
  * string grammar, which is the canonical form; this enum is its typed
  * mirror on the wire.
@@ -1485,6 +1537,22 @@ export interface MeshNodeSpec {
  * own, or a break.
  */
 export type StyledRun = { break: RunBreak } | { text: string; style?: string };
+
+/**
+ * One path of a pattern tile.
+ */
+export interface PatternItemSpec {
+    anchors: PathAnchorSpec[];
+    subpathStarts?: number[];
+    subpathOpen?: boolean[];
+    /**
+     * `\"NonZero\"` (default) | `\"EvenOdd\"`.
+     */
+    fillRule?: string;
+    fill?: PatternColorSpec;
+    stroke?: PatternColorSpec;
+    strokeWeight?: number;
+}
 
 /**
  * One point query. `point` is page-local pt on `page_id`.
@@ -2878,7 +2946,7 @@ export type Value = { type: "bounds"; value: [number, number, number, number] } 
  * (`\"fill.color\"`) — so JS callers don\'t need to learn the Rust
  * enum shape.
  */
-export type PropertyPath = "frameBounds" | "frameFillColor" | "frameStrokeColor" | "frameStrokeWeight" | "frameOpacity" | "frameTransform" | "imageContentTransform" | "framePathPoint" | "pathPointInsert" | "pathPointRemove" | "pathPointCurveType" | "layerVisible" | "layerLocked" | "layerPrintable" | "layerName" | "characterFontSize" | "characterLeading" | "characterTracking" | "characterFillColor" | "paragraphSpaceBefore" | "paragraphSpaceAfter" | "paragraphFirstLineIndent" | "appliedParagraphStyle" | "appliedCharacterStyle" | "appliedObjectStyle" | "itemLayer" | "appliedCellStyle" | "appliedTableStyle" | "framePath" | "frameNonprinting" | "frameFillTint" | "frameGradientFillAngle" | "frameGradientFillLength" | "frameGradientStrokeAngle" | "frameGradientStrokeLength" | "pathOpenAt" | "outlineStroke" | "outlineStrokeVariable" | "offsetPath" | "simplifyPath" | "closePath" | "frameGradientFeather" | "pageBounds" | "frameDropShadowMode" | "frameDropShadowXOffset" | "frameDropShadowYOffset" | "frameDropShadowSize" | "frameDropShadowOpacity" | "frameDropShadowColor" | "frameDropShadow" | "frameFittingCrops" | "frameFittingType" | "frameTextWrapMode" | "frameTextWrapOffsets" | "frameTextWrapContourType" | "frameTextWrapContourIncludeInside" | "paragraphJustification" | "paragraphStyleNextStyle" | "paragraphAppliedNumberingList" | "frameStrokeEndCap" | "frameInsetSpacing" | "appliedConditions" | "characterFontFamily" | "characterFontStyle" | "characterKerningMethod" | "characterCase" | "characterPosition" | "characterLanguage" | "characterBaselineShift" | "characterHorizontalScale" | "characterVerticalScale" | "characterSkew" | "characterUnderline" | "characterStrikethru" | "characterNoBreak" | "characterLigatures" | "characterOtfFeatures" | "paragraphLeftIndent" | "paragraphRightIndent" | "paragraphDropCapCharacters" | "paragraphDropCapLines" | "paragraphHyphenation" | "paragraphHyphenationZone" | "paragraphKeepLinesTogether" | "paragraphKeepWithNext" | "paragraphKeepAllLinesTogether" | "paragraphKeepFirstLines" | "paragraphKeepLastLines" | "paragraphStartParagraph" | "paragraphSpanColumnType" | "paragraphSpanSplitColumnCount" | "paragraphSpanColumnMinSpaceBefore" | "paragraphSpanColumnMinSpaceAfter" | "paragraphSplitColumnInsideGutter" | "paragraphSplitColumnOutsideGutter" | "paragraphRuleAbove" | "paragraphRuleBelow" | "paragraphTabStops" | "paragraphListType" | "paragraphBulletCharacter" | "paragraphNumberingFormat" | "paragraphBulletsTextAfter" | "paragraphNumberingExpression" | "paragraphNumberingStartAt" | "paragraphNumberingContinue" | "paragraphNumberingLevel" | "paragraphNumberingApplyRestartPolicy" | "paragraphBulletsCharacterStyle" | "paragraphNumberingCharacterStyle" | "paragraphComposer" | "paragraphAutoLeading" | "paragraphSingleWordJustification" | "paragraphLastLineIndent" | "paragraphBalanceRaggedLines" | "textFrameColumnCount" | "textFrameColumnGutter" | "textFrameColumnBalance" | "textFrameVerticalJustification" | "textFrameAutoSizing" | "textFrameFirstBaseline" | "textWrapInvert" | "frameFittingReferencePoint" | "frameAutoFit" | "frameStrokeType" | "frameStrokeJoin" | "frameStrokeMiterLimit" | "frameStrokeAlignment" | "frameStrokeGapColor" | "frameStrokeGapTint" | "frameStrokeDashArray" | "frameCornerOptionTopLeft" | "frameCornerOptionTopRight" | "frameCornerOptionBottomLeft" | "frameCornerOptionBottomRight" | "frameCornerRadiusTopLeft" | "frameCornerRadiusTopRight" | "frameCornerRadiusBottomLeft" | "frameCornerRadiusBottomRight" | "frameRotationAngle" | "frameScaleX" | "frameScaleY" | "frameFlipH" | "frameFlipV" | "frameOverprintFill" | "frameOverprintStroke" | "frameInnerShadowEnabled" | "frameInnerShadowBlendMode" | "frameInnerShadowColor" | "frameInnerShadowOpacity" | "frameInnerShadowAngle" | "frameInnerShadowDistance" | "frameInnerShadowSize" | "frameInnerShadowChoke" | "frameInnerShadowNoise" | "frameOuterGlowEnabled" | "frameOuterGlowBlendMode" | "frameOuterGlowColor" | "frameOuterGlowOpacity" | "frameOuterGlowSpread" | "frameOuterGlowSize" | "frameOuterGlowNoise" | "frameInnerGlowEnabled" | "frameInnerGlowBlendMode" | "frameInnerGlowColor" | "frameInnerGlowOpacity" | "frameInnerGlowChoke" | "frameInnerGlowSize" | "frameInnerGlowSource" | "frameInnerGlowNoise" | "frameBevelEnabled" | "frameBevelStyle" | "frameBevelTechnique" | "frameBevelDepth" | "frameBevelDirection" | "frameBevelSize" | "frameBevelSoften" | "frameBevelAngle" | "frameBevelAltitude" | "frameBevelHighlightColor" | "frameBevelShadowColor" | "frameBevelHighlightOpacity" | "frameBevelShadowOpacity" | "frameSatinEnabled" | "frameSatinBlendMode" | "frameSatinColor" | "frameSatinOpacity" | "frameSatinAngle" | "frameSatinDistance" | "frameSatinSize" | "frameSatinInvert" | "frameFeatherEnabled" | "frameFeatherWidth" | "frameFeatherCornerType" | "frameFeatherNoise" | "frameFeatherChoke" | "frameDirectionalFeatherEnabled" | "frameDirectionalFeatherLeftWidth" | "frameDirectionalFeatherRightWidth" | "frameDirectionalFeatherTopWidth" | "frameDirectionalFeatherBottomWidth" | "frameDirectionalFeatherAngle" | "frameDirectionalFeatherNoise" | "frameDirectionalFeatherChoke" | "frameBlendMode" | "nextTextFrame" | "previousTextFrame" | "cellFillColor" | "cellFillTint" | "cellInsetTop" | "cellInsetLeft" | "cellInsetBottom" | "cellInsetRight" | "cellVerticalJustification" | "cellTopEdgeStrokeColor" | "cellTopEdgeStrokeWeight" | "cellTopEdgeStrokeTint" | "cellBottomEdgeStrokeColor" | "cellBottomEdgeStrokeWeight" | "cellBottomEdgeStrokeTint" | "cellLeftEdgeStrokeColor" | "cellLeftEdgeStrokeWeight" | "cellLeftEdgeStrokeTint" | "cellRightEdgeStrokeColor" | "cellRightEdgeStrokeWeight" | "cellRightEdgeStrokeTint" | "rowStartRow" | "rowKeepWithNext" | "tableRowCount" | "tableColumnCount" | "tableHeaderRowCount" | "tableFooterRowCount" | "pluginMetadata" | "anchoredPosition" | "anchorPoint" | "anchoredXOffset" | "anchoredYOffset" | "anchoredHorizontalReference" | "anchoredVerticalReference" | "anchoredHorizontalAlignment" | "anchoredVerticalAlignment" | "anchoredSpineRelative" | "anchoredLockPosition" | "elementVisible" | "elementLocked" | "frameStrokeStartArrowhead" | "frameStrokeEndArrowhead" | "pageMarginTop" | "pageMarginBottom" | "pageMarginLeft" | "pageMarginRight" | "pageColumnCount" | "pageColumnGutter" | "documentBleedTop" | "documentBleedBottom" | "documentBleedInsideOrLeft" | "documentBleedOutsideOrRight" | "documentSlugTop" | "documentSlugBottom" | "documentSlugInsideOrLeft" | "documentSlugRightOrOutside" | "textVariableName" | "textVariableType" | "textVariableContents" | "textVariableTextBefore" | "textVariableTextAfter" | "textVariableDateFormat" | "objectStyleStrokeTint" | "objectStyleCornerRadius" | "objectStyleCornerOption" | "cellStyleRotationAngle" | "tableStyleHeaderRegionCellStyle" | "tableStyleBodyRegionCellStyle" | "tableStyleFooterRegionCellStyle" | "tableStyleLeftColumnRegionCellStyle" | "tableStyleRightColumnRegionCellStyle" | "tableStyleTopBorderStrokeColor" | "tableStyleTopBorderStrokeWeight" | "tableStyleBottomBorderStrokeColor" | "tableStyleBottomBorderStrokeWeight" | "tableStyleLeftBorderStrokeColor" | "tableStyleLeftBorderStrokeWeight" | "tableStyleRightBorderStrokeColor" | "tableStyleRightBorderStrokeWeight" | "tableStyleAlternatingFills" | "tableStyleStartRowFillColor" | "tableStyleStartRowFillCount" | "tableStyleStartRowFillTint" | "tableStyleEndRowFillColor" | "tableStyleEndRowFillCount" | "tableStyleEndRowFillTint" | "itemName" | "frameFillOpacity" | "frameFillBlendMode" | "frameStrokeOpacity" | "frameStrokeBlendMode" | "frameContentOpacity" | "frameContentBlendMode" | "groupIsolateBlending" | "groupKnockout" | "groupClip" | "frameDropShadowBlendMode" | "frameDropShadowSpread" | "frameDropShadowNoise" | "frameDropShadowKnockedOut" | "frameDropShadowUseGlobalLight" | "documentGlobalLightAngle" | "documentGlobalLightAltitude" | "documentFootnoteNumberingStyle" | "documentFootnoteStartAt" | "documentFootnoteRestartNumbering" | "documentFootnotePrefix" | "documentFootnoteSuffix" | "documentFootnoteShowPrefixSuffix" | "documentFootnoteEnableStraddling" | "documentFootnoteNoSplitting" | "documentFootnoteSpaceBetween" | "documentFootnoteSpacer" | "documentFootnoteRuleOn" | "documentFootnoteContinuingRuleOn" | "framePdfPage" | "frameFillRule" | "frameGradientStrokeMode" | "frameGradientFillStart" | "frameFillMesh";
+export type PropertyPath = "frameBounds" | "frameFillColor" | "frameStrokeColor" | "frameStrokeWeight" | "frameOpacity" | "frameTransform" | "imageContentTransform" | "framePathPoint" | "pathPointInsert" | "pathPointRemove" | "pathPointCurveType" | "layerVisible" | "layerLocked" | "layerPrintable" | "layerName" | "characterFontSize" | "characterLeading" | "characterTracking" | "characterFillColor" | "paragraphSpaceBefore" | "paragraphSpaceAfter" | "paragraphFirstLineIndent" | "appliedParagraphStyle" | "appliedCharacterStyle" | "appliedObjectStyle" | "itemLayer" | "appliedCellStyle" | "appliedTableStyle" | "framePath" | "frameNonprinting" | "frameFillTint" | "frameGradientFillAngle" | "frameGradientFillLength" | "frameGradientStrokeAngle" | "frameGradientStrokeLength" | "pathOpenAt" | "outlineStroke" | "outlineStrokeVariable" | "offsetPath" | "simplifyPath" | "closePath" | "frameGradientFeather" | "pageBounds" | "frameDropShadowMode" | "frameDropShadowXOffset" | "frameDropShadowYOffset" | "frameDropShadowSize" | "frameDropShadowOpacity" | "frameDropShadowColor" | "frameDropShadow" | "frameFittingCrops" | "frameFittingType" | "frameTextWrapMode" | "frameTextWrapOffsets" | "frameTextWrapContourType" | "frameTextWrapContourIncludeInside" | "paragraphJustification" | "paragraphStyleNextStyle" | "paragraphAppliedNumberingList" | "frameStrokeEndCap" | "frameInsetSpacing" | "appliedConditions" | "characterFontFamily" | "characterFontStyle" | "characterKerningMethod" | "characterCase" | "characterPosition" | "characterLanguage" | "characterBaselineShift" | "characterHorizontalScale" | "characterVerticalScale" | "characterSkew" | "characterUnderline" | "characterStrikethru" | "characterNoBreak" | "characterLigatures" | "characterOtfFeatures" | "paragraphLeftIndent" | "paragraphRightIndent" | "paragraphDropCapCharacters" | "paragraphDropCapLines" | "paragraphHyphenation" | "paragraphHyphenationZone" | "paragraphKeepLinesTogether" | "paragraphKeepWithNext" | "paragraphKeepAllLinesTogether" | "paragraphKeepFirstLines" | "paragraphKeepLastLines" | "paragraphStartParagraph" | "paragraphSpanColumnType" | "paragraphSpanSplitColumnCount" | "paragraphSpanColumnMinSpaceBefore" | "paragraphSpanColumnMinSpaceAfter" | "paragraphSplitColumnInsideGutter" | "paragraphSplitColumnOutsideGutter" | "paragraphRuleAbove" | "paragraphRuleBelow" | "paragraphTabStops" | "paragraphListType" | "paragraphBulletCharacter" | "paragraphNumberingFormat" | "paragraphBulletsTextAfter" | "paragraphNumberingExpression" | "paragraphNumberingStartAt" | "paragraphNumberingContinue" | "paragraphNumberingLevel" | "paragraphNumberingApplyRestartPolicy" | "paragraphBulletsCharacterStyle" | "paragraphNumberingCharacterStyle" | "paragraphComposer" | "paragraphAutoLeading" | "paragraphSingleWordJustification" | "paragraphLastLineIndent" | "paragraphBalanceRaggedLines" | "textFrameColumnCount" | "textFrameColumnGutter" | "textFrameColumnBalance" | "textFrameVerticalJustification" | "textFrameAutoSizing" | "textFrameFirstBaseline" | "textWrapInvert" | "frameFittingReferencePoint" | "frameAutoFit" | "frameStrokeType" | "frameStrokeJoin" | "frameStrokeMiterLimit" | "frameStrokeAlignment" | "frameStrokeGapColor" | "frameStrokeGapTint" | "frameStrokeDashArray" | "frameCornerOptionTopLeft" | "frameCornerOptionTopRight" | "frameCornerOptionBottomLeft" | "frameCornerOptionBottomRight" | "frameCornerRadiusTopLeft" | "frameCornerRadiusTopRight" | "frameCornerRadiusBottomLeft" | "frameCornerRadiusBottomRight" | "frameRotationAngle" | "frameScaleX" | "frameScaleY" | "frameFlipH" | "frameFlipV" | "frameOverprintFill" | "frameOverprintStroke" | "frameInnerShadowEnabled" | "frameInnerShadowBlendMode" | "frameInnerShadowColor" | "frameInnerShadowOpacity" | "frameInnerShadowAngle" | "frameInnerShadowDistance" | "frameInnerShadowSize" | "frameInnerShadowChoke" | "frameInnerShadowNoise" | "frameOuterGlowEnabled" | "frameOuterGlowBlendMode" | "frameOuterGlowColor" | "frameOuterGlowOpacity" | "frameOuterGlowSpread" | "frameOuterGlowSize" | "frameOuterGlowNoise" | "frameInnerGlowEnabled" | "frameInnerGlowBlendMode" | "frameInnerGlowColor" | "frameInnerGlowOpacity" | "frameInnerGlowChoke" | "frameInnerGlowSize" | "frameInnerGlowSource" | "frameInnerGlowNoise" | "frameBevelEnabled" | "frameBevelStyle" | "frameBevelTechnique" | "frameBevelDepth" | "frameBevelDirection" | "frameBevelSize" | "frameBevelSoften" | "frameBevelAngle" | "frameBevelAltitude" | "frameBevelHighlightColor" | "frameBevelShadowColor" | "frameBevelHighlightOpacity" | "frameBevelShadowOpacity" | "frameSatinEnabled" | "frameSatinBlendMode" | "frameSatinColor" | "frameSatinOpacity" | "frameSatinAngle" | "frameSatinDistance" | "frameSatinSize" | "frameSatinInvert" | "frameFeatherEnabled" | "frameFeatherWidth" | "frameFeatherCornerType" | "frameFeatherNoise" | "frameFeatherChoke" | "frameDirectionalFeatherEnabled" | "frameDirectionalFeatherLeftWidth" | "frameDirectionalFeatherRightWidth" | "frameDirectionalFeatherTopWidth" | "frameDirectionalFeatherBottomWidth" | "frameDirectionalFeatherAngle" | "frameDirectionalFeatherNoise" | "frameDirectionalFeatherChoke" | "frameBlendMode" | "nextTextFrame" | "previousTextFrame" | "cellFillColor" | "cellFillTint" | "cellInsetTop" | "cellInsetLeft" | "cellInsetBottom" | "cellInsetRight" | "cellVerticalJustification" | "cellTopEdgeStrokeColor" | "cellTopEdgeStrokeWeight" | "cellTopEdgeStrokeTint" | "cellBottomEdgeStrokeColor" | "cellBottomEdgeStrokeWeight" | "cellBottomEdgeStrokeTint" | "cellLeftEdgeStrokeColor" | "cellLeftEdgeStrokeWeight" | "cellLeftEdgeStrokeTint" | "cellRightEdgeStrokeColor" | "cellRightEdgeStrokeWeight" | "cellRightEdgeStrokeTint" | "rowStartRow" | "rowKeepWithNext" | "tableRowCount" | "tableColumnCount" | "tableHeaderRowCount" | "tableFooterRowCount" | "pluginMetadata" | "anchoredPosition" | "anchorPoint" | "anchoredXOffset" | "anchoredYOffset" | "anchoredHorizontalReference" | "anchoredVerticalReference" | "anchoredHorizontalAlignment" | "anchoredVerticalAlignment" | "anchoredSpineRelative" | "anchoredLockPosition" | "elementVisible" | "elementLocked" | "frameStrokeStartArrowhead" | "frameStrokeEndArrowhead" | "pageMarginTop" | "pageMarginBottom" | "pageMarginLeft" | "pageMarginRight" | "pageColumnCount" | "pageColumnGutter" | "documentBleedTop" | "documentBleedBottom" | "documentBleedInsideOrLeft" | "documentBleedOutsideOrRight" | "documentSlugTop" | "documentSlugBottom" | "documentSlugInsideOrLeft" | "documentSlugRightOrOutside" | "textVariableName" | "textVariableType" | "textVariableContents" | "textVariableTextBefore" | "textVariableTextAfter" | "textVariableDateFormat" | "objectStyleStrokeTint" | "objectStyleCornerRadius" | "objectStyleCornerOption" | "cellStyleRotationAngle" | "tableStyleHeaderRegionCellStyle" | "tableStyleBodyRegionCellStyle" | "tableStyleFooterRegionCellStyle" | "tableStyleLeftColumnRegionCellStyle" | "tableStyleRightColumnRegionCellStyle" | "tableStyleTopBorderStrokeColor" | "tableStyleTopBorderStrokeWeight" | "tableStyleBottomBorderStrokeColor" | "tableStyleBottomBorderStrokeWeight" | "tableStyleLeftBorderStrokeColor" | "tableStyleLeftBorderStrokeWeight" | "tableStyleRightBorderStrokeColor" | "tableStyleRightBorderStrokeWeight" | "tableStyleAlternatingFills" | "tableStyleStartRowFillColor" | "tableStyleStartRowFillCount" | "tableStyleStartRowFillTint" | "tableStyleEndRowFillColor" | "tableStyleEndRowFillCount" | "tableStyleEndRowFillTint" | "itemName" | "frameFillOpacity" | "frameFillBlendMode" | "frameStrokeOpacity" | "frameStrokeBlendMode" | "frameContentOpacity" | "frameContentBlendMode" | "groupIsolateBlending" | "groupKnockout" | "groupClip" | "frameDropShadowBlendMode" | "frameDropShadowSpread" | "frameDropShadowNoise" | "frameDropShadowKnockedOut" | "frameDropShadowUseGlobalLight" | "documentGlobalLightAngle" | "documentGlobalLightAltitude" | "documentFootnoteNumberingStyle" | "documentFootnoteStartAt" | "documentFootnoteRestartNumbering" | "documentFootnotePrefix" | "documentFootnoteSuffix" | "documentFootnoteShowPrefixSuffix" | "documentFootnoteEnableStraddling" | "documentFootnoteNoSplitting" | "documentFootnoteSpaceBetween" | "documentFootnoteSpacer" | "documentFootnoteRuleOn" | "documentFootnoteContinuingRuleOn" | "framePdfPage" | "frameFillRule" | "frameGradientStrokeMode" | "frameGradientFillStart" | "frameFillMesh" | "framePatternTransform";
 
 /**
  * Typed worker-side error for non-load operations. Mutations,
@@ -3360,6 +3428,13 @@ export interface SwatchSpec {
     alternateValue?: number[];
     tint?: number | null;
     alpha?: number | null;
+    /**
+     * Engine ADR 1041 — a PATTERN swatch: when set, the swatch is the
+     * pattern (`space` and `value` are ignored, `\"\"` and `[]` will do)
+     * and lives under a `Pattern/…` id (`Pattern/u<n>` when `selfId` is
+     * absent). A frame shows it by naming the id as its fill or stroke.
+     */
+    pattern?: PatternSpec;
 }
 
 /**
