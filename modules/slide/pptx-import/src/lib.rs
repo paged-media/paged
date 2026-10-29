@@ -750,6 +750,31 @@ fn theme(el: &El, ctx: &Ctx) -> Theme {
     }
 }
 
+/// Every theme in an OOXML package (slide ADR 713, Design ▸ Browse for
+/// Themes): a `.thmx` (its theme and its variants' themes), a `.pptx` or
+/// `.potx` (its masters' themes), or any other package with a theme part.
+/// In part-name order; a part that does not parse as a theme is skipped.
+pub fn themes_in(bytes: &[u8]) -> Result<Vec<Theme>, ImportError> {
+    let pkg = OpcPackage::read(bytes).map_err(|e| ImportError::Package(e.to_string()))?;
+    let diagnostics = RefCell::new(Vec::new());
+    let mut names: Vec<String> = pkg
+        .file_names()
+        .filter(|n| n.ends_with(".xml") && n.contains("theme/theme") && !n.contains("/_rels/"))
+        .map(str::to_string)
+        .collect();
+    names.sort();
+    let mut out = Vec::new();
+    for name in names {
+        let Ok(el) = read_part(&pkg, &name) else {
+            continue;
+        };
+        if el.is(Ns::A, "theme") {
+            out.push(theme(&el, &Ctx::new(&pkg, &name, &diagnostics)));
+        }
+    }
+    Ok(out)
+}
+
 /// Decode the embedded faces of a `.pptx` without reading the rest of the
 /// deck (a document reopened from its source deck needs only these).
 pub fn embedded_faces(bytes: &[u8]) -> Result<fonts::EmbeddedFaces, ImportError> {

@@ -419,4 +419,29 @@ export const SMARTART = defineMessages("slide.smartart", {
   hint: "Enter writes the text; Shift+Enter starts a new paragraph. Points are edited, not added: the diagram keeps its layout.",
 });
 
+/** Design ▸ Themes and the deck's document styles (slide ADRs 713, 719;
+ *  panels/design-panel.tsx). */
+export const DESIGN = defineMessages("slide.design", {
+  title: "Design",
+  openDesign: "Design",
+  themes: "Themes",
+  variants: "Variants",
+  thisPresentation: "This presentation",
+  browse: "Browse for Themes…",
+  listThemes: "List the themes",
+  applyTheme: "Apply a theme",
+  apply: "Apply {name}",
+  variant: "Variant: {name}",
+  current: "{name}",
+  fonts: "{major} / {minor}",
+  empty: "Open a PowerPoint deck to change its theme.",
+  missing: "{count} references missing",
+  remap: "Remap",
+  remapReference: "Remap a theme reference",
+  remapTo: "Replace {id} with",
+  none: "(none)",
+  refused: "The theme could not be applied.",
+  note: "A theme recolours every theme colour of the deck and sets its heading and body fonts, in one undo step.",
+});
+
 defineTranslations("de", de);

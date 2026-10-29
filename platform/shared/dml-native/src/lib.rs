@@ -145,11 +145,20 @@ pub fn axis_start(p: &Placement, w: f64, h: f64) -> Option<[f32; 2]> {
 /// A gradient swatch: id, kind, (location %, colour id) stops.
 type GradientSwatch = (String, GradientKind, Vec<(f64, String)>);
 
+/// How a document names the theme colour a solid paint keeps
+/// (`Paint::Solid::theme`): its swatch id and name, or `None` for a key it
+/// does not keep live.
+pub type ThemeNamer = fn(&str) -> Option<(String, String)>;
+
 /// The swatches a document's paints need.
 #[derive(Debug, Clone, Default)]
 pub struct Palette {
     colors: BTreeMap<Rgb, String>,
     theme_names: BTreeMap<Rgb, String>,
+    /// Swatches a paint names by id rather than by value: a live theme
+    /// colour (`Color/accent1`, with its transforms) and, in a palette with
+    /// a [`ThemeNamer`], a plain colour (`Color/RRRGGBB`). Id → (name, rgb).
+    named: BTreeMap<String, (String, Rgb)>,
     /// In minting order.
     gradients: Vec<GradientSwatch>,
 }
@@ -178,6 +187,30 @@ impl Palette {
         id
     }
 
+    /// The swatch `id` named `name` holding `rgb`: a theme colour a paint
+    /// refers to by id, so that recolouring the swatch recolours the paint.
+    pub fn themed(&mut self, id: &str, name: &str, rgb: Rgb) -> String {
+        self.named
+            .entry(id.to_string())
+            .or_insert_with(|| (name.to_string(), rgb));
+        id.to_string()
+    }
+
+    /// The swatch of `rgb` as a plain colour (`Color/RRRGGBB`), never a
+    /// theme colour's, whatever its value.
+    pub fn literal(&mut self, rgb: Rgb) -> String {
+        let id = format!("Color/R{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+        let name = id.trim_start_matches("Color/").to_string();
+        self.named.entry(id.clone()).or_insert((name, rgb));
+        id
+    }
+
+    /// The swatches minted by id ([`Palette::themed`], [`Palette::literal`]):
+    /// id, name and colour.
+    pub fn named(&self) -> impl Iterator<Item = (&String, &(String, Rgb))> {
+        self.named.iter()
+    }
+
     /// The gradient swatch of `kind` through `stops` (alpha aside: the
     /// engine's gradient swatches carry none).
     pub fn gradient(&mut self, kind: GradientKind, stops: &[Stop]) -> String {
@@ -199,22 +232,32 @@ impl Palette {
         self.colors.iter()
     }
 
-    /// The RGB colour entries of every colour minted.
+    /// The RGB colour entries of every colour minted, once per id (a
+    /// swatch minted by id names it).
     pub fn color_entries(&self) -> Vec<ColorEntry> {
-        self.colors
+        let entry = |id: &String, name: String, rgb: &Rgb| ColorEntry {
+            self_id: id.clone(),
+            name: Some(name),
+            space: ColorSpace::Rgb,
+            value: rgb.iter().map(|&c| c as f32).collect(),
+            model: ColorModel::Process,
+            alternate_space: None,
+            alternate_value: Vec::new(),
+            tint: None,
+            alpha: None,
+        };
+        let mut out: Vec<ColorEntry> = self
+            .colors
             .iter()
-            .map(|(rgb, id)| ColorEntry {
-                self_id: id.clone(),
-                name: Some(id.trim_start_matches("Color/").to_string()),
-                space: ColorSpace::Rgb,
-                value: rgb.iter().map(|&c| c as f32).collect(),
-                model: ColorModel::Process,
-                alternate_space: None,
-                alternate_value: Vec::new(),
-                tint: None,
-                alpha: None,
-            })
-            .collect()
+            .filter(|(_, id)| !self.named.contains_key(*id))
+            .map(|(rgb, id)| entry(id, id.trim_start_matches("Color/").to_string(), rgb))
+            .collect();
+        out.extend(
+            self.named
+                .iter()
+                .map(|(id, (name, rgb))| entry(id, name.clone(), rgb)),
+        );
+        out
     }
 
     /// The gradient entries of every gradient minted.
@@ -313,6 +356,11 @@ pub fn arrowhead(kind: &str) -> ArrowheadType {
 pub struct Mapper {
     pub palette: Palette,
     losses: Vec<String>,
+    /// Live theme colours (slide ADR 713): a solid paint that names a
+    /// theme colour fills with that colour's swatch, and one that names
+    /// none with a plain colour's, even where its value equals a theme
+    /// colour.
+    theme_namer: Option<ThemeNamer>,
 }
 
 impl Mapper {
@@ -320,6 +368,18 @@ impl Mapper {
         Mapper {
             palette: Palette::new(theme_colors),
             losses: Vec::new(),
+            theme_namer: None,
+        }
+    }
+
+    /// A mapper whose solid paints keep their theme colour by reference:
+    /// `namer` gives the swatch of each `Paint::Solid::theme` key. Colours
+    /// without one (gradient stops, effects) still take a theme colour's
+    /// swatch when their value is one.
+    pub fn with_theme_keys(theme_colors: &[(String, Rgb)], namer: ThemeNamer) -> Self {
+        Mapper {
+            theme_namer: Some(namer),
+            ..Mapper::new(theme_colors)
         }
     }
 
@@ -351,7 +411,13 @@ impl Mapper {
     pub fn paint(&mut self, p: &Paint) -> String {
         match p {
             Paint::None | Paint::Image { .. } => NONE_SWATCH.into(),
-            Paint::Solid { rgb, .. } => self.palette.color(*rgb),
+            Paint::Solid { rgb, theme, .. } => match self.theme_namer {
+                Some(namer) => match theme.as_deref().and_then(namer) {
+                    Some((id, name)) => self.palette.themed(&id, &name, *rgb),
+                    None => self.palette.literal(*rgb),
+                },
+                None => self.palette.color(*rgb),
+            },
             Paint::Linear { stops, .. } => self.palette.gradient(GradientKind::Linear, stops),
             Paint::Radial { stops, .. } => self.palette.gradient(GradientKind::Radial, stops),
             Paint::Pattern(pp) => {

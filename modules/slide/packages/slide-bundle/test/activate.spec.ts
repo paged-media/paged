@@ -49,6 +49,7 @@ import {
 import type { ImportReport } from "../src/engine";
 import { SHAPES_PANEL_ID } from "../src/shapes";
 import { SMARTART_PANEL_ID } from "../src/smartart";
+import { DESIGN_PANEL_ID } from "../src/design";
 import { SLIDE_KEY } from "../src/slides-model";
 
 const FIXTURE = new URL(
@@ -219,10 +220,12 @@ describe("paged.slide importer", () => {
     const handle = activate(host);
     // The Shapes panel (Insert ▸ Shapes, ADR 717), the SmartArt text pane
     // (slide W4) and the Animations pane (ADR 714) beside them.
+    // The Design panel (Design ▸ Themes, ADR 713) too, never in the rail.
     expect(panels.map((p) => p.id)).toEqual([
       SLIDES_PANEL_ID,
       SHAPES_PANEL_ID,
       SMARTART_PANEL_ID,
+      DESIGN_PANEL_ID,
       NOTES_PANEL_ID,
       ANIMATIONS_PANEL_ID,
     ]);
@@ -230,6 +233,7 @@ describe("paged.slide importer", () => {
     expect(panels.map((p) => (p as { rail?: boolean }).rail)).toEqual([
       false,
       undefined,
+      false,
       false,
       false,
       undefined,

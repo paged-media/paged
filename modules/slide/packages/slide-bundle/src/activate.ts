@@ -114,6 +114,16 @@ import { makeExportView } from "./output/export-view.js";
 import { Output } from "./output/output.js";
 import { makeCustomShowsPanel } from "./panels/custom-shows-panel.js";
 import { OUTPUT } from "./messages.js";
+import {
+  contributeDesignCommands,
+  DESIGN_PANEL_ID,
+  DesignStore,
+  designTypedCommands,
+  pickTheme,
+  type DesignDeps,
+} from "./design.js";
+import { makeDesignPanel } from "./panels/design-panel.js";
+import { DESIGN } from "./messages.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
 export const SLIDES_PANEL_ID = "media.paged.slide.panel.slides";
@@ -380,6 +390,19 @@ export function activate(host: BundleHost): BundleHandle {
   const smartArt = new SmartArtStore(host);
   disposers.push(() => smartArt.dispose());
   let textPane = false;
+  // Design ▸ Themes (slide ADR 713): the gallery, applying a theme in one
+  // undo step, and the theme's missing references (slide ADR 719).
+  const design = new DesignStore(host, slideEngine);
+  disposers.push(() => design.dispose());
+  let designPanel = false;
+  const designDeps: DesignDeps = {
+    store: design,
+    openPanel: () => {
+      if (!designPanel || !host.supports("shell.openPanel@1")) return false;
+      host.shell.openPanel(DESIGN_PANEL_ID);
+      return true;
+    },
+  };
   const content: ContentDeps = {
     engine: slideEngine,
     activePage: () => store?.activePage() ?? null,
@@ -406,6 +429,8 @@ export function activate(host: BundleHost): BundleHandle {
       // Pictures, icons, the format painter and SmartArt text (slide ADR
       // 717 amendment), last in the manifest.
       ...contentTypedCommands(host, content, clipboard),
+      // Design ▸ Themes (slide ADR 713), last in the manifest.
+      ...designTypedCommands(host, () => designDeps),
     ],
     comments: () => comments,
     step,
@@ -641,10 +666,14 @@ export function activate(host: BundleHost): BundleHandle {
         deckContext: DECK_CONTEXT,
       },
     );
+    const designCommands = contributeDesignCommands(host, designDeps, () =>
+      store ? store.isDeck() : false,
+    );
     disposers.push(
       () => commands.dispose(),
       () => menu.dispose(),
       () => contentCommands.dispose(),
+      () => designCommands.dispose(),
     );
   }
 
@@ -781,6 +810,23 @@ export function activate(host: BundleHost): BundleHandle {
             '<path d="M16.75 9v6" fill="none" stroke="currentColor" stroke-width="1.6"/>',
         }).dispose,
         host.contribute.panel({
+          id: DESIGN_PANEL_ID,
+          title: t(DESIGN.title),
+          component: makeDesignPanel(host, design, () =>
+            pickTheme(host, design).catch((e: unknown) =>
+              host.log.warn(`paged.slide browse for themes: ${String(e)}`),
+            ),
+          ),
+          defaultDock: "right",
+          // Design ▸ Themes opens it, as the ribbon's Design tab does.
+          rail: false,
+          // A slide with a palette of swatches.
+          iconSvg:
+            '<rect x="3.5" y="4.5" width="17" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<path d="M6 19.5h3M10.5 19.5h3M15 19.5h3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>' +
+            '<path d="M7 8.5h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+        }).dispose,
+        host.contribute.panel({
           id: NOTES_PANEL_ID,
           title: t(NOTES.title),
           component: makeNotesPanel(host, s),
@@ -809,6 +855,7 @@ export function activate(host: BundleHost): BundleHandle {
     };
     registerPanels(s.isDeck());
     textPane = true;
+    designPanel = true;
     disposers.push(
       s.subscribe(() => {
         if (s.isDeck() !== railed) registerPanels(s.isDeck());
