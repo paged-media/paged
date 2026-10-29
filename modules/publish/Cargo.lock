@@ -277,6 +277,7 @@ dependencies = [
  "paged-scene",
  "quick-xml",
  "serde",
+ "serde_json",
  "thiserror",
  "tracing",
  "zip",

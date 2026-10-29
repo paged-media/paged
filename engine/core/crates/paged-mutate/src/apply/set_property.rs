@@ -136,6 +136,14 @@ pub(super) fn apply_set_property(
         }
         _ => {}
     }
+    // Engine ADR 1040 — a box move or resize carries a mesh fill with it
+    // on a frame drawn from its box (the translate gesture and the
+    // resize handles commit `FrameBounds`).
+    if path == PropertyPath::FrameBounds {
+        if let Some(applied) = bounds_carrying_mesh(doc, node, value)? {
+            return Ok(applied);
+        }
+    }
     let (previous, invalidation) = match (node, path) {
         (NodeId::TextFrame(id), PropertyPath::FrameBounds) => {
             let new_bounds = expect_bounds(path, value)?;
@@ -3273,6 +3281,45 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // Engine ADR 1040 — the frame's gradient mesh or freeform
+        // gradient, whole. The inverse is the fill it replaced (`None`
+        // when there was none), so undo restores it exactly.
+        (
+            NodeId::TextFrame(_) | NodeId::Rectangle(_) | NodeId::Oval(_) | NodeId::Polygon(_),
+            PropertyPath::FrameFillMesh,
+        ) => {
+            let new_fill = match value {
+                Value::FillMesh(spec) => spec
+                    .as_ref()
+                    .map(|s| {
+                        s.to_model().map_err(|reason| OperationError::InvalidValue {
+                            node: node.clone(),
+                            path,
+                            reason,
+                        })
+                    })
+                    .transpose()?,
+                _ => {
+                    return Err(OperationError::TypeMismatch {
+                        path,
+                        expected: "FillMesh".to_string(),
+                    })
+                }
+            };
+            let slot = find_fill_mesh_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = slot
+                .as_deref()
+                .map(crate::operation::MeshFillSpec::from_model);
+            *slot = new_fill.map(Box::new);
+            (
+                Value::FillMesh(prev),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
         // Engine ADR 1007 — how a gradient stroke maps onto the stroke.
         // The inverse names the mode it replaced (an unset mode reads
         // "Within", the value it stood for), so undo restores it exactly.
@@ -3987,4 +4034,79 @@ fn check_clip_member(
         return Ok(());
     }
     Err(OperationError::NodeNotFound(node.clone()))
+}
+
+/// Engine ADR 1040 — `FrameBounds` on a frame that is drawn from its box
+/// and carries a mesh fill: the bounds are set as ever, the mesh is
+/// mapped from the old box to the new one, and the inverse restores
+/// both exactly (the bounds, then the mesh as it was — a mapped-back
+/// mesh would differ in the last bit). `None` when the frame has no mesh
+/// or is drawn from its path (its box is then a cache the drawing does
+/// not follow).
+fn bounds_carrying_mesh(
+    doc: &mut Document,
+    node: &NodeId,
+    value: &Value,
+) -> Result<Option<AppliedOperation>, OperationError> {
+    let Some(slot) = find_fill_mesh_mut(doc, node) else {
+        return Ok(None);
+    };
+    if slot.is_none() {
+        return Ok(None);
+    }
+    let from_box = match node {
+        NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| {
+            paged_model::mesh::path_is_plain_box(&f.anchors, &f.subpath_starts, &f.subpath_open)
+        }),
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| {
+            paged_model::mesh::path_is_plain_box(&r.anchors, &r.subpath_starts, &r.subpath_open)
+        }),
+        NodeId::Oval(_) => Some(true),
+        _ => Some(false),
+    };
+    if from_box != Some(true) {
+        return Ok(None);
+    }
+    let mesh = find_fill_mesh_mut(doc, node).and_then(Option::take);
+    let applied = apply_set_property(doc, node, PropertyPath::FrameBounds, value);
+    let slot = find_fill_mesh_mut(doc, node);
+    let (Some(mesh), Some(slot)) = (mesh, slot) else {
+        return applied.map(Some);
+    };
+    let applied = match applied {
+        Ok(a) => a,
+        Err(e) => {
+            *slot = Some(mesh);
+            return Err(e);
+        }
+    };
+    let prev_spec = crate::operation::MeshFillSpec::from_model(&mesh);
+    let mut moved = *mesh;
+    if let (
+        Operation::SetProperty {
+            value: Value::Bounds(prev),
+            ..
+        },
+        Value::Bounds(next),
+    ) = (&applied.inverse, value)
+    {
+        moved.map_box(*prev, *next);
+    }
+    *slot = Some(Box::new(moved));
+    let mut invalidation = applied.invalidation;
+    invalidation.frame_style.push(node.clone());
+    Ok(Some(AppliedOperation {
+        op: applied.op,
+        inverse: Operation::Batch {
+            ops: vec![
+                applied.inverse,
+                Operation::SetProperty {
+                    node: node.clone(),
+                    path: PropertyPath::FrameFillMesh,
+                    value: Value::FillMesh(Some(prev_spec)),
+                },
+            ],
+        },
+        invalidation,
+    }))
 }

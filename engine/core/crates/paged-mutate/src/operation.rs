@@ -1690,6 +1690,17 @@ pub enum PropertyPath {
     /// it: the IDML export writes the stroke `Within` and reports the
     /// loss. Paint-only (`frame_style`).
     FrameGradientStrokeMode,
+    // ---- engine ADR 1040 — gradient mesh and freeform gradient -------
+    /// The frame's native mesh fill, a gradient mesh or a freeform
+    /// gradient (`Value::FillMesh`), shown instead of its fill swatch;
+    /// `Value::FillMesh(None)` clears it back to the swatch. Points are in
+    /// the frame's inner coordinates. On a TextFrame, Rectangle, Oval or
+    /// Polygon. Whole-value, like `FrameGradientFeather`: the Mesh tool
+    /// sends the edited mesh, and its inverse is the mesh it replaced.
+    /// No IDML attribute carries it: the IDML export keeps the swatch,
+    /// stores the mesh in a label the import restores and reports the
+    /// loss. Paint-only (`frame_style`).
+    FrameFillMesh,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -2089,6 +2100,7 @@ impl PropertyPath {
             PropertyPath::FrameGradientFillStart => "frame.gradientFillStart",
             PropertyPath::DocumentShowFieldCodes => "document.showFieldCodes",
             PropertyPath::FrameGradientStrokeMode => "frame.gradientStrokeMode",
+            PropertyPath::FrameFillMesh => "frame.fillMesh",
         }
     }
 }
@@ -3124,6 +3136,9 @@ pub enum Value {
         #[serde(default)]
         prev: Option<String>,
     },
+    /// Engine ADR 1040 — a frame's gradient mesh or freeform gradient
+    /// (`PropertyPath::FrameFillMesh`); `None` clears it.
+    FillMesh(Option<MeshFillSpec>),
     /// W0.2 — whole paragraph rule struct (`RuleAbove` / `RuleBelow`).
     /// `None` clears the rule back to the all-`None` default. The
     /// inverse carries the prior `Option<spec>` so undo round-trips
@@ -3625,6 +3640,265 @@ pub struct GradientStopSpec {
     /// When set it wins over `stop_color`, which may then be `""`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<StopColorSpec>,
+}
+
+/// Engine ADR 1040 — a frame's native mesh fill on the wire: the
+/// mirror of `paged_model::MeshFill` (points in the frame's inner
+/// coordinates; colours inline, `space` as a swatch's).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum MeshFillSpec {
+    /// A gradient mesh: one or more grids of patches.
+    Mesh { grids: Vec<MeshGridSpec> },
+    /// A freeform gradient: coloured points, and lines through some of
+    /// them (each a list of point indices, two or more).
+    Freeform {
+        points: Vec<FreeformPointSpec>,
+        #[serde(default)]
+        lines: Vec<Vec<u32>>,
+    },
+}
+
+/// One grid of a gradient mesh: `rows × cols` patches over
+/// `(rows + 1) × (cols + 1)` nodes, row-major from the top-left.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshGridSpec {
+    pub rows: u32,
+    pub cols: u32,
+    pub nodes: Vec<MeshNodeSpec>,
+    /// Per patch (row-major) its interior control points `p11 p12 p21
+    /// p22` — tensor patches; empty: Coons patches.
+    #[serde(default)]
+    pub tensor: Vec<[[f32; 2]; 4]>,
+}
+
+/// One mesh point: its position, its four handles (towards the previous
+/// column, the next column, the previous row, the next row) and colour.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshNodeSpec {
+    pub point: [f32; 2],
+    pub handles: [[f32; 2]; 4],
+    pub color: MeshColorSpec,
+}
+
+/// A mesh or freeform point's colour.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshColorSpec {
+    /// `"CMYK"` | `"RGB"` | `"LAB"` | `"Gray"`, as a swatch's `space`.
+    pub space: String,
+    pub value: Vec<f32>,
+    /// 0..=100; absent is 100 (clamped on apply).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity_pct: Option<f32>,
+}
+
+/// One freeform colour point.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FreeformPointSpec {
+    pub point: [f32; 2],
+    pub color: MeshColorSpec,
+    /// How far the colour holds before it blends, in percent (0..=100)
+    /// of the frame's box diagonal; absent is 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spread_pct: Option<f32>,
+}
+
+impl MeshColorSpec {
+    fn to_model(&self) -> Result<paged_model::MeshColor, String> {
+        let space = paged_model::ColorSpace::from_attr(&self.space);
+        let channels = match space {
+            paged_model::ColorSpace::Cmyk => 4,
+            paged_model::ColorSpace::Rgb | paged_model::ColorSpace::Lab => 3,
+            paged_model::ColorSpace::Gray => 1,
+            paged_model::ColorSpace::Unknown => {
+                return Err(format!(
+                    "a colour space is CMYK, RGB, LAB or Gray, not {:?}",
+                    self.space
+                ))
+            }
+        };
+        if self.value.len() != channels || self.value.iter().any(|v| !v.is_finite()) {
+            return Err(format!(
+                "a {} colour has {channels} finite values, not {:?}",
+                self.space, self.value
+            ));
+        }
+        Ok(paged_model::MeshColor {
+            space,
+            value: self.value.clone(),
+            opacity_pct: self
+                .opacity_pct
+                .filter(|o| o.is_finite())
+                .map(|o| o.clamp(0.0, 100.0))
+                .filter(|o| *o < 100.0),
+        })
+    }
+
+    fn from_model(c: &paged_model::MeshColor) -> Self {
+        MeshColorSpec {
+            space: c.space.as_attr().to_string(),
+            value: c.value.clone(),
+            opacity_pct: c.opacity_pct,
+        }
+    }
+}
+
+fn finite_point(p: [f32; 2]) -> Result<[f32; 2], String> {
+    if p.iter().all(|v| v.is_finite()) {
+        Ok(p)
+    } else {
+        Err(format!("a point is finite, not {p:?}"))
+    }
+}
+
+impl MeshFillSpec {
+    /// The model's fill, or why the spec is not one: a grid whose node
+    /// count is not `(rows + 1) × (cols + 1)`, a tensor list that is not
+    /// one entry per patch, a line through a point that does not exist,
+    /// an unknown colour space or a value that is not finite.
+    pub fn to_model(&self) -> Result<paged_model::MeshFill, String> {
+        match self {
+            MeshFillSpec::Mesh { grids } => {
+                let mut out = Vec::with_capacity(grids.len());
+                for (gi, g) in grids.iter().enumerate() {
+                    let grid = paged_model::MeshGrid {
+                        rows: g.rows,
+                        cols: g.cols,
+                        nodes: g
+                            .nodes
+                            .iter()
+                            .map(|n| {
+                                Ok(paged_model::MeshNode {
+                                    point: finite_point(n.point)?,
+                                    handles: [
+                                        finite_point(n.handles[0])?,
+                                        finite_point(n.handles[1])?,
+                                        finite_point(n.handles[2])?,
+                                        finite_point(n.handles[3])?,
+                                    ],
+                                    color: n.color.to_model()?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, String>>()?,
+                        tensor: g
+                            .tensor
+                            .iter()
+                            .map(|t| {
+                                Ok([
+                                    finite_point(t[0])?,
+                                    finite_point(t[1])?,
+                                    finite_point(t[2])?,
+                                    finite_point(t[3])?,
+                                ])
+                            })
+                            .collect::<Result<Vec<_>, String>>()?,
+                    };
+                    if !grid.is_well_formed() {
+                        return Err(format!(
+                            "grid {gi}: {} × {} patches need {} nodes and no tensor or {} \
+                             tensor entries, not {} and {}",
+                            g.rows,
+                            g.cols,
+                            (u64::from(g.rows) + 1) * (u64::from(g.cols) + 1),
+                            u64::from(g.rows) * u64::from(g.cols),
+                            g.nodes.len(),
+                            g.tensor.len()
+                        ));
+                    }
+                    out.push(grid);
+                }
+                Ok(paged_model::MeshFill::Mesh(paged_model::GradientMesh {
+                    grids: out,
+                }))
+            }
+            MeshFillSpec::Freeform { points, lines } => {
+                let points = points
+                    .iter()
+                    .map(|p| {
+                        Ok(paged_model::FreeformPoint {
+                            point: finite_point(p.point)?,
+                            color: p.color.to_model()?,
+                            spread_pct: p
+                                .spread_pct
+                                .filter(|s| s.is_finite())
+                                .map(|s| s.clamp(0.0, 100.0))
+                                .filter(|s| *s > 0.0),
+                        })
+                    })
+                    .collect::<Result<Vec<_>, String>>()?;
+                for (li, l) in lines.iter().enumerate() {
+                    if l.len() < 2 {
+                        return Err(format!("line {li} runs through two points or more"));
+                    }
+                    if let Some(i) = l.iter().find(|&&i| i as usize >= points.len()) {
+                        return Err(format!("line {li} names point {i}, which does not exist"));
+                    }
+                }
+                Ok(paged_model::MeshFill::Freeform(
+                    paged_model::FreeformGradient {
+                        points,
+                        lines: lines.clone(),
+                    },
+                ))
+            }
+        }
+    }
+
+    /// The wire form of the model's fill.
+    pub fn from_model(fill: &paged_model::MeshFill) -> Self {
+        match fill {
+            paged_model::MeshFill::Mesh(m) => MeshFillSpec::Mesh {
+                grids: m
+                    .grids
+                    .iter()
+                    .map(|g| MeshGridSpec {
+                        rows: g.rows,
+                        cols: g.cols,
+                        nodes: g
+                            .nodes
+                            .iter()
+                            .map(|n| MeshNodeSpec {
+                                point: n.point,
+                                handles: n.handles,
+                                color: MeshColorSpec::from_model(&n.color),
+                            })
+                            .collect(),
+                        tensor: g.tensor.clone(),
+                    })
+                    .collect(),
+            },
+            paged_model::MeshFill::Freeform(f) => MeshFillSpec::Freeform {
+                points: f
+                    .points
+                    .iter()
+                    .map(|p| FreeformPointSpec {
+                        point: p.point,
+                        color: MeshColorSpec::from_model(&p.color),
+                        spread_pct: p.spread_pct,
+                    })
+                    .collect(),
+                lines: f.lines.clone(),
+            },
+        }
+    }
 }
 
 /// Engine ADR 1007 — a gradient stop's inline colour on the wire.

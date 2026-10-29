@@ -6,5 +6,6 @@
 mod c62_line_ends_load;
 mod effect_stack;
 mod fill_rule;
+mod mesh_fill;
 mod paint_v2;
 mod round_trip_render;

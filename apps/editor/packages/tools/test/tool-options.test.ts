@@ -103,6 +103,8 @@ const radii = (anchors: Array<{ anchor: number[] }>) =>
 describe("the host tool options", () => {
   it("are exactly the options this file covers", () => {
     expect(DECLARED.map((d) => `${d.toolId}.${d.field.key}`).sort()).toEqual([
+      "paged.tool.gradientSwatch.mode",
+      "paged.tool.gradientSwatch.spread",
       "paged.tool.pencil.closeDistance",
       "paged.tool.pencil.fidelity",
       "paged.tool.pencil.smoothing",
@@ -112,7 +114,9 @@ describe("the host tool options", () => {
     ]);
     for (const d of DECLARED)
       expect(d.field.kind).toBe(
-        d.field.key === "smoothing" ? "select" : "number",
+        d.field.key === "smoothing" || d.field.key === "mode"
+          ? "select"
+          : "number",
       );
   });
 });

@@ -1633,6 +1633,7 @@
     "frameFillRule",
     "frameImageAdjustments",
     "frameGradientFillStart",
+    "frameFillMesh",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -4031,6 +4032,18 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameFillMesh",
+      "type": {
+        "kind": "struct",
+        "shape": "MeshFillSpec"
+      },
+      "wire": "fillMesh",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
     },
     {
       "addressKind": "frame",
@@ -17669,6 +17682,20 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameFillMesh",
+        "type": {
+          "kind": "struct",
+          "fields": {},
+          "shape": "MeshFillSpec",
+          "open": true
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "fillMesh"
       },
       {
         "addressKind": "frame",

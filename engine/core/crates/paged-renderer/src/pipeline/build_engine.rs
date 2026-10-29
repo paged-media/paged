@@ -100,6 +100,7 @@ fn other_pools_print(list: &paged_compose::DisplayList) -> u64 {
     list.radial_gradients.len().hash(&mut h);
     list.sweep_gradients.len().hash(&mut h);
     list.images.len().hash(&mut h);
+    list.meshes.len().hash(&mut h);
     for ink in &list.spot_inks {
         ink.name.hash(&mut h);
     }

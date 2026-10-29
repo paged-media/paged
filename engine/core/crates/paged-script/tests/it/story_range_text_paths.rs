@@ -229,7 +229,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 262: ADR 1008 added the effect stack of each target.
         // 263: ADR 1037 added an image frame's filter stack.
         // 264: ADR 1007 added a frame's stroke gradient mode.
-        264,
+        // 265: ADR 1040 added a frame's gradient mesh or freeform gradient.
+        265,
         "the advertised roster changed; move the count with the decision"
     );
 }

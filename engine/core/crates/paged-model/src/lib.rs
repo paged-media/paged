@@ -34,9 +34,15 @@ pub mod effect_stack;
 pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
+pub mod mesh;
 pub mod winding;
 pub mod word_field;
 pub use word_field::{WordField, WordFieldKind};
+
+pub use mesh::{
+    FreeformGradient, FreeformPoint, GradientMesh, MeshColor, MeshFill, MeshGrid, MeshHandle,
+    MeshNode, MeshPatch, PatchInput, MESH_FILL_LABEL_KEY,
+};
 
 use std::collections::BTreeMap;
 
@@ -1580,6 +1586,12 @@ pub struct TextFrame {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// `AppliedTOCStyle` attribute — `TOCStyle/<id>` reference. Frames
     /// authored as Table-of-Contents hosts carry this; the renderer
     /// detects it at story emission and swaps the story's paragraphs
@@ -1706,6 +1718,7 @@ impl TextFrame {
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
             gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
             effects: None,
             effect_stack: Vec::new(),
             fill_transparency: None,
@@ -2098,6 +2111,12 @@ pub struct Rectangle {
     /// reported as a loss on IDML export.
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// `<TextPath>` children attached to this rectangle. See
     /// [`Polygon::text_paths`].
     pub text_paths: Vec<TextPath>,
@@ -2228,6 +2247,7 @@ impl Rectangle {
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
         }
     }
 }
@@ -2556,6 +2576,12 @@ pub struct Oval {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// See [`Rectangle::opacity`].
     pub opacity: Option<f32>,
     /// See [`Rectangle::blend_mode`].
@@ -2702,6 +2728,7 @@ impl Oval {
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
         }
     }
 }
@@ -3326,6 +3353,12 @@ pub struct Polygon {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// See [`Rectangle::opacity`].
     pub opacity: Option<f32>,
     /// See [`Rectangle::blend_mode`].
@@ -3456,6 +3489,7 @@ impl Polygon {
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
             text_wrap: None,
             item_layer: None,
             effects: None,

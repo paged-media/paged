@@ -79,12 +79,12 @@ pub use error::OperationError;
 pub use history::{History, DEFAULT_HISTORY_CAPACITY};
 pub use notify::Notifier;
 pub use operation::{
-    AppliedOperation, ColorGroupSpec, FaceSelectMode, FieldKind, GradientSpec, GradientStopSpec,
-    GroupSpec, GuideOrientationSpec, InvalidationHint, NestedParent, NodeId, NodeSpec,
-    NumberingLevelSpec, NumberingListSpec, OpacityMaskMode, Operation, ParagraphListState,
-    PathPointAddress, PathPointRole, PathfinderKind, PathfinderRegionVerb, PropertyPath,
-    StopColorSpec, StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec, Value,
-    ZOrderTarget,
+    AppliedOperation, ColorGroupSpec, FaceSelectMode, FieldKind, FreeformPointSpec, GradientSpec,
+    GradientStopSpec, GroupSpec, GuideOrientationSpec, InvalidationHint, MeshColorSpec,
+    MeshFillSpec, MeshGridSpec, MeshNodeSpec, NestedParent, NodeId, NodeSpec, NumberingLevelSpec,
+    NumberingListSpec, OpacityMaskMode, Operation, ParagraphListState, PathPointAddress,
+    PathPointRole, PathfinderKind, PathfinderRegionVerb, PropertyPath, StopColorSpec,
+    StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec, Value, ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
 
@@ -272,6 +272,7 @@ mod tests {
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
             gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
+            fill_mesh: None,
             effects: None,
             effect_stack: Vec::new(),
             gradient_fill_angle: None,
