@@ -282,6 +282,24 @@ describe("draw conformance — live symbols (WP6.8) [plugin-draw.symbols]", () =
     expect(await picture(h)).toBe(before);
   });
 
+  it("the live tool writes without a commit hook (as the rail runs it)", async () => {
+    const before = (await readEngineSymbols(h.host))[0]!.instances.length;
+    const handler = createSymbolismHandler(h.host, "sprayer", { dwellMs: 0 });
+    handler.onActivate(undefined as never);
+    handler.onPointerDown(pointerAt(PAGE_ID, [100, 500]));
+    await settle();
+    handler.onPointerUp({ ...pointerAt(PAGE_ID, [140, 500]), maxDelta: 40 });
+    const deadline = Date.now() + 10_000;
+    while (
+      (await readEngineSymbols(h.host))[0]!.instances.length === before &&
+      Date.now() < deadline
+    )
+      await settle();
+    expect(
+      (await readEngineSymbols(h.host))[0]!.instances.length,
+    ).toBeGreaterThan(before);
+  });
+
   it("Escape mid-drag writes nothing", async () => {
     const quiet = countingHost(h.host);
     const handler = createSymbolismHandler(quiet.host, "sizer", { dwellMs: 0 });

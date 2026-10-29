@@ -150,9 +150,13 @@ export function createSymbolismHandler(
       const owned = scope;
       const commit = snap.commit;
       reset();
-      if (commit && owned) {
-        hooks.onCommit?.(await writeSymbolism(host, kind, owned, commit));
-      } else hooks.onCommit?.(false);
+      // The write is its own statement: inside `hooks.onCommit?.(…)` it
+      // would be skipped whenever no hook is given (the live tool).
+      const applied =
+        commit && owned
+          ? await writeSymbolism(host, kind, owned, commit)
+          : false;
+      hooks.onCommit?.(applied);
       return;
     }
     if (scope) draw(snap, scope.pageId);
