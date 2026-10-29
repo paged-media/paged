@@ -5362,7 +5362,8 @@ mod tests {
                         if (0..4).any(|i| g[i].abs_diff(c[i]) > 8) {
                             far += 1;
                         }
-                        if c[0] > 180 && c[1] < 80 {
+                        // Linear 0.9 / 0.1 encodes to about 243 / 89.
+                        if c[0] > 200 && c[1] < 130 && c[2] < 130 {
                             red += 1;
                         }
                     }
