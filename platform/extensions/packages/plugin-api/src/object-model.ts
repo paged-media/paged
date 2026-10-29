@@ -72,9 +72,16 @@ export type Selector = string;
  *  object's content (its `ContentSchema`). */
 export type PropertyPathName = string;
 
-/** The page-item kinds (core's `ElementId` string-id kinds). */
+/** The page-item kinds (core's `ElementId` string-id kinds; `instance`,
+ *  a symbol instance, since protocol 78 — engine ADR 1039). */
 export type PageItemKind =
-  "textFrame" | "rectangle" | "oval" | "polygon" | "graphicLine" | "group";
+  | "textFrame"
+  | "rectangle"
+  | "oval"
+  | "polygon"
+  | "graphicLine"
+  | "group"
+  | "instance";
 
 /** Style families a `style:` address names (= core's `StyleCollection`). */
 export type StyleFamily =
