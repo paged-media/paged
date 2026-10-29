@@ -8173,6 +8173,11 @@
           "const": "symbolInstanceNineSlice"
         },
         {
+          "description": "Engine ADR 1039 (draw ADR 365) — the symbol a symbol instance draws,\n`Value::Text(symbol id)`: Illustrator's Replace Symbol. The\ninstance keeps its id, transform and overrides; a symbol id the\nstore does not hold is refused. Only `NodeId::Instance`. Native.",
+          "type": "string",
+          "const": "symbolInstanceSymbol"
+        },
+        {
           "description": "`<DropShadowSetting BlendMode>`; `\"\"` is InDesign's `Multiply`.",
           "type": "string",
           "const": "frameDropShadowBlendMode"

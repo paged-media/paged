@@ -895,6 +895,8 @@ property_paths! {
         // Native: IDML has no symbol (the writer expands instances).
         SymbolInstanceTint => "symbolInstanceTint" : lengths(),
         SymbolInstanceNineSlice => "symbolInstanceNineSlice" : lengths(),
+        // Draw ADR 365 — the symbol an instance draws (Replace Symbol).
+        SymbolInstanceSymbol => "symbolInstanceSymbol" : text(),
         // R-11 — the drop shadow's remaining attributes.
         FrameDropShadowBlendMode => "frameDropShadowBlendMode" : enum_open(BLEND_MODES).default_text("Multiply").idml(idml![attr(DropShadowSetting, BlendMode)]),
         FrameDropShadowSpread => "frameDropShadowSpread" : pct().default_num(0.0).idml(idml![attr(DropShadowSetting, Spread)]),

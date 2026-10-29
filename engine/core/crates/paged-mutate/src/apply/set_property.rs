@@ -312,8 +312,23 @@ pub(super) fn apply_set_property(
             | PropertyPath::ElementLocked
             | PropertyPath::ItemLayer
             | PropertyPath::SymbolInstanceTint
-            | PropertyPath::SymbolInstanceNineSlice,
+            | PropertyPath::SymbolInstanceNineSlice
+            | PropertyPath::SymbolInstanceSymbol,
         ) => {
+            // Replace Symbol (draw ADR 365): the target must be in the store.
+            let replacement = if path == PropertyPath::SymbolInstanceSymbol {
+                let next = expect_text(path, value)?;
+                if !doc.symbols.iter().any(|d| d.id == next) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason: format!("no symbol {next:?} in the document"),
+                    });
+                }
+                Some(next)
+            } else {
+                None
+            };
             let inst = doc
                 .spreads
                 .iter_mut()
@@ -437,6 +452,17 @@ pub(super) fn apply_set_property(
                                 .unwrap_or_default(),
                         ),
                         frame_style_hint(node),
+                    )
+                }
+                PropertyPath::SymbolInstanceSymbol => {
+                    let next = replacement.expect("validated above");
+                    let prev = std::mem::replace(&mut inst.symbol, next);
+                    (
+                        Value::Text(prev),
+                        InvalidationHint {
+                            frame_geometry: vec![node.clone()],
+                            ..Default::default()
+                        },
                     )
                 }
                 _ => unreachable!("the arm lists the instance paths"),
