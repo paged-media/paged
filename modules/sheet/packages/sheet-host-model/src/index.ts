@@ -205,6 +205,9 @@ export {
 
 export {
   chartGeometryToMutations,
+  chartGradientId,
+  gradientMintOps,
+  nativeFxOps,
   estimateLabelMetrics,
   labelBox,
   labelJustification,
@@ -219,6 +222,12 @@ export {
   type ChartPrimitive,
   type ChartTextLabel,
   type LinePrim,
+  type NativeFeather,
+  type NativeFx,
+  type NativeGlow,
+  type NativeGradient,
+  type NativeInnerShadow,
+  type NativeShadow,
   type PolygonPrim,
   type RectPrim,
   type TextAnchor,
@@ -268,4 +277,8 @@ export {
 
 // Wave 9 — conditional-format data bars on the native placed table.
 export { tableDataBarOps, tableDataBars, tableIcons } from "./table-databars";
-export { tablePictureBox, tablePictureOps } from "./table-pictures";
+export {
+  tablePictureBox,
+  tablePictureLosses,
+  tablePictureOps,
+} from "./table-pictures";

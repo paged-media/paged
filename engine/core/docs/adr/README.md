@@ -145,7 +145,7 @@ is not written yet.
 | [1002](1002-xml-tags-carry-template-fields.md) | XML tags carry template fields, and the XML structure is written | Accepted 2026-10-23 |
 | [1003](1003-a-placed-pdf-shows-the-page-the-document-names.md) | A placed PDF shows the page the document names | Accepted 2026-10-23 |
 | [1004](1004-a-follow-up-write-can-join-the-step-that-provoked-it.md) | A follow-up write can join the undo step that provoked it | Accepted 2026-10-23 |
-| [1005](1005-a-raster-is-read-by-paged-raster.md) | A raster is read by `paged-raster`, and a TIFF through `tiff` | Accepted 2026-10-24; note 2026-10-24 (the frame's intent, ADR 1032) |
+| [1005](1005-a-raster-is-read-by-paged-raster.md) | A raster is read by `paged-raster`, and a TIFF through `tiff` | Accepted 2026-10-24; note 2026-10-24 (the frame's intent, ADR 1032); note 2026-10-28 (the remaining codecs, ADR 1038) |
 | [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
 | [1010](1010-a-group-can-clip-and-be-pasted-in.md) | A group can clip, and a group can be pasted into a frame | Accepted 2026-10-24 |
 | [1011](1011-a-page-has-a-place-on-the-canvas.md) | A page has a place on the canvas (artboards) | Accepted 2026-10-25 |
@@ -162,6 +162,7 @@ is not written yet.
 | [1032](1032-one-cms-with-intents-and-bpc.md) | One colour API with explicit intents and black-point compensation on every backend | Accepted 2026-10-24 |
 | [1033](1033-an-eps-is-drawn-from-its-postscript.md) | An EPS is drawn from its PostScript, by `paged-ps` | Accepted 2026-10-24 |
 | [1036](1036-a-snippet-carries-opacity-masks-and-names.md) | A snippet carries its opacity masks and item names; an inline PDF is readable | Accepted 2026-10-27 |
+| [1038](1038-the-remaining-codecs-and-the-layered-tiff.md) | The remaining codecs: GIF, BMP, TGA, JPEG XL and AVIF encode, HDR and OpenEXR floats, and the layered TIFF | Accepted 2026-10-28 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

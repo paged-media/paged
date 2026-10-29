@@ -593,6 +593,78 @@ fn style_refs_ride_beside_the_colour__feat__sheet_chart_style_roles() {
     );
     let pj = serde_json::to_string(&plain).unwrap();
     assert!(!pj.contains("SwatchRef") && !pj.contains("innerR") && !pj.contains("flattened3d"));
+    assert!(!pj.contains("\"fx\"") && !pj.contains("losses"));
+}
+
+/// A pie whose series has a radial gradient and a glow, and a second
+/// point with a reflection (sheet ADR 527): the wire shape the page
+/// lowering reads.
+#[test]
+fn native_fx_rides_the_ir__feat__sheet_chart_native_effects() {
+    use paged_ooxml::tree::parse;
+    let sp = |x: &str| {
+        let el = parse(
+            format!(r#"<a:spPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{x}</a:spPr>"#)
+                .as_bytes(),
+        )
+        .unwrap();
+        let rels = |_: &str| None;
+        DmlFx {
+            fill: paged_ooxml::drawingml::fill_in(&el, &rels),
+            line_fill: None,
+            effects: el
+                .child(paged_ooxml::tree::Ns::A, "effectLst")
+                .map(|e| paged_ooxml::drawingml::effects(e, &rels))
+                .unwrap_or_default(),
+        }
+    };
+    let mut m = chart(ChartKind::Pie, Grouping::Standard, 1);
+    let s = &mut m.plots[0].series[0];
+    s.fx = Some(Box::new(sp(
+        r#"<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="100000"><a:schemeClr val="accent2"/></a:gs></a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path></a:gradFill><a:effectLst><a:glow rad="38100"><a:schemeClr val="accent2"><a:alpha val="40000"/></a:schemeClr></a:glow></a:effectLst>"#,
+    )));
+    s.point_fx = vec![(
+        1,
+        sp(
+            r#"<a:effectLst><a:reflection blurRad="6350" stA="50000" endA="300" endPos="55000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/></a:effectLst>"#,
+        ),
+    )];
+    let g = generate(&m, &data(vec![vec![1.0, 3.0]]), 300.0, 200.0);
+    let fx: Vec<_> = g
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            Primitive::Wedge { fx, .. } => Some(fx.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(fx.len(), 2);
+    let a = fx[0].as_ref().unwrap();
+    let gr = a.gradient.as_ref().unwrap();
+    assert_eq!(gr.kind, "radial");
+    assert_eq!(
+        gr.stops,
+        vec![(0.0, "#FFFFFF".into()), (100.0, "#ED7D31".into())]
+    );
+    assert!(gr.start.is_some() && gr.length.is_some());
+    assert_eq!(a.outer_glow.as_ref().unwrap().opacity, 40.0);
+    assert!(
+        fx[1].is_none(),
+        "the point's own spPr has only what the page cannot hold"
+    );
+    assert_eq!(g.losses.len(), 1, "{:?}", g.losses);
+    let json = serde_json::to_string(&g).unwrap();
+    assert!(
+        json.contains(
+            r##""fx":{"gradient":{"kind":"radial","stops":[[0.0,"#FFFFFF"],[100.0,"#ED7D31"]]"##
+        ),
+        "{json}"
+    );
+    assert!(
+        json.contains(r#""outerGlow":{"size":3.0,"opacity":40.0"#),
+        "{json}"
+    );
+    assert!(json.contains(r#""losses":["a:reflection"#), "{json}");
 }
 
 #[test]

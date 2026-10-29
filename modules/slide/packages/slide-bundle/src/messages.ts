@@ -219,14 +219,20 @@ export const ANIM = defineMessages("slide.anim", {
     "This effect is kept as the deck wrote it; its timing cannot be changed here.",
   shape: "Shape {name}",
   paragraph: "paragraph {n}",
-  addAnimation: "Add animation",
-  removeAnimation: "Remove animation",
-  setAnimationTiming: "Set animation timing",
-  moveAnimation: "Move animation",
-  listAnimations: "List animations",
   previewAnimations: "Preview animations",
   animationPainter: "Animation Painter",
   animationPane: "Animation pane",
+});
+
+/** The typed twins' titles (anim/contribute.ts), worded as the manifest's
+ *  objectModel commands are, like OUTPUT_MODEL's. */
+export const ANIM_MODEL = defineMessages("slide.animModel", {
+  addAnimation: "Add an animation",
+  removeAnimation: "Remove an animation",
+  setAnimationTiming: "Set an animation's timing",
+  moveAnimation: "Move an animation",
+  listAnimations: "List a slide's animations",
+  previewAnimations: "Preview a slide's animations",
 });
 
 /** The menu items this bundle adds (menu.ts): the path stays English (it is
@@ -390,6 +396,27 @@ export const TEMPLATE = defineMessages("slide.template", {
   yesOrNo: "Whether a slide is shown is yes or no.",
   cannotHide:
     "The template does not let a filler show or hide slides: it must grant document.metadata to the whole document.",
+});
+
+/** Slide W4's content verbs: pictures and icons, the format painter, the
+ *  SmartArt text pane (content-commands.ts). */
+export const CONTENT = defineMessages("slide.content", {
+  insertPicture: "Insert picture…",
+  insertIcon: "Insert icon…",
+  copyFormat: "Copy formatting",
+  pasteFormat: "Paste formatting",
+  smartArtText: "SmartArt text pane",
+  smartArtPoints: "Read a SmartArt diagram's text",
+  setSmartArtText: "Set a SmartArt point's text",
+});
+
+/** The SmartArt text pane (panels/smartart-panel.tsx). */
+export const SMARTART = defineMessages("slide.smartart", {
+  title: "Text Pane",
+  empty: "Select a SmartArt graphic to edit its text.",
+  heading: "Type your text here",
+  point: "Point {number}",
+  hint: "Enter writes the text; Shift+Enter starts a new paragraph. Points are edited, not added: the diagram keeps its layout.",
 });
 
 defineTranslations("de", de);

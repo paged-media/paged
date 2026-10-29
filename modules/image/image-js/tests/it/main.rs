@@ -11,4 +11,5 @@ mod ingest;
 mod ingest_16bit;
 mod ingest_formats;
 mod object_schema;
+mod psd_write;
 mod stroke_tapes;

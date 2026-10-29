@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 743,
-    "keybinding": 154,
-    "menu": 542,
-    "panel": 139,
-    "tool": 114
+    "command": 774,
+    "keybinding": 164,
+    "menu": 546,
+    "panel": 141,
+    "tool": 113
   },
   "features": [
     {
@@ -246,6 +246,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.bookmark",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.borderBottom",
       "kind": "command",
       "owner": "media.paged.doc"
@@ -276,6 +281,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.closeHeaderFooter",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.continueNumbering",
       "kind": "command",
       "owner": "media.paged.doc"
@@ -286,12 +296,52 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.crossReference",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.decreaseIndent",
       "kind": "command",
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.differentFirstPage",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.differentOddEven",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.doubleUnderline",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.editFooter",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.editHeader",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.endnote",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.field",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.footnote",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -331,6 +381,31 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.indexEntry",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.insertDate",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.insertPageCount",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.insertPageNumber",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.insertToc",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.italic",
       "kind": "command",
       "owner": "media.paged.doc"
@@ -352,6 +427,11 @@
     },
     {
       "id": "command:media.paged.doc.command.word.lineSpacing2",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.linkToPrevious",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -391,12 +471,42 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.pageBreak",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.pageSetup",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.pasteFormat",
       "kind": "command",
       "owner": "media.paged.doc"
     },
     {
       "id": "command:media.paged.doc.command.word.restartNumbering",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.sectionContinuous",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.sectionEvenPage",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.sectionNextPage",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.sectionOddPage",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -456,7 +566,22 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.toggleFieldCodes",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.underline",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.updateFields",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.updateToc",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -1941,11 +2066,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "command:media.paged.image.command.freeTransform",
-      "kind": "command",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "command:media.paged.image.command.globalLight",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2711,6 +2831,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.copyFormat",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.customShows",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2746,6 +2871,16 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.insertIcon",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.insertPicture",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.insertShapes",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2767,6 +2902,11 @@
     },
     {
       "id": "command:media.paged.slide.command.nextSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.pasteFormat",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2817,6 +2957,11 @@
     },
     {
       "id": "command:media.paged.slide.command.slideSorter",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.smartArtText",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2917,6 +3062,16 @@
     },
     {
       "id": "command:media.paged.slide.setCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setSmartArtText",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.smartArtPoints",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3806,6 +3961,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:alt+f9→media.paged.doc.command.word.toggleFieldCodes",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:alt+shift+cmd+0→paged.view.zoomFit",
       "kind": "keybinding",
       "owner": "editor"
@@ -3931,6 +4091,16 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+alt+d→media.paged.doc.command.word.endnote",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+alt+f→media.paged.doc.command.word.footnote",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+alt+f→paged.edit.replace",
       "kind": "keybinding",
       "owner": "editor"
@@ -3994,6 +4164,11 @@
       "id": "keybinding:cmd+d→paged.insert.placeImage",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+enter→media.paged.doc.command.word.pageBreak",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+e→media.paged.doc.command.word.alignCenter",
@@ -4096,6 +4271,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+shift+c→media.paged.slide.command.copyFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:cmd+shift+d→media.paged.doc.command.word.doubleUnderline",
       "kind": "keybinding",
       "owner": "media.paged.doc"
@@ -4134,6 +4314,11 @@
       "id": "keybinding:cmd+shift+s→paged.file.saveAsIdml",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+shift+v→media.paged.slide.command.pasteFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:cmd+shift+{→paged.object.sendToBack",
@@ -4331,6 +4516,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:ctrl+shift+c→media.paged.slide.command.copyFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:ctrl+shift+g→paged.object.ungroup",
       "kind": "keybinding",
       "owner": "editor"
@@ -4344,6 +4534,11 @@
       "id": "keybinding:ctrl+shift+s→paged.file.saveAsIdml",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+shift+v→media.paged.slide.command.pasteFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:ctrl+shift+{→paged.object.sendToBack",
@@ -4404,6 +4599,11 @@
       "id": "keybinding:f5→media.paged.slide.command.slideShowFromBeginning",
       "kind": "keybinding",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "keybinding:f9→media.paged.doc.command.word.updateFields",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:home→paged.view.firstPage",
@@ -4484,6 +4684,11 @@
       "id": "keybinding:shift+f5→media.paged.slide.command.slideShowFromCurrent",
       "kind": "keybinding",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "keybinding:shift+f9→media.paged.doc.command.word.toggleFieldCodes",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:shift+tab→media.paged.doc.command.word.listLevelUp",
@@ -5094,11 +5299,6 @@
       "id": "menu:Edit/Find…",
       "kind": "menu",
       "owner": "editor"
-    },
-    {
-      "id": "menu:Edit/Free transform",
-      "kind": "menu",
-      "owner": "media.paged.image"
     },
     {
       "id": "menu:Edit/Go to page…",
@@ -6456,6 +6656,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Insert/Icons…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Insert/Pictures…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Insert/Shapes…",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -6946,6 +7156,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Copy formatting",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Delete slide",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -6981,7 +7196,17 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Paste formatting",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Previous slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/SmartArt text pane",
       "kind": "menu",
       "owner": "media.paged.slide"
     },
@@ -7271,6 +7496,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "panel:media.paged.doc.panel.references",
+      "kind": "panel",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "panel:media.paged.draw.panel.appearance",
       "kind": "panel",
       "owner": "media.paged.draw"
@@ -7422,6 +7652,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.slides",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.smartart",
       "kind": "panel",
       "owner": "media.paged.slide"
     },
@@ -8332,11 +8567,6 @@
     },
     {
       "id": "tool:media.paged.image.tool.spotHeal",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
-      "id": "tool:media.paged.image.tool.transform",
       "kind": "tool",
       "owner": "media.paged.image"
     },

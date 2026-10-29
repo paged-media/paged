@@ -646,8 +646,14 @@ export const GRADIENT_KINDS: GradientKind[] = [
 /** A straight RGBA colour in [0,1] — the fill door's stop format. */
 export type Rgba01 = [number, number, number, number];
 
-/** The raster re-encode formats the non-PSD save-back lane offers. */
-export type RasterFormat = "png" | "jpeg" | "webp" | "tiff";
+/** The raster formats the non-PSD lane writes (ADR 468; GIF, BMP, TGA
+ *  and JPEG XL from engine ADR 1038). AVIF is not here: its encoder is
+ *  not in the module's wasm (the engine's `avif-encode` feature). */
+export type RasterFormat = SaveBackFormat | "gif" | "bmp" | "tga" | "jxl";
+
+/** The formats a save-back writes a file back as (its own format, PNG
+ *  for any other) and the `image.encode` action takes. */
+export type SaveBackFormat = "png" | "jpeg" | "webp" | "tiff";
 
 /** EXPORT AS (ADR 468): what the dialog chooses. */
 export interface ExportOptions {
@@ -681,7 +687,10 @@ export type ExportNote =
   | "widened"
   | "narrowed"
   | "alpha-dropped"
-  | "gray-untagged";
+  | "gray-untagged"
+  | "gif-palette"
+  | "jxl-lossless"
+  | "no-metadata";
 
 /** The engine's spec string for `export_image*`. */
 export function exportSpec(o: ExportOptions): string {
@@ -713,6 +722,10 @@ export const EXPORT_FORMATS: Record<
   jpeg: { extension: ".jpg", mimeType: "image/jpeg" },
   webp: { extension: ".webp", mimeType: "image/webp" },
   tiff: { extension: ".tif", mimeType: "image/tiff" },
+  gif: { extension: ".gif", mimeType: "image/gif" },
+  bmp: { extension: ".bmp", mimeType: "image/bmp" },
+  tga: { extension: ".tga", mimeType: "image/x-tga" },
+  jxl: { extension: ".jxl", mimeType: "image/jxl" },
 };
 
 // ─────────────────────────────── PAINT ───────────────────────────────
@@ -1867,6 +1880,14 @@ export interface ImageEngine
   /** Write the open layer stack into the retained PSD as its layers;
    *  returns the description. Throws for adjustment layers / non-RGB-8. */
   psdSaveLayers(psdHandle: number): string;
+  /** A layered PSD's bytes as a layered TIFF (engine ADR 1038): its
+   *  composite as the image, its layers in tag 37724, which Photoshop
+   *  reopens. Throws for a 16/32-bit document, a PSB or one without
+   *  layers. */
+  psdToLayeredTiff(
+    psd: Uint8Array,
+    compression: ExportOptions["compression"],
+  ): Uint8Array;
   /** The open stack as bytes: manifest first, then its buffers. */
   layersExport(): Uint8Array[];
   /** Replace the open stack with stored bytes and composite it. */
@@ -3190,6 +3211,7 @@ export interface ImageWasmModule
   layers_export(): Uint8Array[];
   layers_import(manifest: Uint8Array, buffers: Uint8Array[]): Promise<void>;
   psd_save_layers(psd_handle: number): string;
+  psd_to_layered_tiff(psd: Uint8Array, compression: string): Uint8Array;
   layers_extent(): Uint32Array;
   layers_undo(): Promise<string>;
   layers_redo(): Promise<string>;
@@ -4362,6 +4384,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         packAdjustExt(p),
       ),
     psdSaveLayers: (psdHandle) => wasm.psd_save_layers(psdHandle),
+    psdToLayeredTiff: (psd, compression) =>
+      wasm.psd_to_layered_tiff(psd, compression),
     layersExport: () => Array.from(wasm.layers_export()),
     layersImport: (manifest, buffers) => wasm.layers_import(manifest, buffers),
     layersSetAdjustment: (index, p) =>

@@ -42,10 +42,13 @@
 //!   decoded, so a texture's `Idnt` is written as it was read and
 //!   dangles the same way) and no `phry` folder tree.
 //!
-//! The descriptor encoder here is PRIVATE and emits every OSType the
-//! reader models; it is not a general descriptor-writing API.
+//! The descriptor tree is written by the crate's one descriptor writer
+//! (`crate::descriptor`), in its `.abr` style (class names without a
+//! trailing NUL).
 
-use crate::descriptor::{units, Descriptor, DescriptorValue, Key, RefItem, DESCRIPTOR_VERSION};
+use crate::descriptor::{
+    units, write_versioned_descriptor_styled, Descriptor, DescriptorValue, Key, WriteStyle,
+};
 use crate::vm_array::{VmRect, VmSamples, COMPRESSION_RAW, VM_VERSION};
 use crate::writer::ByteWriter;
 
@@ -92,10 +95,9 @@ pub fn write_abr(brushes: &[AbrBrush], samples: &[AbrSample]) -> Vec<u8> {
         class_id: Key::four(b"null"),
         items: vec![(Key::four(b"Brsh"), DescriptorValue::List(list))],
     };
-    let mut desc = ByteWriter::new();
-    desc.u32(DESCRIPTOR_VERSION);
-    descriptor(&mut desc, &root);
-    section(&mut w, b"desc", &desc.into_bytes());
+    let mut desc = Vec::new();
+    write_versioned_descriptor_styled(&mut desc, &root, WriteStyle::ABR);
+    section(&mut w, b"desc", &desc);
     w.into_bytes()
 }
 
@@ -493,145 +495,6 @@ fn options(d: &mut D, o: &BrushOptions, has_tool_options: bool) {
         d.opt_bool("usePressureOverridesSize", o.pressure_overrides_size);
         d.opt_bool("usePressureOverridesOpacity", o.pressure_overrides_opacity);
         d.opt_bool("useLegacy", o.use_legacy);
-    }
-}
-
-// ── the private encoder ──────────────────────────────────────────────
-
-fn write_key(w: &mut ByteWriter, k: &Key) {
-    let b = k.as_bytes();
-    if !k.is_long_form() && b.len() == 4 {
-        w.u32(0);
-    } else {
-        w.u32(b.len() as u32);
-    }
-    w.bytes(b);
-}
-
-fn unicode(w: &mut ByteWriter, s: &str, nul: bool) {
-    let mut units: Vec<u16> = s.encode_utf16().collect();
-    if nul {
-        units.push(0);
-    }
-    w.u32(units.len() as u32);
-    for u in units {
-        w.u16(u);
-    }
-}
-
-fn descriptor(w: &mut ByteWriter, d: &Descriptor) {
-    unicode(w, &d.class_name, false);
-    write_key(w, &d.class_id);
-    w.u32(d.items.len() as u32);
-    for (k, v) in &d.items {
-        write_key(w, k);
-        value(w, v);
-    }
-}
-
-fn value(w: &mut ByteWriter, v: &DescriptorValue) {
-    w.fourcc(v.ostype());
-    match v {
-        DescriptorValue::Descriptor(d)
-        | DescriptorValue::GlobalObject(d)
-        | DescriptorValue::ObjectArray(d) => {
-            if matches!(v, DescriptorValue::ObjectArray(_)) {
-                w.u32(16);
-            }
-            descriptor(w, d)
-        }
-        DescriptorValue::List(items) => {
-            w.u32(items.len() as u32);
-            for i in items {
-                value(w, i);
-            }
-        }
-        DescriptorValue::Double(x) => w.u64(x.to_bits()),
-        DescriptorValue::UnitFloat { unit, value } => {
-            w.fourcc(*unit);
-            w.u64(value.to_bits());
-        }
-        DescriptorValue::Text(s) => unicode(w, s, true),
-        DescriptorValue::Enum { type_key, value } => {
-            write_key(w, type_key);
-            write_key(w, value);
-        }
-        DescriptorValue::Integer(i) => w.i32(*i),
-        DescriptorValue::LargeInteger(i) => w.u64(*i as u64),
-        DescriptorValue::Bool(b) => w.u8(u8::from(*b)),
-        DescriptorValue::Class { name, id } => {
-            unicode(w, name, false);
-            write_key(w, id);
-        }
-        DescriptorValue::Alias(b) | DescriptorValue::RawData(b) | DescriptorValue::Path(b) => {
-            w.u32(b.len() as u32);
-            w.bytes(b);
-        }
-        DescriptorValue::UnitFloats { unit, values } => {
-            w.fourcc(*unit);
-            w.u32(values.len() as u32);
-            for x in values {
-                w.u64(x.to_bits());
-            }
-        }
-        DescriptorValue::Reference(items) => {
-            w.u32(items.len() as u32);
-            for i in items {
-                reference(w, i);
-            }
-        }
-    }
-}
-
-fn reference(w: &mut ByteWriter, r: &RefItem) {
-    match r {
-        RefItem::Property { name, class, key } => {
-            w.fourcc(*b"prop");
-            unicode(w, name, false);
-            write_key(w, class);
-            write_key(w, key);
-        }
-        RefItem::Class { name, class } => {
-            w.fourcc(*b"Clss");
-            unicode(w, name, false);
-            write_key(w, class);
-        }
-        RefItem::Enumerated {
-            name,
-            class,
-            type_key,
-            value,
-        } => {
-            w.fourcc(*b"Enmr");
-            unicode(w, name, false);
-            write_key(w, class);
-            write_key(w, type_key);
-            write_key(w, value);
-        }
-        RefItem::Offset {
-            name,
-            class,
-            offset,
-        } => {
-            w.fourcc(*b"rele");
-            unicode(w, name, false);
-            write_key(w, class);
-            w.u32(*offset);
-        }
-        RefItem::Identifier(i) => {
-            w.fourcc(*b"Idnt");
-            w.u32(*i);
-        }
-        RefItem::Index(i) => {
-            w.fourcc(*b"indx");
-            w.u32(*i);
-        }
-        RefItem::Name { name, class, value } => {
-            w.fourcc(*b"name");
-            unicode(w, name, false);
-            write_key(w, class);
-            unicode(w, value, true);
-        }
     }
 }
 

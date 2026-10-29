@@ -274,6 +274,7 @@ const TOOL = defineMessages("image.tool", {
 const IO = defineMessages("image.io", {
   imagePsdPngJpeg: "Image (PSD, TIFF, PNG, JPEG, WebP and more)",
   tiffAdjustedPixels: "TIFF (adjusted pixels, metadata kept)",
+  tiffWithLayers: "TIFF with layers (Photoshop reopens the PSD's layers)",
   webpAdjustedPixels: "WebP lossless (adjusted pixels, metadata kept)",
   psdAdjustedPixelsEditedLayers: "PSD (adjusted pixels + edited layers)",
   pngAdjustedPixels: "PNG (adjusted pixels)",
@@ -315,6 +316,9 @@ export const RASTER_IMPORT_MIME_TYPES = [
   "image/avif",
   "image/jxl",
   "image/x-adobe-dng",
+  "image/x-exr",
+  "image/vnd.radiance",
+  "image/x-tga",
 ] as const;
 
 // The commands' category stays English (an identity); the shell shows it
@@ -1914,6 +1918,13 @@ export function activate(host: BundleHost): BundleHandle {
       extension: ".tif",
       mimeType: "image/tiff",
       export: () => session.rasterExportBytes("tiff"),
+    });
+    host.contribute.exporter({
+      id: "media.paged.image.exporter.tiffLayers",
+      title: t(IO.tiffWithLayers),
+      extension: ".tif",
+      mimeType: "image/tiff",
+      export: () => session.layeredTiffExportBytes(),
     });
     host.contribute.exporter({
       id: "media.paged.image.exporter.webp",

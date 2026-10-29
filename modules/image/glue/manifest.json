@@ -31,7 +31,7 @@
         "name": "compute",
         "path": "wasm/image_js_bg.wasm",
         "purpose": "compute",
-        "maxBytes": 8388608
+        "maxBytes": 9437184
       }
     ]
   },
@@ -334,6 +334,7 @@
       "media.paged.image.exporter.png",
       "media.paged.image.exporter.jpeg",
       "media.paged.image.exporter.tiff",
+      "media.paged.image.exporter.tiffLayers",
       "media.paged.image.exporter.webp"
     ],
     "editContexts": [

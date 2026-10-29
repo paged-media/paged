@@ -60,6 +60,7 @@ import {
 } from "./doc-state.js";
 import { contributeDocObjectModel } from "./object-model.js";
 import { contributeWord, type WordContribution } from "./word/contribute.js";
+import { structureOf, type WordStructure } from "./word/structure.js";
 import {
   docPropertiesPanel,
   PROPERTIES_PANEL_ID,
@@ -70,6 +71,7 @@ import {
   pouredParagraphCount,
   sectionBlocks,
 } from "@paged-media/doc-host-model";
+import { readStructure } from "./save-structure";
 import type { StoryContentLike } from "@paged-media/doc-host-model";
 
 const PANEL_ID = "media.paged.doc.panel.outline";
@@ -101,6 +103,9 @@ interface LastDoc {
   /** The lowering used span/split columns (ADR 029); save-back lowers its
    *  baseline the same way. */
   midPageColumns: boolean;
+  /** Doc ADR 611 — the sections and masters of a document opened as the
+   *  document (the header and footer editing); `null` for a placement. */
+  structure?: WordStructure | null;
 }
 
 export function activate(host: BundleHost): BundleHandle {
@@ -185,6 +190,7 @@ function activateDoc(
             pouredParagraphCount(blocks),
           ),
           midPageColumns: opened.midPageColumns,
+          structure: structureOf(opened.ir, opened.storyIds),
         };
         docStore.set({
           fileName: name,
@@ -276,6 +282,13 @@ function activateDoc(
         ...themeSwatches(ir),
         ...styleColors(styles),
       ]);
+      const structure = await readStructure(
+        host,
+        ir,
+        sections,
+        contents,
+        sectionBlocks(ir).map((blocks) => pouredParagraphCount(blocks, layout)),
+      );
       const bytes = engine.saveEditedFromContent({
         ...content,
         cells,
@@ -283,6 +296,7 @@ function activateDoc(
         colors,
         tableParagraphs: layout === "own",
         styles,
+        structure,
       });
       host.diagnostics.set(
         "media.paged.doc/save-back",
@@ -368,6 +382,14 @@ function activateDoc(
           read.cells,
           [...themeSwatches(lowered), ...styleColors(styles)],
         );
+        // Doc ADRs 611/612: headers, footers, notes and bookmarks.
+        const structure = await readStructure(
+          host,
+          lowered,
+          last.storyIds,
+          contents,
+          last.pouredParagraphs,
+        );
         // This session poured it: each native table has its own paragraph.
         const bytes = engine.saveEditedFromContent({
           ...content,
@@ -376,6 +398,7 @@ function activateDoc(
           colors,
           tableParagraphs: true,
           styles,
+          structure,
         });
         // Save-back refusal feedback (ADR-007 posture): the patcher's skip
         // ledger — edits refused rather than risking corruption (gridSpan
@@ -629,6 +652,7 @@ function activateDoc(
           (d) => (d.frame as { id: string }).id === STANDALONE_FRAME,
         );
       },
+      structure: () => last?.structure ?? null,
     });
   }
 

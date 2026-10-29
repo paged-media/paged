@@ -16,11 +16,14 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Encode a [`RasterImage`] as PNG, JPEG, WebP or TIFF, with its metadata.
+//! Encode a [`RasterImage`] as PNG, JPEG, WebP, TIFF, GIF, BMP, TGA,
+//! JPEG XL or AVIF, with its metadata.
 //!
 //! One entry point, [`encode`], over the encoders the engine already
-//! links: `image`'s PNG and JPEG encoders, image-webp's WebP encoder and
-//! this crate's TIFF writer. What each writes:
+//! links: `image`'s PNG, JPEG, GIF, BMP and TGA encoders, image-webp's
+//! WebP encoder, this crate's TIFF writer, zune-jpegxl (feature
+//! `jxl-encode`, on by default) and ravif over rav1e (feature
+//! `avif-encode`, off by default). What each writes:
 //!
 //! | | samples | ICC | EXIF | XMP | IPTC | resolution |
 //! |---|---|---|---|---|---|---|
@@ -28,12 +31,22 @@
 //! | JPEG | Gray/RGB, 8-bit, quality 1–100 | APP2 | APP1 | APP1 | APP13 | JFIF |
 //! | WebP | Gray/RGB ± alpha, 8-bit, lossless | `ICCP` | `EXIF` | `XMP ` | — | — |
 //! | TIFF | Gray/RGB/CMYK ± alpha, 8/16-bit | 34675 | — | 700 | 33723 | 282/283 |
+//! | GIF | RGB ± alpha, 8-bit, 256 colours | — | — | — | — | — |
+//! | BMP | Gray/RGB ± alpha (Gray with alpha as RGBA), 8-bit | — | — | — | — | pels per metre |
+//! | TGA | Gray/RGB ± alpha, 8-bit, RLE | — | — | — | — | — |
+//! | JPEG XL | Gray/RGB ± alpha, 8/16-bit, lossless | — | — | — | — | — |
+//! | AVIF | Gray/RGB ± alpha, 8-bit in, quality 1–100 | — | `Exif` | — | — | — |
 //!
 //! JPEG has no alpha (it is dropped); 16-bit samples are narrowed to 8 by
 //! their high byte for the 8-bit formats. WebP is lossless only:
-//! image-webp has no lossy (VP8) encoder. EXIF is written with
-//! Orientation 1 ([`crate::exif::with_upright_orientation`]): the pixels
-//! an editor writes back were turned upright when they were opened.
+//! image-webp has no lossy (VP8) encoder. GIF holds 256 colours: an image
+//! with at most 256 distinct colours (alpha included) keeps them exactly,
+//! one with more is quantized (NeuQuant, `gif`'s), and alpha is one bit
+//! (a pixel is transparent or not). Gray is written as RGB in GIF, and in
+//! AVIF (ravif encodes RGB). JPEG XL is lossless (zune-jpegxl writes the
+//! modular mode only). EXIF is written with Orientation 1
+//! ([`crate::exif::with_upright_orientation`]): the pixels an editor
+//! writes back were turned upright when they were opened.
 
 use std::io::Cursor;
 
@@ -54,18 +67,59 @@ pub enum EncodeFormat {
     Jpeg,
     WebP,
     Tiff,
+    Gif,
+    Bmp,
+    Tga,
+    /// Lossless JPEG XL (feature `jxl-encode`).
+    Jxl,
+    /// AVIF (feature `avif-encode`, off by default).
+    Avif,
 }
 
 impl EncodeFormat {
-    /// `png`, `jpeg` (or `jpg`), `webp`, `tiff` (or `tif`).
+    /// Every format, in the order a format menu lists them.
+    pub const ALL: [EncodeFormat; 9] = [
+        EncodeFormat::Png,
+        EncodeFormat::Jpeg,
+        EncodeFormat::WebP,
+        EncodeFormat::Tiff,
+        EncodeFormat::Gif,
+        EncodeFormat::Bmp,
+        EncodeFormat::Tga,
+        EncodeFormat::Jxl,
+        EncodeFormat::Avif,
+    ];
+
+    /// `png`, `jpeg` (or `jpg`), `webp`, `tiff` (or `tif`), `gif`, `bmp`,
+    /// `tga`, `jxl`, `avif`.
     pub fn from_name(name: &str) -> Option<EncodeFormat> {
         Some(match name.to_ascii_lowercase().as_str() {
             "png" => EncodeFormat::Png,
             "jpeg" | "jpg" => EncodeFormat::Jpeg,
             "webp" => EncodeFormat::WebP,
             "tiff" | "tif" => EncodeFormat::Tiff,
+            "gif" => EncodeFormat::Gif,
+            "bmp" => EncodeFormat::Bmp,
+            "tga" => EncodeFormat::Tga,
+            "jxl" => EncodeFormat::Jxl,
+            "avif" => EncodeFormat::Avif,
             _ => return None,
         })
+    }
+
+    /// The name [`EncodeFormat::from_name`] reads back.
+    pub fn name(self) -> &'static str {
+        match self {
+            EncodeFormat::Png => "png",
+            EncodeFormat::Jpeg => "jpeg",
+            EncodeFormat::WebP => "webp",
+            EncodeFormat::Tiff => "tiff",
+            EncodeFormat::Gif => "gif",
+            EncodeFormat::Bmp => "bmp",
+            EncodeFormat::Tga => "tga",
+            EncodeFormat::Jxl => "jxl",
+            EncodeFormat::Avif => "avif",
+        }
     }
 
     /// The container [`crate::sniff`] reads the result as.
@@ -75,7 +129,34 @@ impl EncodeFormat {
             EncodeFormat::Jpeg => Format::Jpeg,
             EncodeFormat::WebP => Format::WebP,
             EncodeFormat::Tiff => Format::Tiff,
+            EncodeFormat::Gif => Format::Gif,
+            EncodeFormat::Bmp => Format::Bmp,
+            EncodeFormat::Tga => Format::Tga,
+            EncodeFormat::Jxl => Format::Jxl,
+            EncodeFormat::Avif => Format::Avif,
         }
+    }
+
+    /// This build carries the encoder: false for JPEG XL without the
+    /// `jxl-encode` feature and for AVIF without `avif-encode`, whose
+    /// [`encode`] refuses, naming the feature.
+    pub fn available(self) -> bool {
+        const JXL: bool = cfg!(feature = "jxl-encode");
+        const AVIF: bool = cfg!(feature = "avif-encode");
+        match self {
+            EncodeFormat::Jxl => JXL,
+            EncodeFormat::Avif => AVIF,
+            _ => true,
+        }
+    }
+
+    /// The encoder writes every sample as given (GIF quantizes beyond
+    /// 256 colours, JPEG and AVIF are lossy).
+    pub fn lossless(self) -> bool {
+        !matches!(
+            self,
+            EncodeFormat::Jpeg | EncodeFormat::Avif | EncodeFormat::Gif
+        )
     }
 }
 
@@ -118,6 +199,11 @@ pub fn encode(img: &RasterImage, format: EncodeFormat, opts: &EncodeOptions) -> 
         EncodeFormat::Png => encode_png(img, opts),
         EncodeFormat::Jpeg => encode_jpeg(img, opts),
         EncodeFormat::WebP => encode_webp(img, opts),
+        EncodeFormat::Gif => encode_gif(img),
+        EncodeFormat::Bmp => encode_bmp(img, opts),
+        EncodeFormat::Tga => encode_tga(img),
+        EncodeFormat::Jxl => encode_jxl(img),
+        EncodeFormat::Avif => encode_avif(img, opts),
         EncodeFormat::Tiff => {
             let m = &opts.metadata;
             let mut page = img.clone();
@@ -385,11 +471,220 @@ fn encode_webp(img: &RasterImage, opts: &EncodeOptions) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// 8-bit samples of a Gray or RGB image, with or without alpha, as the
+/// `image` colour type that names them.
+fn gray_rgb8<'a>(
+    format: &str,
+    img: &'a RasterImage,
+) -> Result<(image::ExtendedColorType, std::borrow::Cow<'a, [u8]>)> {
+    use image::ExtendedColorType as C;
+    let ct = match (img.model, img.alpha != Alpha::None) {
+        (ColorModel::Gray, false) => C::L8,
+        (ColorModel::Gray, true) => C::La8,
+        (ColorModel::Rgb, false) => C::Rgb8,
+        (ColorModel::Rgb, true) => C::Rgba8,
+        _ => return Err(refuse(format, img)),
+    };
+    Ok((ct, to_u8(&img.data)))
+}
+
+/// 8-bit RGB or RGBA samples of a Gray or RGB image (Gray widened).
+fn rgb8(format: &str, img: &RasterImage) -> Result<(bool, Vec<u8>)> {
+    let (ct, samples) = gray_rgb8(format, img)?;
+    use image::ExtendedColorType as C;
+    Ok(match ct {
+        C::L8 => (false, samples.iter().flat_map(|&v| [v, v, v]).collect()),
+        C::La8 => (
+            true,
+            samples
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|&[v, a]| [v, v, v, a])
+                .collect(),
+        ),
+        C::Rgba8 => (true, samples.into_owned()),
+        _ => (false, samples.into_owned()),
+    })
+}
+
+fn encode_gif(img: &RasterImage) -> Result<Vec<u8>> {
+    let (alpha, samples) = rgb8("GIF", img)?;
+    let mut out = Vec::new();
+    {
+        // Speed 10: `gif`'s recommended trade-off for NeuQuant; an image
+        // of at most 256 colours is written exactly at any speed.
+        let mut enc = image::codecs::gif::GifEncoder::new_with_speed(&mut out, 10);
+        let ct = if alpha {
+            image::ExtendedColorType::Rgba8
+        } else {
+            image::ExtendedColorType::Rgb8
+        };
+        enc.encode(&samples, img.width, img.height, ct)
+            .map_err(enc_err)?;
+    }
+    Ok(out)
+}
+
+fn encode_bmp(img: &RasterImage, opts: &EncodeOptions) -> Result<Vec<u8>> {
+    // Gray with alpha goes out as RGBA: the encoder's 32-bit gray file
+    // has no alpha mask, so a reader drops the alpha.
+    let (ct, samples) = if img.model == ColorModel::Gray && img.alpha != Alpha::None {
+        let (_, rgba) = rgb8("BMP", img)?;
+        (
+            image::ExtendedColorType::Rgba8,
+            std::borrow::Cow::Owned(rgba),
+        )
+    } else {
+        gray_rgb8("BMP", img)?
+    };
+    let mut out = Vec::new();
+    image::codecs::bmp::BmpEncoder::new(&mut out)
+        .encode(&samples, img.width, img.height, ct)
+        .map_err(enc_err)?;
+    // The info header's pixels per metre (offsets 38 and 42, little
+    // endian), which the encoder leaves 0.
+    if let Some((x, y)) = opts.ppi {
+        let ppm =
+            |v: f64| ((v / 0.0254).round().clamp(0.0, f64::from(i32::MAX)) as i32).to_le_bytes();
+        if out.len() >= 46 {
+            out[38..42].copy_from_slice(&ppm(x));
+            out[42..46].copy_from_slice(&ppm(y));
+        }
+    }
+    Ok(out)
+}
+
+fn encode_tga(img: &RasterImage) -> Result<Vec<u8>> {
+    let (ct, samples) = gray_rgb8("TGA", img)?;
+    let mut out = Vec::new();
+    image::codecs::tga::TgaEncoder::new(&mut out)
+        .encode(&samples, img.width, img.height, ct)
+        .map_err(enc_err)?;
+    Ok(out)
+}
+
+#[cfg(feature = "jxl-encode")]
+fn encode_jxl(img: &RasterImage) -> Result<Vec<u8>> {
+    use zune_core::bit_depth::BitDepth;
+    use zune_core::colorspace::ColorSpace;
+    use zune_core::options::EncoderOptions;
+    let space = match (img.model, img.alpha != Alpha::None) {
+        (ColorModel::Gray, false) => ColorSpace::Luma,
+        (ColorModel::Gray, true) => ColorSpace::LumaA,
+        (ColorModel::Rgb, false) => ColorSpace::RGB,
+        (ColorModel::Rgb, true) => ColorSpace::RGBA,
+        _ => return Err(refuse("JPEG XL", img)),
+    };
+    // 16-bit samples go in as native-endian byte pairs; floats are
+    // narrowed to 8 bits (the encoder takes integers only).
+    let (bytes, depth): (std::borrow::Cow<'_, [u8]>, BitDepth) = match &img.data {
+        Samples::U16(v) => (
+            std::borrow::Cow::Owned(v.iter().flat_map(|s| s.to_ne_bytes()).collect()),
+            BitDepth::Sixteen,
+        ),
+        other => (to_u8(other), BitDepth::Eight),
+    };
+    let options = EncoderOptions::new(img.width as usize, img.height as usize, space, depth);
+    let mut out = Vec::new();
+    zune_jpegxl::JxlSimpleEncoder::new(&bytes, options)
+        .encode(&mut out)
+        .map_err(|e| Error::Encode(format!("JPEG XL: {e:?}")))?;
+    Ok(out)
+}
+
+#[cfg(not(feature = "jxl-encode"))]
+fn encode_jxl(_: &RasterImage) -> Result<Vec<u8>> {
+    Err(Error::Encode(
+        "JPEG XL encoding is not in this build (the `jxl-encode` feature is off)".into(),
+    ))
+}
+
+#[cfg(feature = "avif-encode")]
+fn encode_avif(img: &RasterImage, opts: &EncodeOptions) -> Result<Vec<u8>> {
+    use ravif::{Encoder, Img, RGB8, RGBA8};
+    let (alpha, samples) = rgb8("AVIF", img)?;
+    let (w, h) = (img.width as usize, img.height as usize);
+    let quality = f32::from(opts.quality.clamp(1, 100));
+    let mut enc = Encoder::new()
+        .with_quality(quality)
+        .with_alpha_quality(quality)
+        // Speed 6 of 1 (slowest) to 10: an export, not an archive.
+        .with_speed(6)
+        .with_num_threads(Some(1));
+    let exif = exif_out(&opts.metadata);
+    if let Some(exif) = exif {
+        enc = enc.with_exif(exif);
+    }
+    let encoded = if alpha {
+        let px: Vec<RGBA8> = samples
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&[r, g, b, a]| RGBA8::new(r, g, b, a))
+            .collect();
+        enc.encode_rgba(Img::new(&px[..], w, h))
+    } else {
+        let px: Vec<RGB8> = samples
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|&[r, g, b]| RGB8::new(r, g, b))
+            .collect();
+        enc.encode_rgb(Img::new(&px[..], w, h))
+    }
+    .map_err(|e| Error::Encode(format!("AVIF: {e}")))?;
+    Ok(encoded.avif_file)
+}
+
+#[cfg(not(feature = "avif-encode"))]
+fn encode_avif(_: &RasterImage, _: &EncodeOptions) -> Result<Vec<u8>> {
+    Err(Error::Encode(
+        "AVIF encoding is not in this build (the `avif-encode` feature is off)".into(),
+    ))
+}
+
 /// The sRGB profile (moxcms's), for an export whose pixels are sRGB.
 pub fn srgb_icc() -> Vec<u8> {
     moxcms::ColorProfile::new_srgb()
         .encode()
         .unwrap_or_default()
+}
+
+/// sRGB pixels converted to CMYK bytes (0 = no ink): through `profile`
+/// with `intent` (black-point compensation on) when it is a usable CMYK
+/// output profile, else with the naive formula (`k = 1 - max(r, g, b)`).
+/// Returns the pixels and whether the profile was used. The one
+/// sRGB-to-ink conversion a raster export (a CMYK TIFF) and a CMYK PSD
+/// save share.
+pub fn srgb8_to_cmyk8(
+    rgb: &[[u8; 3]],
+    profile: Option<&[u8]>,
+    intent: paged_color::Intent,
+) -> (Vec<[u8; 4]>, bool) {
+    let mut cmyk = vec![[0u8; 4]; rgb.len()];
+    let managed = profile.is_some_and(|p| {
+        let mut cmm =
+            paged_color::IccCmm::new(None, paged_color::DisplaySetup { intent, bpc: true });
+        cmm.configure_export(Some(p), paged_color::ExportPolicy::ConvertToDestination);
+        cmm.export_rgb8_to_cmyk8(rgb, &mut cmyk)
+    });
+    if !managed {
+        for (o, p) in cmyk.iter_mut().zip(rgb) {
+            let [r, g, b] = p.map(|v| f32::from(v) / 255.0);
+            let k = 1.0 - r.max(g).max(b);
+            let ink = |c: f32| {
+                if k >= 1.0 {
+                    0.0
+                } else {
+                    (1.0 - c - k) / (1.0 - k)
+                }
+            };
+            let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            *o = [q(ink(r)), q(ink(g)), q(ink(b)), q(k)];
+        }
+    }
+    (cmyk, managed)
 }
 
 /// sRGB samples (8-bit, Gray or RGB, alpha kept) converted to CMYK for a
@@ -419,28 +714,7 @@ pub fn rgb_to_cmyk(
             img.model
         )));
     }
-    let mut cmyk = vec![[0u8; 4]; rgb.len()];
-    let managed = profile.is_some_and(|p| {
-        let mut cmm =
-            paged_color::IccCmm::new(None, paged_color::DisplaySetup { intent, bpc: true });
-        cmm.configure_export(Some(p), paged_color::ExportPolicy::ConvertToDestination);
-        cmm.export_rgb8_to_cmyk8(&rgb, &mut cmyk)
-    });
-    if !managed {
-        for (o, p) in cmyk.iter_mut().zip(&rgb) {
-            let [r, g, b] = p.map(|v| f32::from(v) / 255.0);
-            let k = 1.0 - r.max(g).max(b);
-            let ink = |c: f32| {
-                if k >= 1.0 {
-                    0.0
-                } else {
-                    (1.0 - c - k) / (1.0 - k)
-                }
-            };
-            let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-            *o = [q(ink(r)), q(ink(g)), q(ink(b)), q(k)];
-        }
-    }
+    let (cmyk, managed) = srgb8_to_cmyk8(&rgb, profile, intent);
     let mut data = Vec::with_capacity(rgb.len() * (4 + usize::from(alpha)));
     for (i, c) in cmyk.iter().enumerate() {
         data.extend_from_slice(c);

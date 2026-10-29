@@ -271,6 +271,16 @@ jobs:
           cargo clippy -p paged-wire --features schema --all-targets -- -D warnings
           cargo nextest run -p paged-wire --features schema --no-fail-fast
 
+      # paged-raster's AVIF encoder (ADR 1038) sits behind the
+      # `avif-encode` feature, which no workspace build turns on (rav1e
+      # would add 1.6 MiB to a wasm), so the steps above never compile it.
+      # Its round trip runs here, once, on Linux.
+      - name: AVIF encode (paged-raster --features avif-encode)
+        if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}
+        run: |
+          cargo clippy -p paged-raster --features avif-encode --all-targets -- -D warnings
+          cargo nextest run -p paged-raster --features avif-encode --no-fail-fast
+
       # After a red nextest too, so a run reports both; not after a red lint.
       - name: doctests
         if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}

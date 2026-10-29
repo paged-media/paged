@@ -33,6 +33,7 @@
 
 pub mod anim;
 pub mod chart;
+pub mod media;
 
 use serde::{Deserialize, Serialize};
 
@@ -68,6 +69,11 @@ pub struct Presentation {
     /// Every SmartArt drawing (the shapes PowerPoint drew for a diagram,
     /// in the diagram frame's own coordinates), keyed by part name.
     pub diagrams: std::collections::BTreeMap<String, Vec<Shape>>,
+    /// Every SmartArt data model, keyed by its drawing's part name: the
+    /// text points and which drawing shape shows which (slide W4, the text
+    /// pane).
+    #[serde(default)]
+    pub diagram_models: std::collections::BTreeMap<String, DiagramModel>,
     /// Every chart a slide, layout or master shows, keyed by part name.
     pub charts: std::collections::BTreeMap<String, chart::Chart>,
     /// The table styles the deck defines (`ppt/tableStyles.xml`). A deck
@@ -432,6 +438,36 @@ pub struct Sp {
     /// A connector's `a:endCxn`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_cxn: Option<CxnRef>,
+    /// A SmartArt drawing shape's `modelId`: the presentation point of the
+    /// diagram's data model it draws.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+}
+
+/// A SmartArt diagram's data model (`dgm:dataModel`), as far as its text
+/// goes. There is no layout engine: the drawing PowerPoint laid out is what
+/// is drawn, and an edit changes the text of points it already shows.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DiagramModel {
+    /// The data part (`ppt/diagrams/data1.xml`).
+    pub data_part: String,
+    /// The text points (`node` and `asst`), in the outline's order: a
+    /// depth-first walk of the `parOf` connections from the document point.
+    pub points: Vec<DiagramPoint>,
+    /// Each drawing shape (by `modelId`) and the points whose text it shows,
+    /// in order, with the number of paragraphs each gives it.
+    pub shapes: std::collections::BTreeMap<String, Vec<(String, u32)>>,
+}
+
+/// One text point of a SmartArt data model.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DiagramPoint {
+    /// `modelId`.
+    pub id: String,
+    /// 0 for a top-level point.
+    pub depth: u32,
+    /// Its text, one string per paragraph.
+    pub paragraphs: Vec<String>,
 }
 
 /// `a:stCxn` / `a:endCxn`: a shape on the same slide (its `cNvPr` id) and

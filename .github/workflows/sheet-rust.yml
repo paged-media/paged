@@ -30,6 +30,10 @@ on:
       - "platform/shared/ooxml/**"
       # The shared DrawingML chart reader, a path dependency (slide ADR 709).
       - "platform/shared/dml-chart/**"
+      # The shared DrawingML paint and effect mapper and the engine model it
+      # lowers onto, path dependencies of sheet-chart (sheet ADR 527).
+      - "platform/shared/dml-native/**"
+      - "engine/core/crates/paged-model/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/sheet/docs/**/*.md"
   # Pre-merge gate (audit finding: this lane was push-main-only, so a PR
@@ -54,6 +58,10 @@ on:
       - "platform/shared/ooxml/**"
       # The shared DrawingML chart reader, a path dependency (slide ADR 709).
       - "platform/shared/dml-chart/**"
+      # The shared DrawingML paint and effect mapper and the engine model it
+      # lowers onto, path dependencies of sheet-chart (sheet ADR 527).
+      - "platform/shared/dml-native/**"
+      - "engine/core/crates/paged-model/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/sheet/docs/**/*.md"
   workflow_dispatch:

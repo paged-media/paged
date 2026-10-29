@@ -104,15 +104,47 @@
 
 - id: image.codec.small-formats
   state_row: image.codec.core-codecs
-  tier: shipped          # decode only: GIF (first frame), BMP, TGA, QOI, ICO, Radiance HDR, OpenEXR, DNG, EPS preview
+  tier: shipped          # decode: GIF (first frame), BMP, TGA, QOI, ICO, Radiance HDR, OpenEXR, DNG, EPS preview; encode (WP9.4): GIF, BMP, TGA
   # HDR, OpenEXR and float TIFF are scene-linear: CLIPPED to 0..1 and
   # sRGB-encoded, no tone mapping, stated by the colour row
   # ("hdr-clipped"). DNG is developed with paged-raster's defaults; an EPS
-  # opens its preview.
+  # opens its preview. paged-raster's `decode` hands HDR and OpenEXR over
+  # as 32-bit float RGB(A) (engine ADR 1038); a deep OpenEXR and one
+  # without R, G and B channels are refused by name.
+  # Encode (engine ADR 1038, Export As): GIF (256 colours exact, more
+  # quantized by NeuQuant, one bit of alpha; the "gif-palette" note), BMP
+  # (pels per metre), TGA (RLE); none carries metadata ("no-metadata").
   provenance:
-    - "paged-raster's decoders (engine ADR 1005 and amendments)"
+    - "paged-raster's decoders (engine ADR 1005 and amendments) and encoders (engine ADR 1038)"
   tests:
-    rust: ["engine/core/crates/paged-raster/tests/it/formats.rs", "image-js/tests/it/ingest_formats.rs"]
+    rust:
+      - "engine/core/crates/paged-raster/tests/it/formats.rs"
+      - "engine/core/crates/paged-raster/tests/it/encode_tail.rs"
+      - "image-js/src/export.rs (unit)"
+      - "image-js/tests/it/ingest_formats.rs"
+    ts:
+      - "glue/test/layered-tiff.spec.ts"
+      - "glue/test/export-dialog.dom.test.tsx"
+
+- id: image.codec.layered-tiff
+  state_row: image.codec.core-codecs
+  tier: shipped          # WP9.4 (engine ADR 1038): a layered PSD session written as a TIFF with its layers in tag 37724
+  # File ▸ Export ▸ "TIFF with layers": the session's PSD export (the
+  # layered save) handed to paged-raster's psd_to_layered_tiff — the
+  # merged composite as the TIFF's image, the layers as ImageSourceData
+  # written by paged-psd (Layr + LMsk + the document blocks), the image
+  # resources in tag 34377, big-endian (MM) because Photoshop reads the
+  # layer data in the TIFF's byte order. 8-bit documents; a session not
+  # opened from a PSD, a 16/32-bit document and a PSB are refused by name.
+  # Opening a layered TIFF still reads its composite (its layer count is
+  # probed); importing the layers is a later step.
+  provenance:
+    - "Adobe Photoshop TIFF Technical Notes (tag 37724) via paged-psd's layer writer"
+  tests:
+    rust:
+      - "engine/core/crates/paged-raster/tests/it/encode_tail.rs"
+      - "engine/core/crates/paged-psd/tests/it/layer_list.rs"
+    ts: ["glue/test/layered-tiff.spec.ts"]
 
 - id: image.codec.exif
   state_row: image.codec.exif
@@ -162,12 +194,15 @@
 
 - id: image.codec.avif
   state_row: image.codec.avif
-  tier: partial          # DECODE shipped through paged-raster (rav1d, WP1.5, engine ADR 1005 amendment); ENCODE not offered
+  tier: partial          # DECODE shipped through paged-raster (rav1d, WP1.5, engine ADR 1005 amendment); ENCODE in the engine behind a feature, not in this module's wasm
   # The 2026-06 verdict (no permissive pure-Rust AV1 library decoder) was
   # overtaken: paged-raster decodes AVIF with avif-parse + rav1d's safe Rust
   # API (BSD-2), native and wasm32, and the module ingests it through the
-  # adapters. Encode (ravif/rav1e) stays deferred on the wasm budget.
-  decision: "decode via paged-raster (rav1d); encode deferred (rav1e size)"
+  # adapters. Encode: paged-raster's `avif-encode` feature (ravif BSD-3
+  # over rav1e BSD-2, no assembly, one thread; engine ADR 1038) is OFF by
+  # default, so the module's wasm (8 MiB cap) does not carry it and Export
+  # As does not offer AVIF.
+  decision: "decode via paged-raster (rav1d); encode in paged-raster behind `avif-encode`, kept out of the module wasm (rav1e size)"
   provenance:
     - "AV1 / ISOBMFF (AVIF) via paged-raster (avif-parse MPL-2.0, rav1d BSD-2-Clause)"
   tests:
@@ -175,15 +210,21 @@
 
 - id: image.codec.jxl
   state_row: image.codec.avif
-  tier: partial          # DECODE shipped through paged-raster (jxl-oxide); ENCODE blocked on ecosystem
-  # Decode: jxl-oxide (MIT OR Apache-2.0) in paged-raster (WP1.5). Encode:
-  # the only pure-Rust encoder is AGPL-3.0/commercial (fails cargo deny),
-  # libjxl is C++ — unchanged.
-  decision: "decode via paged-raster (jxl-oxide); encode blocked (no permissive encoder)"
+  tier: shipped          # DECODE through paged-raster (jxl-oxide); ENCODE lossless through paged-raster (zune-jpegxl, WP9.4)
+  # Decode: jxl-oxide (MIT OR Apache-2.0) in paged-raster (WP1.5). Encode
+  # (engine ADR 1038): zune-jpegxl (MIT OR Apache-2.0 OR Zlib), a pure-Rust
+  # LOSSLESS (modular) encoder, Gray/RGB ± alpha at 8 and 16 bits, no
+  # metadata; Export As offers it ("jxl-lossless", "no-metadata"). A lossy
+  # (VarDCT) encoder stays out: the only pure-Rust one is AGPL/commercial
+  # and libjxl is C++.
+  decision: "decode via paged-raster (jxl-oxide); lossless encode via paged-raster (zune-jpegxl); lossy encode declined (no permissive encoder)"
   provenance:
-    - "JPEG XL (ISO/IEC 18181) via paged-raster (jxl-oxide)"
+    - "JPEG XL (ISO/IEC 18181) via paged-raster (jxl-oxide decode, zune-jpegxl lossless encode)"
   tests:
-    rust: ["engine/core/crates/paged-raster/tests/it/formats.rs"]
+    rust:
+      - "engine/core/crates/paged-raster/tests/it/formats.rs"
+      - "engine/core/crates/paged-raster/tests/it/encode_tail.rs"
+      - "image-js/src/export.rs (unit)"
 
 - id: image.codec.raw_heic
   state_row: image.codec.avif   # placeholder; explicit-NON-GOAL marker, no own state row

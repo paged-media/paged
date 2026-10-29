@@ -37,6 +37,10 @@ import {
   type WordCommandName,
 } from "../src/word/commands";
 import {
+  STRUCTURE_COMMANDS,
+  type StructureCommandName,
+} from "../src/word/structure";
+import {
   alignmentOf,
   isBold,
   leadingFor,
@@ -187,7 +191,7 @@ const v = (value: unknown): TextPropertyRead => ({ value: value as never });
 /** What each command writes against a plain selection (bold and regular
  *  text, 10 pt, no list, no indent). */
 const EXPECTED: Record<
-  WordCommandName,
+  Exclude<WordCommandName, StructureCommandName>,
   (w: TextPropertyWrite[][], s: Array<[string, string]>, r: Rec) => void
 > = {
   bold: (w) =>
@@ -409,7 +413,12 @@ describe("every Word command's write (commands.ts)", () => {
     covers("command:media.paged.doc.command.word.styleModify");
     covers("command:media.paged.doc.command.word.styleNew");
     covers("command:media.paged.doc.command.word.applyStyles");
+    // The structure commands are `structure-commands.spec.ts`'s.
+    const structure = new Set<string>(STRUCTURE_COMMANDS);
     for (const name of Object.keys(WORD_COMMAND) as WordCommandName[]) {
+      if (structure.has(name)) continue;
+      const expected =
+        EXPECTED[name as Exclude<WordCommandName, StructureCommandName>];
       const { host, writes, styles, ...rest } = textHost({
         characterFontStyle: v("Regular"),
         characterFontSize: v(10),
@@ -428,7 +437,7 @@ describe("every Word command's write (commands.ts)", () => {
         copied: null,
         focusStyleBox: () => void rec.focus.push("style box"),
       });
-      EXPECTED[name](writes, styles, rec);
+      expected(writes, styles, rec);
     }
   });
 

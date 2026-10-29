@@ -27,10 +27,12 @@ use std::io::Write;
 use zip::write::SimpleFileOptions;
 
 mod first_fit;
+mod structure;
 pub use first_fit::{
     first_fit_cases, first_fit_cases_json, first_fit_docx, FirstFitCase, CHAR_PT,
     FIRST_FIT_FULL_MEASURE_PT,
 };
+pub use structure::{structure_docx, STRUCTURE_NOTES};
 
 /// Zip a set of `(name, bytes)` parts into an OPC package, in the given order.
 pub fn zip_parts(parts: &[(&str, &[u8])]) -> Vec<u8> {

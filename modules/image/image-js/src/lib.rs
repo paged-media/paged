@@ -68,7 +68,9 @@ pub mod paths;
 pub mod pixels;
 pub mod preset_files;
 pub mod psd_layer_ext;
+pub mod psd_source;
 pub mod psd_vector_mask;
+pub mod psd_write;
 pub mod readouts;
 pub mod refine;
 pub mod region_filter;
@@ -7454,9 +7456,37 @@ mod wasm {
         run_export(pixels, w, h, spec, source, cmyk_profile)
     }
 
+    /// A layered PSD as a layered TIFF (engine ADR 1038): the composite as
+    /// the TIFF's image, the layers in tag 37724 (ImageSourceData), which
+    /// Photoshop reopens. `compression` is `none`, `lzw` or `deflate`.
+    /// 8-bit documents with layers; anything else is refused by name.
+    #[wasm_bindgen]
+    pub fn psd_to_layered_tiff(psd: &[u8], compression: &str) -> Result<Vec<u8>, JsValue> {
+        let compression = match compression {
+            "none" => paged_raster::TiffCompression::None,
+            "lzw" => paged_raster::TiffCompression::Lzw,
+            "deflate" | "zip" => paged_raster::TiffCompression::Deflate,
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown compression \"{other}\""
+                )))
+            }
+        };
+        paged_raster::psd_to_layered_tiff(
+            psd,
+            paged_raster::TiffEncodeOptions {
+                compression,
+                predictor: false,
+                rows_per_strip: None,
+            },
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     /// The notes of the last export, newline-separated wire names
     /// (`webp-lossless`, `cmyk-profile`, `cmyk-naive`, `widened`,
-    /// `narrowed`, `alpha-dropped`, `gray-untagged`).
+    /// `narrowed`, `alpha-dropped`, `gray-untagged`, `gif-palette`,
+    /// `jxl-lossless`, `no-metadata`).
     #[wasm_bindgen]
     pub fn export_last_notes() -> String {
         EXPORT_NOTES.with(|n| n.borrow().join("\n"))

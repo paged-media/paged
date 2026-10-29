@@ -39,7 +39,8 @@
 //!
 //! Parsing a descriptor is a pure read. The opaque-bytes path stays
 //! authoritative for re-emission (crate docs, strategy 2); a decoded
-//! tree is a *derived view*. Nothing here writes.
+//! tree is a *derived view*. The writer (below) serves only blocks Paged
+//! constructs or edits; an unedited block keeps its source bytes.
 //!
 //! # Two dialects, forever
 //!
@@ -717,10 +718,36 @@ fn read_ref_item(r: &mut ByteReader) -> Result<RefItem> {
 // ── writing ──────────────────────────────────────────────────────────
 //
 // The inverse of the reader, for the blocks Paged CONSTRUCTS (a layer
-// style, a fill layer's content): an edited block is re-encoded; an
-// unedited one keeps its source bytes (the lazy-verbatim guard, crate
-// docs). Every value kind the reader produces is written in the layout
-// it was read from, so `read(write(d)) == d` for any tree.
+// style, a fill layer's content, an adjustment layer, an `.abr` preset
+// list): an edited block is re-encoded; an unedited one keeps its source
+// bytes (the lazy-verbatim guard, crate docs). Every value kind the
+// reader produces is written in the layout it was read from, so
+// `read(write(d)) == d` for any tree. This is the ONE descriptor writer
+// of the repository: the `.abr` writer and the image module's fill and
+// adjustment blocks write through it.
+
+/// How the writer spells the strings whose trailing NUL producers
+/// disagree on. The reader trims one trailing NUL wherever it finds it,
+/// so both spellings read back the same; they differ only in bytes.
+///
+/// TEXT values and the value of a `name` reference item always carry
+/// the NUL (every producer observed writes it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WriteStyle {
+    /// Class names (a descriptor's, a `type`/`GlbC` value's and a
+    /// reference item's) counted with a trailing NUL.
+    pub names_nul: bool,
+}
+
+impl WriteStyle {
+    /// What Photoshop writes into a PSD: an empty class name is one NUL
+    /// unit (count 1) — `lfx2`, `vibA`, `blwh`, `CgEd` and `SoCo` blocks
+    /// Photoshop 27.10 wrote [OBS].
+    pub const PSD: WriteStyle = WriteStyle { names_nul: true };
+    /// What `.abr` files carry: class names counted without a NUL (an
+    /// empty one is count 0) — the ABR behaviour spec §4.1 [OBS].
+    pub const ABR: WriteStyle = WriteStyle { names_nul: false };
+}
 
 /// Write a `key-or-4cc` in the dialect the key records: a 4-byte key as
 /// length 0 plus its bytes, a long-form key as its length plus bytes.
@@ -736,7 +763,14 @@ pub fn write_key(out: &mut Vec<u8>, key: &Key) {
 /// Write a descriptor unicode string: the count of UTF-16 units INCLUDING
 /// a trailing NUL (what Photoshop writes), then the big-endian units.
 pub fn write_unicode_string(out: &mut Vec<u8>, s: &str) {
-    let units: Vec<u16> = s.encode_utf16().chain(std::iter::once(0)).collect();
+    write_unicode(out, s, true);
+}
+
+fn write_unicode(out: &mut Vec<u8>, s: &str, nul: bool) {
+    let mut units: Vec<u16> = s.encode_utf16().collect();
+    if nul {
+        units.push(0);
+    }
     out.extend_from_slice(&(units.len() as u32).to_be_bytes());
     for u in units {
         out.extend_from_slice(&u.to_be_bytes());
@@ -745,32 +779,55 @@ pub fn write_unicode_string(out: &mut Vec<u8>, s: &str) {
 
 /// Write the "version and descriptor" wrapper ([`DESCRIPTOR_VERSION`]).
 pub fn write_versioned_descriptor(out: &mut Vec<u8>, d: &Descriptor) {
+    write_versioned_descriptor_styled(out, d, WriteStyle::PSD);
+}
+
+/// [`write_versioned_descriptor`] in a given [`WriteStyle`].
+pub fn write_versioned_descriptor_styled(out: &mut Vec<u8>, d: &Descriptor, style: WriteStyle) {
     out.extend_from_slice(&DESCRIPTOR_VERSION.to_be_bytes());
-    write_descriptor(out, d);
+    write_descriptor_styled(out, d, style);
+}
+
+/// A version-16 descriptor as a block payload (`SoCo`, `vibA`, `blwh`,
+/// `CgEd`, …): the wrapper and the tree, in the PSD style.
+pub fn versioned_descriptor_bytes(d: &Descriptor) -> Vec<u8> {
+    let mut out = Vec::new();
+    write_versioned_descriptor(&mut out, d);
+    out
 }
 
 /// Write a descriptor: class name, class id, item count, items.
 pub fn write_descriptor(out: &mut Vec<u8>, d: &Descriptor) {
-    write_unicode_string(out, &d.class_name);
+    write_descriptor_styled(out, d, WriteStyle::PSD);
+}
+
+/// [`write_descriptor`] in a given [`WriteStyle`].
+pub fn write_descriptor_styled(out: &mut Vec<u8>, d: &Descriptor, style: WriteStyle) {
+    write_unicode(out, &d.class_name, style.names_nul);
     write_key(out, &d.class_id);
     out.extend_from_slice(&(d.items.len() as u32).to_be_bytes());
     for (k, v) in &d.items {
         write_key(out, k);
-        write_value(out, v);
+        write_value_styled(out, v, style);
     }
 }
 
 /// Write one OSType-tagged value.
 pub fn write_value(out: &mut Vec<u8>, v: &DescriptorValue) {
+    write_value_styled(out, v, WriteStyle::PSD);
+}
+
+/// [`write_value`] in a given [`WriteStyle`].
+pub fn write_value_styled(out: &mut Vec<u8>, v: &DescriptorValue, style: WriteStyle) {
     out.extend_from_slice(&v.ostype());
     match v {
         DescriptorValue::Descriptor(d) | DescriptorValue::GlobalObject(d) => {
-            write_descriptor(out, d)
+            write_descriptor_styled(out, d, style)
         }
         DescriptorValue::List(items) => {
             out.extend_from_slice(&(items.len() as u32).to_be_bytes());
             for v in items {
-                write_value(out, v);
+                write_value_styled(out, v, style);
             }
         }
         DescriptorValue::Double(x) => out.extend_from_slice(&x.to_bits().to_be_bytes()),
@@ -778,7 +835,7 @@ pub fn write_value(out: &mut Vec<u8>, v: &DescriptorValue) {
             out.extend_from_slice(unit);
             out.extend_from_slice(&value.to_bits().to_be_bytes());
         }
-        DescriptorValue::Text(s) => write_unicode_string(out, s),
+        DescriptorValue::Text(s) => write_unicode(out, s, true),
         DescriptorValue::Enum { type_key, value } => {
             write_key(out, type_key);
             write_key(out, value);
@@ -787,7 +844,7 @@ pub fn write_value(out: &mut Vec<u8>, v: &DescriptorValue) {
         DescriptorValue::LargeInteger(i) => out.extend_from_slice(&i.to_be_bytes()),
         DescriptorValue::Bool(b) => out.push(u8::from(*b)),
         DescriptorValue::Class { name, id } => {
-            write_unicode_string(out, name);
+            write_unicode(out, name, style.names_nul);
             write_key(out, id);
         }
         DescriptorValue::Alias(b) | DescriptorValue::RawData(b) | DescriptorValue::Path(b) => {
@@ -797,12 +854,12 @@ pub fn write_value(out: &mut Vec<u8>, v: &DescriptorValue) {
         DescriptorValue::Reference(items) => {
             out.extend_from_slice(&(items.len() as u32).to_be_bytes());
             for item in items {
-                write_ref_item(out, item);
+                write_ref_item(out, item, style);
             }
         }
         DescriptorValue::ObjectArray(d) => {
             out.extend_from_slice(&DESCRIPTOR_VERSION.to_be_bytes());
-            write_descriptor(out, d);
+            write_descriptor_styled(out, d, style);
         }
         DescriptorValue::UnitFloats { unit, values } => {
             out.extend_from_slice(unit);
@@ -814,17 +871,18 @@ pub fn write_value(out: &mut Vec<u8>, v: &DescriptorValue) {
     }
 }
 
-fn write_ref_item(out: &mut Vec<u8>, item: &RefItem) {
+fn write_ref_item(out: &mut Vec<u8>, item: &RefItem, style: WriteStyle) {
+    let name_nul = style.names_nul;
     match item {
         RefItem::Property { name, class, key } => {
             out.extend_from_slice(b"prop");
-            write_unicode_string(out, name);
+            write_unicode(out, name, name_nul);
             write_key(out, class);
             write_key(out, key);
         }
         RefItem::Class { name, class } => {
             out.extend_from_slice(b"Clss");
-            write_unicode_string(out, name);
+            write_unicode(out, name, name_nul);
             write_key(out, class);
         }
         RefItem::Enumerated {
@@ -834,7 +892,7 @@ fn write_ref_item(out: &mut Vec<u8>, item: &RefItem) {
             value,
         } => {
             out.extend_from_slice(b"Enmr");
-            write_unicode_string(out, name);
+            write_unicode(out, name, name_nul);
             write_key(out, class);
             write_key(out, type_key);
             write_key(out, value);
@@ -845,7 +903,7 @@ fn write_ref_item(out: &mut Vec<u8>, item: &RefItem) {
             offset,
         } => {
             out.extend_from_slice(b"rele");
-            write_unicode_string(out, name);
+            write_unicode(out, name, name_nul);
             write_key(out, class);
             out.extend_from_slice(&offset.to_be_bytes());
         }
@@ -859,9 +917,9 @@ fn write_ref_item(out: &mut Vec<u8>, item: &RefItem) {
         }
         RefItem::Name { name, class, value } => {
             out.extend_from_slice(b"name");
-            write_unicode_string(out, name);
+            write_unicode(out, name, name_nul);
             write_key(out, class);
-            write_unicode_string(out, value);
+            write_unicode(out, value, true);
         }
     }
 }

@@ -136,12 +136,56 @@ describe("[image.codec.core-codecs] Export As dialog", () => {
     expect(h.onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it("[images-graphics.codecs-long-tail] GIF, BMP, TGA and JPEG XL are offered and say what they drop", () => {
+    const h = harness();
+    const options = Array.from(
+      (h.q("[data-export-format]") as unknown as HTMLSelectElement).options,
+    );
+    expect(options.map((o) => o.value)).toEqual([
+      "png",
+      "jpeg",
+      "webp",
+      "tiff",
+      "gif",
+      "bmp",
+      "tga",
+      "jxl",
+    ]);
+    expect(options.at(-1)!.textContent).toBe("JPEG XL");
+    for (const [format, note] of [
+      ["gif", /256 colours/],
+      ["bmp", /no metadata/],
+      ["tga", /no metadata/],
+      ["jxl", /lossless/],
+    ] as const) {
+      fireEvent.change(h.q("[data-export-format]")!, {
+        target: { value: format },
+      });
+      expect(h.q("[data-export-note]")!.textContent).toMatch(note);
+    }
+    // JPEG XL holds 16 bits.
+    fireEvent.change(h.q("[data-export-bits]")!, { target: { value: "16" } });
+    fireEvent.click(h.q("[data-export-apply]")!);
+    expect(h.last()).toMatchObject({ format: "jxl", bits: 16 });
+  });
+
   it("the rules and the engine's spec string", () => {
-    expect(formatsFor("rgb")).toEqual(["png", "jpeg", "webp", "tiff"]);
+    expect(formatsFor("rgb")).toEqual([
+      "png",
+      "jpeg",
+      "webp",
+      "tiff",
+      "gif",
+      "bmp",
+      "tga",
+      "jxl",
+    ]);
     expect(formatsFor("cmyk")).toEqual(["tiff"]);
     expect(sixteenAllowed("png", "rgb")).toBe(true);
     expect(sixteenAllowed("tiff", "cmyk")).toBe(false);
     expect(sixteenAllowed("webp", "rgb")).toBe(false);
+    expect(sixteenAllowed("jxl", "rgb")).toBe(true);
+    expect(sixteenAllowed("gif", "rgb")).toBe(false);
     expect(
       exportSpec({
         format: "tiff",

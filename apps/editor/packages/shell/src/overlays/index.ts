@@ -30,6 +30,7 @@ export {
   isolationScopeRoot,
   isolationVeilPath,
 } from "./isolation-dim";
+export { subContextContribution, subContextHole } from "./sub-context";
 export { marginGuidesContribution, marginGuides } from "./margin-guides";
 export { pathEditContribution, elementSupportsPathEdit } from "./path-edit";
 export { resizeHandlesContribution } from "./resize-handles";

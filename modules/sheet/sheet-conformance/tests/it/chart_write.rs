@@ -420,3 +420,101 @@ fn a_chartsheet_is_a_tab_kind__feat__sheet_chart_chartsheets() {
     assert_eq!(r.list_charts()[0].title.as_deref(), Some("On its tab"));
     assert_eq!(r.list_sheets()[1].kind, "chartsheet");
 }
+
+/// `bytes` with part `name` replaced by `xml`.
+fn with_part(bytes: &[u8], name: &str, xml: &str) -> Vec<u8> {
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut parts: Vec<(String, Vec<u8>)> = Vec::new();
+    for i in 0..z.len() {
+        let mut f = z.by_index(i).unwrap();
+        let n = f.name().unwrap().to_string();
+        let mut data = Vec::new();
+        f.read_to_end(&mut data).unwrap();
+        if n == name {
+            data = xml.as_bytes().to_vec();
+        }
+        parts.push((n, data));
+    }
+    sheet_xlsx::write::write_package(parts.iter().map(|(n, d)| (n.as_str(), d.as_slice())))
+}
+
+/// A column chart whose series and plot area Excel styled with a gradient,
+/// a translucent fill and effects (sheet ADR 527), written into a package
+/// Paged saved: the DrawingML is synthetic, the package Paged's own.
+pub(crate) fn styled_chart_workbook() -> Vec<u8> {
+    let mut s = data_session();
+    s.add_chart(0, "B2:B5", "A2:A5", "column", "T", "").unwrap();
+    let bytes = s.save_xlsx().unwrap();
+    let xml = part(&bytes, "xl/charts/chart1.xml").unwrap();
+    let ser = r#"<c:order val="0"/><c:spPr><a:gradFill><a:gsLst><a:gs pos="0"><a:schemeClr val="accent1"/></a:gs><a:gs pos="100000"><a:schemeClr val="accent1"><a:lumMod val="50000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill><a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="2700000" algn="tl" rotWithShape="0"><a:prstClr val="black"><a:alpha val="40000"/></a:prstClr></a:outerShdw></a:effectLst></c:spPr>"#;
+    let plot = r#"</c:valAx><c:spPr><a:solidFill><a:schemeClr val="bg1"><a:alpha val="60000"/></a:schemeClr></a:solidFill><a:effectLst><a:innerShdw blurRad="63500" dist="50800" dir="13500000"><a:prstClr val="black"><a:alpha val="50000"/></a:prstClr></a:innerShdw><a:reflection blurRad="6350" stA="50000" endA="300" endPos="55000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/></a:effectLst></c:spPr></c:plotArea>"#;
+    assert!(xml.contains(r#"<c:order val="0"/>"#) && xml.contains("</c:valAx></c:plotArea>"));
+    let xml =
+        xml.replacen(r#"<c:order val="0"/>"#, ser, 1)
+            .replacen("</c:valAx></c:plotArea>", plot, 1);
+    with_part(&bytes, "xl/charts/chart1.xml", &xml)
+}
+
+/// The edit the effects survive: a document swatch on the plot area (the
+/// open-check lane runs it too).
+pub(crate) fn swatch_on_the_plot_area(s: &mut SheetSession) {
+    let patch: ChartPatch = serde_json::from_value(serde_json::json!({
+        "roles": { "plotArea": { "swatch": "Color/Paper" } }
+    }))
+    .unwrap();
+    s.update_chart(0, patch).unwrap();
+}
+
+#[test]
+fn chart_effects_reach_the_geometry_and_survive_an_edit__feat__sheet_chart_native_effects() {
+    let bytes = styled_chart_workbook();
+    let mut s = SheetSession::load_xlsx(&bytes).unwrap();
+    let g = s.get_chart_geometry(0, 360.0, 240.0).unwrap();
+    let fxs: Vec<_> = g
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            sheet_chart::Primitive::Rect { fx: Some(fx), .. } => Some(fx.clone()),
+            _ => None,
+        })
+        .collect();
+    // The plot area, then four bars.
+    assert_eq!(fxs.len(), 5, "{:?}", g.prims);
+    assert_eq!(fxs[0].opacity, Some(60.0));
+    assert!(fxs[0].inner_shadow.is_some());
+    let bar = &fxs[1];
+    let gr = bar.gradient.as_ref().unwrap();
+    assert_eq!(gr.angle, Some(-90.0));
+    assert_eq!(gr.stops[0].1, "#4472C4");
+    assert_eq!(bar.drop_shadow.as_ref().unwrap().opacity, 40.0);
+    assert_eq!(g.losses.len(), 1, "the reflection: {:?}", g.losses);
+    // A document swatch on the plot area: its fill is the swatch, its
+    // effects stay in the file.
+    swatch_on_the_plot_area(&mut s);
+    let out = s.save_xlsx().unwrap();
+    let xml = part(&out, "xl/charts/chart1.xml").unwrap();
+    let pa = &xml[xml.rfind("</c:valAx>").unwrap()..];
+    assert!(
+        pa.contains("<a:innerShdw") && pa.contains("<a:reflection"),
+        "{pa}"
+    );
+    assert!(
+        !pa.contains(r#"<a:alpha val="60000"/>"#),
+        "the old fill went: {pa}"
+    );
+    // The series was not edited: its gradient and shadow are as read.
+    assert!(xml.contains(r#"<a:lin ang="5400000" scaled="0"/>"#));
+    assert!(xml.contains("<a:outerShdw"));
+    let r = SheetSession::load_xlsx(&out).unwrap();
+    let g = r.get_chart_geometry(0, 360.0, 240.0).unwrap();
+    let pa_fx = g.prims.iter().find_map(|p| match p {
+        sheet_chart::Primitive::Rect {
+            fx: Some(fx),
+            fill_swatch_ref: Some(sw),
+            ..
+        } if sw == "Color/Paper" => Some(fx.clone()),
+        _ => None,
+    });
+    let pa_fx = pa_fx.expect("the plot area keeps its effects under the swatch");
+    assert!(pa_fx.inner_shadow.is_some());
+}

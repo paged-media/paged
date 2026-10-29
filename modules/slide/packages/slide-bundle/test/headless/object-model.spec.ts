@@ -26,6 +26,7 @@
 // proves they travel in the document.
 
 import { ANIM_TYPED } from "../../src/anim/contribute";
+import { CONTENT_CMD, CONTENT_TYPED } from "../../src/content-commands";
 import { OUTPUT_CMD, OUTPUT_TYPED } from "../../src/output/commands";
 import { SHOW_CMD } from "../../src/show/contribute";
 import { readFileSync } from "node:fs";
@@ -138,6 +139,9 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
         // File ▸ Export, custom shows and sections (slide ADR 720).
         ...Object.values(OUTPUT_CMD),
         ...Object.values(OUTPUT_TYPED),
+        // Pictures, the format painter, SmartArt text (slide W4).
+        ...Object.values(CONTENT_CMD),
+        ...Object.values(CONTENT_TYPED),
       ].sort(),
     );
   });

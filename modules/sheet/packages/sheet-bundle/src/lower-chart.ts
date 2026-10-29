@@ -72,6 +72,23 @@ async function activePageId(host: BundleHost): Promise<PageId | null> {
   return pages.length > 0 ? pages[0].selfId : null;
 }
 
+/** The page's top-left in its spread's coordinates, where a page item's
+ *  gradient start is read (sheet ADR 527); undefined when the host does not
+ *  say (an older engine, a failed read) — the gradient then keeps the
+ *  engine's default placement. */
+async function pageOriginOf(
+  host: BundleHost,
+  pageId: PageId,
+): Promise<[number, number] | undefined> {
+  try {
+    const pages = await host.document.collection<PageSummary>("pages");
+    const o = pages.find((p) => p.selfId === pageId)?.pageOrigin;
+    return o ? [o[0], o[1]] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Lower chart `chartIndex` to a fresh page frame of vector art. Engine
  * generates the IR (all chart semantics in Rust); the translator (pure)
@@ -609,10 +626,25 @@ export async function lowerChartToFrame(
 
   const top = opts?.placement?.bounds[0] ?? CHART_INSET_PT;
   const left = opts?.placement?.bounds[1] ?? CHART_INSET_PT;
+  // Sheet ADR 527: a gradient's start is read in the page's spread, and
+  // its swatch mint reads the document's gradients; a chart without one
+  // pays for neither read.
+  const gradients = geom.prims.some(
+    (p) => p.kind !== "text" && p.kind !== "line" && p.fx?.gradient,
+  );
+  const pageOrigin = gradients ? await pageOriginOf(host, pageId) : undefined;
   const placement: ChartPlacement = {
     pageId,
     bounds: [top, left, top + geom.heightPt, left + geom.widthPt],
+    ...(pageOrigin ? { pageOrigin } : {}),
   };
+  // Sheet ADR 527: what the chart's DrawingML asks for that the page items
+  // cannot hold (a reflection, a pattern, …), one line per kind.
+  if (geom.losses?.length) {
+    host.log.warn(
+      `lowerChart: chart ${chartIndex} drawn without: ${geom.losses.join("; ")}`,
+    );
+  }
   // The binding marks the frame group as a chart of this sheet (the title /
   // chart index ride as the range slot — a chart binds to its parsed index,
   // re-resolved on recalc). contentVersion 0: T0 has no revision counter.
@@ -641,7 +673,7 @@ export async function lowerChartToFrame(
     geom,
     placement,
     binding,
-    await readKnownSwatchIds(host),
+    await readKnownSwatchIds(host, { gradients }),
     await measureLabels(host, geom),
   );
   if (

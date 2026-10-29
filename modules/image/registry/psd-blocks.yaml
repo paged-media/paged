@@ -60,12 +60,12 @@
 
 - id: image.psd.layer.records
   state_row: image.psd.roundtrip
-  tier: preserved        # M0 green (fixtures + proptest); target was: preserved (scalars typed; extra-data verbatim)
+  tier: mutatable        # M0 preserved; WP5.15 (ADR 478): the layered save writes an UNEDITED imported layer as the record it read (byte for byte), an edited one as that record with only the edited fields and blocks replaced (image-js psd_write.rs), a new one built
   oracle: byte_roundtrip
   provenance:
     - "Adobe Photoshop File Format specification — Layer Records"
   tests:
-    rust: ["image-psd/tests/it/roundtrip.rs", "image-conformance/tests/it/psd_fixtures.rs"]
+    rust: ["image-psd/tests/it/roundtrip.rs", "image-conformance/tests/it/psd_fixtures.rs", "image-js/tests/it/psd_write.rs (unedited_photoshop_layers_are_written_as_read)"]
 
 - id: image.psd.layer.channel-data.raw-rle
   state_row: image.psd.roundtrip
@@ -79,12 +79,13 @@
 
 - id: image.psd.layer.channel-data.zip
   state_row: image.psd.roundtrip
-  tier: preserved        # inflate landed (M1) — decode-on-demand to planar; verbatim bytes still canonical
+  tier: mutatable        # inflate landed (M1); 16-bit ZIP-with-prediction read (deltas over big-endian SAMPLES) AND written (`ChannelData::encode_zip_predicted16`) for a 16-bit document's layers (WP5.15, ADR 478); verbatim bytes still canonical for unedited channels
   oracle: byte_roundtrip
   provenance:
     - "Adobe Photoshop File Format specification — Channel Image Data, compression 2/3"
+    - "Photoshop 27.10's 16-bit document (scripts/photoshop/probes/psd-containers.jsx, sixteen-bit): layer channels compression 3, the prediction a per-row delta of 16-bit samples [OBS]"
   tests:
-    rust: ["image-psd/tests/it/roundtrip.rs", "image-psd/tests/it/channel_decode.rs"]
+    rust: ["image-psd/tests/it/roundtrip.rs", "image-psd/tests/it/channel_decode.rs", "image-js/tests/it/psd_write.rs (a_sixteen_bit_document_is_written_at_sixteen_bits)"]
 
 - id: image.psd.addl.lsct
   state_row: image.psd.roundtrip
@@ -145,12 +146,12 @@
 
 - id: image.psd.container.psb
   state_row: image.psd.roundtrip
-  tier: preserved        # M0 green (fixtures + proptest); target was: preserved (one writer, two containers)
+  tier: mutatable        # M0 preserved; WP5.15 (ADR 478): the layered save writes a PSB as a PSB (widened lengths, 4-byte RLE row counts), Photoshop reopens it (psd_write_photoshop.rs)
   oracle: byte_roundtrip
   provenance:
     - "Adobe Photoshop File Format specification — PSB notes (widened length fields)"
   tests:
-    rust: ["image-psd/tests/it/psb.rs", "image-conformance/tests/it/psd_fixtures.rs (psb_wide)"]
+    rust: ["image-psd/tests/it/psb.rs", "image-conformance/tests/it/psd_fixtures.rs (psb_wide)", "image-js/tests/it/psd_write.rs (a_psb_is_written_as_a_psb)", "image-conformance/tests/it/psd_write_photoshop.rs"]
 
 - id: image.psd.mutatable
   state_row: image.psd.roundtrip
@@ -205,7 +206,7 @@
 
 - id: image.psd.addl.effects
   state_row: image.psd.layer-import
-  tier: parsed           # READ (image-psd/src/effects.rs): which effects an lfx2 block DRAWS, and the Color Overlay's parameters; the block stays preserved-opaque
+  tier: mutatable        # READ and WRITTEN (paged-psd effects.rs, WP5.4): every lfx2/lmfx key; the layered save replaces a layer's style block only when the style was edited (WP5.15, ADR 478) and Photoshop reads paged's style back (psd_write_photoshop.rs)
   oracle: photoshop      # effects Photoshop 27.10 wrote, composited by our stack vs its merged composite (psd_layer_effects.rs EXPECT)
   provenance:
     - "Adobe Photoshop File Formats specification — Object-based effects layer info (lfx2: version, then a versioned descriptor) [PUB]"
@@ -219,16 +220,54 @@
 
 - id: image.psd.addl.adjustment
   state_row: image.psd.layer-import
-  tier: parsed           # READ (image-psd/src/adjustment.rs) into the layer stack's adjust chain; the block bytes stay preserved-opaque for re-emission
+  tier: mutatable        # READ and WRITTEN (paged-psd adjustment.rs, WP5.15 / ADR 478): curv, levl, expA, nvrt, hue2, brit+CgEd, blnc, vibA, blwh, phfl, mixr, post, thrs, grdm, selc — written byte for byte as Photoshop writes them (the recorded blocks), and Photoshop reopens paged's layers as live adjustment layers with the written parameters
   oracle: photoshop      # adjustment layers Photoshop 27.10 wrote, composited by our stack vs its merged composite (psd_adjustment_layers.rs EXPECT)
   provenance:
     - "Adobe Photoshop File Formats specification — Adjustment Layers: Levels (`levl`: version, 29 records of in-floor/in-ceiling/out-floor/out-ceiling/gamma×100, composite then channels, optional `Lvls` extension), Curves (`curv`), Exposure (`expA`: version, exposure, offset, gamma as f32), Invert (`nvrt`, empty), Hue/Saturation (`hue2`: version, colorize flag, colorize/master triples, six ranges of four bounds + a triple) [PUB]"
     - "Curves layout checked on Photoshop-written blocks: a pad byte, a u16 version, a u32 map of the curves present (bit 0 composite, then the channels), points stored as (OUTPUT, INPUT); the `Crv ` extension repeats them keyed by channel index [OBS]"
+    - "Adobe Photoshop File Formats specification — Brightness and Contrast, Color Balance, Black and White, Photo Filter, Channel Mixer, Posterize, Threshold, Gradient Map, Selective Color, Vibrance [PUB]"
+    - "Photoshop 27.10, one layer of each kind with known parameters (scripts/photoshop/probes/adjustment-layers-ext.jsx): blnc = 9 shorts + Preserve Luminosity + pad; post/thrs = a short + pad; mixr = version, monochrome, four records of five shorts (r, g, b, unused, constant); selc = version, method, a reserved record then nine of four shorts; grdm version 3 with a method key (`Gcls`) before the name, stops with 16-bit RGB and a pad, then noise fields; vibA/blwh/CgEd version-16 descriptors padded to four INSIDE the length; brit zeroed beside CgEd unless legacy; phfl version 2 with a Lab colour (×100) [OBS]"
+    - "Photoshop 27.10 reading paged's blocks (scripts/photoshop/probes/psd-readback.jsx): every kind opens as its live LayerKind with the written parameters, and draws as Photoshop's own layer of the same parameters (psd_write_photoshop.rs) [OBS]"
     - "Rendering, measured against Photoshop 27.10: Curves is a NATURAL cubic spline (image_core::curve_lut_natural, 0 levels apart) with channel curves before the composite one; Levels per channel then composite (other order 13 off), as tables within 1-3 levels; Exposure with offset/gamma = ((lin(x)·2^e + offset)^(1/gamma)) in 2.2-gamma light, within 1; an adjustment layer's OPACITY scales its coverage (60 % moves each pixel 60 % of the way) [OBS]"
-  # DECLINED: Levels records past R/G/B, Hue/Saturation ranges moved off
-  # their default bounds, a non-normal blend mode on an adjustment layer.
+  # IMPORT DECLINED (still read and written): Levels records past R/G/B,
+  # Hue/Saturation ranges moved off their default bounds, a non-normal blend
+  # mode on an adjustment layer, a tinted Black & White, a legacy
+  # Brightness/Contrast, and the kinds the stack does not draw as Photoshop
+  # yet (layer_pixels NOT_REPRODUCED: Brightness/Contrast, Color Balance,
+  # Vibrance, Photo Filter, Gradient Map, Selective Color — measured
+  # 25–109 levels off). Color Lookup (clrL) is neither read nor written: its
+  # look is a profile Photoshop compiles; a layered save of one flattens.
   tests:
-    rust: ["image-psd/src/adjustment.rs (unit)", "image-conformance/tests/it/psd_adjustment_layers.rs"]
+    rust: ["image-psd/src/adjustment.rs (unit: image_psd_adjustment_every_written_kind_reads_back)", "image-conformance/tests/it/psd_adjustment_layers.rs", "image-conformance/tests/it/psd_adjustment_blocks_photoshop.rs", "image-conformance/tests/it/psd_write_photoshop.rs", "image-js/tests/it/psd_write.rs (every_adjustment_kind_round_trips_through_a_layered_psd)"]
+
+- id: image.psd.addl.fill
+  state_row: image.psd.roundtrip
+  tier: mutatable        # SoCo (solid colour) and GdFl (gradient) READ into fill layers (image-js psd_layer_ext.rs, WP5.3) and WRITTEN through paged-psd's descriptor writer; PtFl (pattern) preserved, a new or edited pattern fill saved as its render (the document's pattern block is not written)
+  oracle: photoshop      # Photoshop reopens paged's fill layers as SOLIDFILL / GRADIENTFILL layers (psd_write_photoshop.rs)
+  provenance:
+    - "Adobe Photoshop File Formats specification — Additional Layer Information: Solid color sheet setting (SoCo), Gradient fill setting (GdFl), Pattern fill setting (PtFl), each a version-16 descriptor [PUB]"
+  tests:
+    rust: ["image-js/src/psd_layer_ext.rs (unit)", "image-conformance/tests/it/psd_write_photoshop.rs"]
+
+- id: image.psd.addl.smart-object
+  state_row: image.psd.roundtrip
+  tier: preserved        # PlLd / SoLd / SoLE on the record and the sources in the document's lnk2 / lnkE blocks: carried through the layered save while the layer's PIXELS are unedited (opacity, blend, name, style, mask edits keep it a live smart object); new pixels rasterize it (WP5.15, ADR 478). The placement is not re-written for a transformed smart object (deferred, WP5.14)
+  oracle: photoshop      # Photoshop reopens an edited, paged-written smart object as a SMARTOBJECT layer (psd_write_photoshop.rs)
+  provenance:
+    - "Adobe Photoshop File Formats specification — Placed Layer (PlLd), Placed Layer Data (SoLd / SoLE), Linked Layer (lnk2 / lnkE) [PUB]"
+    - "Photoshop 27.10's embedded smart object (scripts/photoshop/probes/psd-containers.jsx): PlLd + SoLd on the record and the file in lnk2 [OBS]; a linked one (SoLE + lnkE) was observed but not committed (lnkE holds the machine's absolute path)"
+  tests:
+    rust: ["image-js/tests/it/psd_write.rs (an_edited_smart_object_keeps_its_source_until_its_pixels_change)", "image-conformance/tests/it/psd_write_photoshop.rs"]
+
+- id: image.psd.global.lr16
+  state_row: image.psd.roundtrip
+  tier: mutatable        # a deep document's layers (Lr16 / Lr32) are READ into the model's one layer list at parse (`LayerAndMaskInfo::deep_key`) and a re-encode writes them back into that block (WP5.15, ADR 478); zero-edit stays byte-identical (section_raw)
+  oracle: photoshop      # Photoshop reopens a paged-written 16-bit document at 16 bits (psd_write_photoshop.rs)
+  provenance:
+    - "Adobe Photoshop File Formats specification — Additional Layer Information: Lr16 / Lr32 (the layer info of a 16- / 32-bit document) [PUB]"
+    - "Photoshop 27.10 (psd-containers/sixteen-bit): the layer info sub-block is empty, the layers live in Lr16 (its length odd, padded to four outside it), channels ZIP with prediction, the composite RAW [OBS]"
+  tests:
+    rust: ["image-psd/tests/it/layer_list.rs (a_sixteen_bit_documents_layers_are_read_from_its_lr16_block)", "image-js/tests/it/psd_write.rs", "image-conformance/tests/it/psd_write_photoshop.rs"]
 
 - id: image.psd.addl.vmsk
   state_row: image.psd.roundtrip
@@ -269,7 +308,7 @@
 
 - id: image.psd.descriptor
   state_row: image.psd.roundtrip
-  tier: parsed           # READ-ONLY view. There is no descriptor WRITER: the preservation invariant keeps the opaque-bytes path authoritative for re-emission (§10.4), and a decoded tree is a derived view. Promoting this to `mutatable` means writing a descriptor emitter, which is a separate decision.
+  tier: mutatable        # READ and WRITTEN: ONE descriptor writer (paged-psd descriptor.rs, `write_*` with a WriteStyle: PSD class names with a NUL, .abr without) serves layer styles, fill layers, adjustment layers and the .abr writer (the .abr and image-js duplicates were folded into it, WP5.15). Unedited blocks still re-emit their opaque bytes (§10.4).
   oracle: independent-emitter   # image-conformance/src/abr_builder emits descriptor bytes with its own big-endian sink; the reader never shares code with it
   provenance:
     - "Adobe Photoshop File Formats Specification — Descriptor structure (class name + class id + item count + items; the key-or-4cc length-0 convention; the OSType table Objc/VlLs/doub/UntF/TEXT/enum/long/comp/bool/type/GlbC/GlbO/alis/tdta; unit codes #Ang/#Prc/#Pxl/#Rsl/#Rlt/#Nne/#Pnt/#Mlm) [PUB]"

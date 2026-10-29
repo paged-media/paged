@@ -46,6 +46,7 @@ import { SELECT_TOOL_ID, VIEW_TOOL_IDS, useOptionalTool } from "./tool-context";
 import type { ToolId } from "../registries/tool";
 import { canvasKeyYields } from "../focus/key-ownership";
 import { useEditorKeys } from "./editor-root";
+import { useOptionalRegistries } from "./registries-context";
 
 const MODIFIER_KEYS = new Set([
   "Shift",
@@ -65,6 +66,10 @@ export function EditContextController() {
     useEditContextStack();
   const { elementSelection } = useSelection();
   const tool = useOptionalTool();
+  // Editor ADR 301 — a header or footer edited in place inside this
+  // context: Escape leaves the header (the caret leaves its story), not
+  // the context.
+  const subContexts = useOptionalRegistries()?.subContexts ?? null;
   // ADR 023 follow-up — held in a ref because the enter effect below is
   // keyed on the frame identity and must NOT re-run because the registry
   // emitted (entering a context emits, by construction).
@@ -149,6 +154,7 @@ export function EditContextController() {
       )
         return;
       if (e.key === "Escape") {
+        if (subContexts?.current()) return;
         e.preventDefault();
         e.stopPropagation();
         cancel();
@@ -187,7 +193,7 @@ export function EditContextController() {
     // Capture so we win these keys while a context is active (this
     // editor's keys only).
     return keys.listen("keydown", onKey, true);
-  }, [commit, cancel, keys]);
+  }, [commit, cancel, keys, subContexts]);
 
   // On the active frame ENTER → emphasize panels + focus the first tool.
   // Keyed by the frame identity (type + scope root) so re-running only

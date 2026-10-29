@@ -626,6 +626,92 @@ export interface ViewRegistry {
   onChange(handler: () => void): Disposable;
 }
 
+// -------------------------------------------------------- sub-contexts
+
+/**
+ * Extensions ADR 349 (C6) — what a SUB-CONTEXT edits: a page's header or
+ * footer, or a note, in place on the page (editor ADR 301). Word's
+ * headers live on masters (engine ADR 1022): their story is an ordinary
+ * story, so the text edits address `storyId` directly while the user
+ * sees them on `pageId`.
+ */
+export type SubContextKind = "header" | "footer" | "note";
+
+/** What a bundle asks the host to enter (`host.shell.enterSubContext`, or
+ *  the answer of a {@link SubContextProviderContribution}). */
+export interface SubContextSpec {
+  kind: SubContextKind;
+  /** The body page the user edits on. */
+  pageId: PageId;
+  /** The story the text edits address (a master frame's story). */
+  storyId: string;
+  /** The editable area on `pageId`, page-local points
+   *  `[top, left, bottom, right]`: the host leaves it clear, dims the
+   *  rest of the page, and puts its bar next to it. */
+  bounds: [number, number, number, number];
+  /** The master the story's frame is on, when it is a master's. */
+  masterId?: string;
+  /** The frame showing the story. */
+  frameId?: string;
+  /** The bar's label ("First Page Header -Section 2-"). Absent: the host
+   *  names the kind. */
+  label?: string;
+  /** THIS bundle's command ids the host offers on the bar, in order
+   *  (Different first page, Link to previous, Insert page number, …). */
+  commands?: readonly string[];
+  /** Where the caret starts, a UTF-8 byte offset into the story. Absent:
+   *  its end. */
+  offset?: number;
+}
+
+/** The sub-context the host shows, and whose it is. */
+export interface SubContextState extends SubContextSpec {
+  pluginId: string;
+}
+
+/** A double-click the host offers to the providers. */
+export interface SubContextHit {
+  /** The edit context the providers were asked for: the active one, else
+   *  the document context. */
+  editContext: string;
+  pageId: PageId;
+  /** Page-local points (origin = the page's top-left). */
+  pagePoint: [number, number];
+}
+
+/**
+ * A bundle's answer to "the user double-clicked this point of a page"
+ * while its edit context `editContext` is active (or is the document
+ * context): a sub-context to enter, or `null` to leave the double-click
+ * to the host (a word selection in the body). The host asks before it
+ * hit-tests, so `resolve` should answer from what the bundle already
+ * knows (the page's master and its header and footer frames).
+ */
+export interface SubContextProviderContribution {
+  editContext: string;
+  resolve(
+    hit: SubContextHit,
+  ): SubContextSpec | null | Promise<SubContextSpec | null>;
+}
+
+/** Sub-contexts (extensions ADR 349): the providers and the one shown. */
+export interface SubContextRegistry {
+  register(
+    pluginId: string,
+    contribution: SubContextProviderContribution,
+  ): Disposable;
+  /** Ask the providers of `hit.editContext` in registration order; the
+   *  first answer enters. Resolves the state entered, or `null`. */
+  resolve(hit: SubContextHit): Promise<SubContextState | null>;
+  /** Enter `spec` for `pluginId` (replacing the one shown). */
+  enter(pluginId: string, spec: SubContextSpec): boolean;
+  /** Leave the one shown; with `pluginId`, only when it is that bundle's.
+   *  Answers whether one was left. */
+  exit(pluginId?: string): boolean;
+  current(): SubContextState | null;
+  onChange(handler: () => void): Disposable;
+}
+
 // ----------------------------------------------- importers + exporters
 // Document IO contributions (K-2 / S-06 ↔ plugin-image I-05). An IMPORTER
 // claims file extensions / MIME types; when the host opens a matching file
@@ -811,6 +897,9 @@ export interface ShellRegistries {
   /** Module views that replace the canvas (extensions ADR 345, C5).
    *  Optional likewise (`shell.views@1`). */
   views?: ViewRegistry;
+  /** Sub-contexts: a header, footer or note edited in place (extensions
+   *  ADR 349, C6). Optional likewise (`shell.subContext@1`). */
+  subContexts?: SubContextRegistry;
 }
 
 // ---------------------------------------------------- overlay signals

@@ -193,6 +193,11 @@ pub struct Paragraph {
     /// amendment).
     #[serde(default)]
     pub held: ParagraphHeld,
+    /// The instruction of a table of contents field (`TOC \o "1-3" \h`)
+    /// that begins in this paragraph: Word's TOC is one field whose result
+    /// is the entry paragraphs (doc ADR 612).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toc_field: Option<String>,
 }
 
 /// A paragraph's held content: the facts save-back needs to refuse an edit
@@ -402,6 +407,14 @@ pub struct Run {
     /// [`DocxDocument::notes`].
     #[serde(default)]
     pub note_ref: Option<i64>,
+    /// [`Run::note_ref`] names an endnote (`w:endnoteReference`), not a
+    /// footnote: the two parts number their notes apart.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub note_is_endnote: bool,
+    /// Where in [`Run::text`] the note reference stands (a char offset):
+    /// Word can write text on both sides of it in one run.
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub note_at: usize,
     /// When this run is a FIELD's result, the field's name (the instruction's
     /// first token, upper-cased: `PAGE`, `DATE`, `NUMPAGES`, `REF`, …). The run's
     /// `text` is the value Word last computed — a frozen snapshot, since the
@@ -409,6 +422,17 @@ pub struct Run {
     /// are handled separately (see [`Run::hyperlink`]).
     #[serde(default)]
     pub field: Option<String>,
+    /// When this run is a field's result: the field's whole instruction
+    /// (the `w:instrText`s joined, or `w:fldSimple/@w:instr`), trimmed —
+    /// what the lowering hands the engine as a Word field's code (doc ADR
+    /// 612). For a run inside nested fields, the innermost field's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_code: Option<String>,
+    /// Which field of its paragraph this result run belongs to: the
+    /// fields are numbered in the order they begin (0-based), and the
+    /// result runs of one field share the number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_seq: Option<u32>,
     /// When this run is (part of) the RESULT of a Word `MERGEFIELD` (mail
     /// merge), the parsed field: its data-source column name and switches.
     /// The run's `text` is the field's current result (Word shows
@@ -416,6 +440,37 @@ pub struct Run {
     /// stamps the same [`MergeField`] (same `occurrence`) on each.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_field: Option<MergeField>,
+}
+
+fn is_zero_usize(n: &usize) -> bool {
+    *n == 0
+}
+
+impl Run {
+    /// The engine's marker character for a note reference
+    /// (`paged_model::FOOTNOTE_REFERENCE_MARKER` / `ENDNOTE_REFERENCE_MARKER`):
+    /// what a body run holding a note reference reads as on the canvas, so
+    /// the lowering and the read-back agree (doc ADR 611).
+    pub const FOOTNOTE_MARKER: char = '\u{E01C}';
+    pub const ENDNOTE_MARKER: char = '\u{E01D}';
+
+    /// The marker this run's note reference stands for, if it holds one.
+    pub fn note_marker(&self) -> Option<char> {
+        self.note_ref.map(|_| {
+            if self.note_is_endnote {
+                Self::ENDNOTE_MARKER
+            } else {
+                Self::FOOTNOTE_MARKER
+            }
+        })
+    }
+
+    /// Whether the lowering keeps this run of a body or header paragraph
+    /// (a cell's keeps only runs with text): it has text, or it holds a
+    /// note reference.
+    pub fn is_lowered(&self, in_cell: bool) -> bool {
+        !self.text.is_empty() || (!in_cell && self.note_ref.is_some())
+    }
 }
 
 /// A parsed Word `MERGEFIELD` instruction (ECMA-376 Part 1, 17.16.5.35):

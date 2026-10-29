@@ -29,6 +29,10 @@ use crate::{
 };
 
 fn malformed(format: Format, err: image::ImageError) -> Error {
+    exr_error(format, image_error(format, err))
+}
+
+fn image_error(format: Format, err: image::ImageError) -> Error {
     match err {
         image::ImageError::Unsupported(u) => Error::Unsupported {
             format,
@@ -68,11 +72,51 @@ fn image_format(format: Format) -> Option<ImageFormat> {
 
 fn load(bytes: &[u8], format: Format) -> Result<DynamicImage> {
     let f = image_format(format).ok_or(Error::UnknownFormat)?;
+    exr_supported(bytes, format)?;
     image::load_from_memory_with_format(bytes, f).map_err(|e| malformed(format, e))
+}
+
+/// The OpenEXR variants `image` does not read, refused by name: deep data
+/// (the version field's bit 11) and an image without R, G and B channels
+/// (luminance and chroma, or channels of other names). Every part of a
+/// multi-part file is looked at; the first with R, G and B is read.
+fn exr_supported(bytes: &[u8], format: Format) -> Result<()> {
+    if format != Format::Exr {
+        return Ok(());
+    }
+    let unsupported = |what: &str| Error::Unsupported {
+        format,
+        what: what.into(),
+    };
+    if bytes.len() >= 8 && bytes[5] & 0x08 != 0 {
+        return Err(unsupported(
+            "deep data (an OpenEXR 2 deep image; flat images are read)",
+        ));
+    }
+    Ok(())
+}
+
+/// `image`'s refusal of an OpenEXR without R, G and B channels, as an
+/// [`Error::Unsupported`] that says so.
+fn exr_error(format: Format, err: Error) -> Error {
+    match err {
+        Error::Malformed { detail, .. }
+            if format == Format::Exr && detail.contains("rgb channels") =>
+        {
+            Error::Unsupported {
+                format,
+                what: "an OpenEXR image without R, G and B channels (luminance and chroma, \
+                       or channels of other names)"
+                    .into(),
+            }
+        }
+        other => other,
+    }
 }
 
 pub(crate) fn probe(bytes: &[u8], format: Format, page: usize) -> Result<RasterInfo> {
     single_page(page)?;
+    exr_supported(bytes, format)?;
     let f = image_format(format).ok_or(Error::UnknownFormat)?;
     let reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), f);
     let mut decoder = reader.into_decoder().map_err(|e| malformed(format, e))?;
@@ -83,6 +127,7 @@ pub(crate) fn probe(bytes: &[u8], format: Format, page: usize) -> Result<RasterI
         _ => decoder.icc_profile().ok().flatten(),
     };
     let (color_model, alpha, sample_format) = describe(colour);
+    let alpha = exr_alpha(format, alpha);
     let meta = match format {
         Format::Png | Format::WebP => crate::meta::read_metadata(bytes),
         _ => crate::meta::Metadata::default(),
@@ -177,9 +222,20 @@ pub(crate) fn decode(bytes: &[u8], format: Format, opts: DecodeOptions) -> Resul
         width,
         height,
         model,
-        alpha,
+        alpha: exr_alpha(format, alpha),
         data,
     })
+}
+
+/// OpenEXR stores colour premultiplied by its alpha (the format's
+/// convention, and how Photoshop reads it: ADR 1038's oracle), so an
+/// OpenEXR alpha is associated; `image` hands the samples over as stored.
+fn exr_alpha(format: Format, alpha: Alpha) -> Alpha {
+    if format == Format::Exr && alpha != Alpha::None {
+        Alpha::Associated
+    } else {
+        alpha
+    }
 }
 
 /// Exactly what the renderer did before this crate: `image`'s decode and

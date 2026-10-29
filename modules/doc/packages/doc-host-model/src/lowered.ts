@@ -75,7 +75,30 @@ export interface LoweredRun {
    *  (`docx_core::MergeField`). The text pours as ordinary text; the bundle's
    *  object model addresses the field (`mergeField`). Absent otherwise. */
   mergeField?: LoweredMergeField | null;
+  /** Doc ADR 612 — a Word field the engine keeps live: the run's text is
+   *  (part of) its result; the runs of one field share `seq`. */
+  field?: LoweredField | null;
+  /** Doc ADR 611 — a footnote or endnote reference: the run's text is the
+   *  engine's marker character, which `insertFootnote` / `insertEndnote`
+   *  writes. */
+  note?: LoweredNoteRef | null;
 }
+
+export interface LoweredField {
+  /** The instruction (`PAGE \* roman`, `PAGEREF _Toc1 \h`). */
+  code: string;
+  /** Which field of its paragraph (0-based). */
+  seq: number;
+}
+
+export interface LoweredNoteRef {
+  id: number;
+  endnote: boolean;
+}
+
+/** The engine's note reference markers (paged-model). */
+export const FOOTNOTE_MARKER = "\u{E01C}";
+export const ENDNOTE_MARKER = "\u{E01D}";
 
 /** A Word `MERGEFIELD` (mail merge) as `docx-import` parsed it. */
 export interface LoweredMergeField {
@@ -254,6 +277,61 @@ export interface LoweredSection {
    *  else). Absent: Word's defaults. */
   footnoteNumbering?: LoweredNoteNumbering;
   endnoteNumbering?: LoweredNoteNumbering;
+  /** Doc ADR 611 — the masters this section's story's pages take. */
+  masters?: LoweredSectionMasters;
+  /** Doc ADR 611 — the grow rule's section start (`oddPage`/`evenPage`). */
+  sectionStart?: "newPage" | "oddPage" | "evenPage";
+}
+
+export interface LoweredSectionMasters {
+  master?: string;
+  firstMaster?: string;
+  evenMaster?: string;
+}
+
+/** Doc ADR 611 — a master the skeleton writes, with its header and footer
+ *  frames' stories. */
+export interface LoweredMaster {
+  id: string;
+  name: string;
+  section: number;
+  kind: "default" | "first" | "even";
+  pageWidthPt: number;
+  pageHeightPt: number;
+  header?: LoweredMasterFrame;
+  footer?: LoweredMasterFrame;
+}
+
+export interface LoweredMasterFrame {
+  /** Index into `LoweredDoc.headerFooterParts`. */
+  part: number;
+  storyId: string;
+  frameId: string;
+  bounds: [number, number, number, number];
+  bottomAligned?: boolean;
+}
+
+export interface LoweredHeaderFooterPart {
+  part: string;
+  footer: boolean;
+  paragraphs: LoweredParagraph[];
+}
+
+/** Doc ADR 611 — a footnote or endnote. */
+export interface LoweredNote {
+  id: number;
+  endnote: boolean;
+  paragraphs: LoweredParagraph[];
+  /** The text the engine's note holds (paragraphs joined by `\n`). */
+  text: string;
+}
+
+/** Doc ADR 612 — a Word table of contents in the body. */
+export interface LoweredToc {
+  instruction: string;
+  firstBlock: number;
+  endBlock: number;
+  levels: [number, number];
 }
 
 /** One section's headers and footers, by part name (`word/header1.xml`). */
@@ -306,6 +384,14 @@ export interface LoweredDoc {
   colorGroups?: LoweredColorGroup[];
   /** Doc ADR 609 — the theme's Latin heading and body faces. */
   themeFonts?: { major?: string; minor?: string };
+  /** Doc ADR 611 — every header and footer part, lowered. */
+  headerFooterParts?: LoweredHeaderFooterPart[];
+  /** Doc ADR 611 — the masters the standalone skeleton writes. */
+  masters?: LoweredMaster[];
+  /** Doc ADR 611 — the notes referenced from the body. */
+  notes?: LoweredNote[];
+  /** Doc ADR 612 — the tables of contents in the body. */
+  tocs?: LoweredToc[];
 }
 
 /** Parse the JSON string `docx-js` produces into a typed [`LoweredDoc`]. */

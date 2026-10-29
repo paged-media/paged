@@ -63,6 +63,137 @@ pub struct LoweredDoc {
     /// that is one of them as the theme reference.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme_fonts: Option<LoweredThemeFonts>,
+    /// Every header and footer part, in `DocxDocument::headers_footers`
+    /// order, lowered as paragraphs (doc ADR 611): what the masters'
+    /// header and footer stories are poured with.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub header_footer_parts: Vec<LoweredHeaderFooterPart>,
+    /// The masters the standalone skeleton writes (doc ADR 611): one per
+    /// distinct header and footer pair a section's pages show.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub masters: Vec<LoweredMaster>,
+    /// Every footnote and endnote referenced from the body, lowered as
+    /// paragraphs (doc ADR 611).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<LoweredNote>,
+    /// Word tables of contents in the body (doc ADR 612): the TOC field's
+    /// instruction and the blocks that hold its cached entries.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tocs: Vec<LoweredToc>,
+}
+
+/// A header or footer part's content (doc ADR 611).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredHeaderFooterPart {
+    /// `word/header1.xml`.
+    pub part: String,
+    pub footer: bool,
+    pub paragraphs: Vec<LoweredParagraph>,
+}
+
+/// A master the skeleton writes: a page of the section's size with a
+/// header frame and a footer frame, each holding a story the bundle pours
+/// the part's paragraphs into (doc ADR 611).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredMaster {
+    /// The master's id (`docx_m0`): what a page's `AppliedMaster` and the
+    /// grow rule name.
+    pub id: String,
+    /// Shown in the pages panel (`Section 1 First Page`).
+    pub name: String,
+    /// The section (0-based) that first shows it.
+    pub section: usize,
+    /// `default` / `first` / `even`: the kind of page it was made for.
+    pub kind: String,
+    pub page_width_pt: f32,
+    pub page_height_pt: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<LoweredMasterFrame>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footer: Option<LoweredMasterFrame>,
+}
+
+/// A header or footer frame on a master.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredMasterFrame {
+    /// Index into [`LoweredDoc::header_footer_parts`].
+    pub part: usize,
+    /// The frame's story (`docx_m0_h`).
+    pub story_id: String,
+    /// The frame (`docx_m0_hf`).
+    pub frame_id: String,
+    /// `[top, left, bottom, right]` in page points.
+    pub bounds: [f32; 4],
+    /// A footer's text sits on the frame's foot (Word measures the footer
+    /// distance to the footer's last line).
+    #[serde(default)]
+    pub bottom_aligned: bool,
+}
+
+/// The masters a section story's pages take (engine ADR 1022's grow rule).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredSectionMasters {
+    /// Every page's, or the odd pages' when `even_master` is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master: Option<String>,
+    /// The section's first page (`w:titlePg`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_master: Option<String>,
+    /// Even pages (`w:evenAndOddHeaders`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub even_master: Option<String>,
+}
+
+/// A footnote or endnote (doc ADR 611).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredNote {
+    /// `w:footnote/@w:id` (or the endnote's).
+    pub id: i64,
+    pub endnote: bool,
+    pub paragraphs: Vec<LoweredParagraph>,
+    /// The note's text as the engine's note holds it: its paragraphs'
+    /// run text joined by `\n`, without Word's reference mark.
+    pub text: String,
+}
+
+/// A note reference in a body run (doc ADR 611): the run's text is the
+/// engine's marker character, which `insertFootnote` / `insertEndnote`
+/// writes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredNoteRef {
+    pub id: i64,
+    pub endnote: bool,
+}
+
+/// A Word field the engine keeps live (doc ADR 612): the run's text is
+/// (part of) its result. The runs of one field share `seq`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredField {
+    /// The instruction (`PAGE \* roman`, `PAGEREF _Toc1 \h`).
+    pub code: String,
+    /// Which field of its paragraph (0-based).
+    pub seq: u32,
+}
+
+/// A Word table of contents (doc ADR 612): its cached entries are the
+/// body blocks `first_block..end_block`, poured as they are; their
+/// `PAGEREF` fields stay live.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredToc {
+    /// `TOC \o "1-3" \h \z \u`.
+    pub instruction: String,
+    pub first_block: usize,
+    pub end_block: usize,
+    /// The outline levels it lists (`\o "1-3"`), 1-based, inclusive.
+    pub levels: (u8, u8),
 }
 
 /// A colour group to mint via `createColorGroup`.
@@ -404,6 +535,15 @@ pub struct LoweredRun {
     /// ordinary text; nothing native marks it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_field: Option<docx_core::MergeField>,
+    /// A Word field kept live (doc ADR 612): the pour inserts the run's
+    /// text as the field's result (`insertField { word }`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<LoweredField>,
+    /// A footnote or endnote reference (doc ADR 611): the pour inserts it
+    /// with `insertFootnote` / `insertEndnote`; the run's text is the
+    /// engine's marker character.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<LoweredNoteRef>,
 }
 
 /// Page geometry for the first section, in points.
@@ -453,6 +593,16 @@ pub struct LoweredSection {
     /// ADR 034 — the endnote numbering in force in this section.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub endnote_numbering: Option<LoweredNoteNumbering>,
+    /// The masters this section's story's pages take (doc ADR 611). Set on
+    /// the section that opens a story; absent when it shows no header or
+    /// footer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub masters: Option<LoweredSectionMasters>,
+    /// `w:sectPr/w:type` as the grow rule's section start (`newPage`,
+    /// `oddPage`, `evenPage`), on a section that opens a story after the
+    /// first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section_start: Option<String>,
 }
 
 /// One section's headers and footers (thoughts ADR 033): which header/footer
@@ -531,6 +681,8 @@ impl Default for LoweredSection {
             header_footer: None,
             footnote_numbering: None,
             endnote_numbering: None,
+            masters: None,
+            section_start: None,
         }
     }
 }

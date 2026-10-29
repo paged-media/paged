@@ -17,12 +17,16 @@
  */
 
 //! Place as vectors (publish ADR 658): a page lowered into an engine
-//! snippet that the engine's own paste (`InsertSnippet`, engine ADR 193)
-//! grafts onto a document — native items, one operation, undone whole.
+//! snippet (`paged_scene::snippet::ItemSnippet`) that the engine's own paste
+//! (`InsertSnippet`, engine ADR 193) grafts onto a document. These read the
+//! snippet itself: the paste and its undo are the engine's, tested there, and
+//! this workspace must not link the mutation engine (it would build the
+//! unpatched flo_curves, see the publish workflow's guard).
 
 mod support;
 
-use pdf_import::ir::{DocumentIr, PageIr};
+use paged_scene::snippet::{ItemSnippet, SNIPPET_FORMAT};
+use pdf_import::ir::DocumentIr;
 use pdf_import::snippet::{place, PlaceRequest};
 use support::{obj, pdf, Obj};
 
@@ -35,52 +39,26 @@ fn request(page: usize) -> PlaceRequest {
     .expect("request")
 }
 
-/// A blank one-page document to paste into.
-fn blank() -> paged_scene::Document {
-    let ir = DocumentIr {
-        pages: vec![PageIr {
-            width_pt: 600.0,
-            height_pt: 800.0,
-            background_png_b64: None,
-            frames: Vec::new(),
-        }],
-    };
-    pdf_import::build::build_document(&ir).expect("blank")
-}
-
-fn paste(doc: &mut paged_scene::Document, snippet: &str) -> paged_mutate::Operation {
-    let spread = doc.spreads[0].spread.self_id.clone().expect("spread id");
-    let applied = paged_mutate::apply(
-        doc,
-        &paged_mutate::Operation::InsertSnippet {
-            snippet: snippet.to_string(),
-            spread,
-            dx: 0.0,
-            dy: 0.0,
-            ids: Vec::new(),
-            story_ids: Vec::new(),
-            added: Vec::new(),
-        },
-    )
-    .expect("the engine takes the snippet");
-    applied.inverse
+/// The snippet a placement wrote, as the engine reads it.
+fn snippet(json: &str) -> ItemSnippet {
+    let s: ItemSnippet = serde_json::from_str(json).expect("a snippet");
+    assert_eq!(s.format, SNIPPET_FORMAT);
+    s
 }
 
 const ART: &str = "1 0 0 rg 10 10 100 50 re f 0 0 1 RG 2 w 10 100 m 100 150 l S q 120 20 m 180 20 l 150 80 l h W n 0 1 0 rg 100 0 100 100 re f 1 1 0 rg 0 0 300 30 re f Q";
 
 #[test]
 #[allow(non_snake_case)]
-fn a_page_pastes_as_native_items_and_undoes_whole__feat__editor_shell_import_svg_pdf_vectors() {
+fn a_page_lowers_to_native_items_in_one_group__feat__editor_shell_import_svg_pdf_vectors() {
     let bytes = pdf(200.0, 200.0, "", ART, &[]);
     let r = place(&bytes, &request(0)).expect("placed");
     assert_eq!(r.counts.clip_groups, 1, "{:?}", r.counts);
     assert!(r.counts.paths >= 3);
     // One group wraps what landed, named after the file.
-    let mut doc = blank();
-    let before = doc.spreads[0].spread.frames_in_order.len();
-    let inverse = paste(&mut doc, &r.snippet);
-    let spread = &doc.spreads[0].spread;
-    assert_eq!(spread.frames_in_order.len(), before + 1);
+    let s = snippet(&r.snippet);
+    let spread = &s.spread;
+    assert_eq!(spread.frames_in_order.len(), 1);
     assert!(
         spread.groups.iter().any(|g| g.clip),
         "the clip group landed"
@@ -94,10 +72,7 @@ fn a_page_pastes_as_native_items_and_undoes_whole__feat__editor_shell_import_svg
         .expect("the red rectangle");
     assert_eq!(red.bounds.left, 60.0);
     assert_eq!(red.bounds.top, 200.0);
-    assert!(doc.palette.colors.contains_key("Color/pdf_255_0_0"));
-    paged_mutate::apply(&mut doc, &inverse).expect("undo");
-    assert_eq!(doc.spreads[0].spread.frames_in_order.len(), before);
-    assert!(doc.spreads[0].spread.polygons.is_empty());
+    assert!(s.resources.colors.contains_key("Color/pdf_255_0_0"));
 }
 
 #[test]
@@ -114,15 +89,14 @@ fn a_gradient_lands_with_its_ramp_where_the_pdf_drew_it__feat__editor_shell_impo
     );
     let r = place(&bytes, &request(0)).expect("placed");
     assert_eq!(r.counts.gradients, 1);
-    let mut doc = blank();
-    paste(&mut doc, &r.snippet);
-    let p = &doc.spreads[0].spread.polygons[0];
+    let s = snippet(&r.snippet);
+    let p = &s.spread.polygons[0];
     let id = p.fill_color.as_deref().expect("filled");
     assert!(id.starts_with("Gradient/pdf_"), "{id}");
     assert_eq!(p.gradient_fill_start, Some([70.0, 260.0]));
     assert_eq!(p.gradient_fill_length, Some(160.0));
     assert_eq!(p.gradient_fill_angle, Some(0.0));
-    assert!(doc.palette.gradients.contains_key(id));
+    assert!(s.resources.gradients.contains_key(id));
 }
 
 #[test]
@@ -142,10 +116,13 @@ fn a_soft_mask_lands_as_an_opacity_mask__feat__editor_shell_import_svg_pdf_vecto
     );
     let r = place(&bytes, &request(0)).expect("placed");
     assert_eq!(r.counts.opacity_masks, 1, "{:?}", r.losses);
-    let mut doc = blank();
-    let inverse = paste(&mut doc, &r.snippet);
-    let spread = &doc.spreads[0].spread;
-    assert_eq!(spread.opacity_masks.len(), 1, "the paste carried the mask");
+    let s = snippet(&r.snippet);
+    let spread = &s.spread;
+    assert_eq!(
+        spread.opacity_masks.len(),
+        1,
+        "the snippet carries the mask"
+    );
     let (target, mask) = spread.opacity_masks.iter().next().expect("one");
     assert!(spread
         .polygons
@@ -159,8 +136,6 @@ fn a_soft_mask_lands_as_an_opacity_mask__feat__editor_shell_import_svg_pdf_vecto
         .frames_in_order
         .iter()
         .any(|r| matches!(r, paged_model::FrameRef::Polygon(i) if spread.polygons[*i].self_id.as_deref() == Some(mask.mask_item.as_str()))));
-    paged_mutate::apply(&mut doc, &inverse).expect("undo");
-    assert!(doc.spreads[0].spread.opacity_masks.is_empty());
 }
 
 #[test]
@@ -183,9 +158,8 @@ fn text_frames_land_where_their_runs_paint__feat__editor_shell_import_svg_pdf_ve
     .expect("frames");
     let r = place(&bytes, &req).expect("placed");
     assert_eq!(r.counts.text_frames, 1);
-    let mut doc = blank();
-    paste(&mut doc, &r.snippet);
-    let story = doc
+    let s = snippet(&r.snippet);
+    let story = s
         .stories
         .iter()
         .find(|s| {
@@ -212,9 +186,8 @@ fn a_clip_outline_crops_a_converted_frame__feat__editor_shell_import_svg_pdf_vec
         [50.0, 160.0],
     ]);
     let r = place(&bytes, &req).expect("placed");
-    let mut doc = blank();
-    paste(&mut doc, &r.snippet);
-    let spread = &doc.spreads[0].spread;
+    let s = snippet(&r.snippet);
+    let spread = &s.spread;
     let root = spread.frames_in_order.last().copied().expect("root");
     let paged_model::FrameRef::Group(gi) = root else {
         panic!("{root:?}");

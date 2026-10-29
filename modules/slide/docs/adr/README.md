@@ -19,7 +19,7 @@ Range 700–749.
 | [714](714-timeline-model-and-full-effect-set.md) | Timeline model and full effect set: the timing as a tree, a Rust player, layers composited on WebGPU, presets from PowerPoint | Accepted 2026-10-28 |
 | [715](715-live-charts-via-paged-sheet.md) | Live charts via paged.sheet: the chart's workbook in the slide wasm, slide-chart for the kinds it lays out, paged.sheet for the rest | Accepted 2026-10-25 |
 | [716](716-slide-show-and-presenter-view.md) | Slide show and presenter view: one presentation in three roles, PowerPoint's keys, the slide sorter as a module view | Accepted 2026-10-25 |
-| [717](717-live-presets-and-connectors.md) | Live presets and connectors | Accepted 2026-10-25 |
+| [717](717-live-presets-and-connectors.md) | Live presets and connectors | Accepted 2026-10-25; amended 2026-10-28 (pictures, format painter, SmartArt text) |
 | [720](720-output-formats-including-mp4.md) | Output formats, including MP4: .potx, PDF handouts and notes pages, the outline, video; sections and custom shows | Accepted 2026-10-28 |
 | [721](721-transitions-and-shader-effects-are-pure-webgpu-wgsl.md) | Transitions and shader effects are pure WebGPU/WGSL | Accepted 2026-10-25 |
 | [722](722-one-drawingml-paint-and-effect-mapper.md) | One DrawingML paint and effect reader (`paged_ooxml::drawingml`), one mapper onto the engine (`dml-native`) | Accepted 2026-10-25 |

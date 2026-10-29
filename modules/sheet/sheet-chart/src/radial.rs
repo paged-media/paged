@@ -25,7 +25,7 @@
 //! only, as Excel does; the other series stay in the model (and in the file)
 //! and draw when the chart becomes a doughnut, where each series is a ring.
 
-use crate::cartesian::{marker_of, point_color, series_list, S};
+use crate::cartesian::{marker_of, point_color, point_fx, series_list, S};
 use crate::colors::Paint;
 use crate::extras::{self, LabelParts};
 use crate::frame::{self, Entry, Glyph, Rect};
@@ -170,7 +170,9 @@ fn ring(
         let mid = ((a0 + a1) / 2.0).to_radians();
         let (ox, oy) = (explode * mid.sin(), -explode * mid.cos());
         let fill = slice_color(pen, model, s, i, n);
-        pen.wedge(cx + ox, cy + oy, r, inner, a0, a1, &fill, Some(edge));
+        pen.with_fx(point_fx(s, i), || {
+            pen.wedge(cx + ox, cy + oy, r, inner, a0, a1, &fill, Some(edge))
+        });
         if let Some(dl) = dl {
             let spec = TextSpec::of(
                 &dl.style,
@@ -262,7 +264,9 @@ fn of_pie(pen: &Pen, model: &ChartModel, data: &PlotData, s: &S, area: Rect) {
         }
         let sweep = vals[i] / total * 360.0;
         let fill = slice_color(pen, model, s, i, n);
-        pen.wedge(cx1, cy, r1, 0.0, acc, acc + sweep, &fill, Some(&edge));
+        pen.with_fx(point_fx(s, i), || {
+            pen.wedge(cx1, cy, r1, 0.0, acc, acc + sweep, &fill, Some(&edge))
+        });
         acc += sweep;
     }
     let other_fill = pen.theme.auto_color(n, n + 1, model.style);
@@ -293,7 +297,9 @@ fn of_pie(pen: &Pen, model: &ChartModel, data: &PlotData, s: &S, area: Rect) {
         for &i in &others {
             let sweep = vals[i] / sub_total * 360.0;
             let fill = slice_color(pen, model, s, i, n);
-            pen.wedge(cx2, cy, r2, 0.0, acc, acc + sweep, &fill, Some(&edge));
+            pen.with_fx(point_fx(s, i), || {
+                pen.wedge(cx2, cy, r2, 0.0, acc, acc + sweep, &fill, Some(&edge))
+            });
             acc += sweep;
         }
         pen.line(vec![top1, (cx2, cy - r2)], &line, 0.75, None);

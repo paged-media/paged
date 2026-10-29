@@ -28,9 +28,6 @@ paged-scene = { path = "../../engine/core/crates/paged-scene" }
 # The native `.paged` model codec (pgm to_bytes/from_bytes): the PDF import
 # builds a Document and persists it natively (no IDML round-trip).
 paged-store = { path = "../../engine/core/crates/paged-store" }
-# The engine's snippet type (engine ADR 193): place-as-vectors lowers a page
-# into one, which the editor pastes (publish ADR 658).
-paged-mutate = { path = "../../engine/core/crates/paged-mutate" }
 # The IDML reader, for pdf-import's round-trip test (a dev-dependency).
 idml-import = { path = "../../engine/core/crates/idml-import" }
 

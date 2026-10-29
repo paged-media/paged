@@ -229,6 +229,10 @@ mod wasm {
                 table_paragraphs: bool,
                 #[serde(default)]
                 styles: Vec<docx_export::StyleIn>,
+                /// Doc ADRs 611/612: the master stories, the notes and
+                /// the text anchors read back (absent: none).
+                #[serde(default)]
+                structure: docx_export::structure::StructureIn,
             }
             let Cells {
                 cells,
@@ -236,6 +240,7 @@ mod wasm {
                 colors,
                 table_paragraphs,
                 styles,
+                structure,
             } = serde_json::from_str(content_json)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             let layout = if table_paragraphs {
@@ -244,7 +249,9 @@ mod wasm {
                 docx_export::TableParagraphs::Joined
             };
             let (bytes, skips) = session
-                .save_edited_full(&content, &cells, &tables, &colors, &styles, layout)
+                .save_edited_structure(
+                    &content, &cells, &tables, &colors, &styles, layout, &structure,
+                )
                 .map_err(|e| JsValue::from_str(&e))?;
             *self.last_skips.borrow_mut() = skips;
             Ok(bytes)

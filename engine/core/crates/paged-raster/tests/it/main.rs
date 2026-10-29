@@ -25,7 +25,9 @@
 //! to the `images-graphics.tiff-raster` feature row, and
 //! `__feat__images_graphics_format_extensions` those of the EPS preview,
 //! DNG, AVIF, JPEG XL and the small formats to
-//! `images-graphics.format-extensions`; it is the evidence join's
+//! `images-graphics.format-extensions`, and `__feat__images_graphics_codecs_long_tail`
+//! WP9.4's encoders, floats and layered TIFF to
+//! `images-graphics.codecs-long-tail`; it is the evidence join's
 //! convention, hence the lint allowance.
 #![allow(non_snake_case)]
 
@@ -33,11 +35,14 @@ mod codecs;
 mod colour;
 mod dng;
 mod encode;
+mod encode_tail;
 mod eps;
 mod formats;
 mod layouts;
 mod matrix;
 mod metadata;
+mod oracle;
+mod oracle_files;
 mod psd;
 mod raw_tiff;
 mod support;

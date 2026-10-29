@@ -68,6 +68,9 @@ import type {
   PresentationState,
   PresentRequest,
   PresentResult,
+  SubContextProviderContribution,
+  SubContextSpec,
+  SubContextState,
   ToolContribution,
   ToolPreviewShape,
   ViewContribution,
@@ -540,6 +543,17 @@ export interface ContributionSurface {
    * `contributes.views[]`. Probe `supports("shell.views@1")`.
    */
   view(contribution: ViewContribution): Disposable;
+  /**
+   * Register a SUB-CONTEXT PROVIDER (extensions ADR 349, C6): while the
+   * edit context `editContext` is active, or is the document context, a
+   * double-click on a page is offered to `resolve` before the host's own
+   * handling; a {@link SubContextSpec} answer enters that header, footer
+   * or note in place (editor ADR 301). The context must be registered by
+   * this bundle (the provider borrows its declaration). Probe
+   * `supports("shell.subContext@1")` (without the host's registry the door
+   * warns and registers nothing).
+   */
+  subContextProvider(contribution: SubContextProviderContribution): Disposable;
   /**
    * Register a CONTROL-BAR GROUP (extensions ADR 348, C1): a segment of
    * the host's control bar shown while the edit context `scope` names is
@@ -2626,6 +2640,24 @@ export interface ShellSurface {
   activeView(): string | null;
   /** Fires when a view is shown or closed (null: the canvas is back). */
   onDidChangeView(handler: (id: string | null) => void): Disposable;
+  /**
+   * Extensions ADR 349 (C6) — edit a header, footer or note IN PLACE on a
+   * page (editor ADR 301): the host puts the caret into `spec.storyId`,
+   * shows it on `spec.pageId`, dims the rest of the page and shows a bar
+   * with `spec.commands`; Esc, a click on the body or
+   * {@link exitSubContext} leaves. Replaces a sub-context already shown.
+   * Answers false without the host's sub-contexts
+   * (`supports("shell.subContext@1")`).
+   */
+  enterSubContext(spec: SubContextSpec): boolean;
+  /** Leave the sub-context shown, if it is this bundle's. */
+  exitSubContext(): boolean;
+  /** The sub-context shown (any bundle's), or null. */
+  subContext(): SubContextState | null;
+  /** Fires when a sub-context is entered or left (null: left). */
+  onDidChangeSubContext(
+    handler: (state: SubContextState | null) => void,
+  ): Disposable;
 }
 
 /** What `ShellSurface.saveFile` delivers (K-10) — the inverse of

@@ -58,6 +58,11 @@
 //     each, and the Custom shows panel (never in the rail) — only when the
 //     host answers `contribute.command@1`; the panel also needs
 //     `contribute.panel@1`.
+//   · the animations (slide ADR 714): the Animations pane (React, never in
+//     the rail), Animation Pane, Preview Animations and Animation Painter
+//     with a Plugins ▸ Animations entry each, and six typed twins — the
+//     pane with `contribute.panel@1`, the palette commands with
+//     `contribute.command@1`; Preview also needs an overlay.
 //
 // The editor answers every one of those doors, so all of it is live here.
 // paged.slide declares NO tool; its edit contexts are the deck's document
@@ -115,6 +120,8 @@ const DECK_PANEL = "media.paged.slide.panel.deck";
 const COMMENTS_PANEL = "media.paged.slide.panel.comments";
 const SHAPES_PANEL = "media.paged.slide.panel.shapes";
 const CUSTOM_SHOWS_PANEL = "media.paged.slide.panel.customShows";
+const ANIMATIONS_PANEL = "media.paged.slide.panel.animations";
+const SMARTART_PANEL = "media.paged.slide.panel.smartart";
 const IMPORTER = "media.paged.slide.importer.pptx";
 const EXPORTER = "media.paged.slide.exporter.pptx";
 /** Save as template's exporter (slide ADR 720). */
@@ -142,6 +149,16 @@ const SECTIONS = "media.paged.slide.sections";
 const RENAME_SECTION = "media.paged.slide.renameSection";
 const MOVE_SECTION = "media.paged.slide.moveSection";
 const DELETE_SECTION = "media.paged.slide.deleteSection";
+/** SmartArt's text, for scripts (slide W4, `src/content-commands.ts`). */
+const SMARTART_POINTS = "media.paged.slide.smartArtPoints";
+const SET_SMARTART_TEXT = "media.paged.slide.setSmartArtText";
+/** The animations' typed twins (slide ADR 714, `src/anim/contribute.ts`). */
+const ADD_ANIMATION = "media.paged.slide.addAnimation";
+const REMOVE_ANIMATION = "media.paged.slide.removeAnimation";
+const SET_ANIMATION_TIMING = "media.paged.slide.setAnimationTiming";
+const MOVE_ANIMATION = "media.paged.slide.moveAnimation";
+const LIST_ANIMATIONS = "media.paged.slide.listAnimations";
+const PREVIEW_ANIMATIONS = "media.paged.slide.previewAnimations";
 
 /** The palette commands and the menu entry onto each (the bundle's
  *  `src/menu.ts`, restated). */
@@ -158,6 +175,12 @@ const PALETTE = {
   "media.paged.slide.command.addComment": "Slide/New comment",
   // Insert is the host's menu; the entry opens the Shapes panel (ADR 717).
   "media.paged.slide.command.insertShapes": "Insert/Shapes…",
+  // Slide W4: pictures and icons, the format painter, the SmartArt text pane.
+  "media.paged.slide.command.insertPicture": "Insert/Pictures…",
+  "media.paged.slide.command.insertIcon": "Insert/Icons…",
+  "media.paged.slide.command.copyFormat": "Slide/Copy formatting",
+  "media.paged.slide.command.pasteFormat": "Slide/Paste formatting",
+  "media.paged.slide.command.smartArtText": "Slide/SmartArt text pane",
 } as const;
 
 /** The slide show's commands (slide ADR 716, `src/show/contribute.ts`):
@@ -202,6 +225,25 @@ const OUTPUT = {
   "media.paged.slide.command.addSection": ["Add section", "Slide/Add Section"],
 } as const;
 
+/** The Animation pane, Preview and the Animation Painter (slide ADR 714,
+ *  `src/anim/contribute.ts`): their titles and their menu entries. Offered
+ *  only in a deck: Preview on a slide with animations, the painter with a
+ *  shape selected. */
+const ANIM = {
+  "media.paged.slide.command.animationPane": [
+    "Animation pane",
+    "Animations/Animation Pane",
+  ],
+  "media.paged.slide.command.previewAnimations": [
+    "Preview animations",
+    "Animations/Preview Animations",
+  ],
+  "media.paged.slide.command.animationPainter": [
+    "Animation Painter",
+    "Animations/Animation Painter",
+  ],
+} as const;
+
 const KIND = (k: string) => `plugin:media.paged.slide/${k}`;
 
 /** THE IDS, SPELLED OUT. Comparing the manifest to the registries proves
@@ -220,6 +262,8 @@ const DECLARED = {
     COMMENTS_PANEL,
     SHAPES_PANEL,
     CUSTOM_SHOWS_PANEL,
+    ANIMATIONS_PANEL,
+    SMARTART_PANEL,
   ],
   importers: [IMPORTER],
   exporters: [EXPORTER, TEMPLATE_EXPORTER],
@@ -252,6 +296,21 @@ const DECLARED = {
     RENAME_SECTION,
     MOVE_SECTION,
     DELETE_SECTION,
+    // The animations' typed twins (ADR 714).
+    ADD_ANIMATION,
+    REMOVE_ANIMATION,
+    SET_ANIMATION_TIMING,
+    MOVE_ANIMATION,
+    LIST_ANIMATIONS,
+    PREVIEW_ANIMATIONS,
+    // Slide W4's palette twins and SmartArt's text, for scripts.
+    "media.paged.slide.command.insertPicture",
+    "media.paged.slide.command.insertIcon",
+    "media.paged.slide.command.copyFormat",
+    "media.paged.slide.command.pasteFormat",
+    "media.paged.slide.command.smartArtText",
+    SMARTART_POINTS,
+    SET_SMARTART_TEXT,
   ],
   /** The deck's document context (editor ADR 307): no frame is entered;
    *  and a chart frame's data (slide ADR 715), entered by double-click. */
@@ -265,12 +324,13 @@ const DECLARED = {
     ...Object.keys(PALETTE),
     ...Object.keys(SHOW),
     ...Object.keys(OUTPUT),
+    ...Object.keys(ANIM),
   ],
 } as const;
 
 /** Each panel's title, and what it is: the sorter, the notes, the
- *  comments, the shapes and the custom shows are React panels; the other
- *  four are schema panels of property rows. */
+ *  comments, the shapes, the custom shows and the animations are React
+ *  panels; the other four are schema panels of property rows. */
 const PANEL_TITLES: Record<string, string> = {
   [SLIDES_PANEL]: "Slides",
   [NOTES_PANEL]: "Notes",
@@ -281,6 +341,8 @@ const PANEL_TITLES: Record<string, string> = {
   [COMMENTS_PANEL]: "Comments",
   [SHAPES_PANEL]: "Shapes",
   [CUSTOM_SHOWS_PANEL]: "Custom shows",
+  [ANIMATIONS_PANEL]: "Animations",
+  [SMARTART_PANEL]: "Text Pane",
 };
 const SCHEMA_PANELS = [
   SLIDE_PANEL,
@@ -598,7 +660,7 @@ test.describe("plugin surface · paged.slide", () => {
 
   // ── 2. PANELS ────────────────────────────────────────────────────
 
-  test("all nine panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
+  test("all eleven panels mount, each behind its own Plugins ▸ Slide item @feat:plugin-platform.panel-registration @feat:editor-shell.plugin-bundles @level:happy", async ({
     page,
   }) => {
     await bootBlank(page);
@@ -616,16 +678,20 @@ test.describe("plugin surface · paged.slide", () => {
     expect(byId[COMMENTS_PANEL].defaultDock).toBe("right");
     expect(byId[SHAPES_PANEL].defaultDock).toBe("right");
     expect(byId[CUSTOM_SHOWS_PANEL].defaultDock).toBe("right");
-    // The five React panels carry their own glyph for the panel rail.
+    expect(byId[ANIMATIONS_PANEL].defaultDock).toBe("right");
+    // The six React panels carry their own glyph for the panel rail.
     expect(byId[SLIDES_PANEL].iconSvg).toBe(true);
     expect(byId[NOTES_PANEL].iconSvg).toBe(true);
     expect(byId[COMMENTS_PANEL].iconSvg).toBe(true);
     expect(byId[SHAPES_PANEL].iconSvg).toBe(true);
     expect(byId[CUSTOM_SHOWS_PANEL].iconSvg).toBe(true);
+    expect(byId[ANIMATIONS_PANEL].iconSvg).toBe(true);
     // The Shapes panel never joins the rail: Insert ▸ Shapes… opens it.
     expect(byId[SHAPES_PANEL].rail).toBe(false);
     // Nor does Custom shows: Slide Show ▸ Custom Shows… opens it (ADR 720).
     expect(byId[CUSTOM_SHOWS_PANEL].rail).toBe(false);
+    // Nor does Animations: Animations ▸ Animation Pane opens it (ADR 714).
+    expect(byId[ANIMATIONS_PANEL].rail).toBe(false);
     for (const id of SCHEMA_PANELS)
       expect(byId[id].defaultDock, id).toBe("right");
 
@@ -701,8 +767,13 @@ test.describe("plugin surface · paged.slide", () => {
       "No custom shows.",
       { timeout: 15_000 },
     );
+    // The Animations pane mounts (outside a deck it has no effects to list).
+    await openPanel(page, ANIMATIONS_PANEL);
+    await expect(page.locator("[data-animations-panel]")).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // The real menu bar: Plugins ▸ Slide lists all nine, none greyed
+    // The real menu bar: Plugins ▸ Slide lists all eleven, none greyed
     // (paged.slide has no edit context, so no context withholds them),
     // and picking one opens it.
     await page.keyboard.press("Escape");
@@ -1254,11 +1325,19 @@ test.describe("plugin surface · paged.slide", () => {
       "media.paged.slide.command.importPptx": "Open PowerPoint deck…",
       "media.paged.slide.command.exportPptx": "Export PowerPoint deck…",
       "media.paged.slide.command.insertShapes": "Insert shape…",
+      "media.paged.slide.command.insertPicture": "Insert picture…",
+      "media.paged.slide.command.insertIcon": "Insert icon…",
+      "media.paged.slide.command.copyFormat": "Copy formatting",
+      "media.paged.slide.command.pasteFormat": "Paste formatting",
+      "media.paged.slide.command.smartArtText": "SmartArt text pane",
       ...Object.fromEntries(
         Object.entries(SHOW).map(([id, [title]]) => [id, title]),
       ),
       ...Object.fromEntries(
         Object.entries(OUTPUT).map(([id, [title]]) => [id, title]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(ANIM).map(([id, [title]]) => [id, title]),
       ),
     });
     for (const x of blank.commands)
@@ -1273,6 +1352,9 @@ test.describe("plugin surface · paged.slide", () => {
       ),
       ...Object.fromEntries(
         Object.entries(OUTPUT).map(([id, [, path]]) => [id, path]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(ANIM).map(([id, [, path]]) => [id, path]),
       ),
     });
     // Outside a deck only Open is offered.
@@ -1323,6 +1405,11 @@ test.describe("plugin surface · paged.slide", () => {
         "ctrl+d@slideDeck→media.paged.slide.command.duplicateSlide",
         "pageup@slideDeck→media.paged.slide.command.previousSlide",
         "pagedown@slideDeck→media.paged.slide.command.nextSlide",
+        // The format painter (slide W4).
+        "cmd+shift+c@slideDeck→media.paged.slide.command.copyFormat",
+        "ctrl+shift+c@slideDeck→media.paged.slide.command.copyFormat",
+        "cmd+shift+v@slideDeck→media.paged.slide.command.pasteFormat",
+        "ctrl+shift+v@slideDeck→media.paged.slide.command.pasteFormat",
       ].sort(),
     );
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
@@ -1356,7 +1443,9 @@ test.describe("plugin surface · paged.slide", () => {
     await page.keyboard.press("Escape");
 
     // In a deck, on its first slide, the slide verbs are offered, except
-    // Move slide up and Previous slide (no slide above the first).
+    // Move slide up and Previous slide (no slide above the first), and the
+    // Animation pane: Preview waits for a slide with animations (the first
+    // has none), the painter for a selected shape.
     await openDeck(page, designer);
     await expect
       .poll(
@@ -1368,11 +1457,19 @@ test.describe("plugin surface · paged.slide", () => {
         { timeout: 15_000 },
       )
       .toEqual(
-        [...Object.keys(PALETTE), ...Object.keys(SHOW), ...Object.keys(OUTPUT)]
+        [
+          ...Object.keys(PALETTE),
+          ...Object.keys(SHOW),
+          ...Object.keys(OUTPUT),
+          "media.paged.slide.command.animationPane",
+        ]
           .filter(
             (id) =>
               id !== "media.paged.slide.command.moveSlideUp" &&
-              id !== "media.paged.slide.command.previousSlide",
+              id !== "media.paged.slide.command.previousSlide" &&
+              // The format painter copies from a selection; none is made.
+              id !== "media.paged.slide.command.copyFormat" &&
+              id !== "media.paged.slide.command.pasteFormat",
           )
           .sort(),
       );

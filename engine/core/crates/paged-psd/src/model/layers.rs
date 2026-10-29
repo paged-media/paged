@@ -181,6 +181,13 @@ pub struct LayerAndMaskInfo {
     pub global_mask: Option<GlobalLayerMask>,
     /// File-level additional layer info blocks after the global mask.
     pub addl_global: Vec<AdditionalLayerInfo>,
+    /// The document block the layers are STORED in (`Lr16` / `Lr32`), when
+    /// the layer info sub-block is empty and a deep document keeps them
+    /// there [PUB; OBS: Photoshop 27.10's 16-bit documents]. The records
+    /// are read into [`layers`](Self::layers) all the same, so every
+    /// reader and editor sees one list; a re-encode writes them back into
+    /// that block and leaves the sub-block empty.
+    pub deep_key: Option<[u8; 4]>,
     /// The ENTIRE section payload as read (inside the section length
     /// frame). The zero-edit writer emits this verbatim — the strongest
     /// byte-identity guarantee against producer length/padding quirks;
@@ -215,12 +222,22 @@ impl LayerAndMaskInfo {
         };
         // Document-level additional layer info blocks, padded to 4.
         let addl_global = parse_addl_run(&mut sub, container, AddlPad::Four)?;
+        // A deep document's layers live in its `Lr16` / `Lr32` block.
+        let (layers, transparency_in_merged, deep_key) = if layers.is_empty() {
+            match crate::layer_list::deep_layers(&addl_global, container)? {
+                Some(list) => (list.layers, list.transparency_in_merged, list.key),
+                None => (layers, transparency_in_merged, None),
+            }
+        } else {
+            (layers, transparency_in_merged, None)
+        };
 
         Ok(LayerAndMaskInfo {
             layers,
             transparency_in_merged,
             global_mask,
             addl_global,
+            deep_key,
             section_raw: Some(section_bytes),
         })
     }
@@ -235,17 +252,92 @@ impl LayerAndMaskInfo {
             return;
         }
         w.framed(width, |w| {
-            emit_layer_info(self, w, container);
+            match self.deep_key {
+                // The layers go into their document block below.
+                Some(_) => w.len_field(width, 0),
+                None => emit_layer_info(self, w, container),
+            }
             match &self.global_mask {
                 Some(gm) => gm.emit(w),
                 // The zero-length global mask is common and meaningful; emit
                 // the 4-byte zero length explicitly (brief §4b).
                 None => w.u32(0),
             }
+            let mut deep_written = false;
             for a in &self.addl_global {
+                if Some(a.key) == self.deep_key && !deep_written {
+                    deep_written = true;
+                    Self::deep_layer_block(
+                        a.key,
+                        &self.layers,
+                        self.transparency_in_merged,
+                        container,
+                    )
+                    .emit(w, container, AddlPad::Four);
+                    continue;
+                }
                 a.emit(w, container, AddlPad::Four);
             }
+            if let (Some(key), false) = (self.deep_key, deep_written) {
+                Self::deep_layer_block(key, &self.layers, self.transparency_in_merged, container)
+                    .emit(w, container, AddlPad::Four);
+            }
         });
+    }
+}
+
+impl LayerAndMaskInfo {
+    /// The document block (`Lr16` for a 16-bit document, `Lr32` for a
+    /// 32-bit one) that carries `layers` the way Photoshop stores a deep
+    /// document's layers: the layer info body — the signed count, the
+    /// records, the channel image data — framed as a document-level
+    /// additional-layer-info block (PSB: an 8-byte length), padded to
+    /// four. The layer info sub-block itself is then left
+    /// EMPTY [OBS: Photoshop 27.10's 16-bit documents].
+    pub fn deep_layer_block(
+        key: [u8; 4],
+        layers: &[LayerRecord],
+        transparency_in_merged: bool,
+        container: Container,
+    ) -> AdditionalLayerInfo {
+        let mut body = ByteWriter::new();
+        let count = layers.len() as i16;
+        body.i16(if transparency_in_merged {
+            -count
+        } else {
+            count
+        });
+        for layer in layers {
+            layer.emit_record(&mut body, container);
+        }
+        for layer in layers {
+            for cd in &layer.channel_data {
+                cd.emit(&mut body);
+            }
+        }
+        // The stored length is the body's own (Photoshop writes an odd
+        // one); the pad to four follows it.
+        let data = body.into_bytes();
+        let wide = container.addl_len_is_wide(key);
+        let mut raw = Vec::with_capacity(data.len() + 16);
+        raw.extend_from_slice(b"8BIM");
+        raw.extend_from_slice(&key);
+        if wide {
+            raw.extend_from_slice(&(data.len() as u64).to_be_bytes());
+        } else {
+            raw.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        }
+        raw.extend_from_slice(&data);
+        // Document-level blocks pad to four.
+        while (raw.len() - if wide { 16 } else { 12 }) % 4 != 0 {
+            raw.push(0);
+        }
+        AdditionalLayerInfo {
+            sig: *b"8BIM",
+            key,
+            body: super::addl::AddlBody::Opaque,
+            raw_block: Some(raw),
+        }
     }
 }
 
@@ -315,25 +407,38 @@ fn emit_layer_info(info: &LayerAndMaskInfo, w: &mut ByteWriter, container: Conta
     }
     let anchor = w.len() + width.bytes();
     w.framed(width, |w| {
-        let count = info.layers.len() as i16;
-        let signed = if info.transparency_in_merged {
-            -count
-        } else {
-            count
-        };
-        w.i16(signed);
-        for layer in &info.layers {
-            layer.emit_record(w, container);
-        }
-        for layer in &info.layers {
-            for cd in &layer.channel_data {
-                cd.emit(w);
-            }
-        }
+        emit_layer_info_body(&info.layers, info.transparency_in_merged, w, container);
         // Layer info content is rounded up to even (brief §4a). Anchor on
         // the content start (just after the length field).
         w.pad_to(2, anchor);
     });
+}
+
+/// The layer info sub-block AFTER its length field, the inverse of
+/// [`parse_layer_info_body`]: the signed layer count, every record, then
+/// every channel's image data in layer/channel order. Unpadded; the
+/// caller frames and pads it (the layer info sub-block to 2, a `Layr` /
+/// `Lr16` / `Lr32` block to 4).
+pub(crate) fn emit_layer_info_body(
+    layers: &[LayerRecord],
+    transparency_in_merged: bool,
+    w: &mut ByteWriter,
+    container: Container,
+) {
+    let count = layers.len() as i16;
+    w.i16(if transparency_in_merged {
+        -count
+    } else {
+        count
+    });
+    for layer in layers {
+        layer.emit_record(w, container);
+    }
+    for layer in layers {
+        for cd in &layer.channel_data {
+            cd.emit(w);
+        }
+    }
 }
 
 impl ChannelData {

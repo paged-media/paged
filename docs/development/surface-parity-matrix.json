@@ -1,7 +1,7 @@
 {
   "catalog": {
-    "hostFunctions": 201,
-    "operations": 168
+    "hostFunctions": 202,
+    "operations": 169
   },
   "environment": {
     "cli": true
@@ -9122,6 +9122,67 @@
     },
     {
       "cases": [
+        "placePage"
+      ],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {
+            "automation.batch": "parity",
+            "automation.mutate": "parity"
+          },
+          "status": "parity"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {
+            "boa.batch": "parity",
+            "boa.invoke": "parity",
+            "boa.named": "parity"
+          },
+          "status": "parity"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {
+            "cli.invoke": "parity",
+            "cli.script": "parity"
+          },
+          "status": "parity"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {
+            "ui.dialog": "parity"
+          },
+          "status": "parity"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {
+            "plugin.mutate": "parity",
+            "plugin.objects": "parity"
+          },
+          "status": "parity"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": true,
+      "op": "placePage"
+    },
+    {
+      "cases": [
         "onMaster"
       ],
       "cells": {
@@ -10344,27 +10405,27 @@
       "named": 9,
       "none": 1,
       "not-run": 26,
-      "parity": 139,
-      "typed": 151
+      "parity": 140,
+      "typed": 152
     },
     "boa": {
       "differs": 0,
       "gap": 1,
       "generic": 1,
-      "named": 165,
+      "named": 166,
       "none": 1,
       "not-run": 26,
-      "parity": 141,
+      "parity": 142,
       "typed": 1
     },
     "cli": {
       "differs": 0,
       "gap": 1,
       "generic": 0,
-      "named": 165,
+      "named": 166,
       "none": 1,
       "not-run": 26,
-      "parity": 141,
+      "parity": 142,
       "typed": 2
     },
     "editor-ui": {
@@ -10374,17 +10435,17 @@
       "named": 9,
       "none": 8,
       "not-run": 26,
-      "parity": 132,
-      "typed": 151
+      "parity": 133,
+      "typed": 152
     },
     "mcp": {
       "differs": 0,
       "gap": 1,
       "generic": 2,
-      "named": 165,
+      "named": 166,
       "none": 1,
       "not-run": 28,
-      "parity": 139,
+      "parity": 140,
       "typed": 0
     },
     "plugin-api": {
@@ -10394,15 +10455,15 @@
       "named": 0,
       "none": 1,
       "not-run": 26,
-      "parity": 141,
-      "typed": 160
+      "parity": 142,
+      "typed": 161
     },
     "viewer-sdk": {
       "differs": 0,
-      "gap": 168,
+      "gap": 169,
       "generic": 0,
       "named": 0,
-      "none": 168,
+      "none": 169,
       "not-run": 0,
       "parity": 0,
       "typed": 0
