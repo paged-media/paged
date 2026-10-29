@@ -295,6 +295,40 @@ export type BindingWrite =
 export type BindingCollection =
   { kind: "rows"; rows: readonly unknown[] } | BindingDecline;
 
+/**
+ * Image ADR 482 — a row a provider serves for the `"links"` collection:
+ * core's `LinkSummary` (`hostSelfId`, `hostKind`, `uri`, `status`) for a
+ * file the provider's content LINKS to or EMBEDS (paged.image's smart
+ * objects), plus the one field the host reads beyond core's shape:
+ * `actions`, the COMMANDS the Links panel's toolbar runs for the row.
+ *
+ * Core has no relink / update operation a provider could take first
+ * refusal on (`applyMutation`), and a link inside a provider's content
+ * is not a core link anyway — so the row names the provider's own
+ * commands, and the host runs them with `{ link: hostSelfId }` as their
+ * payload. The host branches on the PRESENCE of an action, never on the
+ * provider's identity; an action left out keeps its button disabled.
+ * Each command is one undo step of the provider's, as any command is.
+ */
+export interface ProvidedLinkRow {
+  hostSelfId: string;
+  /** What holds the link, in the provider's words (`"smartObject"`). */
+  hostKind: string;
+  /** The linked file's path, or an embedded file's name. */
+  uri: string;
+  /** `"ok"`, `"missing"` (a link whose file is not at hand), or
+   *  `"embedded"` (the file is held inside the document). */
+  status?: string;
+  actions?: {
+    /** Point the link at another file (the command picks it). */
+    relink?: string;
+    /** Read the linked file again (Update Modified Content). */
+    update?: string;
+    /** Embed a linked file in the document. */
+    embed?: string;
+  };
+}
+
 // --------------------------------------------------------------- provider
 
 /** The op names a provider may intercept — core's own mutation
