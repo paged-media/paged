@@ -1538,7 +1538,7 @@ clears its missing flag.
 
 The sheets-mode grid's range copy/paste (cells + values) had nowhere to
 land (RFI §6 K-6). `host.clipboard` is the door: a read/write surface over
-the SYSTEM clipboard with a rich `{ text?, tabular? }` payload. The
+the SYSTEM clipboard with a rich `{ text?, tabular?, svg? }` payload. The
 manifest already declared a `clipboard` enum (`none | vector | full`) ahead
 of any surface; this change gives it teeth.
 
@@ -1599,6 +1599,20 @@ Wholly additive: a new `host.clipboard` member + `ClipboardSurface` /
 `capabilities.clipboard` manifest field (the enum itself is unchanged). No
 existing member changed; the gate / namespace rule / every other door are
 untouched.
+
+### 14.6 The svg half (extensions ADR 341 — `clipboard.svg@1`)
+
+`ClipboardPayload.svg` is an SVG document (UTF-8 text), the platform's
+vector interchange. On write the host puts it on the clipboard as
+`image/svg+xml` where the platform takes that type; on read it fills `svg`
+from plain text that IS an SVG document (Illustrator writes its source
+there; the browser's `image/svg+xml` is sanitised and loses `<style>`),
+else from the `image/svg+xml` flavour, and an SVG text is never read as a
+TSV grid. `"vector"` and `"full"` both carry it. A backend declares the
+half with `ClipboardBackend.svg: true`; without it the door strips `svg`
+both ways and `supports("clipboard.svg@1")` is false. The editor's backend
+and the harness's `inMemoryClipboard` declare it. What browsers can and
+cannot reach (no PDF anywhere) is recorded in editor ADR 289.
 
 ## 15. The capability-gated worker door (K-3 / S-07 / I-02 — `host.workers`)
 
