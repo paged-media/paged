@@ -134,9 +134,12 @@ describe("setting paged.exportPdf.options.v1", () => {
     mount(fakeClient().client);
     await waitFor(() => field("[data-export-dialog]"));
     // No output intent: the standard the document can meet (PN-305,
-    // ADR 238).
-    expect(field<HTMLSelectElement>("select[data-export-standard]").value).toBe(
-      "pdf17",
+    // ADR 238). It is chosen when the document's meta arrives, after the
+    // dialog shows.
+    await waitFor(() =>
+      expect(
+        field<HTMLSelectElement>("select[data-export-standard]").value,
+      ).toBe("pdf17"),
     );
     expect(field<HTMLSelectElement>("select[data-export-policy]").value).toBe(
       "preserveNumbers",
