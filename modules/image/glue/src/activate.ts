@@ -55,6 +55,7 @@ import { createImageSession } from "./session";
 import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
 import { contributeMasking } from "./masking-contrib";
+import { contributeMode } from "./mode-contrib";
 import { BG, type BlurKind } from "./filters-blur-gallery";
 import {
   contributeVectors,
@@ -1815,6 +1816,8 @@ export function activate(host: BundleHost): BundleHandle {
   // Vectors inside the image (ADR 476): the pen and shape tools, the
   // Paths panel's verbs, Layer ▸ Vector Mask.
   const vectorsSub = contributeVectors(host, session, command, PANEL_ID);
+  // Image ▸ Mode (ADR 479): depth, colour mode and the proof view.
+  const modeSub = contributeMode(host, session, command, PANEL_ID);
 
   // K-2 — the raster importer: opening/dropping a raster file routes
   // its bytes HERE (decode into the session, raise the panel; it does
@@ -2166,6 +2169,7 @@ export function activate(host: BundleHost): BundleHandle {
       retouchSettingsSub?.dispose();
       menuSub.dispose();
       maskingSub.dispose();
+      modeSub.dispose();
       vectorsSub.dispose();
       providerInvalidate = null;
       for (const h of providerHandles.splice(0)) h.dispose();

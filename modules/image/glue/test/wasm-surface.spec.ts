@@ -34,6 +34,9 @@ const ENGINE_TS = fileURLToPath(new URL("../src/engine.ts", import.meta.url));
 const MASKING_TS = fileURLToPath(
   new URL("../src/masking-engine.ts", import.meta.url),
 );
+const MODE_TS = fileURLToPath(
+  new URL("../src/mode-engine.ts", import.meta.url),
+);
 const RETOUCH_TS = fileURLToPath(
   new URL("../src/retouch-engine.ts", import.meta.url),
 );
@@ -95,6 +98,7 @@ function declaredInTs(): string[] {
   return [
     ...declaredIn(ENGINE_TS, "ImageWasmModule"),
     ...declaredIn(MASKING_TS, "MaskingWasm"),
+    ...declaredIn(MODE_TS, "ModeWasm"),
     ...declaredIn(RETOUCH_TS, "RetouchWasm"),
     ...declaredIn(FILTERS_TS, "FilterWasm"),
     ...declaredIn(VECTOR_TS, "VectorWasm"),

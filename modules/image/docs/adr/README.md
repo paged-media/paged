@@ -18,7 +18,7 @@ stood, for decisions made earlier; their status says so.
 | [452](452-kernel-abi.md) | The frozen shader kernel ABI (v1, amended to v1.1) | Accepted, recorded retroactively 2026-10-02 |
 | [453](453-tolerance-not-golden-bytes.md) | GPU output is verified against the scalar reference by tolerance, never by golden bytes | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-04) |
 | [454](454-two-evaluation-engines.md) | Two evaluation engines over one kernel set | Accepted, recorded retroactively 2026-10-02 |
-| [455](455-pixel-model.md) | The pixel model: explicit format, 16-bit float working tiles | Accepted, recorded retroactively 2026-10-02 |
+| [455](455-pixel-model.md) | The pixel model: explicit format, 16-bit float working tiles | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-28 by 479) |
 | [456](456-codecs.md) | Codecs are pure-Rust, permissively licensed adapters behind I/O-free traits | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-24 by 466) |
 | [457](457-colour-management.md) | Colour management: one seam, one engine for display and one for print | Accepted, recorded retroactively 2026-10-02 |
 | [458](458-psd-preservation.md) | PSD is read and written by an own parser under a preservation rule | Accepted, recorded retroactively 2026-10-02 |
@@ -40,6 +40,7 @@ stood, for decisions made earlier; their status says so.
 | [476](476-vectors-inside-the-image.md) | Vectors inside the image: one path geometry, drawn by the vector-mask rasterizer, edited by draw's machines | Accepted 2026-10-28 (amends 470) |
 | [477](477-history-and-presets.md) | Snapshots, a configurable journal and one Preset Manager in the image context | Accepted 2026-10-28 (WP5.9; amends 463) |
 | [478](478-psd-write-depth.md) | The layered PSD save writes what it reads | Accepted 2026-10-28 (WP5.15) |
+| [479](479-depth-and-colour-modes.md) | 16 bits end to end, colour modes as a projection, and the proof view | Accepted 2026-10-28 (WP5.13; amends 455) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

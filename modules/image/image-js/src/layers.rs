@@ -154,6 +154,8 @@ pub use styles::{style_from_json, style_to_json};
 // The Layer menu's verbs (merges, via copy/cut, comps, align, links).
 mod verbs;
 pub use verbs::{AlignEdge, Axis};
+#[cfg(test)]
+mod depth_tests;
 pub mod mask;
 #[cfg(test)]
 mod parity_tests;
@@ -739,6 +741,14 @@ fn alpha_of(rgba: &[u8]) -> Vec<u8> {
     rgba.as_chunks::<4>().0.iter().map(|p| p[3]).collect()
 }
 
+/// [`alpha_of`] at the pixels' own depth (8-bit coverage either way).
+fn alpha_of_px(px: &crate::pixels::Pixels) -> Vec<u8> {
+    match px.depth() {
+        image_core::SampleDepth::U16 => (0..px.pixel_count()).map(|i| px.alpha8(i)).collect(),
+        _ => alpha_of(px.raw()),
+    }
+}
+
 /// The journal-scope bit that marks an entry as a MASK edit. Layer ids
 /// are `u32`, so the bit above them can never collide with a pixel
 /// entry's scope.
@@ -828,6 +838,14 @@ fn is_fully_transparent(rgba: &[u8]) -> bool {
     rgba.as_chunks::<4>().0.iter().all(|t| t[3] == 0)
 }
 
+/// [`is_fully_transparent`] at the pixels' own depth.
+fn is_fully_transparent_px(px: &crate::pixels::Pixels) -> bool {
+    match px.depth() {
+        image_core::SampleDepth::U16 => (0..px.pixel_count()).all(|i| px.sample16(i, 3) == 0),
+        _ => is_fully_transparent(px.raw()),
+    }
+}
+
 /// `new` with the alpha of `old` inside `damage` (Lock Transparent
 /// Pixels): the colour an edit painted stays, its coverage does not.
 fn keep_alpha(
@@ -850,6 +868,31 @@ fn keep_alpha(
         }
     }
     crate::pixels::Pixels::from_raw(Arc::from(out.into_boxed_slice()), new.depth())
+}
+
+/// `edit` (canvas-sized, at another depth) at `layer`'s depth: the
+/// layer's own samples, with `damage` taken from `edit` converted to that
+/// depth ([`Pixels::at_depth`](crate::pixels::Pixels::at_depth)'s rules).
+fn adopt_depth(
+    layer: &crate::pixels::Pixels,
+    edit: &crate::pixels::Pixels,
+    damage: Region,
+    width: u32,
+) -> crate::pixels::Pixels {
+    let converted = edit.at_depth(layer.depth());
+    let bpp = layer.bytes_per_pixel();
+    let mut out = layer.raw().to_vec();
+    let src = converted.raw();
+    let (x0, y0) = (damage.x.max(0) as usize, damage.y.max(0) as usize);
+    let row = damage.w as usize * bpp;
+    for y in y0..y0 + damage.h as usize {
+        let at = (y * width as usize + x0) * bpp;
+        if at + row > out.len() || at + row > src.len() {
+            continue;
+        }
+        out[at..at + row].copy_from_slice(&src[at..at + row]);
+    }
+    crate::pixels::Pixels::from_raw(Arc::from(out.into_boxed_slice()), layer.depth())
 }
 
 /// The undo/redo readout the panel shows.
@@ -891,7 +934,9 @@ pub struct HistoryStats {
 /// inside it.
 #[derive(Clone)]
 pub(crate) struct Plate {
-    pub px: Arc<[u8]>,
+    /// At the layer's own depth (a 16-bit layer's plate is 16-bit; the
+    /// fold uploads each at its depth and reads back at the stack's).
+    pub px: crate::pixels::Pixels,
     pub rect: Option<Region>,
 }
 
@@ -1000,6 +1045,9 @@ pub struct LayerStack {
     next_snapshot_id: u32,
     /// The id the next recorded step takes (see [`Step`]).
     next_step_id: u64,
+    /// The document's COLOUR MODE (Image ▸ Mode, ADR 479): the colours
+    /// its pixels may hold. Document state: in every snapshot, persisted.
+    mode: crate::color_mode::DocMode,
 }
 
 /// What a document's layer styles share: the Global Light every effect
@@ -1075,6 +1123,7 @@ struct Snapshot {
     /// structure step, so undo walks back through selections too).
     selection: Option<Arc<SelectionCoverage>>,
     styles: StyleDoc,
+    mode: crate::color_mode::DocMode,
 }
 
 /// One undo step.
@@ -1120,11 +1169,15 @@ impl LayerStack {
                 rgba.len()
             )));
         }
-        // Build through the 8-bit door with a correctly-sized dummy so
-        // all the stack's other invariants are established exactly
-        // once, then swap the real buffer in.
-        let dummy = vec![0u8; (width as usize) * (height as usize) * 4];
-        let mut st = Self::from_image(width, height, Arc::from(dummy))?;
+        // Build through the 8-bit door with a correctly-sized buffer so
+        // all the stack's other invariants are established exactly once,
+        // then put the real one in. An 8-bit image goes straight through
+        // (its `Arc` shared, not copied).
+        if rgba.depth() == image_core::SampleDepth::U8 {
+            return Self::from_image(width, height, rgba.raw_arc());
+        }
+        let placeholder = vec![0u8; (width as usize) * (height as usize) * 4];
+        let mut st = Self::from_image(width, height, Arc::from(placeholder))?;
         st.layers[0].rgba = rgba.into();
         Ok(st)
     }
@@ -1174,6 +1227,7 @@ impl LayerStack {
             snapshots: Vec::new(),
             next_snapshot_id: 1,
             next_step_id: 1,
+            mode: Default::default(),
         })
     }
 
@@ -1359,20 +1413,29 @@ impl LayerStack {
                 blend: psd_blend_kernel(&plate.blend_key),
                 // At its BOUNDS (ADR 464): an adjustment keeps an empty
                 // rectangle, a pixel layer its record's.
-                rgba: bounded_pixels(
-                    if adjustment.is_some() {
-                        Region::new(0, 0, 0, 0)
-                    } else {
-                        plate_rect
-                    },
-                    if adjustment.is_some() {
-                        Vec::new()
-                    } else {
-                        plate.rgba.clone()
-                    },
-                    width,
-                    height,
-                )?,
+                rgba: match (&adjustment, &plate.rgba16) {
+                    // A 16-bit RGB document's layer at full depth (ADR 479).
+                    (None, Some(deep)) => bounded_px(
+                        plate_rect,
+                        crate::pixels::Pixels::from_rgba16(deep),
+                        width,
+                        height,
+                    )?,
+                    _ => bounded_pixels(
+                        if adjustment.is_some() {
+                            Region::new(0, 0, 0, 0)
+                        } else {
+                            plate_rect
+                        },
+                        if adjustment.is_some() {
+                            Vec::new()
+                        } else {
+                            plate.rgba.clone()
+                        },
+                        width,
+                        height,
+                    )?,
+                },
                 // A smart object's stored render arrives as pixels: the
                 // source is not rendered here (`smart_renders_agree`).
                 kind: match (adjustment, fill) {
@@ -1429,6 +1492,7 @@ impl LayerStack {
             snapshots: Vec::new(),
             next_snapshot_id: 1,
             next_step_id: 1,
+            mode: Default::default(),
         };
         stack.styles.global_light = import.global_light;
         if let Some(deep) = stack
@@ -2005,6 +2069,9 @@ impl LayerStack {
     pub fn add(&mut self, name: &str) -> usize {
         let id = self.fresh_id();
         let at = self.active + 1;
+        // At the document's depth: a new layer in a 16-bit document is
+        // 16-bit, as Photoshop's is.
+        let depth = self.depth();
         let pixels = self.transparent();
         self.layers.insert(
             at,
@@ -2019,7 +2086,9 @@ impl LayerStack {
                 locked: false,
                 opacity: 1.0,
                 blend: &COMPOSE_NORMAL,
-                rgba: crate::pixels::Pixels::from_rgba8(pixels).into(),
+                rgba: crate::pixels::Pixels::from_rgba8(pixels)
+                    .at_depth(depth)
+                    .into(),
                 kind: LayerKind::Pixels,
                 // A new layer is unmasked; the mask is authored later.
                 mask: None,
@@ -2775,22 +2844,31 @@ impl LayerStack {
         let clipped = damage
             .intersect(Region::new(0, 0, self.width, self.height))
             .unwrap_or(Region::new(0, 0, 0, 0));
+        // A layer and the edit landing on it must agree on depth, or the
+        // journal would snapshot tiles in one geometry and restore them
+        // in another. An edit made at another depth (a tool that paints
+        // 8-bit onto a 16-bit layer) ADOPTS THE LAYER'S inside its
+        // damage — widened or rounded there, the layer's own samples
+        // kept everywhere else — so the document keeps its depth and
+        // only the pixels the edit touched carry the edit's precision.
+        let pixels = if active.rgba.depth() != pixels.depth() {
+            adopt_depth(active.rgba.canvas(), &pixels, clipped, self.width)
+        } else {
+            pixels
+        };
+        // THE DOCUMENT'S MODE: what the edit painted inside its damage is
+        // put through the mode's space, so a Grayscale document stays
+        // grey and a CMYK one inside its press gamut (ADR 479).
+        let pixels = match crate::color_mode::ModeTransform::new(&self.mode)? {
+            Some(t) => t.project_pixels(&pixels, self.width, Some(clipped)),
+            None => pixels,
+        };
         // LOCK TRANSPARENT PIXELS: the edit keeps every pixel's alpha.
-        let pixels = if active.ext.locks.transparency && active.rgba.depth() == pixels.depth() {
+        let pixels = if active.ext.locks.transparency {
             keep_alpha(active.rgba.canvas(), pixels, clipped, self.width)
         } else {
             pixels
         };
-        // A layer and the edit landing on it must agree on depth, or
-        // the journal would snapshot tiles in one geometry and restore
-        // them in another. Refuse rather than silently narrow.
-        if active.rgba.depth() != pixels.depth() {
-            return Err(IngestError::Unsupported(format!(
-                "layer edit at {:?} onto a {:?} layer — depths must match",
-                pixels.depth(),
-                active.rgba.depth()
-            )));
-        }
         let outcome = {
             let bpp = active.rgba.canvas().bytes_per_pixel();
             let raw = active.rgba.canvas().raw();
@@ -2942,6 +3020,7 @@ impl LayerStack {
             masking: self.masking.doc.clone(),
             selection: self.masking.live_selection.clone(),
             styles: self.styles.clone(),
+            mode: self.mode.clone(),
         }
     }
 
@@ -2956,6 +3035,7 @@ impl LayerStack {
         self.masking.doc = s.masking;
         self.restore_selection(s.selection);
         self.styles = s.styles;
+        self.mode = s.mode;
     }
 
     /// The journal bounds its own entries (and clears itself when one
@@ -3211,12 +3291,15 @@ impl LayerStack {
     /// and other whole-canvas readers); the resident fold uses
     /// [`Self::plates_indexed`], which keeps the bounds.
     #[cfg_attr(not(any(test, feature = "reference-fold")), allow(dead_code))]
-    fn plates<'a>(&'a self, override_active: Option<&'a Arc<[u8]>>) -> Vec<(&'a Layer, Arc<[u8]>)> {
+    fn plates<'a>(
+        &'a self,
+        override_active: Option<&'a crate::pixels::Pixels>,
+    ) -> Vec<(&'a Layer, crate::pixels::Pixels)> {
         self.plates_indexed(override_active)
             .into_iter()
             .map(|(i, p)| {
                 let px = match p.rect {
-                    Some(_) => self.layers[i].rgba.raw_arc(),
+                    Some(_) => self.layers[i].rgba.canvas().clone(),
                     None => p.px,
                 };
                 (&self.layers[i], px)
@@ -3226,7 +3309,10 @@ impl LayerStack {
 
     /// The contributing layers by index, each with its plate: canvas-sized,
     /// or a bounded layer's own rectangle and pixels (ADR 464).
-    fn plates_indexed(&self, override_active: Option<&Arc<[u8]>>) -> Vec<(usize, Plate)> {
+    fn plates_indexed(
+        &self,
+        override_active: Option<&crate::pixels::Pixels>,
+    ) -> Vec<(usize, Plate)> {
         self.plates_indexed_with(override_active, &[])
     }
 
@@ -3234,7 +3320,7 @@ impl LayerStack {
     /// replaced (`fresh`: a stale fill layer's render for this composite).
     fn plates_indexed_with(
         &self,
-        override_active: Option<&Arc<[u8]>>,
+        override_active: Option<&crate::pixels::Pixels>,
         fresh: &[(usize, Arc<[u8]>)],
     ) -> Vec<(usize, Plate)> {
         self.layers
@@ -3249,20 +3335,24 @@ impl LayerStack {
                 // out a clone of its handle, not a reference into
                 // itself. The clone is a refcount bump, not a copy.
                 let plate = match (override_active, l.rgba.bounded()) {
+                    // A fill layer's render is 8-bit (its generator reads
+                    // back RGBA8); the fold takes each plate at its depth.
                     _ if renewed.is_some() => Plate {
-                        px: Arc::clone(renewed.expect("checked")),
+                        px: crate::pixels::Pixels::from_rgba8(Arc::clone(
+                            renewed.expect("checked"),
+                        )),
                         rect: None,
                     },
                     (Some(o), _) if i == self.active => Plate {
-                        px: Arc::clone(o),
+                        px: o.clone(),
                         rect: None,
                     },
                     (_, Some(b)) => Plate {
-                        px: b.px.raw_arc(),
+                        px: b.px.clone(),
                         rect: Some(b.rect),
                     },
                     _ => Plate {
-                        px: l.rgba.raw_arc(),
+                        px: l.rgba.canvas().clone(),
                         rect: None,
                     },
                 };
@@ -3270,7 +3360,7 @@ impl LayerStack {
                 // `rgba` is a transparent placeholder — so the
                 // transparency skip would drop exactly the layers whose
                 // whole job is to change what is beneath them.
-                if l.is_pixels() && is_fully_transparent(&plate.px) {
+                if l.is_pixels() && is_fully_transparent_px(&plate.px) {
                     return None;
                 }
                 Some((i, plate))
@@ -3278,7 +3368,95 @@ impl LayerStack {
             .collect()
     }
 
-    /// Fold the stack bottom-up into one straight-RGBA8 canvas.
+    /// Image ▸ Mode ▸ 8 or 16 Bits/Channel: every layer's pixels at
+    /// `depth` (masks are coverage and stay 8-bit; a smart object's source
+    /// keeps its own). One undo step, like a canvas operation, and for
+    /// the same reason: older pixel steps were recorded at the old depth
+    /// and are reachable only by undoing this first. Answers whether
+    /// anything changed (the same depth records nothing).
+    pub fn set_depth(&mut self, depth: image_core::SampleDepth) -> Result<bool, IngestError> {
+        if !matches!(
+            depth,
+            image_core::SampleDepth::U8 | image_core::SampleDepth::U16
+        ) {
+            return Err(IngestError::Unsupported(format!(
+                "a layer stack holds 8 or 16 bits per channel, not {depth:?}"
+            )));
+        }
+        let label = match depth {
+            image_core::SampleDepth::U16 => "16 Bits/Channel",
+            _ => "8 Bits/Channel",
+        };
+        self.recorded_if_changed(label, |s| {
+            let mut changed = false;
+            for l in &mut s.layers {
+                if l.rgba.depth() != depth {
+                    l.rgba = l.rgba.at_depth(depth);
+                    changed = true;
+                }
+            }
+            Ok(changed)
+        })
+    }
+
+    /// The document's colour mode (Image ▸ Mode).
+    pub fn mode(&self) -> &crate::color_mode::DocMode {
+        &self.mode
+    }
+
+    /// Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color:
+    /// every layer's pixels (each at its bounds, its alpha kept) put
+    /// through the new mode's space and back ([`crate::color_mode`]), and
+    /// the mode kept, so later pixel edits land projected too. One undo
+    /// step; the same mode (and profile) again records nothing. A smart
+    /// object's source and a fill layer's settings are not converted
+    /// (their render is; a re-render shows the source's colours).
+    pub fn set_mode(&mut self, mode: crate::color_mode::DocMode) -> Result<bool, IngestError> {
+        if self.mode == mode {
+            return Ok(false);
+        }
+        let t = crate::color_mode::ModeTransform::new(&mode)?;
+        let w = self.width;
+        self.recorded(mode.mode.label(), None, |s| {
+            if let Some(t) = &t {
+                for l in &mut s.layers {
+                    if matches!(l.kind, LayerKind::Adjustment(_)) {
+                        continue;
+                    }
+                    l.rgba = match &l.rgba {
+                        crate::pixels::LayerPixels::Canvas(p) => {
+                            crate::pixels::LayerPixels::Canvas(t.project_pixels(p, w, None))
+                        }
+                        crate::pixels::LayerPixels::Bounded(b) => {
+                            let px = t.project_pixels(&b.px, b.rect.w, None);
+                            match crate::pixels::Bounded::new(b.rect, px, b.canvas_w, b.canvas_h) {
+                                Some(nb) => crate::pixels::LayerPixels::Bounded(nb),
+                                None => l.rgba.clone(),
+                            }
+                        }
+                    };
+                }
+            }
+            s.mode = mode;
+            Ok(true)
+        })
+    }
+
+    /// The document's DEPTH: 16 bits when any layer holds 16-bit pixels,
+    /// else 8 (Image ▸ Mode ▸ 8/16 Bits/Channel sets every layer's;
+    /// [`set_depth`](Self::set_depth)). The composite is read back at it.
+    pub fn depth(&self) -> image_core::SampleDepth {
+        if self.layers.iter().any(|l| l.rgba.is_16bit()) {
+            image_core::SampleDepth::U16
+        } else {
+            image_core::SampleDepth::U8
+        }
+    }
+
+    /// Fold the stack bottom-up into one straight-RGBA8 canvas — the
+    /// DISPLAY view of [`composite_px`](Self::composite_px), narrowed by
+    /// the high byte when the document is 16-bit (an 8-bit document's
+    /// composite is handed back as it is, the same allocation).
     ///
     /// `override_active` replaces the ACTIVE layer's pixels for this
     /// composite only — how a stroke in flight previews through the rest
@@ -3290,23 +3468,42 @@ impl LayerStack {
     pub async fn composite(
         &self,
         ctx: Option<&GpuContext>,
-        override_active: Option<&Arc<[u8]>>,
+        override_active: Option<&crate::pixels::Pixels>,
     ) -> Result<Arc<[u8]>, IngestError> {
+        let px = self.composite_px(ctx, override_active).await?;
+        Ok(match px.depth() {
+            image_core::SampleDepth::U8 => px.raw_arc(),
+            _ => Arc::from(px.to_rgba8().into_owned().into_boxed_slice()),
+        })
+    }
+
+    /// The composite at the document's [`depth`](Self::depth): a 16-bit
+    /// document folds its 16-bit plates in rgba16float and reads the
+    /// result back at 16 bits, so a layered 16-bit image keeps its levels
+    /// through the fold (within f16's precision) instead of being cut to
+    /// 256 at every composite.
+    pub async fn composite_px(
+        &self,
+        ctx: Option<&GpuContext>,
+        override_active: Option<&crate::pixels::Pixels>,
+    ) -> Result<crate::pixels::Pixels, IngestError> {
+        let depth = self.depth();
         let fresh = self.stale_fill_renders(ctx).await?;
         let plates = self.plates_indexed_with(override_active, &fresh);
         crate::counters::bump(|c| c.composites += 1);
 
         match plates.as_slice() {
             // Nothing contributes: an honest transparent canvas.
-            [] => return Ok(self.transparent()),
+            [] => return Ok(crate::pixels::Pixels::from_rgba8(self.transparent()).at_depth(depth)),
             // The identity fold — the pixels ARE the composite. Handed
             // back as the very same allocation (an `Arc` clone), so a
             // one-layer document costs nothing to composite.
             [(i, p)] if self.layers[*i].is_plain() => {
-                return Ok(match p.rect {
-                    Some(_) => self.layers[*i].rgba.raw_arc(),
-                    None => Arc::clone(&p.px),
-                })
+                let px = match p.rect {
+                    Some(_) => self.layers[*i].rgba.canvas().clone(),
+                    None => p.px.clone(),
+                };
+                return Ok(px.at_depth(depth));
             }
             _ => {}
         }
@@ -3317,7 +3514,7 @@ impl LayerStack {
                     .into(),
             )
         })?;
-        self.composite_resident(ctx, &plates).await
+        self.composite_resident(ctx, &plates, depth).await
     }
 
     /// Every visible fill layer whose render is stale, rendered now (for
@@ -3392,17 +3589,25 @@ impl LayerStack {
         match plates.as_slice() {
             [] => return Ok(self.transparent()),
             [(i, p)] if self.layers[*i].is_plain() => {
-                return Ok(match p.rect {
-                    Some(_) => self.layers[*i].rgba.raw_arc(),
-                    None => Arc::clone(&p.px),
-                })
+                let px = match p.rect {
+                    Some(_) => self.layers[*i].rgba.canvas().clone(),
+                    None => p.px.clone(),
+                };
+                return Ok(match px.depth() {
+                    image_core::SampleDepth::U8 => px.raw_arc(),
+                    _ => Arc::from(px.to_rgba8().into_owned().into_boxed_slice()),
+                });
             }
             _ => {}
         }
         let ctx = ctx.ok_or_else(|| {
             IngestError::Unsupported("compositing layers is GPU-only — call init_gpu first".into())
         })?;
-        self.composite_resident(ctx, &plates).await
+        // The tools sample 8-bit.
+        Ok(self
+            .composite_resident(ctx, &plates, image_core::SampleDepth::U8)
+            .await?
+            .raw_arc())
     }
 
     /// The fold as it ran before it became resident: every blend its own
@@ -3413,10 +3618,15 @@ impl LayerStack {
     pub async fn composite_reference(
         &self,
         ctx: Option<&GpuContext>,
-        override_active: Option<&Arc<[u8]>>,
+        override_active: Option<&crate::pixels::Pixels>,
     ) -> Result<Arc<[u8]>, IngestError> {
         let (w, h) = (self.width, self.height);
-        let plates = self.plates(override_active);
+        // The reference is the 8-bit fold it always was.
+        let plates: Vec<(&Layer, Arc<[u8]>)> = self
+            .plates(override_active)
+            .into_iter()
+            .map(|(l, p)| (l, Arc::from(p.to_rgba8().into_owned().into_boxed_slice())))
+            .collect();
 
         match plates.as_slice() {
             // Nothing contributes: an honest transparent canvas.
@@ -3997,6 +4207,16 @@ fn bounded_pixels(
     height: u32,
 ) -> Result<crate::pixels::LayerPixels, IngestError> {
     let px = crate::pixels::Pixels::from_rgba8(Arc::from(rgba.into_boxed_slice()));
+    bounded_px(rect, px, width, height)
+}
+
+/// [`bounded_pixels`] for pixels that already know their depth.
+fn bounded_px(
+    rect: Region,
+    px: crate::pixels::Pixels,
+    width: u32,
+    height: u32,
+) -> Result<crate::pixels::LayerPixels, IngestError> {
     if rect == Region::new(0, 0, width, height) {
         return Ok(px.into());
     }
@@ -5850,6 +6070,7 @@ mod tests {
     #[test]
     fn image_editor_layers_a_psd_import_becomes_a_stack_bottom_first() {
         let plate = |name: &str, key: &[u8; 4], opacity: u8, hidden: bool| image_psd::LayerPlate {
+            rgba16: None,
             clipped: false,
             group: None,
             mask: None,
@@ -5899,6 +6120,7 @@ mod tests {
             width: 4,
             height: 4,
             layers: vec![image_psd::LayerPlate {
+                rgba16: None,
                 clipped: false,
                 group: None,
                 mask: None,
@@ -6130,7 +6352,7 @@ mod tests {
         let mut s = stack(8, 8);
         s.add("Paint");
         // The override stands in for the active layer WITHOUT committing.
-        let white: Arc<[u8]> = px(8, 8, 255);
+        let white = crate::pixels::Pixels::from_rgba8(px(8, 8, 255));
         let out = pollster::block_on(s.composite(Some(ctx), Some(&white))).expect("composite");
         assert!(out.iter().all(|&b| b == 255), "the override composited");
         assert!(

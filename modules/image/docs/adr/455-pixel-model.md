@@ -88,3 +88,13 @@ accepts either depth, has no caller outside tests. The multi-layer fold converts
 
 - [ADR 452](452-kernel-abi.md), [ADR 453](453-tolerance-not-golden-bytes.md) — the `rgba16float` output; f16 as the unit of comparison
 - [ADR 454](454-two-evaluation-engines.md), [ADR 457](457-colour-management.md) — the layer stack and its journal; the colour transforms at decode
+
+## Amendment, 2026-10-28 (ADR 479)
+
+The 8-bit paths listed under Consequences now carry the depth: `layers_open` opens an image at
+its own depth, the fold uploads each plate at its depth and reads back at the document's
+(`LayerStack::composite_px`), the panel's chain and Bake run at f16 on a 16-bit image
+(`ingest::adjust_px`), an edit at another depth adopts the layer's inside its damage instead of
+being refused, the decode worker hands a 16-bit source over as samples, and a 16-bit RGB PSD's
+layers import at 16 bits. The display view (`composite`, tiles, the scene image) stays 8-bit.
+

@@ -59,6 +59,8 @@ interface DecodeWasm {
     w: number,
     h: number,
   ): Uint8Array;
+  image_bits(handle: number): number;
+  image_samples16(handle: number): Uint16Array;
   free_image(handle: number): void;
 }
 
@@ -78,6 +80,10 @@ export type DecodeReply =
       width: number;
       height: number;
       rgba: ArrayBuffer;
+      /** A 16-bit source's straight RGBA samples (`width*height*4`
+       *  u16), beside its 8-bit view: the main thread registers these, so
+       *  the off-thread decode keeps the depth (image ADR 479). */
+      samples16?: ArrayBuffer;
     }
   | { id: number; ok: false; error: string };
 
@@ -106,6 +112,7 @@ async function decode(bytes: Uint8Array): Promise<{
   height: number;
   rgba: Uint8Array;
   display?: number;
+  samples16?: Uint16Array;
 }> {
   const wasm = await ensureWasm();
   const decoded = wasm.decode_image(bytes);
@@ -121,7 +128,12 @@ async function decode(bytes: Uint8Array): Promise<{
     // Copy out before freeing the handle (the view aliases wasm memory).
     const out = new Uint8Array(rgba.length);
     out.set(rgba);
-    return { width, height, rgba: out, display };
+    // A 16-bit source keeps its samples (copied out, like the bytes).
+    const samples16 =
+      wasm.image_bits(handle) === 16
+        ? Uint16Array.from(wasm.image_samples16(handle))
+        : undefined;
+    return { width, height, rgba: out, display, samples16 };
   } finally {
     wasm.free_image(handle);
   }
@@ -139,20 +151,22 @@ if (
     const { id, bytes } = ev.data;
     void (async () => {
       try {
-        const { width, height, rgba } = await decode(bytes);
+        const { width, height, rgba, samples16 } = await decode(bytes);
         // `out` was allocated as a fresh `new Uint8Array(len)`, so its
         // buffer is a plain (non-shared) ArrayBuffer — assert it for the
         // transfer typing.
         const buffer = rgba.buffer as ArrayBuffer;
+        const deep = samples16?.buffer as ArrayBuffer | undefined;
         const reply: DecodeReply = {
           id,
           ok: true,
           width,
           height,
           rgba: buffer,
+          ...(deep ? { samples16: deep } : {}),
         };
-        // Transfer the RGBA buffer (zero-copy hand-back).
-        scope.postMessage(reply, [buffer]);
+        // Transfer the buffers (zero-copy hand-back).
+        scope.postMessage(reply, deep ? [buffer, deep] : [buffer]);
       } catch (err) {
         const reply: DecodeReply = {
           id,
