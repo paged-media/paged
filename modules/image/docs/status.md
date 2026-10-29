@@ -371,8 +371,10 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   Invert and Hue/Saturation adjustment layers and the blending properties; a pattern fill is
   written as its render, and any other adjustment kind makes the save flatten, naming the layer.
 - **Layers and undo.** A layer is canvas-sized once edited (an imported layer keeps its bounds
-  until then); the layer fold keeps whole-canvas accumulator textures, so the largest image is the device's texture limit (16384 px on Apple silicon,
-  8192 on many others). A crop, resize or straighten keeps every layer and mask, is one undo
+  until then); past the device's texture limit (16384 px on Apple silicon, 8192 on many
+  others) or its readback buffer the fold runs tile by tile, byte-equal to the whole fold, and
+  refolds only the tiles an edit damaged; without a device it runs on the kernels' CPU twins
+  (no layer style there) ([ADR 480](adr/480-tiles-past-the-device-and-the-cpu-fold.md)). A crop, resize or straighten keeps every layer and mask, is one undo
   step that keeps the history, and drops the selection (a crop does in Photoshop too); a
   quarter turn or flip carries the selection with the pixels, and a canvas resize drops it.
   A selection is session state ([ADR 460](adr/460-document-is-not-the-store.md)): it is
@@ -388,7 +390,8 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   on-canvas handles. The Clone Source overlay replaces the frame's image while it shows. A
   multi-layer image needs a GPU for the composite after a retouch, as every layer edit does.
 - **Called only by tests:** Engine B's op-node evaluation and the residency manager's third
-  tier (scratch storage), which returns an error.
+  tier (scratch storage), which returns an error. The tiled fold takes Engine B's model —
+  persistent tiles, damage, recompute only invalid ones — without its graph (ADR 480).
 - **Oracles.** Photoshop 2026's answers for 80 blend, adjustment and filter cases, seven
   layered RGB PSDs and six CMYK PSDs with Photoshop's own sRGB conversions are replayed in CI
   (`image-conformance/tests/it/oracle_photoshop.rs`, `psd_composite_photoshop.rs`,

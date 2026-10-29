@@ -3507,14 +3507,28 @@ impl LayerStack {
             }
             _ => {}
         }
-        let ctx = ctx.ok_or_else(|| {
-            IngestError::Unsupported(
-                "compositing layers is GPU-only — call init_gpu first (the blend \
-                 is a registered WGSL kernel dispatch; no CPU blend path ships)"
-                    .into(),
-            )
-        })?;
-        self.composite_resident(ctx, &plates, depth).await
+        // Without a device the fold runs on the CPU twins (ADR 480):
+        // pixel, adjustment, group and clipping layers; a style needs one.
+        let Some(ctx) = ctx else {
+            return self
+                .composite_tiled(None, &plates, depth, fold::CPU_TILE_SIDE)
+                .await;
+        };
+        self.fold_on(ctx, &plates, depth).await
+    }
+
+    /// The fold on the device: whole, or tile by tile past the device's
+    /// limits (ADR 480).
+    async fn fold_on(
+        &self,
+        ctx: &GpuContext,
+        plates: &[(usize, Plate)],
+        depth: image_core::SampleDepth,
+    ) -> Result<crate::pixels::Pixels, IngestError> {
+        match self.fold_tile_side(ctx) {
+            Some(side) => self.composite_tiled(Some(ctx), plates, depth, side).await,
+            None => self.composite_resident(ctx, plates, depth).await,
+        }
     }
 
     /// Every visible fill layer whose render is stale, rendered now (for
@@ -3600,14 +3614,23 @@ impl LayerStack {
             }
             _ => {}
         }
-        let ctx = ctx.ok_or_else(|| {
-            IngestError::Unsupported("compositing layers is GPU-only — call init_gpu first".into())
-        })?;
         // The tools sample 8-bit.
-        Ok(self
-            .composite_resident(ctx, &plates, image_core::SampleDepth::U8)
-            .await?
-            .raw_arc())
+        let px = match ctx {
+            Some(ctx) => {
+                self.fold_on(ctx, &plates, image_core::SampleDepth::U8)
+                    .await?
+            }
+            None => {
+                self.composite_tiled(
+                    None,
+                    &plates,
+                    image_core::SampleDepth::U8,
+                    fold::CPU_TILE_SIDE,
+                )
+                .await?
+            }
+        };
+        Ok(px.raw_arc())
     }
 
     /// The fold as it ran before it became resident: every blend its own
@@ -6179,15 +6202,22 @@ mod tests {
     }
 
     #[test]
-    fn image_editor_layers_a_second_painted_layer_makes_the_composite_gpu_only() {
+    fn image_editor_layers_a_second_painted_layer_folds_on_the_cpu_without_a_device() {
         let mut s = stack(4, 4);
         s.add("Paint");
         s.edit_active("fill", Region::new(0, 0, 4, 4), px(4, 4, 200).into())
             .expect("unlocked");
         assert!(!s.composite_is_trivial());
-        // …and says so rather than inventing a CPU blend.
-        let err = pollster::block_on(s.composite(None, None)).expect_err("GPU-only");
-        assert!(format!("{err}").contains("GPU-only"));
+        // …and folds on the kernels' CPU twins (ADR 480): source-over,
+        // alpha 200 over alpha 128 is 200 + 128 · (1 − 200/255) ≈ 228.
+        assert!(s.composite_runs_without_gpu());
+        let out = pollster::block_on(s.composite(None, None)).expect("the CPU fold");
+        assert_eq!(out.len(), 64);
+        assert!(
+            out.chunks(4).all(|p| p[3].abs_diff(228) <= 1),
+            "{:?}",
+            &out[..4]
+        );
     }
 
     #[test]

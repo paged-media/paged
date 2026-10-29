@@ -1134,7 +1134,7 @@ pub async fn adjust_f16(
 
 /// A 256-entry tone LUT over straight rgba16float RGB (alpha untouched),
 /// optionally masked by the same coverage the GPU stages honour.
-fn apply_curve_lut_f16(
+pub(crate) fn apply_curve_lut_f16(
     pixels: &mut [u8],
     luts: &[[u8; 256]; 3],
     selection: Option<&SelectionCoverage>,

@@ -87,8 +87,9 @@ one undo step, and redo still lands on a revision whose parts exist.
   `smartObject.source` are `heavy`: `getAll` reads them only with
   `{ content: true }`.
 
-**The bake.** Compositing is a GPU kernel fold, and the constitution allows
-no CPU blend path.
+**The bake.** Compositing is a GPU kernel fold. (Since image ADR 480 the engine
+also folds on the CPU twins where no device exists; the object model's bake has
+not moved to it yet.)
 
 - A stack whose composite is the identity is baked in the same batch with
   `replaceImageBytes`. That covers nothing visible and a single plain

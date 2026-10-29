@@ -6259,10 +6259,11 @@ mod wasm {
                 // Refuse BEFORE changing anything when the new composite
                 // could not be computed: a transformed stack over an
                 // untransformed image is the state this must never leave.
-                if ctx.is_none() && !doc.stack.composite_is_trivial() {
+                if ctx.is_none() && !doc.stack.composite_runs_without_gpu() {
                     return Err(JsValue::from_str(
-                        "a canvas operation on a layered image is GPU-only \
-                         (the composite is a kernel dispatch) — call init_gpu first",
+                        "a canvas operation on this layered image needs a GPU (a layer \
+                         style or a direct adjustment composites only there) — call \
+                         init_gpu first",
                     ));
                 }
                 doc.stack
@@ -6330,8 +6331,8 @@ mod wasm {
     }
 
     /// Replace the open stack with one stored by `layers_export`, then
-    /// composite it into the bound image (GPU-only unless the stored stack
-    /// is a single plain layer). The stored extent must equal the bound
+    /// composite it into the bound image (on the CPU fold without a device,
+    /// unless a style or a direct adjustment needs one — ADR 480). The stored extent must equal the bound
     /// image's; the history starts empty.
     #[wasm_bindgen]
     pub async fn layers_import(manifest: &[u8], buffers: js_sys::Array) -> Result<(), JsValue> {
@@ -6352,10 +6353,10 @@ mod wasm {
                         doc.stack.height()
                     )));
                 }
-                if ctx.is_none() && !stack.composite_is_trivial() {
+                if ctx.is_none() && !stack.composite_runs_without_gpu() {
                     return Err(JsValue::from_str(
-                        "reopening a layered image is GPU-only (the composite is a \
-                         kernel dispatch) — call init_gpu first",
+                        "reopening this layered image needs a GPU (a layer style or a \
+                         direct adjustment composites only there) — call init_gpu first",
                     ));
                 }
                 let rgba = stack
