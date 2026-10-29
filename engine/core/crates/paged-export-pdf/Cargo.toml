@@ -19,6 +19,10 @@ paged-color = { path = "../paged-color" }
 # tree through paged-renderer).
 paged-raster = { path = "../paged-raster" }
 paged-model = { path = "../paged-model" }
+# Engine ADR 1008 — the effect stack's layer effects (blur, noise, colour
+# adjustment) have no PDF operator: they are drawn by the CPU rasterizer
+# at the export's effect resolution and embedded as an image.
+paged-gpu = { path = "../paged-gpu", default-features = false, features = ["cpu"], optional = true }
 pdf-writer = "0.15"
 subsetter = "0.2"
 xmp-writer = "0.3"
@@ -34,6 +38,8 @@ anyhow = { workspace = true, optional = true }
 paged-scene = { path = "../paged-scene", optional = true }
 
 [features]
+default = ["raster-effects"]
+raster-effects = ["dep:paged-gpu"]
 # The `paged-export` CLI (kept out of the library consumers' tree —
 # paged-canvas links the lib and must not pull clap into wasm).
 cli = ["dep:clap", "dep:anyhow", "dep:paged-scene"]

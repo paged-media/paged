@@ -517,6 +517,16 @@ export const HOST_FEATURES: readonly string[] = [
   // and keeps its own TypeScript reader for a host without the flags.
   "document.importSvg@1",
   "document.exportSvg@1",
+  // Engine ADR 1008 — the ordered effect stack. The vendored wire and
+  // catalog carry `frameEffectStack` (and the fill / stroke / content
+  // twins): the whole stack as `{ type: "effectStack", value: { entries } }`,
+  // one write and one undo step per gesture, with the stack-only effects
+  // (Gaussian blur, outline stroke, colour and gradient overlays,
+  // reflection, soft edge, noise, colour adjustment) on the object target.
+  // STATIC like the fill rule: additive at protocol 76, so an older engine
+  // refuses the path (an outcome) and reads no row. A bundle that would
+  // otherwise bake an effect into pixels asks this flag first.
+  "document.effectStack@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never

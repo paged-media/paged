@@ -930,7 +930,90 @@ pub(crate) fn with_object_style_options<'f>(
     std::borrow::Cow::Owned(f)
 }
 
+/// A text frame's body, with its effect stack applied (engine ADR 1008).
+/// The text slot it returns sits inside what the stack applies to, so
+/// the story's glyphs take the stack's effects with the box.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_text_frame_into(
+    page: &mut BuiltPage,
+    frame: &TextFrame,
+    document: &Document,
+    palette: &Graphic,
+    fallback: Paint,
+    color_ctx: ColorCtx<'_>,
+    drop_shadow: Option<DropShadow>,
+    auto_sized_bounds: Option<paged_model::Bounds>,
+) -> Option<BodyTextSlot> {
+    let Some(mode) = crate::module::effect_stack::stack_mode(&frame.effect_stack) else {
+        return emit_text_frame_body(
+            page,
+            frame,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            drop_shadow,
+            auto_sized_bounds,
+        );
+    };
+    let stripped;
+    let base = if mode == crate::module::effect_stack::StackMode::Ordered {
+        stripped = TextFrame {
+            effects: None,
+            drop_shadow: None,
+            ..frame.clone()
+        };
+        &stripped
+    } else {
+        frame
+    };
+    let start = page.list.commands.len();
+    let body = emit_text_frame_body(
+        page,
+        base,
+        document,
+        palette,
+        fallback,
+        color_ctx,
+        drop_shadow,
+        auto_sized_bounds,
+    );
+    let mut resolved = ResolvedFrame::from_text_frame(frame);
+    if let (Some(grown), Geometry::TextFrameRect { rect }) =
+        (auto_sized_bounds, &mut resolved.geometry)
+    {
+        *rect = Rect {
+            x: grown.left,
+            y: grown.top,
+            w: grown.width(),
+            h: grown.height(),
+        };
+    }
+    let style = crate::module::resolve_applied_style(&resolved, document);
+    if let Some(s) = &style {
+        crate::module::object_style_cascade(&mut resolved, s);
+    }
+    let in_object_group = body.is_some_and(|b| b.in_object_group);
+    let slot = super::shapes::finish_effect_stack(
+        page,
+        start,
+        body.map(|b| b.slot),
+        &frame.effect_stack,
+        mode,
+        &resolved,
+        frame.effects.as_ref(),
+        palette,
+        color_ctx,
+    );
+    slot.map(|slot| BodyTextSlot {
+        slot,
+        // Inside the stack's own layers, and inside the object's group
+        // when the body opened one.
+        in_object_group: in_object_group || slot < page.list.commands.len(),
+    })
+}
+
+pub(super) fn emit_text_frame_body(
     page: &mut BuiltPage,
     frame: &TextFrame,
     document: &Document,

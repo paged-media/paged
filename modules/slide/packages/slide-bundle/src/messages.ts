@@ -264,6 +264,9 @@ defineMessages("menu", {
   "Save as template…": "Save as template…",
   "Custom Shows…": "Custom Shows…",
   "Add Section": "Add Section",
+  Design: "Design",
+  Themes: "Themes",
+  "Browse for Themes…": "Browse for Themes…",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled

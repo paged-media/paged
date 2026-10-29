@@ -166,7 +166,51 @@ pub(crate) fn polygon_outline_path(
 /// (real-world InDesign export shape) we build a curved FillPath
 /// from them; otherwise fall back to drawing the AABB so synthetic
 /// IDMLs that declare a polygon via `GeometricBounds` still render.
+/// A polygon, with its effect stack applied (engine ADR 1008).
 pub(super) fn emit_polygon_into(
+    page: &mut BuiltPage,
+    poly: &Polygon,
+    document: &Document,
+    palette: &Graphic,
+    fallback: Paint,
+    color_ctx: ColorCtx<'_>,
+    content: super::shapes::ContentPainter<'_>,
+) {
+    let Some(mode) = crate::module::effect_stack::stack_mode(&poly.effect_stack) else {
+        return emit_polygon_body(page, poly, document, palette, fallback, color_ctx, content);
+    };
+    let stripped;
+    let base = if mode == crate::module::effect_stack::StackMode::Ordered {
+        stripped = Polygon {
+            effects: None,
+            drop_shadow: None,
+            ..poly.clone()
+        };
+        &stripped
+    } else {
+        poly
+    };
+    let start = page.list.commands.len();
+    emit_polygon_body(page, base, document, palette, fallback, color_ctx, content);
+    let mut resolved = ResolvedFrame::from_polygon(poly);
+    let style = crate::module::resolve_applied_style(&resolved, document);
+    if let Some(s) = &style {
+        crate::module::object_style_cascade(&mut resolved, s);
+    }
+    super::shapes::finish_effect_stack(
+        page,
+        start,
+        None,
+        &poly.effect_stack,
+        mode,
+        &resolved,
+        poly.effects.as_ref(),
+        palette,
+        color_ctx,
+    );
+}
+
+pub(super) fn emit_polygon_body(
     page: &mut BuiltPage,
     poly: &Polygon,
     document: &Document,

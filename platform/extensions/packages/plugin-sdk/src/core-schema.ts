@@ -784,6 +784,11 @@ export const CORE_PATHS: Record<
   frameFillRule: V71,
   // The gradient fill's start is protocol 77 (engine ADR 1031).
   frameGradientFillStart: V71,
+  // The effect stacks are protocol 76 (engine ADR 1008).
+  frameEffectStack: V71,
+  frameFillEffectStack: V71,
+  frameStrokeEffectStack: V71,
+  frameContentEffectStack: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",

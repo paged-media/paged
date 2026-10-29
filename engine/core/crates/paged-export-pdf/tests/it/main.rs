@@ -5,6 +5,7 @@
 
 mod bookmarks;
 mod clip_groups;
+mod effect_stack;
 mod effects_export;
 mod export_x4;
 mod feathered_picture;
