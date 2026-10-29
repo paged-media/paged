@@ -25,6 +25,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [610](610-save-back-across-sessions-and-new-parts.md) | Save-back across sessions and new parts (amends 602): reopen-then-splice, paragraph styles, styles.xml | Accepted 2026-10-24 |
 | [611](611-headers-footers-and-notes-placed.md) | Headers, footers and notes placed: section masters named by the grow rule, notes at their references, in-place header/footer editing | Accepted 2026-10-28 |
 | [612](612-fields-and-toc.md) | Fields and tables of contents: Word fields as engine fields, bookmarks as text anchors, Word's TOC entries live, F9 / Shift+F9 and the References panel | Accepted 2026-10-28 |
+| [613](613-tracked-changes-and-comments.md) | Tracked changes and comments: Word's revisions as engine changes, comment threads over runs, review markup saved back as Word's (paragraphs written whole, the comment parts made when missing) | Accepted 2026-10-29 |
 | [616](616-files.md) | Files: templates as new documents, macros carried, RTF and OpenDocument read onto docx-core, .doc refused, "Save as .docx" | Accepted 2026-10-25 |
 | [617](617-pagination-policy.md) | Pagination policy: Word's rules, the engine's first-fit composer | Accepted 2026-10-24, amended 2026-10-25 |
 

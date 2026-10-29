@@ -134,6 +134,10 @@ is the subject of ADR 029, a proposal that is not published yet.
   vertical alignment, `setCellSpan` for merged cells. This is why a story is not one batch.
 - Two offsets run side by side: style, anchor and link ranges count characters, contiguous
   across paragraphs; `insertText` counts UTF-8 bytes including the separators.
+- Review markup (doc ADR 613) comes last, in a step of its own: `recordChange` for each
+  tracked run, cell run, paragraph mark and property change, then `insertComment` and
+  `replyComment` per thread; `open.ts` then turns `documentTrackChanges` on for a document
+  Word tracked changes in, so the pour is never recorded.
 
 ## One build, several engine versions
 
@@ -190,6 +194,22 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
   `paragraphs` read (`overlay_cells`); the
   tests in `docx-conformance/tests/it/save_back.rs` reach those through lowerings or edit sets
   built in the test, and no test of the read-back path adds or removes a paragraph.
+- Review markup ([ADR 613](adr/613-tracked-changes-and-comments.md), `docx-export/src/review.rs`).
+  The overlay also carries each read-back run's review markup (change, format change,
+  comments) and each paragraph's mark and property change. Before it, `review::prepare` lines
+  the read-back paragraphs up with the blocks: a tracked paragraph mark inserted in paged folds
+  two read-back paragraphs into one block, one removed takes a block's slot with that block
+  unchanged. After it, `dirty_blocks` picks the body paragraphs whose review markup changed (or
+  that hold some and were edited); the differ sees them as they were (`masked`). Before the run
+  patcher, `write_paragraphs` writes each of them whole: its `<w:p>` start tag and `<w:pPr>` (the
+  paragraph edit merged in, the mark's change and `w:pPrChange` rewritten), every run with the
+  `<w:rPr>` of the Word run its text came from, wrapped in `w:ins` / `w:del`, its `w:rPrChange`
+  kept or written, comment ranges and references where the read-back comments start and end,
+  bookmarks in place; a join's second `<w:p>` is marked and removed after the run patcher
+  (`remove_joined`). `save_comments` then rewrites `comments.xml`, `commentsExtended.xml` and
+  `commentsIds.xml` from the read-back threads, keeping unchanged comments byte for byte and
+  making missing parts with their relationship and content type. A paragraph holding a field,
+  note, picture, link, content control, move or page break is refused and named.
 
 ## Where data is stored
 

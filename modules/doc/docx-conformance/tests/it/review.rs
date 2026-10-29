@@ -236,7 +236,8 @@ fn comment_threads_are_read_with_their_ranges__feat__plugin_doc_read_path() {
 #[test]
 fn a_zero_edit_save_is_byte_identical__feat__plugin_doc_save_back() {
     for (name, original) in [
-        ("tracked-moves", tracked_changes_docx()),
+        // Not for the Word probe: Word stops on the fixture's own move.
+        ("", tracked_changes_docx()),
         ("tracked", tracked_changes_no_moves_docx()),
         ("review", review_docx()),
     ] {
@@ -245,7 +246,9 @@ fn a_zero_edit_save_is_byte_identical__feat__plugin_doc_save_back() {
         let (saved, skips) = session.save_edited_from_content(&content).unwrap();
         assert!(skips.is_empty(), "{skips:?}");
         assert_parts_identical(&original, &saved);
-        probe_out(name, &original);
+        if !name.is_empty() {
+            probe_out(name, &original);
+        }
     }
 }
 
