@@ -113,6 +113,7 @@ import {
   type GraphicStyleBase,
 } from "./graphic-styles";
 import { symbolInstanceOf } from "./symbols";
+import { engineSymbols, readEngineSymbols } from "./symbols-engine";
 
 /** Command titles, message keys `registerCommand` reads in the editor's locale. */
 const M = defineMessages("draw.selectSame", {
@@ -440,6 +441,21 @@ export async function selectSameMatches(
     return leafIdsOf(await index.tree()).filter(
       (id) => id.kind === reference.kind,
     );
+  }
+  if (c === "symbol" && reference.kind === "instance" && engineSymbols(host)) {
+    // Engine ADR 1039: an engine instance names its symbol in the
+    // document's symbol store, which lists every instance of it.
+    const address = `instance:${String(reference.id)}`;
+    const symbol = (await readEngineSymbols(host)).find((sym) =>
+      sym.instances.includes(address),
+    );
+    if (!symbol) return [];
+    return symbol.instances
+      .filter((a) => a.startsWith("instance:"))
+      .map(
+        (a) =>
+          ({ kind: "instance", id: a.slice("instance:".length) }) as ElementId,
+      );
   }
   if (c === "graphicStyle" || c === "symbol") {
     const refValue = linkValue(await index.envelopeOf(reference), c);

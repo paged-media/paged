@@ -33,7 +33,7 @@ import {
   it,
 } from "bun:test";
 
-import type { ElementId } from "@paged-media/plugin-api";
+import type { CommandContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
@@ -45,6 +45,7 @@ import {
   applyRedefineSymbol,
   applyRenameSymbol,
   applyResetSymbolTransform,
+  SELECT_SAME_SYMBOL_COMMAND_ID,
 } from "../../src";
 import {
   ENGINE_SYMBOLS_FEATURE,
@@ -96,6 +97,31 @@ describe("symbols on the engine (document.symbols@1)", () => {
     // One undo step removes the symbol again.
     await h.host.document.undo();
     expect(await readEngineSymbols(h.host)).toEqual([]);
+  });
+
+  it("SELECT SAME symbol instance selects the engine instances of the reference's symbol, not its source", async () => {
+    await h.host.selection.set([INNER]);
+    const symbol = (await applyDefineSymbol(h.host, { name: "Tile" }))!;
+    const a = (await applyPlaceSymbolInstance(h.host, symbol.id, {
+      x: 300,
+      y: 300,
+    }))!;
+    const b = (await applyPlaceSymbolInstance(h.host, symbol.id, {
+      x: 500,
+      y: 500,
+    }))!;
+    await h.host.selection.set([a[0]!]);
+    const rec = h.contributions.find(
+      (c) => c.kind === "command" && c.id === SELECT_SAME_SYMBOL_COMMAND_ID,
+    );
+    await (rec!.value as CommandContribution).handler(undefined, undefined);
+    const ids = h.host.selection
+      .get()
+      .map((e) => `${e.kind}:${String(e.id)}`)
+      .sort();
+    expect(ids).toEqual(
+      [a[0]!, b[0]!].map((e) => `${e.kind}:${String(e.id)}`).sort(),
+    );
   });
 
   it("PLACE, REDEFINE, RESET, BREAK, RENAME and DELETE are one undo step each", async () => {

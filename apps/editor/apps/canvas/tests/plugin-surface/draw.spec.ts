@@ -632,9 +632,33 @@ async function idsOfKind(page: Page, kind: string): Promise<string[]> {
 }
 
 /** Total page items across the kinds paged.draw mints. */
+/** The id of the newest engine symbol (engine ADR 1039: with the host's
+ *  document.symbols@1, defineSymbol writes a symbol definition whose id
+ *  the engine mints). */
+async function newestSymbolId(page: Page): Promise<string> {
+  return page.evaluate(async () => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { collection(n: string): Promise<Array<{ id: string }>> };
+        };
+      }
+    ).__canvas;
+    const rows = await c.client.collection("symbols");
+    return rows[rows.length - 1]?.id ?? "";
+  });
+}
+
 async function artworkCount(page: Page): Promise<number> {
   let n = 0;
-  for (const kind of ["polygon", "rectangle", "oval", "graphicLine"]) {
+  // An engine symbol instance (engine ADR 1039) is artwork too.
+  for (const kind of [
+    "polygon",
+    "rectangle",
+    "oval",
+    "graphicLine",
+    "instance",
+  ]) {
     n += (await idsOfKind(page, kind)).length;
   }
   return n;
@@ -1256,29 +1280,32 @@ test.describe("plugin surface · paged.draw", () => {
     );
 
     // SYMBOL — two instances of a symbol defined from r1 select each
-    // other; the source r1 is not an instance. An instance re-emits the
-    // definition through insertPath, so its leaf is a path.
+    // other; the source r1 is not an instance. With the host's
+    // document.symbols@1 an instance is the engine's instance node (engine
+    // ADR 1039).
     await designer.selectElements([rect(r1)]);
     await designer.runCommand(`${C}.defineSymbol`);
+    await expect.poll(() => newestSymbolId(page)).not.toBe("");
+    const symbolId = await newestSymbolId(page);
     const placed: string[] = [];
     for (const x of [300, 450]) {
-      const ids = await idsOfKind(page, "polygon");
+      const ids = await idsOfKind(page, "instance");
       await runWithPayload(page, `${C}.placeSymbolInstance`, {
-        symbolId: "sym-1",
+        symbolId,
         x,
         y: 400,
       });
       await expect
-        .poll(async () => (await idsOfKind(page, "polygon")).length, {
-          message: "placing an instance re-emits its geometry as a path",
+        .poll(async () => (await idsOfKind(page, "instance")).length, {
+          message: "placing an instance adds an instance node",
         })
         .toBe(ids.length + 1);
       placed.push(
-        (await idsOfKind(page, "polygon")).find((id) => !ids.includes(id))!,
+        (await idsOfKind(page, "instance")).find((id) => !ids.includes(id))!,
       );
     }
     await selects(
-      [{ kind: "polygon", id: placed[0]! }],
+      [{ kind: "instance", id: placed[0]! }],
       `${C}.selectSameSymbolInstance`,
       placed,
       "same symbol: both instances, not the source",
