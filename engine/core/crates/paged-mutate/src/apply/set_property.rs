@@ -41,6 +41,17 @@ pub(super) fn apply_set_property(
     // bottom-of-function `invert_set_property` path. Each helper
     // returns a fully-formed AppliedOperation.
     match (node, path) {
+        // Engine ADR 1047 — live shapes. A polygon write redraws the
+        // anchors, so its inverse is a batch (see `live_shape`).
+        (
+            NodeId::Polygon(id),
+            PropertyPath::FrameShapeSides | PropertyPath::FrameShapeStarInset,
+        ) => {
+            return super::live_shape::apply_polygon_shape(doc, node, id, path, value);
+        }
+        (NodeId::Oval(id), PropertyPath::FrameShapePieStart | PropertyPath::FrameShapePieEnd) => {
+            return super::live_shape::apply_pie_angle(doc, node, id, path, value);
+        }
         // Track J fan-out — path-topology ops accept any path-bearing
         // page item kind (Polygon, TextFrame, Rectangle, GraphicLine).
         // The four kinds carry identical `anchors` + `subpath_starts`
@@ -2643,6 +2654,60 @@ pub(super) fn apply_set_property(
             let slot = &mut doc.designmap.document_preference.show_field_codes;
             let prev = std::mem::replace(slot, show.then_some(true)).unwrap_or(false);
             (Value::Bool(prev), InvalidationHint::default())
+        }
+        // ---- engine ADR 1040 — Track Changes and the markup view -----
+        (NodeId::Document(_), PropertyPath::DocumentTrackChanges) => {
+            let Value::Bool(on) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Bool".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.track_changes;
+            let prev = std::mem::replace(slot, on.then_some(true)).unwrap_or(false);
+            // Recording changes draws nothing: no reflow.
+            (Value::Bool(prev), InvalidationHint::default())
+        }
+        (NodeId::Document(_), PropertyPath::DocumentTrackChangesAuthor) => {
+            let Value::Text(author) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Text".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.track_changes_author;
+            let next = (!author.is_empty()).then(|| author.clone());
+            let prev = std::mem::replace(slot, next).unwrap_or_default();
+            (Value::Text(prev), InvalidationHint::default())
+        }
+        (NodeId::Document(_), PropertyPath::DocumentMarkupView) => {
+            let Value::Text(view) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Text".to_string(),
+                });
+            };
+            // Cleared (null): the default view.
+            let parsed = if view.is_empty() {
+                Some(paged_model::MarkupView::All)
+            } else {
+                paged_model::MarkupView::parse(view)
+            };
+            let Some(parsed) = parsed else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "simple, all, none or original".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.markup_view;
+            // All Markup, the default, is stored as unset.
+            let next = (parsed != paged_model::MarkupView::All).then_some(parsed);
+            let prev = std::mem::replace(slot, next).unwrap_or_default();
+            // Every story with changes reflows: the whole document.
+            (
+                Value::Text(prev.as_str().to_string()),
+                InvalidationHint::default(),
+            )
         }
         // ---- R-11 — the document's global light ---------------------
         (

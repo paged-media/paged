@@ -104,6 +104,8 @@ describe.skipIf(!docxPresent)(
         "media.paged.doc.status.page",
         "media.paged.doc.status.words",
         "media.paged.doc.status.zoom",
+        // Doc ADR 613 — the review chrome's Track Changes state.
+        "media.paged.doc.status.trackChanges",
       ]);
     });
 

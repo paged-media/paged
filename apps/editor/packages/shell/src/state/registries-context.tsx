@@ -40,6 +40,7 @@ import {
   createControlBarGroupRegistry,
   createDocumentContextStore,
   createStatusItemRegistry,
+  createMarginBandRegistry,
   createImporterRegistry,
   createKeybindingRegistry,
   createMenuRegistry,
@@ -59,6 +60,7 @@ import {
   type ControlBarGroupRegistry,
   type DocumentContextStore,
   type StatusItemRegistry,
+  type MarginBandRegistry,
   type ImporterRegistry,
   type KeybindingRegistry,
   type MenuRegistry,
@@ -108,6 +110,9 @@ export interface ShellRegistries {
   controlBarGroups: ControlBarGroupRegistry;
   /** Status-bar items (extensions ADR 348, editor ADR 298). */
   statusItems: StatusItemRegistry;
+  /** Markup margin bands (extensions ADR 349 amendment 1, editor ADR
+   *  300): balloons beside the pages while a bundle's context is active. */
+  marginBands: MarginBandRegistry;
   /** The document context (extensions ADR 348): the plugin content type
    *  the open document is. Dropped when a document loads. */
   documentContext: DocumentContextStore;
@@ -174,6 +179,7 @@ export function createShellRegistries(
     subContexts: createSubContextRegistry(),
     controlBarGroups: createControlBarGroupRegistry(),
     statusItems: createStatusItemRegistry(),
+    marginBands: createMarginBandRegistry(),
     documentContext: createDocumentContextStore(),
   };
 }
