@@ -5451,6 +5451,7 @@ mod tests {
             mask_id: ElementId::Polygon("p1".into()),
             mask_type: Some("alpha".into()),
             invert: Some(true),
+            clip: None,
         };
         let json = serde_json::to_string(&apply_mask).unwrap();
         assert!(

@@ -115,6 +115,20 @@ impl AdditionalLayerInfo {
             _ => None,
         }
     }
+
+    /// The block's data as read: after the signature, key and 4-byte
+    /// length (the length bounds it; the pad is left out). Empty for a
+    /// constructed block.
+    pub fn payload(&self) -> &[u8] {
+        let Some(raw) = self.raw_block.as_deref() else {
+            return &[];
+        };
+        let Some(len) = raw.get(8..12) else {
+            return &[];
+        };
+        let n = u32::from_be_bytes([len[0], len[1], len[2], len[3]]) as usize;
+        raw.get(12..12 + n).unwrap_or(&[])
+    }
 }
 
 use crate::container::{Container, LenWidth};

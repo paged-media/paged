@@ -835,6 +835,26 @@ refuses them. Additive at protocol 76: an older engine refuses the path.
 A bundle that would otherwise bake an effect into its pixels (paged.draw's
 appearance, paged.image's layer styles placed on a page) asks it first.
 
+The catalog also DESCRIBES the stack's kinds (editor ADR 309, plan C16):
+`effectKinds`, one row per kind in the wire's order — `kind`, an English
+`title`, the Effect menu `category` (one of `effectCategories`), whether it
+is one of `indesign`'s nine, the `targets` that take it, `maxPerStack`,
+whether the entry carries its own `blend`, the `params` of a stack-only
+kind (each an `EffectEntrySpec` field with a `ValueType`, `range` and
+`default`), and for InDesign's kinds the `enablePath` and `fieldPaths`
+that hold their parameters. The SDK serves them as `CORE_EFFECT_KINDS`
+and `CORE_EFFECT_CATEGORIES` (types `EffectKindDescriptor`,
+`EffectParamDescriptor`), so an effects UI lists from core and a kind core
+adds needs no change to it. The frame rows `opacityMaskType`
+(`luminosity` | `alpha`), `opacityMaskInvert` and `opacityMaskClip`
+(Illustrator's Clip: off, what the mask artwork does not paint shows the
+item) edit a mask's options, each write one undo step (the release and the
+re-apply, the artwork keeping its place); on an item without a mask they
+read as a new mask would take them and a write is refused.
+`applyOpacityMask` takes an optional `clip` (absent: `true`). A snapshot
+whose `only` names a mask item without its target draws the mask artwork
+alone (the Transparency panel's thumbnail). All additive: no protocol bump.
+
 `"document.symbols@1"` (engine ADR 1039, protocol 78) is the engine's
 symbol: a definition kept once in the document and instances that draw it
 (`FrameRef::Instance`, addressed `instance:<id>`). The doors are five wire

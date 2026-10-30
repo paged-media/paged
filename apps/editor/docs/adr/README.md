@@ -109,6 +109,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [306](306-module-views-replace-the-canvas.md) | Module views replace the canvas | Accepted 2026-10-25 |
 | [307](307-the-slide-profile.md) | The slide profile: PowerPoint's Normal view and its keys | Accepted 2026-10-25 |
 | [308](308-video-export-runner.md) | Video export runner: the show drawn offline, WebCodecs, an MP4 muxer, progress and Cancel | Accepted 2026-10-28 |
+| [309](309-effects-transparency-and-appearance-panels.md) | The Effects, Transparency and Appearance panels and the Effect menu: kinds from core's catalog, the mask's options and Clip, every edit context | Accepted 2026-10-29 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

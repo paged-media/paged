@@ -2081,6 +2081,7 @@ fn frame_cases(c: &mut Vec<Case>) {
             mask_id: ElementId::Rectangle(mask),
             mask_type: Some("luminosity".into()),
             invert: None,
+            clip: None,
         }
     }));
     c.push(paints("ReleaseOpacityMask", "geometry", |m| {
@@ -2091,6 +2092,7 @@ fn frame_cases(c: &mut Vec<Case>) {
             mask_id: ElementId::Rectangle(mask),
             mask_type: Some("luminosity".into()),
             invert: None,
+            clip: None,
         })
         .expect("apply mask");
         Mutation::ReleaseOpacityMask {

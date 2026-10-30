@@ -4672,6 +4672,7 @@ impl CanvasModel {
                 mask_id,
                 mask_type,
                 invert,
+                clip,
             } => Some(Operation::ApplyOpacityMask {
                 target: element_to_leaf_node_id(target_id)?,
                 mask: element_to_leaf_node_id(mask_id)?,
@@ -4680,6 +4681,7 @@ impl CanvasModel {
                     _ => paged_mutate::OpacityMaskMode::Luminosity,
                 },
                 invert: invert.unwrap_or(false),
+                clip: clip.unwrap_or(true),
             }),
             Mutation::ReleaseOpacityMask { target_id } => Some(Operation::ReleaseOpacityMask {
                 target: element_to_leaf_node_id(target_id)?,
@@ -13652,6 +13654,58 @@ impl CanvasModel {
         }
         for m in scene.master_spreads.values_mut() {
             hide_in(&mut m.spread);
+        }
+        // Editor ADR 309 — a mask item named in `only` without its
+        // target is drawn as an object of its own (the Transparency
+        // panel's mask thumbnail): in this throwaway copy the relation
+        // is released and the artwork stacks on top.
+        if !only.is_empty() {
+            let named: HashSet<&str> = only.iter().map(|e| e.raw_id()).collect();
+            for p in scene.spreads.iter_mut() {
+                let sp = &mut p.spread;
+                let freed: Vec<String> = sp
+                    .opacity_masks
+                    .iter()
+                    .filter(|(target, m)| {
+                        named.contains(m.mask_item.as_str()) && !named.contains(target.as_str())
+                    })
+                    .map(|(target, _)| target.clone())
+                    .collect();
+                for target in freed {
+                    let Some(mask) = sp.opacity_masks.remove(&target) else {
+                        continue;
+                    };
+                    let id = Some(mask.mask_item.as_str());
+                    let found = sp
+                        .rectangles
+                        .iter()
+                        .position(|f| f.self_id.as_deref() == id)
+                        .map(paged_model::FrameRef::Rectangle)
+                        .or_else(|| {
+                            sp.ovals
+                                .iter()
+                                .position(|f| f.self_id.as_deref() == id)
+                                .map(paged_model::FrameRef::Oval)
+                        })
+                        .or_else(|| {
+                            sp.polygons
+                                .iter()
+                                .position(|f| f.self_id.as_deref() == id)
+                                .map(paged_model::FrameRef::Polygon)
+                        })
+                        .or_else(|| {
+                            sp.graphic_lines
+                                .iter()
+                                .position(|f| f.self_id.as_deref() == id)
+                                .map(paged_model::FrameRef::GraphicLine)
+                        });
+                    if let Some(r) = found {
+                        if !sp.frames_in_order.is_empty() {
+                            sp.frames_in_order.push(r);
+                        }
+                    }
+                }
+            }
         }
         let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
         let resource_providers = self.resource_tiles.provider_entries();

@@ -14711,6 +14711,58 @@
     },
     {
       "addressKind": "frame",
+      "path": "opacityMaskType",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "luminosity",
+          "alpha"
+        ]
+      },
+      "wire": "text",
+      "nullable": false,
+      "default": "luminosity",
+      "access": "readWrite",
+      "virtual": {
+        "op": "applyOpacityMask",
+        "field": "maskType"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "opacityMaskInvert",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "applyOpacityMask",
+        "field": "invert"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "opacityMaskClip",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "applyOpacityMask",
+        "field": "clip"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
       "path": "points[i].anchor",
       "type": {
         "kind": "list",
@@ -20904,6 +20956,58 @@
         },
         "bindable": true,
         "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "opacityMaskType",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "luminosity",
+            "alpha"
+          ]
+        },
+        "nullable": false,
+        "default": "luminosity",
+        "access": "readWrite",
+        "virtual": {
+          "op": "applyOpacityMask",
+          "field": "maskType"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "opacityMaskInvert",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "applyOpacityMask",
+          "field": "invert"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "frame",
+        "path": "opacityMaskClip",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "applyOpacityMask",
+          "field": "clip"
+        },
+        "bindable": true,
+        "wire": "bool"
       },
       {
         "addressKind": "frame",
@@ -27110,5 +27214,564 @@
         ]
       }
     ]
-  }
+  },
+  "effectKinds": [
+    {
+      "kind": "dropShadow",
+      "title": "Drop shadow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameDropShadow",
+      "fieldPaths": [
+        "frameDropShadowMode",
+        "frameDropShadowXOffset",
+        "frameDropShadowYOffset",
+        "frameDropShadowSize",
+        "frameDropShadowOpacity",
+        "frameDropShadowColor",
+        "frameDropShadowBlendMode",
+        "frameDropShadowSpread",
+        "frameDropShadowNoise",
+        "frameDropShadowKnockedOut",
+        "frameDropShadowUseGlobalLight"
+      ]
+    },
+    {
+      "kind": "innerShadow",
+      "title": "Inner shadow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameInnerShadowEnabled",
+      "fieldPaths": [
+        "frameInnerShadowBlendMode",
+        "frameInnerShadowColor",
+        "frameInnerShadowOpacity",
+        "frameInnerShadowAngle",
+        "frameInnerShadowDistance",
+        "frameInnerShadowSize",
+        "frameInnerShadowChoke",
+        "frameInnerShadowNoise"
+      ]
+    },
+    {
+      "kind": "outerGlow",
+      "title": "Outer glow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameOuterGlowEnabled",
+      "fieldPaths": [
+        "frameOuterGlowBlendMode",
+        "frameOuterGlowColor",
+        "frameOuterGlowOpacity",
+        "frameOuterGlowSpread",
+        "frameOuterGlowSize",
+        "frameOuterGlowNoise"
+      ]
+    },
+    {
+      "kind": "innerGlow",
+      "title": "Inner glow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameInnerGlowEnabled",
+      "fieldPaths": [
+        "frameInnerGlowBlendMode",
+        "frameInnerGlowColor",
+        "frameInnerGlowOpacity",
+        "frameInnerGlowChoke",
+        "frameInnerGlowSize",
+        "frameInnerGlowSource",
+        "frameInnerGlowNoise"
+      ]
+    },
+    {
+      "kind": "bevelEmboss",
+      "title": "Bevel and emboss",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameBevelEnabled",
+      "fieldPaths": [
+        "frameBevelStyle",
+        "frameBevelTechnique",
+        "frameBevelDepth",
+        "frameBevelDirection",
+        "frameBevelSize",
+        "frameBevelSoften",
+        "frameBevelAngle",
+        "frameBevelAltitude",
+        "frameBevelHighlightColor",
+        "frameBevelShadowColor",
+        "frameBevelHighlightOpacity",
+        "frameBevelShadowOpacity"
+      ]
+    },
+    {
+      "kind": "satin",
+      "title": "Satin",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameSatinEnabled",
+      "fieldPaths": [
+        "frameSatinBlendMode",
+        "frameSatinColor",
+        "frameSatinOpacity",
+        "frameSatinAngle",
+        "frameSatinDistance",
+        "frameSatinSize",
+        "frameSatinInvert"
+      ]
+    },
+    {
+      "kind": "feather",
+      "title": "Feather",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameFeatherEnabled",
+      "fieldPaths": [
+        "frameFeatherWidth",
+        "frameFeatherCornerType",
+        "frameFeatherNoise",
+        "frameFeatherChoke"
+      ]
+    },
+    {
+      "kind": "directionalFeather",
+      "title": "Directional feather",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameDirectionalFeatherEnabled",
+      "fieldPaths": [
+        "frameDirectionalFeatherLeftWidth",
+        "frameDirectionalFeatherRightWidth",
+        "frameDirectionalFeatherTopWidth",
+        "frameDirectionalFeatherBottomWidth",
+        "frameDirectionalFeatherAngle",
+        "frameDirectionalFeatherNoise",
+        "frameDirectionalFeatherChoke"
+      ]
+    },
+    {
+      "kind": "gradientFeather",
+      "title": "Gradient feather",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "fieldPaths": [
+        "frameGradientFeather"
+      ]
+    },
+    {
+      "kind": "gaussianBlur",
+      "title": "Gaussian blur",
+      "category": "blur",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "radiusPt",
+          "title": "Radius",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 2.0
+        }
+      ]
+    },
+    {
+      "kind": "outlineStroke",
+      "title": "Stroke (layer style)",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "sizePt",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 3.0
+        },
+        {
+          "field": "position",
+          "title": "Position",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "Outside",
+              "Inside",
+              "Center"
+            ]
+          },
+          "default": "Outside"
+        },
+        {
+          "field": "color",
+          "title": "Color",
+          "type": {
+            "kind": "color"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "colorOverlay",
+      "title": "Color overlay",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "color",
+          "title": "Color",
+          "type": {
+            "kind": "color"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "gradientOverlay",
+      "title": "Gradient overlay",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "gradient",
+          "title": "Gradient",
+          "type": {
+            "kind": "ref",
+            "to": "gradient"
+          }
+        },
+        {
+          "field": "angleDeg",
+          "title": "Angle",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "reverse",
+          "title": "Reverse",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "kind": "reflection",
+      "title": "Reflection",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "distancePt",
+          "title": "Distance",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "sizePct",
+          "title": "Size",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 50.0
+        },
+        {
+          "field": "startOpacityPct",
+          "title": "Start opacity",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 50.0
+        },
+        {
+          "field": "endOpacityPct",
+          "title": "End opacity",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "blurPt",
+          "title": "Blur",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        }
+      ]
+    },
+    {
+      "kind": "softEdge",
+      "title": "Soft edge",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "sizePt",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        }
+      ]
+    },
+    {
+      "kind": "noise",
+      "title": "Add noise",
+      "category": "noise",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "amountPct",
+          "title": "Amount",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 10.0
+        },
+        {
+          "field": "monochromatic",
+          "title": "Monochromatic",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "kind": "colorAdjust",
+      "title": "Color adjustment",
+      "category": "color",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "brightness",
+          "title": "Brightness",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "contrast",
+          "title": "Contrast",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "saturation",
+          "title": "Saturation",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "hueDeg",
+          "title": "Hue",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -180.0,
+            "max": 180.0
+          },
+          "default": 0.0
+        }
+      ]
+    }
+  ],
+  "effectCategories": [
+    "stylize",
+    "blur",
+    "noise",
+    "color",
+    "distortAndTransform",
+    "path",
+    "pathfinder",
+    "warp",
+    "convertToShape",
+    "rasterize"
+  ]
 }

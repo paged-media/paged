@@ -77,7 +77,37 @@ export const FAMILY_OF_PATTERN = new Map([
   ["menu Window/*", "Window/*"],
   ["menu Window/*/*", "Window/*"],
   ["menu Plugins/*/*", "Plugins/*"],
+  // Editor ADR 309 — the Effect menu's rows are core's effect kinds.
+  ["command paged.effect.add.*", "paged.effect.add.*"],
+  ["menu Object/Effects/*/*", "Object/Effects/*/*"],
 ]);
+
+/** Core's effect kinds as the vendored catalog lists them, with the menu
+ *  path each takes (`effect-menu.ts`: Object/Effects/<group>/<title>). */
+const EFFECT_SEGMENTS = {
+  stylize: "Stylize",
+  blur: "Blur",
+  noise: "Noise",
+  color: "Color",
+  distortAndTransform: "Distort & Transform",
+  path: "Path",
+  pathfinder: "Pathfinder",
+  warp: "Warp",
+  convertToShape: "Convert to Shape",
+  rasterize: "Rasterize",
+};
+function effectKinds(root) {
+  const catalog = JSON.parse(
+    readFileSync(
+      join(root, "platform/extensions/packages/plugin-api/src/catalog.json"),
+      "utf8",
+    ),
+  );
+  return (catalog.effectKinds ?? []).map((k) => ({
+    command: `paged.effect.add.${k.kind}`,
+    path: `Object/Effects/${EFFECT_SEGMENTS[k.category] ?? k.category}/${k.title}`,
+  }));
+}
 
 /** Sites the evaluator cannot resolve, on purpose. Keyed by
  *  `<kind> <file>`; each says why the site is not a static surface. */
@@ -908,6 +938,8 @@ export function enumerateSurface(root) {
     ],
     ["menu Window/*", hostPanelIds.map((p) => `Window/…/${p}`)],
     ["menu Plugins/*", pluginPanels.map((p) => `Plugins/…/${p}`)],
+    ["command paged.effect.add.*", effectKinds(root).map((k) => k.command)],
+    ["menu Object/Effects/*/*", effectKinds(root).map((k) => k.path)],
   ]);
   const families = new Map();
   for (const p of patterns) {
