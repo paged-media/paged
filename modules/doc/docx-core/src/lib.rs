@@ -35,7 +35,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod controls;
 pub mod objects;
+pub use controls::{ContentControl, ContentControlKind, ListItem};
 pub mod symbols;
 pub mod theme;
 pub use objects::{
@@ -449,6 +451,10 @@ pub struct Run {
     /// `w:pict` holding a `v:textbox`), doc ADR 614.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub text_boxes: Vec<TextBox>,
+    /// The inline content control (`w:sdt`) this run is content of, doc ADR
+    /// 614. Every run of the control carries it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control: Option<ContentControl>,
 }
 
 fn is_zero_usize(n: &usize) -> bool {
@@ -910,6 +916,10 @@ pub struct ParaProps {
     /// yet lowered: the engine has no paragraph shading on text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shading: Option<Shading>,
+    /// `w:bidi` (doc ADR 620): a right-to-left paragraph. Lowered to the
+    /// engine's paragraph direction (engine ADR 1051).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bidi: Option<bool>,
 }
 
 /// A tab stop (`w:tab`).
@@ -976,6 +986,25 @@ pub struct RunProps {
     /// applied language; East Asian and complex script are read only.
     #[serde(default, skip_serializing_if = "Language::is_empty")]
     pub lang: Language,
+    /// `w:rtl` (doc ADR 620): a right-to-left run, complex script
+    /// throughout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rtl: Option<bool>,
+    /// `w:cs`: the run is complex script.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complex_script: Option<bool>,
+    /// `w:bCs`: bold for the complex-script characters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bold_cs: Option<bool>,
+    /// `w:iCs`: italic for the complex-script characters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub italic_cs: Option<bool>,
+    /// `w:szCs/@w:val` in half-points: the complex-script size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_cs_half_pts: Option<u32>,
+    /// `w:rFonts/@w:hint` (`default`, `eastAsia`, `cs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_hint: Option<String>,
 }
 
 /// Paragraph alignment (`w:jc`).

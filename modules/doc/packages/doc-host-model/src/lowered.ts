@@ -82,6 +82,18 @@ export interface LoweredRun {
    *  engine's marker character, which `insertFootnote` / `insertEndnote`
    *  writes. */
   note?: LoweredNoteRef | null;
+  /** Doc ADR 614 — the inline content control the run is content of, in the
+   *  engine's JSON shape (`paged_model::ContentControl`, engine ADR 1052):
+   *  the pour sets it on the run's range (`characterContentControl`). */
+  control?: LoweredContentControl | null;
+}
+
+/** Doc ADR 614 — an inline content control (its `id` and `kind` are what the
+ *  bundle reads; the rest rides to the engine as it stands). */
+export interface LoweredContentControl {
+  id: string;
+  kind: { type: string; [key: string]: unknown };
+  [key: string]: unknown;
 }
 
 export interface LoweredField {

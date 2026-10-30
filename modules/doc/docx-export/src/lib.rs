@@ -27,11 +27,12 @@
 //! serializer is never linked (the wasm-budget guard).
 
 mod bindings;
+pub mod controls;
 mod diff;
 mod edit;
 mod native;
 pub mod notes;
-mod overlay;
+pub mod overlay;
 mod rpr;
 mod splice;
 pub mod structure;

@@ -86,6 +86,53 @@ pub struct RunContentIn {
     /// back (engine ADR 1022): its instruction.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field_code: Option<String>,
+    /// Doc ADR 620 — the run's own script slots and direction, as the
+    /// engine reads them back (engine ADR 1051).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub script: Option<RunScriptIn>,
+    /// Doc ADR 614 — the content control the run is content of, as the
+    /// engine reads it back (engine ADR 1052).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control: Option<ControlIn>,
+}
+
+/// Doc ADR 620 — a read-back run's script properties (the engine's
+/// `RunScriptContent`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunScriptIn {
+    #[serde(default)]
+    pub direction: Option<String>,
+    #[serde(default)]
+    pub east_asian_font: Option<String>,
+    #[serde(default)]
+    pub complex_font: Option<String>,
+    #[serde(default)]
+    pub complex_point_size: Option<f32>,
+    #[serde(default)]
+    pub complex_bold: Option<bool>,
+    #[serde(default)]
+    pub complex_italic: Option<bool>,
+    #[serde(default)]
+    pub complex: Option<bool>,
+    #[serde(default)]
+    pub hint: Option<String>,
+}
+
+/// Doc ADR 614 — a read-back content control (the engine's
+/// `ContentControlContent`): what save-back writes into its `w:sdt`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlIn {
+    pub id: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub showing_placeholder: bool,
+    #[serde(default)]
+    pub checked: Option<bool>,
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
 impl RunContentIn {
@@ -128,6 +175,29 @@ impl RunContentIn {
         }
         if let Some(t) = self.tracking {
             push("characterTracking", PropValue::Length(t));
+        }
+        if let Some(s) = &self.script {
+            let text = |v: &Option<String>| v.clone().map(PropValue::Text);
+            for (path, value) in [
+                ("characterEastAsianFont", text(&s.east_asian_font)),
+                ("characterComplexFont", text(&s.complex_font)),
+                (
+                    "characterComplexFontSize",
+                    s.complex_point_size.map(PropValue::Length),
+                ),
+                ("characterComplexBold", s.complex_bold.map(PropValue::Bool)),
+                (
+                    "characterComplexItalic",
+                    s.complex_italic.map(PropValue::Bool),
+                ),
+                ("characterComplexScript", s.complex.map(PropValue::Bool)),
+                ("characterDirection", text(&s.direction)),
+                ("characterFontHint", text(&s.hint)),
+            ] {
+                if let Some(v) = value {
+                    push(path, v);
+                }
+            }
         }
         out
     }

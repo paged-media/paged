@@ -2062,6 +2062,14 @@ impl Lowering {
         if field.is_some() {
             self.live_fields += 1;
         }
+        // Doc ADR 614 — an inline content control: the engine's control
+        // (engine ADR 1052), its placeholder drawn in the run's own style.
+        let control = r.control.clone().map(|mut c| {
+            if c.showing_placeholder {
+                c.placeholder_style = char_style_id.clone();
+            }
+            c
+        });
         LoweredRun {
             text,
             char_style_id,
@@ -2069,6 +2077,7 @@ impl Lowering {
             merge_field: r.merge_field.clone(),
             field,
             note,
+            control,
         }
     }
 
@@ -2427,6 +2436,11 @@ impl Lowering {
 
     fn para_props(&mut self, p: &ParaProps) -> Vec<StyleProp> {
         let mut out = Vec::new();
+        // Doc ADR 620 — `w:bidi`: the engine's paragraph direction (engine
+        // ADR 1051), whose alignment and indents are logical as Word's are.
+        if let Some(b) = p.bidi {
+            out.push(text("paragraphDirection", if b { "rtl" } else { "ltr" }));
+        }
         if let Some(j) = p.justification {
             out.push(StyleProp {
                 path: "paragraphJustification".into(),
@@ -2932,8 +2946,41 @@ impl Lowering {
         if let Some(tag) = &r.lang.latin {
             out.push(text("characterLanguage", &objects::applied_language(tag)));
         }
+        out.extend(script_props(r));
         out
     }
+}
+
+/// Doc ADR 620 — a run's East Asian and complex-script fonts, its
+/// complex-script size and weight, its direction and its font hint as the
+/// engine's script properties (engine ADR 1051).
+pub fn script_props(r: &RunProps) -> Vec<StyleProp> {
+    let mut out = Vec::new();
+    if let Some(f) = &r.font_east_asia {
+        out.push(text("characterEastAsianFont", f));
+    }
+    if let Some(f) = &r.font_cs {
+        out.push(text("characterComplexFont", f));
+    }
+    if let Some(half) = r.size_cs_half_pts {
+        out.push(len("characterComplexFontSize", half_pt_to_pt(half)));
+    }
+    if let Some(b) = r.bold_cs {
+        out.push(boolean("characterComplexBold", b));
+    }
+    if let Some(i) = r.italic_cs {
+        out.push(boolean("characterComplexItalic", i));
+    }
+    if let Some(cs) = r.complex_script {
+        out.push(boolean("characterComplexScript", cs));
+    }
+    if let Some(rtl) = r.rtl {
+        out.push(text("characterDirection", if rtl { "rtl" } else { "ltr" }));
+    }
+    if let Some(h) = &r.font_hint {
+        out.push(text("characterFontHint", h));
+    }
+    out
 }
 
 /// Word's character spacing (`w:spacing/@w:val`, twentieths of a point) as

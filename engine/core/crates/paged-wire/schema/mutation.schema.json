@@ -8535,6 +8535,11 @@
           "description": "Which slot shared characters take (`w:rFonts/@w:hint`):\n`Value::Text` of `default`, `eastAsia` or `cs`; `\"\"` clears.",
           "type": "string",
           "const": "characterFontHint"
+        },
+        {
+          "description": "Make a run range a content control (Word's inline `w:sdt`):\n`Value::Text` of a JSON `paged_model::ContentControl`; `\"\"` makes it\nordinary text again. Every run of the range carries the control.\nOn a `StoryRange` only. Paint-only (the text is the runs').",
+          "type": "string",
+          "const": "characterContentControl"
         }
       ]
     },

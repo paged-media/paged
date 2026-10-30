@@ -12,6 +12,7 @@ import type {
   LoweredBlock,
   LoweredCell,
   LoweredCellLook,
+  LoweredContentControl,
   LoweredDoc,
   LoweredParagraph,
   LoweredStyle,
@@ -121,6 +122,13 @@ interface LinkAt {
   url: string;
 }
 
+/** Doc ADR 614 — an inline content control's range in the pour. */
+interface ControlAt {
+  start: number;
+  end: number;
+  control: LoweredContentControl;
+}
+
 /** Something the pour does not write as text but inserts after it, at its
  *  place in the poured story (doc ADRs 611 / 612): a live Word field (its
  *  result is its text) or a note reference (the engine's marker). Both
@@ -178,6 +186,7 @@ function poured(
   ranges: Range[];
   images: ImageAt[];
   links: LinkAt[];
+  controls: ControlAt[];
   atomics: AtomicAt[];
   anchors: AnchorAt[];
   length: number;
@@ -188,6 +197,7 @@ function poured(
   const ranges: Range[] = [];
   const images: ImageAt[] = [];
   const links: LinkAt[] = [];
+  const controls: ControlAt[] = [];
   const atomics: AtomicAt[] = [];
   const anchors: AnchorAt[] = [];
   let text = "";
@@ -314,6 +324,15 @@ function poured(
       if (run.hyperlinkUrl && offset > runStart) {
         links.push({ start: runStart, end: offset, url: run.hyperlinkUrl });
       }
+      // Doc ADR 614 — a control's runs make one range.
+      if (run.control && offset > runStart) {
+        const last = controls[controls.length - 1];
+        if (last && last.end === runStart && last.control.id === run.control.id) {
+          last.end = offset;
+        } else {
+          controls.push({ start: runStart, end: offset, control: run.control });
+        }
+      }
     }
     // Breaks at the paragraph's very end (an empty trailing part).
     for (const at of cuts) {
@@ -386,6 +405,7 @@ function poured(
     ranges,
     images,
     links,
+    controls,
     atomics,
     anchors,
     length: offset - base,
@@ -502,6 +522,21 @@ export function buildTextPour(
     ops.push({
       op: "insertHyperlink",
       args: { storyId, start: link.start, end: link.end, url: link.url },
+    } as unknown as Mutation);
+  }
+  // Doc ADR 614 — inline content controls on their runs (engine ADR 1052,
+  // a v78 rider path).
+  for (const c of body.controls) {
+    ops.push({
+      op: "setElementProperty",
+      args: {
+        elementId: {
+          kind: "storyRange",
+          id: { story_id: storyId, start: c.start, end: c.end },
+        },
+        path: "characterContentControl",
+        value: { type: "text", value: JSON.stringify(c.control) },
+      },
     } as unknown as Mutation);
   }
   // Doc ADR 612 — Word bookmarks as named text anchors (engine ADR 1022).

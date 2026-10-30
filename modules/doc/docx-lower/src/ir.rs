@@ -574,6 +574,11 @@ pub struct LoweredRun {
     /// engine's marker character.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<LoweredNoteRef>,
+    /// Doc ADR 614 — the inline content control the run is content of: the
+    /// pour sets it on the run's range (`characterContentControl`, engine
+    /// ADR 1052), as the engine's JSON.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control: Option<docx_core::ContentControl>,
 }
 
 /// Page geometry for the first section, in points.

@@ -416,6 +416,11 @@ impl DocSession {
                 .insert(token.to_string(), id.to_string());
         }
         let created = |t: &str| bindings.para_token_to_style_id.contains_key(t);
+        // Doc ADR 614: a content control's new value is written into its
+        // `w:sdt` (below), not patched as text.
+        let mut content = content.clone();
+        let control_changes = docx_export::controls::take_control_changes(&mut content, &marked);
+        let content = &content;
         let mut edited_marked = overlay_story_content_with(&marked, content, layout, &created);
         // What the canvas put into the text that is not text: notes kept,
         // added and removed; new fields (taken out of the edited runs).
@@ -477,6 +482,16 @@ impl DocSession {
             docx_export::apply_style_plan(&mut package, self.styles_part.as_deref(), &plan)
                 .map_err(|e| e.to_string())?,
         );
+        if !control_changes.is_empty() {
+            let (xml, control_skips) = docx_export::controls::save_controls(
+                package
+                    .require(&self.main_part)
+                    .map_err(|e| e.to_string())?,
+                &control_changes,
+            );
+            package.set_part(&self.main_part, xml);
+            skips.extend(control_skips);
+        }
         let bytes = package.write().map_err(|e| e.to_string())?;
         Ok((bytes, skips))
     }

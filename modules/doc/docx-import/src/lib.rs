@@ -44,6 +44,7 @@ use paged_ooxml::ooxmlsdk::simple_type::{
 };
 use paged_ooxml::{parse_root, part_dir, rels, resolve_target, OoxmlError, OpcPackage};
 
+mod controls;
 mod objects;
 mod theme;
 use docx_core::Theme;
@@ -92,6 +93,12 @@ impl ImportCtx<'_> {
     fn take_look(&self, id: u32) -> Option<Box<PictureLook>> {
         let look = self.looks.borrow_mut().get_mut(&id)?.pop_front()??;
         Some(Box::new(look))
+    }
+
+    /// How many content controls the walk met before this one: the id of
+    /// one Word wrote without `w:id`.
+    fn content_control_ordinal(&self) -> u32 {
+        self.held.get().content_controls
     }
 
     fn bump(&self, f: impl FnOnce(&mut BodyHeld)) {
@@ -1006,6 +1013,13 @@ fn map_paragraph(
         ),
         None => (None, ParaProps::default()),
     };
+    // Doc ADR 620 — `w:bidi`.
+    let mut props = props;
+    props.bidi = p
+        .paragraph_properties
+        .as_deref()
+        .and_then(|pp| pp.bi_di.as_ref())
+        .map(|v| on(&v.val));
 
     // Resolve w:numPr -> a list marker through numbering.xml. With no numPr
     // of its own the paragraph takes its style chain's (Word applies a
@@ -1280,6 +1294,8 @@ struct Stamp {
     field_code: Option<String>,
     field_seq: Option<u32>,
     merge: Option<MergeField>,
+    /// Doc ADR 614 — the inline content control the runs are content of.
+    control: Option<docx_core::ContentControl>,
 }
 
 /// One paragraph's inline walk.
@@ -1385,6 +1401,7 @@ impl<'a> ParaWalk<'_, 'a> {
                         field_code: Some(fs.instruction.trim().to_string()),
                         field_seq: Some(seq),
                         merge,
+                        control: stamp.control.clone(),
                     };
                     self.items(
                         fs.simple_field_choice.iter().map(inline_of_field).collect(),
@@ -1395,10 +1412,20 @@ impl<'a> ParaWalk<'_, 'a> {
                 // A run-level content control: its runs are shown; the
                 // control itself stays in the source.
                 Inline::ContentControl(sdt) => {
+                    let ordinal = self.ctx.content_control_ordinal();
                     self.ctx.bump(|h| h.content_controls += 1);
                     let inner_path = match path {
                         Path::Locked(Some(s)) => Path::Locked(Some(s)),
                         _ => Path::Locked(Some(RunSource::ContentControl)),
+                    };
+                    // The innermost control wins on its runs.
+                    let stamp = Stamp {
+                        control: sdt
+                            .sdt_properties
+                            .as_ref()
+                            .and_then(|p| controls::read(p, ordinal))
+                            .or_else(|| stamp.control.clone()),
+                        ..stamp.clone()
                     };
                     self.items(
                         sdt.sdt_content_run
@@ -1407,7 +1434,7 @@ impl<'a> ParaWalk<'_, 'a> {
                             .map(inline_of_content_control)
                             .collect(),
                         inner_path,
-                        stamp,
+                        &stamp,
                     );
                 }
                 // A tracked insertion: shown as accepted.
@@ -1489,6 +1516,7 @@ impl<'a> ParaWalk<'_, 'a> {
         run.field_code = stamp.field_code.clone();
         run.field_seq = stamp.field_seq;
         run.merge_field = stamp.merge.clone();
+        run.control = stamp.control.clone();
         if let Some(f) = self.fields.last() {
             if f.separated {
                 if let Some(url) = &f.result_url {
@@ -2116,6 +2144,7 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
         field_seq: None,
         merge_field: None,
         text_boxes,
+        control: None,
     }
 }
 
@@ -2438,6 +2467,12 @@ fn apply_run_property_choice(
         C::Position(p) => props.baseline_half_pts = signed_hps(&p.val),
         C::Spacing(sp) => props.spacing_twips = Some(sp.val),
         C::Languages(l) => props.lang = objects::language(l),
+        // Doc ADR 620 — complex script and direction.
+        C::BoldComplexScript(b) => props.bold_cs = Some(on(&b.val)),
+        C::ItalicComplexScript(i) => props.italic_cs = Some(on(&i.val)),
+        C::FontSizeComplexScript(sz) => props.size_cs_half_pts = hps(&sz.val),
+        C::RightToLeftText(v) => props.rtl = Some(on(&v.val)),
+        C::ComplexScript(v) => props.complex_script = Some(on(&v.val)),
         _ => {}
     }
 }
@@ -2471,6 +2506,7 @@ fn map_styles(styles: &wml::Styles, theme: Option<&Theme>) -> StyleCatalog {
                     None,
                     &None,
                 );
+                out.doc_defaults.para.bidi = base.bi_di.as_ref().map(|v| on(&v.val));
             }
         }
     }
@@ -2510,6 +2546,19 @@ fn run_props_base(rpr: &wml::RunPropertiesBaseStyle, theme: Option<&Theme>) -> R
     if let Some(l) = &rpr.languages {
         props.lang = objects::language(l);
     }
+    // Doc ADR 620 — complex script and direction.
+    if let Some(b) = &rpr.bold_complex_script {
+        props.bold_cs = Some(on(&b.val));
+    }
+    if let Some(i) = &rpr.italic_complex_script {
+        props.italic_cs = Some(on(&i.val));
+    }
+    if let Some(sz) = &rpr.font_size_complex_script {
+        props.size_cs_half_pts = hps(&sz.val);
+    }
+    if let Some(v) = &rpr.right_to_left_text {
+        props.rtl = Some(on(&v.val));
+    }
     props
 }
 
@@ -2526,7 +2575,7 @@ fn map_style(s: &wml::Style, theme: Option<&Theme>) -> Option<Style> {
         .style_paragraph_properties
         .as_deref()
         .map(|pp| {
-            para_props(
+            let p = para_props(
                 &pp.justification,
                 &pp.indentation,
                 &pp.spacing_between_lines,
@@ -2538,7 +2587,11 @@ fn map_style(s: &wml::Style, theme: Option<&Theme>) -> Option<Style> {
                 },
                 pp.page_break_before.as_ref().map(|v| on(&v.val)),
                 &pp.tabs,
-            )
+            );
+            // Doc ADR 620 — `w:bidi` on a style.
+            let mut p = p;
+            p.bidi = pp.bi_di.as_ref().map(|v| on(&v.val));
+            p
         })
         .unwrap_or_default();
     let run = s
@@ -2605,6 +2658,19 @@ fn run_props_named(rpr: &wml::StyleRunProperties, theme: Option<&Theme>) -> RunP
     }
     if let Some(l) = &rpr.languages {
         props.lang = objects::language(l);
+    }
+    // Doc ADR 620 — complex script and direction.
+    if let Some(b) = &rpr.bold_complex_script {
+        props.bold_cs = Some(on(&b.val));
+    }
+    if let Some(i) = &rpr.italic_complex_script {
+        props.italic_cs = Some(on(&i.val));
+    }
+    if let Some(sz) = &rpr.font_size_complex_script {
+        props.size_cs_half_pts = hps(&sz.val);
+    }
+    if let Some(v) = &rpr.right_to_left_text {
+        props.rtl = Some(on(&v.val));
     }
     props
 }

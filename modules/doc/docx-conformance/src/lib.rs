@@ -3082,3 +3082,43 @@ fn tiny_png() -> Vec<u8> {
     chunk(&mut out, b"IEND", &[]);
     out
 }
+
+/// Wave W4b (doc ADR 620) — direction and script fonts:
+///
+/// - p0 an Arabic right-to-left paragraph (`w:bidi`, `w:rtl` runs, `w:cs`
+///   font Arial with `w:szCs` 28 and `w:bCs`).
+/// - p1 a Hebrew right-to-left paragraph with a Latin word and digits.
+/// - p2 a left-to-right paragraph mixing Latin and Japanese, the Japanese
+///   in an East Asian font (`w:eastAsia` MS Mincho, `w:hint="eastAsia"`).
+pub fn w4b_scripts_docx() -> Vec<u8> {
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS}>
+  <w:body>
+    <w:p><w:pPr><w:bidi/><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:rFonts w:cs="Arial"/><w:bCs/><w:rtl/><w:szCs w:val="28"/></w:rPr><w:t>مرحبا بالعالم</w:t></w:r></w:p>
+    <w:p><w:pPr><w:bidi/></w:pPr><w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space="preserve">שלום </w:t></w:r><w:r><w:t>Word</w:t></w:r><w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space="preserve"> 2026</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Hello </w:t></w:r><w:r><w:rPr><w:rFonts w:hint="eastAsia" w:eastAsia="MS Mincho"/></w:rPr><w:t>日本語</w:t></w:r><w:r><w:t xml:space="preserve"> world.</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#
+    );
+    w0_package(&document, None)
+}
+
+/// Wave W4b (doc ADR 614, content controls) — one inline control of each
+/// kind in one paragraph: a checkbox (`w:id` 11, unchecked), a drop-down
+/// (12, Red / Blue, Red chosen), a date (13, `d MMMM yyyy`), a plain text
+/// control showing its placeholder (14), a rich text control (15) and a
+/// combo box (16).
+pub fn w4b_controls_docx() -> Vec<u8> {
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS} xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Agree </w:t></w:r><w:sdt><w:sdtPr><w:alias w:val="Agree"/><w:tag w:val="agree"/><w:id w:val="11"/><w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox></w:sdtPr><w:sdtContent><w:r><w:rPr><w:rFonts w:ascii="MS Gothic" w:eastAsia="MS Gothic" w:hAnsi="MS Gothic" w:hint="eastAsia"/></w:rPr><w:t>☐</w:t></w:r></w:sdtContent></w:sdt><w:r><w:t xml:space="preserve"> colour </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="12"/><w:dropDownList w:lastValue="r"><w:listItem w:displayText="Red" w:value="r"/><w:listItem w:displayText="Blue" w:value="b"/></w:dropDownList></w:sdtPr><w:sdtContent><w:r><w:t>Red</w:t></w:r></w:sdtContent></w:sdt><w:r><w:t xml:space="preserve"> on </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="13"/><w:date w:fullDate="2026-01-02T00:00:00Z"><w:dateFormat w:val="d MMMM yyyy"/><w:lid w:val="en-US"/><w:storeMappedDataAs w:val="dateTime"/><w:calendar w:val="gregorian"/></w:date></w:sdtPr><w:sdtContent><w:r><w:t>2 January 2026</w:t></w:r></w:sdtContent></w:sdt><w:r><w:t xml:space="preserve"> by </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="14"/><w:showingPlcHdr/><w:text/></w:sdtPr><w:sdtContent><w:r><w:rPr><w:color w:val="808080"/></w:rPr><w:t>Click here</w:t></w:r></w:sdtContent></w:sdt><w:r><w:t xml:space="preserve"> note </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="15"/><w:richText/></w:sdtPr><w:sdtContent><w:r><w:t>rich</w:t></w:r></w:sdtContent></w:sdt><w:r><w:t xml:space="preserve"> size </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="16"/><w:comboBox w:lastValue="M"><w:listItem w:displayText="Small" w:value="S"/><w:listItem w:displayText="Medium" w:value="M"/></w:comboBox></w:sdtPr><w:sdtContent><w:r><w:t>Medium</w:t></w:r></w:sdtContent></w:sdt></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#
+    );
+    w0_package(&document, None)
+}
