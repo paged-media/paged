@@ -16,21 +16,21 @@
     "documents": 305
   },
   "counts": {
-    "rows": 1676,
-    "elements": 142,
-    "attributes": 762,
-    "imported": 1470,
-    "exported": 1183,
-    "importedAndExported": 977,
+    "rows": 1680,
+    "elements": 143,
+    "attributes": 763,
+    "imported": 1473,
+    "exported": 1187,
+    "importedAndExported": 980,
     "importOnly": 493,
-    "exportOnly": 206,
+    "exportOnly": 207,
     "propertiesChild": 61,
-    "importerReadSites": 1083,
-    "exporterWriteSites": 1170,
+    "importerReadSites": 1086,
+    "exporterWriteSites": 1174,
     "unresolved": 0,
     "partRows": 4150,
     "misplaced": 30,
-    "unseen": 433
+    "unseen": 436
   },
   "metrics": {
     "weightedImport": {
@@ -49,7 +49,7 @@
       "value": 0.155641
     },
     "misplacedReads": 30,
-    "unseenReads": 433,
+    "unseenReads": 436,
     "unjustifiedUnseenReads": 0
   },
   "rows": [
@@ -282,7 +282,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 404
+        "line": 418
       },
       "exportSource": null
     },
@@ -300,7 +300,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 413
+        "line": 427
       },
       "exportSource": null
     },
@@ -318,7 +318,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 399
+        "line": 413
       },
       "exportSource": null
     },
@@ -957,11 +957,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 454
+        "line": 468
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 484
+        "line": 491
       }
     },
     {
@@ -980,11 +980,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 453
+        "line": 467
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 481
+        "line": 488
       }
     },
     {
@@ -1003,11 +1003,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 442
+        "line": 456
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 479
+        "line": 486
       }
     },
     {
@@ -1026,11 +1026,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 507
+        "line": 521
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 152
+        "line": 154
       }
     },
     {
@@ -1049,11 +1049,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 508
+        "line": 522
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 154
+        "line": 156
       }
     },
     {
@@ -1072,11 +1072,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 505
+        "line": 519
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 151
+        "line": 153
       }
     },
     {
@@ -1095,11 +1095,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 506
+        "line": 520
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 153
+        "line": 155
       }
     },
     {
@@ -1118,11 +1118,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 509
+        "line": 523
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 155
+        "line": 157
       }
     },
     {
@@ -1139,11 +1139,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 150
+        "line": 152
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 150
+        "line": 152
       }
     },
     {
@@ -1308,7 +1308,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 908
+        "line": 922
       },
       "exportSource": null
     },
@@ -1326,7 +1326,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 907
+        "line": 921
       },
       "exportSource": null
     },
@@ -2960,7 +2960,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 879
+        "line": 893
       },
       "exportSource": null
     },
@@ -3003,7 +3003,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 908
+        "line": 922
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -3026,7 +3026,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 907
+        "line": 921
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -6891,11 +6891,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 562
+        "line": 569
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 562
+        "line": 569
       }
     },
     {
@@ -6920,7 +6920,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 551
+        "line": 558
       }
     },
     {
@@ -6945,7 +6945,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 549
+        "line": 556
       }
     },
     {
@@ -6970,7 +6970,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 548
+        "line": 555
       }
     },
     {
@@ -6995,7 +6995,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 556
+        "line": 563
       }
     },
     {
@@ -7040,7 +7040,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 577
+        "line": 584
       }
     },
     {
@@ -7065,7 +7065,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 576
+        "line": 583
       }
     },
     {
@@ -7082,11 +7082,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 606
+        "line": 613
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 606
+        "line": 613
       }
     },
     {
@@ -7103,11 +7103,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 605
+        "line": 612
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 605
+        "line": 612
       }
     },
     {
@@ -7198,7 +7198,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 522
+        "line": 536
       },
       "exportSource": null
     },
@@ -7216,7 +7216,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 523
+        "line": 537
       },
       "exportSource": null
     },
@@ -7234,7 +7234,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 521
+        "line": 535
       },
       "exportSource": null
     },
@@ -7252,7 +7252,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 517
+        "line": 531
       },
       "exportSource": null
     },
@@ -7272,11 +7272,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 492
+        "line": 506
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 136
+        "line": 138
       }
     },
     {
@@ -7295,11 +7295,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 491
+        "line": 505
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 135
+        "line": 137
       }
     },
     {
@@ -7318,11 +7318,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 488
+        "line": 502
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 134
+        "line": 136
       }
     },
     {
@@ -7342,7 +7342,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 463
+        "line": 477
       },
       "exportSource": {
         "file": "crates/idml-export/src/rewrite.rs",
@@ -7363,7 +7363,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 464
+        "line": 478
       },
       "exportSource": null
     },
@@ -7381,7 +7381,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 462
+        "line": 476
       },
       "exportSource": null
     },
@@ -7400,7 +7400,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 459
+        "line": 473
       },
       "exportSource": null
     },
@@ -7420,7 +7420,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 908
+        "line": 922
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -7443,7 +7443,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 907
+        "line": 921
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -7641,7 +7641,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 908
+        "line": 922
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -7664,7 +7664,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 907
+        "line": 921
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -8096,7 +8096,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 674
+        "line": 688
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8120,7 +8120,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 675
+        "line": 689
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8144,7 +8144,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 676
+        "line": 690
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8168,7 +8168,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 673
+        "line": 687
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8237,7 +8237,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 683
+        "line": 697
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8262,7 +8262,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 684
+        "line": 698
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8287,7 +8287,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 682
+        "line": 696
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8312,7 +8312,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 681
+        "line": 695
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8336,7 +8336,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 678
+        "line": 692
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8360,7 +8360,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 679
+        "line": 693
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8384,7 +8384,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 680
+        "line": 694
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -8408,7 +8408,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 677
+        "line": 691
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -9034,7 +9034,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 372
+        "line": 386
       },
       "exportSource": null
     },
@@ -9052,7 +9052,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 375
+        "line": 389
       },
       "exportSource": null
     },
@@ -9070,7 +9070,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 374
+        "line": 388
       },
       "exportSource": null
     },
@@ -9088,7 +9088,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 376
+        "line": 390
       },
       "exportSource": null
     },
@@ -9106,7 +9106,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 373
+        "line": 387
       },
       "exportSource": null
     },
@@ -9124,7 +9124,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 369
+        "line": 383
       },
       "exportSource": null
     },
@@ -9142,7 +9142,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 370
+        "line": 384
       },
       "exportSource": null
     },
@@ -9160,7 +9160,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 371
+        "line": 385
       },
       "exportSource": null
     },
@@ -10225,7 +10225,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 908
+        "line": 922
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -10248,7 +10248,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 907
+        "line": 921
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -10692,7 +10692,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 731
+        "line": 745
       },
       "exportSource": null
     },
@@ -10711,7 +10711,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 730
+        "line": 744
       },
       "exportSource": null
     },
@@ -10730,7 +10730,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 727
+        "line": 741
       },
       "exportSource": null
     },
@@ -10749,7 +10749,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 729
+        "line": 743
       },
       "exportSource": null
     },
@@ -10770,7 +10770,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 726
+        "line": 740
       },
       "exportSource": {
         "file": "crates/idml-export/src/footnote_option.rs",
@@ -10792,7 +10792,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 732
+        "line": 746
       },
       "exportSource": null
     },
@@ -10811,7 +10811,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 728
+        "line": 742
       },
       "exportSource": null
     },
@@ -10832,7 +10832,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 720
+        "line": 734
       },
       "exportSource": {
         "file": "crates/idml-export/src/footnote_option.rs",
@@ -10854,7 +10854,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 711
+        "line": 725
       },
       "exportSource": null
     },
@@ -10896,7 +10896,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 724
+        "line": 738
       },
       "exportSource": {
         "file": "crates/idml-export/src/footnote_option.rs",
@@ -10920,7 +10920,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 714
+        "line": 728
       },
       "exportSource": {
         "file": "crates/idml-export/src/footnote_option.rs",
@@ -10942,7 +10942,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 717
+        "line": 731
       },
       "exportSource": null
     },
@@ -10982,7 +10982,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 698
+        "line": 712
       },
       "exportSource": null
     },
@@ -11001,7 +11001,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 702
+        "line": 716
       },
       "exportSource": null
     },
@@ -11020,7 +11020,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 700
+        "line": 714
       },
       "exportSource": null
     },
@@ -11039,7 +11039,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 703
+        "line": 717
       },
       "exportSource": null
     },
@@ -11060,7 +11060,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 697
+        "line": 711
       },
       "exportSource": {
         "file": "crates/idml-export/src/footnote_option.rs",
@@ -11082,7 +11082,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 699
+        "line": 713
       },
       "exportSource": null
     },
@@ -11101,7 +11101,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 701
+        "line": 715
       },
       "exportSource": null
     },
@@ -11120,7 +11120,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 704
+        "line": 718
       },
       "exportSource": null
     },
@@ -11139,7 +11139,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 716
+        "line": 730
       },
       "exportSource": null
     },
@@ -11181,7 +11181,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 706
+        "line": 720
       },
       "exportSource": {
         "file": "crates/idml-export/src/footnote_option.rs",
@@ -11205,7 +11205,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 705
+        "line": 719
       },
       "exportSource": {
         "file": "crates/idml-export/src/footnote_option.rs",
@@ -11229,7 +11229,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 707
+        "line": 721
       },
       "exportSource": {
         "file": "crates/idml-export/src/footnote_option.rs",
@@ -11253,7 +11253,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 715
+        "line": 729
       },
       "exportSource": {
         "file": "crates/idml-export/src/footnote_option.rs",
@@ -13042,7 +13042,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 759
+        "line": 773
       },
       "exportSource": null
     },
@@ -13061,7 +13061,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 756
+        "line": 770
       },
       "exportSource": null
     },
@@ -13080,7 +13080,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 758
+        "line": 772
       },
       "exportSource": null
     },
@@ -13099,7 +13099,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 757
+        "line": 771
       },
       "exportSource": null
     },
@@ -13118,7 +13118,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 755
+        "line": 769
       },
       "exportSource": null
     },
@@ -13137,7 +13137,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 760
+        "line": 774
       },
       "exportSource": null
     },
@@ -13156,7 +13156,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 761
+        "line": 775
       },
       "exportSource": null
     },
@@ -13940,11 +13940,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 469
+        "line": 476
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 469
+        "line": 476
       }
     },
     {
@@ -13961,11 +13961,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 462
+        "line": 469
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 462
+        "line": 469
       }
     },
     {
@@ -13982,7 +13982,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 433
+        "line": 447
       },
       "exportSource": null
     },
@@ -14006,7 +14006,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 471
+        "line": 478
       }
     },
     {
@@ -14025,11 +14025,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 435
+        "line": 449
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 465
+        "line": 472
       }
     },
     {
@@ -14046,11 +14046,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 463
+        "line": 470
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 463
+        "line": 470
       }
     },
     {
@@ -14067,11 +14067,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 460
+        "line": 467
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 460
+        "line": 467
       }
     },
     {
@@ -14090,11 +14090,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 431
+        "line": 445
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 450
+        "line": 457
       }
     },
     {
@@ -14113,11 +14113,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 419
+        "line": 433
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 448
+        "line": 455
       }
     },
     {
@@ -14136,11 +14136,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 432
+        "line": 446
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 457
+        "line": 464
       }
     },
     {
@@ -14157,11 +14157,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 459
+        "line": 466
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 459
+        "line": 466
       }
     },
     {
@@ -14178,11 +14178,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 461
+        "line": 468
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 461
+        "line": 468
       }
     },
     {
@@ -14201,16 +14201,102 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 313
+        "line": 327
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 401
+        "line": 408
       }
     },
     {
       "element": "HyperlinkPageDestination",
       "attribute": "DestinationUniqueKey",
+      "kind": "attr",
+      "importerField": null,
+      "coarseType": "string",
+      "imported": true,
+      "exported": true,
+      "importParts": [
+        "designmap"
+      ],
+      "exportParts": [
+        "designmap"
+      ],
+      "source": {
+        "file": "crates/idml-import/src/designmap.rs",
+        "line": 297
+      },
+      "exportSource": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 412
+      }
+    },
+    {
+      "element": "HyperlinkPageDestination",
+      "attribute": "Hidden",
+      "kind": "attr",
+      "importerField": null,
+      "coarseType": null,
+      "imported": false,
+      "exported": true,
+      "importParts": [],
+      "exportParts": [
+        "designmap"
+      ],
+      "source": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 411
+      },
+      "exportSource": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 411
+      }
+    },
+    {
+      "element": "HyperlinkPageDestination",
+      "attribute": "Name",
+      "kind": "attr",
+      "importerField": null,
+      "coarseType": null,
+      "imported": false,
+      "exported": true,
+      "importParts": [],
+      "exportParts": [
+        "designmap"
+      ],
+      "source": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 406
+      },
+      "exportSource": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 406
+      }
+    },
+    {
+      "element": "HyperlinkPageDestination",
+      "attribute": "NameManually",
+      "kind": "attr",
+      "importerField": null,
+      "coarseType": null,
+      "imported": false,
+      "exported": true,
+      "importParts": [],
+      "exportParts": [
+        "designmap"
+      ],
+      "source": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 407
+      },
+      "exportSource": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 407
+      }
+    },
+    {
+      "element": "HyperlinkPageDestination",
+      "attribute": "Self",
       "kind": "attr",
       "importerField": null,
       "coarseType": "string",
@@ -14233,92 +14319,6 @@
     },
     {
       "element": "HyperlinkPageDestination",
-      "attribute": "Hidden",
-      "kind": "attr",
-      "importerField": null,
-      "coarseType": null,
-      "imported": false,
-      "exported": true,
-      "importParts": [],
-      "exportParts": [
-        "designmap"
-      ],
-      "source": {
-        "file": "crates/idml-export/src/navigation.rs",
-        "line": 404
-      },
-      "exportSource": {
-        "file": "crates/idml-export/src/navigation.rs",
-        "line": 404
-      }
-    },
-    {
-      "element": "HyperlinkPageDestination",
-      "attribute": "Name",
-      "kind": "attr",
-      "importerField": null,
-      "coarseType": null,
-      "imported": false,
-      "exported": true,
-      "importParts": [],
-      "exportParts": [
-        "designmap"
-      ],
-      "source": {
-        "file": "crates/idml-export/src/navigation.rs",
-        "line": 399
-      },
-      "exportSource": {
-        "file": "crates/idml-export/src/navigation.rs",
-        "line": 399
-      }
-    },
-    {
-      "element": "HyperlinkPageDestination",
-      "attribute": "NameManually",
-      "kind": "attr",
-      "importerField": null,
-      "coarseType": null,
-      "imported": false,
-      "exported": true,
-      "importParts": [],
-      "exportParts": [
-        "designmap"
-      ],
-      "source": {
-        "file": "crates/idml-export/src/navigation.rs",
-        "line": 400
-      },
-      "exportSource": {
-        "file": "crates/idml-export/src/navigation.rs",
-        "line": 400
-      }
-    },
-    {
-      "element": "HyperlinkPageDestination",
-      "attribute": "Self",
-      "kind": "attr",
-      "importerField": null,
-      "coarseType": "string",
-      "imported": true,
-      "exported": true,
-      "importParts": [
-        "designmap"
-      ],
-      "exportParts": [
-        "designmap"
-      ],
-      "source": {
-        "file": "crates/idml-import/src/designmap.rs",
-        "line": 297
-      },
-      "exportSource": {
-        "file": "crates/idml-export/src/navigation.rs",
-        "line": 398
-      }
-    },
-    {
-      "element": "HyperlinkPageDestination",
       "attribute": "ViewPercentage",
       "kind": "attr",
       "importerField": null,
@@ -14331,11 +14331,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 403
+        "line": 410
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 403
+        "line": 410
       }
     },
     {
@@ -14352,11 +14352,101 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 402
+        "line": 409
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 402
+        "line": 409
+      }
+    },
+    {
+      "element": "HyperlinkPageItemSource",
+      "attribute": "Hidden",
+      "kind": "attr",
+      "importerField": null,
+      "coarseType": null,
+      "imported": false,
+      "exported": true,
+      "importParts": [],
+      "exportParts": [
+        "designmap"
+      ],
+      "source": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 1142
+      },
+      "exportSource": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 1142
+      }
+    },
+    {
+      "element": "HyperlinkPageItemSource",
+      "attribute": "Name",
+      "kind": "attr",
+      "importerField": "HyperlinkPageItemSource.name",
+      "coarseType": "string",
+      "imported": true,
+      "exported": true,
+      "importParts": [
+        "designmap"
+      ],
+      "exportParts": [
+        "designmap"
+      ],
+      "source": {
+        "file": "crates/idml-import/src/designmap.rs",
+        "line": 311
+      },
+      "exportSource": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 1139
+      }
+    },
+    {
+      "element": "HyperlinkPageItemSource",
+      "attribute": "Self",
+      "kind": "attr",
+      "importerField": null,
+      "coarseType": "string",
+      "imported": true,
+      "exported": true,
+      "importParts": [
+        "designmap"
+      ],
+      "exportParts": [
+        "designmap"
+      ],
+      "source": {
+        "file": "crates/idml-import/src/designmap.rs",
+        "line": 305
+      },
+      "exportSource": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 1137
+      }
+    },
+    {
+      "element": "HyperlinkPageItemSource",
+      "attribute": "SourcePageItem",
+      "kind": "attr",
+      "importerField": null,
+      "coarseType": "string",
+      "imported": true,
+      "exported": true,
+      "importParts": [
+        "designmap"
+      ],
+      "exportParts": [
+        "designmap"
+      ],
+      "source": {
+        "file": "crates/idml-import/src/designmap.rs",
+        "line": 305
+      },
+      "exportSource": {
+        "file": "crates/idml-export/src/navigation.rs",
+        "line": 1141
       }
     },
     {
@@ -14373,7 +14463,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 323
+        "line": 337
       },
       "exportSource": null
     },
@@ -14544,11 +14634,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 304
+        "line": 318
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 385
+        "line": 392
       }
     },
     {
@@ -14571,7 +14661,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 387
+        "line": 394
       }
     },
     {
@@ -14588,11 +14678,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 386
+        "line": 393
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 386
+        "line": 393
       }
     },
     {
@@ -14609,11 +14699,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 384
+        "line": 391
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 384
+        "line": 391
       }
     },
     {
@@ -14636,7 +14726,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 383
+        "line": 390
       }
     },
     {
@@ -15039,7 +15129,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 662
+        "line": 676
       },
       "exportSource": null
     },
@@ -15058,7 +15148,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 659
+        "line": 673
       },
       "exportSource": null
     },
@@ -15077,7 +15167,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 661
+        "line": 675
       },
       "exportSource": null
     },
@@ -15096,7 +15186,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 656
+        "line": 670
       },
       "exportSource": null
     },
@@ -15115,7 +15205,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 657
+        "line": 671
       },
       "exportSource": null
     },
@@ -15134,7 +15224,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 663
+        "line": 677
       },
       "exportSource": null
     },
@@ -15153,7 +15243,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 658
+        "line": 672
       },
       "exportSource": null
     },
@@ -15172,7 +15262,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 643
+        "line": 657
       },
       "exportSource": null
     },
@@ -15191,7 +15281,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 647
+        "line": 661
       },
       "exportSource": null
     },
@@ -15210,7 +15300,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 644
+        "line": 658
       },
       "exportSource": null
     },
@@ -15229,7 +15319,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 646
+        "line": 660
       },
       "exportSource": null
     },
@@ -15248,7 +15338,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 645
+        "line": 659
       },
       "exportSource": null
     },
@@ -15267,7 +15357,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 649
+        "line": 663
       },
       "exportSource": null
     },
@@ -15286,7 +15376,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 650
+        "line": 664
       },
       "exportSource": null
     },
@@ -15305,7 +15395,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 651
+        "line": 665
       },
       "exportSource": null
     },
@@ -15324,7 +15414,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 652
+        "line": 666
       },
       "exportSource": null
     },
@@ -15343,7 +15433,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 655
+        "line": 669
       },
       "exportSource": null
     },
@@ -15362,7 +15452,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 660
+        "line": 674
       },
       "exportSource": null
     },
@@ -15381,7 +15471,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 642
+        "line": 656
       },
       "exportSource": null
     },
@@ -15400,7 +15490,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 654
+        "line": 668
       },
       "exportSource": null
     },
@@ -15419,7 +15509,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 640
+        "line": 654
       },
       "exportSource": null
     },
@@ -15438,7 +15528,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 641
+        "line": 655
       },
       "exportSource": null
     },
@@ -17173,7 +17263,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 908
+        "line": 922
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -17196,7 +17286,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 907
+        "line": 921
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -17329,7 +17419,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 908
+        "line": 922
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -17352,7 +17442,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 907
+        "line": 921
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -19962,7 +20052,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 908
+        "line": 922
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -19985,7 +20075,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 907
+        "line": 921
       },
       "exportSource": {
         "file": "crates/idml-export/src/text_variables.rs",
@@ -30168,11 +30258,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 336
+        "line": 350
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 341
+        "line": 348
       }
     },
     {
@@ -30191,11 +30281,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 345
+        "line": 359
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 342
+        "line": 349
       }
     },
     {
@@ -30212,11 +30302,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 339
+        "line": 346
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 339
+        "line": 346
       }
     },
     {
@@ -30235,11 +30325,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 344
+        "line": 358
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 347
+        "line": 354
       }
     },
     {
@@ -30256,11 +30346,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 340
+        "line": 347
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 340
+        "line": 347
       }
     },
     {
@@ -30279,11 +30369,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 339
+        "line": 353
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 345
+        "line": 352
       }
     },
     {
@@ -30302,11 +30392,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 340
+        "line": 354
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 745
+        "line": 752
       }
     },
     {
@@ -30329,7 +30419,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 357
+        "line": 364
       }
     },
     {
@@ -30348,11 +30438,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 335
+        "line": 349
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 348
+        "line": 355
       }
     },
     {
@@ -30371,11 +30461,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 343
+        "line": 357
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 350
+        "line": 357
       }
     },
     {
@@ -30394,11 +30484,11 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 332
+        "line": 346
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 338
+        "line": 345
       }
     },
     {
@@ -36436,7 +36526,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 908
+        "line": 922
       },
       "exportSource": null
     },
@@ -36454,7 +36544,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 907
+        "line": 921
       },
       "exportSource": null
     },
@@ -36916,7 +37006,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 479
+        "line": 493
       },
       "exportSource": null
     },
@@ -36934,7 +37024,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 469
+        "line": 483
       },
       "exportSource": null
     },
@@ -36952,7 +37042,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 480
+        "line": 494
       },
       "exportSource": null
     },
@@ -36973,7 +37063,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 744
+        "line": 758
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -36997,7 +37087,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 743
+        "line": 757
       },
       "exportSource": {
         "file": "crates/idml-export/src/preferences.rs",
@@ -37018,11 +37108,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 415
+        "line": 422
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 415
+        "line": 422
       }
     },
     {
@@ -37039,11 +37129,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 414
+        "line": 421
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 414
+        "line": 421
       }
     },
     {
@@ -37060,11 +37150,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 416
+        "line": 423
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 416
+        "line": 423
       }
     },
     {
@@ -37081,11 +37171,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 413
+        "line": 420
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 413
+        "line": 420
       }
     },
     {
@@ -37110,7 +37200,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 587
+        "line": 594
       }
     },
     {
@@ -37135,7 +37225,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/navigation.rs",
-        "line": 588
+        "line": 595
       }
     },
     {
@@ -37604,7 +37694,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 528
+        "line": 542
       },
       "exportSource": null
     },
@@ -37645,7 +37735,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 528
+        "line": 542
       },
       "exportSource": null
     },
@@ -37686,7 +37776,7 @@
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/designmap.rs",
-        "line": 528
+        "line": 542
       },
       "exportSource": null
     },
@@ -39157,6 +39247,24 @@
       "attribute": "ParentStory",
       "kind": "attr",
       "reason": "`make_anchored_frame` reads ParentStory for text frames only; the walk credits the read to every kind the function handles."
+    },
+    {
+      "element": "HyperlinkPageItemSource",
+      "attribute": "Name",
+      "kind": "attr",
+      "reason": "A page item that is a hyperlink's source: InDesign writes a <HyperlinkPageItemSource> in designmap.xml when a frame or shape (not text) carries a hyperlink (IDML schema, designmap). No census document links an item; the importer reads it for engine ADR 1026 (a PowerPoint shape's click action)."
+    },
+    {
+      "element": "HyperlinkPageItemSource",
+      "attribute": "Self",
+      "kind": "attr",
+      "reason": "A page item that is a hyperlink's source: InDesign writes a <HyperlinkPageItemSource> in designmap.xml when a frame or shape (not text) carries a hyperlink (IDML schema, designmap). No census document links an item; the importer reads it for engine ADR 1026 (a PowerPoint shape's click action)."
+    },
+    {
+      "element": "HyperlinkPageItemSource",
+      "attribute": "SourcePageItem",
+      "kind": "attr",
+      "reason": "A page item that is a hyperlink's source: InDesign writes a <HyperlinkPageItemSource> in designmap.xml when a frame or shape (not text) carries a hyperlink (IDML schema, designmap). No census document links an item; the importer reads it for engine ADR 1026 (a PowerPoint shape's click action)."
     },
     {
       "element": "HyperlinkTextDestination",
