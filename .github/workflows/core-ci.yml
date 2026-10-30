@@ -10,6 +10,7 @@ concurrency:
 # Every `run:` step executes in engine/core (defaults below); `uses:` steps do
 # not honour that default, so their path inputs carry the prefix explicitly.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
