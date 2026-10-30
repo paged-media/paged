@@ -37,12 +37,12 @@ Doc ADRs [620](adr/620-right-to-left-and-east-asian-text.md) and
 [614](adr/614-floating-objects-and-content-controls.md) (content controls), on engine ADRs 1051
 (paragraph direction, script font slots) and 1052 (content controls).
 
-| Area             | Built |
-| ---------------- | ----- |
-| Direction        | `w:bidi` → `paragraphDirection` (alignment, indents, tabs and the list marker from the right edge); `w:rtl` → `characterDirection` (the run's neutrals embedded, complex script throughout) |
-| Script fonts     | `w:rFonts` eastAsia / cs / hint, `w:szCs`, `w:bCs`, `w:iCs`, `w:cs` → the engine's script slots; East Asian and complex-script characters drawn in their faces, an unset slot in the run's own |
+| Area             | Built                                                                                                                                                                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Direction        | `w:bidi` → `paragraphDirection` (alignment, indents, tabs and the list marker from the right edge); `w:rtl` → `characterDirection` (the run's neutrals embedded, complex script throughout)                                                                                                                     |
+| Script fonts     | `w:rFonts` eastAsia / cs / hint, `w:szCs`, `w:bCs`, `w:iCs`, `w:cs` → the engine's script slots; East Asian and complex-script characters drawn in their faces, an unset slot in the run's own                                                                                                                  |
 | Content controls | Inline `w:sdt`: plain / rich text, checkbox, drop-down, combo box, date read with tag, alias, id, lock and placeholder; poured as the engine's controls; the Content control panel (caret-opened) toggles, chooses, sets; a changed value saved into its `w:sdt`, `w:sdtPr` byte for byte but the changed state |
-| Save-back        | Edited script properties written as Word's `w:rPr`; a style's direction as `w:bidi`; zero-edit saves byte-identical |
+| Save-back        | Edited script properties written as Word's `w:rPr`; a style's direction as `w:bidi`; zero-edit saves byte-identical                                                                                                                                                                                             |
 
 Evidence: `docx-conformance/tests/it/w4b.rs`, `docx-export/src/controls.rs`,
 `doc-host-model/test/controls.spec.ts`, `doc-bundle/test/content-controls.spec.ts`; the engine's
@@ -57,6 +57,7 @@ saved files the conformance tests write with `W4B_DUMP=<dir>`).
 Not yet: a paragraph's own `w:bidi` changed on the canvas is written back only through its
 style; Word's `w:b`-not-for-complex-script rule; mirrored neutral glyphs; controls in headers,
 footers, notes and text boxes edited; data-bound controls; PDF form fields.
+
 ## W3 (files): tracked changes and comments read and saved back (2026-10-29)
 
 [Doc ADR 613](adr/613-tracked-changes-and-comments.md), over engine ADRs 1040 and 1020:

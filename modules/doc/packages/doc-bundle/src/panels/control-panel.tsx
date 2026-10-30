@@ -51,16 +51,9 @@ function Editor({
 }) {
   const { t } = useStrings();
   const c = at.control;
-  const [text, setText] = React.useState(
-    c.showingPlaceholder ? "" : at.text,
-  );
+  const [text, setText] = React.useState(c.showingPlaceholder ? "" : at.text);
   const [refused, setRefused] = React.useState(false);
-  React.useEffect(() => {
-    setText(c.showingPlaceholder ? "" : at.text);
-    setRefused(false);
-  }, [c.id, at.text, c.showingPlaceholder]);
-  const run = (a: ControlAction) =>
-    void act(a).then((ok) => setRefused(!ok));
+  const run = (a: ControlAction) => void act(a).then((ok) => setRefused(!ok));
   const locked = c.lock === "contentLocked" || c.lock === "sdtContentLocked";
   return (
     <div style={box} data-doc-control={c.kind} data-doc-control-id={c.id}>
@@ -131,7 +124,9 @@ function Editor({
         </div>
       )}
       {locked && <small>{t(WORD.controlLocked)}</small>}
-      {refused && <small data-doc-control-refused="">{t(WORD.refRefused)}</small>}
+      {refused && (
+        <small data-doc-control-refused="">{t(WORD.refRefused)}</small>
+      )}
     </div>
   );
 }
@@ -152,7 +147,12 @@ export function makeControlPanel(
     }
     return (
       <div data-doc-panel="control">
-        <Editor at={at} act={(a) => act(at, a)} />
+        {/* Keyed so a new control (or a new value) starts its own state. */}
+        <Editor
+          key={`${at.control.id}/${at.text}/${String(at.control.showingPlaceholder)}`}
+          at={at}
+          act={(a) => act(at, a)}
+        />
       </div>
     );
   };

@@ -400,11 +400,14 @@ function poured(
       // Doc ADR 614 — a control's runs make one range.
       if (run.control && offset > runStart) {
         const last = controls[controls.length - 1];
-        if (last && last.end === runStart && last.control.id === run.control.id) {
+        if (
+          last &&
+          last.end === runStart &&
+          last.control.id === run.control.id
+        ) {
           last.end = offset;
         } else {
           controls.push({ start: runStart, end: offset, control: run.control });
-
         }
       }
       // Doc ADR 613 — the run's tracked changes and comment ranges.

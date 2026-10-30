@@ -135,9 +135,7 @@ export async function applyControlAction(
   at: ControlAtCaret,
   action: ControlAction,
 ): Promise<boolean> {
-  const out = await host.document.mutate(
-    controlMutation(at, action) as never,
-  );
+  const out = await host.document.mutate(controlMutation(at, action) as never);
   return out.applied;
 }
 
