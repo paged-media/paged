@@ -1717,10 +1717,11 @@ fn map_cell(
                 };
                 cell_content_control(sdt, ctx, path, &mut paragraphs);
             }
-            // A table nested in the cell (doc ADR 614): kept whole for the
-            // native lowering, and shown as its paragraphs, held, where it
-            // stands. It is not one of the cell's `<w:p>` children the
-            // patcher counts, so `para` does not move.
+            // A table nested in the cell (doc ADR 614, amendment 1): kept whole for
+            // the native lowering, which makes it in the cell (engine ADR
+            // 1050) on the one empty paragraph that stands for it here,
+            // held. It is not one of the cell's `<w:p>` children the patcher
+            // counts, so `para` does not move.
             wml::TableCellChoice::Table(t) => {
                 let path = CellPath {
                     table_ord,
@@ -1730,19 +1731,15 @@ fn map_cell(
                 };
                 let table = map_table(t, ctx, table_ord);
                 let first = paragraphs.len() as u32;
-                for r in &table.rows {
-                    for c in &r.cells {
-                        for p in &c.paragraphs {
-                            let mut p = p.clone();
-                            p.source_cell = Some(path);
-                            p.held.in_content_control = true;
-                            paragraphs.push(p);
-                        }
-                    }
-                }
+                let mut stand_in = docx_core::Paragraph {
+                    source_cell: Some(path),
+                    ..Default::default()
+                };
+                stand_in.held.in_content_control = true;
+                paragraphs.push(stand_in);
                 nested_tables.push(docx_core::NestedTable {
                     first_para: first,
-                    para_count: paragraphs.len() as u32 - first,
+                    para_count: 1,
                     table,
                 });
             }

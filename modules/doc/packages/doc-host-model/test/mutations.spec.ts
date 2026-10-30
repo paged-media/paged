@@ -309,8 +309,72 @@ describe("tables", () => {
         footerRows: 0,
         columnWidths: [100, 150],
         rowHeights: [],
+        // Engine ADR 1025: every Word table lays out by Word's rules.
+        word: {
+          indent: 0,
+          autofit: true,
+          width: null,
+          cellWidths: [],
+          cantSplitRows: [],
+        },
       },
     });
+  });
+
+  it("insertTable carries Word's layout: fixed, widths, indent, rows that never split", () => {
+    const base = tableIr().story
+      .blocks[1] as unknown as import("../src/lowered.js").LoweredTable;
+    const table = {
+      ...base,
+      layout: {
+        fixed: true,
+        widthPct: 50,
+        cellWidthsPt: [72, 36],
+        indentPt: 12,
+        cantSplit: [false, true],
+        exactRows: [true, false],
+      },
+      rowHeightsPt: [20, 0],
+    };
+    const args = (
+      buildTableInsert(table, "Story/u1") as unknown as {
+        args: { word: unknown };
+      }
+    ).args;
+    expect(args.word).toEqual({
+      indent: 12,
+      autofit: false,
+      width: { unit: "percent", value: 50 },
+      cellWidths: [
+        {
+          row: base.cells[0]!.row,
+          col: base.cells[0]!.col,
+          width: { unit: "points", value: 72 },
+        },
+        {
+          row: base.cells[1]!.row,
+          col: base.cells[1]!.col,
+          width: { unit: "points", value: 36 },
+        },
+      ],
+      cantSplitRows: [1],
+    });
+    const cells = buildTableCells(table, "Story/u1", "t1") as unknown as {
+      args: { ops: { op: string; args: Record<string, unknown> }[] };
+    };
+    const exact = cells.args.ops.filter((o) => o.op === "setRowHeight");
+    expect(exact).toEqual([
+      {
+        op: "setRowHeight",
+        args: {
+          storyId: "Story/u1",
+          tableId: "t1",
+          row: 0,
+          height: 20,
+          autoGrow: false,
+        },
+      },
+    ]);
   });
 
   it("insertTable carries Word's least row heights", () => {

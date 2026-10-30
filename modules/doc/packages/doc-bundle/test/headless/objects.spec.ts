@@ -113,6 +113,38 @@ describe.skipIf(!docxPresent)(
       expect(props).not.toBeNull();
     }, 60_000);
 
+    it("a text box with no known page is an anchored text frame with its own story (engine ADR 1050)", async () => {
+      d = await openDoc("objects-text-boxes.docx");
+      const known = new Set<string>([
+        ...d.opened.storyIds,
+        ...(d.opened.ir.pageItems ?? []).flatMap((i) =>
+          i.item.kind === "textBox" ? [i.item.storyId] : [],
+        ),
+      ]);
+      const stories = (await d.h.objects.query("story")).map((a) =>
+        decodeURIComponent(a.replace(/^story:/, "")),
+      );
+      const texts = await Promise.all(
+        stories.filter((s) => !known.has(s)).map((s) => storyTexts(d!.host, s)),
+      );
+      expect(texts).toContainEqual(["TB2 unplaced box"]);
+    }, 60_000);
+
+    it("a nested table is a table in its cell; the cell keeps its own text (engine ADR 1050)", async () => {
+      d = await openDoc("objects-nested-tables.docx");
+      const tables = await d.h.objects.query(
+        `story:${d.opened.storyIds[0]} > table`,
+      );
+      expect(tables).toHaveLength(1);
+      const id = tables[0]!.replace(/^table:/, "");
+      const cell = (await d.h.objects.get(`cell:${id}/0,1`, "text")) as {
+        value: unknown;
+      };
+      // N1, the paragraph holding the nested table, N2: the nested table's
+      // text is no longer poured into the outer cell as paragraphs.
+      expect(cell.value).toBe("N1\n\nN2");
+    }, 60_000);
+
     it("an unedited export writes every part as it was", async () => {
       for (const name of [
         "objects-text-boxes.docx",

@@ -155,6 +155,7 @@ fn lower_image(img: &docx_core::Image) -> LoweredImage {
         anchor: None,
         fx: None,
         losses: Vec::new(),
+        layout: None,
     }
 }
 
@@ -629,13 +630,10 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                         3,
                     ));
                 }
-                let table = match ctx.flow_table(t) {
-                    Some(flow) => LoweredTable {
-                        flow,
-                        ..LoweredTable::default()
-                    },
-                    None => ctx.lower_table(t),
-                };
+                // Engine ADR 1025: a native Word table splits its rows across
+                // pages as Word does, so a row taller than the page no longer
+                // pours as plain paragraphs.
+                let table = ctx.lower_table(t);
                 blocks.push(LoweredBlock::Table(table));
             }
         }
@@ -918,12 +916,13 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         }
     }
 
-    // Pictures in table cells are not poured (a cell carries text only).
+    // Pictures in table cells (engine ADR 1050): characters of their lines,
+    // floats standing against their cell.
     if ctx.cell_pictures > 0 {
-        ctx.diagnostics.push(Diagnostic::warning(
+        ctx.diagnostics.push(Diagnostic::info(
             format!(
-                "{} picture(s) in table cells ({} of them floating) are NOT shown: \
-                 table cells are poured as text only",
+                "{} picture(s) in table cells shown in their cells ({} of them floating, \
+                 placed against the cell without wrapping its text)",
                 ctx.cell_pictures, ctx.cell_floats
             ),
             2,
@@ -1209,9 +1208,6 @@ struct Lowering {
     /// The height of the body on the page being lowered (page height less
     /// the top and bottom margins): what a table row has to fit in.
     text_height: Option<f32>,
-    /// Tables lowered as flowing text, a row being taller than the page
-    /// ([`Lowering::flow_table`]).
-    flowed_tables: usize,
     /// What Word's paragraph-spacing rule changes on the body paragraph
     /// about to be lowered ([`Lowering::word_spacing`]): its space before,
     /// and whether its space after is dropped. Taken by the lowering.
@@ -1919,6 +1915,7 @@ impl Lowering {
                     .is_some_and(|o| emu_to_pt(o) >= 0.5 * first_line)
         };
         let mut pushed_below = false;
+        let mut text_boxes: Vec<crate::ir::LoweredTextBox> = Vec::new();
         for (ri, r) in p.runs.iter().enumerate() {
             for (ii, img) in r.images.iter().enumerate() {
                 // A float placed as a page item (doc ADR 614) is not in
@@ -1947,9 +1944,8 @@ impl Lowering {
                     continue;
                 }
                 li.at = anchor_at(before, total);
-                if !self.in_cell {
-                    self.anchor_float(&mut li);
-                }
+                // A float in a cell stands against the cell (engine ADR 1050).
+                self.anchor_float(&mut li);
                 if !self.in_cell && li.anchor.is_none() {
                     if total == 0 {
                         self.pictures_alone += 1;
@@ -1959,14 +1955,20 @@ impl Lowering {
                 }
                 images.push(li);
             }
-            for ti in 0..r.text_boxes.len() {
-                if self.in_cell
-                    || !self
+            for (ti, tb) in r.text_boxes.iter().enumerate() {
+                if !self.in_cell
+                    && self
                         .w4
                         .planned(self.current_block, ri, objects::ObjectRef::TextBox(ti))
                 {
-                    self.w4.unplaced_boxes += 1;
+                    continue;
                 }
+                if self.in_cell {
+                    self.w4.unplaced_boxes += 1;
+                    continue;
+                }
+                // Engine ADR 1050: an anchored text frame of the paragraph.
+                text_boxes.push(self.lower_text_box(tb, anchor_at(before, total)));
             }
             before += r.text.chars().count() as u32;
         }
@@ -1991,6 +1993,7 @@ impl Lowering {
                     num_id: l.num_id,
                     level: l.level,
                 }),
+                text_boxes,
             },
             tail,
         )
@@ -2078,97 +2081,6 @@ impl Lowering {
         }
     }
 
-    /// The least a row of `t` can be tall, in points: per cell, every
-    /// paragraph's lines at its pitch, a paragraph taking at least as many
-    /// lines as its characters need at a NARROW average character (0.38 em:
-    /// real text runs wider, so this never overstates), plus its pictures.
-    fn row_height_floor(&mut self, t: &docx_core::Table, row: &docx_core::TableRow) -> f32 {
-        const NARROW_EM: f32 = 0.38;
-        let widths: Vec<f32> = t.column_widths.iter().map(|w| twip_to_pt(*w)).collect();
-        let mut tallest = 0.0f32;
-        let mut col = 0usize;
-        for cell in &row.cells {
-            let span = cell.grid_span.max(1) as usize;
-            let width: f32 = if widths.is_empty() {
-                self.text_width.unwrap_or(468.0) / row.cells.len().max(1) as f32
-            } else {
-                widths.iter().skip(col).take(span).sum()
-            };
-            col += span;
-            let mut height = 0.0f32;
-            for p in &cell.paragraphs {
-                let style = self.style_of(p).map(str::to_owned);
-                let pitch = self.paragraph_pitch(p).unwrap_or(12.0);
-                let mut em_width = 0.0f32;
-                for r in &p.runs {
-                    let (_, size) = self.resolve_face(Some(r), style.as_deref());
-                    let size_pt = size.map_or(10.0, half_pt_to_pt);
-                    em_width += r.text.chars().count() as f32 * size_pt * NARROW_EM;
-                    height += r
-                        .images
-                        .iter()
-                        .map(|i| emu_to_pt(i.height_emu))
-                        .sum::<f32>();
-                }
-                let lines = (em_width / width.max(1.0)).ceil().max(1.0);
-                height += lines * pitch;
-            }
-            tallest = tallest.max(height);
-        }
-        tallest
-    }
-
-    /// The paragraphs a table pours as when it cannot be a native table: one
-    /// of its rows is certainly taller than the page ([`row_height_floor`]).
-    /// Word splits such a row across pages; a native row never splits
-    /// (InDesign's rule), so the whole row would be overset and its text
-    /// gone. Typical of a web page saved as Word, whose article sits in one
-    /// cell of a layout table. The cells' paragraphs follow in reading
-    /// order (row by row, cell by cell), without the table's borders.
-    /// `None` for a table every row of which may fit.
-    fn flow_table(&mut self, t: &docx_core::Table) -> Option<Vec<LoweredParagraph>> {
-        if self.in_cell {
-            return None;
-        }
-        let page = self.text_height.filter(|h| *h > 0.0)?;
-        let floors: Vec<f32> = t.rows.iter().map(|r| self.row_height_floor(t, r)).collect();
-        let tallest = floors.iter().copied().fold(0.0_f32, f32::max);
-        if tallest <= page {
-            return None;
-        }
-        let mut out = Vec::new();
-        for row in &t.rows {
-            for cell in &row.cells {
-                if cell.v_merge == docx_core::VMerge::Continue {
-                    continue;
-                }
-                for (i, p) in cell.paragraphs.iter().enumerate() {
-                    let before = i.checked_sub(1).and_then(|k| cell.paragraphs.get(k));
-                    let after = cell.paragraphs.get(i + 1);
-                    self.spacing_override = self.word_spacing(before, p, after);
-                    let (para, _) =
-                        self.lower_body_paragraph(p, self.current_block as u32, None, Some(false));
-                    out.push(para);
-                }
-            }
-        }
-        self.flowed_tables += 1;
-        self.diagnostics.push(Diagnostic::warning(
-            format!(
-                "the table at body block {} has a row at least {:.0} pt tall on a page whose \
-                 body is {:.0} pt: Word splits the row across pages, a native table row never \
-                 splits and would be overset. Its {} paragraph(s) flow as text, in reading \
-                 order, without the table's borders; edits to them are not saved back",
-                self.current_block,
-                tallest,
-                page,
-                out.len()
-            ),
-            2,
-        ));
-        Some(out)
-    }
-
     /// Lower a table: resolve the grid (gridSpan widens a cell across columns,
     /// vMerge merges cells down rows) into positioned cells with spans. A
     /// vMerge-continue cell is absorbed into its restart cell above (not emitted).
@@ -2216,6 +2128,19 @@ impl Lowering {
                                 lp
                             })
                             .collect();
+                        // Doc ADR 614 amendment 1: each nested table on the
+                        // empty paragraph that stands for it.
+                        let nested = cell
+                            .nested_tables
+                            .iter()
+                            .map(|nt| {
+                                let table = self.lower_table(&nt.table);
+                                crate::ir::LoweredNestedTable {
+                                    paragraph: nt.first_para,
+                                    table,
+                                }
+                            })
+                            .collect();
                         let idx = cells.len();
                         let insets_pt = self.cell_insets(t, cell);
                         let cell_look =
@@ -2227,6 +2152,7 @@ impl Lowering {
                             row_span: 1,
                             col_span: span,
                             paragraphs,
+                            nested,
                             insets_pt: Some(insets_pt),
                             v_align: cell.v_align.map(|v| {
                                 match v {

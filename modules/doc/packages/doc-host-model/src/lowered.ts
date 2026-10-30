@@ -135,6 +135,31 @@ export interface LoweredParagraph {
   /** The Word list this paragraph is an item of (`w:numId`) and its level.
    *  Absent when it is not a list item. */
   list?: LoweredListRef;
+  /** Engine ADR 1050 — text boxes anchored in the paragraph that are not
+   *  page items: anchored text frames with stories of their own. */
+  textBoxes?: LoweredTextBox[];
+}
+
+/** Engine ADR 1050 — a float's layout among its story's text. */
+export interface LoweredFloatLayout {
+  wrap?: LoweredWrap;
+  /** Word's `behindDoc`. */
+  behind?: boolean;
+  /** Word's `allowOverlap="0"`. */
+  noOverlap?: boolean;
+}
+
+/** Engine ADR 1050 — a text box anchored in its paragraph. */
+export interface LoweredTextBox {
+  at?: number;
+  widthPt: number;
+  heightPt: number;
+  /** Absent for an inline box (a character of its line). */
+  anchor?: LoweredAnchor;
+  layout?: LoweredFloatLayout;
+  insetsPt: [number, number, number, number];
+  paragraphs: LoweredParagraph[];
+  fx?: NativeFx;
 }
 
 /** A list paragraph's list identity. */
@@ -175,6 +200,8 @@ export interface LoweredImage {
   fx?: NativeFx;
   /** What the engine cannot hold of the look, one line per kind. */
   losses?: string[];
+  /** Engine ADR 1050 — a float's wrap, z-order and overlap. */
+  layout?: LoweredFloatLayout;
 }
 
 /** `dml_native::native::NativeFx` (doc ADR 618): the lowering kit's own
@@ -268,6 +295,9 @@ export interface LoweredCell {
   vAlign?: string;
   /** Doc ADR 614 — Word's borders and shading on the cell's edges. */
   look?: LoweredCellLook;
+  /** Engine ADR 1050 — tables nested in the cell, each on the empty cell
+   *  paragraph `paragraph` that stands for it. */
+  nested?: { paragraph: number; table: LoweredTable }[];
 }
 
 export interface LoweredSection {

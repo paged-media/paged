@@ -379,6 +379,19 @@ pub struct LoweredCell {
     /// Word's borders and shading on the cell's four edges (doc ADR 614).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub look: Option<LoweredCellLook>,
+    /// Tables nested in the cell (engine ADR 1050), each made on the empty
+    /// paragraph `paragraph` of [`Self::paragraphs`] that stands for it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nested: Vec<LoweredNestedTable>,
+}
+
+/// A table nested in a cell (doc ADR 614 amendment 1).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredNestedTable {
+    /// The cell paragraph it takes.
+    pub paragraph: u32,
+    pub table: LoweredTable,
 }
 
 impl LoweredStory {
@@ -428,6 +441,11 @@ pub struct LoweredParagraph {
     /// The Word list this paragraph is an item of, when it is one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub list: Option<LoweredListRef>,
+    /// Text boxes anchored in this paragraph that are not page items: the
+    /// engine's anchored text frames (engine ADR 1050, doc ADR 614
+    /// amendment 1).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub text_boxes: Vec<LoweredTextBox>,
 }
 
 /// A list paragraph's list identity: the `w:numId` its items share and its
@@ -491,6 +509,10 @@ pub struct LoweredImage {
     /// What the engine cannot hold of the look, one line per kind.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub losses: Vec<String>,
+    /// For a float placed as an anchored object: its wrap, behind-text
+    /// z-order and overlap (engine ADR 1050).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<LoweredFloatLayout>,
 }
 
 /// A floating drawing's position and wrap, in points (thoughts ADR 035).
