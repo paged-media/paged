@@ -145,6 +145,24 @@ export interface NativeFeather {
   stops: [number, number][];
 }
 
+/** One entry of the object's effect stack (engine ADR 1008), as the
+ *  wire's `EffectEntrySpec` states it with its colour as `#RRGGBB`. An
+ *  InDesign kind (`dropShadow`, `innerShadow`, `outerGlow`, `feather`,
+ *  `gradientFeather`) carries only its place; its parameters are the
+ *  item's own fields. */
+export interface NativeEffect {
+  kind: string;
+  blendMode?: string;
+  opacityPct?: number;
+  radiusPt?: number;
+  color?: string;
+  distancePt?: number;
+  sizePct?: number;
+  startOpacityPct?: number;
+  endOpacityPct?: number;
+  blurPt?: number;
+}
+
 /** What a primitive carries beyond its solid fill and stroke. */
 export interface NativeFx {
   gradient?: NativeGradient;
@@ -156,6 +174,10 @@ export interface NativeFx {
   /** A soft edge's width, pt. */
   feather?: number;
   gradientFeather?: NativeFeather;
+  /** The object's effect stack, when it holds an effect InDesign has
+   *  none of (a blur, a colour overlay, a reflection): every effect in the
+   *  order it is drawn. */
+  effectStack?: NativeEffect[];
 }
 
 /** An axis-aligned rectangle (bars, plot frame, legend swatches). */
@@ -834,6 +856,26 @@ export function nativeFxOps(
         })),
       },
     });
+  }
+  // The stack last: its InDesign entries take the parameters written
+  // above; a line draws no gradient feather, so it names none.
+  const stack = (fx.effectStack ?? []).filter(
+    (e) => filled || e.kind !== "gradientFeather",
+  );
+  if (stack.length > 0) {
+    set("frameEffectStack", {
+      type: "effectStack",
+      value: {
+        entries: stack.map(({ color: hex, ...e }) =>
+          hex != null
+            ? {
+                ...e,
+                color: swatchIdForHex(normalizeHex(hex) ?? "000000"),
+              }
+            : e,
+        ),
+      },
+    } as Value);
   }
   return ops;
 }

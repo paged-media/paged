@@ -7461,6 +7461,7 @@ impl CanvasModel {
         ));
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
         out.extend(crate::export_losses::effect_stack_losses(&self.scene));
+        out.extend(crate::export_losses::appearance_losses(&self.scene));
         out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
@@ -8401,6 +8402,11 @@ impl CanvasModel {
                         ));
                         // Engine ADR 1008 — the effect stacks.
                         entries.extend(effect_stack_entries(f));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(f)),
+                        });
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -8783,6 +8789,11 @@ impl CanvasModel {
                         ));
                         // Engine ADR 1008 — the effect stacks.
                         entries.extend(effect_stack_entries(f));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(f)),
+                        });
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -9096,6 +9107,11 @@ impl CanvasModel {
                         ));
                         // Engine ADR 1008 — the effect stacks.
                         entries.extend(effect_stack_entries(p));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(p)),
+                        });
                         entries.extend(target_property_entries(
                             Some(p.fill_transparency.as_ref()),
                             p.stroke_transparency.as_ref(),
@@ -9445,6 +9461,11 @@ impl CanvasModel {
                         ));
                         // Engine ADR 1008 — the effect stacks.
                         entries.extend(effect_stack_entries(o));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(o)),
+                        });
                         entries.extend(target_property_entries(
                             Some(o.fill_transparency.as_ref()),
                             o.stroke_transparency.as_ref(),
@@ -15625,6 +15646,8 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameFillEffectStack
             | P::FrameStrokeEffectStack
             | P::FrameContentEffectStack
+            | P::FrameAppearance
+            | P::FrameAppearanceLayer
     )
 }
 

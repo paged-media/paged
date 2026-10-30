@@ -79,3 +79,18 @@ and paged.doc already lower the same DrawingML onto the engine's native items th
 - Out of scope, follow-ups: shapes in xlsx drawings (`xdr:sp`) are preserved but not drawn, so
   there is nothing yet to lower; the in-frame grid's effects (WP3.6); gradient strokes;
   surfacing `losses` in the workbook panel beside the 3-D flag.
+
+## Amendment 2026-10-30 — one wire form, and the effect stack (plan C10)
+
+`sheet-chart/src/native.rs` no longer keeps its own copy of the wire types and the restatement:
+it lowers through `dml_native::native::Lowering` (`resolve_paint`, `resolve_effects`,
+`fill_into`, `look_into`, `picture_alpha`) and re-exports `dml_native::native::NativeFx`, so the
+chart's `fx` is the mapper's own wire form (a primitive keeps its solid fill and stroke, so the
+form's `fill` and `stroke` stay unset). A blur, a solid fill overlay and a reflection now ride
+the item's effect stack (`effectStack`, engine ADR 1008; slide ADR 722 amendment 2026-10-30)
+instead of the loss list: `nativeFxOps` writes it last as `frameEffectStack`, after the
+per-field effects its InDesign entries name, a line's stack without the gradient feather it
+does not draw; the stack's colours are chart swatches. Evidence:
+`sheet-chart/src/native.rs` (`blur_overlay_and_reflection_ride_the_effect_stack`),
+`sheet-chart/tests/kinds.rs` (`native_fx_rides_the_ir`),
+`packages/sheet-host-model/test/chart-native-fx.spec.ts`.
