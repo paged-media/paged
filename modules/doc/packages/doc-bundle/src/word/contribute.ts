@@ -42,10 +42,17 @@ import {
   makeWordsStatus,
   makeZoomStatus,
 } from "./status-items.js";
+import { makeControlPanel } from "../panels/control-panel.js";
 import { makeReferencesPanel } from "../panels/references-panel.js";
+import {
+  applyControlAction,
+  controlAtCaret,
+  createControlStore,
+} from "./controls.js";
 import { referencesActions } from "./references.js";
 import {
   HEADER_BAR_COMMANDS,
+  CONTROL_PANEL,
   REFERENCES_PANEL,
   resolveHeaderFooter,
   type WordStructure,
@@ -298,6 +305,33 @@ export function contributeWord(
         }).dispose,
       );
     }
+  }
+
+  // Doc ADR 614 — the content control at the caret, edited from a panel
+  // the caret opens (the host has no anchored popover door).
+  const controls = createControlStore();
+  disposers.push(
+    host.contribute.panel({
+      id: CONTROL_PANEL,
+      ...makeControlPanel(controls, async (at, action) => {
+        const ok = await applyControlAction(host, at, action);
+        controls.set(await controlAtCaret(host));
+        return ok;
+      }),
+    }).dispose,
+  );
+  if (host.supports("text.selection@1")) {
+    let shownFor: string | null = null;
+    disposers.push(
+      host.text.onDidChangeSelection(() => {
+        void controlAtCaret(host).then((at) => {
+          controls.set(at);
+          const id = at ? `${at.storyId}/${at.control.id}` : null;
+          if (at && id !== shownFor) host.shell.openPanel(CONTROL_PANEL);
+          shownFor = id;
+        });
+      }).dispose,
+    );
   }
 
   // Doc ADR 612 — Word's References and Insert dialogs, as a panel.

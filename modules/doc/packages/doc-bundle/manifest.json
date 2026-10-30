@@ -28,7 +28,8 @@
     "panels": [
       "media.paged.doc.panel.outline",
       "media.paged.doc.panel.properties",
-      "media.paged.doc.panel.references"
+      "media.paged.doc.panel.references",
+      "media.paged.doc.panel.contentControl"
     ],
     "commands": [
       "media.paged.doc.command.placeDoc",
