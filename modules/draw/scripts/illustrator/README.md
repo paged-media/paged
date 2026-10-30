@@ -60,6 +60,18 @@ the input unchanged; and a discovery probe with out-of-range values
 computing past the probe timeout — keep every parameter in its dialog's
 range. Free Distort's `src*`/`dst*` frame is not settled.
 
+`appearance` (engine ADR 1043) is written and NOT YET RECORDED. It builds
+an object's several fills and strokes with the Appearance panel's own
+commands (`Adobe New Fill Shortcut`, `Adobe New Stroke Shortcut`; the DOM's
+`fillColor`, `strokeColor`, `strokeWidth`, `opacity` and `blendingMode`
+then write the targeted layer, or the object -- which one is what the
+recording says), exports each case as PNG-24 into `PAGED_PROBE_OUT`, and
+records Object > Expand Appearance part by part. Record it with
+`PAGED_PROBE_OUT` pointing at
+`engine/core/crates/paged-renderer/tests/fixtures/illustrator/appearance/`;
+a replay that rasterises the same appearance on the CPU lane and compares
+the PNGs is the follow-up.
+
 `clipboard-copy` (2026-10-28) is not a path operation: it records what
 Edit › Copy puts on the macOS clipboard, for the editor's vector clipboard
 (apps/editor ADR 289). Its runner, `run-clipboard-probe.sh <out-dir>`,

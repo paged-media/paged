@@ -74,6 +74,11 @@ pub(super) fn emit_oval_into(
             page, &poly, document, palette, fallback, color_ctx, content, module,
         );
     }
+    if !oval.appearance.is_empty() {
+        return super::appearance::emit_oval(
+            page, oval, document, palette, fallback, color_ctx, content, module,
+        );
+    }
     let Some(mode) = crate::module::effect_stack::stack_mode(&oval.effect_stack) else {
         return emit_oval_body(
             page, oval, document, palette, fallback, color_ctx, content, module,
@@ -1035,6 +1040,11 @@ pub(super) fn emit_rectangle_into(
             drop_shadow,
             content,
             module,
+        );
+    }
+    if !rect.appearance.is_empty() {
+        return super::appearance::emit_rectangle(
+            page, rect, document, palette, fallback, color_ctx, content, module,
         );
     }
     let Some(mode) = crate::module::effect_stack::stack_mode(&rect.effect_stack) else {

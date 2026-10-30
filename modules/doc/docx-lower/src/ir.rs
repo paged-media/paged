@@ -31,6 +31,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::ir_objects::*;
+
 /// The whole lowering of one Word document body.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,6 +82,9 @@ pub struct LoweredDoc {
     /// instruction and the blocks that hold its cached entries.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tocs: Vec<LoweredToc>,
+    /// Floating pictures and text boxes placed as page items (doc ADR 614).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub page_items: Vec<LoweredPageItem>,
 }
 
 /// A header or footer part's content (doc ADR 611).
@@ -344,6 +349,13 @@ pub struct LoweredTable {
     /// the Word table as it was.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub flow: Vec<LoweredParagraph>,
+    /// The table's own paragraph's style, which aligns the table (Word's
+    /// `w:tblPr/w:jc`; the engine sets a table as a character of its line).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub para_style_id: Option<String>,
+    /// What the engine does not lay out yet (doc ADR 614).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<LoweredTableLayout>,
 }
 
 /// One table cell, addressed by its resolved grid position.
@@ -364,6 +376,9 @@ pub struct LoweredCell {
     /// `CenterAlign` / `BottomAlign`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub v_align: Option<String>,
+    /// Word's borders and shading on the cell's four edges (doc ADR 614).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<LoweredCellLook>,
 }
 
 impl LoweredStory {
@@ -455,13 +470,15 @@ pub struct LoweredImage {
     /// A self-contained `data:<mime>;base64,…` URI the anchored frame links to.
     pub uri: String,
     /// For a FLOATING Word drawing (`wp:anchor`), where Word positions it and
-    /// how text wraps around it (thoughts ADR 035). It is still placed
-    /// INLINE (at [`Self::at`]), with a diagnostic, until the engine
-    /// can create a positioned, wrapped anchored object (RFI C-47/C-48);
-    /// this carries what that later lowering needs. Absent for an inline
-    /// picture.
+    /// how text wraps around it (thoughts ADR 035), as written. How it is
+    /// placed is [`Self::anchor`] (doc ADR 614); the wrap waits for the
+    /// engine's anchored objects to take one. Absent for an inline picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub float: Option<LoweredFloat>,
+    /// For a floating drawing placed as an anchored object (doc ADR 614):
+    /// the anchored-object settings. Absent for an inline picture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<LoweredAnchor>,
     /// The picture's DrawingML look as the shared mapper lowers it (doc
     /// ADR 618): fill, outline, opacity (`a:alphaModFix`) and effects,
     /// colours as `#RRGGBB`, a gradient's start in the picture's box.
@@ -505,6 +522,9 @@ pub struct LoweredFloat {
     /// `wp:simplePos` (x, y) from the page's top-left, when it is used.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub simple_pos_pt: Option<(f32, f32)>,
+    /// `wp:wrapPolygon`, in the drawing's own points.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wrap_polygon_pt: Vec<(f32, f32)>,
 }
 
 /// One axis of a float's position.

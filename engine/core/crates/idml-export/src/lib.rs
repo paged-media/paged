@@ -258,6 +258,32 @@ pub fn write_idml_with(
     original: &[u8],
     opts: &ExportOptions,
 ) -> Result<IdmlExport, WriteError> {
+    // Engine ADR 1043: IDML has one fill and one stroke per item; an
+    // item's appearance is baked to a group of single-paint items, the
+    // source kept in the carrier's label.
+    use paged_model::appearance::interchange as appearance;
+    let baked;
+    let doc = if doc
+        .spreads
+        .iter()
+        .any(|p| appearance::needs_bake(&p.spread))
+        || doc
+            .master_spreads
+            .values()
+            .any(|p| appearance::needs_bake(&p.spread))
+    {
+        let mut d = doc.clone();
+        for p in d.spreads.iter_mut() {
+            appearance::bake_spread(&mut p.spread);
+        }
+        for p in d.master_spreads.values_mut() {
+            appearance::bake_spread(&mut p.spread);
+        }
+        baked = d;
+        &baked
+    } else {
+        doc
+    };
     // Engine ADR 1008: IDML carries InDesign's effects in their slots
     // and nothing else; an item's effect stacks ride its label.
     use paged_model::effect_stack::label;

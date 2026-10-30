@@ -18,7 +18,7 @@
 
 //! Write a conformance fixture to a path, so the wasm-boundary smoke harness
 //! (a Node script booting the real docx-js artifact) has a real `.docx`.
-//! `cargo run -p docx-conformance --bin dump-fixture -- <path> [memo|tier1|one|pagination|line-spacing|breaks|continuous|columns|line-breaks|run-specials|cell-blank-lines|symbols|headers|footnote-numbering|floats|real-docx|keeps|merge|template|first-fit|first-fit-cases|…]`
+//! `cargo run -p docx-conformance --bin dump-fixture -- <path> [memo|tier1|one|pagination|line-spacing|breaks|continuous|columns|line-breaks|run-specials|cell-blank-lines|symbols|headers|footnote-numbering|floats|real-docx|keeps|merge|template|first-fit|first-fit-cases|objects-floats|objects-text-boxes|objects-nested-tables|objects-table-look|objects-languages|…]`
 
 fn main() {
     let path = std::env::args()
@@ -62,6 +62,11 @@ fn main() {
         "template" => docx_conformance::template_docx(),
         "first-fit" => docx_conformance::first_fit_docx(),
         "first-fit-cases" => docx_conformance::first_fit_cases_json().into_bytes(),
+        "objects-floats" => docx_conformance::objects_floats_docx(),
+        "objects-text-boxes" => docx_conformance::objects_text_boxes_docx(),
+        "objects-nested-tables" => docx_conformance::objects_nested_tables_docx(),
+        "objects-table-look" => docx_conformance::objects_table_look_docx(),
+        "objects-languages" => docx_conformance::objects_languages_docx(),
         _ => docx_conformance::memo_docx(),
     };
     std::fs::write(&path, bytes).expect("write fixture");

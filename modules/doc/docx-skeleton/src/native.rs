@@ -72,7 +72,7 @@ fn master_story_src(f: &LoweredMasterFrame) -> String {
 }
 
 /// One empty story: the pour fills it.
-fn empty_story(src: String, self_id: String) -> ParsedStory {
+pub(crate) fn empty_story(src: String, self_id: String) -> ParsedStory {
     ParsedStory {
         src,
         self_id,
@@ -89,7 +89,7 @@ fn empty_story(src: String, self_id: String) -> ParsedStory {
 /// A text frame on `[top, left, bottom, right]` holding `story`, as the
 /// skeleton's frames are: no fill or stroke, `LeadingOffset` first
 /// baseline, zero insets.
-fn text_frame(id: &str, story: &str, [top, left, bottom, right]: [f32; 4]) -> TextFrame {
+pub(crate) fn text_frame(id: &str, story: &str, [top, left, bottom, right]: [f32; 4]) -> TextFrame {
     let corner = |x: f32, y: f32| PathAnchor {
         anchor: (x, y),
         left: (x, y),

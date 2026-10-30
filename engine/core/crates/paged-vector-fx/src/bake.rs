@@ -359,6 +359,7 @@ pub fn oval_as_polygon(o: &Oval) -> Polygon {
         visible: o.visible,
         locked: o.locked,
         end_cap: o.end_cap.clone(),
+        appearance: o.appearance.clone(),
         ..Polygon::new(id, o.bounds)
     }
 }

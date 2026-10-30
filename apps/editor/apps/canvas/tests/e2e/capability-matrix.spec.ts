@@ -1893,6 +1893,115 @@ const TEXT_PROBES: Probe[] = [
 // Path-point ops target a scratch path created per probe (setupUndo
 // undoes the insert on both paths) so the classification is the
 // engine's, never the fixture's shape inventory.
+/** Engine ADR 1039 — symbols (protocol 78). Each probe makes a scratch
+ *  frame and a symbol of it (`Symbol/probe`, the source left on the page),
+ *  so each counts two setup undos, three where it places an instance. */
+async function scratchSymbol(page: Page, pageId: string): Promise<boolean> {
+  const frames = await newFrames(page, pageId, [[10, 10, 40, 40]]);
+  if (!frames) return false;
+  const made = await tryMutate(page, {
+    op: "createSymbol",
+    args: {
+      name: "Probe",
+      elementIds: frames,
+      symbolId: "Symbol/probe",
+      replace: false,
+    },
+  });
+  return made.ok;
+}
+
+/** An instance of `Symbol/probe` on the page; its ElementId. */
+async function scratchInstance(
+  page: Page,
+  pageId: string,
+): Promise<{ kind: string; id: string } | null> {
+  return page.evaluate(async (pid) => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            mutate: (m: unknown) => Promise<{
+              kind: string;
+              payload?: { createdId?: { kind: string; id: string } | null };
+            }>;
+          };
+        };
+      }
+    ).__canvas;
+    const reply = await c.client.mutate({
+      op: "placeSymbolInstance",
+      args: { symbolId: "Symbol/probe", pageId: pid, at: [200, 200] },
+    });
+    return reply.kind === "mutationApplied"
+      ? (reply.payload?.createdId ?? null)
+      : null;
+  }, pageId);
+}
+
+const SYMBOL_PROBES: Probe[] = [
+  {
+    op: "createSymbol",
+    build: async ({ page, fx }) => {
+      const frames = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 40, 40],
+      ]);
+      return frames
+        ? {
+            op: "createSymbol",
+            args: { name: "Probe", elementIds: frames, replace: false },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "redefineSymbol",
+    build: async ({ page, fx }) => {
+      if (!(await scratchSymbol(page, fx.pages[0].pageId))) return null;
+      return {
+        op: "redefineSymbol",
+        args: { symbolId: "Symbol/probe", elementIds: [], name: "Probe 2" },
+      };
+    },
+    setupUndo: 2,
+  },
+  {
+    op: "placeSymbolInstance",
+    build: async ({ page, fx }) =>
+      (await scratchSymbol(page, fx.pages[0].pageId))
+        ? {
+            op: "placeSymbolInstance",
+            args: {
+              symbolId: "Symbol/probe",
+              pageId: fx.pages[0].pageId,
+              at: [200, 200],
+            },
+          }
+        : null,
+    setupUndo: 2,
+  },
+  {
+    op: "breakSymbolLink",
+    build: async ({ page, fx }) => {
+      if (!(await scratchSymbol(page, fx.pages[0].pageId))) return null;
+      const instance = await scratchInstance(page, fx.pages[0].pageId);
+      return instance
+        ? { op: "breakSymbolLink", args: { elementId: instance } }
+        : null;
+    },
+    setupUndo: 3,
+  },
+  {
+    op: "deleteSymbol",
+    build: async ({ page, fx }) =>
+      (await scratchSymbol(page, fx.pages[0].pageId))
+        ? { op: "deleteSymbol", args: { symbolId: "Symbol/probe" } }
+        : null,
+    setupUndo: 2,
+  },
+];
+
 const GEOMETRY_PROBES: Probe[] = [
   {
     op: "pathPointInsert",
@@ -3268,6 +3377,7 @@ test("AC-E2E-CAPS — every wire op's engine support matches the table", async (
 
   const geoFx = await loadFixture(page, "geometry");
   await runProbes(page, GEOMETRY_PROBES, geoFx, results);
+  await runProbes(page, SYMBOL_PROBES, geoFx, results);
 
   const condFx = await loadFixture(page, "conditions");
   await runProbes(page, CONDITION_PROBES, condFx, results);

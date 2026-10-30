@@ -919,6 +919,10 @@ property_paths! {
         FrameFillEffectStack => "frameFillEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         FrameStrokeEffectStack => "frameStrokeEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         FrameContentEffectStack => "frameContentEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        // Engine ADR 1043 — native appearance: the whole layer list, and
+        // one layer by index.
+        FrameAppearance => "frameAppearance" : list_of("PaintLayerSpec", Wire::Appearance),
+        FrameAppearanceLayer => "frameAppearanceLayer" : operation("AppearanceLayerSpec", Wire::AppearanceLayer),
         CellFillColor => "cellFillColor" : color().idml(idml![attr(Cell | CellStyle, FillColor)]),
         CellFillTint => "cellFillTint" : pct().default_num(100.0).idml(idml![attr(Cell | CellStyle, FillTint)]),
         CellInsetTop => "cellInsetTop" : length_pos().idml(idml![attr(Cell, TextTopInset)]),
@@ -1498,8 +1502,10 @@ mod tests {
         //
         // 265 -> 266: ADR 1037 — an image frame's filter stack.
         //
-        // 266 -> 267: ADR 1042 — a group's vector effects.
-        assert_eq!(cat.settable_paths.len(), 267, "settable path count drifted");
+        // 266 -> 268: ADR 1043 — an item's appearance, and one layer of it.
+        //
+        // 268 -> 269: ADR 1042 — a group's vector effects.
+        assert_eq!(cat.settable_paths.len(), 269, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings
