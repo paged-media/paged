@@ -4712,6 +4712,7 @@
             "placeSymbolInstance",
             "breakSymbolLink",
             "deleteSymbol",
+            "expandAppearance",
             "onMaster",
             "createMaster",
             "deleteMaster",

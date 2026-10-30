@@ -228,7 +228,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 258: ADR 1031 added the gradient fill's start.
         // 262: ADR 1008 added the effect stack of each target.
         // 264: ADR 1039 added a symbol instance's tint and 9-slice guides.
-        264,
+        // 265: ADR 1042 added a group's vector effects.
+        265,
         "the advertised roster changed; move the count with the decision"
     );
 }

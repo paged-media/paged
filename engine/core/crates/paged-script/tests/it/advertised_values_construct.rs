@@ -106,6 +106,11 @@ const STRUCTURED: &[(&str, &str)] = &[
         "frameContentEffectStack",
         "{ type: 'effectStack', value: { entries: [] } }",
     ),
+    // Engine ADR 1042 — a group's vector effects.
+    (
+        "groupEffectStack",
+        "{ type: 'effectStack', value: { entries: [{ kind: 'pathfinder' }] } }",
+    ),
     (
         "pluginMetadata",
         "{ type: 'pluginMetadata', value: { key: 'x-paged:probe', value: '1' } }",

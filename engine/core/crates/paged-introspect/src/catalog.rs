@@ -319,6 +319,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.placeSymbolInstance", "(symbolId, pageId, [x, y]?, [a, b, c, d]?)", "string | null", "write", "Place an instance, its registration point at [x, y] page pt (omit: the page centre); returns its instance:<id> address."),
         f!("paged.breakSymbolLink", "(elementId)", "string | null", "write", "Break Link to Symbol: the instance becomes ordinary items; returns the new root's address."),
         f!("paged.deleteSymbol", "(symbolId)", "bool", "write", "Delete a symbol; its instances become ordinary items first."),
+        f!("paged.expandAppearance", "(elementId)", "bool", "write", "Expand Appearance: the item becomes what its live vector effects draw (engine ADR 1042)."),
         f!("paged.createMaster", "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })", "bool", "author", "Create a master spread: one page of the given size, or a copy of another master."),
         f!("paged.deleteMaster", "(masterId)", "bool", "author", "Delete a master no page applies."),
         f!("paged.renameMaster", "(masterId, name?)", "bool", "write", "Set (omit/null: clear) a master's name."),

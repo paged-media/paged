@@ -442,9 +442,17 @@ fn the_effects_survive_a_paged_round_trip() {
         .export_paged(paged_canvas::channel::PROTOCOL_VERSION.0)
         .expect("export .paged");
     let back = CanvasModel::load("back", &bytes, CanvasOptions::default()).expect("reload");
-    assert_eq!(stack(&back, &r1(), "frameEffectStack")[0].kind, EffectKind::ZigZag);
     assert_eq!(
-        stack(&back, &el(ElementId::Group("g1".into())), "groupEffectStack")[0].kind,
+        stack(&back, &r1(), "frameEffectStack")[0].kind,
+        EffectKind::ZigZag
+    );
+    assert_eq!(
+        stack(
+            &back,
+            &el(ElementId::Group("g1".into())),
+            "groupEffectStack"
+        )[0]
+        .kind,
         EffectKind::Pathfinder
     );
 }

@@ -351,6 +351,13 @@
       "summary": "Delete a symbol; its instances become ordinary items first."
     },
     {
+      "name": "paged.expandAppearance",
+      "params": "(elementId)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Expand Appearance: the item becomes what its live vector effects draw (engine ADR 1042)."
+    },
+    {
       "name": "paged.createMaster",
       "params": "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })",
       "returns": "bool",
