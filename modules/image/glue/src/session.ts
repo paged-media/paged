@@ -145,7 +145,21 @@ import {
   type SelectionStats,
   type StrokeTool,
 } from "./engine";
-import { imageToPage, pageToImage, resolveFrameFit } from "./frame-fit";
+import {
+  imageToPage,
+  pageToImage,
+  resolveFrameFit,
+  type FitTransform,
+} from "./frame-fit";
+import {
+  emptyRender,
+  fitRuns,
+  newTypeSource,
+  renderTypeSource,
+  type TypeFrame,
+  type TypeSource,
+  type TypeWarp,
+} from "./type-layer";
 import { claimImageTiles } from "./tile-provider";
 import { gradientKindLabel, warpKindLabel } from "./words";
 import { readPgil } from "./object-model/pgil";
@@ -223,6 +237,10 @@ import {
   type HistoryOps,
   type PresetOps,
 } from "./session-presets";
+import {
+  createWorkspaceController,
+  type WorkspaceController,
+} from "./workspace";
 
 /** The fixed v0 feather sigma (px) the `featherSelection` command uses
  *  when the caller passes none (a slider is a follow-up). */
@@ -342,6 +360,7 @@ export type ImageDialog =
   | { kind: "trim" }
   | { kind: "rotate" }
   | { kind: "exportAs" }
+  | { kind: "newGuide" }
   | { kind: "blendingOptions"; index: number }
   | { kind: "layerStyle"; index: number; pane: LayerStylePane }
   | { kind: "globalLight" }
@@ -375,6 +394,16 @@ export type CurvesPick = "black" | "grey" | "white";
 export type ChannelCurves = Record<"r" | "g" | "b", Array<[number, number]>>;
 
 export interface ImageSessionState {
+  /** WP5.10 — the type layer being edited on the canvas, and the
+   *  session its writes merge into (one undo step), or null. */
+  typeEdit: {
+    index: number;
+    session: string;
+    text: string;
+    /** The image frame's fit on its page, for the overlay (null until
+     *  read). */
+    fit: FitTransform | null;
+  } | null;
   engine: EngineStatus;
   /** The honest boot/GPU detail when something is off. */
   engineDetail: string | null;
@@ -628,6 +657,9 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   /** Vectors inside the image: the paths the Pen and the shape tools
    *  draw, vector masks and shape layers (image ADR 476). */
   vectors(): VectorController;
+  /** WP5.12 — guides, count, notes, slices, the Ruler, the snapping and
+   *  the Info rows (image ADR 475, `workspace.ts`). */
+  workspace(): WorkspaceController;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -872,7 +904,9 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   applyAverage(): Promise<boolean>;
   /** Show one of the Image dialogs (Image Size, Trim, Arbitrary
    *  rotation) on top of the panel. */
-  openDialog(kind: "imageSize" | "trim" | "rotate" | "exportAs"): boolean;
+  openDialog(
+    kind: "imageSize" | "trim" | "rotate" | "exportAs" | "newGuide",
+  ): boolean;
   /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
    *  active one by default): fill opacity, knockout and Blend If. */
   openBlendingOptions(index?: number): boolean;
@@ -1435,6 +1469,38 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   /** Layer ▸ Rasterize: a fill layer's or smart object's render becomes
    *  pixels. */
   rasterizeLayer(index: number): Promise<boolean>;
+  /** WP5.10 — a new TYPE layer at `frame` (image px): a point (a click)
+   *  or a box (a drag), its text `text` (the Type section's when
+   *  omitted, else a placeholder), styled from the Type section and the
+   *  foreground colour, laid out and drawn by the engine. Opens the
+   *  on-canvas editing session on it. Resolves the new layer's index, or
+   *  null when nothing was added (no image, no story door). */
+  addTypeLayer(frame: TypeFrame, text?: string): Promise<number | null>;
+  /** A type layer's source, or null for another layer. */
+  typeLayerSource(index: number): TypeSource | null;
+  /** Change a type layer's source (`edit` returns the new one) and
+   *  re-render it through the engine. `session` names an editing
+   *  session: its writes are one undo step. */
+  editTypeLayer(
+    index: number,
+    edit: (src: TypeSource) => TypeSource,
+    session?: string,
+  ): Promise<boolean>;
+  /** Start editing a type layer's text on the canvas (the overlay). */
+  beginTypeEdit(index: number): boolean;
+  /** The text being typed in the overlay: re-rendered as it changes,
+   *  every write of the session one undo step. */
+  setTypeEditText(text: string): Promise<boolean>;
+  /** End the editing session. */
+  endTypeEdit(): void;
+  /** Type ▸ Warp Text: the active type layer's warp. */
+  setTypeWarp(warp: TypeWarp, index?: number): Promise<boolean>;
+  /** Re-render every type layer whose pixels are stale (after a move or
+   *  Image Size). */
+  refreshTypeLayers(): Promise<number>;
+  /** Type ▸ Paint text into layer: the raster type of before, at the
+   *  last type-tool point (the image centre before any). */
+  paintTextIntoLayer(): Promise<boolean>;
   setLayerFillOpacity(index: number, fill: number): Promise<boolean>;
   /** Blend If's 32 sliders, or null to clear. */
   setLayerBlendIf(
@@ -1983,6 +2049,13 @@ const L = defineMessages("image.layerOps", {
   scaleEffects: "Scale effects",
   showEffects: "Show all effects",
   hideEffects: "Hide all effects",
+  newTypeLayer: "New type layer",
+  editType: "Edit type",
+  typeAdded: "Type layer “{name}” added — type to edit it, Esc to finish.",
+  typePlaceholder: "Lorem ipsum",
+  notATypeLayer: "The layer is not a type layer.",
+  noStoryDoor:
+    "This host cannot lay out type layers (it has no render.story door).",
   newAdjustmentLayer: "New adjustment layer",
   adjustment: "Adjustment",
   newFillLayer: "New fill layer",
@@ -2086,6 +2159,7 @@ export function createImageSession(host: BundleHost): ImageSession {
   // Selection and masking (created below, once `api` helpers exist).
   let maskingRef: MaskingController | null = null;
   let vectorsRef: VectorController | null = null;
+  let workspaceRef: WorkspaceController | null = null;
   // The paint interaction machine (pointer sampling only — the stroke's
   // base snapshot + coverage live engine-side).
   let brushMachineRef: BrushMachine | null = null;
@@ -2101,6 +2175,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     engineDetail: null,
     gpu: false,
     source: null,
+    typeEdit: null,
     params: freshIdentityParams(),
     histogram: null,
     compositedFrame: null,
@@ -2503,6 +2578,8 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.layers = EMPTY_LAYER_STACK;
       state.history = null;
     }
+    // The workspace rides the stack (undo, redo, open all move it).
+    workspaceRef?.sync();
   };
 
   /** Fold the stack into the bound engine-held image, re-read the
@@ -3572,6 +3649,16 @@ export function createImageSession(host: BundleHost): ImageSession {
       // Compute the levels/curves histogram, bind the stack + selection,
       // and build the crop machine.
       refreshSourceReadout();
+      // The file's ruler guides (resource 1032) are where the image's
+      // workspace starts — not an undo step (image ADR 475).
+      if (psdHandle !== null && engine) {
+        try {
+          engine.adoptPsdGuides(psdHandle);
+          refreshLayers();
+        } catch (err) {
+          host.log.debug("PSD guides not adopted", err);
+        }
+      }
       // The selection kept for the revision the frame shows now; one kept
       // for another revision lay over pixels that have moved since.
       if (ref) openRecord = await frameRecordOf(ref, bytes).catch(() => null);
@@ -4099,12 +4186,50 @@ export function createImageSession(host: BundleHost): ImageSession {
   const historyOps = createHistoryOps(presetCtx);
   const presetOps = createPresetOps(presetCtx);
 
+  workspaceRef = createWorkspaceController({
+    host,
+    engine: () => engine,
+    source: () => state.source,
+    ppi: () => state.ppi,
+    selection: () => state.selection,
+    emit,
+    setStatus,
+    markEdited: () => {
+      state.uncommitted = true;
+      state.saveBack = null;
+      refreshLayers();
+    },
+    rotateCanvas: (degrees) => api.rotateCanvas(degrees),
+  });
+  const workspace = workspaceRef;
+  // ── type layer plumbing (WP5.10) ──
+  let typeSessionCounter = 0;
+  let lastTypePoint: [number, number] | null = null;
+  /** The page the engine draws type stories on: the image frame's (any
+   *  page would do — the story is drawn alone). */
+  const storyPage = async (): Promise<string | null> => {
+    const fit = await resolveFrameFit(host, state.source, "type layer");
+    return fit?.pageId ?? host.viewport.activePage() ?? null;
+  };
+  /** The overlay's writes, latest-wins: typing faster than the engine
+   *  renders drops the intermediate texts, never the last one. */
+  const typeTextWrites = latestWins((): Promise<boolean> => {
+    const e = state.typeEdit;
+    if (!e) return Promise.resolve(false);
+    return api.editTypeLayer(
+      e.index,
+      (src) => ({ ...src, text: e.text }),
+      e.session,
+    );
+  });
+
   const api: ImageSession = {
     ...historyOps,
     ...presetOps,
     ...retouch,
     masking: () => masking,
     vectors: () => vectors,
+    workspace: () => workspace,
     state: () => state,
 
     onDidChange(listener) {
@@ -4945,6 +5070,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     psdExport() {
       if (psdHandle === null || !engine || !state.psd) return null;
       try {
+        // The image's guides as the file's resource 1032 (unchanged
+        // guides leave the bytes alone: the preservation rule).
+        engine.psdWriteGuides(psdHandle);
         return { bytes: engine.psdSave(psdHandle), fileName: state.psd.name };
       } catch (err) {
         setStatus(t(S.psdSaveFailed, { error: errText(err) }));
@@ -4980,6 +5108,7 @@ export function createImageSession(host: BundleHost): ImageSession {
             rgba,
           );
           refreshPsdLayers();
+          engine.psdWriteGuides(psdHandle);
           result = {
             bytes: engine.psdSave(psdHandle),
             fileName: `${stem}.psd`,
@@ -6218,6 +6347,17 @@ export function createImageSession(host: BundleHost): ImageSession {
     setType(p) {
       state.type = { ...state.type, ...p };
       emit();
+      // The Character and Paragraph panels act on the active TYPE layer
+      // too (WP5.10): the whole layer takes the new setting.
+      const active = state.layers.layers[state.layers.active];
+      if (active?.kind === "type" && engine) {
+        const session = state.typeEdit?.session;
+        void api.editTypeLayer(
+          active.index,
+          (src) => applyTypeSettings(src, p),
+          session,
+        );
+      }
     },
 
     async paintText([x, y], text, family, sizePx) {
@@ -7181,7 +7321,154 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
 
     rasterizeLayer(index) {
+      if (state.typeEdit?.index === index) api.endTypeEdit();
       return layerOp(L.rasterize, () => engine!.layerRasterize(index));
+    },
+
+    // ── TYPE LAYERS (WP5.10) ──
+    async addTypeLayer(frame, text) {
+      if (!engine || !state.source) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return null;
+      }
+      if (!host.supports("render.story@1")) {
+        setStatus(t(L.noStoryDoor));
+        return null;
+      }
+      lastTypePoint = [frame.x, frame.y];
+      const body = text ?? (state.type.text || t(L.typePlaceholder));
+      const src = sourceFromTypeState(
+        state.type,
+        state.brush.color,
+        frame,
+        body,
+      );
+      const pageId = await storyPage();
+      if (!pageId) {
+        setStatus(t(L.noStoryDoor));
+        return null;
+      }
+      state.busy = true;
+      emit();
+      let index: number;
+      try {
+        const render =
+          (await renderTypeSource(host, pageId, src)) ?? emptyRender(src);
+        index = await engine.layerAddType(JSON.stringify(src), render, "");
+        refreshLayers();
+      } catch (err) {
+        state.busy = false;
+        setStatus(
+          t(S.whatFailed, { what: t(L.newTypeLayer), error: errText(err) }),
+        );
+        refreshLayers();
+        emit();
+        return null;
+      }
+      state.busy = false;
+      await recomposite();
+      setStatus(t(L.typeAdded, { name: activeLayerName() }));
+      api.beginTypeEdit(index);
+      return index;
+    },
+
+    typeLayerSource(index) {
+      if (!engine) return null;
+      try {
+        return (engine.layerTypeSource(index)?.source as TypeSource) ?? null;
+      } catch {
+        return null;
+      }
+    },
+
+    async editTypeLayer(index, edit, session) {
+      const current = api.typeLayerSource(index);
+      if (!engine || !current) {
+        setStatus(t(L.notATypeLayer));
+        return false;
+      }
+      const next = edit(structuredClone(current));
+      next.runs = fitRuns(next.runs, next.text);
+      const pageId = await storyPage();
+      if (!pageId || !host.supports("render.story@1")) {
+        setStatus(t(L.noStoryDoor));
+        return false;
+      }
+      return layerOpAsync(L.editType, async () => {
+        const render =
+          (await renderTypeSource(host, pageId, next)) ?? emptyRender(next);
+        await engine!.layerSetType(
+          index,
+          JSON.stringify(next),
+          render,
+          session ?? "",
+        );
+        // The rows now (the composite that follows may decline without a
+        // GPU; the layer changed either way).
+        refreshLayers();
+      });
+    },
+
+    beginTypeEdit(index) {
+      const src = api.typeLayerSource(index);
+      if (!src) {
+        setStatus(t(L.notATypeLayer));
+        return false;
+      }
+      typeSessionCounter += 1;
+      const sessionId = `edit-${typeSessionCounter}`;
+      state.typeEdit = { index, session: sessionId, text: src.text, fit: null };
+      emit();
+      void resolveFrameFit(host, state.source, "type overlay").then((fit) => {
+        if (state.typeEdit?.session !== sessionId) return;
+        state.typeEdit = { ...state.typeEdit, fit };
+        emit();
+      });
+      return true;
+    },
+
+    async setTypeEditText(text) {
+      const edit = state.typeEdit;
+      if (!edit) return false;
+      state.typeEdit = { ...edit, text };
+      emit();
+      return typeTextWrites();
+    },
+
+    endTypeEdit() {
+      if (!state.typeEdit) return;
+      state.typeEdit = null;
+      emit();
+    },
+
+    async setTypeWarp(warp, index) {
+      const i = index ?? state.layers.active;
+      return api.editTypeLayer(i, (src) => ({ ...src, warp: { ...warp } }));
+    },
+
+    async refreshTypeLayers() {
+      if (!engine) return 0;
+      let n = 0;
+      for (const row of state.layers.layers) {
+        if (row.kind !== "type" || !row.typeStale) continue;
+        if (await api.editTypeLayer(row.index, (src) => src)) n++;
+      }
+      return n;
+    },
+
+    async paintTextIntoLayer() {
+      const src = state.source;
+      if (!src) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      const at = lastTypePoint ?? [src.width / 2, src.height / 2];
+      return api.paintText(
+        at,
+        state.type.text || t(L.typePlaceholder),
+        state.type.family,
+        state.type.sizePx,
+      );
     },
 
     setLayerFillOpacity(index, fill) {
@@ -7754,4 +8041,84 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
   };
   return api;
+}
+
+// ── type layers (WP5.10) ──
+
+/** A new type layer's source from the Type section's settings and the
+ *  foreground colour. */
+export function sourceFromTypeState(
+  type: ImageSessionState["type"],
+  color: readonly number[],
+  frame: TypeFrame,
+  text: string,
+): TypeSource {
+  const c = (v: number | undefined) =>
+    Math.max(0, Math.min(255, Math.round((v ?? 0) * 255)));
+  return newTypeSource(
+    text,
+    frame,
+    {
+      font: type.family,
+      style: type.style,
+      size: type.sizePx,
+      color: [c(color[0]), c(color[1]), c(color[2])],
+      tracking: type.trackingPerMille,
+      leading: type.leadingPx,
+      baselineShift: type.baselineShiftPx,
+      horizontalScale: type.hScalePct / 100,
+      verticalScale: type.vScalePct / 100,
+      underline: type.underline,
+      strikethrough: type.strikethrough,
+      ligatures: type.ligatures,
+      caps: type.textCase === "upper" ? "allCaps" : "normal",
+    },
+    type.align,
+  );
+}
+
+/** The Character / Paragraph panel's settings (a `setType` patch) applied
+ *  to every run and paragraph of a type layer. */
+export function applyTypeSettings(
+  src: TypeSource,
+  p: Partial<ImageSessionState["type"]>,
+): TypeSource {
+  const runs = src.runs.map((r) => ({
+    ...r,
+    ...(p.family !== undefined ? { font: p.family, postscript: null } : {}),
+    ...(p.style !== undefined ? { style: p.style, postscript: null } : {}),
+    ...(p.sizePx !== undefined ? { size: p.sizePx } : {}),
+    ...(p.trackingPerMille !== undefined
+      ? { tracking: p.trackingPerMille }
+      : {}),
+    ...(p.leadingPx !== undefined ? { leading: p.leadingPx } : {}),
+    ...(p.baselineShiftPx !== undefined
+      ? { baselineShift: p.baselineShiftPx }
+      : {}),
+    ...(p.hScalePct !== undefined
+      ? { horizontalScale: p.hScalePct / 100 }
+      : {}),
+    ...(p.vScalePct !== undefined ? { verticalScale: p.vScalePct / 100 } : {}),
+    ...(p.underline !== undefined ? { underline: p.underline } : {}),
+    ...(p.strikethrough !== undefined
+      ? { strikethrough: p.strikethrough }
+      : {}),
+    ...(p.ligatures !== undefined ? { ligatures: p.ligatures } : {}),
+    ...(p.textCase !== undefined
+      ? {
+          caps:
+            p.textCase === "upper" ? ("allCaps" as const) : ("normal" as const),
+        }
+      : {}),
+  }));
+  const paragraphs =
+    p.align !== undefined
+      ? src.paragraphs.map((q) => ({ ...q, align: p.align! }))
+      : src.paragraphs;
+  return {
+    ...src,
+    ...(p.text !== undefined && p.text !== "" ? { text: p.text } : {}),
+    runs,
+    paragraphs,
+  };
 }

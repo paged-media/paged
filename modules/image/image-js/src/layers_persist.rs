@@ -70,6 +70,15 @@
 //! and i64 profile slot (−1: none) — the CMYK profile the mode converts
 //! through.
 //!
+//! Version 7 (type layers, image ADR 474) adds the layer kind code 5: the
+//! type source as JSON, i64 slot of the `TySh` block a PSD gave it (−1:
+//! none), u8 stale; an older reader takes a type layer as its pixels.
+//!
+//! After the masking block (ADR 470) comes the WORKSPACE block (image ADR
+//! 475, `"PGWS"`): guides, count marks, notes and slices
+//! (`workspace.rs` documents its layout). Both blocks are tagged and
+//! absent when empty, so an older manifest still reads.
+//!
 //! The history is not persisted: a reopened stack starts with none.
 
 use std::sync::Arc;
@@ -80,12 +89,13 @@ use image_graph::journal::TileJournal;
 
 use super::{
     Adjustment, BlendIf, CompAppearance, CompEntry, FillLayer, FillSource, Knockout, Layer,
-    LayerComp, LayerExt, LayerGroup, LayerKind, LayerLocks, LayerStack, SmartSource,
+    LayerComp, LayerExt, LayerGroup, LayerKind, LayerLocks, LayerStack, SmartSource, TypeLayer,
+    TypeSource,
 };
 use crate::ingest::{AdjustParams, IngestError};
 
 const MAGIC: &[u8; 4] = b"PGIL";
-const VERSION: u32 = 6;
+const VERSION: u32 = 7;
 
 struct W(Vec<u8>);
 
@@ -329,6 +339,9 @@ impl LayerStack {
                 LayerKind::Fill(_) if version >= 4 => 3,
                 // An older reader takes a fill layer's render as pixels.
                 LayerKind::Fill(_) => 0,
+                LayerKind::Type(_) if version >= 7 => 5,
+                // An older reader takes a type layer's render as pixels.
+                LayerKind::Type(_) => 0,
             });
             w.u8(if l.rgba.is_16bit() { 16 } else { 8 });
             // A bounded layer is stored as it lives — expanding it here
@@ -390,6 +403,16 @@ impl LayerStack {
             match &l.kind {
                 LayerKind::Pixels => {}
                 LayerKind::Fill(_) if version < 4 => {}
+                LayerKind::Type(_) if version < 7 => {}
+                LayerKind::Type(t) => {
+                    w.str(&t.source.to_json());
+                    w.i64(
+                        t.psd
+                            .as_ref()
+                            .map_or(-1, |b| i64::from(slot(Arc::clone(b)))),
+                    );
+                    w.u8(u8::from(t.stale));
+                }
                 LayerKind::Adjustment(a) if version < 4 || matches!(**a, Adjustment::Chain(_)) => {
                     // An older reader takes a typed layer as the chain it
                     // evaluates to (a direct kind as the identity chain).
@@ -559,6 +582,9 @@ impl LayerStack {
         // skip; nothing at all without masking state.
         if version >= 3 {
             self.masking.doc.encode(&mut w.0, &mut slot);
+            // Guides, count marks, notes and slices (image ADR 475): a
+            // further trailing block, after the masking one.
+            self.workspace.encode(&mut w.0);
         }
         (w.0, buffers)
     }
@@ -750,6 +776,15 @@ impl LayerStack {
                         &kind, &values, &blob, &label,
                     )?))
                 }
+                5 if version >= 7 => {
+                    let source = TypeSource::from_json(&r.str()?).map_err(IngestError::Decode)?;
+                    let psd = match u32::try_from(r.i64()?).ok() {
+                        Some(slot) => Some(buffer(slot)?),
+                        None => None,
+                    };
+                    let stale = r.u8()? != 0;
+                    LayerKind::Type(Box::new(TypeLayer { source, stale, psd }))
+                }
                 2 => {
                     let (sw, sh, scale) = (r.u32()?, r.u32()?, r.f32()?);
                     let src = buffer(r.u32()?)?;
@@ -940,10 +975,13 @@ impl LayerStack {
                 "layer manifest: no layers, or active out of range".into(),
             ));
         }
-        let masking = crate::masking::MaskingDoc::decode(&manifest[r.at..], width, height, |i| {
-            buffer(i).map_err(|e| e.to_string())
-        })
-        .map_err(|e| IngestError::Decode(format!("layer manifest: {e}")))?;
+        let (masking, masking_len) =
+            crate::masking::MaskingDoc::decode_with_len(&manifest[r.at..], width, height, |i| {
+                buffer(i).map_err(|e| e.to_string())
+            })
+            .map_err(|e| IngestError::Decode(format!("layer manifest: {e}")))?;
+        let workspace = crate::workspace::Workspace::decode(&manifest[r.at + masking_len..])
+            .map_err(|e| IngestError::Decode(format!("layer manifest: {e}")))?;
         let mut stack = LayerStack {
             width,
             height,
@@ -966,6 +1004,7 @@ impl LayerStack {
             next_snapshot_id: 1,
             next_step_id: 1,
             mode,
+            workspace,
         };
         stack.masking.doc = masking;
         Ok(stack)

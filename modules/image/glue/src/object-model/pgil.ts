@@ -14,7 +14,7 @@
 // either codec fails there rather than in a document.
 
 const MAGIC = [0x50, 0x47, 0x49, 0x4c]; // "PGIL"
-export const PGIL_VERSION = 6;
+export const PGIL_VERSION = 7;
 
 export interface PgilRect {
   x: number;
@@ -40,7 +40,16 @@ export interface PgilGroup {
   color: number;
 }
 
-export type PgilLayerKind = "pixels" | "adjustment" | "smart" | "fill";
+export type PgilLayerKind = "pixels" | "adjustment" | "smart" | "fill" | "type";
+
+/** A TYPE layer's payload (kind code 5, version 7; WP5.10): its source as
+ *  JSON, the PSD `TySh` block it came with while unedited, and whether
+ *  its render is stale. */
+export interface PgilType {
+  source: string;
+  psd: Uint8Array | null;
+  stale: boolean;
+}
 
 /** A TYPED adjustment layer's payload (kind code 4): `Adjustment::values`
  *  of `kind`, a Color Lookup's cube and look name. */
@@ -148,6 +157,7 @@ export interface PgilLayer {
   typed: PgilTyped | null;
   fill: PgilFill | null;
   smart: PgilSmart | null;
+  typeLayer?: PgilType | null;
   ext: PgilExt;
 }
 
@@ -374,6 +384,7 @@ export function readPgil(
     let typed: PgilTyped | null = null;
     let fill: PgilFill | null = null;
     let smart: PgilSmart | null = null;
+    let typeLayer: PgilType | null = null;
     if (kindCode === 0) kind = "pixels";
     else if (kindCode === 1) {
       kind = "adjustment";
@@ -412,6 +423,15 @@ export function readPgil(
         blob: r.f32s(),
         label: r.str(),
       };
+    } else if (kindCode === 5 && version >= 7) {
+      kind = "type";
+      const source = r.str();
+      const psdSlot = opt(r.i64());
+      typeLayer = {
+        source,
+        psd: psdSlot === null ? null : buf(psdSlot),
+        stale: r.u8() !== 0,
+      };
     } else throw new Error(`layer manifest: layer kind ${kindCode}`);
     let ext: PgilExt = { ...DEFAULT_EXT };
     if (version >= 4) {
@@ -447,6 +467,7 @@ export function readPgil(
       typed,
       fill,
       smart,
+      typeLayer,
       ext,
     });
   }
@@ -575,7 +596,9 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
             : 1
           : l.kind === "smart"
             ? 2
-            : 3,
+            : l.kind === "type"
+              ? 5
+              : 3,
     );
     w.u8(l.depth);
     w.u32(slot(l.pixels));
@@ -620,6 +643,11 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
       w.u32(s.height);
       w.f32(s.scale);
       w.u32(slot(s.source));
+    } else if (l.kind === "type") {
+      const t = l.typeLayer!;
+      w.str(t.source);
+      w.i64(t.psd ? slot(t.psd) : -1);
+      w.u8(t.stale ? 1 : 0);
     } else if (l.kind === "fill") {
       const f = l.fill!;
       w.str(f.kind);

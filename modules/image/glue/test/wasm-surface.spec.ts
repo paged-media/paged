@@ -46,6 +46,9 @@ const FILTERS_TS = fileURLToPath(
 const VECTOR_TS = fileURLToPath(
   new URL("../src/vector-engine.ts", import.meta.url),
 );
+const WORKSPACE_TS = fileURLToPath(
+  new URL("../src/workspace-engine.ts", import.meta.url),
+);
 
 /**
  * wasm-bindgen's `--target web` glue also exports its init machinery,
@@ -81,7 +84,7 @@ const UNMODELLED_ON_PURPOSE = new Map([
 function declaredIn(file: string, name: string): string[] {
   const src = readFileSync(file, "utf8");
   const block = new RegExp(
-    `export interface ${name}(?:\\s+extends [A-Za-z<>,\\s]+?)? \\{(.*?)\\n\\}`,
+    `export interface ${name}(?:\\s+extends\\s+[A-Za-z<>,\\s]+?)?\\s*\\{(.*?)\\n\\}`,
     "s",
   ).exec(src);
   if (!block) throw new Error(`${name} interface not found in ${file}`);
@@ -102,6 +105,7 @@ function declaredInTs(): string[] {
     ...declaredIn(RETOUCH_TS, "RetouchWasm"),
     ...declaredIn(FILTERS_TS, "FilterWasm"),
     ...declaredIn(VECTOR_TS, "VectorWasm"),
+    ...declaredIn(WORKSPACE_TS, "WorkspaceWasm"),
   ];
 }
 

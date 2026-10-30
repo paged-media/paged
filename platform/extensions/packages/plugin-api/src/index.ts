@@ -148,6 +148,10 @@ export type {
   RenderLayersOptions,
   RenderedLayer,
   RenderedLayers,
+  RenderStory,
+  RenderStoryParagraph,
+  RenderStoryRun,
+  RenderStoryOptions,
   TextSurface,
   TextMetrics,
   TextCaret,
@@ -321,6 +325,21 @@ export type {
   BindingWriteResult,
   BindingCollectionResult,
   ActiveBindingProvider,
+  // Extensions ADR 340 — the workspace (rulers, guides, grid) and
+  // readout lanes.
+  BindingReadoutSurface,
+  BindingRulerUnit,
+  BindingWorkspace,
+  BindingWorkspaceGuide,
+  BindingWorkspaceRead,
+  BindingGuideEdit,
+  BindingWorkspaceView,
+  BindingReadoutRow,
+  BindingReadoutSection,
+  BindingReadoutRequest,
+  BindingReadoutsRead,
+  BindingWorkspaceResult,
+  BindingReadoutsResult,
 } from "./binding-provider.js";
 
 export type {

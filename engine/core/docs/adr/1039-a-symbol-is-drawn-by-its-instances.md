@@ -113,5 +113,9 @@ and replaces every labelled set of leaves with its instance, in its slot
   bakes neither 9-slice nor tint (the artwork comes back plainly scaled and untinted); the
   per-instance overrides stop at opacity, blend and tint (no per-item colour or text
   overrides); instances on master spreads are not drawn; the `.paged` container's IDML twin
-  parts do not carry instances (its native model part does); the SVG export draws instances
-  inline, not as `<symbol>` / `<use>`; a definition's hyperlinks are not copied.
+  parts do not carry instances (its native model part does); a definition's hyperlinks are not
+  copied.
+- Amended 2026-10-29 (draw ADR 365, still protocol 78): the `symbolInstanceSymbol` element path
+  points an instance at another definition (Replace Symbol, its id and overrides kept);
+  `deleteFrame` resolves an instance by id or `instance:` address; paged-svg writes each
+  definition once as `<symbol>` and every instance as a `<use>` of it.

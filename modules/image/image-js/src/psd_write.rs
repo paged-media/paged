@@ -536,6 +536,18 @@ fn vector_mask_blocks(store: &Store, l: &Layer) -> Vec<AdditionalLayerInfo> {
         .collect()
 }
 
+/// A type layer's `TySh` (image ADR 474): the text stays editable in
+/// Photoshop — the block it was read with while unedited, else its source
+/// written out at the bounds of its ink.
+fn type_block(store: &Store, l: &Layer) -> Option<AdditionalLayerInfo> {
+    let t = l.type_layer()?;
+    let px = l.rgba.canvas().to_rgba8();
+    Some(crate::layers::type_layer::psd_block(
+        t,
+        crate::layers::type_layer::ink_bounds(&px, store.width, store.height, &t.source.frame),
+    ))
+}
+
 /// A layer MADE in paged, as a new record.
 fn built_record(store: &Store, l: &Layer) -> Result<LayerRecord, IngestError> {
     // A new SHAPE layer's stored pixels are its fill cut by its path
@@ -599,6 +611,7 @@ fn built_record(store: &Store, l: &Layer) -> Result<LayerRecord, IngestError> {
         addl.extend(crate::psd_layer_ext::fill_block(&f.source));
     }
     addl.extend(vector_mask_blocks(store, l));
+    addl.extend(type_block(store, l));
     let adjustment = matches!(l.kind, LayerKind::Adjustment(_));
     Ok(LayerRecord {
         top: rect.y,
@@ -724,6 +737,14 @@ fn source_record(
                     blocks,
                 );
             }
+            (LayerKind::Type(_), KindState::Type(_)) => {
+                // The text was edited: its TySh is written from the source.
+                replace_blocks(
+                    &mut rec,
+                    &[b"TySh", b"tySh"],
+                    type_block(store, l).into_iter().collect(),
+                );
+            }
             (LayerKind::Fill(f), KindState::Fill(_)) => {
                 let blocks = crate::psd_layer_ext::fill_block(&f.source)
                     .into_iter()
@@ -779,8 +800,12 @@ fn source_record(
             let colour: Vec<_> = infos.into_iter().zip(data).collect();
             kept.splice(0..0, colour);
             let keep_fill = matches!(l.kind, LayerKind::Fill(_));
+            // A type layer's new pixels are its text's render: its TySh stays.
+            let keep_type = matches!(l.kind, LayerKind::Type(_));
             rec.addl.retain(|a| {
-                !CONTENT_KEYS.contains(&&a.key) || (keep_fill && FILL_KEYS.contains(&&a.key))
+                !CONTENT_KEYS.contains(&&a.key)
+                    || (keep_fill && FILL_KEYS.contains(&&a.key))
+                    || (keep_type && matches!(&a.key, b"TySh" | b"tySh"))
             });
             if !keep_fill {
                 rec.addl.retain(|a| !FILL_KEYS.contains(&&a.key));

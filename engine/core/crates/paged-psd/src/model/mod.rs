@@ -40,7 +40,8 @@ pub use layers::{
     MaskParameters,
 };
 pub use resources::{
-    ImageResourceBlock, ImageResources, PascalString, ResolutionInfo, ResourceBody,
+    GridAndGuides, ImageResourceBlock, ImageResources, PascalString, PsdGuide, ResolutionInfo,
+    ResourceBody,
 };
 
 use crate::container::Container;

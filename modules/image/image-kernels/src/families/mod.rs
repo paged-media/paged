@@ -49,6 +49,7 @@ pub mod resample;
 pub mod select;
 pub mod style;
 pub mod stylize;
+pub mod warp;
 
 use crate::KernelDef;
 
@@ -82,4 +83,5 @@ pub static ALL_FAMILIES: &[&[&KernelDef]] = &[
     select::FAMILY,
     style::FAMILY,
     stylize::FAMILY,
+    warp::FAMILY,
 ];

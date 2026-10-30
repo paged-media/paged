@@ -61,6 +61,11 @@ import {
   type FilterEngine,
   type FilterWasm,
 } from "./engine-filters";
+import {
+  workspaceEngine,
+  type WorkspaceEngine,
+  type WorkspaceWasm,
+} from "./workspace-engine";
 
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
@@ -555,6 +560,16 @@ function decodedInfoOf(h: DecodedHandleWasm): DecodedInfo {
   };
 }
 
+/** WP5.10 — a type layer's render: straight RGBA8, `width × height`, its
+ *  top-left at canvas pixel `(x, y)` (it may reach past the canvas). */
+export interface TypeRenderPixels {
+  rgba: Uint8Array;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** The distortion kinds `geom.warp_backward` carries. Order matches the
  *  kernel's `kind` discriminant. */
 export const WARP_KINDS = ["pinch", "spherize", "twirl", "wave"] as const;
@@ -939,7 +954,7 @@ export interface LayerInfo {
    *  transforms everything beneath it; a `smart` layer's pixels are a
    *  cached RENDER of preserved source bytes, so rescaling it is
    *  lossless. */
-  kind: "pixels" | "adjustment" | "smart" | "fill";
+  kind: "pixels" | "adjustment" | "smart" | "fill" | "type";
   /** Whether a layer mask is attached at all. */
   hasMask: boolean;
   /** Whether that mask APPLIES. Disabled keeps the coverage — the two
@@ -983,6 +998,8 @@ export interface LayerInfo {
     subpaths: number;
     anchors: number;
   } | null;
+  /** A TYPE layer (WP5.10): whether its pixels need a new render. */
+  typeStale?: boolean | null;
 }
 
 /** A plain layer's parity fields (Photoshop's defaults) — for a reader
@@ -1341,14 +1358,16 @@ export interface FilterMask {
 }
 
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
- *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`. */
+ *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`;
+ *  the workspace (image ADR 475) in `workspace-engine.ts`. */
 export interface ImageEngine
   extends
     MaskingEngine,
     ModeEngine,
     RetouchEngine<DecodedInfo>,
     FilterEngine,
-    VectorEngine<DecodedInfo> {
+    VectorEngine<DecodedInfo>,
+    WorkspaceEngine {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2318,8 +2337,31 @@ export interface ImageEngine
     values: readonly number[],
     tileHandle: number,
   ): Promise<void>;
-  /** A fill layer's or smart object's render becomes pixels. */
+  /** A fill layer's, smart object's or type layer's render becomes
+   *  pixels. */
   layerRasterize(index: number): void;
+  /** WP5.10 — a TYPE layer of `source` (its JSON), its pixels the
+   *  engine's render `render`, bent by the source's warp. One undo step.
+   *  Returns its index. */
+  layerAddType(
+    source: string,
+    render: TypeRenderPixels,
+    name: string,
+  ): Promise<number>;
+  /** A type layer's new source and render; writes sharing `session`
+   *  merge into one undo step. */
+  layerSetType(
+    index: number,
+    source: string,
+    render: TypeRenderPixels,
+    session: string,
+  ): Promise<void>;
+  /** A type layer's source JSON and state, or null for another layer. */
+  layerTypeSource(index: number): {
+    stale: boolean;
+    fromPsd: boolean;
+    source: unknown;
+  } | null;
   layerSetFillOpacity(index: number, fill: number): void;
   /** The layer's STYLE (null: none). */
   layerStyle(index: number): LayerStyle | null;
@@ -2425,7 +2467,13 @@ interface DecodedHandleWasm {
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
 export interface ImageWasmModule
-  extends MaskingWasm, ModeWasm, RetouchWasm, FilterWasm, VectorWasm {
+  extends
+    MaskingWasm,
+    ModeWasm,
+    RetouchWasm,
+    FilterWasm,
+    VectorWasm,
+    WorkspaceWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -3150,6 +3198,26 @@ export interface ImageWasmModule
     tile_handle: number,
   ): Promise<void>;
   layers_rasterize(index: number): void;
+  layers_add_type(
+    source: string,
+    rgba: Uint8Array,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    name: string,
+  ): Promise<number>;
+  layers_set_type(
+    index: number,
+    source: string,
+    rgba: Uint8Array,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    session: string,
+  ): Promise<void>;
+  layers_type_source(index: number): string;
   layers_set_fill_opacity(index: number, fill: number): void;
   layers_style(index: number): string;
   layers_set_style(index: number, json: string): void;
@@ -3243,6 +3311,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     ...wrapRetouch(wasm, decodedInfoOf),
     ...filterEngineOf(wasm, decodedInfoOf),
     ...wrapVectors(wasm, decodedInfoOf),
+    ...workspaceEngine(wasm),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,
@@ -4339,6 +4408,23 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     layerSetFill: (index, kind, values, tile) =>
       wasm.layers_set_fill(index, kind, Float32Array.from(values), tile),
     layerRasterize: (index) => wasm.layers_rasterize(index),
+    layerAddType: (source, r, name) =>
+      wasm.layers_add_type(source, r.rgba, r.x, r.y, r.width, r.height, name),
+    layerSetType: (index, source, r, session) =>
+      wasm.layers_set_type(
+        index,
+        source,
+        r.rgba,
+        r.x,
+        r.y,
+        r.width,
+        r.height,
+        session,
+      ),
+    layerTypeSource: (index) => {
+      const json = wasm.layers_type_source(index);
+      return json ? (JSON.parse(json) as never) : null;
+    },
     layerSetFillOpacity: (index, fill) =>
       wasm.layers_set_fill_opacity(index, fill),
     layerStyle: (index) =>
