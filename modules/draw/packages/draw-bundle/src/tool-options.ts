@@ -105,6 +105,16 @@ const M = defineMessages("draw.toolOptions", {
   nothing: "Nothing",
   rectangle: "Rectangle",
   ellipse: "Ellipse",
+  diameter: "Diameter",
+  symbolDensity: "Symbol set density",
+  sizeScatter: "Size scatter",
+  rotationScatter: "Rotation scatter",
+  orientation: "Orientation",
+  orientFixed: "Upright",
+  orientDrag: "Follow the drag",
+  stainRed: "Stain red",
+  stainGreen: "Stain green",
+  stainBlue: "Stain blue",
 });
 
 type OptionValue = number | boolean | string;
@@ -667,6 +677,110 @@ export const PERSPECTIVE_SELECT_OPTIONS = defineToolOptions({
   ],
 });
 
+// ------------------------------------------------- the Symbolism tools
+//
+// WP6.8 (draw ADR 365) — Illustrator's Symbolism Tools Options: the
+// brush DIAMETER and INTENSITY every tool shares (Illustrator's defaults:
+// 200 px ≈ 100 pt here, intensity 8), the Sprayer's SYMBOL SET DENSITY
+// (1–10, default 5) and its size / rotation scatter and orientation, and
+// the Stainer's colour (Illustrator stains with the current fill, which
+// the contract does not hand a tool; the colour is the tool's own option).
+
+const symbolismBrush = (): OptionDef[] => [
+  {
+    kind: "number",
+    key: "diameter",
+    label: M.diameter,
+    min: 1,
+    max: 1000,
+    step: 1,
+    unit: "pt",
+    default: 100,
+  },
+  {
+    kind: "number",
+    key: "intensity",
+    label: M.intensity,
+    min: 1,
+    max: 10,
+    step: 1,
+    default: 8,
+  },
+];
+
+const symbolismTool = (kind: string, extra: OptionDef[] = []) =>
+  defineToolOptions({
+    toolId: `media.paged.draw.tool.${kind}`,
+    fields: [...symbolismBrush(), ...extra],
+  });
+
+const channel = (key: string, label: string, d: number): OptionDef => ({
+  kind: "number",
+  key,
+  label,
+  min: 0,
+  max: 255,
+  step: 1,
+  default: d,
+});
+
+export const SYMBOL_SPRAYER_OPTIONS = symbolismTool("symbolSprayer", [
+  {
+    kind: "number",
+    key: "density",
+    label: M.symbolDensity,
+    min: 1,
+    max: 10,
+    step: 1,
+    default: 5,
+  },
+  {
+    kind: "number",
+    key: "sizeScatter",
+    label: M.sizeScatter,
+    min: 0,
+    max: 100,
+    step: 1,
+    unit: "%",
+    default: 0,
+  },
+  {
+    kind: "number",
+    key: "rotationScatter",
+    label: M.rotationScatter,
+    min: 0,
+    max: 180,
+    step: 1,
+    unit: "°",
+    default: 0,
+  },
+  {
+    kind: "select",
+    key: "orientation",
+    label: M.orientation,
+    options: [
+      { value: "fixed", label: M.orientFixed },
+      { value: "drag", label: M.orientDrag },
+    ],
+    default: "fixed",
+  },
+]);
+
+/** The Symbolism tools' options, by kind. */
+export const SYMBOLISM_OPTIONS = {
+  sprayer: SYMBOL_SPRAYER_OPTIONS,
+  shifter: symbolismTool("symbolShifter"),
+  scruncher: symbolismTool("symbolScruncher"),
+  sizer: symbolismTool("symbolSizer"),
+  spinner: symbolismTool("symbolSpinner"),
+  stainer: symbolismTool("symbolStainer", [
+    channel("red", M.stainRed, 255),
+    channel("green", M.stainGreen, 0),
+    channel("blue", M.stainBlue, 0),
+  ]),
+  screener: symbolismTool("symbolScreener"),
+} as const;
+
 /** Every tool that declares options, by tool id — what `tools.ts`
  *  attaches to the contribution and what the spec walks. */
 export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
@@ -680,4 +794,5 @@ export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
   ...Object.values(LIQUIFY_OPTIONS),
   PUPPET_WARP_OPTIONS,
   PERSPECTIVE_SELECT_OPTIONS,
+  ...Object.values(SYMBOLISM_OPTIONS),
 ];

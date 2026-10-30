@@ -412,6 +412,21 @@ pub enum PropertyPath {
     /// for the whole struct — kind + axis + the stop LIST edit
     /// together, and per-field shapes can't carry a list.
     FrameGradientFeather,
+    /// Engine ADR 1008 — the object target's ordered effect stack
+    /// (`Value::EffectStack`), whole-list replacement: add, remove,
+    /// reorder, enable and the stack-only effects' parameters are one
+    /// write each. The InDesign effects' parameters stay on their own
+    /// per-field paths. Reads the canonical stack (the effects that are
+    /// on, in InDesign's order) for an item that stores none. The inverse
+    /// carries a snapshot (`prev`), so undo restores the model exactly.
+    /// Text frames, rectangles, ovals and polygons. Paint-only.
+    FrameEffectStack,
+    /// ADR 1008 — the fill target's stack (InDesign effects only).
+    FrameFillEffectStack,
+    /// ADR 1008 — the stroke target's stack (InDesign effects only).
+    FrameStrokeEffectStack,
+    /// ADR 1008 — the content target's stack (InDesign effects only).
+    FrameContentEffectStack,
     /// Editor-ops (Page tool) — a page's `GeometricBounds`
     /// `[top, left, bottom, right]` in the page's INNER coordinate
     /// system (`Value::Bounds`). Only `NodeId::Page` carries it.
@@ -1548,6 +1563,11 @@ pub enum PropertyPath {
     /// space; the empty list falls back to the definition's. Only
     /// `NodeId::Instance` carries it. Native.
     SymbolInstanceNineSlice,
+    /// Engine ADR 1039 (draw ADR 365) — the symbol a symbol instance draws,
+    /// `Value::Text(symbol id)`: Illustrator's Replace Symbol. The
+    /// instance keeps its id, transform and overrides; a symbol id the
+    /// store does not hold is refused. Only `NodeId::Instance`. Native.
+    SymbolInstanceSymbol,
 
     // ---- R-11 — drop-shadow attributes and the global light -------
     /// `<DropShadowSetting BlendMode>`; `""` is InDesign's `Multiply`.
@@ -1617,6 +1637,14 @@ pub enum PropertyPath {
     /// an even-odd outline whose contours do not cross and reports the
     /// rest as lost. Paint-only (`frame_style`).
     FrameFillRule,
+
+    // ---- engine ADR 1037 — the image filter stack ----------------------
+    /// The placed picture's filter stack, in order: `Value::ImageAdjustments`
+    /// (the whole list; the empty list clears it). On a Rectangle, Oval or
+    /// Polygon (the kinds that place a picture). IDML has no such construct:
+    /// the export keeps the stack in a label and reports it as lost.
+    /// Paint-only (`frame_style`).
+    FrameImageAdjustments,
 
     // ---- engine ADR 1018 — Word's character and paragraph additions --
     /// A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a
@@ -1757,6 +1785,10 @@ impl PropertyPath {
             PropertyPath::SimplifyPath => "path.simplify",
             PropertyPath::ClosePath => "path.close",
             PropertyPath::FrameGradientFeather => "frame.gradientFeather",
+            PropertyPath::FrameEffectStack => "frame.effectStack",
+            PropertyPath::FrameFillEffectStack => "frame.fillEffectStack",
+            PropertyPath::FrameStrokeEffectStack => "frame.strokeEffectStack",
+            PropertyPath::FrameContentEffectStack => "frame.contentEffectStack",
             PropertyPath::PageBounds => "page.bounds",
             PropertyPath::PageCanvasOrigin => "page.canvasOrigin",
             PropertyPath::FrameNonprinting => "frame.nonprinting",
@@ -2031,6 +2063,7 @@ impl PropertyPath {
             PropertyPath::GroupClip => "group.clip",
             PropertyPath::SymbolInstanceTint => "symbolInstance.tint",
             PropertyPath::SymbolInstanceNineSlice => "symbolInstance.nineSlice",
+            PropertyPath::SymbolInstanceSymbol => "symbolInstance.symbol",
             PropertyPath::FrameDropShadowBlendMode => "frame.dropShadowBlendMode",
             PropertyPath::FrameDropShadowSpread => "frame.dropShadowSpread",
             PropertyPath::FrameDropShadowNoise => "frame.dropShadowNoise",
@@ -2052,6 +2085,7 @@ impl PropertyPath {
             PropertyPath::DocumentFootnoteContinuingRuleOn => "document.footnoteContinuingRuleOn",
             PropertyPath::FramePdfPage => "frame.pdfPage",
             PropertyPath::FrameFillRule => "frame.fillRule",
+            PropertyPath::FrameImageAdjustments => "frame.imageAdjustments",
             PropertyPath::CharacterHighlightColor => "character.highlightColor",
             PropertyPath::CharacterHidden => "character.hidden",
             PropertyPath::CharacterUnderlineType => "character.underlineType",
@@ -2180,6 +2214,374 @@ impl GradientFeatherSpec {
                 .collect(),
             ..Default::default()
         }
+    }
+}
+
+/// Engine ADR 1008 — an effect kind on the stack: InDesign's nine, then
+/// the stack-only ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum EffectKind {
+    DropShadow,
+    InnerShadow,
+    OuterGlow,
+    InnerGlow,
+    BevelEmboss,
+    Satin,
+    Feather,
+    DirectionalFeather,
+    GradientFeather,
+    GaussianBlur,
+    OutlineStroke,
+    ColorOverlay,
+    GradientOverlay,
+    Reflection,
+    SoftEdge,
+    Noise,
+    ColorAdjust,
+}
+
+impl EffectKind {
+    pub const ALL: [EffectKind; 17] = [
+        EffectKind::DropShadow,
+        EffectKind::InnerShadow,
+        EffectKind::OuterGlow,
+        EffectKind::InnerGlow,
+        EffectKind::BevelEmboss,
+        EffectKind::Satin,
+        EffectKind::Feather,
+        EffectKind::DirectionalFeather,
+        EffectKind::GradientFeather,
+        EffectKind::GaussianBlur,
+        EffectKind::OutlineStroke,
+        EffectKind::ColorOverlay,
+        EffectKind::GradientOverlay,
+        EffectKind::Reflection,
+        EffectKind::SoftEdge,
+        EffectKind::Noise,
+        EffectKind::ColorAdjust,
+    ];
+
+    fn indesign(self) -> Option<paged_model::effect_stack::IndesignEffect> {
+        use paged_model::effect_stack::IndesignEffect as I;
+        Some(match self {
+            EffectKind::DropShadow => I::DropShadow,
+            EffectKind::InnerShadow => I::InnerShadow,
+            EffectKind::OuterGlow => I::OuterGlow,
+            EffectKind::InnerGlow => I::InnerGlow,
+            EffectKind::BevelEmboss => I::BevelEmboss,
+            EffectKind::Satin => I::Satin,
+            EffectKind::Feather => I::Feather,
+            EffectKind::DirectionalFeather => I::DirectionalFeather,
+            EffectKind::GradientFeather => I::GradientFeather,
+            _ => return None,
+        })
+    }
+
+    /// The kind's serialised (camelCase) name.
+    pub fn name(self) -> &'static str {
+        match self {
+            EffectKind::DropShadow => "dropShadow",
+            EffectKind::InnerShadow => "innerShadow",
+            EffectKind::OuterGlow => "outerGlow",
+            EffectKind::InnerGlow => "innerGlow",
+            EffectKind::BevelEmboss => "bevelEmboss",
+            EffectKind::Satin => "satin",
+            EffectKind::Feather => "feather",
+            EffectKind::DirectionalFeather => "directionalFeather",
+            EffectKind::GradientFeather => "gradientFeather",
+            EffectKind::GaussianBlur => "gaussianBlur",
+            EffectKind::OutlineStroke => "outlineStroke",
+            EffectKind::ColorOverlay => "colorOverlay",
+            EffectKind::GradientOverlay => "gradientOverlay",
+            EffectKind::Reflection => "reflection",
+            EffectKind::SoftEdge => "softEdge",
+            EffectKind::Noise => "noise",
+            EffectKind::ColorAdjust => "colorAdjust",
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.name() == name)
+    }
+}
+
+/// Engine ADR 1008 — one entry of an effect stack on the wire. Every
+/// entry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`
+/// and `opacityPct`. The parameter fields are flat and optional; each
+/// kind reads its own and an absent one takes the kind's default:
+///
+/// | kind | fields |
+/// | --- | --- |
+/// | `gaussianBlur` | `radiusPt` (σ, pt) |
+/// | `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |
+/// | `colorOverlay` | `color` |
+/// | `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |
+/// | `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |
+/// | `softEdge` | `sizePt` |
+/// | `noise` | `amountPct`, `monochromatic` |
+/// | `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |
+///
+/// InDesign's kinds carry no parameters here: theirs are the per-field
+/// paths (`frameInnerShadowSize`, …), and the stack keeps them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectEntrySpec {
+    pub kind: EffectKind,
+    #[serde(default = "spec_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub blend_mode: Option<String>,
+    #[serde(default)]
+    pub opacity_pct: Option<f32>,
+    #[serde(default)]
+    pub radius_pt: Option<f32>,
+    #[serde(default)]
+    pub size_pt: Option<f32>,
+    #[serde(default)]
+    pub position: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub gradient: Option<String>,
+    #[serde(default)]
+    pub angle_deg: Option<f32>,
+    #[serde(default)]
+    pub reverse: Option<bool>,
+    #[serde(default)]
+    pub distance_pt: Option<f32>,
+    #[serde(default)]
+    pub size_pct: Option<f32>,
+    #[serde(default)]
+    pub start_opacity_pct: Option<f32>,
+    #[serde(default)]
+    pub end_opacity_pct: Option<f32>,
+    #[serde(default)]
+    pub blur_pt: Option<f32>,
+    #[serde(default)]
+    pub amount_pct: Option<f32>,
+    #[serde(default)]
+    pub monochromatic: Option<bool>,
+    #[serde(default)]
+    pub brightness: Option<f32>,
+    #[serde(default)]
+    pub contrast: Option<f32>,
+    #[serde(default)]
+    pub saturation: Option<f32>,
+    #[serde(default)]
+    pub hue_deg: Option<f32>,
+}
+
+/// Engine ADR 1008 — the wire value of a target's effect stack as the
+/// user sees it: the stored stack, or the canonical one its slots say.
+pub fn effect_stack_value(
+    item: &dyn paged_model::effect_stack::EffectBearing,
+    target: paged_model::effect_stack::EffectTarget,
+) -> Value {
+    Value::EffectStack {
+        entries: item
+            .effect_slots(target)
+            .resolved()
+            .iter()
+            .map(EffectEntrySpec::from_model)
+            .collect(),
+        prev: None,
+    }
+}
+
+fn spec_true() -> bool {
+    true
+}
+
+impl EffectEntrySpec {
+    /// A bare entry of `kind`, enabled, every parameter at its default.
+    pub fn new(kind: EffectKind) -> Self {
+        Self {
+            kind,
+            enabled: true,
+            blend_mode: None,
+            opacity_pct: None,
+            radius_pt: None,
+            size_pt: None,
+            position: None,
+            color: None,
+            gradient: None,
+            angle_deg: None,
+            reverse: None,
+            distance_pt: None,
+            size_pct: None,
+            start_opacity_pct: None,
+            end_opacity_pct: None,
+            blur_pt: None,
+            amount_pct: None,
+            monochromatic: None,
+            brightness: None,
+            contrast: None,
+            saturation: None,
+            hue_deg: None,
+        }
+    }
+
+    /// The wire form of a model entry. Every parameter of a stack-only
+    /// kind is written out, so a reader sees the values in effect.
+    pub fn from_model(e: &paged_model::effect_stack::EffectEntry) -> Self {
+        use paged_model::effect_stack::{Effect, StrokePosition};
+        let kind = EffectKind::from_name(e.effect.kind_name()).unwrap_or(EffectKind::GaussianBlur);
+        let mut s = Self::new(kind);
+        s.enabled = e.enabled;
+        s.blend_mode = e.blend_mode.clone();
+        s.opacity_pct = e.opacity_pct;
+        match &e.effect {
+            Effect::GaussianBlur(p) => s.radius_pt = Some(p.radius_pt),
+            Effect::OutlineStroke(p) => {
+                s.size_pt = Some(p.size_pt);
+                s.position = Some(
+                    match p.position {
+                        StrokePosition::Outside => "Outside",
+                        StrokePosition::Inside => "Inside",
+                        StrokePosition::Center => "Center",
+                    }
+                    .to_string(),
+                );
+                s.color = p.color.clone();
+            }
+            Effect::ColorOverlay(p) => s.color = p.color.clone(),
+            Effect::GradientOverlay(p) => {
+                s.gradient = p.gradient.clone();
+                s.angle_deg = p.angle_deg;
+                s.reverse = Some(p.reverse);
+            }
+            Effect::Reflection(p) => {
+                s.distance_pt = Some(p.distance_pt);
+                s.size_pct = Some(p.size_pct);
+                s.start_opacity_pct = Some(p.start_opacity_pct);
+                s.end_opacity_pct = Some(p.end_opacity_pct);
+                s.blur_pt = Some(p.blur_pt);
+            }
+            Effect::SoftEdge(p) => s.size_pt = Some(p.size_pt),
+            Effect::Noise(p) => {
+                s.amount_pct = Some(p.amount_pct);
+                s.monochromatic = Some(p.monochromatic);
+            }
+            Effect::ColorAdjust(p) => {
+                s.brightness = Some(p.brightness);
+                s.contrast = Some(p.contrast);
+                s.saturation = Some(p.saturation);
+                s.hue_deg = Some(p.hue_deg);
+            }
+            _ => {}
+        }
+        s
+    }
+
+    /// The model entry, or why the spec is not one.
+    pub fn to_model(&self) -> Result<paged_model::effect_stack::EffectEntry, String> {
+        use paged_model::effect_stack::*;
+        let finite = |name: &str, v: Option<f32>| -> Result<Option<f32>, String> {
+            match v {
+                Some(x) if !x.is_finite() => Err(format!("`{name}` must be a finite number")),
+                _ => Ok(v),
+            }
+        };
+        let pct = |name: &str, v: Option<f32>| -> Result<Option<f32>, String> {
+            Ok(finite(name, v)?.map(|x| x.clamp(0.0, 100.0)))
+        };
+        let signed = |name: &str, v: Option<f32>| -> Result<Option<f32>, String> {
+            Ok(finite(name, v)?.map(|x| x.clamp(-100.0, 100.0)))
+        };
+        let len = |name: &str, v: Option<f32>| -> Result<Option<f32>, String> {
+            Ok(finite(name, v)?.map(|x| x.max(0.0)))
+        };
+        let effect = match self.kind.indesign() {
+            Some(k) => Effect::slot(k),
+            None => match self.kind {
+                EffectKind::GaussianBlur => {
+                    let d = GaussianBlurParams::default();
+                    Effect::GaussianBlur(GaussianBlurParams {
+                        radius_pt: len("radiusPt", self.radius_pt)?.unwrap_or(d.radius_pt),
+                    })
+                }
+                EffectKind::OutlineStroke => {
+                    let d = OutlineStrokeParams::default();
+                    let position = match self.position.as_deref() {
+                        None | Some("") | Some("Outside") => StrokePosition::Outside,
+                        Some("Inside") => StrokePosition::Inside,
+                        Some("Center") => StrokePosition::Center,
+                        Some(other) => {
+                            return Err(format!(
+                                "`position` is `Outside`, `Inside` or `Center`, not `{other}`"
+                            ))
+                        }
+                    };
+                    Effect::OutlineStroke(OutlineStrokeParams {
+                        size_pt: len("sizePt", self.size_pt)?.unwrap_or(d.size_pt),
+                        position,
+                        color: self.color.clone().filter(|c| !c.is_empty()),
+                    })
+                }
+                EffectKind::ColorOverlay => Effect::ColorOverlay(ColorOverlayParams {
+                    color: self.color.clone().filter(|c| !c.is_empty()),
+                }),
+                EffectKind::GradientOverlay => Effect::GradientOverlay(GradientOverlayParams {
+                    gradient: self.gradient.clone().filter(|c| !c.is_empty()),
+                    angle_deg: finite("angleDeg", self.angle_deg)?,
+                    reverse: self.reverse.unwrap_or(false),
+                }),
+                EffectKind::Reflection => {
+                    let d = ReflectionParams::default();
+                    Effect::Reflection(ReflectionParams {
+                        distance_pt: len("distancePt", self.distance_pt)?.unwrap_or(d.distance_pt),
+                        size_pct: pct("sizePct", self.size_pct)?.unwrap_or(d.size_pct),
+                        start_opacity_pct: pct("startOpacityPct", self.start_opacity_pct)?
+                            .unwrap_or(d.start_opacity_pct),
+                        end_opacity_pct: pct("endOpacityPct", self.end_opacity_pct)?
+                            .unwrap_or(d.end_opacity_pct),
+                        blur_pt: len("blurPt", self.blur_pt)?.unwrap_or(d.blur_pt),
+                    })
+                }
+                EffectKind::SoftEdge => {
+                    let d = SoftEdgeParams::default();
+                    Effect::SoftEdge(SoftEdgeParams {
+                        size_pt: len("sizePt", self.size_pt)?.unwrap_or(d.size_pt),
+                    })
+                }
+                EffectKind::Noise => {
+                    let d = NoiseParams::default();
+                    Effect::Noise(NoiseParams {
+                        amount_pct: pct("amountPct", self.amount_pct)?.unwrap_or(d.amount_pct),
+                        monochromatic: self.monochromatic.unwrap_or(d.monochromatic),
+                    })
+                }
+                EffectKind::ColorAdjust => Effect::ColorAdjust(ColorAdjustParams {
+                    brightness: signed("brightness", self.brightness)?.unwrap_or(0.0),
+                    contrast: signed("contrast", self.contrast)?.unwrap_or(0.0),
+                    saturation: signed("saturation", self.saturation)?.unwrap_or(0.0),
+                    hue_deg: finite("hueDeg", self.hue_deg)?
+                        .map(|h| h.clamp(-180.0, 180.0))
+                        .unwrap_or(0.0),
+                }),
+                _ => unreachable!("InDesign kinds handled above"),
+            },
+        };
+        let stack_only = self.kind.indesign().is_none();
+        Ok(EffectEntry {
+            enabled: self.enabled,
+            blend_mode: if stack_only {
+                self.blend_mode.clone().filter(|b| !b.is_empty())
+            } else {
+                None
+            },
+            opacity_pct: if stack_only {
+                pct("opacityPct", self.opacity_pct)?
+            } else {
+                None
+            },
+            effect,
+        })
     }
 }
 
@@ -2724,6 +3126,15 @@ pub enum Value {
     /// effect). The inverse carries the prior `Option<spec>` so undo
     /// round-trips bytewise.
     GradientFeather(Option<GradientFeatherSpec>),
+    /// Engine ADR 1008 — a target's whole effect stack. `prev` is the
+    /// apply layer's snapshot of the target's effect state (JSON); an
+    /// inverse carries it so undo restores exactly. Wire callers leave
+    /// it `None`.
+    EffectStack {
+        entries: Vec<EffectEntrySpec>,
+        #[serde(default)]
+        prev: Option<String>,
+    },
     /// W0.2 — whole paragraph rule struct (`RuleAbove` / `RuleBelow`).
     /// `None` clears the rule back to the all-`None` default. The
     /// inverse carries the prior `Option<spec>` so undo round-trips
@@ -2772,6 +3183,12 @@ pub enum Value {
     /// half-written colour behind), with the colour model and tint kept
     /// unless given.
     SwatchColor(SwatchColorSpec),
+    /// Engine ADR 1037 — an image frame's whole filter stack, the value of
+    /// `frame.imageAdjustments`. Serialises as `{ type:
+    /// "imageAdjustments", value: [{ op: "exposure", ev: 0.5 }, …] }`. The
+    /// inverse carries the prior stack, so undo restores it exactly.
+    /// Additive new variant (the `TabStops` / `Lengths` precedent).
+    ImageAdjustments(Vec<paged_model::RasterOp>),
 }
 
 /// v71 polish — a `text` / `enum` / `ref` payload of `null` is the empty

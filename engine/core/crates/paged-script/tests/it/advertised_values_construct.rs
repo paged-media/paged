@@ -89,6 +89,28 @@ const STRUCTURED: &[(&str, &str)] = &[
     ("paragraphRuleAbove", "{ type: 'paragraphRule', value: null }"),
     ("paragraphRuleBelow", "{ type: 'paragraphRule', value: null }"),
     ("paragraphTabStops", "{ type: 'tabStops', value: [] }"),
+    // Engine ADR 1008 — the effect stacks, whole.
+    (
+        "frameEffectStack",
+        "{ type: 'effectStack', value: { entries: [{ kind: 'gaussianBlur' }] } }",
+    ),
+    (
+        "frameFillEffectStack",
+        "{ type: 'effectStack', value: { entries: [] } }",
+    ),
+    (
+        "frameStrokeEffectStack",
+        "{ type: 'effectStack', value: { entries: [] } }",
+    ),
+    (
+        "frameContentEffectStack",
+        "{ type: 'effectStack', value: { entries: [] } }",
+    ),
+    // Engine ADR 1037 — an image frame's filter stack, whole.
+    (
+        "frameImageAdjustments",
+        "{ type: 'imageAdjustments', value: [{ op: 'exposure', ev: 0.5 }] }",
+    ),
     (
         "pluginMetadata",
         "{ type: 'pluginMetadata', value: { key: 'x-paged:probe', value: '1' } }",

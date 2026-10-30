@@ -2983,6 +2983,10 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
     }
     out.item_names = item_names.clone();
     provenance.item_names = item_names;
+    // Engine ADR 1008: the effect stacks a paged writer kept in labels.
+    paged_model::effect_stack::label::lift(&mut out);
+    // Engine ADR 1037 — an image frame's filter stack rides a label.
+    paged_model::image_adjust::adopt_labels(&mut out);
     Ok((out, provenance))
 }
 

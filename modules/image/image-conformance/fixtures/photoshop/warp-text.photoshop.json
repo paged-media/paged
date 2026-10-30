@@ -1,0 +1,1005 @@
+{
+  "fixture": "warp-text",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/warp-text.jsx",
+    "script_sha256": "1166c567024ee90a65e60e2fc33bf06998df9ca70b47c440bbbff0a80ab9e39a",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-27T09:07:02.522Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "none",
+      "params": {
+        "style": "none",
+        "bend": 0,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/none.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          107,
+          286,
+          140
+        ]
+      }
+    },
+    {
+      "id": "arc-50",
+      "params": {
+        "style": "arc",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/arc-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          29,
+          60,
+          318,
+          136
+        ]
+      }
+    },
+    {
+      "id": "arc-minus-50",
+      "params": {
+        "style": "arc",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/arc-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          41,
+          105,
+          305,
+          187
+        ]
+      }
+    },
+    {
+      "id": "arcLower-50",
+      "params": {
+        "style": "arcLower",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/arcLower-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          107,
+          286,
+          176
+        ]
+      }
+    },
+    {
+      "id": "arcLower-minus-50",
+      "params": {
+        "style": "arcLower",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/arcLower-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          100,
+          286,
+          135
+        ]
+      }
+    },
+    {
+      "id": "arcUpper-50",
+      "params": {
+        "style": "arcUpper",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/arcUpper-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          67,
+          286,
+          139
+        ]
+      }
+    },
+    {
+      "id": "arcUpper-minus-50",
+      "params": {
+        "style": "arcUpper",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/arcUpper-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          107,
+          286,
+          151
+        ]
+      }
+    },
+    {
+      "id": "arch-50",
+      "params": {
+        "style": "arch",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/arch-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          60,
+          286,
+          133
+        ]
+      }
+    },
+    {
+      "id": "arch-minus-50",
+      "params": {
+        "style": "arch",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/arch-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          107,
+          286,
+          187
+        ]
+      }
+    },
+    {
+      "id": "bulge-50",
+      "params": {
+        "style": "bulge",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/bulge-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          74,
+          286,
+          165
+        ]
+      }
+    },
+    {
+      "id": "bulge-minus-50",
+      "params": {
+        "style": "bulge",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/bulge-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          107,
+          286,
+          141
+        ]
+      }
+    },
+    {
+      "id": "shellLower-50",
+      "params": {
+        "style": "shellLower",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/shellLower-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          43,
+          107,
+          302,
+          160
+        ]
+      }
+    },
+    {
+      "id": "shellLower-minus-50",
+      "params": {
+        "style": "shellLower",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/shellLower-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          107,
+          288,
+          139
+        ]
+      }
+    },
+    {
+      "id": "shellUpper-50",
+      "params": {
+        "style": "shellUpper",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/shellUpper-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          30,
+          79,
+          317,
+          142
+        ]
+      }
+    },
+    {
+      "id": "shellUpper-minus-50",
+      "params": {
+        "style": "shellUpper",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/shellUpper-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          56,
+          106,
+          292,
+          141
+        ]
+      }
+    },
+    {
+      "id": "flag-50",
+      "params": {
+        "style": "flag",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/flag-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          92,
+          286,
+          156
+        ]
+      }
+    },
+    {
+      "id": "flag-minus-50",
+      "params": {
+        "style": "flag",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/flag-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          92,
+          286,
+          155
+        ]
+      }
+    },
+    {
+      "id": "wave-50",
+      "params": {
+        "style": "wave",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/wave-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          103,
+          286,
+          146
+        ]
+      }
+    },
+    {
+      "id": "wave-minus-50",
+      "params": {
+        "style": "wave",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/wave-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          103,
+          286,
+          146
+        ]
+      }
+    },
+    {
+      "id": "fish-50",
+      "params": {
+        "style": "fish",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/fish-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          97,
+          286,
+          149
+        ]
+      }
+    },
+    {
+      "id": "fish-minus-50",
+      "params": {
+        "style": "fish",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/fish-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          97,
+          286,
+          149
+        ]
+      }
+    },
+    {
+      "id": "rise-50",
+      "params": {
+        "style": "rise",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/rise-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          107,
+          286,
+          192
+        ]
+      }
+    },
+    {
+      "id": "rise-minus-50",
+      "params": {
+        "style": "rise",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/rise-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          55,
+          286,
+          140
+        ]
+      }
+    },
+    {
+      "id": "fishEye-50",
+      "params": {
+        "style": "fishEye",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/fishEye-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          104,
+          286,
+          144
+        ]
+      }
+    },
+    {
+      "id": "fishEye-minus-50",
+      "params": {
+        "style": "fishEye",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/fishEye-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          61,
+          107,
+          286,
+          140
+        ]
+      }
+    },
+    {
+      "id": "inflate-50",
+      "params": {
+        "style": "inflate",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/inflate-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          37,
+          102,
+          306,
+          144
+        ]
+      }
+    },
+    {
+      "id": "inflate-minus-50",
+      "params": {
+        "style": "inflate",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/inflate-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          75,
+          107,
+          272,
+          140
+        ]
+      }
+    },
+    {
+      "id": "squeeze-50",
+      "params": {
+        "style": "squeeze",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/squeeze-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          75,
+          102,
+          272,
+          144
+        ]
+      }
+    },
+    {
+      "id": "squeeze-minus-50",
+      "params": {
+        "style": "squeeze",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/squeeze-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          37,
+          107,
+          306,
+          140
+        ]
+      }
+    },
+    {
+      "id": "twist-50",
+      "params": {
+        "style": "twist",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/twist-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          61,
+          107,
+          286,
+          141
+        ]
+      }
+    },
+    {
+      "id": "twist-minus-50",
+      "params": {
+        "style": "twist",
+        "bend": -50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/twist-minus-50.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          60,
+          107,
+          286,
+          141
+        ]
+      }
+    },
+    {
+      "id": "arc-distorted",
+      "params": {
+        "style": "arc",
+        "bend": 30,
+        "horizontal": 40,
+        "vertical": -20,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/arc-distorted.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          31,
+          75,
+          337,
+          142
+        ]
+      }
+    },
+    {
+      "id": "flag-vertical",
+      "params": {
+        "style": "flag",
+        "bend": 50,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48,
+        "vertical_orientation": true
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/flag-vertical.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          60,
+          107,
+          286,
+          140
+        ],
+        "warped_bounds": [
+          -4,
+          107,
+          342,
+          141
+        ]
+      }
+    },
+    {
+      "id": "none-300ppi",
+      "params": {
+        "style": "none",
+        "bend": 0,
+        "horizontal": 0,
+        "vertical": 0,
+        "size": 48
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "warp-text/none-300ppi.psd"
+      ],
+      "values": {
+        "flat_bounds": [
+          63,
+          4,
+          1002,
+          140
+        ],
+        "warped_bounds": [
+          63,
+          4,
+          1002,
+          140
+        ]
+      }
+    }
+  ]
+}

@@ -429,6 +429,20 @@ pub(super) fn find_fill_rule_mut<'a>(
     }
 }
 
+/// Engine ADR 1037 — locate the `image_adjustments` stack on a kind that
+/// places a picture.
+pub(super) fn find_image_adjustments_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut Vec<paged_model::RasterOp>> {
+    match node {
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.image_adjustments),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.image_adjustments),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.image_adjustments),
+        _ => None,
+    }
+}
+
 /// W1.1 — locate the `stroke_dash: Vec<f32>` field (per-frame
 /// `StrokeDashAndGap` override) on any stroked page-item kind.
 pub(super) fn find_stroke_dash_mut<'a>(
@@ -512,15 +526,7 @@ pub(super) fn find_group_mut<'a>(
 /// prior-None state. Values mirror InDesign's "Drop Shadow"
 /// preset (multiply blend, ~3pt offset, ~30% opacity).
 pub(super) fn default_drop_shadow() -> paged_model::DropShadowSetting {
-    paged_model::DropShadowSetting {
-        mode: "Drop".to_string(),
-        x_offset: 3.0,
-        y_offset: 3.0,
-        size: 4.0,
-        opacity_pct: 30.0,
-        effect_color: None,
-        ..Default::default()
-    }
+    paged_model::effect_stack::defaults::drop_shadow()
 }
 
 // W0.4 — paint-only single-node invalidation, the shared shape every
@@ -541,97 +547,31 @@ pub(super) fn frame_style_hint(node: &NodeId) -> InvalidationHint {
 // 120°/19° light angles, 5 pt sizes, …).
 
 pub(super) fn default_inner_shadow() -> paged_model::InnerShadowParams {
-    paged_model::InnerShadowParams {
-        x_offset: None,
-        y_offset: None,
-        size: Some(5.0),
-        opacity_pct: Some(75.0),
-        effect_color: None,
-        angle_deg: Some(120.0),
-        distance: Some(5.0),
-        choke_pct: Some(0.0),
-        blend_mode: Some("Multiply".to_string()),
-        noise_pct: Some(0.0),
-        ..Default::default()
-    }
+    paged_model::effect_stack::defaults::inner_shadow()
 }
 
 pub(super) fn default_outer_glow() -> paged_model::OuterGlowParams {
-    paged_model::OuterGlowParams {
-        size: Some(5.0),
-        opacity_pct: Some(75.0),
-        effect_color: None,
-        spread_pct: Some(0.0),
-        blend_mode: Some("Screen".to_string()),
-        noise_pct: Some(0.0),
-        ..Default::default()
-    }
+    paged_model::effect_stack::defaults::outer_glow()
 }
 
 pub(super) fn default_inner_glow() -> paged_model::InnerGlowParams {
-    paged_model::InnerGlowParams {
-        size: Some(5.0),
-        opacity_pct: Some(75.0),
-        effect_color: None,
-        choke_pct: Some(0.0),
-        blend_mode: Some("Screen".to_string()),
-        source: Some("EdgeGlow".to_string()),
-        noise_pct: Some(0.0),
-        ..Default::default()
-    }
+    paged_model::effect_stack::defaults::inner_glow()
 }
 
 pub(super) fn default_bevel() -> paged_model::BevelEmbossParams {
-    paged_model::BevelEmbossParams {
-        depth_pct: Some(100.0),
-        size: Some(5.0),
-        angle_deg: Some(120.0),
-        altitude_deg: Some(30.0),
-        highlight_color: None,
-        shadow_color: None,
-        highlight_opacity_pct: Some(75.0),
-        shadow_opacity_pct: Some(75.0),
-        style: Some("InnerBevel".to_string()),
-        direction: Some("Up".to_string()),
-        technique: Some("Smooth".to_string()),
-        soften: Some(0.0),
-        ..Default::default()
-    }
+    paged_model::effect_stack::defaults::bevel()
 }
 
 pub(super) fn default_satin() -> paged_model::SatinParams {
-    paged_model::SatinParams {
-        size: Some(14.0),
-        angle_deg: Some(19.0),
-        distance: Some(11.0),
-        effect_color: None,
-        opacity_pct: Some(50.0),
-        blend_mode: Some("Multiply".to_string()),
-        invert: Some(true),
-    }
+    paged_model::effect_stack::defaults::satin()
 }
 
 pub(super) fn default_feather() -> paged_model::FeatherParams {
-    paged_model::FeatherParams {
-        width: Some(5.0),
-        corner_type: Some("Diffusion".to_string()),
-        noise_pct: Some(0.0),
-        choke_pct: Some(0.0),
-    }
+    paged_model::effect_stack::defaults::feather()
 }
 
 pub(super) fn default_directional_feather() -> paged_model::DirectionalFeatherParams {
-    paged_model::DirectionalFeatherParams {
-        left_width: Some(5.0),
-        right_width: Some(5.0),
-        top_width: Some(5.0),
-        bottom_width: Some(5.0),
-        angle_deg: Some(0.0),
-        noise_pct: Some(0.0),
-        choke_pct: Some(0.0),
-        corner_type: None,
-        ..Default::default()
-    }
+    paged_model::effect_stack::defaults::directional_feather()
 }
 
 /// SDK Phase 5 (v1 sweep) — locate a mutable DropShadowSetting on

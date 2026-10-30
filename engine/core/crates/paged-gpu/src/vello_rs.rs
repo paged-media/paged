@@ -762,7 +762,36 @@ fn build_scene_with_transform_filtered(
         (c[0].hypot(c[1])) as f32
     };
 
+    // An effect layer the CPU lane drew in this lane's place: its
+    // commands up to and including its `PopLayer` are skipped.
+    let mut skip_until: Option<usize> = None;
     for (cmd_idx, cmd) in list.commands.iter().enumerate() {
+        if let Some(end) = skip_until {
+            if cmd_idx <= end {
+                continue;
+            }
+            skip_until = None;
+        }
+        #[cfg(feature = "cpu")]
+        if let DisplayCommand::PushLayer {
+            effect,
+            blend_mode,
+            opacity,
+            ..
+        } = cmd
+        {
+            if layer_effect_runs_on_cpu(effect) {
+                let end = layer_end(list, cmd_idx);
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                if let Some(layer) =
+                    crate::vcpu::rasterize_layer(list, cmd_idx, end, (px_per_pt * 72.0).max(1.0))
+                {
+                    draw_layer_raster(scene, &layer, *blend_mode, *opacity, page_to_px);
+                }
+                skip_until = Some(end);
+                continue;
+            }
+        }
         if let Some(feather_idx) = feather_runs.get(&cmd_idx).copied() {
             // Defensive: a previous run whose feather never executed
             // (degenerate path) would otherwise leak its layer.
@@ -1589,6 +1618,75 @@ fn emit_soft_mask(
             scene.pop_layer();
         }
     }
+}
+
+/// Whether this lane hands an effect layer to the CPU rasterizer (engine
+/// ADR 1008): the per-pixel effects always, and the Gaussian blur, whose
+/// CPU raster is exact where the multi-tap replay below approximates.
+#[cfg(feature = "cpu")]
+fn layer_effect_runs_on_cpu(effect: &LayerEffect) -> bool {
+    match effect {
+        LayerEffect::GaussianBlur { sigma_pt } => *sigma_pt > 0.0,
+        e => paged_compose::layer_fx::is_per_pixel(e),
+    }
+}
+
+/// The index of the `PopLayer` that closes the `PushLayer` at `start`
+/// (the list's last index when it is never closed).
+#[cfg(feature = "cpu")]
+fn layer_end(list: &DisplayList, start: usize) -> usize {
+    let mut depth = 0usize;
+    for (i, c) in list.commands.iter().enumerate().skip(start) {
+        match c {
+            DisplayCommand::PushLayer { .. } => depth += 1,
+            DisplayCommand::PopLayer(_) => {
+                depth -= 1;
+                if depth == 0 {
+                    return i;
+                }
+            }
+            _ => {}
+        }
+    }
+    list.commands.len().saturating_sub(1)
+}
+
+/// Composite a CPU-drawn effect layer: its premultiplied pixels as an
+/// image, under the layer's blend mode and opacity.
+#[cfg(feature = "cpu")]
+fn draw_layer_raster(
+    scene: &mut Scene,
+    layer: &crate::vcpu::LayerRaster,
+    blend_mode: ComposeBlendMode,
+    opacity: f32,
+    page_to_px: kurbo::Affine,
+) {
+    let b = layer.bounds_pt();
+    let rect = kurbo::Rect::new(
+        b.x as f64,
+        b.y as f64,
+        (b.x + b.w) as f64,
+        (b.y + b.h) as f64,
+    );
+    let brush = ImageBrush::new(ImageData {
+        data: Blob::new(Arc::new(layer.rgba.clone().into_boxed_slice())),
+        format: ImageFormat::Rgba8,
+        alpha_type: ImageAlphaType::AlphaPremultiplied,
+        width: layer.w,
+        height: layer.h,
+    });
+    let k = 1.0 / layer.px_per_pt.max(1e-6) as f64;
+    let place =
+        page_to_px * kurbo::Affine::translate((b.x as f64, b.y as f64)) * kurbo::Affine::scale(k);
+    scene.push_layer(
+        Fill::NonZero,
+        blend_to_peniko(blend_mode),
+        opacity.clamp(0.0, 1.0),
+        page_to_px,
+        &rect,
+    );
+    scene.draw_image(&brush, place);
+    scene.pop_layer();
 }
 
 /// Multi-tap Gaussian-blur approximation over a captured sub-scene.
@@ -4546,6 +4644,68 @@ mod tests {
         }
     }
 
+    /// The effect stack's layers (engine ADR 1008) composite the CPU
+    /// rasterizer's own pixels on this lane: a blurred, a noisy and a
+    /// colour-adjusted layer match the CPU lane (ADR 146).
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn effect_stack_layers_match_the_cpu_lane__feat__effects_transparency_effect_stack() {
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, Paint, Rect as DLRect,
+            Transform,
+        };
+        let effects = [
+            LayerEffect::GaussianBlur { sigma_pt: 4.0 },
+            LayerEffect::Noise {
+                amount: 0.2,
+                monochromatic: false,
+            },
+            LayerEffect::ColorAdjust {
+                brightness: 0.2,
+                contrast: 0.3,
+                saturation: -0.5,
+                hue_deg: 40.0,
+            },
+        ];
+        for effect in effects {
+            let mut list = DisplayList::new();
+            let bounds = DLRect {
+                x: 10.0,
+                y: 10.0,
+                w: 60.0,
+                h: 40.0,
+            };
+            list.commands.push(DisplayCommand::PushLayer {
+                bounds,
+                effect,
+                blend_mode: ComposeBlend::Multiply,
+                opacity: 0.8,
+                transform: Transform::IDENTITY,
+            });
+            paged_compose::emit_rect_transformed(
+                DLRect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 1.0,
+                    h: 1.0,
+                },
+                Transform([40.0, 0.0, 0.0, 20.0, 20.0, 20.0]),
+                Paint::Solid(DLColor::rgba(0.8, 0.2, 0.1, 1.0)),
+                &mut list,
+            );
+            list.commands
+                .push(DisplayCommand::PopLayer(Transform::IDENTITY));
+            let Some((worst, _)) = cpu_gpu_delta(&list, &overflow_opts(144.0)) else {
+                return;
+            };
+            assert!(
+                worst <= SHADOW_WORST,
+                "{effect:?}: worst channel delta {worst}"
+            );
+        }
+    }
+
     /// A dashed stroke leaves its gaps on the GPU as on the CPU. The
     /// dash used to be dropped here, so every dashed and dotted stroke
     /// drew solid (`strokes-fills` "canned-dotted": mean ΔE 0.37 between
@@ -4952,6 +5112,52 @@ mod tests {
             assert_eq!(red_at(buf, 90, 32), 255, "so is the star's middle");
             assert_eq!(red_at(buf, 90, 14), 0, "and its points are inside");
         }
+    }
+
+    /// Engine ADR 1037 — an image frame's filter stack is evaluated once,
+    /// on the CPU, into an RGBA-only picture of the display list's pool
+    /// (no encoded bytes): both lanes draw that picture alike, scaled
+    /// up, so the adjusted picture is the same on the GPU and the CPU.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn an_adjusted_picture_matches_the_cpu_lane__feat__images_graphics_image_filter_stack() {
+        use paged_compose::{DecodedImage, DisplayCommand, Transform};
+        let mut list = DisplayList::new();
+        // A duotone-like ramp, as the stack would leave it: 16 × 16, a
+        // smooth gradient so both lanes' sampling meet on it.
+        let (w, h) = (16u32, 16u32);
+        let rgba: Vec<u8> = (0..w * h)
+            .flat_map(|i| {
+                let (x, y) = (i % w, i / w);
+                let t = (x + y) as f32 / 30.0;
+                let mix = |a: f32, b: f32| ((a + (b - a) * t) * 255.0).round() as u8;
+                [mix(0.1, 1.0), mix(0.1, 0.9), mix(0.3, 0.7), 255]
+            })
+            .collect();
+        let image_id = list.push_image(DecodedImage {
+            width: w,
+            height: h,
+            encoded: Vec::new().into(),
+            rgba: rgba.into(),
+            icc: None,
+            rendering: None,
+        });
+        list.commands.push(DisplayCommand::Image {
+            image_id,
+            transform: Transform([96.0, 0.0, 0.0, 96.0, 12.0, 12.0]),
+        });
+        let mut opts = RasterOptions::new(120.0, 120.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let Some((worst, ndiff)) = cpu_gpu_delta(&list, &opts) else {
+            return;
+        };
+        // Measured on Metal: no pixel over 2, worst 2.
+        assert!(
+            ndiff <= 8 && worst <= 8,
+            "lanes differ on {ndiff} pixels (worst {worst})"
+        );
     }
 
     /// Engine ADR 1010 — a clip group nested in a paste-into is two

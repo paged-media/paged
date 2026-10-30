@@ -49,6 +49,16 @@
   tests:
     rust: ["image-conformance/tests/it/psd_fixtures.rs"]
 
+- id: image.psd.resource.grid-and-guides
+  state_row: image.psd.roundtrip
+  tier: mutatable        # WP5.12 (image ADR 475): typed (id 1032), read on open, written on save; unchanged guides keep the bytes
+  oracle: photoshop        # scripts/photoshop/probes/guides.jsx; the canonical re-encode equals Photoshop's bytes
+  provenance:
+    - "Adobe Photoshop File Format specification — Image Resources Section, id 1032 (Grid and guides information: version, grid cycle, guide count, per guide a 1/32-px location and a direction byte)"
+  tests:
+    rust: ["engine/core/crates/paged-psd/tests/it/roundtrip.rs", "image-js/src/workspace.rs", "image-conformance/tests/it/psd_guides_photoshop.rs"]
+    ts: ["glue/test/workspace-persist.spec.ts"]
+
 - id: image.psd.resource.opaque
   state_row: image.psd.roundtrip
   tier: preserved        # M0 green (fixtures + proptest); target was: preserved (the invariant itself)
@@ -251,13 +261,14 @@
 
 - id: image.psd.addl.smart-object
   state_row: image.psd.roundtrip
-  tier: preserved        # PlLd / SoLd / SoLE on the record and the sources in the document's lnk2 / lnkE blocks: carried through the layered save while the layer's PIXELS are unedited (opacity, blend, name, style, mask edits keep it a live smart object); new pixels rasterize it (WP5.15, ADR 478). The placement is not re-written for a transformed smart object (deferred, WP5.14)
-  oracle: photoshop      # Photoshop reopens an edited, paged-written smart object as a SMARTOBJECT layer (psd_write_photoshop.rs)
+  tier: mutatable        # PlLd / SoLd / SoLE READ into the smart object's placement (Trnf / nonAffineTransform), source size, warp and smart filters (filterFX), its source from the document's lnk2 / lnkD / lnk3 / lnkE (liFD embedded, liFE linked) and its filter mask from FEid (paged-psd smart_object.rs, image-js smart.rs; ADR 482). WRITTEN live: an unchanged object byte for byte; a transformed, re-filtered or re-contented one with SoLd patched (corners, size, uuid, filterFX), PlLd regenerated, a new liFD entry when its contents changed and a new FEid entry (unfiltered render + filter mask) when it has filters; an object made in paged gets both blocks and a one-layer PSB source (psd_write_smart.rs). A warp is read and kept, not drawn; a smart filter without a Photoshop counterpart rasterizes the layer on save and says so
+  oracle: photoshop      # Photoshop's stored render of each of 17 recorded smart objects (transforms, filters, Edit Contents) against paged's render from the embedded source; Photoshop reopens paged's transformed, perspective, filtered, re-contented and new smart objects live (smart_objects_photoshop.rs)
   provenance:
-    - "Adobe Photoshop File Formats specification — Placed Layer (PlLd), Placed Layer Data (SoLd / SoLE), Linked Layer (lnk2 / lnkE) [PUB]"
+    - "Adobe Photoshop File Formats specification — Placed Layer (PlLd), Placed Layer Data (SoLd / SoLE), Linked Layer (lnk2 / lnkE), Filter Effects (FEid / FXid), Filter Mask (FMsk) [PUB]"
     - "Photoshop 27.10's embedded smart object (scripts/photoshop/probes/psd-containers.jsx): PlLd + SoLd on the record and the file in lnk2 [OBS]; a linked one (SoLE + lnkE) was observed but not committed (lnkE holds the machine's absolute path)"
+    - "Photoshop 27.10's transformed and filtered smart objects (scripts/photoshop/probes/smart-objects.jsx): Trnf and nonAffineTransform carry the same corners for an affine transform; filterFX lists the filters bottom first, each Fltr a filter descriptor (GsnB Rds, MtnB Angl + Dstn, boxblur Rds with filterID 840, HghP, Mdn , Mxm , Mnm  Rds); FEid holds per placement id the unfiltered render (channels 0–2 and max+1, RLE with 4-byte row counts) and after the entry's framed part the filter mask (rect, RLE); the liFD entry is version 8 with a child-document id, an asset time, a lock flag and a contentID descriptor after the data; a new placed layer's PSB is zero-padded to 1 MiB until its contents are saved [OBS]"
   tests:
-    rust: ["image-js/tests/it/psd_write.rs (an_edited_smart_object_keeps_its_source_until_its_pixels_change)", "image-conformance/tests/it/psd_write_photoshop.rs"]
+    rust: ["engine/core/crates/paged-psd/src/smart_object.rs (unit)", "image-js/src/smart.rs (unit)", "image-js/src/layers/smart_ops.rs (unit)", "image-js/tests/it/psd_write.rs (an_edited_smart_object_keeps_its_source_until_its_pixels_change)", "image-conformance/tests/it/smart_objects_photoshop.rs", "image-conformance/tests/it/psd_write_photoshop.rs"]
 
 - id: image.psd.global.lr16
   state_row: image.psd.roundtrip
@@ -296,6 +307,21 @@
       - "image-js/src/psd_vector_mask.rs (unit: edges_count_samples_on_photoshops_17_by_15_grid, fill_rule_decides_a_self_intersecting_star, components_fold_per_sample_in_order, invert_open_subpaths_and_the_user_mask_product)"
       - "image-conformance/tests/it/psd_vector_masks_photoshop.rs (photoshop_vector_masks_import_as_recorded)"
       - "image-conformance/tests/it/psd_vector_mask_corpus.rs (opt-in corpus lane: vector_masks_draw_as_photoshops_cached_renders)"
+
+- id: image.psd.addl.tysh
+  state_row: image.layers.type
+  tier: mutatable        # READ into an editable type layer (paged-psd text_layer.rs → image-js TypeSource) and WRITTEN back: an unedited layer re-emits its own block verbatim (preservation untouched), an edited or new one is written from its source by the canonical writer
+  oracle: photoshop      # probes/text-layers.jsx and probes/warp-text.jsx fixtures (Photoshop-written type layers, every Warp Text style)
+  provenance:
+    - "Adobe Photoshop File Formats Specification — Type tool object setting (TySh): version 1, the transform as six doubles, text version 50 + a versioned `TxLr` descriptor, warp version 1 + a versioned `warp` descriptor (warpStyle, warpValue, warpPerspective, warpPerspectiveOther, warpRotate), then the bounds [PUB]"
+    - "The text engine's data (`EngineData`, a `tdta` in the `TxLr` descriptor): a PostScript-like tree of `<< /Key value >>` dictionaries, arrays, numbers, booleans and `( )` strings of UTF-16BE after a FE FF mark with `(`, `)` and `\\` escaped. Its field names and nesting — Editor/Text, StyleRun and ParagraphRun (RunArray + RunLengthArray over the text and its trailing paragraph mark), StyleSheetData (Font index into ResourceDict/FontSet, FontSize, FillColor {Type 1, Values [a r g b]}, Tracking, Leading/AutoLeading, scales, FontCaps, FontBaseline …), ParagraphSheet/Properties (Justification 0–6, indents, spaces, AutoHyphenate), Rendered/Shapes/Children/Cookie/Photoshop (ShapeType 0 point with PointBase, 1 box with BoxBounds) — are established by OBSERVATION of Photoshop 27.10-written files [OBS]"
+    - "Key forms observed in Photoshop's own TySh: `TxLr`, `Txt `, `Ornt`, `AntA`, `TxMP` and the bound corners in the 4-byte form; `textGridding`, `bounds`, `boundingBox`, `TextIndex`, `EngineData`, `warp` (class) and every `warp*` key in the long form; the block's tail is four zero 32-bit bounds padded to a multiple of four [OBS]"
+  tests:
+    rust:
+      - "paged-psd/src/text_layer.rs, engine_data.rs, descriptor_write.rs (unit: round trips)"
+      - "image-js/src/layers/type_layer.rs (unit: a_type_source_goes_through_a_psd_type_layer_and_back)"
+      - "image-conformance/tests/it/psd_text_layers.rs (photoshop_text_layers_open_as_editable_type, type_layers_are_written_back_as_type)"
+      - "image-conformance/tests/it/warp_text_photoshop.rs"
 
 # ── PSD descriptor-family primitives ─────────────────────────────────
 # Neither of these is a top-level PSD *block*; they are the two

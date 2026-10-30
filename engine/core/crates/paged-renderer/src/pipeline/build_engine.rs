@@ -1553,6 +1553,7 @@ pub(super) fn build_document_inner(
                                     ),
                                 )
                             },
+                            &mut |_: &mut BuiltPage| {},
                         );
                     }
                     paged_model::FrameRef::Polygon(idx) => {
@@ -1581,6 +1582,7 @@ pub(super) fn build_document_inner(
                             palette,
                             options.fallback_frame_fill,
                             color_ctx,
+                            &mut |_: &mut BuiltPage| {},
                             &mut |_: &mut BuiltPage| {},
                         );
                     }
@@ -1611,6 +1613,7 @@ pub(super) fn build_document_inner(
                             options.fallback_frame_fill,
                             color_ctx,
                             &mut |_: &mut BuiltPage| {},
+                            &mut |_: &mut BuiltPage| {},
                         );
                     }
                     paged_model::FrameRef::GraphicLine(idx) => {
@@ -1632,7 +1635,14 @@ pub(super) fn build_document_inner(
                         let mut copy = line.clone();
                         copy.item_transform =
                             Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                        emit_line_into(&mut pages[i], &copy, document, palette, color_ctx);
+                        emit_line_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            color_ctx,
+                            &mut |_: &mut BuiltPage| {},
+                        );
                     }
                     // Engine ADR 1039 — instances are placed on body spreads
                     // only (`placeSymbolInstance` names one); a master holds none.
@@ -1857,6 +1867,31 @@ pub(super) fn build_document_inner(
                             options.frame_drop_shadow,
                             grown,
                         );
+                        // C-6 tiles and the C-1 scene layer: the module's
+                        // own render of this frame, over the box. When the
+                        // body gave a slot (an object group, feathers or an
+                        // effect stack wrap the box), the module content
+                        // moves into it, so the frame's opacity, blend mode
+                        // and effects take it with the box (engine ADR
+                        // 1046), and the text slot moves past it: the story
+                        // stays frontmost, as it is without a slot.
+                        let body_end = pages[page_idx].list.commands.len();
+                        emit_frame_module_content(
+                            &mut pages[page_idx],
+                            frame.self_id.as_deref(),
+                            frame.bounds,
+                            frame.inset_spacing,
+                            frame.item_transform,
+                            options,
+                        );
+                        let added = pages[page_idx].list.commands.len() - body_end;
+                        let slot_in_group = slot_in_group.map(|mut s| {
+                            if added > 0 && s.slot <= body_end {
+                                pages[page_idx].list.move_tail_to(body_end, s.slot);
+                                s.slot += added;
+                            }
+                            s
+                        });
                         let after = pages[page_idx].list.commands.len();
                         if after > before && frame_spans.text_frames[idx].is_none() {
                             frame_spans.text_frames[idx] = Some(crate::module::FrameCmdSpan {
@@ -1865,35 +1900,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            frame.self_id.as_deref(),
-                            frame.bounds,
-                            frame.inset_spacing,
-                            frame.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            frame.self_id.as_deref(),
-                            frame.bounds,
-                            frame.inset_spacing,
-                            frame.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                         // W2 — the z-slot this frame's story text belongs
                         // at. Recorded AFTER the box, the C-6 tiles and the
                         // C-1 plugin layer, so relocating the glyphs keeps
@@ -1982,6 +1988,19 @@ pub(super) fn build_document_inner(
                                     ),
                                 )
                             },
+                            // C-6 tiles and the C-1 scene layer: the module's own
+                            // render of this frame, frontmost in it, inside the
+                            // frame's group and effect stack (engine ADR 1046).
+                            &mut |page: &mut BuiltPage| {
+                                emit_frame_module_content(
+                                    page,
+                                    rect.self_id.as_deref(),
+                                    rect.bounds,
+                                    None,
+                                    rect.item_transform,
+                                    options,
+                                )
+                            },
                         );
                         let after = pages[page_idx].list.commands.len();
                         if after > before && frame_spans.rectangles[idx].is_none() {
@@ -1991,35 +2010,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            rect.self_id.as_deref(),
-                            rect.bounds,
-                            None,
-                            rect.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            rect.self_id.as_deref(),
-                            rect.bounds,
-                            None,
-                            rect.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                     }
                     // B-18 paste-into: nested children paint inside
                     // the container, masked by its outline.
@@ -2085,6 +2075,19 @@ pub(super) fn build_document_inner(
                                     ),
                                 )
                             },
+                            // C-6 tiles and the C-1 scene layer: the module's own
+                            // render of this frame, frontmost in it, inside the
+                            // frame's group and effect stack (engine ADR 1046).
+                            &mut |page: &mut BuiltPage| {
+                                emit_frame_module_content(
+                                    page,
+                                    oval.self_id.as_deref(),
+                                    oval.bounds,
+                                    None,
+                                    oval.item_transform,
+                                    options,
+                                )
+                            },
                         );
                         let after = pages[page_idx].list.commands.len();
                         if after > before && frame_spans.ovals[idx].is_none() {
@@ -2094,35 +2097,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            oval.self_id.as_deref(),
-                            oval.bounds,
-                            None,
-                            oval.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            oval.self_id.as_deref(),
-                            oval.bounds,
-                            None,
-                            oval.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                     }
                     // B-18 paste-into: nested children paint inside
                     // the container, masked by its outline.
@@ -2165,7 +2139,26 @@ pub(super) fn build_document_inner(
                     for &local_idx in &local_indices {
                         let page_idx = range.start + local_idx;
                         let before = pages[page_idx].list.commands.len();
-                        emit_line_into(&mut pages[page_idx], line, document, palette, color_ctx);
+                        emit_line_into(
+                            &mut pages[page_idx],
+                            line,
+                            document,
+                            palette,
+                            color_ctx,
+                            // C-6 tiles and the C-1 scene layer: the module's own
+                            // render of this frame, frontmost in it, inside the
+                            // frame's group and effect stack (engine ADR 1046).
+                            &mut |page: &mut BuiltPage| {
+                                emit_frame_module_content(
+                                    page,
+                                    line.self_id.as_deref(),
+                                    line.bounds,
+                                    None,
+                                    line.item_transform,
+                                    options,
+                                )
+                            },
+                        );
                         let after = pages[page_idx].list.commands.len();
                         if after > before && frame_spans.graphic_lines[idx].is_none() {
                             frame_spans.graphic_lines[idx] = Some(crate::module::FrameCmdSpan {
@@ -2174,35 +2167,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            line.self_id.as_deref(),
-                            line.bounds,
-                            None,
-                            line.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            line.self_id.as_deref(),
-                            line.bounds,
-                            None,
-                            line.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                     }
                 }
                 paged_model::FrameRef::Polygon(idx) => {
@@ -2254,6 +2218,19 @@ pub(super) fn build_document_inner(
                                     ),
                                 )
                             },
+                            // C-6 tiles and the C-1 scene layer: the module's own
+                            // render of this frame, frontmost in it, inside the
+                            // frame's group and effect stack (engine ADR 1046).
+                            &mut |page: &mut BuiltPage| {
+                                emit_frame_module_content(
+                                    page,
+                                    poly.self_id.as_deref(),
+                                    poly.bounds,
+                                    None,
+                                    poly.item_transform,
+                                    options,
+                                )
+                            },
                         );
                         let after = pages[page_idx].list.commands.len();
                         if after > before && frame_spans.polygons[idx].is_none() {
@@ -2263,35 +2240,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            poly.self_id.as_deref(),
-                            poly.bounds,
-                            None,
-                            poly.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            poly.self_id.as_deref(),
-                            poly.bounds,
-                            None,
-                            poly.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                     }
                     // B-18 paste-into: nested children paint inside
                     // the container, masked by its outline.

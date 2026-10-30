@@ -108,6 +108,7 @@ export interface FilterDef {
 
 /** Every filter id (the command is `filter<Id>`). */
 export type FilterId =
+  | "gaussianBlur"
   | "boxBlur"
   | "surfaceBlur"
   | "motionBlur"
@@ -215,6 +216,7 @@ export type FilterGroup =
   | "Adjust";
 
 export const F = defineMessages("image.filter", {
+  gaussianBlur: "Gaussian blur",
   boxBlur: "Box blur",
   surfaceBlur: "Surface blur",
   motionBlur: "Motion blur",
@@ -327,6 +329,9 @@ export const MORPH_MAX_RADIUS = 32;
 export const BOX_MAX_RADIUS = 32;
 export const SURFACE_MAX_RADIUS = 16;
 export const HIGH_PASS_MAX_SIGMA = 10;
+/** The adjust chain's blur: its window reaches 3 sigma, up to the
+ *  Gaussian kernel's radius bound, 24 (`conv::GAUSSIAN_MAX_RADIUS`). */
+export const GAUSSIAN_MAX_SIGMA = 8;
 
 export const num = (v: FilterValues, k: string): number => {
   const x = v[k];

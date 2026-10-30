@@ -132,7 +132,26 @@ pub(crate) fn apply_inner(
         // ADR 132 — the typed value forms (`Number`, `Enum`, `Ref`) fold into
         // the variants the arms match on, so one apply path serves both.
         Operation::SetProperty { node, path, value } => {
-            apply_set_property(doc, node, *path, &value.normalized())
+            let value = value.normalized();
+            // Engine ADR 1008 — the effect stack, and the per-field
+            // effect paths on an item that stores one.
+            if effect_stack::stack_target(*path).is_some()
+                && matches!(
+                    node,
+                    NodeId::TextFrame(_)
+                        | NodeId::Rectangle(_)
+                        | NodeId::Oval(_)
+                        | NodeId::Polygon(_)
+                )
+            {
+                return effect_stack::apply_effect_stack(doc, node, *path, &value);
+            }
+            if let Some(result) =
+                effect_stack::apply_effect_field_on_stack(doc, node, *path, &value)
+            {
+                return result;
+            }
+            apply_set_property(doc, node, *path, &value)
         }
         Operation::InsertNode {
             parent,
@@ -1304,6 +1323,7 @@ mod batch_page;
 mod character;
 mod conditions;
 mod duplicate_nodes;
+pub(crate) mod effect_stack;
 pub use duplicate_nodes::{duplicate_demand, duplicate_roots, DuplicateDemand};
 mod snippet;
 mod symbol;

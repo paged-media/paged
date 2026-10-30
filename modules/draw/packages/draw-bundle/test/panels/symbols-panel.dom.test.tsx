@@ -42,6 +42,7 @@ import {
   applyDefineSymbol,
   applyPlaceSymbolInstance,
   makeSymbolsPanel,
+  readEngineSymbols,
   readSymbolLibrary,
   symbolInstanceOf,
   symbolInstances,
@@ -447,6 +448,60 @@ describe("Symbols panel — rendered against the engine", () => {
       await panel.click("[data-draw-symbol-break]");
       expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
       expect(panel.attr(row, "data-draw-symbol-instance-count")).toBe("0");
+      await h.host.document.undo();
+    });
+
+    // WP6.8 (draw ADR 365) — choose a symbol, Replace, Symbol Options.
+    it("chooses a symbol, replaces the selected instance's symbol and applies its options, one step each", async () => {
+      await h.host.selection.set([poly("s1")]);
+      const panel = await mountPanel(h, makeSymbolsPanel);
+      const ids = () =>
+        panel
+          .all("[data-draw-symbol-row]")
+          .map((r) => r.getAttribute("data-draw-symbol-row"));
+      const had = new Set(ids());
+      await panel.click("[data-draw-symbol-define]");
+      await h.host.selection.set([poly("s2")]);
+      await panel.click("[data-draw-symbol-define]");
+      const made = ids().filter((id) => !had.has(id));
+      expect(made).toHaveLength(2);
+      const [first, second] = made;
+      await panel.click(
+        `[data-draw-symbol-row="${first}"] [data-draw-symbol-place]`,
+      );
+      // Choosing the second row makes it the Sprayer's and Replace's.
+      await panel.click(`[data-draw-symbol-choose="${second}"]`);
+      expect(
+        panel.attr(`[data-draw-symbol-choose="${second}"]`, "aria-pressed"),
+      ).toBe("true");
+      expect(
+        panel.attr("[data-draw-symbol-options]", "data-draw-symbol-options"),
+      ).toBe(second);
+      // Replace — the placed instance (still selected) draws the second.
+      panel.reset();
+      await panel.click(
+        `[data-draw-symbol-row="${second}"] [data-draw-symbol-replace]`,
+      );
+      expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+      expect(
+        panel.attr(
+          `[data-draw-symbol-row="${second}"]`,
+          "data-draw-symbol-instance-count",
+        ),
+      ).toBe("1");
+      // Options — a new name and 9-slice guides, one redefineSymbol.
+      panel.change("[data-draw-symbol-option-name]", "Badge");
+      await panel.click("[data-draw-symbol-option-guides]");
+      panel.change('[data-draw-symbol-option-inset="0"]', "3");
+      panel.reset();
+      await panel.click("[data-draw-symbol-option-apply]");
+      expect(panel.work.mutations.map((m) => m.op)).toEqual(["redefineSymbol"]);
+      const row = (await readEngineSymbols(h.host)).find(
+        (r) => r.id === second,
+      )!;
+      expect(row.name).toBe("Badge");
+      expect(row.nineSlice?.[0]).toBe(3);
+      await h.host.document.undo();
       await h.host.document.undo();
     });
   });

@@ -1,0 +1,89 @@
+{
+  "fixture": "effect-stack",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/effect-stack.jsx",
+    "script_sha256": "656c3c260673a1379e792b44942a77690eb5751f24e8d660d97928d486bfbdab",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-25T07:18:16.984Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "identity",
+      "params": {},
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "effect-stack/identity.png"
+      ]
+    },
+    {
+      "id": "stroke-outside",
+      "params": {
+        "stroke": "Outside",
+        "size": 4
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "effect-stack/stroke-outside.png"
+      ]
+    },
+    {
+      "id": "stroke-inside",
+      "params": {
+        "stroke": "Inside",
+        "size": 4
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "effect-stack/stroke-inside.png"
+      ]
+    },
+    {
+      "id": "stroke-center",
+      "params": {
+        "stroke": "Center",
+        "size": 4
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "effect-stack/stroke-center.png"
+      ]
+    },
+    {
+      "id": "color-overlay",
+      "params": {
+        "overlay": [
+          255,
+          0,
+          0
+        ]
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "effect-stack/color-overlay.png"
+      ]
+    },
+    {
+      "id": "gaussian-blur-3",
+      "params": {
+        "radius": 3
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "effect-stack/gaussian-blur-3.png"
+      ]
+    }
+  ]
+}

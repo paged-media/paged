@@ -798,6 +798,9 @@ property_paths! {
         FramePdfPage => "framePdfPage" : count().min(1.0).default_num(1.0).idml(idml![attr(PDFAttribute, PageNumber)]),
         // Engine ADR 1006 — the outline's fill rule; IDML has no attribute.
         FrameFillRule => "frameFillRule" : enum_(FILL_RULES).default_text("NonZero"),
+        // Engine ADR 1037 — the placed picture's filter stack; IDML has none
+        // (the export keeps it in a label and reports it).
+        FrameImageAdjustments => "frameImageAdjustments" : list_of("RasterOp", Wire::ImageAdjustments),
         // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
@@ -898,6 +901,8 @@ property_paths! {
         // Native: IDML has no symbol (the writer expands instances).
         SymbolInstanceTint => "symbolInstanceTint" : lengths(),
         SymbolInstanceNineSlice => "symbolInstanceNineSlice" : lengths(),
+        // Draw ADR 365 — the symbol an instance draws (Replace Symbol).
+        SymbolInstanceSymbol => "symbolInstanceSymbol" : text(),
         // R-11 — the drop shadow's remaining attributes.
         FrameDropShadowBlendMode => "frameDropShadowBlendMode" : enum_open(BLEND_MODES).default_text("Multiply").idml(idml![attr(DropShadowSetting, BlendMode)]),
         FrameDropShadowSpread => "frameDropShadowSpread" : pct().default_num(0.0).idml(idml![attr(DropShadowSetting, Spread)]),
@@ -909,6 +914,11 @@ property_paths! {
         // apply arm takes the same node kinds as the others and the
         // bridge already encodes its spec. PROMOTED 2026-09-09.
         FrameGradientFeather => "frameGradientFeather" : structure("GradientFeatherSpec", Wire::GradientFeather),
+        // Engine ADR 1008 — the ordered effect stack per target.
+        FrameEffectStack => "frameEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameFillEffectStack => "frameFillEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameStrokeEffectStack => "frameStrokeEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameContentEffectStack => "frameContentEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         CellFillColor => "cellFillColor" : color().idml(idml![attr(Cell | CellStyle, FillColor)]),
         CellFillTint => "cellFillTint" : pct().default_num(100.0).idml(idml![attr(Cell | CellStyle, FillTint)]),
         CellInsetTop => "cellInsetTop" : length_pos().idml(idml![attr(Cell, TextTopInset)]),
@@ -1479,8 +1489,15 @@ mod tests {
         //
         // 257 -> 258: ADR 1031 — where a frame's gradient fill starts.
         //
-        // 258 -> 260: ADR 1039 — a symbol instance's tint and 9-slice guides.
-        assert_eq!(cat.settable_paths.len(), 260, "settable path count drifted");
+        // 258 -> 262: ADR 1008 — the effect stack of each transparency
+        // target.
+        //
+        // 262 -> 264: ADR 1039 — a symbol instance's tint and 9-slice guides.
+        //
+        // 264 -> 265: draw ADR 365 — the symbol an instance draws.
+        //
+        // 265 -> 266: ADR 1037 — an image frame's filter stack.
+        assert_eq!(cat.settable_paths.len(), 266, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

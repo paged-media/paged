@@ -312,8 +312,23 @@ pub(super) fn apply_set_property(
             | PropertyPath::ElementLocked
             | PropertyPath::ItemLayer
             | PropertyPath::SymbolInstanceTint
-            | PropertyPath::SymbolInstanceNineSlice,
+            | PropertyPath::SymbolInstanceNineSlice
+            | PropertyPath::SymbolInstanceSymbol,
         ) => {
+            // Replace Symbol (draw ADR 365): the target must be in the store.
+            let replacement = if path == PropertyPath::SymbolInstanceSymbol {
+                let next = expect_text(path, value)?;
+                if !doc.symbols.iter().any(|d| d.id == next) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason: format!("no symbol {next:?} in the document"),
+                    });
+                }
+                Some(next)
+            } else {
+                None
+            };
             let inst = doc
                 .spreads
                 .iter_mut()
@@ -437,6 +452,17 @@ pub(super) fn apply_set_property(
                                 .unwrap_or_default(),
                         ),
                         frame_style_hint(node),
+                    )
+                }
+                PropertyPath::SymbolInstanceSymbol => {
+                    let next = replacement.expect("validated above");
+                    let prev = std::mem::replace(&mut inst.symbol, next);
+                    (
+                        Value::Text(prev),
+                        InvalidationHint {
+                            frame_geometry: vec![node.clone()],
+                            ..Default::default()
+                        },
                     )
                 }
                 _ => unreachable!("the arm lists the instance paths"),
@@ -3377,6 +3403,36 @@ pub(super) fn apply_set_property(
             *slot = rule;
             (
                 Value::Text(prev.as_str().into()),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
+        // Engine ADR 1037 — the picture's filter stack, replaced whole. Every
+        // op is range-checked; the inverse carries the stack it replaced.
+        (
+            NodeId::Rectangle(_) | NodeId::Oval(_) | NodeId::Polygon(_),
+            PropertyPath::FrameImageAdjustments,
+        ) => {
+            let Value::ImageAdjustments(ops) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "ImageAdjustments".to_string(),
+                });
+            };
+            if let Some(bad) = ops.iter().find(|op| !op.is_valid()) {
+                return Err(OperationError::InvalidValue {
+                    node: node.clone(),
+                    path,
+                    reason: format!("the {} op has a value out of its range", bad.name()),
+                });
+            }
+            let slot = find_image_adjustments_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = std::mem::replace(slot, ops.clone());
+            (
+                Value::ImageAdjustments(prev),
                 InvalidationHint {
                     frame_style: vec![node.clone()],
                     ..Default::default()

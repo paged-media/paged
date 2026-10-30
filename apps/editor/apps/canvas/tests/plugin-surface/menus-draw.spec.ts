@@ -1096,6 +1096,33 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
+  // WP6.8 (draw ADR 365) — engine symbols.
+  test("Draw/Symbol/Replace symbol — runs replaceSymbol; the selection holds no symbol instance, so it changes nothing", async () => {
+    covers("menu:Draw/Symbol/Replace symbol");
+    await expectGreyedAndInert(bare, "Draw/Symbol/Replace symbol");
+    const out = await clickEntry(
+      live,
+      "Draw/Symbol/Replace symbol",
+      "media.paged.draw.command.replaceSymbol",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after, "the selection holds no symbol instance").toBe(
+      out.before,
+    );
+  });
+
+  test("Draw/Symbol/Symbol options… — runs symbolOptions; the document has no symbol, so it raises nothing and changes nothing", async () => {
+    covers("menu:Draw/Symbol/Symbol options…");
+    await expectGreyedAndInert(bare, "Draw/Symbol/Symbol options…");
+    const out = await clickEntry(
+      live,
+      "Draw/Symbol/Symbol options…",
+      "media.paged.draw.command.symbolOptions",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after, "the document has no symbol").toBe(out.before);
+  });
+
   test("Draw/Live paint/Make — makes a live paint group of the selection, and one Undo takes it back", async () => {
     covers("menu:Draw/Live paint/Make");
     await expectGreyedAndInert(bare, "Draw/Live paint/Make");

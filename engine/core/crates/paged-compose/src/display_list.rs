@@ -977,6 +977,20 @@ pub enum LayerEffect {
     /// (in pt) before compositing. Edges clamp to transparent (the
     /// layer's bounds are padded by 3σ at composite time).
     GaussianBlur { sigma_pt: f32 },
+    /// Photoshop's Add Noise (uniform): each pixel's colour moves by up to
+    /// `amount` (0..=1) of its range, one random value for all channels
+    /// when `monochromatic`. The grain is hashed per page-space cell
+    /// (engine ADR 1008, [`crate::layer_fx`]).
+    Noise { amount: f32, monochromatic: bool },
+    /// A colour adjustment of the layer's pixels: brightness and contrast
+    /// (−1..=1), then saturation (−1..=1) and a hue rotation in degrees
+    /// ([`crate::layer_fx`]).
+    ColorAdjust {
+        brightness: f32,
+        contrast: f32,
+        saturation: f32,
+        hue_deg: f32,
+    },
 }
 
 impl LayerEffect {
@@ -984,8 +998,8 @@ impl LayerEffect {
     /// pad the layer bounds uniformly.
     pub fn sigma_pt(&self) -> f32 {
         match self {
-            LayerEffect::None => 0.0,
             LayerEffect::GaussianBlur { sigma_pt } => sigma_pt.max(0.0),
+            _ => 0.0,
         }
     }
 }
@@ -1789,6 +1803,31 @@ impl DisplayList {
         }
     }
 
+    /// Move the commands from `from` to the end of the list so they start
+    /// at `at` (`at <= from`), keeping the glyph-run side channel in step:
+    /// an entry on a moved command moves with it, one between `at` and
+    /// `from` moves past the block. Used to splice what an emitter appended
+    /// back into an earlier slot, such as a frame's module content into
+    /// the frame's object group (engine ADR 1046).
+    pub fn move_tail_to(&mut self, from: usize, at: usize) {
+        let len = self.commands.len();
+        if from >= len || at >= from {
+            return;
+        }
+        let n = len - from;
+        self.commands[at..].rotate_right(n);
+        if let Some(table) = self.glyph_runs.as_mut() {
+            for entry in table.entries.iter_mut() {
+                let i = entry.command_index as usize;
+                if i >= from {
+                    entry.command_index -= (from - at) as u32;
+                } else if i >= at {
+                    entry.command_index += n as u32;
+                }
+            }
+        }
+    }
+
     /// Apply `f` to the transform of every command in `range`, and of every
     /// glyph-run entry that belongs to one of them.
     ///
@@ -2051,6 +2090,63 @@ mod tests {
             list.commands[1].clone().transform_mut().0,
             [2.0, 0.0, 0.0, 2.0, 20.0, 20.0]
         );
+    }
+
+    /// Engine ADR 1046 — a tail spliced back into an earlier slot keeps
+    /// every glyph-run entry on the command it was captured for.
+    #[test]
+    fn move_tail_to_moves_commands_and_their_glyph_runs() {
+        let mut list = DisplayList::new();
+        let path_id = list.paths.push_anon(PathData::default());
+        let fill = |x: f32| DisplayCommand::FillPath {
+            path_id,
+            paint: Paint::Solid(Color::WHITE),
+            transform: Transform([1.0, 0.0, 0.0, 1.0, x, 0.0]),
+        };
+        for x in 0..5 {
+            list.push(fill(x as f32));
+        }
+        let entry = |i: u32| GlyphRunEntry {
+            command_index: i,
+            font_id: 0,
+            face_id: None,
+            glyph_id: i,
+            font_size: 10.0,
+            transform: Transform::IDENTITY,
+            paint: Paint::Solid(Color::WHITE),
+            unicode: None,
+            is_stroke: false,
+            structure: None,
+        };
+        list.glyph_runs = Some(GlyphRunTable {
+            entries: (0..5).map(entry).collect(),
+            current: None,
+        });
+        // Commands 3 and 4 move to slot 1.
+        list.move_tail_to(3, 1);
+        let xs: Vec<f32> = list
+            .commands
+            .iter()
+            .map(|c| c.clone().transform_mut().0[4])
+            .collect();
+        assert_eq!(xs, vec![0.0, 3.0, 4.0, 1.0, 2.0]);
+        let table = list.glyph_runs.as_ref().unwrap();
+        for e in &table.entries {
+            let x = list.commands[e.command_index as usize]
+                .clone()
+                .transform_mut()
+                .0[4];
+            assert_eq!(
+                x, e.glyph_id as f32,
+                "entry {} follows its command",
+                e.glyph_id
+            );
+        }
+        // Out-of-range or backwards requests change nothing.
+        let before = list.commands.len();
+        list.move_tail_to(9, 0);
+        list.move_tail_to(2, 2);
+        assert_eq!(list.commands.len(), before);
     }
 
     #[test]

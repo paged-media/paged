@@ -46,6 +46,11 @@ import type {
   AssetSurface,
   BindingCollectionRequest,
   BindingCollectionResult,
+  BindingGuideEdit,
+  BindingReadoutRequest,
+  BindingReadoutsResult,
+  BindingWorkspaceResult,
+  BindingWorkspaceView,
   BindingProvider,
   BindingProviderHandle,
   BindingPropertyRequest,
@@ -86,7 +91,10 @@ import type {
   PresentationContribution,
   PresentationState,
   RenderedLayer,
+  RenderedElement,
   RenderRect,
+  RenderStory,
+  RenderStoryOptions,
   ViewContribution,
   SubContextProviderContribution,
   SubContextState,
@@ -477,6 +485,11 @@ export const HOST_FEATURES: readonly string[] = [
   // along its line geometry (`requestSelectionGeometry`). Static: built on
   // doors every engine at this protocol answers.
   "render.layers.paragraphs@1",
+  // Extensions ADR 342 — a story the document does not hold, laid out and
+  // drawn by the engine (`requestSnapshot.story`, additive on protocol
+  // 76). Static: an engine without the field draws the page instead, and
+  // its reply lacks `story`, so the door answers null — never the page.
+  "render.story@1",
   // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
   // reason as storage.parts@1: the pinned engine is the server, and the worker
   // handshake refuses a protocol older than the pin — so a running bundle is
@@ -512,6 +525,26 @@ export const HOST_FEATURES: readonly string[] = [
   // and keeps its own TypeScript reader for a host without the flags.
   "document.importSvg@1",
   "document.exportSvg@1",
+  // Engine ADR 1008 — the ordered effect stack. The vendored wire and
+  // catalog carry `frameEffectStack` (and the fill / stroke / content
+  // twins): the whole stack as `{ type: "effectStack", value: { entries } }`,
+  // one write and one undo step per gesture, with the stack-only effects
+  // (Gaussian blur, outline stroke, colour and gradient overlays,
+  // reflection, soft edge, noise, colour adjustment) on the object target.
+  // STATIC like the fill rule: additive at protocol 76, so an older engine
+  // refuses the path (an outcome) and reads no row. A bundle that would
+  // otherwise bake an effect into pixels asks this flag first.
+  "document.effectStack@1",
+  // Engine ADR 1037 — an image frame's filter stack: `frameImageAdjustments`
+  // (a list of `RasterOp`: exposure, levels, curves, hue/saturation,
+  // recolor, duotone, black & white, sharpen, blur, posterize, threshold,
+  // invert) reads and writes through the ordinary property doors on a
+  // rectangle, oval or polygon. STATIC, like `document.fillRule@1`: the
+  // path and its `imageAdjustments` value are additive at protocol 77, so
+  // an older engine refuses the write as an unknown path (an outcome) and
+  // reads no row. A bundle that would otherwise bake a picture fix into
+  // the pixels (paged.slide's DrawingML picture effects) asks it first.
+  "document.imageAdjustments@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -1117,6 +1150,19 @@ export interface BindingProviderBackend {
   /** Offer a structural mutation to the active providers before sending
    *  it to core (`layerMove`, `createSwatch`, …). */
   applyMutation(mutation: MutationInput): Promise<BindingWriteResult>;
+  /** Extensions ADR 340 — the active context's workspace (the frame the
+   *  rulers measure in, its guides, the grid's area), innermost claimer
+   *  first; `resolved: false` keeps the page rulers and guides. */
+  readWorkspace(): Promise<BindingWorkspaceResult>;
+  /** A guide edit from the host's guide machinery, to the provider whose
+   *  workspace the host is showing (the innermost claimer). */
+  editGuide(edit: BindingGuideEdit): Promise<BindingWriteResult>;
+  /** The host's grid and snapping state. Remembered, and delivered to
+   *  every workspace provider now and whenever one becomes active. */
+  setWorkspaceView(view: BindingWorkspaceView): void;
+  /** Rows the active providers add to a host readout surface (the Info
+   *  panel), innermost claimer first. */
+  readReadouts(request: BindingReadoutRequest): Promise<BindingReadoutsResult>;
   /** Fires when the active stack changes OR a provider invalidates —
    *  the host panel's re-read signal. */
   onDidChange(listener: () => void): Disposable;
@@ -1140,6 +1186,17 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
     elementId: string | null;
   }[] = [];
   const listeners = new Set<() => void>();
+  /** The host's last view state (extensions ADR 340), handed to every
+   *  workspace provider as it becomes active. */
+  let workspaceView: BindingWorkspaceView | null = null;
+  const deliverView = (entry: RegisteredBindingProvider) => {
+    if (!workspaceView || !entry.provider.provides.workspace) return;
+    try {
+      entry.provider.workspaceView?.(workspaceView);
+    } catch {
+      // A throwing provider must not break the host's view sync.
+    }
+  };
   // The separator is the ESCAPE `\u0000`, not a literal NUL byte. A raw
   // control character in the source makes every tool that sniffs content
   // treat this 3k-line file as BINARY — `grep` silently matches nothing
@@ -1210,6 +1267,8 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
     setContextActive(plugin, contextType, elementId, isActive) {
       if (isActive) {
         stack.push({ plugin, contextType, elementId });
+        for (const entry of providers.get(key(plugin, contextType)) ?? [])
+          deliverView(entry);
       } else {
         // Pop the INNERMOST matching frame: the same context type can be
         // entered twice (a frame inside a frame), and exiting must
@@ -1323,6 +1382,71 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
       return {
         handled: false,
         reason: `no active binding provider claimed the "${mutation.op}" op`,
+      };
+    },
+    async readWorkspace() {
+      for (const { frame, entry } of active()) {
+        if (!entry.provider.provides.workspace) continue;
+        if (!entry.provider.readWorkspace) continue;
+        const read = await entry.provider.readWorkspace();
+        if (read.kind === "decline") continue;
+        return {
+          resolved: true,
+          provider: entry.plugin,
+          elementId: frame.elementId,
+          workspace: read.workspace,
+        };
+      }
+      return {
+        resolved: false,
+        reason: "no active binding provider claimed the workspace",
+      };
+    },
+    async editGuide(edit) {
+      // The provider whose workspace is SHOWN takes the edit: the same
+      // walk as readWorkspace, so a guide is never edited in a frame the
+      // rulers are not measuring.
+      for (const { entry } of active()) {
+        if (!entry.provider.provides.workspace) continue;
+        if (!entry.provider.readWorkspace || !entry.provider.editGuide)
+          continue;
+        const read = await entry.provider.readWorkspace();
+        if (read.kind === "decline") continue;
+        const write = await entry.provider.editGuide(edit);
+        if (write.kind === "decline") break;
+        return {
+          handled: true,
+          provider: entry.plugin,
+          outcome: write.outcome,
+        };
+      }
+      return {
+        handled: false,
+        reason: `no active binding provider took the guide ${edit.kind}`,
+      };
+    },
+    setWorkspaceView(view) {
+      workspaceView = view;
+      for (const { entry } of active()) deliverView(entry);
+    },
+    async readReadouts(request) {
+      for (const { entry } of active()) {
+        if (!(
+          entry.provider.provides.readouts?.includes(request.surface) ?? false
+        ))
+          continue;
+        if (!entry.provider.readReadouts) continue;
+        const read = await entry.provider.readReadouts(request);
+        if (read.kind === "decline") continue;
+        return {
+          resolved: true,
+          provider: entry.plugin,
+          sections: read.sections,
+        };
+      }
+      return {
+        resolved: false,
+        reason: `no active binding provider adds readouts to "${request.surface}"`,
       };
     },
     onDidChange(listener) {
@@ -1646,6 +1770,65 @@ export interface BundleHostHandle {
 }
 
 /** Refuse a malformed scene image before any lane sees it. */
+/** Extensions ADR 342 — a {@link RenderStory} as the wire's
+ *  `SnapshotStory`: only the fields the contract names, each checked, so
+ *  a bundle cannot smuggle anything else into the engine request. */
+function wireStory(story: RenderStory): Record<string, unknown> {
+  const num = (v: unknown) =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
+  const strip = (o: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+  const rgb = (v: unknown) =>
+    Array.isArray(v) &&
+    v.length === 3 &&
+    v.every((c) => typeof c === "number" && Number.isFinite(c))
+      ? (v as number[]).map((c) => Math.max(0, Math.min(255, Math.round(c))))
+      : undefined;
+  const paragraphs = Array.isArray(story.paragraphs) ? story.paragraphs : [];
+  return strip({
+    bounds: story.bounds.map(Number),
+    verticalJustification: str(story.verticalJustification),
+    firstBaseline: num(story.firstBaseline),
+    paragraphs: paragraphs.map((p) =>
+      strip({
+        runs: (Array.isArray(p?.runs) ? p.runs : []).map((r) =>
+          strip({
+            text: typeof r?.text === "string" ? r.text : "",
+            font: str(r?.font),
+            fontStyle: str(r?.fontStyle),
+            pointSize: num(r?.pointSize),
+            leading: num(r?.leading),
+            fillRgb: rgb(r?.fillRgb),
+            tracking: num(r?.tracking),
+            baselineShift: num(r?.baselineShift),
+            horizontalScale: num(r?.horizontalScale),
+            verticalScale: num(r?.verticalScale),
+            skew: num(r?.skew),
+            underline: bool(r?.underline),
+            strikethru: bool(r?.strikethru),
+            ligatures: bool(r?.ligatures),
+            capitalization: str(r?.capitalization),
+            position: str(r?.position),
+          }),
+        ),
+        justification: str(p?.justification),
+        firstLineIndent: num(p?.firstLineIndent),
+        leftIndent: num(p?.leftIndent),
+        rightIndent: num(p?.rightIndent),
+        spaceBefore: num(p?.spaceBefore),
+        spaceAfter: num(p?.spaceAfter),
+        hyphenation: bool(p?.hyphenation),
+        composer:
+          p?.composer === "paragraph" || p?.composer === "single"
+            ? p.composer
+            : undefined,
+      }),
+    ),
+  });
+}
+
 function checkImage(image: SceneImage): void {
   const { width, height, rgba } = image;
   if (
@@ -1987,6 +2170,12 @@ export function createBundleHost(
       gaps.push("provides.collections declared without readCollection()");
     if ((p.provides.ops?.length ?? 0) > 0 && !p.applyMutation)
       gaps.push("provides.ops declared without applyMutation()");
+    if (p.provides.workspace && !p.readWorkspace)
+      gaps.push("provides.workspace declared without readWorkspace()");
+    if (p.provides.workspace && !p.editGuide)
+      gaps.push("provides.workspace declared without editGuide()");
+    if ((p.provides.readouts?.length ?? 0) > 0 && !p.readReadouts)
+      gaps.push("provides.readouts declared without readReadouts()");
     // A declaration list is a SET: a repeated entry means two intents
     // fought over one key and one lost silently. Say so instead.
     const dupes = (label: string, xs: readonly string[] | undefined) => {
@@ -2000,6 +2189,7 @@ export function createBundleHost(
     dupes("collections", p.provides.collections);
     dupes("ops", p.provides.ops);
     dupes("writablePaths", p.provides.writablePaths);
+    dupes("readouts", p.provides.readouts);
     // `writablePaths` NARROWS `paths`; a member outside it is a path the
     // provider believes it writes and will never be asked about, which is
     // the silent-loss shape the dupe check exists for.
@@ -2020,7 +2210,9 @@ export function createBundleHost(
     if (
       (p.provides.paths?.length ?? 0) === 0 &&
       (p.provides.collections?.length ?? 0) === 0 &&
-      (p.provides.ops?.length ?? 0) === 0
+      (p.provides.ops?.length ?? 0) === 0 &&
+      !p.provides.workspace &&
+      (p.provides.readouts?.length ?? 0) === 0
     ) {
       gaps.push("provides declares nothing — the provider could never answer");
     }
@@ -3714,6 +3906,7 @@ export function createBundleHost(
     }
   };
   const render: RenderSurface = {
+    story: (pageId, story, opts) => renderStory(pageId, story, opts),
     async snapshot(pageId, opts) {
       requireDocRead("render.snapshot");
       const dpi = opts?.dpi;
@@ -3961,6 +4154,78 @@ export function createBundleHost(
         },
       };
     });
+  }
+
+  // Extensions ADR 342 — the story door, on the snapshot request. The
+  // engine lays the story out in a copy of the document; this side only
+  // validates and maps the reply.
+  async function renderStory(
+    pageId: PageId,
+    story: RenderStory,
+    opts?: RenderStoryOptions,
+  ): Promise<RenderedElement | null> {
+    requireDocRead("render.story");
+    const dpi = opts?.dpi ?? 72;
+    checkDpi(dpi, "host.render.story");
+    const margin = opts?.marginPt ?? 0;
+    if (!(Number.isFinite(margin) && margin >= 0)) {
+      throw new Error("host.render.story: marginPt must be 0 or more");
+    }
+    const [top, left, bottom, right] = story?.bounds ?? [];
+    if (
+      ![top, left, bottom, right].every(
+        (v) => typeof v === "number" && Number.isFinite(v),
+      ) ||
+      !(bottom! > top! && right! > left!)
+    ) {
+      throw new Error("host.render.story: bounds must have an area");
+    }
+    const rgba = opts?.format !== "png";
+    const trim = opts?.trim !== false;
+    let reply: { kind: string; payload?: unknown };
+    try {
+      reply = (await getEditor().client.send({
+        kind: "requestSnapshot",
+        payload: {
+          pageId,
+          targetWidthPx: 0,
+          hideItems: [],
+          dpi,
+          clip: {
+            x: left! - margin,
+            y: top! - margin,
+            width: right! - left! + 2 * margin,
+            height: bottom! - top! + 2 * margin,
+          },
+          ...(rgba ? { format: "rgba" } : {}),
+          background: "transparent",
+          ...(trim ? { trim: true } : {}),
+          story: wireStory(story),
+        },
+      } as never)) as { kind: string; payload?: unknown };
+    } catch {
+      return null;
+    }
+    if (reply.kind !== "snapshotReady") return null;
+    const p = reply.payload as SnapshotPng & { story?: boolean };
+    // An engine without the field drew the PAGE in that region.
+    if (p.story !== true || !p.region) return null;
+    if (rgba && p.format !== "rgba") return null;
+    return {
+      pageId: p.pageId,
+      widthPx: p.widthPx,
+      heightPx: p.heightPx,
+      png: Uint8Array.from(p.pngBytes ?? []),
+      layoutGeneration: p.layoutGeneration,
+      format: p.format === "rgba" ? "rgba" : "png",
+      ...(p.rgba && p.rgba.length > 0 ? { rgba: Uint8Array.from(p.rgba) } : {}),
+      region: {
+        x: p.region.x,
+        y: p.region.y,
+        width: p.region.width,
+        height: p.region.height,
+      },
+    };
   }
 
   /** A snapshot reply as a layer in the asked format. */
@@ -6031,6 +6296,13 @@ export function createBundleHost(
     // provider will actually be consulted by the host's panels and the
     // adapter reports context activation into it.
     featureSet.add("bindings.provider@1");
+    // Extensions ADR 340 — the same registry carries the workspace lane
+    // (the host rulers, guides and grid follow an active context's frame)
+    // and the readout lane (the Info panel shows a context's rows). The
+    // flags say the REGISTRY routes them; a host that reads them is the
+    // editor that wired it.
+    featureSet.add("bindings.workspace@1");
+    featureSet.add("bindings.readouts@1");
   }
   if (options?.blobStore) {
     // The blob door always exists (no-store fallback); this flag means a

@@ -89,6 +89,7 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.rotate180",
       "media.paged.image.command.flipHorizontal",
       "media.paged.image.command.flipVertical",
+      "media.paged.image.command.filterGaussianBlur",
       "media.paged.image.command.filterBoxBlur",
       "media.paged.image.command.filterSurfaceBlur",
       "media.paged.image.command.filterMotionBlur",
@@ -234,6 +235,9 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.globalLight",
       "media.paged.image.command.toggleEffects",
       "media.paged.image.command.scaleEffects",
+      "media.paged.image.command.rasterizeType",
+      "media.paged.image.command.paintTextIntoLayer",
+      "media.paged.image.command.warpText",
       "media.paged.image.command.newAdjustmentBrightnessContrast",
       "media.paged.image.command.newAdjustmentLevels",
       "media.paged.image.command.newAdjustmentCurves",
@@ -256,6 +260,18 @@ describe("imageBundle.activate", () => {
       // Built long before anything reached them: smart objects, pattern
       // fill (with Define pattern), shape blur.
       "media.paged.image.command.convertLayerToSmart",
+      // Smart objects in full (image ADR 482).
+      "media.paged.image.command.smartEditContents",
+      "media.paged.image.command.smartSaveContents",
+      "media.paged.image.command.smartCloseContents",
+      "media.paged.image.command.smartTransform",
+      "media.paged.image.command.smartReplaceContents",
+      "media.paged.image.command.smartRelink",
+      "media.paged.image.command.smartUpdateLinked",
+      "media.paged.image.command.smartEmbed",
+      "media.paged.image.command.smartExportContents",
+      "media.paged.image.command.smartPlacePageItems",
+      "media.paged.image.command.convertForSmartFilters",
       "media.paged.image.command.definePattern",
       "media.paged.image.command.fillPattern",
       "media.paged.image.command.shapeBlur",
@@ -317,6 +333,24 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.gamutWarning",
       "media.paged.image.command.proofSetupCmyk",
       "media.paged.image.command.proofSetupGray",
+      // WP5.12 — the workspace: rulers, guides, slices, notes, count, ruler.
+      "media.paged.image.command.rulerUnitPx",
+      "media.paged.image.command.rulerUnitIn",
+      "media.paged.image.command.rulerUnitCm",
+      "media.paged.image.command.rulerUnitMm",
+      "media.paged.image.command.toggleGuides",
+      "media.paged.image.command.toggleLockGuides",
+      "media.paged.image.command.toggleSnapGuides",
+      "media.paged.image.command.clearGuides",
+      "media.paged.image.command.newGuide",
+      "media.paged.image.command.slicesFromGuides",
+      "media.paged.image.command.clearSlices",
+      "media.paged.image.command.exportSlices",
+      "media.paged.image.command.clearNotes",
+      "media.paged.image.command.clearCount",
+      "media.paged.image.command.newCountGroup",
+      "media.paged.image.command.straightenToRuler",
+      "media.paged.image.command.clearRuler",
     ]);
     expect(fake.tools.ids()).toEqual([
       "media.paged.image.tool.crop",
@@ -382,6 +416,12 @@ describe("imageBundle.activate", () => {
       "media.paged.image.tool.polygonShape",
       "media.paged.image.tool.lineShape",
       "media.paged.image.tool.customShape",
+      // WP5.12 — Ruler, Count, Note (the eyedropper's slot) and Slice
+      // (the crop slot).
+      "media.paged.image.tool.ruler",
+      "media.paged.image.tool.count",
+      "media.paged.image.tool.note",
+      "media.paged.image.tool.slice",
     ]);
     expect(fake.importers.ids()).toEqual(["media.paged.image.importer.raster"]);
   });

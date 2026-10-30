@@ -28,6 +28,13 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/psd-containers.jsx
 PAGED_PSD_READBACK_OUT=<stage>/psd-readback cargo nextest run -p image-conformance \
   --run-ignored only write_psd_readback_inputs
 PAGED_PROBE_STAGE=<stage> bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/psd-readback.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/guides.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/warp-text.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/smart-objects.jsx
+# smart-readback opens the smart objects paged WROTE: stage them first (image ADR 482)
+PAGED_SMART_READBACK_OUT=<stage>/smart-readback cargo nextest run -p image-conformance \
+  --run-ignored only write_smart_readback_inputs
+PAGED_PROBE_STAGE=<stage> bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/smart-readback.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -86,6 +93,9 @@ Photoshop's own sRGB conversions under three intent/BPC settings).
 `colour-sweep` stimulus converted to CMYK (Coated FOGRA39, named), Gray Gamma 2.2 and Lab and back
 to sRGB at 16 and 8 bits, each converted document saved as a PSD; and a Levels gamma on the
 `deep-ramp` stimulus, 16384 levels, at 16 and 8 bits).
+`image-conformance/tests/it/warp_text_photoshop.rs` (Warp Text: each style's
+PSD warp opens as the style that made it; paged-warp's meshes held to
+Photoshop's warped bounds as a recorded convention) and
 `image-conformance/tests/it/psd_vector_masks_photoshop.rs` (vector masks: the
 merged composite, and the render Photoshop caches in each masked layer's
 channel −2).
@@ -108,6 +118,22 @@ TRIP — a PSD paged's layered save wrote, opened by Photoshop). The round trip'
 before the run: `PAGED_VECTOR_PROBE_INPUT=<dir>/input cargo nextest run -p image-conformance
 write_probe_input --run-ignored only`, then the probe with `PAGED_PROBE_STAGE=<dir>`; copy
 `<dir>/input/paged-vectors.psd` into `fixtures/photoshop/vector-paths/` with the recording.
+
+## Smart objects: `smart-objects` and `smart-readback` (image ADR 482)
+
+`smart-objects.jsx` makes an embedded smart object of a textured square of the colour sweep and
+records seventeen cases: transforms (scale and turn, skew, flip, enlargement, a scale down and up
+again), smart filters (Gaussian Blur alone, at 50 %, under a switched-off Motion Blur, behind a
+filter mask, after a transform; Box Blur — event `boxblur`, `filterID` 840 —, High Pass, Median,
+Maximum, Minimum) and an Edit Contents round trip, each as the layered PSD, an 8-bit PNG of the
+composite and what the ActionManager reports. `smart-readback.jsx` opens the five files the
+layered save writes from them and reports each smart object (its corners, filters and contents),
+then has Photoshop draw it again from paged's record (scaled to 50 % and back; each live filter
+switched off and on) and saves the composite. Findings: the PSB a new smart object embeds has a
+white placeholder composite and is zero-padded to 1 MiB; a filtered object's channels are the
+filters' output before the filter mask; Photoshop refuses a `SoLd` whose length is not a multiple
+of 4. The replay is `image-conformance/tests/it/smart_objects_photoshop.rs`; the readback inputs
+are rebuilt by the test and held to the recording by content hash, so they are not committed.
 
 ## Files paged writes: `codecs-open` (engine ADR 1038)
 
@@ -136,6 +162,12 @@ Apple events during it, so the writer stays big-endian, the byte order
 Photoshop's own layer data then matches); OpenEXR colour is associated
 with its alpha; a Radiance mantissa is read at the middle of its step (a
 convention, see the replay).
+
+`image-conformance/tests/it/psd_guides_photoshop.rs` (ruler guides: the
+grid-and-guides resource 1032 of PSDs Photoshop saved -- whole, fractional
+and off-canvas positions, a guide placed in inches at 300 ppi, none -- read
+exactly, adopted by the image workspace, and re-encoded to Photoshop's own
+bytes; image ADR 475).
 
 ## Traps, and what each step does about them
 

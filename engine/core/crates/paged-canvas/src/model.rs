@@ -65,6 +65,10 @@ pub const INK_COVERAGE_DPI: f32 = 72.0;
 /// costs nothing.
 pub const INK_COVERAGE_LIMIT_PCT: f32 = 300.0;
 
+/// Engine ADR 1037 — the least display density (device px per pt) a live
+/// build evaluates an image filter stack for: a 2× (retina) screen at 100 %.
+const LIVE_IMAGE_ADJUST_PX_PER_PT: f32 = 2.0;
+
 /// The type size a run takes when nothing in its cascade names one: the
 /// renderer's own default (`PipelineOptions::default_point_size`), so a
 /// read reports the size the text is set at (ADR 206).
@@ -1549,6 +1553,27 @@ fn gradient_feather_entry(
     }
 }
 
+/// Engine ADR 1008 — the four effect-stack rows of an effect-bearing
+/// item: each target's stack as the user sees it.
+fn effect_stack_entries(
+    item: &dyn paged_model::effect_stack::EffectBearing,
+) -> Vec<crate::channel::PropertyEntry> {
+    use paged_model::effect_stack::EffectTarget as T;
+    use paged_mutate::PropertyPath as P;
+    [
+        (P::FrameEffectStack, T::Object),
+        (P::FrameFillEffectStack, T::Fill),
+        (P::FrameStrokeEffectStack, T::Stroke),
+        (P::FrameContentEffectStack, T::Content),
+    ]
+    .into_iter()
+    .map(|(path, target)| crate::channel::PropertyEntry {
+        path,
+        value: Some(paged_mutate::operation::effect_stack_value(item, target)),
+    })
+    .collect()
+}
+
 /// W0.4 — read-side mirror of the transparency-effect per-field paths
 /// (gap 18). Emits one `PropertyEntry` per effect field, sourcing each
 /// from the parsed `effects: Option<FrameEffects>` block (a `None`
@@ -2889,6 +2914,8 @@ impl CanvasModel {
                 // EPS/PDF ghost-cross); export builds keep the default
                 // `false` so output stays pixel-faithful.
                 degraded_asset_markers: true,
+                // Engine ADR 1037 — the first build is a live one too.
+                image_adjust_px_per_pt: Some(LIVE_IMAGE_ADJUST_PX_PER_PT),
                 ..PipelineOptions::default()
             };
             // Phase 4 Step 1 — install an empty cache for the initial
@@ -6380,6 +6407,7 @@ impl CanvasModel {
                     | (K::Oval, paged_mutate::NodeId::Oval(_))
                     | (K::Polygon, paged_mutate::NodeId::Polygon(_))
                     | (K::GraphicLine, paged_mutate::NodeId::GraphicLine(_))
+                    | (K::Instance, paged_mutate::NodeId::Instance(_))
                     | (K::Frame, _)
             );
             return matches.then_some(node);
@@ -6424,6 +6452,14 @@ impl CanvasModel {
                 .any(|o| o.self_id.as_deref() == Some(frame_id))
             {
                 return Some(paged_mutate::NodeId::Oval(frame_id.to_string()));
+            }
+            // Draw ADR 365 — a symbol instance deletes like a frame (the
+            // Symbol Sprayer's Alt-drag, a script's `deleteFrame`).
+            if s.instances
+                .iter()
+                .any(|i| i.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(paged_mutate::NodeId::Instance(frame_id.to_string()));
             }
         }
         None
@@ -7539,6 +7575,8 @@ impl CanvasModel {
             &mut self.scene.clone(),
         ));
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
+        out.extend(crate::export_losses::effect_stack_losses(&self.scene));
+        out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -8476,6 +8514,8 @@ impl CanvasModel {
                             f.effects.as_ref(),
                             f.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(f));
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -8527,6 +8567,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(f.fill_rule.as_str().into())),
+                            },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(f.image_adjustments.clone())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
@@ -8851,6 +8896,8 @@ impl CanvasModel {
                             f.effects.as_ref(),
                             f.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(f));
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -8990,6 +9037,10 @@ impl CanvasModel {
                                         .unwrap_or_default(),
                                 )),
                             },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceSymbol,
+                                value: Some(Value::Text(f.symbol.clone())),
+                            },
                         ];
                         entries.extend(transform_decompose_entries(Some(f.item_transform)));
                         entries
@@ -9037,6 +9088,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(p.fill_rule.as_str().into())),
+                            },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(p.image_adjustments.clone())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
@@ -9153,6 +9209,8 @@ impl CanvasModel {
                             p.effects.as_ref(),
                             p.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(p));
                         entries.extend(target_property_entries(
                             Some(p.fill_transparency.as_ref()),
                             p.stroke_transparency.as_ref(),
@@ -9404,6 +9462,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(o.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(o.image_adjustments.clone())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
                                 value: Some(Value::Text(
@@ -9495,6 +9558,8 @@ impl CanvasModel {
                             o.effects.as_ref(),
                             o.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(o));
                         entries.extend(target_property_entries(
                             Some(o.fill_transparency.as_ref()),
                             o.stroke_transparency.as_ref(),
@@ -13506,6 +13571,13 @@ impl CanvasModel {
                 build_generation: self.build_generation,
                 emission_prints: Some(&self.emission_prints),
                 render_scale: self.resource_render_scale,
+                // Engine ADR 1037 — an image filter stack is evaluated for
+                // the screen: at the camera's scale, at least a 2× (retina)
+                // display's 2 px per pt. The export evaluates at the
+                // picture's own pixels (the option's `None`).
+                image_adjust_px_per_pt: Some(
+                    self.resource_render_scale.max(LIVE_IMAGE_ADJUST_PX_PER_PT),
+                ),
                 // A5 — live rebuilds keep the degraded-asset markers on
                 // (mirrors the initial load); an export stays faithful.
                 degraded_asset_markers: true,
@@ -13646,9 +13718,21 @@ impl CanvasModel {
         hide: &[crate::element_selection::ElementId],
         only: &[crate::element_selection::ElementId],
     ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
+        self.build_page_filtered_in(self.scene.clone(), page_id, hide, only)
+    }
+
+    /// [`build_page_filtered`](Self::build_page_filtered) over `scene`, a
+    /// copy of the model's scene a caller may have added to (engine ADR
+    /// 10XX's snapshot story).
+    pub(crate) fn build_page_filtered_in(
+        &self,
+        mut scene: Document,
+        page_id: &PageId,
+        hide: &[crate::element_selection::ElementId],
+        only: &[crate::element_selection::ElementId],
+    ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
         use crate::element_selection::ElementId;
         use std::collections::HashSet;
-        let mut scene = self.scene.clone();
         // Engine ADR 1026 — a master page is drawn as the only page of a
         // copy whose one spread is its master: the master's items as page
         // items, over the masters its page applies.
@@ -15732,6 +15816,10 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameDirectionalFeatherNoise
             | P::FrameDirectionalFeatherChoke
             | P::FrameGradientFeather
+            | P::FrameEffectStack
+            | P::FrameFillEffectStack
+            | P::FrameStrokeEffectStack
+            | P::FrameContentEffectStack
     )
 }
 

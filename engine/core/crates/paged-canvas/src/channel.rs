@@ -735,6 +735,11 @@ export type WorkerToMain = WorkerToMainKind & {
 //   `RunContent.textVariable`, the text variable a run is an instance of.
 // Additive on 77, no bump (governance rule 1) — data ADR 564:
 //   `StorySummary.oversetCells`, the table cells whose text overflows.
+// Additive on 76, no bump (governance rule 1) — engine ADR 1035,
+//   `RequestSnapshot.story`: a story the document does not hold, laid out
+//   and drawn alone (paged.image's type layers). Optional; an older worker
+//   ignores it and draws the page, which a caller detects by the reply's
+//   region (it covers the story's box only when the story was drawn).
 // Rides v76 (unreleased; added before first consumer sync, governance rule
 //   4) — engine ADRs 1018 and 1021: the mutations setStyleBasedOn,
 //   setListLevel, restartNumbering and findReplace (Operations
@@ -1377,6 +1382,12 @@ pub enum MainToWorkerKind {
         /// 1 to 100 (absent: 90). Other formats ignore it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         quality: Option<u8>,
+        /// Engine ADR 1035 — draw this story alone, laid out by the
+        /// engine in a frame at its bounds on `page_id`, in a copy of the
+        /// document (which is not changed). `only` is then ignored; an
+        /// absent `clip` draws the frame's box.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        story: Option<crate::snapshot::SnapshotStory>,
     },
     /// Replace the worker's current selection. Phase 3 Item 1 — the
     /// worker mirrors the main thread's `ContentSelection` so the
@@ -5041,10 +5052,12 @@ mod tests {
                 background: Default::default(),
                 trim: false,
                 quality: None,
+                story: None,
             },
         };
         let json = serde_json::to_string(&msg).unwrap();
         // A v1 request serializes as it did before ADR 338.
+        assert!(!json.contains("\"story\""), "{json}");
         assert!(!json.contains("\"only\""), "{json}");
         assert!(!json.contains("\"format\""), "{json}");
         assert!(!json.contains("\"background\""), "{json}");

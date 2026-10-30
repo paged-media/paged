@@ -246,3 +246,105 @@ describe("Effects panel: every control writes the selection", () => {
     expect(await h.get(addr(h.scene.groupA), "frameBlendMode")).toEqual(before);
   });
 });
+
+// Engine ADR 1008 — the stack: the picked target's effects in order, an
+// Add menu, and per entry a switch, move up / down, remove and (for a
+// stack-only effect) its parameters. Each gesture is one whole-stack
+// write.
+describe("Effects panel: the effect stack [effects-transparency.effect-stack]", () => {
+  const stackRoot = (h: H, t = "object") =>
+    h.root.querySelector(`[data-effect-stack="${t}"]`)!;
+  const addMenu = (h: H, t = "object") =>
+    stackRoot(h, t).querySelector<HTMLSelectElement>(
+      "select[data-effect-stack-add]",
+    )!;
+  const rows = (h: H, t = "object") =>
+    [...stackRoot(h, t).querySelectorAll("[data-effect-stack-row]")].map((r) =>
+      r.getAttribute("data-effect-stack-row"),
+    );
+  const action = (h: H, kind: string, a: string) =>
+    stackRoot(h).querySelector<HTMLButtonElement>(
+      `[data-effect-stack-row="${kind}"] [data-effect-stack-action="${a}"]`,
+    )!;
+  const kinds = (v: unknown) =>
+    (
+      (v as { value?: { entries?: Array<{ kind: string; enabled: boolean }> } })
+        .value?.entries ?? []
+    ).map((e) => `${e.kind}${e.enabled ? "" : " (off)"}`);
+
+  test("add, move, switch off and remove: one stack write each", async () => {
+    covers("panel:paged.effects");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    expect(rows(h)).toEqual([]);
+    expect([...addMenu(h).options].map((o) => o.value)).toContain(
+      "gaussianBlur",
+    );
+    let from = h.mark();
+    await h.choose(addMenu(h), "gaussianBlur");
+    const writes = h.mutations(from) as Array<{
+      args: { path: string; value: unknown };
+    }>;
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.args.path).toBe("frameEffectStack");
+    await h.choose(addMenu(h), "outlineStroke");
+    expect(kinds(await h.get(addr(h.scene.rect), "frameEffectStack"))).toEqual([
+      "gaussianBlur",
+      "outlineStroke",
+    ]);
+    expect(rows(h)).toEqual(["gaussianBlur", "outlineStroke"]);
+
+    await h.click(action(h, "outlineStroke", "up"));
+    expect(rows(h)).toEqual(["outlineStroke", "gaussianBlur"]);
+    from = h.mark();
+    await h.click(pill(h, "stack:gaussianBlur"));
+    expect(h.mutations(from)).toHaveLength(1);
+    expect(kinds(await h.get(addr(h.scene.rect), "frameEffectStack"))).toEqual([
+      "outlineStroke",
+      "gaussianBlur (off)",
+    ]);
+    await h.click(action(h, "gaussianBlur", "remove"));
+    expect(rows(h)).toEqual(["outlineStroke"]);
+    await h.act(() => h.client.undo());
+    expect(rows(h)).toEqual(["outlineStroke", "gaussianBlur"]);
+  });
+
+  test("a stack-only effect's parameter writes the stack", async () => {
+    covers("panel:paged.effects");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    await h.choose(addMenu(h), "gaussianBlur");
+    await h.click(
+      stackRoot(h).querySelector<HTMLButtonElement>(
+        '[data-effect-stack-row="gaussianBlur"] [data-effect-stack-open]',
+      )!,
+    );
+    const radius = stackRoot(h).querySelector<HTMLInputElement>(
+      '[data-effect-param="radiusPt"] input',
+    )!;
+    await h.typeInto(radius, "7");
+    const v = (await h.get(addr(h.scene.rect), "frameEffectStack")) as {
+      value: { entries: Array<{ radiusPt?: number }> };
+    };
+    expect(v.value.entries[0]!.radiusPt).toBe(7);
+  });
+
+  test("the blend menu lists the engine's schema modes", async () => {
+    covers("panel:paged.effects");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    const modes = [...blend(h).options].map((o) => o.value);
+    expect(modes).toContain("Multiply");
+    expect(modes).toContain("Luminosity");
+  });
+
+  test("a fill target offers InDesign's effects only", async () => {
+    covers("panel:paged.effects");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    await h.click(target(h, "fill"));
+    const offered = [...addMenu(h, "fill").options].map((o) => o.value);
+    expect(offered).toContain("innerGlow");
+    expect(offered).not.toContain("gaussianBlur");
+  });
+});
