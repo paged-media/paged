@@ -81,6 +81,7 @@ pub mod selection;
 pub mod stroke;
 pub mod text;
 pub mod vectors;
+pub mod workspace;
 
 /// The frozen kernel ABI version this artifact was built against.
 pub fn abi_version() -> u32 {
@@ -6114,6 +6115,284 @@ mod wasm {
     pub fn layers_comp_rename(id: u32, name: &str) -> Result<(), JsValue> {
         recorded_edit("Rename Layer Comp", Some(format!("comp-name:{id}")), |st| {
             st.rename_comp(id, name)
+        })
+    }
+
+    // ───────────────────── workspace (image ADR 475) ─────────────────────
+    //
+    // Guides, count marks, notes and slices. Each verb is one undo step
+    // on the image's list (a verb that changes nothing records nothing);
+    // indices address the lists `layers_workspace` reads.
+
+    fn ws_edit<T>(
+        label: &str,
+        f: impl FnOnce(&mut crate::workspace::Workspace, u32, u32) -> Result<(T, bool), IngestError>,
+    ) -> Result<T, JsValue> {
+        with_stack(|d| d.stack.edit_workspace(label, f).map_err(ingest_err))
+    }
+
+    /// The workspace as JSON: `{guides: [{orientation, position}],
+    /// counts: [{name, color, visible, marks}], activeCount, notes: [{at,
+    /// author, text}], slices: [{x, y, w, h, name}]}` (image px).
+    #[wasm_bindgen]
+    pub fn layers_workspace() -> String {
+        LAYERS.with(|l| {
+            l.borrow().as_ref().map_or_else(
+                || crate::workspace::Workspace::default().to_json(),
+                |d| d.stack.workspace().to_json(),
+            )
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guide_add(vertical: bool, position: f32) -> Result<u32, JsValue> {
+        ws_edit("New Guide", |ws, _, _| {
+            Ok((ws.add_guide(vertical, position)? as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guide_move(index: u32, position: f32) -> Result<bool, JsValue> {
+        ws_edit("Move Guide", |ws, _, _| {
+            let c = ws.move_guide(index as usize, position)?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guide_delete(index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Guide", |ws, _, _| {
+            Ok((ws.delete_guide(index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guides_clear() -> Result<bool, JsValue> {
+        ws_edit("Clear Guides", |ws, _, _| {
+            let c = ws.clear_guides();
+            Ok((c, c))
+        })
+    }
+
+    /// COUNT: mark `(x, y)` in the active group; answers the mark's
+    /// number in its group (from 1).
+    #[wasm_bindgen]
+    pub fn layers_count_add(x: f32, y: f32) -> Result<u32, JsValue> {
+        ws_edit("Count", |ws, _, _| {
+            Ok((ws.add_count([x, y])?.1 as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_move(group: u32, index: u32, x: f32, y: f32) -> Result<bool, JsValue> {
+        ws_edit("Move Count", |ws, _, _| {
+            let c = ws.move_count(group as usize, index as usize, [x, y])?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_remove(group: u32, index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Count", |ws, _, _| {
+            Ok((ws.remove_count(group as usize, index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_clear(group: u32) -> Result<bool, JsValue> {
+        ws_edit("Clear Count", |ws, _, _| {
+            let c = ws.clear_counts(group as usize)?;
+            Ok((c, c))
+        })
+    }
+
+    /// A new count group (`name` empty: "Count Group n"), made active.
+    #[wasm_bindgen]
+    pub fn layers_count_group_new(name: &str) -> Result<u32, JsValue> {
+        ws_edit("New Count Group", |ws, _, _| {
+            let name = Some(name.trim()).filter(|n| !n.is_empty());
+            Ok((ws.new_count_group(name)? as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_group_active(group: u32) -> Result<bool, JsValue> {
+        ws_edit("Count Group", |ws, _, _| {
+            let c = ws.set_active_count(group as usize)?;
+            Ok((c, c))
+        })
+    }
+
+    /// Rename / recolour / show or hide a count group. `name` empty keeps
+    /// the name; a negative `r` keeps the colour; `visible` −1 keeps it.
+    #[wasm_bindgen]
+    pub fn layers_count_group_set(
+        group: u32,
+        name: &str,
+        r: i32,
+        g: i32,
+        b: i32,
+        visible: i32,
+    ) -> Result<bool, JsValue> {
+        ws_edit("Count Group", |ws, _, _| {
+            let name = Some(name.trim()).filter(|n| !n.is_empty());
+            let color = (r >= 0).then(|| {
+                [
+                    r.clamp(0, 255) as u8,
+                    g.clamp(0, 255) as u8,
+                    b.clamp(0, 255) as u8,
+                ]
+            });
+            let visible = (visible >= 0).then_some(visible > 0);
+            let c = ws.set_count_group(group as usize, name, color, visible)?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_group_delete(group: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Count Group", |ws, _, _| {
+            Ok((ws.delete_count_group(group as usize)?, true))
+        })
+    }
+
+    /// NOTE at `(x, y)`; answers its index.
+    #[wasm_bindgen]
+    pub fn layers_note_add(x: f32, y: f32, author: &str, text: &str) -> Result<u32, JsValue> {
+        ws_edit("New Note", |ws, _, _| {
+            Ok((ws.add_note([x, y], author, text)? as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_note_edit(index: u32, author: &str, text: &str) -> Result<bool, JsValue> {
+        ws_edit("Edit Note", |ws, _, _| {
+            let c = ws.edit_note(index as usize, author, text)?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_note_move(index: u32, x: f32, y: f32) -> Result<bool, JsValue> {
+        ws_edit("Move Note", |ws, _, _| {
+            let c = ws.move_note(index as usize, [x, y])?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_note_delete(index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Note", |ws, _, _| {
+            Ok((ws.delete_note(index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_notes_clear() -> Result<bool, JsValue> {
+        ws_edit("Delete All Notes", |ws, _, _| {
+            let c = ws.clear_notes();
+            Ok((c, c))
+        })
+    }
+
+    /// SLICE: a rectangle of whole pixels (clipped to the canvas; `name`
+    /// empty: "slice_nn"); answers its index.
+    #[wasm_bindgen]
+    pub fn layers_slice_add(x: i32, y: i32, w: i32, h: i32, name: &str) -> Result<u32, JsValue> {
+        ws_edit("Slice", |ws, cw, ch| {
+            let i = ws.add_slice(
+                i64::from(x),
+                i64::from(y),
+                i64::from(w),
+                i64::from(h),
+                name,
+                cw,
+                ch,
+            )?;
+            Ok((i as u32, true))
+        })
+    }
+
+    /// Move / resize / rename a slice (`name` empty keeps it).
+    #[wasm_bindgen]
+    pub fn layers_slice_set(
+        index: u32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        name: &str,
+    ) -> Result<bool, JsValue> {
+        ws_edit("Edit Slice", |ws, cw, ch| {
+            let c = ws.set_slice(
+                index as usize,
+                i64::from(x),
+                i64::from(y),
+                i64::from(w),
+                i64::from(h),
+                Some(name),
+                cw,
+                ch,
+            )?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_slice_delete(index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Slice", |ws, _, _| {
+            Ok((ws.delete_slice(index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_slices_clear() -> Result<bool, JsValue> {
+        ws_edit("Delete All Slices", |ws, _, _| {
+            let c = ws.clear_slices();
+            Ok((c, c))
+        })
+    }
+
+    /// SLICES FROM GUIDES: the guides cut the canvas into cells, one
+    /// slice each (replacing the slices); answers how many.
+    #[wasm_bindgen]
+    pub fn layers_slices_from_guides() -> Result<u32, JsValue> {
+        ws_edit("Slices From Guides", |ws, cw, ch| {
+            Ok((ws.slices_from_guides(cw, ch)? as u32, true))
+        })
+    }
+
+    /// Take the ruler guides of the retained PSD behind `psd_handle`
+    /// (Photoshop's grid-and-guides resource, id 1032) as the open
+    /// stack's — at open, so NOT an undo step. Answers how many.
+    #[wasm_bindgen]
+    pub fn layers_adopt_psd_guides(psd_handle: u32) -> Result<u32, JsValue> {
+        let guides = PSDS.with(|m| {
+            m.borrow()
+                .get(&psd_handle)
+                .map(|f| crate::workspace::Workspace::guides_from_psd(f.resources.guides()))
+                .ok_or_else(|| JsValue::from_str(&format!("unknown psd handle {psd_handle}")))
+        })?;
+        let n = guides.len() as u32;
+        with_stack(|d| {
+            d.stack.adopt_guides(guides);
+            Ok(n)
+        })
+    }
+
+    /// Write the open stack's guides into the retained PSD behind
+    /// `psd_handle` as its grid-and-guides resource (id 1032). Unchanged
+    /// guides leave the file's bytes alone (the preservation rule);
+    /// answers whether the record changed.
+    #[wasm_bindgen]
+    pub fn psd_write_guides(psd_handle: u32) -> Result<bool, JsValue> {
+        let guides = with_stack(|d| Ok(d.stack.workspace().psd_guides()))?;
+        PSDS.with(|m| {
+            let mut map = m.borrow_mut();
+            let file = map
+                .get_mut(&psd_handle)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown psd handle {psd_handle}")))?;
+            Ok(file.resources.set_guides(&guides))
         })
     }
 

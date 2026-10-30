@@ -173,6 +173,7 @@ impl LayerStack {
             next_snapshot_id: 1,
             next_step_id: 1,
             mode: Default::default(),
+            workspace: Default::default(),
         }
     }
 

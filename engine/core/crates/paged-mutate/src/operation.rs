@@ -1563,6 +1563,11 @@ pub enum PropertyPath {
     /// space; the empty list falls back to the definition's. Only
     /// `NodeId::Instance` carries it. Native.
     SymbolInstanceNineSlice,
+    /// Engine ADR 1039 (draw ADR 365) — the symbol a symbol instance draws,
+    /// `Value::Text(symbol id)`: Illustrator's Replace Symbol. The
+    /// instance keeps its id, transform and overrides; a symbol id the
+    /// store does not hold is refused. Only `NodeId::Instance`. Native.
+    SymbolInstanceSymbol,
 
     // ---- R-11 — drop-shadow attributes and the global light -------
     /// `<DropShadowSetting BlendMode>`; `""` is InDesign's `Multiply`.
@@ -2058,6 +2063,7 @@ impl PropertyPath {
             PropertyPath::GroupClip => "group.clip",
             PropertyPath::SymbolInstanceTint => "symbolInstance.tint",
             PropertyPath::SymbolInstanceNineSlice => "symbolInstance.nineSlice",
+            PropertyPath::SymbolInstanceSymbol => "symbolInstance.symbol",
             PropertyPath::FrameDropShadowBlendMode => "frame.dropShadowBlendMode",
             PropertyPath::FrameDropShadowSpread => "frame.dropShadowSpread",
             PropertyPath::FrameDropShadowNoise => "frame.dropShadowNoise",

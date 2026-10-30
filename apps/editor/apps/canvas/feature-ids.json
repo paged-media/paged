@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 795,
+    "command": 814,
     "keybinding": 164,
-    "menu": 563,
-    "panel": 143,
-    "tool": 114
+    "menu": 581,
+    "panel": 142,
+    "tool": 126
   },
   "features": [
     {
@@ -1141,6 +1141,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.replaceSymbol",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.resetSymbolTransform",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1301,6 +1306,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.symbolOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.transformAgain",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1426,7 +1436,32 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.clearCount",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.clearGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.clearLayerStyle",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.clearNotes",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.clearRuler",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.clearSlices",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1522,6 +1557,11 @@
     },
     {
       "id": "command:media.paged.image.command.exportBrushPresetsJson",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.exportSlices",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2331,6 +2371,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.newCountGroup",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.newFillGradient",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2342,6 +2387,11 @@
     },
     {
       "id": "command:media.paged.image.command.newFillSolid",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newGuide",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2446,6 +2496,26 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.rulerUnitCm",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rulerUnitIn",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rulerUnitMm",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rulerUnitPx",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.saveSelection",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2496,12 +2566,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.slicesFromGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.solarize",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.stampVisible",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.straightenToRuler",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2516,7 +2596,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.toggleGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.toggleLockGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.toggleLockTransparent",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.toggleSnapGuides",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -5326,7 +5421,17 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Symbol/Replace symbol",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Symbol/Reset transform",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Symbol/Symbol options…",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -5742,6 +5847,11 @@
     },
     {
       "id": "menu:Image/File/Export as…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/File/Export slices…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6826,6 +6936,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Straighten to ruler",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Trim…",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -6957,11 +7072,6 @@
     },
     {
       "id": "menu:Object/Effects/Global light…",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
-      "id": "menu:Object/Effects/Picture adjustments…",
       "kind": "menu",
       "owner": "editor"
     },
@@ -7451,6 +7561,31 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Clear count",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Clear guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Clear ruler",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Delete all notes",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Delete all slices",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:View/Fit document",
       "kind": "menu",
       "owner": "editor"
@@ -7474,6 +7609,21 @@
       "id": "menu:View/Guides & grid preferences…",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Lock guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/New count group",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/New guide…",
+      "kind": "menu",
+      "owner": "media.paged.image"
     },
     {
       "id": "menu:View/Outline view",
@@ -7541,6 +7691,26 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Rulers/Centimetres",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Rulers/Inches",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Rulers/Millimetres",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Rulers/Pixels",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:View/Show data markers",
       "kind": "menu",
       "owner": "editor"
@@ -7549,6 +7719,11 @@
       "id": "menu:View/Show grid",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Show guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
     },
     {
       "id": "menu:View/Show heading anchors",
@@ -7566,6 +7741,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Slices from guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:View/Slide Sorter",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -7579,6 +7759,11 @@
       "id": "menu:View/Snap to grid",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Snap to guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
     },
     {
       "id": "menu:View/Snap to pixel",
@@ -8211,11 +8396,6 @@
       "owner": "editor"
     },
     {
-      "id": "panel:paged.picture-adjustments",
-      "kind": "panel",
-      "owner": "editor"
-    },
-    {
       "id": "panel:paged.preflight",
       "kind": "panel",
       "owner": "editor"
@@ -8516,6 +8696,46 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.symbolNineSlice",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolScreener",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolScruncher",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolShifter",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolSizer",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolSpinner",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolSprayer",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolStainer",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.twirl",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -8592,6 +8812,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.contentAwareMove",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.count",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -8696,6 +8921,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.note",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.patch",
       "kind": "tool",
       "owner": "media.paged.image"
@@ -8751,7 +8981,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.ruler",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.sharpen",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.slice",
       "kind": "tool",
       "owner": "media.paged.image"
     },

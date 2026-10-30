@@ -89,6 +89,8 @@ import { CanvasSection, type CanvasSize } from "./sections/canvas-section";
 import { HueSatSection } from "./sections/hue-sat-section";
 import { ToneSection } from "./sections/tone-section";
 import { ColorSection } from "./sections/color-section";
+import { NewGuideDialog, WorkspaceSection } from "./sections/workspace-section";
+import { DEFAULT_PPI, pxPerUnit } from "../workspace";
 import { RankLookupSection } from "./sections/rank-lookup-section";
 import { SelectModifySection } from "./sections/select-modify-section";
 import { MoveSection } from "./sections/move-section";
@@ -2613,6 +2615,20 @@ export function makeImagePanel(session: ImageSession) {
             onCancel={() => void session.closeDialog()}
           />
         )}
+        {s.dialog?.kind === "newGuide" && (
+          <NewGuideDialog
+            unit={live.workspace().state().view.rulerUnit}
+            pxPerUnit={pxPerUnit(
+              live.workspace().state().view.rulerUnit,
+              s.ppi ?? DEFAULT_PPI,
+            )}
+            onAdd={(orientation, px) => {
+              if (session.workspace().addGuide(orientation, px))
+                void session.closeDialog();
+            }}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
         {s.dialog?.kind === "trim" && (
           <TrimDialog
             busy={s.busy}
@@ -3670,6 +3686,10 @@ export function makeImagePanel(session: ImageSession) {
           eyedropper={s.eyedropper}
           samplers={s.samplers}
         />
+
+        {/* WORKSPACE (WP5.12) — rulers, guides, the Ruler, Count, Note
+            and Slice tools' data. */}
+        <WorkspaceSection session={session} disabled={disabled} />
 
         {/* BRUSH — the paint tools' frozen-at-pointer-down parameters
             (paged.image's RASTER brush/pencil/eraser, distinct from

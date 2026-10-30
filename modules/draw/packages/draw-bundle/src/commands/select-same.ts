@@ -442,20 +442,17 @@ export async function selectSameMatches(
       (id) => id.kind === reference.kind,
     );
   }
-  if (c === "symbol" && reference.kind === "instance" && engineSymbols(host)) {
-    // Engine ADR 1039: an engine instance names its symbol in the
-    // document's symbol store, which lists every instance of it.
+  // WP6.8 (draw ADR 365) — an engine instance is one page item that names
+  // its symbol; the store lists every instance of each.
+  if (c === "symbol" && engineSymbols(host) && reference.kind === "instance") {
     const address = `instance:${String(reference.id)}`;
-    const symbol = (await readEngineSymbols(host)).find((sym) =>
-      sym.instances.includes(address),
+    const row = (await readEngineSymbols(host)).find((r) =>
+      r.instances.includes(address),
     );
-    if (!symbol) return [];
-    return symbol.instances
-      .filter((a) => a.startsWith("instance:"))
-      .map(
-        (a) =>
-          ({ kind: "instance", id: a.slice("instance:".length) }) as ElementId,
-      );
+    return (row?.instances ?? []).map(
+      (a) =>
+        ({ kind: "instance", id: a.slice("instance:".length) }) as ElementId,
+    );
   }
   if (c === "graphicStyle" || c === "symbol") {
     const refValue = linkValue(await index.envelopeOf(reference), c);

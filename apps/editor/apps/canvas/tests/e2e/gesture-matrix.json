@@ -646,6 +646,38 @@
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.draw.tool.symbolSprayer",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/symbolism-tools.spec.ts) and the plugin-surface canvas e2e; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.symbolShifter",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/symbolism-tools.spec.ts) and the plugin-surface canvas e2e; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.symbolScruncher",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/symbolism-tools.spec.ts) and the plugin-surface canvas e2e; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.symbolSizer",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/symbolism-tools.spec.ts) and the plugin-surface canvas e2e; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.symbolSpinner",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/symbolism-tools.spec.ts) and the plugin-surface canvas e2e; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.symbolStainer",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/symbolism-tools.spec.ts) and the plugin-surface canvas e2e; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.symbolScreener",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/symbolism-tools.spec.ts) and the plugin-surface canvas e2e; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.symbolNineSlice",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/symbolism-tools.spec.ts) and the plugin-surface canvas e2e; matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.image.tool.smudge",
       "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/brush-engine.spec.ts); matrix rows are the follow-up"
     },

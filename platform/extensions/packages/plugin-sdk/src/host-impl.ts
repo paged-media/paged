@@ -46,6 +46,11 @@ import type {
   AssetSurface,
   BindingCollectionRequest,
   BindingCollectionResult,
+  BindingGuideEdit,
+  BindingReadoutRequest,
+  BindingReadoutsResult,
+  BindingWorkspaceResult,
+  BindingWorkspaceView,
   BindingProvider,
   BindingProviderHandle,
   BindingPropertyRequest,
@@ -1137,6 +1142,19 @@ export interface BindingProviderBackend {
   /** Offer a structural mutation to the active providers before sending
    *  it to core (`layerMove`, `createSwatch`, …). */
   applyMutation(mutation: MutationInput): Promise<BindingWriteResult>;
+  /** Extensions ADR 340 — the active context's workspace (the frame the
+   *  rulers measure in, its guides, the grid's area), innermost claimer
+   *  first; `resolved: false` keeps the page rulers and guides. */
+  readWorkspace(): Promise<BindingWorkspaceResult>;
+  /** A guide edit from the host's guide machinery, to the provider whose
+   *  workspace the host is showing (the innermost claimer). */
+  editGuide(edit: BindingGuideEdit): Promise<BindingWriteResult>;
+  /** The host's grid and snapping state. Remembered, and delivered to
+   *  every workspace provider now and whenever one becomes active. */
+  setWorkspaceView(view: BindingWorkspaceView): void;
+  /** Rows the active providers add to a host readout surface (the Info
+   *  panel), innermost claimer first. */
+  readReadouts(request: BindingReadoutRequest): Promise<BindingReadoutsResult>;
   /** Fires when the active stack changes OR a provider invalidates —
    *  the host panel's re-read signal. */
   onDidChange(listener: () => void): Disposable;
@@ -1160,6 +1178,17 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
     elementId: string | null;
   }[] = [];
   const listeners = new Set<() => void>();
+  /** The host's last view state (extensions ADR 340), handed to every
+   *  workspace provider as it becomes active. */
+  let workspaceView: BindingWorkspaceView | null = null;
+  const deliverView = (entry: RegisteredBindingProvider) => {
+    if (!workspaceView || !entry.provider.provides.workspace) return;
+    try {
+      entry.provider.workspaceView?.(workspaceView);
+    } catch {
+      // A throwing provider must not break the host's view sync.
+    }
+  };
   // The separator is the ESCAPE `\u0000`, not a literal NUL byte. A raw
   // control character in the source makes every tool that sniffs content
   // treat this 3k-line file as BINARY — `grep` silently matches nothing
@@ -1230,6 +1259,8 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
     setContextActive(plugin, contextType, elementId, isActive) {
       if (isActive) {
         stack.push({ plugin, contextType, elementId });
+        for (const entry of providers.get(key(plugin, contextType)) ?? [])
+          deliverView(entry);
       } else {
         // Pop the INNERMOST matching frame: the same context type can be
         // entered twice (a frame inside a frame), and exiting must
@@ -1343,6 +1374,71 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
       return {
         handled: false,
         reason: `no active binding provider claimed the "${mutation.op}" op`,
+      };
+    },
+    async readWorkspace() {
+      for (const { frame, entry } of active()) {
+        if (!entry.provider.provides.workspace) continue;
+        if (!entry.provider.readWorkspace) continue;
+        const read = await entry.provider.readWorkspace();
+        if (read.kind === "decline") continue;
+        return {
+          resolved: true,
+          provider: entry.plugin,
+          elementId: frame.elementId,
+          workspace: read.workspace,
+        };
+      }
+      return {
+        resolved: false,
+        reason: "no active binding provider claimed the workspace",
+      };
+    },
+    async editGuide(edit) {
+      // The provider whose workspace is SHOWN takes the edit: the same
+      // walk as readWorkspace, so a guide is never edited in a frame the
+      // rulers are not measuring.
+      for (const { entry } of active()) {
+        if (!entry.provider.provides.workspace) continue;
+        if (!entry.provider.readWorkspace || !entry.provider.editGuide)
+          continue;
+        const read = await entry.provider.readWorkspace();
+        if (read.kind === "decline") continue;
+        const write = await entry.provider.editGuide(edit);
+        if (write.kind === "decline") break;
+        return {
+          handled: true,
+          provider: entry.plugin,
+          outcome: write.outcome,
+        };
+      }
+      return {
+        handled: false,
+        reason: `no active binding provider took the guide ${edit.kind}`,
+      };
+    },
+    setWorkspaceView(view) {
+      workspaceView = view;
+      for (const { entry } of active()) deliverView(entry);
+    },
+    async readReadouts(request) {
+      for (const { entry } of active()) {
+        if (!(
+          entry.provider.provides.readouts?.includes(request.surface) ?? false
+        ))
+          continue;
+        if (!entry.provider.readReadouts) continue;
+        const read = await entry.provider.readReadouts(request);
+        if (read.kind === "decline") continue;
+        return {
+          resolved: true,
+          provider: entry.plugin,
+          sections: read.sections,
+        };
+      }
+      return {
+        resolved: false,
+        reason: `no active binding provider adds readouts to "${request.surface}"`,
       };
     },
     onDidChange(listener) {
@@ -2007,6 +2103,12 @@ export function createBundleHost(
       gaps.push("provides.collections declared without readCollection()");
     if ((p.provides.ops?.length ?? 0) > 0 && !p.applyMutation)
       gaps.push("provides.ops declared without applyMutation()");
+    if (p.provides.workspace && !p.readWorkspace)
+      gaps.push("provides.workspace declared without readWorkspace()");
+    if (p.provides.workspace && !p.editGuide)
+      gaps.push("provides.workspace declared without editGuide()");
+    if ((p.provides.readouts?.length ?? 0) > 0 && !p.readReadouts)
+      gaps.push("provides.readouts declared without readReadouts()");
     // A declaration list is a SET: a repeated entry means two intents
     // fought over one key and one lost silently. Say so instead.
     const dupes = (label: string, xs: readonly string[] | undefined) => {
@@ -2020,6 +2122,7 @@ export function createBundleHost(
     dupes("collections", p.provides.collections);
     dupes("ops", p.provides.ops);
     dupes("writablePaths", p.provides.writablePaths);
+    dupes("readouts", p.provides.readouts);
     // `writablePaths` NARROWS `paths`; a member outside it is a path the
     // provider believes it writes and will never be asked about, which is
     // the silent-loss shape the dupe check exists for.
@@ -2040,7 +2143,9 @@ export function createBundleHost(
     if (
       (p.provides.paths?.length ?? 0) === 0 &&
       (p.provides.collections?.length ?? 0) === 0 &&
-      (p.provides.ops?.length ?? 0) === 0
+      (p.provides.ops?.length ?? 0) === 0 &&
+      !p.provides.workspace &&
+      (p.provides.readouts?.length ?? 0) === 0
     ) {
       gaps.push("provides declares nothing — the provider could never answer");
     }
@@ -6051,6 +6156,13 @@ export function createBundleHost(
     // provider will actually be consulted by the host's panels and the
     // adapter reports context activation into it.
     featureSet.add("bindings.provider@1");
+    // Extensions ADR 340 — the same registry carries the workspace lane
+    // (the host rulers, guides and grid follow an active context's frame)
+    // and the readout lane (the Info panel shows a context's rows). The
+    // flags say the REGISTRY routes them; a host that reads them is the
+    // editor that wired it.
+    featureSet.add("bindings.workspace@1");
+    featureSet.add("bindings.readouts@1");
   }
   if (options?.blobStore) {
     // The blob door always exists (no-store fallback); this flag means a

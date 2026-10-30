@@ -103,6 +103,12 @@ import { makeTypeGesture } from "./type-tool";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
 import { makeColorBindingProvider } from "./binding-provider/color-provider";
+import { makeWorkspaceBindingProvider } from "./workspace";
+import {
+  contributeImageTool,
+  contributeWorkspace,
+  WORKSPACE_TOOL_IDS,
+} from "./workspace-contrib";
 import {
   contributeImageObjectModel,
   type UntypedCommand,
@@ -522,7 +528,7 @@ export function activate(host: BundleHost): BundleHandle {
     return fields.length ? { options: { toolId, fields } } : {};
   };
 
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: CROP_TOOL_ID,
     title: t(TOOL.crop),
     icon: "tool-crop",
@@ -538,7 +544,7 @@ export function activate(host: BundleHost): BundleHandle {
   // selection, the active layer; arrows nudge 1 px, Shift+arrow 10. It
   // shares the crop tool's rail slot and takes no shortcut of its own:
   // "v" is the host Selection tool, which moves the FRAME.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: MOVE_TOOL_ID,
     title: t(TOOL.movePixels),
     icon: "tool-select",
@@ -549,7 +555,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   // PAINT BUCKET — floods by colour (wand tolerance / contiguity) with
   // the foreground. Shares the brush slot; no shortcut ("g" is taken).
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: BUCKET_TOOL_ID,
     ...optionsFor(BUCKET_TOOL_ID),
     title: t(TOOL.paintBucket),
@@ -561,7 +567,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   // GRADIENT — drag to set the line; foreground → background. Shares the
   // brush slot with the bucket (Photoshop pairs them).
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: GRADIENT_TOOL_ID,
     ...optionsFor(GRADIENT_TOOL_ID),
     title: t(TOOL.gradient),
@@ -572,7 +578,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
 
   // RED EYE — drag a box around the eye; shares the healing brush's slot.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: RED_EYE_TOOL_ID,
     title: t(TOOL.redEye),
     icon: "tool-heal",
@@ -585,7 +591,7 @@ export function activate(host: BundleHost): BundleHandle {
   // foreground (Alt: background); its own slot, with the Color Sampler in
   // its flyout (Photoshop's pairing). No key: the shortcut register is full
   // and `i` is the host's own Eyedropper.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: EYEDROPPER_TOOL_ID,
     ...optionsFor(EYEDROPPER_TOOL_ID),
     title: t(TOOL.eyedropper),
@@ -595,7 +601,7 @@ export function activate(host: BundleHost): BundleHandle {
     gesture: () => makeEyedropperGesture(host, session),
   });
   // COLOR SAMPLER — up to four fixed sampling points, read live.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: COLOR_SAMPLER_TOOL_ID,
     ...optionsFor(COLOR_SAMPLER_TOOL_ID),
     title: t(TOOL.colorSampler),
@@ -668,7 +674,7 @@ export function activate(host: BundleHost): BundleHandle {
   // shift register (draw holds shift+a/b/c/i/j/k/m/n/r/u; this bundle
   // holds shift+x) — verified against both manifests + the editor
   // built-ins at pick time.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: MARQUEE_RECT_TOOL_ID,
     title: t(TOOL.marqueeRectangle),
     icon: "tool-marquee-rect",
@@ -677,7 +683,7 @@ export function activate(host: BundleHost): BundleHandle {
     shortcut: "y",
     gesture: () => makeSelectionGesture(host, session, "rect"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: MARQUEE_ELLIPSE_TOOL_ID,
     title: t(TOOL.marqueeEllipse),
     icon: "tool-marquee-ellipse",
@@ -686,7 +692,7 @@ export function activate(host: BundleHost): BundleHandle {
     shortcut: "shift+y",
     gesture: () => makeSelectionGesture(host, session, "ellipse"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: LASSO_TOOL_ID,
     title: t(TOOL.lasso),
     icon: "tool-lasso",
@@ -708,7 +714,7 @@ export function activate(host: BundleHost): BundleHandle {
   // stealing another global register for a variant of a tool that is
   // already there would be exactly the land-grab the shortcut note in
   // paged.draw's CLAUDE.md warns about.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: POLY_LASSO_TOOL_ID,
     title: t(TOOL.polygonalLasso),
     icon: "tool-lasso",
@@ -719,7 +725,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Magic wand: click-select by color distance. Its tool options carry
   // the tolerance (0–255 per channel, default 32) and the contiguous
   // toggle (default on); see `tool-options.ts` and selection-machine.ts.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: MAGIC_WAND_TOOL_ID,
     ...optionsFor(MAGIC_WAND_TOOL_ID),
     title: t(TOOL.magicWand),
@@ -738,7 +744,7 @@ export function activate(host: BundleHost): BundleHandle {
   // rather than from a threshold anchored on the first pixel, so the
   // result does not depend on precisely where the drag started — the
   // complaint that makes a wand feel unpredictable.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: QUICK_SELECT_TOOL_ID,
     title: t(TOOL.quickSelection),
     icon: "tool-magic-wand",
@@ -766,7 +772,7 @@ export function activate(host: BundleHost): BundleHandle {
   // paged.draw (= - shift+c/u/n/a/m/b/r/j/k/i/d/s/q) and this bundle's
   // own five (shift+x, y, shift+y, shift+l, shift+w). "[" and "]" are
   // deliberately LEFT FREE for brush-size nudging.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: BRUSH_TOOL_ID,
     ...optionsFor(BRUSH_TOOL_ID),
     title: t(TOOL.brushRaster),
@@ -777,7 +783,7 @@ export function activate(host: BundleHost): BundleHandle {
     cursor: PAINT_CURSOR,
     gesture: () => makeBrushGesture(host, session, "brush"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: PENCIL_TOOL_ID,
     ...optionsFor(PENCIL_TOOL_ID),
     title: t(TOOL.pencilRaster),
@@ -788,7 +794,7 @@ export function activate(host: BundleHost): BundleHandle {
     cursor: PAINT_CURSOR,
     gesture: () => makeBrushGesture(host, session, "pencil"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: ERASER_TOOL_ID,
     ...optionsFor(ERASER_TOOL_ID),
     title: t(TOOL.eraserRaster),
@@ -815,7 +821,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Photoshop's healing-brush key exactly; both verified free against
   // the editor built-ins and the other plugin manifests at pick time
   // (INV-REG-1 keeps tool shortcuts globally unique).
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: CLONE_TOOL_ID,
     ...optionsFor(CLONE_TOOL_ID),
     title: t(TOOL.cloneStamp),
@@ -826,7 +832,7 @@ export function activate(host: BundleHost): BundleHandle {
     cursor: PAINT_CURSOR,
     gesture: () => makeBrushGesture(host, session, "clone"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: HEAL_TOOL_ID,
     ...optionsFor(HEAL_TOOL_ID),
     title: t(TOOL.healingBrush),
@@ -853,7 +859,7 @@ export function activate(host: BundleHost): BundleHandle {
     [BLUR_TOOL_ID, TOOL.blurBrush, "blur"],
     [SHARPEN_TOOL_ID, TOOL.sharpenBrush, "sharpen"],
   ] as const) {
-    contributeTool(host, {
+    contributeImageTool(host, session, {
       id,
       title: t(title),
       icon: "tool-clone",
@@ -872,7 +878,7 @@ export function activate(host: BundleHost): BundleHandle {
   // history brushes in a slot of their own, the background and magic
   // erasers beside the eraser. All but the magic eraser are strokes of
   // the same gesture; Brush Settings shapes every one of them.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: SMUDGE_TOOL_ID,
     ...optionsFor(SMUDGE_TOOL_ID),
     title: t(TOOL.smudge),
@@ -882,7 +888,7 @@ export function activate(host: BundleHost): BundleHandle {
     cursor: PAINT_CURSOR,
     gesture: () => makeBrushGesture(host, session, "smudge"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: MIXER_TOOL_ID,
     ...optionsFor(MIXER_TOOL_ID),
     title: t(TOOL.mixerBrush),
@@ -892,7 +898,7 @@ export function activate(host: BundleHost): BundleHandle {
     cursor: PAINT_CURSOR,
     gesture: () => makeBrushGesture(host, session, "mixer"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: COLOR_REPLACE_TOOL_ID,
     ...optionsFor(COLOR_REPLACE_TOOL_ID),
     title: t(TOOL.colorReplacement),
@@ -902,7 +908,7 @@ export function activate(host: BundleHost): BundleHandle {
     cursor: PAINT_CURSOR,
     gesture: () => makeBrushGesture(host, session, "color-replace"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: HISTORY_TOOL_ID,
     ...optionsFor(HISTORY_TOOL_ID),
     title: t(TOOL.historyBrush),
@@ -912,7 +918,7 @@ export function activate(host: BundleHost): BundleHandle {
     cursor: PAINT_CURSOR,
     gesture: () => makeBrushGesture(host, session, "history"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: ART_HISTORY_TOOL_ID,
     ...optionsFor(ART_HISTORY_TOOL_ID),
     title: t(TOOL.artHistoryBrush),
@@ -922,7 +928,7 @@ export function activate(host: BundleHost): BundleHandle {
     cursor: PAINT_CURSOR,
     gesture: () => makeBrushGesture(host, session, "art-history"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: BG_ERASER_TOOL_ID,
     ...optionsFor(BG_ERASER_TOOL_ID),
     title: t(TOOL.backgroundEraser),
@@ -932,7 +938,7 @@ export function activate(host: BundleHost): BundleHandle {
     cursor: PAINT_CURSOR,
     gesture: () => makeBrushGesture(host, session, "background-eraser"),
   });
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: MAGIC_ERASER_TOOL_ID,
     ...optionsFor(MAGIC_ERASER_TOOL_ID),
     title: t(TOOL.magicEraser),
@@ -945,7 +951,7 @@ export function activate(host: BundleHost): BundleHandle {
   // SPOT HEALING BRUSH — shares the healing brush's slot; no anchor, no
   // shortcut. The heal lands on release (the engine searches for the
   // source then).
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: SPOT_HEAL_TOOL_ID,
     ...optionsFor(SPOT_HEAL_TOOL_ID),
     title: t(TOOL.spotHealingBrush),
@@ -958,7 +964,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   // PATCH — drag the selection onto the area to copy from; it is replaced
   // and healed on release. Shares the healing brush's slot; no shortcut.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: PATCH_TOOL_ID,
     title: t(TOOL.patch),
     icon: "tool-heal",
@@ -972,7 +978,7 @@ export function activate(host: BundleHost): BundleHandle {
   //
   // CONTENT-AWARE MOVE: drag the selection where the object should go;
   // the hole it leaves is filled and the moved pixels blend in.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: CA_MOVE_TOOL_ID,
     ...optionsFor(CA_MOVE_TOOL_ID),
     title: t(TOOL.contentAwareMove),
@@ -983,7 +989,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   // REMOVE: paint over an object; it is filled from its surroundings on
   // release (an `ml.inpaint` provider answers first when installed).
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: REMOVE_TOOL_ID,
     ...optionsFor(REMOVE_TOOL_ID),
     title: t(TOOL.remove),
@@ -995,7 +1001,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   // SAMPLING BRUSH: paints the Content-Aware Fill workspace's sampling
   // area (Alt erases); outside the workspace a click opens it.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: CAF_SAMPLING_TOOL_ID,
     title: t(TOOL.samplingBrush),
     icon: "tool-heal",
@@ -1750,7 +1756,7 @@ export function activate(host: BundleHost): BundleHandle {
   // plugin tool. Verified against the editor built-ins and every plugin
   // manifest at pick time, as INV-REG-1 requires; the first pick was
   // `shift+u` and it COLLIDED, which the check caught.
-  contributeTool(host, {
+  contributeImageTool(host, session, {
     id: TYPE_TOOL_ID,
     title: t(TOOL.typeRaster),
     icon: "tool-type",
@@ -1860,6 +1866,10 @@ export function activate(host: BundleHost): BundleHandle {
   const vectorsSub = contributeVectors(host, session, command, PANEL_ID);
   // Image ▸ Mode (ADR 479): depth, colour mode and the proof view.
   const modeSub = contributeMode(host, session, command, PANEL_ID);
+
+  // WP5.12 — the workspace (image ADR 475): Ruler, Count, Note and Slice,
+  // the View menu's guides and rulers, the persistent marks overlay.
+  const workspaceSub = contributeWorkspace(host, session, command, PANEL_ID);
 
   // K-2 — the raster importer: opening/dropping a raster file routes
   // its bytes HERE (decode into the session, raise the panel; it does
@@ -2061,6 +2071,7 @@ export function activate(host: BundleHost): BundleHandle {
         PEN_TOOL_ID,
         PATH_SELECT_TOOL_ID,
         RECT_SHAPE_TOOL_ID,
+        ...WORKSPACE_TOOL_IDS,
       ],
       // The context's OWN panel. Deliberately NOT the host panels it
       // serves (Layers, Character) — naming those here would put host
@@ -2070,11 +2081,13 @@ export function activate(host: BundleHost): BundleHandle {
       panelIds: [PANEL_ID],
       onEnter: () => {
         host.log.debug("rasterImage context entered");
+        workspaceSub.setContextActive(true);
       },
       onExit: () => {
         host.log.debug("rasterImage context exited");
         // An open transform box does not outlive the context.
         host.transformBox.active()?.cancel();
+        workspaceSub.setContextActive(false);
         // Leaving the image hands its edits to the document.
         if (session.state().uncommitted) void session.commitToDocument();
       },
@@ -2139,6 +2152,16 @@ export function activate(host: BundleHost): BundleHandle {
         host.contribute.bindingProvider(
           "rasterImage",
           makeColorBindingProvider(host, session).provider,
+        ),
+      );
+      // WORKSPACE (WP5.12, extensions ADR 340) — the host rulers measure
+      // the image in its unit, its guides are the host's guides, the host
+      // grid covers it, and the Info panel shows its pixel, selection and
+      // Ruler rows.
+      providerHandles.push(
+        host.contribute.bindingProvider(
+          "rasterImage",
+          makeWorkspaceBindingProvider(() => session.workspace()),
         ),
       );
       // A provider's values change without an ENGINE mutation — a layer
@@ -2216,6 +2239,7 @@ export function activate(host: BundleHost): BundleHandle {
       maskingSub.dispose();
       modeSub.dispose();
       vectorsSub.dispose();
+      workspaceSub.dispose();
       providerInvalidate = null;
       for (const h of providerHandles.splice(0)) h.dispose();
       session.dispose();

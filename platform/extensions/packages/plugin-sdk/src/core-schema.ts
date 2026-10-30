@@ -970,6 +970,12 @@ export const CORE_PATHS: Record<
     wire: "lengths",
     type: { kind: "list", of: { kind: "length" } },
   },
+  // Draw ADR 365 — the symbol an instance draws (Replace Symbol).
+  symbolInstanceSymbol: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   // Word's character and paragraph additions are protocol 76 (engine ADR
   // 1018); a pre-71 engine has none.
   characterHighlightColor: V71,

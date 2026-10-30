@@ -341,3 +341,18 @@ export {
   type PlaneChoice,
   type PlaneWidgetCell,
 } from "./perspective-machine";
+
+// WP6.8 — the Symbolism tools' machine (draw ADR 365): the Symbol Sprayer
+// and the six modifiers, one gesture one batch.
+export {
+  SymbolismMachine,
+  SYMBOLISM_DEFAULTS,
+  type SymbolismCommit,
+  type SymbolismEvent,
+  type SymbolismOptions,
+  type SymbolismSnapshot,
+  type SymbolismTarget,
+  type SymbolismToolKind,
+  type SymbolismToolOptions,
+  type SymbolismUpdate,
+} from "./symbolism-machine";

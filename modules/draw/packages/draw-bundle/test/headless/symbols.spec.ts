@@ -807,7 +807,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       await h.host.selection.set([]);
     });
 
-    it("registers the seven commands + the right-docked panel", () => {
+    it("registers the nine commands + the right-docked panel", () => {
       expect(SYMBOLS_COMMAND_IDS).toEqual([
         DEFINE_SYMBOL_COMMAND_ID,
         PLACE_SYMBOL_COMMAND_ID,
@@ -816,6 +816,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
         RESET_SYMBOL_TRANSFORM_COMMAND_ID,
         RENAME_SYMBOL_COMMAND_ID,
         DELETE_SYMBOL_COMMAND_ID,
+        // WP6.8 (draw ADR 365) — the engine lane's Replace and Options.
+        "media.paged.draw.command.replaceSymbol",
+        "media.paged.draw.command.symbolOptions",
       ]);
       for (const id of SYMBOLS_COMMAND_IDS) {
         expect(commandFor(h, id).category).toBe("Symbols");
