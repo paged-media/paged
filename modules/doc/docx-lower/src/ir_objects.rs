@@ -80,7 +80,11 @@ pub struct LoweredWrap {
 
 /// Where a page item stands.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum LoweredItemHost {
     /// On a story's authored page (the skeleton's `docx_p{k}`).
     Page { page_id: String },
@@ -90,7 +94,11 @@ pub enum LoweredItemHost {
 
 /// What a page item is.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum LoweredItemKind {
     /// A picture: a graphic frame the image is placed in (`placeImage`).
     Picture { uri: String },

@@ -177,9 +177,11 @@ describe.skipIf(!docxPresent)(
       expect(tables).toHaveLength(6);
       const get = async (t: number, path: string) => {
         const id = tables[t]!.replace(/^table:/, "");
-        return ((await d!.h.objects.get(`cell:${id}/0,0`, path)) as {
-          value: unknown;
-        }).value;
+        return (
+          (await d!.h.objects.get(`cell:${id}/0,0`, path)) as {
+            value: unknown;
+          }
+        ).value;
       };
       // Every cell's text arrived with its look (one batch per table).
       expect(await get(1, "text")).toBe("TB r0c0");
