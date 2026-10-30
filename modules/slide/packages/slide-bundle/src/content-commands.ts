@@ -397,6 +397,9 @@ export function contributeContentCommands(
   // clicked takes the formatting; the command twice in quick succession
   // (PowerPoint's double-click on the brush) keeps it on until Esc.
   const painter = new PainterMode();
+  // The copy is read asynchronously; a click that comes before it is done
+  // waits for it.
+  let arming: Promise<void> = Promise.resolve();
   add(
     CONTENT_CMD.formatPainter,
     t(CONTENT.formatPainter),
@@ -407,12 +410,19 @@ export function contributeContentCommands(
         painter.invoke(null, null, now);
         return;
       }
-      const copied = await copyFormat(host);
       const source = host.selection.get()[0];
-      const mode = painter.invoke(copied, source ? String(source.id) : null, now);
-      if (mode === "off")
-        host.log.info("paged.slide formatPainter: nothing is selected");
-      else host.log.info(t(CONTENT.formatPainterArmed));
+      arming = (async () => {
+        const copied = await copyFormat(host, source);
+        const mode = painter.invoke(
+          copied,
+          source ? String(source.id) : null,
+          now,
+        );
+        if (mode === "off")
+          host.log.info("paged.slide formatPainter: nothing is selected");
+        else host.log.info(t(CONTENT.formatPainterArmed));
+      })();
+      await arming;
     },
   );
   add(
@@ -424,12 +434,18 @@ export function contributeContentCommands(
   if (typeof host.selection?.onDidChange === "function")
     handles.push(
       host.selection.onDidChange((sel) => {
-        const go = painter.take(sel.map((e) => String(e.id)));
-        if (!go) return;
-        const targets = sel.filter((e) => go.targets.includes(String(e.id)));
-        void pasteFormat(host, go.copied, targets).catch((err: unknown) =>
-          host.log.warn(`paged.slide formatPainter: ${String(err)}`),
-        );
+        void arming
+          .then(() => {
+            const go = painter.take(sel.map((e) => String(e.id)));
+            if (!go) return;
+            const targets = sel.filter((e) =>
+              go.targets.includes(String(e.id)),
+            );
+            return pasteFormat(host, go.copied, targets);
+          })
+          .catch((err: unknown) =>
+            host.log.warn(`paged.slide formatPainter: ${String(err)}`),
+          );
       }),
     );
   handles.push({ dispose: () => painter.off() });

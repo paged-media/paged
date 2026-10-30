@@ -222,6 +222,44 @@ async function entries(
   );
 }
 
+/** The effects with a switch of their own: their prefix and the switch's
+ *  path (`frameBevel…`, `frameBevelEnabled`). */
+const SWITCHED: readonly [string, string][] = [
+  ["frameDropShadow", "frameDropShadow"],
+  ["frameInnerShadow", "frameInnerShadowEnabled"],
+  ["frameOuterGlow", "frameOuterGlowEnabled"],
+  ["frameInnerGlow", "frameInnerGlowEnabled"],
+  ["frameBevel", "frameBevelEnabled"],
+  ["frameSatin", "frameSatinEnabled"],
+  ["frameFeather", "frameFeatherEnabled"],
+  ["frameDirectionalFeather", "frameDirectionalFeatherEnabled"],
+  ["frameGradientFeather", "frameGradientFeather"],
+];
+
+/** A shape's look without the settings of the effects it has switched off:
+ *  writing one of them would switch the effect on in the target (the
+ *  engine materialises an effect from any of its fields), so only the
+ *  switch itself goes, off. */
+export function withoutOffEffects(
+  shape: readonly FormatEntry[],
+): FormatEntry[] {
+  const isOff = (path: string) =>
+    shape.some(
+      (e) =>
+        e.path === path && (e.value as { value?: unknown }).value === false,
+    );
+  const off = new Map(SWITCHED.filter(([, sw]) => isOff(sw)));
+  // The longest prefix a path starts with owns it.
+  const owner = (path: string) =>
+    SWITCHED.map(([p]) => p)
+      .filter((p) => path.startsWith(p))
+      .sort((a, b) => b.length - a.length)[0];
+  return shape.filter((e) => {
+    const o = owner(e.path);
+    return !o || !off.has(o) || e.path === off.get(o);
+  });
+}
+
 const textSelection = (host: BundleHost) =>
   host.supports("text.selection@1") ? host.text.selection() : null;
 
@@ -245,7 +283,9 @@ export async function copyFormat(
   const parts = partsOf((await host.document.tree()) as TreeNode[], [id]);
   const outline = parts.outlines[0] ?? parts.frames[0];
   if (!outline) return null;
-  const shape = await entries(host, outline, isShapeFormatPath);
+  const shape = withoutOffEffects(
+    await entries(host, outline, isShapeFormatPath),
+  );
   let text: FormatEntry[] = [];
   const frame = parts.frames[0];
   if (frame) {

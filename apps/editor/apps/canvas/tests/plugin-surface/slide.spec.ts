@@ -341,6 +341,8 @@ const DECLARED = {
   objectTypes: [{ type: "slideChart", bakedFallback: "group" }],
   commands: [
     ...Object.keys(PALETTE),
+    // Esc's command, which puts the Format Painter down: no menu entry.
+    "media.paged.slide.command.formatPainterOff",
     ...Object.keys(SHOW),
     ...Object.keys(OUTPUT),
     ...Object.keys(ANIM),
@@ -1582,6 +1584,7 @@ test.describe("plugin surface · paged.slide", () => {
               id !== "media.paged.slide.command.previousSlide" &&
               // The format painter copies from a selection; none is made.
               id !== "media.paged.slide.command.copyFormat" &&
+              id !== "media.paged.slide.command.formatPainter" &&
               id !== "media.paged.slide.command.pasteFormat",
           )
           .sort(),

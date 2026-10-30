@@ -72,7 +72,7 @@ test.describe("journey · paged.slide motion paths", () => {
         timeout: 15_000,
       })
       .toBeGreaterThan(1);
-    const ends = page.locator('[data-slide-motion-path-handle":to"]');
+    const ends = page.locator('[data-slide-motion-path-handle$=":to"]');
     const last = ends.last();
     await expect(last).toBeVisible();
 
@@ -100,7 +100,7 @@ test.describe("journey · paged.slide motion paths", () => {
     await row.click();
     const lock = pane.locator("[data-animation-path-locked]");
     await expect(lock).toBeVisible({ timeout: 15_000 });
-    await lock.check();
+    await lock.click();
     await expect
       .poll(async () => (await motion(page)).mode, { timeout: 15_000 })
       .toBe("fixed");
