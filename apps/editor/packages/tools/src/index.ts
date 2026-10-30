@@ -86,7 +86,14 @@ export {
   type EngineSnapQuery,
   type EngineSnapResult,
 } from "./handlers/snapper";
-export { createPolygonHandler } from "./handlers/polygon-tool";
+export {
+  createPolygonHandler,
+  livePolygonInsert,
+} from "./handlers/polygon-tool";
+// Engine ADR 10XX / editor ADR 310 — the live-shape geometry the
+// on-canvas widgets, the Transform panel's Shape section and the Polygon
+// tool share (the editor's twin of `paged_model::live_shape`).
+export * from "./live-shapes/geometry";
 export { createRectangleHandler } from "./handlers/rectangle-tool";
 export { createScissorsHandler } from "./handlers/scissors-tool";
 export { createShearHandler } from "./handlers/shear-tool";

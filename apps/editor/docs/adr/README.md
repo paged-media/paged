@@ -109,6 +109,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [306](306-module-views-replace-the-canvas.md) | Module views replace the canvas | Accepted 2026-10-25 |
 | [307](307-the-slide-profile.md) | The slide profile: PowerPoint's Normal view and its keys | Accepted 2026-10-25 |
 | [308](308-video-export-runner.md) | Video export runner: the show drawn offline, WebCodecs, an MP4 muxer, progress and Cancel | Accepted 2026-10-28 |
+| [310](310-live-shape-widgets.md) | Live-shape widgets on the canvas and the Transform panel's Shape section | Accepted 2026-10-30 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and
