@@ -15,6 +15,7 @@
  *
  *  @copyright  Copyright (c) And The Next GmbH
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
 
 // paged.slide's video and audio (slide ADR 718, engine ADR 1027,
 // extensions ADR 345, amendment 1): Insert ▸ Video (its typed twin, as a script runs it)
