@@ -1080,6 +1080,7 @@ impl Odt<'_> {
                 .clone()
                 .unwrap_or_else(|| name.replace("_20_", " "));
             styles.push(Style {
+                table: None,
                 is_default: id == "Normal",
                 style_id: id,
                 name: Some(word_name(&display)),
