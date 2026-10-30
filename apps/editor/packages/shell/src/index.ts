@@ -189,6 +189,8 @@ export {
   HAND_TOOL_ID,
   DIRECT_SELECT_TOOL_ID,
   ZOOM_TOOL_ID,
+  CONTEXT_SHARED_TOOL_IDS,
+  toolStaysInContext,
   type ActiveToolState,
   type ToolChangeReason,
   type ToolContextValue,

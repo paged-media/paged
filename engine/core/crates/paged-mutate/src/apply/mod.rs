@@ -616,6 +616,7 @@ pub(crate) fn apply_inner(
             image_uri,
             self_id,
             paragraph,
+            restore,
         } => anchored_frame::apply_insert_anchored_frame(
             doc,
             story_id,
@@ -625,6 +626,7 @@ pub(crate) fn apply_inner(
             *height,
             image_uri.as_deref(),
             self_id,
+            restore.as_deref(),
         ),
         Operation::RemoveAnchoredFrame { story_id, self_id } => {
             anchored_frame::apply_remove_anchored_frame(doc, story_id, self_id)
@@ -1378,6 +1380,7 @@ fn cell_paragraphs_mut<'a>(
 }
 
 mod anchored_frame;
+mod anchored_look;
 pub(crate) mod appearance;
 mod batch_page;
 mod character;

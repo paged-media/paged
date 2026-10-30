@@ -93,7 +93,7 @@ mod text_slots;
 pub mod word_fields;
 
 pub use anchored::AnchoredImageEmit;
-use anchored::{emit_anchored_frames_for_paragraph, emit_anchored_rect_image};
+use anchored::{emit_anchored_frames_for_paragraph, emit_anchored_rect_image, AnchoredLook};
 pub use datefmt::DateParts;
 // Doc-link-only imports: referenced from `///` comments in this file.
 #[cfg(doc)]

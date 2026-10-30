@@ -937,19 +937,19 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
     // Pictures' DrawingML looks (doc ADR 618): lowered through the shared
-    // mapper and carried in the IR, but the engine's anchored frames, where
-    // pictures are placed, hold no fill, outline, opacity or effects yet.
+    // mapper, carried in the IR and painted on the pictures' anchored frames
+    // (engine ADR 1045, doc ADR 619). What the engine cannot hold is listed
+    // per kind below.
     if ctx.looked_pictures > 0 {
         let kinds: Vec<&str> = ctx.look_kinds.iter().map(String::as_str).collect();
-        ctx.diagnostics.push(Diagnostic::warning(
+        ctx.diagnostics.push(Diagnostic::info(
             format!(
-                "{} picture(s) carry a DrawingML look ({}) that is NOT shown: pictures are \
-                 placed as anchored frames, which hold no fill, outline, opacity or effects \
-                 yet; the look is kept in the document and lowered for when they do",
+                "{} picture(s) carry a DrawingML look ({}), drawn natively on their \
+                 anchored frames",
                 ctx.looked_pictures,
                 kinds.join(", ")
             ),
-            2,
+            3,
         ));
     }
     for (loss, n) in &ctx.look_losses {
@@ -1362,6 +1362,12 @@ impl Lowering {
                 self.looked_pictures += 1;
                 self.look_kinds
                     .extend(fx.describe().split(", ").map(str::to_string));
+                // Engine ADR 1045: the host model paints the look on the
+                // picture's anchored frame, each colour a document swatch
+                // (`Color/docx-RRGGBB`, the host model's mapping).
+                for c in fx.colors() {
+                    self.swatch_for(c.trim_start_matches('#'));
+                }
             }
         }
         li.fx = (!fx.is_empty()).then_some(fx);

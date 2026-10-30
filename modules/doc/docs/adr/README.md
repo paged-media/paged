@@ -29,6 +29,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [616](616-files.md) | Files: templates as new documents, macros carried, RTF and OpenDocument read onto docx-core, .doc refused, "Save as .docx" | Accepted 2026-10-25 |
 | [617](617-pagination-policy.md) | Pagination policy: Word's rules, the engine's first-fit composer | Accepted 2026-10-24, amended 2026-10-25 |
 | [618](618-picture-looks-through-the-shared-drawingml-mapper.md) | Pictures' DrawingML looks (fill, outline, alpha, effects) read and lowered through the shared reader and mapper; carried in the IR, reported until anchored frames hold them (amends 606) | Accepted 2026-10-28 |
+| [619](619-picture-looks-drawn-on-their-anchored-frames.md) | Pictures' looks drawn on their anchored frames: the pour binds each frame and writes its look through the lowering kit; colours and gradients as document swatches | Accepted 2026-10-29 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

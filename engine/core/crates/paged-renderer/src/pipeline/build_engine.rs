@@ -3995,6 +3995,11 @@ pub(super) fn build_document_inner(
             entry.width,
             entry.height,
             options,
+            AnchoredLook {
+                document,
+                palette,
+                color_ctx,
+            },
             &mut page_image_caches[entry.target_page],
             decoded_image_cache,
         );
