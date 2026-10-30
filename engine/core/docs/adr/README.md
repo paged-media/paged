@@ -156,6 +156,7 @@ is not written yet.
 | [1017](1017-styled-field-values-and-alternates.md) | A text field takes the styles and breaks its author allows; alternates choose a frame | Accepted 2026-10-24 |
 | [1018](1018-word-paragraph-character-and-list-model.md) | Word's paragraph, character and list model: highlight, hidden text, underline kinds, double strike, direct shading and borders, list levels, based-on, Next Style | Accepted 2026-10-24 |
 | [1019](1019-geometry-kernels-walk-the-arrangement.md) | The planar arrangement is a face walk; offsets and variable width work on whole paths | Accepted 2026-10-25 |
+| [1020](1020-range-comments-with-threads.md) | Range comments with threads: a comment's range is the runs that name it (extends 172) | Accepted 2026-10-29 |
 | [1021](1021-find-and-replace.md) | Find and replace: the caret space, Word's specials and wildcards on `regress`, Replace All as one undo step | Accepted 2026-10-24 |
 | [1022](1022-word-document-structure.md) | Word document structure: section first / odd / even masters and odd/even starts (amends 026), Word fields and F9, creating tables of contents, cross-references, bookmarks and index markers | Accepted 2026-10-25 |
 | [1030](1030-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
@@ -167,7 +168,9 @@ is not written yet.
 | [1037](1037-an-image-frame-has-a-filter-stack.md) | An image frame has a filter stack, evaluated by the kernel twins `paged-kernels` shares with paged.image | Accepted 2026-10-28 |
 | [1038](1038-the-remaining-codecs-and-the-layered-tiff.md) | The remaining codecs: GIF, BMP, TGA, JPEG XL and AVIF encode, HDR and OpenEXR floats, and the layered TIFF | Accepted 2026-10-28 |
 | [1039](1039-a-symbol-is-drawn-by-its-instances.md) | A symbol is kept once and drawn by its instances: 9-slice, overrides, one PDF form, IDML through labels | Accepted 2026-10-28 |
+| [1040](1040-word-change-tracking.md) | Word's change tracking: changes carried by what they changed, recorded while typing, accepted and rejected as each other's opposite, shown by the markup view (amends 184) | Accepted 2026-10-29 |
 | [1043](1043-an-item-has-several-fills-and-strokes.md) | An item has several fills and strokes (native appearance), drawn as parts, baked to a group in IDML and restored from its label | Accepted 2026-10-29 |
+| [1045](1045-an-anchored-frame-paints-as-a-free-frame.md) | An anchored frame paints as a free frame does: its look, its picture in its effects, IDML both ways | Accepted 2026-10-29 |
 | [1046](1046-a-scene-layer-takes-its-frames-effects.md) | A scene layer takes its frame's opacity, blend mode and effects | Accepted 2026-10-30 |
 | [1051](1051-paragraph-direction-and-script-font-slots.md) | A paragraph's base direction (logical alignment, indents and tabs, UAX #9 at its level, mirrored right to left) and a run's direction and East Asian / complex-script font slots | Accepted 2026-10-30 |
 | [1052](1052-content-controls.md) | Content controls: a range of runs that is a checkbox, drop-down, date or text field; one value set is one undo step | Accepted 2026-10-30 |

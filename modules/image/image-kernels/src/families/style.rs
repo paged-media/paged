@@ -732,11 +732,14 @@ style_params!(
     /// NOISE: `± noise / 2` (`h − ½`, `h` a hashed value in [0, 1) per
     /// texel and `seed`) where the effect has any alpha — Photoshop's
     /// noise darkens and lightens the shadow alike and stays inside its
-    /// reach (measured on a noise-40 shadow); premultiplied out.
+    /// reach (measured on a noise-40 shadow); premultiplied out. The
+    /// hash reads CANVAS coordinates: `(ox, oy)` is where the output's
+    /// first texel lies on the canvas (0 for a whole canvas; a tile's
+    /// origin in the tiled fold, so its noise is the canvas's).
     StyleColorizeParams, COLORIZE_FIELDS {
         lut: [[f32; 4]; 256] => "array<vec4<f32>, 256>",
         mode: u32 => "u32", channel: u32 => "u32", noise: f32 => "f32", jitter: f32 => "f32",
-        seed: u32 => "u32", _pad0: u32 => "u32", _pad1: u32 => "u32",
+        seed: u32 => "u32", ox: i32 => "i32", oy: i32 => "i32",
     }
 );
 
@@ -756,10 +759,16 @@ impl StyleColorizeParams {
             noise,
             jitter,
             seed,
-            _pad0: 0,
-            _pad1: 0,
+            ox: 0,
+            oy: 0,
             _abi_pad: 0,
         }
+    }
+
+    /// The same, drawn into a texture whose first texel lies at
+    /// `(ox, oy)` on the canvas.
+    pub fn at(self, ox: i32, oy: i32) -> Self {
+        Self { ox, oy, ..self }
     }
 
     /// One straight colour (`rgb` in [0, 1]) at full alpha everywhere.
@@ -790,8 +799,8 @@ struct Params {
     noise: f32,
     jitter: f32,
     seed: u32,
-    _pad0: u32,
-    _pad1: u32,
+    ox: i32,
+    oy: i32,
     _abi_pad: u32,
 }
 
@@ -813,11 +822,13 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let d = textureDimensions(outp);
     if (gid.x >= d.x || gid.y >= d.y) { return; }
     let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let cx = u32(params.ox + xy.x);
+    let cy = u32(params.oy + xy.y);
     let v = clamp(textureLoad(in0, xy, 0)[params.channel], 0.0, 1.0);
     var t = v;
     if (params.mode == 2u) { t = 1.0 - v; }
     if (params.jitter > 0.0) {
-        t = clamp(t + params.jitter * (hash(gid.x, gid.y, params.seed + 1u) - 0.5), 0.0, 1.0);
+        t = clamp(t + params.jitter * (hash(cx, cy, params.seed + 1u) - 0.5), 0.0, 1.0);
     }
     let x = t * 255.0;
     let i = min(u32(floor(x)), 254u);
@@ -826,7 +837,7 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     if (params.mode == 0u) { a = a * v; }
     if (params.mode == 2u) { a = a * min(1.0, 4.0 * v); }
     if (params.noise > 0.0 && a > 0.004) {
-        a = clamp(a + params.noise * (hash(gid.x, gid.y, params.seed) - 0.5), 0.0, 1.0);
+        a = clamp(a + params.noise * (hash(cx, cy, params.seed) - 0.5), 0.0, 1.0);
     }
     textureStore(outp, xy, mix(textureLoad(in0, xy, 0), vec4<f32>(c.rgb * a, a), vec4<f32>(textureLoad(mask, xy, 0).r)));
 }

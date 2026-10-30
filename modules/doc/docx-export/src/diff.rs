@@ -307,7 +307,7 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
 /// The effective DIRECT paragraph formatting a lowered paragraph-style token maps
 /// to, plus the real `<w:pStyle>` it should carry — the paragraph twin of
 /// [`effective_props`].
-fn effective_para_props(
+pub(crate) fn effective_para_props(
     token: Option<&str>,
     doc: &LoweredDoc,
     bindings: &DocxBindings,
@@ -1107,7 +1107,7 @@ pub(crate) fn plan_runs(
 /// (deletions before insertions in a gap, matches as late as they can be),
 /// or, past a size where the table
 /// would grow too large, replaced whole.
-fn align_chars(a: &[char], b: &[char]) -> Vec<Align> {
+pub(crate) fn align_chars(a: &[char], b: &[char]) -> Vec<Align> {
     let prefix = a.iter().zip(b).take_while(|(x, y)| x == y).count();
     let max_suffix = a.len().min(b.len()) - prefix;
     let suffix = a

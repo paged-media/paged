@@ -59,12 +59,15 @@ fn prop<'a>(s: &'a LoweredStyle, path: &str) -> Option<&'a PropValue> {
 /// The read-back of an unedited pour: each run as the baseline lowered it.
 fn identity(ir: &LoweredDoc) -> StoryContentIn {
     StoryContentIn {
+        comments: Vec::new(),
         self_id: "Story/doc".into(),
         paragraphs: ir
             .story
             .paragraphs()
             .into_iter()
             .map(|p| ParagraphContentIn {
+                mark_change: None,
+                props_change: None,
                 paragraph_style: p.para_style_id.clone(),
                 runs: p
                     .runs

@@ -244,7 +244,90 @@ fn inputs() -> Vec<(String, Vec<u8>)> {
         paint(&mut stack, j, [40, 120, 200]);
         out.push(("psb-edited.psb".into(), save(&file, &stack)));
     }
+    // Image ▸ Mode, then the layered save (image ADR 481): an RGB document
+    // converted to Grayscale, Lab, CMYK or 16 bits is written in the new
+    // mode and depth. Photoshop's render of each (converted to sRGB by
+    // Photoshop for the non-RGB ones) is compared with paged's composite.
+    for (name, mode, sixteen) in CONVERTED {
+        let (file, stack) = converted(name, *mode, *sixteen);
+        out.push(((*name).into(), save(&file, &stack)));
+    }
     out
+}
+
+/// The conversion cases: file name, mode, 16 bits.
+const CONVERTED: &[(&str, image_js::color_mode::ColorMode, bool)] = &[
+    (
+        "converted-gray-8.psd",
+        image_js::color_mode::ColorMode::Gray,
+        false,
+    ),
+    (
+        "converted-gray-16.psd",
+        image_js::color_mode::ColorMode::Gray,
+        true,
+    ),
+    (
+        "converted-lab-8.psd",
+        image_js::color_mode::ColorMode::Lab,
+        false,
+    ),
+    (
+        "converted-lab-16.psd",
+        image_js::color_mode::ColorMode::Lab,
+        true,
+    ),
+    (
+        "converted-cmyk-8.psd",
+        image_js::color_mode::ColorMode::Cmyk,
+        false,
+    ),
+    (
+        "converted-cmyk-16.psd",
+        image_js::color_mode::ColorMode::Cmyk,
+        true,
+    ),
+    (
+        "converted-rgb-16.psd",
+        image_js::color_mode::ColorMode::Rgb,
+        true,
+    ),
+];
+
+/// Photoshop's RGB background with a painted, half-opaque multiply layer
+/// over it, converted to `mode` (CMYK through Photoshop's own Coated
+/// FOGRA39, read from its CMYK document) at 8 or 16 bits.
+fn converted(
+    name: &str,
+    mode: image_js::color_mode::ColorMode,
+    sixteen: bool,
+) -> (PsdFile, LayerStack) {
+    use image_js::color_mode::{ColorMode as M, DocMode};
+    let file = fixture("adjustment-layers-ext/vibrance.psd");
+    let mut stack = open_background(&file);
+    let j = stack.add("painted");
+    paint(&mut stack, j, [40, 160, 220]);
+    stack.set_opacity(j, 0.7).expect("opacity");
+    let _ = name;
+    stack.set_blend(j, "multiply").expect("blend");
+    if sixteen {
+        stack
+            .set_depth(image_core::SampleDepth::U16)
+            .expect("16 bits");
+    }
+    let cmyk_profile = (mode == M::Cmyk).then(|| {
+        Arc::from(
+            fixture("mode-conversions/cmyk-8.cmyk.psd")
+                .resources
+                .icc_profile()
+                .expect("Photoshop's CMYK profile"),
+        )
+    });
+    stack
+        .set_mode(DocMode { mode, cmyk_profile })
+        .expect("mode");
+    // The background record goes with the conversion too.
+    (file, stack)
 }
 
 /// A Photoshop file opened as layers with every layer above its
@@ -473,3 +556,83 @@ fn read_png8(p: &std::path::Path) -> Vec<u8> {
         .flat_map(|px| [px[0], px[1], px[2]])
         .collect()
 }
+
+/// A document converted in paged (Image ▸ Mode, image ADR 481) and saved
+/// with layers opens in Photoshop in the new mode and depth, with its
+/// layers, and looks like paged's composite: Photoshop's own render of
+/// the file, taken to sRGB by Photoshop's conversion, against paged's
+/// fold of the converted stack, in ΔE*ab 1976. A wrong channel encoding
+/// (an a*/b* offset, an ink not inverted) is tens of ΔE.
+#[test]
+#[allow(non_snake_case)]
+fn photoshop_opens_a_converted_document_in_its_new_mode__feat__image_io_depth_color_modes() {
+    let r = report();
+    let mut report = Vec::new();
+    let mut failed = false;
+    for (name, mode, sixteen) in CONVERTED {
+        let c = case(&r, name);
+        assert!(c.get("error").is_none(), "{name}: Photoshop refused it");
+        let doc = c
+            .get("values")
+            .and_then(|v| v.get("document"))
+            .expect("doc");
+        let want_mode = match mode {
+            image_js::color_mode::ColorMode::Gray => "DocumentMode.GRAYSCALE",
+            image_js::color_mode::ColorMode::Lab => "DocumentMode.LAB",
+            image_js::color_mode::ColorMode::Cmyk => "DocumentMode.CMYK",
+            image_js::color_mode::ColorMode::Rgb => "DocumentMode.RGB",
+        };
+        assert_eq!(s(doc, "mode"), want_mode, "{name}");
+        assert_eq!(
+            s(doc, "bits"),
+            if *sixteen {
+                "BitsPerChannelType.SIXTEEN"
+            } else {
+                "BitsPerChannelType.EIGHT"
+            },
+            "{name}"
+        );
+        assert_eq!(num(doc, &["layers"]), 2.0, "{name}: both layers, live");
+        let (_, stack) = converted(name, *mode, *sixteen);
+        let ours = pollster::block_on(stack.composite(None, None)).expect("the CPU fold");
+        let id = name.trim_end_matches(".psd");
+        let theirs = read_png8(&photoshop().join(format!("psd-readback/{id}.png")));
+        let lab = |p: &[u8]| {
+            paged_color::lab::srgb_to_lab_d50([0, 1, 2].map(|c| f32::from(p[c]) / 255.0))
+        };
+        // A Lab document blends in L*a*b* in Photoshop and in RGB here
+        // (deferred), so only the background, where nothing blends, holds
+        // a Lab file's encoding; elsewhere every texel.
+        let lab_doc = *mode == image_js::color_mode::ColorMode::Lab;
+        let painted = |i: usize| (32..96).contains(&(i % 128)) && (32..96).contains(&(i / 128));
+        let mut d: Vec<f32> = ours
+            .chunks(4)
+            .zip(theirs.chunks(3))
+            .enumerate()
+            .filter(|(i, _)| !lab_doc || !painted(*i))
+            .map(|(_, (o, t))| paged_color::cms::delta_e76(lab(o), lab(t)))
+            .collect();
+        d.sort_by(f32::total_cmp);
+        let (p99, max) = (d[d.len() * 99 / 100], d[d.len() - 1]);
+        let ok = p99 <= CONVERTED_DE_P99 && max <= CONVERTED_DE_MAX;
+        failed |= !ok;
+        report.push(format!(
+            "{}{name}: dE p99 {p99:.2} max {max:.2}",
+            if ok { "" } else { "OVER " }
+        ));
+    }
+    eprintln!("{}", report.join("\n"));
+    assert!(!failed, "{}", report.join("\n"));
+}
+
+/// The bound: the two applications' CMMs and Photoshop's conversion of
+/// the merged document to sRGB. Measured 2026-10-29: Gray 1.45 / 2.0 (a
+/// Multiply blended in grey by Photoshop, in RGB by the stack), CMYK
+/// 0.86 / 1.5 (the ink fold, image ADR 481), 16-bit RGB 0.68 / 1.4.
+const CONVERTED_DE_P99: f32 = 2.0;
+const CONVERTED_DE_MAX: f32 = 2.5;
+
+// A Lab document's painted square is not compared: Photoshop blends its
+// layers in L*a*b*, the stack in RGB (image ADR 481, deferred) — measured
+// 2026-10-29 at 10 ΔE p99 under a 70 % Multiply and 12.7 under a 70 %
+// Normal layer; its background holds the encoding to the bound above.

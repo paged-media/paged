@@ -41,6 +41,7 @@
 use std::sync::Arc;
 
 use half::f16;
+use image_core::Region;
 use image_gpu::{GpuContext, TileInput};
 use image_kernels::families::adjust::{AdjustGradientMapParams, ADJUST_GRADIENT_MAP};
 use image_kernels::families::cast::{CastUnpremultiplyParams, CAST_UNPREMULTIPLY};
@@ -85,7 +86,8 @@ async fn dispatch(
 }
 
 /// Render `src` at `w × h` as straight RGBA8 (GPU-only: every pixel is a
-/// `gen.*` dispatch).
+/// `gen.*` dispatch). A canvas larger than the device's texture or
+/// buffer limit renders in bands, each in canvas coordinates (ADR 480).
 pub async fn render_fill(
     ctx: &GpuContext,
     w: u32,
@@ -95,22 +97,61 @@ pub async fn render_fill(
     if w == 0 || h == 0 {
         return Err(IngestError::Unsupported("a fill on an empty canvas".into()));
     }
+    let fits = w.max(h) <= ctx.max_texture_dim()
+        && u64::from(w) * u64::from(h) * 8 <= ctx.max_buffer_size();
+    if fits {
+        return Ok(Arc::from(
+            render_window(ctx, w, h, Region::new(0, 0, w, h), src)
+                .await?
+                .into_boxed_slice(),
+        ));
+    }
+    // A pattern's tile must fit inside one window.
+    let side = match src {
+        FillSource::Pattern(p) => super::fold::TILE_SIDE.max(p.width.max(p.height)),
+        _ => super::fold::TILE_SIDE,
+    }
+    .min(ctx.max_texture_dim());
+    let mut out = vec![0u8; w as usize * h as usize * 4];
+    for y in (0..h).step_by(side as usize) {
+        for x in (0..w).step_by(side as usize) {
+            let win = Region::new(x as i32, y as i32, side.min(w - x), side.min(h - y));
+            let px = render_window(ctx, w, h, win, src).await?;
+            let row = win.w as usize * 4;
+            for r in 0..win.h as usize {
+                let d = ((y as usize + r) * w as usize + x as usize) * 4;
+                out[d..d + row].copy_from_slice(&px[r * row..(r + 1) * row]);
+            }
+        }
+    }
+    Ok(Arc::from(out.into_boxed_slice()))
+}
+
+/// `win` of `src` rendered on a `cw × ch` canvas, straight RGBA8.
+async fn render_window(
+    ctx: &GpuContext,
+    cw: u32,
+    ch: u32,
+    win: Region,
+    src: &FillSource,
+) -> Result<Vec<u8>, IngestError> {
+    let (w, h, ox, oy) = (win.w, win.h, win.x, win.y);
     let zeros = vec![0u8; w as usize * h as usize * 8];
     let out = match src {
         FillSource::Solid { rgb } => {
             let c = rgb.map(|v| f32::from(v) / 255.0);
-            let p = GenSolidParams::new(0, 0, c[0], c[1], c[2], 1.0);
+            let p = GenSolidParams::new(ox, oy, c[0], c[1], c[2], 1.0);
             dispatch(ctx, &GEN_SOLID, &[&zeros], p.as_bytes(), w, h).await?
         }
         FillSource::Gradient(g) => {
-            let ((cx, cy), (dx, dy), half) = gradient_geometry(w, h, g);
+            let ((cx, cy), (dx, dy), half) = gradient_geometry(cw, ch, g);
             let (black, white) = ([0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]);
             let angle = dy.atan2(dx);
             let ramp = match g.style {
                 GradientKind::Linear => {
                     let p = GenLinearGradientParams::new(
-                        0,
-                        0,
+                        ox,
+                        oy,
                         cx - dx * half,
                         cy - dy * half,
                         cx + dx * half,
@@ -121,17 +162,17 @@ pub async fn render_fill(
                     dispatch(ctx, &GEN_LINEAR_GRADIENT, &[&zeros], p.as_bytes(), w, h).await?
                 }
                 GradientKind::Radial => {
-                    let p = GenRadialGradientParams::new(0, 0, cx, cy, half, black, white);
+                    let p = GenRadialGradientParams::new(ox, oy, cx, cy, half, black, white);
                     dispatch(ctx, &GEN_RADIAL_GRADIENT, &[&zeros], p.as_bytes(), w, h).await?
                 }
                 GradientKind::Angular => {
-                    let p = GenAngularGradientParams::new(0, 0, cx, cy, angle, black, white);
+                    let p = GenAngularGradientParams::new(ox, oy, cx, cy, angle, black, white);
                     dispatch(ctx, &GEN_ANGULAR_GRADIENT, &[&zeros], p.as_bytes(), w, h).await?
                 }
                 GradientKind::Reflected => {
                     let p = GenReflectedGradientParams::new(
-                        0,
-                        0,
+                        ox,
+                        oy,
                         cx,
                         cy,
                         cx + dx * half,
@@ -142,7 +183,8 @@ pub async fn render_fill(
                     dispatch(ctx, &GEN_REFLECTED_GRADIENT, &[&zeros], p.as_bytes(), w, h).await?
                 }
                 GradientKind::Diamond => {
-                    let p = GenDiamondGradientParams::new(0, 0, cx, cy, angle, half, black, white);
+                    let p =
+                        GenDiamondGradientParams::new(ox, oy, cx, cy, angle, half, black, white);
                     dispatch(ctx, &GEN_DIAMOND_GRADIENT, &[&zeros], p.as_bytes(), w, h).await?
                 }
             };
@@ -156,7 +198,12 @@ pub async fn render_fill(
             // The tile, premultiplied (the pattern's source-over is), into
             // a canvas-sized zero-padded input; its real extent travels in
             // the params.
-            let (tw, th) = (pat.width.min(w), pat.height.min(h));
+            let (tw, th) = (pat.width.min(cw), pat.height.min(ch));
+            if tw > w || th > h {
+                return Err(IngestError::Unsupported(format!(
+                    "a {tw}×{th} pattern tile does not fit a {w}×{h} band"
+                )));
+            }
             let mut tile = vec![0u8; w as usize * h as usize * 8];
             for y in 0..th as usize {
                 for x in 0..tw as usize {
@@ -172,8 +219,8 @@ pub async fn render_fill(
                 }
             }
             let p = GenPatternParams::new(
-                0,
-                0,
+                ox,
+                oy,
                 (pat.scale / 100.0).max(0.01),
                 pat.angle,
                 0.0,
@@ -194,7 +241,7 @@ pub async fn render_fill(
             .await?
         }
     };
-    Ok(Arc::from(f16_to_rgba8(&out).into_boxed_slice()))
+    Ok(f16_to_rgba8(&out))
 }
 
 #[cfg(test)]

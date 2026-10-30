@@ -56,6 +56,7 @@ mod layers;
 mod pages;
 mod paths;
 mod reads;
+mod review;
 mod selection;
 mod styles;
 mod swatches;
@@ -75,6 +76,7 @@ const ROW_SOURCES: &[&str] = &[
     include_str!("pages.rs"),
     include_str!("paths.rs"),
     include_str!("reads.rs"),
+    include_str!("review.rs"),
     include_str!("selection.rs"),
     include_str!("styles.rs"),
     include_str!("swatches.rs"),

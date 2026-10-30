@@ -229,6 +229,7 @@ fn doc03_read_overlay_diff_save_round_trips() {
     // The read-back reflects the plugin's own story: each run's characterStyle IS
     // the plugin's char_style_id token, so it mirrors the baseline exactly...
     let mut content = StoryContentIn {
+        comments: Vec::new(),
         self_id: "Story/doc".into(),
         paragraphs: base
             .story
@@ -236,6 +237,8 @@ fn doc03_read_overlay_diff_save_round_trips() {
             .iter()
             .filter_map(|b| match b {
                 LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: p
                         .runs
@@ -283,6 +286,7 @@ fn doc03_identity_content_is_a_no_op() {
     let (model, _pkg, _main) = docx_import::import_docx_with_package(&original).unwrap();
     let base = docx_lower::lower(&model);
     let content = StoryContentIn {
+        comments: Vec::new(),
         self_id: "Story/doc".into(),
         paragraphs: base
             .story
@@ -290,6 +294,8 @@ fn doc03_identity_content_is_a_no_op() {
             .iter()
             .filter_map(|b| match b {
                 LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: p
                         .runs
@@ -326,6 +332,7 @@ fn structural_edits_insert_and_delete_runs_and_paragraphs() {
     let base = docx_lower::lower(&model);
 
     let mut content = StoryContentIn {
+        comments: Vec::new(),
         self_id: "Story/doc".into(),
         paragraphs: base
             .story
@@ -333,6 +340,8 @@ fn structural_edits_insert_and_delete_runs_and_paragraphs() {
             .iter()
             .filter_map(|b| match b {
                 LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: p
                         .runs
@@ -1130,6 +1139,7 @@ fn canvas_edits_in_table_cells_are_saved_back__feat__plugin_doc_object_model() {
     // The body as the engine reads it back: one run per paragraph (no run
     // carries a character style here).
     let story = StoryContentIn {
+        comments: Vec::new(),
         self_id: "s".into(),
         paragraphs: base
             .story
@@ -1137,6 +1147,8 @@ fn canvas_edits_in_table_cells_are_saved_back__feat__plugin_doc_object_model() {
             .iter()
             .filter_map(|b| match b {
                 LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: vec![RunContentIn {
                         text: p.runs.iter().map(|r| r.text.as_str()).collect(),
@@ -1224,6 +1236,7 @@ fn paragraphs_added_and_removed_in_cells_are_saved_back__feat__plugin_doc_object
     let session = DocSession::load(&source).unwrap();
     let base = session.lowered();
     let story = StoryContentIn {
+        comments: Vec::new(),
         self_id: "s".into(),
         paragraphs: base
             .story
@@ -1231,6 +1244,8 @@ fn paragraphs_added_and_removed_in_cells_are_saved_back__feat__plugin_doc_object
             .iter()
             .filter_map(|b| match b {
                 LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: vec![RunContentIn {
                         text: p.runs.iter().map(|r| r.text.as_str()).collect(),
@@ -1372,6 +1387,8 @@ fn canvas_formatting_in_runs_is_saved_back__feat__plugin_doc_object_model() {
         .iter()
         .filter_map(|b| match b {
             LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                mark_change: None,
+                props_change: None,
                 paragraph_style: p.para_style_id.clone(),
                 runs: p
                     .runs
@@ -1393,6 +1410,7 @@ fn canvas_formatting_in_runs_is_saved_back__feat__plugin_doc_object_model() {
     ];
     paragraphs[2].runs[1].font_style = Some("Bold Italic".into());
     let content = StoryContentIn {
+        comments: Vec::new(),
         self_id: "Story/doc".into(),
         paragraphs,
     };
@@ -1439,6 +1457,7 @@ fn canvas_formatting_in_runs_is_saved_back__feat__plugin_doc_object_model() {
     let session = DocSession::load(&source).unwrap();
     let base = session.lowered();
     let story = StoryContentIn {
+        comments: Vec::new(),
         self_id: "s".into(),
         paragraphs: base
             .story
@@ -1446,6 +1465,8 @@ fn canvas_formatting_in_runs_is_saved_back__feat__plugin_doc_object_model() {
             .iter()
             .filter_map(|b| match b {
                 LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: vec![run(
                         &p.runs.iter().map(|r| r.text.as_str()).collect::<String>(),
@@ -1465,6 +1486,8 @@ fn canvas_formatting_in_runs_is_saved_back__feat__plugin_doc_object_model() {
         cell,
         text: runs.iter().map(|r| r.text.as_str()).collect(),
         paragraphs: Some(vec![ParagraphContentIn {
+            mark_change: None,
+            props_change: None,
             paragraph_style: None,
             runs,
         }]),
@@ -1535,6 +1558,8 @@ fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__
             .iter()
             .filter_map(|b| match b {
                 LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: p
                         .runs
@@ -1559,6 +1584,7 @@ fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__
     paragraphs[0].runs[0].tracking = Some(100.0);
     paragraphs[2].runs[2].fill_color = Some("Color/Canvas green".into());
     let content = StoryContentIn {
+        comments: Vec::new(),
         self_id: "Story/doc".into(),
         paragraphs,
     };
@@ -1595,6 +1621,7 @@ fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__
     paragraphs[2].runs[2].fill_color = Some("Color/Unknown".into());
     let (saved, _) = session
         .save_edited_from_content(&StoryContentIn {
+            comments: Vec::new(),
             self_id: "Story/doc".into(),
             paragraphs,
         })
@@ -1611,6 +1638,8 @@ fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__
         panic!("block 1 is the table")
     };
     let read = |p: &docx_lower::ir::LoweredParagraph| ParagraphContentIn {
+        mark_change: None,
+        props_change: None,
         paragraph_style: p.para_style_id.clone(),
         runs: p
             .runs
@@ -1626,6 +1655,8 @@ fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__
     let bold_style = paras[2].runs[1].character_style.clone();
     let plain_style = paras[1].runs[0].character_style.clone();
     paras.push(ParagraphContentIn {
+        mark_change: None,
+        props_change: None,
         paragraph_style: paras[2].paragraph_style.clone(),
         runs: vec![
             RunContentIn {
@@ -1649,6 +1680,7 @@ fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__
     let (saved, skips) = session
         .save_edited_from_content_and_cells(
             &StoryContentIn {
+                comments: Vec::new(),
                 self_id: "s".into(),
                 paragraphs: identity(&base),
             },
@@ -1680,6 +1712,7 @@ fn rows_added_and_removed_on_the_canvas_are_saved_back__feat__plugin_doc_object_
         String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap()
     };
     let story = StoryContentIn {
+        comments: Vec::new(),
         self_id: "s".into(),
         paragraphs: vec![],
     };
@@ -1748,6 +1781,7 @@ fn a_cell_emptied_with_no_styled_paragraph_is_saved_back() {
     let (saved, skips) = session
         .save_edited_from_content_and_cells(
             &StoryContentIn {
+                comments: Vec::new(),
                 self_id: "s".into(),
                 paragraphs: vec![],
             },

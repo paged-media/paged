@@ -158,7 +158,14 @@ pub(crate) fn apply_inner(
             {
                 return result;
             }
-            apply_set_property(doc, node, *path, &value)
+            match review::format_scope(doc, op) {
+                // Engine ADR 1040 — a range's formatting, recorded while the
+                // document tracks changes.
+                Some(scope) => review::tracked_format(doc, scope, |doc| {
+                    apply_set_property(doc, node, *path, &value)
+                }),
+                None => apply_set_property(doc, node, *path, &value),
+            }
         }
         Operation::InsertNode {
             parent,
@@ -579,16 +586,24 @@ pub(crate) fn apply_inner(
             scope,
             cell,
             paragraph,
-        } => apply_apply_style(
-            doc,
-            story_id,
-            *start,
-            *end,
-            style,
-            *scope,
-            cell.as_ref(),
-            *paragraph,
-        ),
+        } => {
+            let apply_fn = |doc: &mut Document| {
+                apply_apply_style(
+                    doc,
+                    story_id,
+                    *start,
+                    *end,
+                    style,
+                    *scope,
+                    cell.as_ref(),
+                    *paragraph,
+                )
+            };
+            match review::format_scope(doc, op) {
+                Some(tracked) => review::tracked_format(doc, tracked, apply_fn),
+                None => apply_fn(doc),
+            }
+        }
         Operation::InsertField {
             story_id,
             offset,
@@ -612,6 +627,7 @@ pub(crate) fn apply_inner(
             image_uri,
             self_id,
             paragraph,
+            restore,
         } => anchored_frame::apply_insert_anchored_frame(
             doc,
             story_id,
@@ -621,6 +637,7 @@ pub(crate) fn apply_inner(
             *height,
             image_uri.as_deref(),
             self_id,
+            restore.as_deref(),
         ),
         Operation::RemoveAnchoredFrame { story_id, self_id } => {
             anchored_frame::apply_remove_anchored_frame(doc, story_id, self_id)
@@ -685,6 +702,71 @@ pub(crate) fn apply_inner(
             remove,
             change,
         } => tracked_change::apply_restore(doc, story_id, *offset, *remove, change),
+        Operation::RecordChange {
+            story_id,
+            cell,
+            start,
+            end,
+            paragraph,
+            change,
+        } => review::apply_record_change(
+            doc,
+            story_id,
+            cell.as_ref(),
+            *start,
+            *end,
+            *paragraph,
+            change,
+        ),
+        Operation::AcceptChange {
+            story_id,
+            id,
+            author,
+        } => review::apply_resolve(
+            doc,
+            story_id.as_deref(),
+            id.as_deref(),
+            author.as_deref(),
+            true,
+        ),
+        Operation::RejectChange {
+            story_id,
+            id,
+            author,
+        } => review::apply_resolve(
+            doc,
+            story_id.as_deref(),
+            id.as_deref(),
+            author.as_deref(),
+            false,
+        ),
+        Operation::InsertComment {
+            story_id,
+            cell,
+            start,
+            end,
+            comment,
+        } => review::apply_insert_comment(doc, story_id, cell.as_ref(), *start, *end, comment),
+        Operation::ResolveComment {
+            comment_id,
+            resolved,
+        } => review::apply_resolve_comment(doc, comment_id, *resolved),
+        Operation::DeleteComment { comment_id } => review::apply_delete_comment(doc, comment_id),
+        Operation::EditComment {
+            comment_id,
+            text,
+            date,
+        } => review::apply_edit_comment(doc, comment_id, text, date.as_deref()),
+        Operation::RestoreStoryReview {
+            story_id,
+            paragraphs_json,
+            comments_json,
+        } => review::apply_restore_story_review(
+            doc,
+            story_id,
+            paragraphs_json.as_deref(),
+            comments_json,
+        ),
         Operation::CreateBookmark {
             bookmark_id,
             name,
@@ -1309,6 +1391,7 @@ fn cell_paragraphs_mut<'a>(
 }
 
 mod anchored_frame;
+mod anchored_look;
 pub(crate) mod appearance;
 mod batch_page;
 mod character;
@@ -1342,6 +1425,7 @@ mod list_ops;
 mod lock;
 mod note;
 pub mod permit;
+pub mod review;
 mod script;
 mod tracked_change;
 mod word;

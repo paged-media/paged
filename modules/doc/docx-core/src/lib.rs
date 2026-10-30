@@ -37,12 +37,16 @@ use serde::{Deserialize, Serialize};
 
 pub mod controls;
 pub mod objects;
+pub mod review;
 pub use controls::{ContentControl, ContentControlKind, ListItem};
 pub mod symbols;
 pub mod theme;
 pub use objects::{
     BorderEdge, Borders, CellLook, HeightRule, Language, NestedTable, PreferredWidth, TableLook,
     TableStyleProps, TextBox, WidthKind,
+};
+pub use review::{
+    ChangeKind, Comment, FormatChange, ParaPropsChange, ParagraphReview, Revision, RunChange,
 };
 pub use symbols::symbol_char;
 pub use theme::{Shading, Theme, ThemeColorRef, ThemeFonts};
@@ -109,6 +113,15 @@ pub struct DocxDocument {
     /// "Word theme" swatch group.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<Theme>,
+    /// Doc ADR 613 — the comments of `comments.xml`, threaded through
+    /// `commentsExtended.xml`, in part order. Their ranges are on the runs
+    /// ([`Run::comments`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<Comment>,
+    /// `settings.xml` `w:trackRevisions`: Word records changes in this
+    /// document (doc ADR 613).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub track_revisions: bool,
 }
 
 /// Counts of body constructs the import shows in a simplified form, for the
@@ -205,6 +218,10 @@ pub struct Paragraph {
     /// is the entry paragraphs (doc ADR 612).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toc_field: Option<String>,
+    /// Doc ADR 613 — the paragraph mark's insertion or deletion and the
+    /// tracked change of its properties.
+    #[serde(default, skip_serializing_if = "ParagraphReview::is_empty")]
+    pub review: ParagraphReview,
 }
 
 /// A paragraph's held content: the facts save-back needs to refuse an edit
@@ -447,6 +464,18 @@ pub struct Run {
     /// stamps the same [`MergeField`] (same `occurrence`) on each.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_field: Option<MergeField>,
+    /// Doc ADR 613 — the run sits in a tracked insertion or deletion
+    /// (`w:ins` / `w:del`, a move's `w:moveTo` / `w:moveFrom`). A deleted
+    /// run's text is its `w:delText`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<RunChange>,
+    /// Doc ADR 613 — the run's tracked formatting change (`w:rPrChange`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_change: Option<FormatChange>,
+    /// Doc ADR 613 — the comments (their `w:id`) whose range covers the
+    /// run: the threads' first comments, never a reply.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<i64>,
     /// Text boxes drawn by this run (`w:drawing` holding a `wps:txbx`, or
     /// `w:pict` holding a `v:textbox`), doc ADR 614.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

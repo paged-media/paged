@@ -99,6 +99,7 @@ pub(super) fn without_hidden_runs(
         &HideRule {
             declared,
             hidden_text: None,
+            review: None,
         },
     )
 }
@@ -109,11 +110,16 @@ pub(super) fn without_hidden_runs(
 pub(super) struct HideRule<'a> {
     pub declared: &'a BTreeMap<String, ConditionDef>,
     pub hidden_text: Option<&'a paged_scene::Document>,
+    /// Engine ADR 1040 — the markup view, which hides deleted text (Simple
+    /// and No Markup) or inserted text (Original).
+    pub review: Option<paged_model::MarkupView>,
 }
 
 impl HideRule<'_> {
     fn hides(&self, paragraph: &Paragraph, r: &CharacterRun) -> bool {
-        (!r.applied_conditions.is_empty() && !run_prints(&r.applied_conditions, self.declared))
+        self.review.is_some_and(|v| v.hides(r.revision.as_ref()))
+            || (!r.applied_conditions.is_empty()
+                && !run_prints(&r.applied_conditions, self.declared))
             || self.hidden_text.is_some_and(|doc| {
                 r.decorations.hidden.unwrap_or_else(|| {
                     doc.resolved_run_attrs(paragraph, r)
@@ -269,6 +275,7 @@ mod tests {
             image_link: None,
             image_item_transform: None,
             children: Vec::new(),
+            ..Default::default()
         }
     }
 

@@ -572,6 +572,18 @@ impl ImageTarget for RasterTarget {
             ChannelLayout::Rgba => (ColorModel::Rgb, true),
             ChannelLayout::Cmyk => (ColorModel::Cmyk, false),
             ChannelLayout::Cmyka => (ColorModel::Cmyk, true),
+            // The interleaved encoders take what a raster file stores
+            // (PixelFormat amendment 1, image ADR 481: Lab and planes are
+            // the stack's, not a target's).
+            ChannelLayout::Lab | ChannelLayout::LabA | ChannelLayout::Planes { .. } => {
+                return Err(CodecError::Unsupported {
+                    format: self.name(),
+                    detail: format!(
+                        "{:?} pixels (encode RGB, grey or CMYK)",
+                        info.format.channels
+                    ),
+                })
+            }
         };
         let mut data = match info.format.depth {
             SampleDepth::U16 => Samples::U16(

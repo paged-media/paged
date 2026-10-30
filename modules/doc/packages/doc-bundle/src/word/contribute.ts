@@ -58,6 +58,12 @@ import {
   type WordStructure,
 } from "./structure.js";
 import { createWordStore, type WordStore } from "./word-state.js";
+import {
+  contributeReview,
+  type ReviewArgs,
+  type ReviewContribution,
+  type ReviewResult,
+} from "./review.js";
 
 export interface WordDeps {
   /** The stories that are the open Word document(s), for the word count. */
@@ -158,6 +164,11 @@ export interface WordContribution {
   /** Run a Word command by id (the typed twins of ADR 323 call this);
    *  false for an id that is not a Word command. */
   run(id: string): Promise<boolean>;
+  /** Doc ADR 613 — the review chrome (Track Changes, comments). */
+  review: ReviewContribution;
+  /** Run a review command by id with its typed arguments; false for an id
+   *  that is not one. */
+  runReview(id: string, args?: ReviewArgs): Promise<ReviewResult | false>;
 }
 
 /**
@@ -359,6 +370,14 @@ export function contributeWord(
     );
   }
 
+  // Doc ADR 613 — Word's Review: Track Changes, the markup views, the
+  // changes and the comment threads (margin band, panel, status item).
+  const review = contributeReview(host, {
+    docStories: deps.docStories,
+    editContext: WORD_CONTEXT,
+  });
+  disposers.push(() => review.dispose());
+
   // Keep the store current: the selection's format on every selection
   // change, the styles and counts on every document change (the counts a
   // beat later, so a burst of typing reads the story once).
@@ -410,6 +429,7 @@ export function contributeWord(
       void store.refreshPage();
       void store.refreshWords();
       void store.refreshShowHidden();
+      void review.store.refresh();
     }
   };
   if (host.supports("document.onDidOpen@1")) {
@@ -432,9 +452,14 @@ export function contributeWord(
   return {
     store,
     setDocumentContext,
+    review,
+    runReview: (id, args) => review.runId(id, args),
     async run(id) {
       const name = byId.get(id);
-      if (!name) return false;
+      if (!name) {
+        const out = await review.runId(id);
+        return out !== false;
+      }
       await runWordCommand(host, name, state);
       return true;
     },

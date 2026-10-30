@@ -995,6 +995,10 @@ export const CORE_PATHS: Record<
   paragraphBorderWeight: V71,
   documentShowHiddenText: V71,
   documentShowFieldCodes: V71,
+  // Engine ADR 1040 — Track Changes and the markup view.
+  documentTrackChanges: V71,
+  documentTrackChangesAuthor: V71,
+  documentMarkupView: V71,
   // Engine ADRs 1051 / 1052 — direction, script slots and content
   // controls ride protocol 78; a pre-71 engine has none.
   paragraphDirection: V71,
