@@ -436,6 +436,7 @@ pub fn pie_polygon(oval: &Oval) -> Option<Polygon> {
         image_bytes: o.image_bytes,
         image_clip: o.image_clip,
         image_adjustments: o.image_adjustments,
+        appearance: o.appearance,
         overprint_fill: o.overprint_fill,
         overprint_stroke: o.overprint_stroke,
         nonprinting: o.nonprinting,

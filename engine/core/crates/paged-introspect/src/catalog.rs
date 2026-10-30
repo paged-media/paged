@@ -921,6 +921,10 @@ property_paths! {
         FrameFillEffectStack => "frameFillEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         FrameStrokeEffectStack => "frameStrokeEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         FrameContentEffectStack => "frameContentEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        // Engine ADR 1043 — native appearance: the whole layer list, and
+        // one layer by index.
+        FrameAppearance => "frameAppearance" : list_of("PaintLayerSpec", Wire::Appearance),
+        FrameAppearanceLayer => "frameAppearanceLayer" : operation("AppearanceLayerSpec", Wire::AppearanceLayer),
         CellFillColor => "cellFillColor" : color().idml(idml![attr(Cell | CellStyle, FillColor)]),
         CellFillTint => "cellFillTint" : pct().default_num(100.0).idml(idml![attr(Cell | CellStyle, FillTint)]),
         CellInsetTop => "cellInsetTop" : length_pos().idml(idml![attr(Cell, TextTopInset)]),
@@ -1500,9 +1504,11 @@ mod tests {
         //
         // 265 -> 266: ADR 1037 — an image frame's filter stack.
         //
-        // 266 -> 270: ADR 1047 — live shapes (a polygon's sides and star
+        // 266 -> 268: ADR 1043 — an item's appearance, and one layer of it.
+        //
+        // 268 -> 272: ADR 1047 — live shapes (a polygon's sides and star
         // inset, an oval's pie angles).
-        assert_eq!(cat.settable_paths.len(), 270, "settable path count drifted");
+        assert_eq!(cat.settable_paths.len(), 272, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

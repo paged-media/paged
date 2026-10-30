@@ -161,6 +161,14 @@ pub struct SubPath {
     /// `darkenLess`, `lighten`, `lightenLess` (shading on ribbons, action
     /// buttons, curved arrows), applied to the shape's fill by the resolver.
     pub fill_mode: Option<String>,
+    /// The index of the `a:path` the contour belongs to. PowerPoint fills
+    /// each path on its own, its contours under the even-odd rule.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub path: usize,
+}
+
+fn is_zero(v: &usize) -> bool {
+    *v == 0
 }
 
 /// An evaluated geometry.
@@ -395,6 +403,7 @@ impl Guides {
 
 struct Builder {
     fill_mode: Option<String>,
+    path: usize,
     subpaths: Vec<SubPath>,
     cur: Vec<PathPoint>,
     pen: (f64, f64),
@@ -430,6 +439,7 @@ impl Builder {
                 filled,
                 stroked,
                 fill_mode,
+                path: self.path,
             });
         }
         self.cur.clear();
@@ -558,11 +568,13 @@ fn evaluate(
 
     let mut b = Builder {
         fill_mode: None,
+        path: 0,
         subpaths: Vec::new(),
         cur: Vec::new(),
         pen: (0.0, 0.0),
     };
-    for path in &geom.paths {
+    for (index, path) in geom.paths.iter().enumerate() {
+        b.path = index;
         // A path's own w / h scale its coordinates onto the box.
         let sx = path
             .w
