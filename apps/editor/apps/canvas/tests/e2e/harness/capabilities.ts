@@ -160,6 +160,10 @@
 // real-args probe on the first story; deleteTextAnchor learns the id the
 // next mint takes from a scratch bookmark it undoes.
 
+// 2026-10-30: symbols (engine ADR 1039) named five new Mutation ops —
+// createSymbol, redefineSymbol, placeSymbolInstance, breakSymbolLink and
+// deleteSymbol. Each got a real-args probe on a scratch frame made a symbol.
+
 export type CapabilityStatus = "supported" | "unsupported";
 
 export interface Capability {
@@ -648,6 +652,32 @@ export const CAPABILITIES: Capability[] = [
     op: "updateFields",
     status: "supported",
     note: "proto 77, ADR 1022; {storyId?, offset?, now?}; probed on a DATE field the probe inserts",
+  },
+  // Symbols (protocol 78, engine ADR 1039).
+  {
+    op: "createSymbol",
+    status: "supported",
+    note: "proto 78, ADR 1039; {name, elementIds, symbolId?, replace?, nineSlice?}; probed on a scratch frame",
+  },
+  {
+    op: "redefineSymbol",
+    status: "supported",
+    note: "proto 78, ADR 1039; {symbolId, elementIds, name?, nineSlice?, replace?}; probed renaming a scratch symbol",
+  },
+  {
+    op: "placeSymbolInstance",
+    status: "supported",
+    note: "proto 78, ADR 1039; {symbolId, pageId, at?, linear?, nineSlice?}; probed placing a scratch symbol",
+  },
+  {
+    op: "breakSymbolLink",
+    status: "supported",
+    note: "proto 78, ADR 1039; {elementId}; probed on an instance of a scratch symbol",
+  },
+  {
+    op: "deleteSymbol",
+    status: "supported",
+    note: "proto 78, ADR 1039; {symbolId}; probed on a scratch symbol",
   },
 ];
 

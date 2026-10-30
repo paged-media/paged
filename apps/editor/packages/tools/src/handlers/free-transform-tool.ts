@@ -143,6 +143,13 @@ export interface FreeTransformBox {
   geometry: ElementGeometryItem[];
 }
 
+/** The press's modifiers as the box reads them: Cmd is Ctrl off the Mac,
+ *  as everywhere else in the editor, so shear, distort and perspective
+ *  are reachable on Windows and Linux. */
+const boxModifiers = (
+  m: CanvasPointerEvent["modifiers"],
+): CanvasPointerEvent["modifiers"] => ({ ...m, cmd: m.cmd || m.ctrl });
+
 /** An item transform `[a, b, c, d, tx, ty]` applied to a point. */
 const apply = (
   t: readonly number[] | null | undefined,
@@ -599,7 +606,7 @@ export function createFreeTransformHandler(): GestureHandler {
     },
     onPointerDown(e) {
       if (!paged || e.button !== 0) return;
-      const mods = e.modifiers;
+      const mods = boxModifiers(e.modifiers);
       notice = null;
       resolving = true;
       pendingMove = null;
@@ -669,7 +676,7 @@ export function createFreeTransformHandler(): GestureHandler {
       if (p.refused) return;
       const at = pointOnPage(e, p.box.pageId);
       if (!at) return;
-      const res = dragBox(p.start, at, e.modifiers, mode());
+      const res = dragBox(p.start, at, boxModifiers(e.modifiers), mode());
       if (p.op === "reference") {
         customRef = {
           key: selectionKeyOf(p.box.targets),
@@ -728,7 +735,7 @@ export function createFreeTransformHandler(): GestureHandler {
       const hit = hitTestBox(box.quad, at, unitsPerPx(), referenceOf(box));
       switch (hit.kind) {
         case "handle": {
-          const op = operationFor(hit, mode(), e.modifiers);
+          const op = operationFor(hit, mode(), boxModifiers(e.modifiers));
           if (op === "distort" || op === "perspective")
             return { kind: "css", token: "crosshair" };
           return {
