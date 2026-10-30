@@ -793,22 +793,22 @@ export interface TrackedChangeSummary {
      */
     text: string;
     /**
-     * Engine ADR 1037 — the change\'s id (absent for an InDesign deletion,
+     * Engine ADR 1040 — the change\'s id (absent for an InDesign deletion,
      * which is addressed by its offset). Additive on 77.
      */
     id?: string;
     /**
-     * Engine ADR 1037 — `insert`, `delete`, `format`, `paraProps`,
+     * Engine ADR 1040 — `insert`, `delete`, `format`, `paraProps`,
      * `insertMark` or `deleteMark`.
      */
     kind?: string;
     /**
-     * Engine ADR 1037 — the story char offset past the change\'s last
+     * Engine ADR 1040 — the story char offset past the change\'s last
      * character (`offset` is its first).
      */
     end?: number;
     /**
-     * Engine ADR 1037 — the paragraph a paragraph or mark change is on.
+     * Engine ADR 1040 — the paragraph a paragraph or mark change is on.
      */
     paragraph?: number;
 }
@@ -889,12 +889,12 @@ export interface ParagraphContent {
      */
     toc?: string;
     /**
-     * Engine ADR 1037 — the paragraph mark\'s tracked insertion or
+     * Engine ADR 1040 — the paragraph mark\'s tracked insertion or
      * deletion. Additive on 77.
      */
     markChange?: ChangeContent;
     /**
-     * Engine ADR 1037 — the paragraph\'s tracked formatting change.
+     * Engine ADR 1040 — the paragraph\'s tracked formatting change.
      */
     propsChange?: PropsChangeContent;
 }
@@ -932,12 +932,12 @@ export interface RunContent {
      */
     fieldCode?: string;
     /**
-     * Engine ADR 1037 — the tracked insertion or deletion this run is.
+     * Engine ADR 1040 — the tracked insertion or deletion this run is.
      * Additive on 77.
      */
     change?: ChangeContent;
     /**
-     * Engine ADR 1037 — the run\'s tracked formatting change.
+     * Engine ADR 1040 — the run\'s tracked formatting change.
      */
     formatChange?: FormatChangeContent;
     /**
@@ -1320,7 +1320,7 @@ export interface SnapshotStory {
 }
 
 /**
- * Engine ADR 1037 — a paragraph\'s tracked formatting change: the change
+ * Engine ADR 1040 — a paragraph\'s tracked formatting change: the change
  * and the paragraph style it had before.
  */
 export interface PropsChangeContent {
@@ -1329,7 +1329,7 @@ export interface PropsChangeContent {
 }
 
 /**
- * Engine ADR 1037 — a run\'s tracked formatting change: the change and the
+ * Engine ADR 1040 — a run\'s tracked formatting change: the change and the
  * run\'s formatting before it (`before.text` is empty).
  */
 export interface FormatChangeContent {
@@ -1338,7 +1338,7 @@ export interface FormatChangeContent {
 }
 
 /**
- * Engine ADR 1037 — a tracked change as the content read names it.
+ * Engine ADR 1040 — a tracked change as the content read names it.
  */
 export interface ChangeContent {
     id: string;
@@ -1351,7 +1351,7 @@ export interface ChangeContent {
 }
 
 /**
- * Engine ADR 1037 — one tracked change to record over a range or on a
+ * Engine ADR 1040 — one tracked change to record over a range or on a
  * paragraph. `id` absent: the change joins an adjacent change of the same
  * kind and author, else the engine mints one.
  */
@@ -1375,7 +1375,7 @@ export interface ChangeSpec {
 }
 
 /**
- * Engine ADR 1037 — what [`Operation::RecordChange`] records.
+ * Engine ADR 1040 — what [`Operation::RecordChange`] records.
  */
 export type ChangeSpecKind = "insert" | "delete" | "format" | "paraProps" | "insertMark" | "deleteMark";
 

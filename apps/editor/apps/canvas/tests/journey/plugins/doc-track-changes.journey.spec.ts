@@ -16,7 +16,7 @@
  *  @copyright  Copyright (c) And The Next GmbH
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
-// Journey: Word's Track Changes (doc ADR 613, engine ADR 1037, editor ADR
+// Journey: Word's Track Changes (doc ADR 613, engine ADR 1040, editor ADR
 // 300). A .docx opened with File ▸ Open: Cmd+Shift+E turns tracking on (the
 // status bar says so); typed text is recorded as an insertion, a deleted
 // word stays in the story struck through and gets a balloon in the margin

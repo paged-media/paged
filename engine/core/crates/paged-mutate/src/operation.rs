@@ -1691,13 +1691,13 @@ pub enum PropertyPath {
     /// braces instead of its result (engine ADR 1022). A whole-document
     /// reflow.
     DocumentShowFieldCodes,
-    /// Word's Track Changes (engine ADR 1037), on `NodeId::Document`:
+    /// Word's Track Changes (engine ADR 1040), on `NodeId::Document`:
     /// `Value::Bool`, default false. While on, text and formatting edits on
     /// story ranges are recorded as tracked changes.
     DocumentTrackChanges,
     /// The author tracked changes are recorded under: `Value::Text`.
     DocumentTrackChangesAuthor,
-    /// How tracked changes and comments show (engine ADR 1037):
+    /// How tracked changes and comments show (engine ADR 1040):
     /// `Value::Text` `simple` / `all` / `none` / `original`, default `all`.
     /// A whole-document reflow.
     DocumentMarkupView,
@@ -5096,7 +5096,7 @@ pub enum Operation {
         remove: u32,
         change: String,
     },
-    /// Engine ADR 1037 — record tracked change `change` over story chars
+    /// Engine ADR 1040 — record tracked change `change` over story chars
     /// `[start, end)` (of `cell`'s stream when set), or on paragraph
     /// `paragraph` for the paragraph kinds. What an importer writes for
     /// Word's `w:ins` / `w:del` / `w:rPrChange` / `w:pPrChange`, and what a
@@ -5111,7 +5111,7 @@ pub enum Operation {
         paragraph: Option<u32>,
         change: ChangeSpec,
     },
-    /// Engine ADR 1037 — accept tracked change `id` (all its runs and
+    /// Engine ADR 1040 — accept tracked change `id` (all its runs and
     /// marks), every change by `author`, or every change; in story
     /// `story_id` only when set. An insertion's text stays, a deletion's
     /// goes, a formatting change keeps the new formatting. Inverse: the
@@ -5124,7 +5124,7 @@ pub enum Operation {
         #[serde(default)]
         author: Option<String>,
     },
-    /// Engine ADR 1037 — reject: an insertion's text goes, a deletion's
+    /// Engine ADR 1040 — reject: an insertion's text goes, a deletion's
     /// stays, a formatting change puts the formatting before it back.
     /// Scoped as `AcceptChange`.
     RejectChange {
@@ -5166,7 +5166,7 @@ pub enum Operation {
         #[serde(default)]
         date: Option<String>,
     },
-    /// Inverse-only (engines ADR 1037 / 1020) — set story `story_id`'s
+    /// Inverse-only (engines ADR 1040 / 1020) — set story `story_id`'s
     /// paragraphs (when `paragraphs_json` is set) and comment threads to
     /// what they were. Its inverse carries what it replaced.
     RestoreStoryReview {
@@ -5796,7 +5796,7 @@ pub struct CellAddr {
     pub col: u32,
 }
 
-/// Engine ADR 1037 — what [`Operation::RecordChange`] records.
+/// Engine ADR 1040 — what [`Operation::RecordChange`] records.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -5816,7 +5816,7 @@ pub enum ChangeSpecKind {
     DeleteMark,
 }
 
-/// Engine ADR 1037 — one tracked change to record over a range or on a
+/// Engine ADR 1040 — one tracked change to record over a range or on a
 /// paragraph. `id` absent: the change joins an adjacent change of the same
 /// kind and author, else the engine mints one.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]

@@ -4701,7 +4701,7 @@ pub struct DocumentPreference {
     /// document, carried by the `.paged` model part; not an IDML attribute.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_field_codes: Option<bool>,
-    /// Word's Track Changes (engine ADR 1037): while true, text typed and
+    /// Word's Track Changes (engine ADR 1040): while true, text typed and
     /// deleted and the character and paragraph formatting set on story
     /// ranges are recorded as [`Change`]s instead of being applied
     /// destructively. `None` / false: edits apply as they always did.
@@ -4710,11 +4710,11 @@ pub struct DocumentPreference {
     /// The author a recorded change carries (Word's user name).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub track_changes_author: Option<String>,
-    /// How tracked changes and comments are shown (engine ADR 1037);
+    /// How tracked changes and comments are shown (engine ADR 1040);
     /// `None` is [`MarkupView::All`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub markup_view: Option<MarkupView>,
-    /// Engine ADR 1037 — the date a tracked change recorded now carries
+    /// Engine ADR 1040 — the date a tracked change recorded now carries
     /// (ISO 8601), as the host's clock stamped it before the edit. The
     /// engine reads no clock; `None` records changes without a date, as
     /// Word allows. Session state: never saved.
@@ -7584,13 +7584,13 @@ pub struct Paragraph {
     /// InDesign table of contents is a story of its own).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toc: Option<String>,
-    /// Engine ADR 1037 — the paragraph MARK (the break that ends this
+    /// Engine ADR 1040 — the paragraph MARK (the break that ends this
     /// paragraph) inserted or deleted by a tracked change. Accepting a
     /// deleted mark, or rejecting an inserted one, joins this paragraph
     /// with the next.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mark_revision: Option<Change>,
-    /// Engine ADR 1037 — a tracked paragraph-formatting change (Word's
+    /// Engine ADR 1040 — a tracked paragraph-formatting change (Word's
     /// `w:pPrChange`): the paragraph's properties before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub props_change: Option<ParaPropsChange>,
@@ -8820,13 +8820,13 @@ pub struct CharacterRun {
     /// when the fields are updated (Word's F9). `None` for ordinary text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field: Option<WordField>,
-    /// Engine ADR 1037 — the tracked insertion or deletion this run's text
+    /// Engine ADR 1040 — the tracked insertion or deletion this run's text
     /// is ([`ChangeKind::Insert`] / [`ChangeKind::Delete`]). A deleted run
     /// keeps its text, as Word keeps `w:delText`; the markup view decides
     /// whether it shows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<Change>,
-    /// Engine ADR 1037 — a tracked formatting change (Word's `w:rPrChange`):
+    /// Engine ADR 1040 — a tracked formatting change (Word's `w:rPrChange`):
     /// the run's properties before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format_change: Option<FormatChange>,
@@ -8906,7 +8906,7 @@ impl Graphic {
         if let Some(c) = self.colors.get(id) {
             return Some(c);
         }
-        // Engine ADR 1037 — the markup's reserved author colours.
+        // Engine ADR 1040 — the markup's reserved author colours.
         if let Some(c) = review::review_color(id) {
             return Some(c);
         }

@@ -32,7 +32,7 @@ fifth slower (see `Cargo.toml`).
 
 ## W3 (files): tracked changes and comments read and saved back (2026-10-29)
 
-[Doc ADR 613](adr/613-tracked-changes-and-comments.md), over engine ADRs 1037 and 1020:
+[Doc ADR 613](adr/613-tracked-changes-and-comments.md), over engine ADRs 1040 and 1020:
 
 - **Read.** `w:ins` / `w:moveTo` runs carry an insertion, `w:del` / `w:moveFrom` runs a
   deletion (their `w:delText` shown), `w:rPrChange` a format change with the look before, a
@@ -62,7 +62,7 @@ fifth slower (see `Cargo.toml`).
 
 ## W3 (UI): the Review panel and the markup margin band (2026-10-29)
 
-Doc ADR 613's chrome over engine ADRs 1037 (change tracking) and 1020 (range comments), contract
+Doc ADR 613's chrome over engine ADRs 1040 (change tracking) and 1020 (range comments), contract
 C5 (extensions ADR 349 amendment 1) and editor ADR 300 (`src/word/review.tsx`,
 `src/word/review-model.ts`):
 

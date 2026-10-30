@@ -483,7 +483,7 @@ impl WorkerCore {
                 let affected_story = story_id_for_mutation(&m);
                 let t0 = clock();
                 let model = self.model.as_mut().expect("checked above");
-                // Engine ADR 1037 — a tracked change carries the date of
+                // Engine ADR 1040 — a tracked change carries the date of
                 // the edit that made it: the shell's clock stamps it (the
                 // engine reads none). A stub clock (0) stamps nothing.
                 if t0 > 0.0 {

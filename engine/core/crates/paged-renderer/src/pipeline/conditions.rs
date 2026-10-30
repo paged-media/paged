@@ -110,7 +110,7 @@ pub(super) fn without_hidden_runs(
 pub(super) struct HideRule<'a> {
     pub declared: &'a BTreeMap<String, ConditionDef>,
     pub hidden_text: Option<&'a paged_scene::Document>,
-    /// Engine ADR 1037 — the markup view, which hides deleted text (Simple
+    /// Engine ADR 1040 — the markup view, which hides deleted text (Simple
     /// and No Markup) or inserted text (Original).
     pub review: Option<paged_model::MarkupView>,
 }

@@ -3689,7 +3689,7 @@ fn style_cases(c: &mut Vec<Case>) {
             tab_position: None,
         }
     }));
-    // Engine ADRs 1037 / 1020 — All Markup draws a change in its author's
+    // Engine ADRs 1040 / 1020 — All Markup draws a change in its author's
     // colour and shades commented text; a thread's replies and its
     // resolved state print nothing.
     fn sweep_change(kind: paged_mutate::ChangeSpecKind, id: &str) -> paged_mutate::ChangeSpec {

@@ -2130,7 +2130,7 @@ pub struct CanvasModel {
     /// pour its text, style it, put it on a layer — used to pay that
     /// per child.
     rebuild_deferred: bool,
-    /// Engine ADR 1037 — set while a tracked text edit's lowered batch
+    /// Engine ADR 1040 — set while a tracked text edit's lowered batch
     /// applies, so its own untracked children are not lowered again.
     tracked_lowering: bool,
     /// Set by a deferred `rebuild_after_mutation`; consumed by the one
@@ -3169,7 +3169,7 @@ impl CanvasModel {
         Ok(outcome)
     }
 
-    /// Engine ADR 1037 — the date the tracked changes recorded from now on
+    /// Engine ADR 1040 — the date the tracked changes recorded from now on
     /// carry (ISO 8601): the host's clock, stamped before each edit. The
     /// engine reads no clock of its own.
     pub fn set_review_clock(&mut self, date: Option<String>) {
@@ -3198,7 +3198,7 @@ impl CanvasModel {
         // author (an unknown composer) is refused before anything runs.
         refuse_unauthorable(mutation)?;
         self.refuse_unpermitted(mutation)?;
-        // Engine ADR 1037 — while the document tracks changes, a text edit
+        // Engine ADR 1040 — while the document tracks changes, a text edit
         // is recorded: lowered to one batch of the untracked edit and the
         // changes it makes (`review::lower_tracked`).
         if !self.tracked_lowering
@@ -5485,7 +5485,7 @@ impl CanvasModel {
                     offset: *offset,
                 })
             }
-            // Engine ADR 1037 — tracked changes recorded and resolved.
+            // Engine ADR 1040 — tracked changes recorded and resolved.
             Mutation::RecordChange {
                 story_id,
                 start,
@@ -11575,7 +11575,7 @@ impl CanvasModel {
                     .sum::<u32>();
             }
         }
-        // Engine ADR 1037 — Word's changes, one row per story and change id.
+        // Engine ADR 1040 — Word's changes, one row per story and change id.
         for story in &self.scene.stories {
             out.extend(crate::review::change_rows(
                 &story.self_id,

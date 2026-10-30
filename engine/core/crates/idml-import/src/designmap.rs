@@ -670,7 +670,7 @@ fn read_preference(e: &quick_xml::events::BytesStart, out: &mut DesignMap) {
             show_hidden_text: None,
             // Nor is Word's show-field-codes view (engine ADR 1022).
             show_field_codes: None,
-            // Nor are Word's Track Changes and markup view (engine ADR 1037).
+            // Nor are Word's Track Changes and markup view (engine ADR 1040).
             track_changes: None,
             track_changes_author: None,
             markup_view: None,

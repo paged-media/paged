@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADRs 1037 and 1020 on the canvas: the tracked-edit lane, and the
+//! Engine ADRs 1040 and 1020 on the canvas: the tracked-edit lane, and the
 //! reads of tracked changes and comments.
 //!
 //! **The tracked-edit lane.** While the document tracks changes, a wire

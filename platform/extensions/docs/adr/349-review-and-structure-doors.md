@@ -45,7 +45,7 @@ given page.
 
 ## Amendment 1 (2026-10-29): the markup margin band (C5) and `text.contentRange`
 
-paged.doc's review wave (doc ADR 613; engine ADRs 1037 and 1020) needs Word's markup area: a
+paged.doc's review wave (doc ADR 613; engine ADRs 1040 and 1020) needs Word's markup area: a
 balloon per deletion, formatting change and comment thread beside the page, level with its
 text. Two additive members:
 

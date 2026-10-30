@@ -1,4 +1,4 @@
-# ADR 1037 — Word's change tracking: changes carried by what they changed, recorded while typing, accepted and rejected
+# ADR 1040 — Word's change tracking: changes carried by what they changed, recorded while typing, accepted and rejected
 
 - **Status:** Accepted 2026-10-29.
 - **Scope:** rides protocol v78 as a rider (every addition is optional on the wire and

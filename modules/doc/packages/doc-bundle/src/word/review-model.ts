@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Word's Review (doc ADR 613, engine ADRs 1037 and 1020): the live state of
+// Word's Review (doc ADR 613, engine ADRs 1040 and 1020): the live state of
 // the review chrome — whether Track Changes is on, who is reviewing, the
 // markup view, the document's tracked changes and comment threads — read
 // from the engine's `trackedChanges` and `comments` collections and the

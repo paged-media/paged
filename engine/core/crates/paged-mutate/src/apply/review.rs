@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADRs 1037 and 1020 — tracked changes recorded, accepted and
+//! Engine ADRs 1040 and 1020 — tracked changes recorded, accepted and
 //! rejected, and range comments with threads.
 //!
 //! - [`Operation::RecordChange`] marks a range (or a paragraph) as

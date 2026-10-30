@@ -785,7 +785,7 @@ pub const FOOTNOTE_RESTARTS: &[&str] = &[
     "SpreadRestart",
     "SectionRestart",
 ];
-/// Engine ADR 1037 — `documentMarkupView`: Word's Display for Review.
+/// Engine ADR 1040 — `documentMarkupView`: Word's Display for Review.
 pub const MARKUP_VIEWS: &[&str] = &["simple", "all", "none", "original"];
 
 pub const FOOTNOTE_SHOW_PREFIX_SUFFIX: &[&str] = &[

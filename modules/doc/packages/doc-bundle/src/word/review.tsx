@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Word's Review tab inside paged (doc ADR 613; engine ADRs 1037 and 1020;
+// Word's Review tab inside paged (doc ADR 613; engine ADRs 1040 and 1020;
 // contract C5, extensions ADR 349 amendment 1; editor ADR 300): Track
 // Changes on and off, Accept and Reject (one, all, by author), Next and
 // Previous, the four markup views, and comment threads (new, reply,

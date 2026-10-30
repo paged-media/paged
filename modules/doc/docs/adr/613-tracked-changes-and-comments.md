@@ -1,7 +1,7 @@
 # ADR 613 — Tracked changes and comments
 
 - **Status:** Accepted 2026-10-29.
-- **Builds on:** engine ADRs 1037 (change tracking: `recordChange`, `acceptChange`,
+- **Builds on:** engine ADRs 1040 (change tracking: `recordChange`, `acceptChange`,
   `rejectChange`, `documentTrackChanges`, the markup views) and 1020 (range comments:
   `insertComment`, `replyComment`, `resolveComment`, `deleteComment`), and the story read's
   review fields (`RunContent.change` / `formatChange` / `comments`,

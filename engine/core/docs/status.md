@@ -255,7 +255,7 @@ template fields | fill | check` run the same messages headlessly.
   `insertCrossReference`, `insertTableOfContents` (a table inside the text, updated in place by
   `updateTableOfContents`) and `insertIndexMarker`. IDML writes fields as InDesign's variables
   where one exists, else as their result.
-- **Word's review** ([ADR 1037](adr/1037-word-change-tracking.md),
+- **Word's review** ([ADR 1040](adr/1040-word-change-tracking.md),
   [ADR 1020](adr/1020-range-comments-with-threads.md)). Tracked insertions, deletions,
   formatting and paragraph changes and inserted or deleted paragraph marks are carried by the
   runs and paragraphs they changed (`recordChange` for importers). While
@@ -291,7 +291,7 @@ template fields | fill | check` run the same messages headlessly.
   search table cells or notes. Word fields other than the nine kinds are opaque; a bookmark is
   a point; a TOC style made by `insertTableOfContents`, new text destinations and index topics
   reach the `.paged` model, not IDML; no continuous section breaks (ADR 1022).
-- **Review limits** (ADRs 1037, 1020). Changes and comments in table cells are kept and
+- **Review limits** (ADRs 1040, 1020). Changes and comments in table cells are kept and
   resolved but not listed; Simple Markup draws no change bar and a deleted paragraph mark
   still breaks the line; Word's changes and comments reach the `.paged` model, not IDML.
 - **A commit rebuilds the whole document.** Caches make unchanged paragraphs and stories

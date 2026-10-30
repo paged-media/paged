@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADRs 1037 and 1020 — tracked changes over text ranges and range
+//! Engine ADRs 1040 and 1020 — tracked changes over text ranges and range
 //! comments with threads, Word's review model.
 //!
 //! A change is carried by what it changed, as Word carries `w:ins`,

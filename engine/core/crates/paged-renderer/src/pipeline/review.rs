@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1037 — tracked changes and comments as the markup view shows
+//! Engine ADR 1040 — tracked changes and comments as the markup view shows
 //! them (Word's Display for Review), applied to a paragraph before it is
 //! set:
 //!

@@ -6590,7 +6590,7 @@ pub(super) fn emit_paragraph_into_chain(
     // skips the pass.
     // Hidden text (engine ADR 1018) leaves the same way, through the
     // same pass, when the document does not show it.
-    // Engine ADR 1037 — tracked changes and comments as the markup view
+    // Engine ADR 1040 — tracked changes and comments as the markup view
     // shows them; the views that leave text out hide it in the pass below.
     let view = em
         .document

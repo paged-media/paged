@@ -386,7 +386,7 @@ export function useTextEditing(ctx: TextEditingContext) {
           if (sel.start !== sel.end) {
             setSel({ ...sel, end: sel.start, affinity: false });
           }
-          // Editor ADR 300 — with Track Changes on (engine ADR 1037) the
+          // Editor ADR 300 — with Track Changes on (engine ADR 1040) the
           // deleted text stays in the story, struck through: the caret
           // then steps PAST it, as Word's does, so the next Delete takes
           // the next character instead of the struck one again.

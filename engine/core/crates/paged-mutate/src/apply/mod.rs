@@ -152,7 +152,7 @@ pub(crate) fn apply_inner(
                 return result;
             }
             match review::format_scope(doc, op) {
-                // Engine ADR 1037 — a range's formatting, recorded while the
+                // Engine ADR 1040 — a range's formatting, recorded while the
                 // document tracks changes.
                 Some(scope) => review::tracked_format(doc, scope, |doc| {
                     apply_set_property(doc, node, *path, &value)

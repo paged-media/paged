@@ -2630,7 +2630,7 @@ pub(super) fn apply_set_property(
             let prev = std::mem::replace(slot, show.then_some(true)).unwrap_or(false);
             (Value::Bool(prev), InvalidationHint::default())
         }
-        // ---- engine ADR 1037 — Track Changes and the markup view -----
+        // ---- engine ADR 1040 — Track Changes and the markup view -----
         (NodeId::Document(_), PropertyPath::DocumentTrackChanges) => {
             let Value::Bool(on) = value else {
                 return Err(OperationError::TypeMismatch {

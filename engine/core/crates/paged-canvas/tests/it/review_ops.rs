@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADRs 1037 and 1020 over the wire: typing, deleting and
+//! Engine ADRs 1040 and 1020 over the wire: typing, deleting and
 //! formatting while Track Changes is on record changes; accepting and
 //! rejecting resolve them, each other's opposite (a proptest); comments
 //! with threads are inserted, replied to, resolved and deleted; every step
@@ -449,7 +449,7 @@ enum St {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(48))]
 
-    /// Engine ADR 1037 — accepting and rejecting are each other's opposite:
+    /// Engine ADR 1040 — accepting and rejecting are each other's opposite:
     /// over any tracked edits, rejecting everything gives back the text
     /// before them, accepting everything the text the same edits make
     /// untracked, and either undoes to the tracked document exactly.

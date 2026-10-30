@@ -176,7 +176,7 @@ fn the_script_surface_reaches_181_of_182() {
     // insertIndexMarker (engine ADR 1022); v77 placePage (engine ADR 1011);
     // v78 createSymbol, redefineSymbol, placeSymbolInstance,
     // breakSymbolLink and deleteSymbol (engine ADR 1039); v78 recordChange,
-    // acceptChange, rejectChange (engine ADR 1037), insertComment,
+    // acceptChange, rejectChange (engine ADR 1040), insertComment,
     // replyComment, resolveComment, deleteComment and editComment (engine
     // ADR 1020).
     assert_eq!(ops_the_bridge_names().len(), 181);

@@ -2502,7 +2502,7 @@ pub enum Mutation {
         #[serde(default)]
         sort_order: Option<String>,
     },
-    /// Engine ADR 1037 — record tracked change `change` over story chars
+    /// Engine ADR 1040 — record tracked change `change` over story chars
     /// `[start, end)` (contiguous, as `applyStyle` counts them; of `cell`
     /// when set), or on paragraph `paragraph` for the paragraph kinds
     /// (`paraProps`, `insertMark`, `deleteMark`). What an importer writes
@@ -2518,7 +2518,7 @@ pub enum Mutation {
         paragraph: Option<u32>,
         change: paged_mutate::operation::ChangeSpec,
     },
-    /// Engine ADR 1037 — Accept: tracked change `id`, every change by
+    /// Engine ADR 1040 — Accept: tracked change `id`, every change by
     /// `author`, or every change (in story `storyId` only when set). One
     /// undo step.
     AcceptChange {
@@ -2529,7 +2529,7 @@ pub enum Mutation {
         #[serde(default)]
         author: Option<String>,
     },
-    /// Engine ADR 1037 — Reject, scoped as `acceptChange`. One undo step.
+    /// Engine ADR 1040 — Reject, scoped as `acceptChange`. One undo step.
     RejectChange {
         #[serde(default)]
         story_id: Option<String>,

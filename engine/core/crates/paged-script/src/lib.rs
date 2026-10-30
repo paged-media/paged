@@ -1386,7 +1386,7 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("convertNoteToText"),
             1,
         )
-        // Engine ADRs 1037 and 1020 — Word's review.
+        // Engine ADRs 1040 and 1020 — Word's review.
         .function(guarded(paged_record_change), js_string!("recordChange"), 5)
         .function(guarded(paged_accept_change), js_string!("acceptChange"), 1)
         .function(guarded(paged_reject_change), js_string!("rejectChange"), 1)
@@ -3812,7 +3812,7 @@ fn str_arg(args: &[JsValue], i: usize, ctx: &mut Context) -> JsResult<String> {
 
 /// `paged.recordChange(storyId, start, end, { kind, id?, author?, date?,
 /// beforeCharacterStyle?, beforeParagraphStyle? }, paragraph?)` — record a
-/// tracked change over story chars (engine ADR 1037).
+/// tracked change over story chars (engine ADR 1040).
 fn paged_record_change(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let story_id = str_arg(args, 0, ctx)?;
     let start = args.get_or_undefined(1).to_number(ctx)? as u32;
@@ -3843,7 +3843,7 @@ struct ChangeScope {
 }
 
 /// `paged.acceptChange({ storyId?, id?, author? })` — accept one tracked
-/// change, an author's or all (engine ADR 1037).
+/// change, an author's or all (engine ADR 1040).
 fn paged_accept_change(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let s = from_js::<ChangeScope>(args.get_or_undefined(0), ctx).unwrap_or_default();
     Ok(apply_bool(&Mutation::AcceptChange {

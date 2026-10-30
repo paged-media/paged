@@ -17,7 +17,7 @@
  */
 
 // Doc ADR 613 — Word's Review over a recording host: the store reads the
-// engine's collections (engine ADRs 1037 and 1020) into changes and
+// engine's collections (engine ADRs 1040 and 1020) into changes and
 // threads with caret offsets, the margin band shows what each markup view
 // shows, and each review command is the one mutation Word's verb is.
 

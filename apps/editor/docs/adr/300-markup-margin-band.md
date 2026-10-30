@@ -6,7 +6,7 @@
   `packages/shell/src/overlays/margin-band.tsx` (`marginBandContribution`, `MarginBandView`,
   `layoutBalloons`, `anchorTouched`), `apps/canvas/src/app/mount.tsx`,
   `apps/canvas/src/ui/useTextEditing.ts` (forward Delete over tracked text, `textStays`).
-  Contract: extensions ADR 349 amendment 1 (C5). Engine: ADRs 1037 (change tracking) and
+  Contract: extensions ADR 349 amendment 1 (C5). Engine: ADRs 1040 (change tracking) and
   1020 (range comments). First consumer: paged.doc (doc ADR 613).
 
 ## Context
@@ -47,7 +47,7 @@ for itself would have to re-derive the page geometry, the camera and the text's 
 - **Input inside a balloon** (a reply field) is the balloon's: pointer and key events stop at
   the balloon, so typing a reply never reaches the canvas text input.
 - **Tracked deletions and the caret.** With Track Changes on, deleted text stays in the story
-  (struck through, engine ADR 1037). Backspace already left the caret before the struck
+  (struck through, engine ADR 1040). Backspace already left the caret before the struck
   character; forward Delete left it in front of it, so the next Delete struck the same
   character again. The text input now measures the story around a forward Delete
   (`textStays`): when the delete was applied and the story kept its length, the caret steps

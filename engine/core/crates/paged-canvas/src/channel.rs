@@ -805,7 +805,7 @@ export type WorkerToMain = WorkerToMainKind & {
 //   (`instance:<id>`), the element paths `symbolInstanceTint` /
 //   `symbolInstanceNineSlice`, the `symbols` collection. New Mutation kinds
 //   an older worker cannot apply, hence the bump.
-// v78 (rider) — Word's review (engine ADRs 1037 and 1020): the mutations
+// v78 (rider) — Word's review (engine ADRs 1040 and 1020): the mutations
 //   recordChange, acceptChange, rejectChange, insertComment, replyComment,
 //   resolveComment, deleteComment and editComment; the PropertyPaths
 //   documentTrackChanges, documentTrackChangesAuthor and documentMarkupView;
@@ -3268,7 +3268,7 @@ pub enum CollectionName {
     XmlElements,
     /// D-01 — the document's tracked changes, one row per change in story
     /// order: its story, the story offset of its place, its kind, author,
-    /// date and text. Engine ADR 1037: Word's changes too (insertions,
+    /// date and text. Engine ADR 1040: Word's changes too (insertions,
     /// deletions, formatting and paragraph changes, paragraph marks), one
     /// row per story and change id with its range.
     TrackedChanges,
@@ -4221,19 +4221,19 @@ pub struct TrackedChangeSummary {
     pub date: Option<String>,
     /// The text it inserted or deleted, paragraphs separated by U+000D.
     pub text: String,
-    /// Engine ADR 1037 — the change's id (absent for an InDesign deletion,
+    /// Engine ADR 1040 — the change's id (absent for an InDesign deletion,
     /// which is addressed by its offset). Additive on 77.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    /// Engine ADR 1037 — `insert`, `delete`, `format`, `paraProps`,
+    /// Engine ADR 1040 — `insert`, `delete`, `format`, `paraProps`,
     /// `insertMark` or `deleteMark`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
-    /// Engine ADR 1037 — the story char offset past the change's last
+    /// Engine ADR 1040 — the story char offset past the change's last
     /// character (`offset` is its first).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end: Option<u32>,
-    /// Engine ADR 1037 — the paragraph a paragraph or mark change is on.
+    /// Engine ADR 1040 — the paragraph a paragraph or mark change is on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paragraph: Option<u32>,
 }
@@ -4267,7 +4267,7 @@ pub struct CommentSummary {
     pub resolved: bool,
 }
 
-/// Engine ADR 1037 — a tracked change as the content read names it.
+/// Engine ADR 1040 — a tracked change as the content read names it.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
@@ -4281,7 +4281,7 @@ pub struct ChangeContent {
     pub date: Option<String>,
 }
 
-/// Engine ADR 1037 — a run's tracked formatting change: the change and the
+/// Engine ADR 1040 — a run's tracked formatting change: the change and the
 /// run's formatting before it (`before.text` is empty).
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
@@ -4291,7 +4291,7 @@ pub struct FormatChangeContent {
     pub before: Box<RunContent>,
 }
 
-/// Engine ADR 1037 — a paragraph's tracked formatting change: the change
+/// Engine ADR 1040 — a paragraph's tracked formatting change: the change
 /// and the paragraph style it had before.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
@@ -4626,11 +4626,11 @@ pub struct ParagraphContent {
     /// entry of (`Paragraph.toc`), when it is one. Additive on 77.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toc: Option<String>,
-    /// Engine ADR 1037 — the paragraph mark's tracked insertion or
+    /// Engine ADR 1040 — the paragraph mark's tracked insertion or
     /// deletion. Additive on 77.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mark_change: Option<ChangeContent>,
-    /// Engine ADR 1037 — the paragraph's tracked formatting change.
+    /// Engine ADR 1040 — the paragraph's tracked formatting change.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub props_change: Option<PropsChangeContent>,
 }
@@ -4677,11 +4677,11 @@ pub struct RunContent {
     /// is the field's result. Additive on 77.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field_code: Option<String>,
-    /// Engine ADR 1037 — the tracked insertion or deletion this run is.
+    /// Engine ADR 1040 — the tracked insertion or deletion this run is.
     /// Additive on 77.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change: Option<ChangeContent>,
-    /// Engine ADR 1037 — the run's tracked formatting change.
+    /// Engine ADR 1040 — the run's tracked formatting change.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format_change: Option<FormatChangeContent>,
     /// Engine ADR 1020 — the comment threads whose range covers the run.
