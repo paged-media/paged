@@ -169,6 +169,7 @@ is not written yet.
 | [1038](1038-the-remaining-codecs-and-the-layered-tiff.md) | The remaining codecs: GIF, BMP, TGA, JPEG XL and AVIF encode, HDR and OpenEXR floats, and the layered TIFF | Accepted 2026-10-28 |
 | [1039](1039-a-symbol-is-drawn-by-its-instances.md) | A symbol is kept once and drawn by its instances: 9-slice, overrides, one PDF form, IDML through labels | Accepted 2026-10-28 |
 | [1040](1040-word-change-tracking.md) | Word's change tracking: changes carried by what they changed, recorded while typing, accepted and rejected as each other's opposite, shown by the markup view (amends 184) | Accepted 2026-10-29 |
+| [1043](1043-an-item-has-several-fills-and-strokes.md) | An item has several fills and strokes (native appearance), drawn as parts, baked to a group in IDML and restored from its label | Accepted 2026-10-29 |
 | [1046](1046-a-scene-layer-takes-its-frames-effects.md) | A scene layer takes its frame's opacity, blend mode and effects | Accepted 2026-10-30 |
 
 Decisions made in other repositories that this engine's code rests on are listed in

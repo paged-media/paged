@@ -48,6 +48,7 @@ use std::rc::Rc;
 
 use paged_scene::Document;
 
+pub mod appearance_wire;
 pub mod apply;
 pub mod bezier_conv;
 pub mod error;
@@ -278,6 +279,7 @@ mod tests {
             fill_rule: paged_model::FillRule::NonZero,
             effects: None,
             effect_stack: Vec::new(),
+            appearance: Vec::new(),
             gradient_fill_angle: None,
             gradient_fill_length: None,
             gradient_fill_start: None,

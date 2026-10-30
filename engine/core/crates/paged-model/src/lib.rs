@@ -30,6 +30,7 @@
 //! primitive. `paged-parse` re-exports everything moved here, so its dependents
 //! compile unchanged.
 
+pub mod appearance;
 pub mod effect_stack;
 pub mod fitting;
 pub mod image_adjust;
@@ -1711,6 +1712,11 @@ pub struct TextFrame {
     /// are on in InDesign's order and nothing else is stacked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -1870,6 +1876,7 @@ impl TextFrame {
             fill_rule: FillRule::NonZero,
             effects: None,
             effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -2206,6 +2213,11 @@ pub struct Rectangle {
     /// are on in InDesign's order and nothing else is stacked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -2360,6 +2372,7 @@ impl Rectangle {
             blend_mode: None,
             effects: None,
             effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -2674,6 +2687,11 @@ pub struct Oval {
     /// are on in InDesign's order and nothing else is stacked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -2820,6 +2838,7 @@ impl Oval {
             item_layer: None,
             effects: None,
             effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -3393,6 +3412,11 @@ pub struct Polygon {
     /// are on in InDesign's order and nothing else is stacked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -3558,6 +3582,7 @@ impl Polygon {
             item_layer: None,
             effects: None,
             effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,

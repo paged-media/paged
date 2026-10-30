@@ -789,6 +789,10 @@ export const CORE_PATHS: Record<
   frameFillEffectStack: V71,
   frameStrokeEffectStack: V71,
   frameContentEffectStack: V71,
+  // The appearance is protocol 78 (engine ADR 1043): the layer list, and
+  // the per-layer edit, an operation.
+  frameAppearance: V71,
+  frameAppearanceLayer: OP,
   // An image frame's filter stack is protocol 77 (engine ADR 1037).
   frameImageAdjustments: V71,
   nextTextFrame: {

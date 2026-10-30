@@ -310,6 +310,7 @@ fn is_action(path: PropertyPath) -> bool {
             | Wire::SimplifyPath
             | Wire::ClosePath
             | Wire::PluginMetadata
+            | Wire::AppearanceLayer
     )
 }
 
