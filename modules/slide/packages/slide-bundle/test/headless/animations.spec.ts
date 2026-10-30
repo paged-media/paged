@@ -47,6 +47,17 @@ const manifest = JSON.parse(
   readFileSync(new URL("../../manifest.json", import.meta.url), "utf8"),
 ) as Parameters<HeadlessHost["loadBundle"]>[0]["manifest"];
 
+// The show draws a layer per animated item, text frames included: the
+// engine lays text out only with a font, as the editor gives it Inter.
+const FONT = new Uint8Array(
+  readFileSync(
+    new URL(
+      "../../../../../../engine/core/corpus/fonts/Inter.ttf",
+      import.meta.url,
+    ),
+  ),
+);
+
 const hosts: HeadlessHost[] = [];
 afterEach(() => {
   for (const h of hosts.splice(0)) h.dispose();
@@ -69,6 +80,7 @@ async function open(name: string) {
   let active: string | null = null;
   const h = await createHeadlessHost({
     resolveFrom: ENGINE_ANCHOR,
+    defaultFont: FONT,
     pages: {
       goToPage(pageId) {
         active = pageId;

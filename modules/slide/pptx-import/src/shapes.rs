@@ -181,7 +181,7 @@ pub fn shape_props(el: &El, ctx: &Ctx) -> ShapeProps {
         },
         fill: fill_in(el, ctx),
         line: el.child(Ns::A, "ln").map(|l| line(l, ctx)),
-        effects: el.child(Ns::A, "effectLst").map(|e| effects(e, ctx)),
+        effects: paged_ooxml::drawingml::effect::container(el).map(|e| effects(e, ctx)),
     }
 }
 

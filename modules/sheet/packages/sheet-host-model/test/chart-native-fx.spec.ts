@@ -113,7 +113,9 @@ const geom = (f: NativeFx = fx): ChartGeometry => ({
       fx: f,
     },
   ],
-  losses: ["a:reflection is not carried (no reflection effect yet)"],
+  losses: [
+    "pattern fill drawn as the mix of its two colours (no pattern paint yet)",
+  ],
 });
 
 const lower = (
@@ -243,5 +245,43 @@ describe("chart native effects [sheet.chart.native-effects]", () => {
     expect(p.some(([k]) => String(k).startsWith("frameDropShadow"))).toBe(
       false,
     );
+  });
+  it("writes the effect stack after the effects its InDesign entries name", () => {
+    const stacked: NativeFx = {
+      dropShadow: fx.dropShadow,
+      gradientFeather: fx.gradientFeather,
+      effectStack: [
+        { kind: "dropShadow" },
+        { kind: "gradientFeather" },
+        { kind: "colorOverlay", blendMode: "Multiply", color: "#ED7D31" },
+        { kind: "gaussianBlur", radiusPt: 1 },
+        { kind: "reflection", sizePct: 55, startOpacityPct: 50 },
+      ],
+    };
+    const ops = lower(geom(stacked));
+    const p = props(ops);
+    const stacks = p.filter(([path]) => path === "frameEffectStack");
+    // Two rects and the line.
+    expect(stacks).toHaveLength(3);
+    const entries = (stacks[0][1] as { entries: { kind: string }[] }).entries;
+    expect(entries.map((e) => e.kind)).toEqual([
+      "dropShadow",
+      "gradientFeather",
+      "colorOverlay",
+      "gaussianBlur",
+      "reflection",
+    ]);
+    expect(entries[2]).toEqual({
+      kind: "colorOverlay",
+      blendMode: "Multiply",
+      color: paletteSwatchId("chart", "ED7D31"),
+    });
+    // A line draws no gradient feather: its stack names none.
+    const line = (stacks[2][1] as { entries: { kind: string }[] }).entries;
+    expect(line.map((e) => e.kind)).not.toContain("gradientFeather");
+    // The stack comes after the drop shadow it orders.
+    const at = (path: string) => p.findIndex(([q]) => q === path);
+    expect(at("frameDropShadow")).toBeLessThan(at("frameEffectStack"));
+    expect(distinctChartHexes(geom(stacked))).toContain("ED7D31");
   });
 });

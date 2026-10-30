@@ -1157,11 +1157,20 @@ pub fn contents_bytes(
 
 /// A new uuid for a source or a placement — deterministic per call
 /// order within the realm (tests reproduce files byte for byte), in the
-/// 8-4-4-4-12 form Photoshop writes.
+/// 8-4-4-4-12 form Photoshop writes. The count is the thread's: the wasm
+/// realm has one, and a test runner's tests, each on a thread of its own,
+/// do not shift each other's uuids (a process-wide count made a recorded
+/// file's hash depend on which tests ran first).
 pub fn new_uuid(seed: &[u8]) -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(1);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    use std::cell::Cell;
+    thread_local! {
+        static COUNTER: Cell<u64> = const { Cell::new(1) };
+    }
+    let n = COUNTER.with(|c| {
+        let n = c.get();
+        c.set(n.wrapping_add(1));
+        n
+    });
     let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ n;
     let mut g: u64 = 0x8422_2325_cbf2_9ce4 ^ n.rotate_left(17);
     for &b in seed {

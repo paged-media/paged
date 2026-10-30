@@ -514,6 +514,8 @@ struct Outline {
     anchors: Vec<PathAnchor>,
     starts: Vec<usize>,
     open: Vec<bool>,
+    /// The `a:path` each contour belongs to (one entry per contour).
+    paths: Vec<usize>,
 }
 
 impl Outline {
@@ -521,9 +523,11 @@ impl Outline {
         let mut anchors = Vec::new();
         let mut starts = Vec::new();
         let mut open = Vec::new();
+        let mut paths = Vec::new();
         for sp in subpaths {
             starts.push(anchors.len());
             open.push(!sp.closed);
+            paths.push(sp.path);
             for p in &sp.points {
                 anchors.push(PathAnchor {
                     anchor: (n(p.anchor.0), n(p.anchor.1)),
@@ -536,11 +540,16 @@ impl Outline {
         // contour is the canonical empty list (an open one keeps its
         // flag).
         let len = anchors.len();
-        let (starts, open): (Vec<usize>, Vec<bool>) = starts
+        let (starts, (open, paths)): (Vec<usize>, (Vec<bool>, Vec<usize>)) = starts
             .into_iter()
-            .zip(open)
+            .zip(open.into_iter().zip(paths))
             .filter(|(s, _)| *s < len)
             .unzip();
+        let paths = if starts.len() <= 1 {
+            paths.into_iter().take(1).collect()
+        } else {
+            paths
+        };
         let (starts, open) = if starts.len() <= 1 {
             if open.first().copied().unwrap_or(false) {
                 (Vec::new(), vec![true])
@@ -554,6 +563,7 @@ impl Outline {
             anchors,
             starts,
             open,
+            paths,
         }
     }
 
@@ -625,6 +635,7 @@ fn rect_path(l: f64, t: f64, r: f64, b: f64) -> Vec<SubPath> {
         filled: true,
         stroked: true,
         fill_mode: None,
+        path: 0,
     }]
 }
 
@@ -886,10 +897,10 @@ impl Builder<'_> {
             } => {
                 // Engine ADR 1037 — the blip's picture effects the engine
                 // models ride the frame's filter stack; the rest are reported.
-                let mapped = self.dml.picture(&Picture {
+                let pic = Picture {
                     opacity: it.opacity,
                     effects: image_effects.clone(),
-                });
+                };
                 let Some(bytes) = (self.images)(image_part) else {
                     self.diagnostics
                         .push(format!("{image_part}: image bytes missing"));
@@ -913,6 +924,10 @@ impl Builder<'_> {
                 let disp_w = it.w / vis_w;
                 let disp_h = it.h / vis_h;
                 let (iw, ih) = (pw as f64, ph as f64);
+                // A picture blur is in the image's own pixels: its pixels
+                // per point as placed.
+                let px_per_pt = (iw / disp_w.max(1e-6) + ih / disp_h.max(1e-6)) / 2.0;
+                let mapped = self.dml.picture_at(&pic, Some(px_per_pt));
                 let m = [disp_w / iw, 0.0, 0.0, disp_h / ih, -l * disp_w, -t * disp_h];
                 let uri = format!(
                     "file:{}",
@@ -942,7 +957,14 @@ impl Builder<'_> {
                     opacity: tr.opacity,
                     drop_shadow: tr.shadow,
                     effects: tr.effects,
+                    effect_stack: tr.stack,
                     image_adjustments: mapped.adjustments,
+                    fill_rule: self.dml.fill_rule(
+                        &path.anchors,
+                        &path.starts,
+                        &path.open,
+                        &path.paths,
+                    ),
                     ..Rectangle::new(it.id.clone(), path.bounds())
                 };
                 if !path.is_plain_box() {
@@ -979,6 +1001,15 @@ impl Builder<'_> {
             // An outline with no point is no item.
             return;
         }
+        // PowerPoint fills a path even-odd (engine ADR 1006); an outline
+        // with no fill has no rule to keep.
+        let fill_rule = match fill.as_deref() {
+            Some(f) if f != NONE_SWATCH => {
+                self.dml
+                    .fill_rule(&path.anchors, &path.starts, &path.open, &path.paths)
+            }
+            _ => paged_model::FillRule::NonZero,
+        };
         let poly = Polygon {
             item_transform: Some(matrix(&it.transform)),
             fill_color: fill,
@@ -998,6 +1029,8 @@ impl Builder<'_> {
             opacity: tr.opacity,
             drop_shadow: tr.shadow,
             effects: tr.effects,
+            effect_stack: tr.stack,
+            fill_rule,
             bounds: path.bounds(),
             anchors: path.anchors,
             subpath_starts: path.starts,
