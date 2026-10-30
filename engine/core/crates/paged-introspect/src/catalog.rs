@@ -824,6 +824,11 @@ property_paths! {
         FrameImageAdjustments => "frameImageAdjustments" : list_of("RasterOp", Wire::ImageAdjustments),
         // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
+        // Engine ADR 1047 — live shapes; IDML has none (the outline is written, the parameters ride a label).
+        FrameShapeSides => "frameShapeSides" : count().range(3.0, 100.0),
+        FrameShapeStarInset => "frameShapeStarInset" : pct().range(0.0, 99.0).default_num(0.0),
+        FrameShapePieStart => "frameShapePieStart" : deg().default_num(0.0),
+        FrameShapePieEnd => "frameShapePieEnd" : deg().default_num(360.0),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
         FrameStrokeMiterLimit => "frameStrokeMiterLimit" : number().range(1.0, 500.0).default_num(4.0).idml(idml![attr(Rectangle | GraphicLine | Polygon, MiterLimit)]),
@@ -1527,7 +1532,10 @@ mod tests {
         // 265 -> 266: ADR 1037 — an image frame's filter stack.
         //
         // 266 -> 268: ADR 1043 — an item's appearance, and one layer of it.
-        assert_eq!(cat.settable_paths.len(), 268, "settable path count drifted");
+        //
+        // 268 -> 272: ADR 1047 — live shapes (a polygon's sides and star
+        // inset, an oval's pie angles).
+        assert_eq!(cat.settable_paths.len(), 272, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

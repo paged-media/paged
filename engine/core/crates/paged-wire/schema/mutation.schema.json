@@ -8728,6 +8728,26 @@
           "description": "How tracked changes and comments show (engine ADR 1040):\n`Value::Text` `simple` / `all` / `none` / `original`, default `all`.\nA whole-document reflow.",
           "type": "string",
           "const": "documentMarkupView"
+        },
+        {
+          "description": "A live polygon's side count (a star's points): `Value::Length` of a\nwhole number in 3..=100, on a Polygon that is one closed contour.\nSetting it makes the polygon live and redraws its anchors in their\nown bounding box, keeping a live star's inset;\n`Length(None)` ends the live shape and keeps the path. Reads `None`\nfor a path that is not a live polygon. Reshapes\n(`frame_geometry`); the inverse restores the parameters and the\nanchors exactly. No IDML attribute: the anchors are written, the\nparameters ride the item's label (`paged:liveShape`).",
+          "type": "string",
+          "const": "frameShapeSides"
+        },
+        {
+          "description": "A live polygon's star inset, percent: `Value::Length` in 0..=99, 0\n(or `None`) the plain polygon. Only on a LIVE polygon; any other\npath refuses it (set `FrameShapeSides` first). Redraws the anchors.",
+          "type": "string",
+          "const": "frameShapeStarInset"
+        },
+        {
+          "description": "An oval's pie start angle, degrees counter-clockwise from three\no'clock (Illustrator's Pie Start Angle): `Value::Length`, `None`\nis 0. The oval draws the wedge from the start counter-clockwise to\nthe end; a whole turn between them is the whole ellipse. Reshapes\n(`frame_geometry`).",
+          "type": "string",
+          "const": "frameShapePieStart"
+        },
+        {
+          "description": "An oval's pie end angle (Illustrator's Pie End Angle):\n`Value::Length`, `None` is 360.",
+          "type": "string",
+          "const": "frameShapePieEnd"
         }
       ]
     },

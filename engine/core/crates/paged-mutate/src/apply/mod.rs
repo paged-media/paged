@@ -1411,6 +1411,7 @@ mod hyperlink_edit;
 mod insert_node;
 mod layer;
 mod list_ops;
+mod live_shape;
 mod lock;
 mod note;
 pub mod permit;
