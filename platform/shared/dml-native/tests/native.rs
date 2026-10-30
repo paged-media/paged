@@ -107,10 +107,61 @@ fn a_picture_takes_its_alpha_and_reports_what_the_engine_cannot_hold__feat__plug
         losses.iter().any(|m| m.contains("adjustment blackWhite")),
         "{losses:?}"
     );
+    // The reflection rides the effect stack after InDesign's effects.
+    let kinds: Vec<&str> = fx.effect_stack.iter().map(|e| e.kind.as_str()).collect();
+    assert_eq!(kinds, ["innerShadow", "feather", "reflection"]);
+    let r = &fx.effect_stack[2];
+    assert_eq!(
+        (r.size_pct, r.start_opacity_pct, r.end_opacity_pct),
+        (Some(55.0), Some(50.0), Some(0.3))
+    );
     assert!(
-        losses.iter().any(|m| m.contains("a:reflection")),
+        !losses.iter().any(|m| m.contains("reflection")),
         "{losses:?}"
     );
+    assert!(fx.describe().ends_with("reflection"), "{}", fx.describe());
+}
+
+#[test]
+fn blur_and_a_colour_overlay_go_on_the_wire_stack__feat__plugin_doc_native_effects() {
+    let mut l = Lowering::new(slots());
+    let fx = l.shape(
+        &sp(concat!(
+            r#"<a:solidFill><a:srgbClr val="FFFF00"/></a:solidFill>"#,
+            r#"<a:effectLst><a:blur rad="38100"/><a:fillOverlay blend="mult"><a:solidFill><a:schemeClr val="accent1"/></a:solidFill></a:fillOverlay></a:effectLst>"#,
+        )),
+        10.0,
+        10.0,
+    );
+    assert!(l.take_losses().is_empty());
+    let json = serde_json::to_value(&fx.effect_stack).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!([
+            {"kind": "colorOverlay", "blendMode": "Multiply", "color": "#4472C4"},
+            {"kind": "gaussianBlur", "radiusPt": 1.0}
+        ])
+    );
+    assert!(fx.colors().contains(&"#4472C4"));
+    // A gradient overlay, which PowerPoint does not draw: reported.
+    let fx = l.shape(
+        &sp(r#"<a:effectLst><a:fillOverlay blend="over"><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="100000"><a:srgbClr val="000000"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill></a:fillOverlay></a:effectLst>"#),
+        10.0,
+        10.0,
+    );
+    assert!(fx.effect_stack.is_empty());
+    assert!(l.take_losses()[0].contains("gradient fill overlay"));
+    // An effect DAG's containers are named, never dropped.
+    let el = parse(
+        format!(
+            r#"<a:spPr {NS}><a:effectDag><a:cont/><a:blur rad="12700"/></a:effectDag></a:spPr>"#
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    let fx = l.shape(&drawingml::shape_properties(&el, &|_| None), 10.0, 10.0);
+    assert_eq!(fx.effect_stack.len(), 1);
+    assert_eq!(l.take_losses(), ["effect cont is not carried (not read)"]);
 }
 
 #[test]

@@ -95,3 +95,12 @@ that reason.
   (2026-10-28) got no answer from Word, which opened no document at all, not even a fixture
   it had opened before. The answer file and a test that reads Word's own look back to the
   same native effects follow once it is recorded.
+
+## Amendment 2026-10-30 — the effect stack in the look (plan C10)
+
+`NativeFx` gains `effectStack` (engine ADR 1008): a picture's `a:blur`, solid `a:fillOverlay`
+and `a:reflection` are carried in the look instead of reported (slide ADR 722 amendment
+2026-10-30); `lowered.ts` types it. The look as a whole is still carried for the anchored
+frames (the diagnostic names "reflection" among what it holds); whatever writes the look onto
+the frame writes the stack last, as `frameEffectStack`. Evidence:
+`docx-conformance/tests/it/picture_effects.rs`, `platform/shared/dml-native/tests/native.rs`.

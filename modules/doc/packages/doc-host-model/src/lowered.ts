@@ -271,6 +271,23 @@ export interface NativeFx {
     /** `[location 0–100, opacity 0–100]`. */
     stops: [number, number][];
   };
+  /** The object's effect stack (engine ADR 1008), when it holds an effect
+   *  InDesign has none of (a blur, a colour overlay, a reflection): every
+   *  effect in the order it is drawn, as the wire's `EffectEntrySpec`
+   *  with its colour as `#RRGGBB`; an InDesign kind carries only its
+   *  place. */
+  effectStack?: {
+    kind: string;
+    blendMode?: string;
+    opacityPct?: number;
+    radiusPt?: number;
+    color?: string;
+    distancePt?: number;
+    sizePct?: number;
+    startOpacityPct?: number;
+    endOpacityPct?: number;
+    blurPt?: number;
+  }[];
 }
 
 /** A floating drawing's position and wrap, in points, Word's vocabulary. */

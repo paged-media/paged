@@ -170,6 +170,7 @@ export function distinctChartHexes(geom: ChartGeometry): string[] {
     add(fx.dropShadow?.color ?? null);
     add(fx.innerShadow?.color ?? null);
     add(fx.outerGlow?.color ?? null);
+    for (const e of fx.effectStack ?? []) add(e.color ?? null);
   };
   // A colour that names a document swatch is referenced, never minted.
   for (const prim of geom.prims) {
