@@ -281,6 +281,7 @@ fn gray() -> crate::color_mode::DocMode {
     crate::color_mode::DocMode {
         mode: crate::color_mode::ColorMode::Gray,
         cmyk_profile: None,
+        table: None,
     }
 }
 
@@ -343,11 +344,13 @@ fn the_colour_mode_is_persisted__feat__image_io_depth_color_modes() {
     s.set_mode(crate::color_mode::DocMode {
         mode: crate::color_mode::ColorMode::Cmyk,
         cmyk_profile: Some(Arc::from(vec![1u8, 2, 3])),
+        table: None,
     })
     .expect_err("a profile that is not a profile is refused");
     s.set_mode(crate::color_mode::DocMode {
         mode: crate::color_mode::ColorMode::Lab,
         cmyk_profile: None,
+        table: None,
     })
     .expect("lab");
     let (manifest, buffers) = s.export();

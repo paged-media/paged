@@ -100,7 +100,7 @@ use super::{
 use crate::ingest::{AdjustParams, IngestError};
 
 const MAGIC: &[u8; 4] = b"PGIL";
-const VERSION: u32 = 8;
+const VERSION: u32 = 9;
 
 struct W(Vec<u8>);
 
@@ -767,6 +767,16 @@ impl LayerStack {
                 }
                 None => w.i64(-1),
             }
+            // The single-image modes' table (image ADR 483, version 9).
+            if version >= 9 {
+                match &self.mode.table {
+                    Some(t) => {
+                        let s = slot(Arc::from(encode_mode_table(t).into_boxed_slice()));
+                        w.i64(i64::from(s));
+                    }
+                    None => w.i64(-1),
+                }
+            }
         }
         // Channels and paths (ADR 470): a trailing block older readers
         // skip; nothing at all without masking state.
@@ -1173,6 +1183,12 @@ impl LayerStack {
             if at >= 0 {
                 mode.cmyk_profile = Some(buffer(at as u32)?);
             }
+            if version >= 9 {
+                let at = r.i64()?;
+                if at >= 0 {
+                    mode.table = Some(Arc::new(decode_mode_table(&buffer(at as u32)?)?));
+                }
+            }
         }
         if layers.is_empty() || active >= layers.len() {
             return Err(IngestError::Decode(
@@ -1221,6 +1237,80 @@ fn f32s(r: &mut R<'_>) -> Result<Vec<f32>, IngestError> {
         return Err(IngestError::Decode("layer manifest is truncated".into()));
     }
     (0..n).map(|_| r.f32()).collect()
+}
+
+/// A mode table as bytes: 1 = palette (u16 transparent index or 0xFFFF,
+/// u16 count, RGB triples), 2 = spots (u8 count; per channel RGB ink, u16
+/// name length, UTF-8 name), 3 = a Duotone specification verbatim.
+fn encode_mode_table(t: &crate::color_mode::ModeTable) -> Vec<u8> {
+    use crate::color_mode::ModeTable as T;
+    let mut out = Vec::new();
+    match t {
+        T::Palette {
+            colours,
+            transparent,
+        } => {
+            out.push(1);
+            out.extend_from_slice(&transparent.map_or(0xFFFF, u16::from).to_be_bytes());
+            out.extend_from_slice(&(colours.len() as u16).to_be_bytes());
+            for c in colours {
+                out.extend_from_slice(c);
+            }
+        }
+        T::Spots(spots) => {
+            out.push(2);
+            out.push(spots.len() as u8);
+            for sp in spots {
+                out.extend_from_slice(&sp.ink);
+                out.extend_from_slice(&(sp.name.len() as u16).to_be_bytes());
+                out.extend_from_slice(sp.name.as_bytes());
+            }
+        }
+        T::Duotone(raw) => {
+            out.push(3);
+            out.extend_from_slice(raw);
+        }
+    }
+    out
+}
+
+fn decode_mode_table(b: &[u8]) -> Result<crate::color_mode::ModeTable, IngestError> {
+    use crate::color_mode::{ModeTable as T, SpotChannel};
+    let bad = || IngestError::Decode("layer manifest: a malformed mode table".into());
+    let u16_at = |o: usize| -> Result<u16, IngestError> {
+        b.get(o..o + 2)
+            .map(|x| u16::from_be_bytes([x[0], x[1]]))
+            .ok_or_else(bad)
+    };
+    match b.first() {
+        Some(1) => {
+            let t = u16_at(1)?;
+            let n = usize::from(u16_at(3)?);
+            let body = b.get(5..5 + n * 3).ok_or_else(bad)?;
+            Ok(T::Palette {
+                colours: body.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect(),
+                transparent: u8::try_from(t).ok(),
+            })
+        }
+        Some(2) => {
+            let n = usize::from(*b.get(1).ok_or_else(bad)?);
+            let mut o = 2;
+            let mut spots = Vec::with_capacity(n);
+            for _ in 0..n {
+                let ink = b.get(o..o + 3).ok_or_else(bad)?;
+                let len = usize::from(u16_at(o + 3)?);
+                let name = b.get(o + 5..o + 5 + len).ok_or_else(bad)?;
+                spots.push(SpotChannel {
+                    name: String::from_utf8_lossy(name).into_owned(),
+                    ink: [ink[0], ink[1], ink[2]],
+                });
+                o += 5 + len;
+            }
+            Ok(T::Spots(spots))
+        }
+        Some(3) => Ok(T::Duotone(b[1..].to_vec())),
+        _ => Err(bad()),
+    }
 }
 
 /// The persisted code of a layer's depth (bits per sample; 32 is float).

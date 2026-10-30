@@ -176,6 +176,9 @@ fn psd_mode(m: crate::color_mode::ColorMode) -> ColorMode {
         M::Gray => ColorMode::Grayscale,
         M::Cmyk => ColorMode::Cmyk,
         M::Lab => ColorMode::Lab,
+        M::Indexed => ColorMode::Indexed,
+        M::Multichannel => ColorMode::Multichannel,
+        M::Duotone => ColorMode::Duotone,
     }
 }
 
@@ -263,7 +266,7 @@ impl Store {
     fn colour_ids(&self) -> &'static [i16] {
         match self.psd_mode() {
             ColorMode::Cmyk => &[0, 1, 2, 3],
-            ColorMode::Grayscale => &[0],
+            ColorMode::Grayscale | ColorMode::Duotone => &[0],
             _ => &[0, 1, 2],
         }
     }
@@ -1058,6 +1061,12 @@ pub fn psd_write_stack_px(
     composite: &crate::pixels::Pixels,
 ) -> Result<PsdSaveBackShape, IngestError> {
     let (width, height) = (stack.width(), stack.height());
+    if matches!(
+        stack.mode().mode,
+        crate::color_mode::ColorMode::Indexed | crate::color_mode::ColorMode::Multichannel
+    ) {
+        return write_single_image(file, stack, composite);
+    }
     let store = Store::of(file, stack)?;
     let n = width as usize * height as usize;
     if composite.pixel_count() != n {
@@ -1189,6 +1198,148 @@ pub fn psd_write_stack_px(
     let notes = std::mem::take(&mut smart.notes);
     smart.finish(file);
     SAVE_NOTES.with(|n| *n.borrow_mut() = notes);
+    Ok(PsdSaveBackShape::Layered)
+}
+
+/// An INDEXED or MULTICHANNEL document (image ADR 483), which Photoshop
+/// keeps as one image without layers: the header of the mode, its table
+/// (Indexed: the 768-byte colour table, resources 1046 and 1047;
+/// Multichannel: the channels' names, 1006 and 1045, and display colours,
+/// 1077), no layer records, and the composite as the mode stores it —
+/// each pixel's nearest table index, or each channel's ink brightness.
+fn write_single_image(
+    file: &mut PsdFile,
+    stack: &LayerStack,
+    composite: &crate::pixels::Pixels,
+) -> Result<PsdSaveBackShape, IngestError> {
+    use crate::color_mode::ColorMode as M;
+    let (w, h) = (stack.width(), stack.height());
+    let n = w as usize * h as usize;
+    if composite.pixel_count() != n {
+        return Err(IngestError::Decode(
+            "layered PSD save: composite is mis-sized".into(),
+        ));
+    }
+    let mode = stack.mode();
+    let table = mode
+        .table
+        .as_deref()
+        .ok_or_else(|| IngestError::Unsupported(format!("{} without its table", mode.mode.label())))?;
+    let sixteen = mode.mode == M::Multichannel && stack.depth() == image_core::SampleDepth::U16;
+    let rgba = composite.to_rgba8();
+    let planes: Vec<Vec<u16>> = match (mode.mode, table) {
+        (M::Indexed, t) => {
+            let colours = t
+                .palette()
+                .ok_or_else(|| IngestError::Unsupported("Indexed without a colour table".into()))?;
+            let mut raw = vec![0u8; 768];
+            for (i, c) in colours.iter().take(256).enumerate() {
+                raw[i] = c[0];
+                raw[256 + i] = c[1];
+                raw[512 + i] = c[2];
+            }
+            file.color_mode.raw = raw;
+            file.resources
+                .set_data(1046, &(colours.len().min(256) as u16).to_be_bytes());
+            let transparent = match t {
+                crate::color_mode::ModeTable::Palette {
+                    transparent: Some(i),
+                    ..
+                } => u16::from(*i),
+                _ => 0xFFFF,
+            };
+            file.resources.set_data(1047, &transparent.to_be_bytes());
+            vec![rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|p| crate::color_mode::nearest_index(colours, [p[0], p[1], p[2]]) as u16)
+                .collect()]
+        }
+        (_, t) => {
+            let spots = t
+                .spots()
+                .ok_or_else(|| IngestError::Unsupported("Multichannel without channels".into()))?;
+            file.color_mode.raw.clear();
+            let mut pascal = Vec::new();
+            let mut unicode = Vec::new();
+            let mut display = 1u32.to_be_bytes().to_vec();
+            for sp in spots {
+                let name: Vec<u8> = sp.name.bytes().take(255).collect();
+                pascal.push(name.len() as u8);
+                pascal.extend_from_slice(&name);
+                let units: Vec<u16> = sp.name.encode_utf16().chain([0]).collect();
+                unicode.extend_from_slice(&(units.len() as u32).to_be_bytes());
+                for u in units {
+                    unicode.extend_from_slice(&u.to_be_bytes());
+                }
+                // RGB display colour, 0 % solidity, kind 2 (spot) [OBS].
+                display.extend_from_slice(&0u16.to_be_bytes());
+                for c in sp.ink {
+                    display.extend_from_slice(&(u16::from(c) * 257).to_be_bytes());
+                }
+                display.extend_from_slice(&[0, 0, 0, 0, 2]);
+            }
+            file.resources.set_data(1006, &pascal);
+            file.resources.set_data(1045, &unicode);
+            file.resources.set_data(1077, &display);
+            // Each channel's brightness: the composite's channel its ink
+            // takes away (Cyan from red, …; one Black channel from grey).
+            (0..spots.len())
+                .map(|k| {
+                    (0..n)
+                        .map(|i| {
+                            let s = composite.sample16(i, k % 3);
+                            if sixteen {
+                                s
+                            } else {
+                                s >> 8
+                            }
+                        })
+                        .collect()
+                })
+                .collect()
+        }
+    };
+    file.resources.blocks.retain(|b| b.id != ICC_PROFILE_ID && b.id != ICC_UNTAGGED_ID);
+    file.header.color_mode = psd_mode(mode.mode);
+    file.header.depth = if sixteen { 16 } else { 8 };
+    file.header.channels = planes.len() as u16;
+    file.layer_mask.layers = Vec::new();
+    file.layer_mask.transparency_in_merged = false;
+    file.layer_mask.deep_key = None;
+    file.layer_mask.section_raw = None;
+    file.composite = if sixteen {
+        let mut raw = Vec::with_capacity(planes.len() * n * 2);
+        for p in &planes {
+            for v in p {
+                raw.extend_from_slice(&v.to_be_bytes());
+            }
+        }
+        GlobalImageData {
+            compression: Compression::Raw.code(),
+            raw,
+        }
+    } else {
+        let cw = match file.container {
+            Container::Psb => 4usize,
+            Container::Psd => 2usize,
+        };
+        let split = h as usize * cw;
+        let (mut counts, mut rows) = (Vec::new(), Vec::new());
+        for p in &planes {
+            let bytes: Vec<u8> = p.iter().map(|&v| v as u8).collect();
+            let cd = ChannelData::encode_rle(&bytes, file.container, h, w).map_err(err)?;
+            counts.extend_from_slice(&cd.bytes[..split]);
+            rows.extend_from_slice(&cd.bytes[split..]);
+        }
+        counts.extend_from_slice(&rows);
+        GlobalImageData {
+            compression: Compression::Rle.code(),
+            raw: counts,
+        }
+    };
+    SAVE_NOTES.with(|n| n.borrow_mut().clear());
     Ok(PsdSaveBackShape::Layered)
 }
 

@@ -1907,11 +1907,29 @@ mod wasm {
             mode,
             cmyk_profile: (mode == crate::color_mode::ColorMode::Cmyk && !cmyk_profile.is_empty())
                 .then(|| Arc::from(cmyk_profile.into_boxed_slice())),
+            table: None,
         };
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {
             let result = async {
-                if !doc.stack.set_mode(doc_mode).map_err(ingest_err)? {
+                // Multichannel (image ADR 483): the channels of the
+                // document's RGB or grey, the stack flattened.
+                let changed = if mode == crate::color_mode::ColorMode::Multichannel {
+                    let from = doc.stack.mode().mode;
+                    let m = crate::color_mode::DocMode::multichannel_from(from).ok_or_else(|| {
+                        JsValue::from_str(&format!(
+                            "Multichannel is made from an RGB or Grayscale document, not {}",
+                            from.label()
+                        ))
+                    })?;
+                    doc.stack
+                        .convert_flat(ctx.as_deref(), m)
+                        .await
+                        .map_err(ingest_err)?
+                } else {
+                    doc.stack.set_mode(doc_mode).map_err(ingest_err)?
+                };
+                if !changed {
                     return Ok(false);
                 }
                 let rgba = doc
@@ -1921,6 +1939,58 @@ mod wasm {
                     .map_err(ingest_err)?;
                 set_image_pixels(doc.handle, rgba)?;
                 Ok(true)
+            }
+            .await;
+            (doc, result)
+        })
+        .await
+    }
+
+    /// IMAGE ▸ MODE ▸ INDEXED COLOR… (image ADR 483) over the bound stack:
+    /// the visible image flattened and every pixel the nearest colour of
+    /// `palette` — `exact` (the image's own colours, at most 256), `web`
+    /// (216), or `adaptive` (`colours` of them, median cut) — at 8 bits,
+    /// one undo step. Answers whether anything changed.
+    #[wasm_bindgen]
+    pub async fn image_set_indexed(handle: u32, palette: &str, colours: u32) -> Result<bool, JsValue> {
+        if LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) != Some(handle) {
+            return Err(JsValue::from_str(
+                "no layer stack open on this image (layers_open first)",
+            ));
+        }
+        let palette = palette.to_string();
+        let ctx = GPU.with(|g| g.borrow().clone());
+        with_stack_async(|mut doc| async move {
+            let result = async {
+                let rgba = doc
+                    .stack
+                    .composite(ctx.as_deref(), None)
+                    .await
+                    .map_err(ingest_err)?;
+                let table = match palette.as_str() {
+                    "web" => crate::color_mode::web_palette(),
+                    "exact" => crate::color_mode::exact_palette(&rgba).ok_or_else(|| {
+                        JsValue::from_str(
+                            "the image has more than 256 colours: an Exact palette needs at most 256",
+                        )
+                    })?,
+                    "adaptive" => crate::color_mode::adaptive_palette(&rgba, colours as usize),
+                    p => return Err(JsValue::from_str(&format!("unknown palette {p:?}"))),
+                };
+                let changed = doc
+                    .stack
+                    .convert_flat(ctx.as_deref(), crate::color_mode::DocMode::indexed(table))
+                    .await
+                    .map_err(ingest_err)?;
+                if changed {
+                    let rgba = doc
+                        .stack
+                        .composite_px(ctx.as_deref(), None)
+                        .await
+                        .map_err(ingest_err)?;
+                    set_image_pixels(doc.handle, rgba)?;
+                }
+                Ok(changed)
             }
             .await;
             (doc, result)
@@ -5066,6 +5136,32 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&image_handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {image_handle}")))?;
+        // An Indexed or Multichannel document is one image in Photoshop
+        // (no layer records): it opens as its composite in its mode, with
+        // its table, so an edit stays in the mode and the save writes it
+        // back (image ADR 483).
+        let single = PSDS.with(|m| {
+            m.borrow().get(&psd_handle).and_then(|f| {
+                matches!(
+                    f.header.color_mode,
+                    image_psd::model::ColorMode::Indexed | image_psd::model::ColorMode::Multichannel
+                )
+                .then(|| crate::color_mode::DocMode::of_psd(f))
+                .flatten()
+            })
+        });
+        if let Some(mode) = single {
+            let mut stack = LayerStack::from_image_px(img.width, img.height, img.rgba.clone())
+                .map_err(ingest_err)?;
+            stack.adopt_mode(mode);
+            LAYERS.with(|l| {
+                *l.borrow_mut() = Some(LayerDoc {
+                    handle: image_handle,
+                    stack,
+                })
+            });
+            return Ok(1);
+        }
         let (import, mut stack) = PSDS.with(|m| {
             let map = m.borrow();
             let file = map

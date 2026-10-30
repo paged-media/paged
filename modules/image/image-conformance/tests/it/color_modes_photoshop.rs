@@ -318,3 +318,103 @@ fn eight_and_sixteen_to_32_bits_is_photoshops_linearisation__feat__image_io_dept
     assert!(off_level < 0.03, "float-from-8 is not a decoded level: {off_level}");
     assert!(off_ours <= 1, "float-from-8: {off_ours} levels from ours");
 }
+
+/// The `colour-sweep` stimulus at 8 bits, as Photoshop reduces it (its
+/// 16 → 8 step, read back from the 8-bit documents it wrote, is not ours
+/// to the level; the indexed and multichannel cases are judged from it).
+fn sweep8_from(file: &PsdFile) -> Vec<[u8; 3]> {
+    // Multichannel from RGB keeps the RGB channels' values: the 8-bit
+    // sweep Photoshop converted, read back from that document.
+    let c = file.composite_samples().expect("merged");
+    (0..c.samples.len() / c.channels)
+        .map(|i| {
+            let s = |k: usize| (c.samples[i * c.channels + k] * 255.0).round() as u8;
+            [s(0), s(1), s(2)]
+        })
+        .collect()
+}
+
+/// Indexed with the Web palette and no dither: each pixel takes the
+/// nearest of the 216 colours. Photoshop's choice against ours (squared
+/// distance in sRGB levels) on the 8-bit sweep, and the decode of both
+/// Indexed documents against Photoshop's own sRGB render.
+#[test]
+fn indexed_documents_decode_and_map_to_the_nearest_colour_as_photoshop_does__feat__image_io_depth_color_modes(
+) {
+    // The 8-bit sweep as Photoshop reduced it (Multichannel from RGB keeps
+    // the values, `multichannel_channels_are_the_rgb_values`).
+    let sweep = sweep8_from(&psd("multichannel-8"));
+    let file = psd("indexed-web");
+    let pal = file.indexed_palette().expect("table");
+    assert_eq!(pal.count, Some(216), "the Web palette");
+    let web = image_js::color_mode::web_palette();
+    let c = file.composite_samples().expect("indices");
+    let mut differ = 0usize;
+    let mut worst = 0i32;
+    for (i, &rgb) in sweep.iter().enumerate() {
+        let theirs = pal.colours[(c.samples[i] * 255.0).round() as usize];
+        let ours = web[image_js::color_mode::nearest_index(&web, rgb)];
+        if ours != theirs {
+            differ += 1;
+            worst = worst.max((0..3).map(|k| (i32::from(ours[k]) - i32::from(theirs[k])).abs()).max().unwrap());
+        }
+    }
+    println!("indexed-web: {differ} of {} pixels map elsewhere (worst {worst} levels)", sweep.len());
+    assert_eq!(differ, 0, "every pixel takes Photoshop's colour");
+    assert!(worst <= 51, "one Web step at most: {worst}");
+    for id in ["indexed-web", "indexed-exact"] {
+        let file = psd(id);
+        let img = image_js::ingest::decode_rgba8(
+            &std::fs::read(dir().join(format!("color-modes/{id}.psd"))).expect("psd"),
+        )
+        .expect("decodes");
+        let render = png16(&format!("color-modes/{id}.png"));
+        let mut worst = 0u16;
+        for (i, r) in render.iter().enumerate() {
+            for k in 0..3 {
+                worst = worst.max(img.rgba.sample16(i, k).abs_diff(r[k]) / 257);
+            }
+        }
+        println!("{id}: decode vs Photoshop's render, max {worst} levels");
+        assert!(worst <= 1, "{id}: {worst}");
+        assert_eq!(
+            image_js::color_mode::DocMode::of_psd(&file).map(|m| m.mode),
+            Some(image_js::color_mode::ColorMode::Indexed)
+        );
+    }
+}
+
+/// Multichannel from RGB: the Cyan, Magenta and Yellow channels hold the
+/// red, green and blue values, displayed in their inks (resource 1077), so
+/// the decode is the 8-bit image itself.
+#[test]
+fn multichannel_channels_are_the_rgb_values__feat__image_io_depth_color_modes() {
+    let file = psd("multichannel-8");
+    let mode = image_js::color_mode::DocMode::of_psd(&file).expect("multichannel");
+    let spots = mode.table.as_ref().and_then(|t| t.spots()).expect("channels").to_vec();
+    assert_eq!(spots.len(), 3);
+    assert_eq!(
+        spots.iter().map(|s| s.ink).collect::<Vec<_>>(),
+        vec![[0, 255, 255], [255, 0, 255], [255, 255, 0]],
+        "{spots:?}"
+    );
+    // The 8-bit reduction of the sweep against Photoshop's channels: the
+    // red, green and blue values, within Photoshop's own 16 → 8 rounding.
+    let sweep = png16("stimuli/colour-sweep.png");
+    let theirs = sweep8_from(&file);
+    let worst = sweep
+        .iter()
+        .zip(&theirs)
+        .flat_map(|(s, t)| (0..3).map(move |k| (i32::from(s[k] >> 8) - i32::from(t[k])).abs()))
+        .max()
+        .unwrap();
+    assert!(worst <= 1, "{worst}");
+    let img = image_js::ingest::decode_rgba8(
+        &std::fs::read(dir().join("color-modes/multichannel-8.psd")).expect("psd"),
+    )
+    .expect("decodes");
+    let rgba = img.rgba.to_rgba8();
+    for (i, t) in theirs.iter().enumerate() {
+        assert_eq!(&rgba[i * 4..i * 4 + 3], t, "pixel {i}");
+    }
+}

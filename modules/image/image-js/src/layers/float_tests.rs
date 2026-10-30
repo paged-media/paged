@@ -94,6 +94,7 @@ fn mode_32_bits_is_one_undo_step_and_round_trips_8bit_pixels__feat__image_io_dep
     s.set_mode(crate::color_mode::DocMode {
         mode: crate::color_mode::ColorMode::Lab,
         cmyk_profile: None,
+        table: None,
     })
     .expect("lab");
     assert!(s.set_depth(SampleDepth::F32).is_err());
@@ -128,8 +129,34 @@ fn a_float_grayscale_document_keeps_linear_luminance__feat__image_io_depth_color
     s.set_mode(crate::color_mode::DocMode {
         mode: crate::color_mode::ColorMode::Gray,
         cmyk_profile: None,
+        table: None,
     })
     .expect("gray");
     let got = first(s.layers()[0].rgba.canvas());
     assert!(close(&got, &[0.445, 0.445, 0.445, 1.0], 1e-3), "{got:?}");
+}
+
+#[test]
+fn a_float_layer_and_a_mode_table_are_persisted__feat__image_io_depth_color_modes() {
+    let mut s = LayerStack::from_image_px(4, 2, solid(4, 2, [2.5, 0.25, 0.0, 1.0])).expect("open");
+    let (manifest, buffers) = s.export();
+    let back = LayerStack::import(&manifest, &buffers).expect("import");
+    assert_eq!(back.depth(), SampleDepth::F32);
+    assert_eq!(
+        back.layers()[0].rgba.canvas().to_f32_linear(),
+        s.layers()[0].rgba.canvas().to_f32_linear()
+    );
+    s.set_depth(SampleDepth::U8).expect("8 bits");
+    let m = crate::color_mode::DocMode::multichannel_from(crate::color_mode::ColorMode::Rgb)
+        .expect("from RGB");
+    pollster::block_on(s.convert_flat(None, m.clone())).expect("multichannel");
+    let (manifest, buffers) = s.export();
+    let back = LayerStack::import(&manifest, &buffers).expect("import");
+    assert_eq!(back.mode(), &m, "the channels come back");
+    let indexed = crate::color_mode::DocMode::indexed(crate::color_mode::web_palette());
+    s.set_mode(crate::color_mode::DocMode::rgb()).expect("rgb");
+    pollster::block_on(s.convert_flat(None, indexed.clone())).expect("indexed");
+    let (manifest, buffers) = s.export();
+    let back = LayerStack::import(&manifest, &buffers).expect("import");
+    assert_eq!(back.mode(), &indexed, "the table comes back");
 }

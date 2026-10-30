@@ -762,7 +762,8 @@ impl PsdFile {
         self.layer_plates_checked(Some(ink_to_rgba8), true)
     }
 
-    /// [`Self::layer_plates_rgba8`] for a GRAYSCALE or LAB document (image
+    /// [`Self::layer_plates_rgba8`] for a GRAYSCALE, DUOTONE (its grey) or
+    /// LAB document (image
     /// ADR 483): every plate's stored colour goes through `to_rgb`
     /// ([`DeviceToRgb`]) at the file's depth, so a 16-bit document's plates
     /// carry `rgba16`. A 32-bit Grayscale document needs no transform (its
@@ -809,7 +810,10 @@ impl PsdFile {
         let float = h.depth == 32;
         // Grayscale and Lab at 8 or 16 bits go through the caller's
         // transform; without one they are refused here, by name.
-        let device = matches!(h.color_mode, ColorMode::Grayscale | ColorMode::Lab) && !float;
+        let device = matches!(
+            h.color_mode,
+            ColorMode::Grayscale | ColorMode::Lab | ColorMode::Duotone
+        ) && !float;
         let device16 = device && h.depth == 16;
         if device && to_rgb.is_none() {
             return Err(PsdError::Unsupported(format!(
@@ -1079,13 +1083,17 @@ impl PsdFile {
         let cmyk = h.color_mode == ColorMode::Cmyk;
         if !matches!(
             h.color_mode,
-            ColorMode::Rgb | ColorMode::Cmyk | ColorMode::Grayscale | ColorMode::Lab
+            ColorMode::Rgb
+                | ColorMode::Cmyk
+                | ColorMode::Grayscale
+                | ColorMode::Lab
+                | ColorMode::Duotone
         ) {
             block(
                 "colour-mode",
                 format!(
-                    "layer import for color mode {:?} (RGB, Grayscale and Lab, and CMYK \
-                     through its profile; Indexed, Duotone and Multichannel documents \
+                    "layer import for color mode {:?} (RGB, Grayscale, Duotone (its grey) and \
+                     Lab, and CMYK through its profile; Indexed and Multichannel documents \
                      have no layers in Photoshop and open as their composite)",
                     h.color_mode
                 ),

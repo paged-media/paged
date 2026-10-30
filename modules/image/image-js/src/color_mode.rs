@@ -30,11 +30,13 @@
 //! lcms2 on native, moxcms on wasm32) with the Color Settings default
 //! rendering, relative colorimetric with black-point compensation.
 //!
-//! What a mode is NOT here: the stored channels. A CMYK document's layers
-//! are not ink planes and its blends are not subtractive; Indexed,
-//! Duotone and Multichannel are not offered. Those need N-channel planes
-//! in the stack and a `paged-pixel` PixelFormat amendment (the ADR's
-//! deferred half).
+//! The stored channels are the planes' (image ADRs 481, 483): a CMYK,
+//! Grayscale or Lab document folds in its own numbers. The single-image
+//! modes (image ADR 483) are a mode and a table: INDEXED holds the colours
+//! of its table (each pixel the nearest entry), MULTICHANNEL its spot
+//! channels (from RGB, one ink a channel, which changes no colour), and a
+//! DUOTONE read from a file is its grey with the file's specification
+//! kept for the save.
 
 use std::sync::Arc;
 
@@ -55,6 +57,9 @@ pub enum ColorMode {
     Gray,
     Cmyk,
     Lab,
+    Indexed,
+    Multichannel,
+    Duotone,
 }
 
 impl ColorMode {
@@ -65,6 +70,9 @@ impl ColorMode {
             ColorMode::Gray => "gray",
             ColorMode::Cmyk => "cmyk",
             ColorMode::Lab => "lab",
+            ColorMode::Indexed => "indexed",
+            ColorMode::Multichannel => "multichannel",
+            ColorMode::Duotone => "duotone",
         }
     }
 
@@ -74,6 +82,9 @@ impl ColorMode {
             "gray" | "grey" | "grayscale" => ColorMode::Gray,
             "cmyk" => ColorMode::Cmyk,
             "lab" => ColorMode::Lab,
+            "indexed" => ColorMode::Indexed,
+            "multichannel" => ColorMode::Multichannel,
+            "duotone" => ColorMode::Duotone,
             _ => return None,
         })
     }
@@ -85,6 +96,9 @@ impl ColorMode {
             ColorMode::Gray => "Grayscale",
             ColorMode::Cmyk => "CMYK Color",
             ColorMode::Lab => "Lab Color",
+            ColorMode::Indexed => "Indexed Color",
+            ColorMode::Multichannel => "Multichannel",
+            ColorMode::Duotone => "Duotone",
         }
     }
 
@@ -95,6 +109,9 @@ impl ColorMode {
             ColorMode::Gray => 1,
             ColorMode::Cmyk => 2,
             ColorMode::Lab => 3,
+            ColorMode::Indexed => 4,
+            ColorMode::Multichannel => 5,
+            ColorMode::Duotone => 6,
         }
     }
 
@@ -104,6 +121,9 @@ impl ColorMode {
             1 => ColorMode::Gray,
             2 => ColorMode::Cmyk,
             3 => ColorMode::Lab,
+            4 => ColorMode::Indexed,
+            5 => ColorMode::Multichannel,
+            6 => ColorMode::Duotone,
             _ => return None,
         })
     }
@@ -115,6 +135,159 @@ impl ColorMode {
 pub struct DocMode {
     pub mode: ColorMode,
     pub cmyk_profile: Option<Arc<[u8]>>,
+    /// An Indexed document's colours, a Multichannel document's channels,
+    /// a Duotone document's specification (image ADR 483).
+    pub table: Option<Arc<ModeTable>>,
+}
+
+/// What a single-image mode holds beside its pixels.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ModeTable {
+    /// The colour table (at most 256 sRGB colours) and the transparent
+    /// index, when there is one.
+    Palette {
+        colours: Vec<[u8; 3]>,
+        transparent: Option<u8>,
+    },
+    /// The spot channels in order: name and display colour (sRGB).
+    Spots(Vec<SpotChannel>),
+    /// A Duotone file's Color Mode Data, kept byte for byte (its format is
+    /// undocumented; the file format tells a reader to treat the image as
+    /// grey and keep it).
+    Duotone(Vec<u8>),
+}
+
+/// One Multichannel channel.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpotChannel {
+    pub name: String,
+    pub ink: [u8; 3],
+}
+
+impl ModeTable {
+    pub fn palette(&self) -> Option<&[[u8; 3]]> {
+        match self {
+            ModeTable::Palette { colours, .. } => Some(colours),
+            _ => None,
+        }
+    }
+
+    pub fn spots(&self) -> Option<&[SpotChannel]> {
+        match self {
+            ModeTable::Spots(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
+/// The Web palette: the 216 colours whose channels are multiples of 51,
+/// red slowest (Photoshop's table order).
+pub fn web_palette() -> Vec<[u8; 3]> {
+    let v = [0u8, 51, 102, 153, 204, 255];
+    let mut out = Vec::with_capacity(216);
+    for &r in &v {
+        for &g in &v {
+            for &b in &v {
+                out.push([r, g, b]);
+            }
+        }
+    }
+    out
+}
+
+/// Every distinct colour of `rgba` (opaque or not) when there are at most
+/// 256 of them — Photoshop's Exact palette — in first-seen order.
+pub fn exact_palette(rgba: &[u8]) -> Option<Vec<[u8; 3]>> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for p in rgba.as_chunks::<4>().0 {
+        let c = [p[0], p[1], p[2]];
+        if seen.insert(c) {
+            out.push(c);
+            if out.len() > 256 {
+                return None;
+            }
+        }
+    }
+    Some(out)
+}
+
+/// An adaptive palette of at most `n` colours (median cut over the
+/// opaque pixels: the box with the widest channel range is split at its
+/// median until there are `n`; each box answers its mean).
+pub fn adaptive_palette(rgba: &[u8], n: usize) -> Vec<[u8; 3]> {
+    let mut px: Vec<[u8; 3]> = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| p[3] > 0)
+        .map(|p| [p[0], p[1], p[2]])
+        .collect();
+    if px.is_empty() {
+        return vec![[0, 0, 0]];
+    }
+    let n = n.clamp(2, 256);
+    let range = |b: &[[u8; 3]]| -> (usize, u8) {
+        (0..3)
+            .map(|c| {
+                let (lo, hi) = b
+                    .iter()
+                    .fold((255u8, 0u8), |(lo, hi), p| (lo.min(p[c]), hi.max(p[c])));
+                (c, hi - lo)
+            })
+            .max_by_key(|&(_, r)| r)
+            .unwrap_or((0, 0))
+    };
+    let mut boxes: Vec<std::ops::Range<usize>> = vec![0..px.len()];
+    while boxes.len() < n {
+        let Some((i, c)) = boxes
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.len() > 1)
+            .map(|(i, b)| (i, range(&px[b.clone()])))
+            .filter(|(_, (_, r))| *r > 0)
+            .max_by_key(|(_, (_, r))| *r)
+            .map(|(i, (c, _))| (i, c))
+        else {
+            break;
+        };
+        let b = boxes.swap_remove(i);
+        px[b.clone()].sort_unstable_by_key(|p| p[c]);
+        let mid = b.start + b.len() / 2;
+        boxes.push(b.start..mid);
+        boxes.push(mid..b.end);
+    }
+    boxes
+        .iter()
+        .map(|b| {
+            let mut sum = [0u64; 3];
+            for p in &px[b.clone()] {
+                for c in 0..3 {
+                    sum[c] += u64::from(p[c]);
+                }
+            }
+            let k = b.len().max(1) as u64;
+            sum.map(|v| ((v + k / 2) / k) as u8)
+        })
+        .collect()
+}
+
+/// The entry of `palette` nearest `rgb` (squared distance in sRGB levels;
+/// the first of equals).
+pub fn nearest_index(palette: &[[u8; 3]], rgb: [u8; 3]) -> usize {
+    let mut best = (u32::MAX, 0);
+    for (i, p) in palette.iter().enumerate() {
+        let d: u32 = (0..3)
+            .map(|c| {
+                let x = i32::from(p[c]) - i32::from(rgb[c]);
+                (x * x) as u32
+            })
+            .sum();
+        if d < best.0 {
+            best = (d, i);
+        }
+    }
+    best.1
 }
 
 impl DocMode {
@@ -130,13 +303,79 @@ impl DocMode {
             P::Grayscale => ColorMode::Gray,
             P::Cmyk => ColorMode::Cmyk,
             P::Lab => ColorMode::Lab,
+            P::Indexed => ColorMode::Indexed,
+            P::Multichannel => ColorMode::Multichannel,
+            P::Duotone => ColorMode::Duotone,
             _ => return None,
+        };
+        let table = match mode {
+            ColorMode::Indexed => file.indexed_palette().map(|p| {
+                let used = p.count.unwrap_or(256).clamp(1, 256);
+                ModeTable::Palette {
+                    colours: p.colours[..used].to_vec(),
+                    transparent: p.transparent.and_then(|t| u8::try_from(t).ok()),
+                }
+            }),
+            ColorMode::Multichannel => {
+                let names = spot_names(file);
+                let inks = spot_inks(file);
+                let k = file.header.channels as usize;
+                Some(ModeTable::Spots(
+                    (0..k)
+                        .map(|i| SpotChannel {
+                            name: names.get(i).cloned().unwrap_or_else(|| format!("Channel {}", i + 1)),
+                            ink: inks
+                                .get(i)
+                                .map_or([0, 0, 0], |c| c.map(|v| (v * 255.0).round() as u8)),
+                        })
+                        .collect(),
+                ))
+            }
+            ColorMode::Duotone => Some(ModeTable::Duotone(file.color_mode.raw.clone())),
+            _ => None,
         };
         Some(DocMode {
             mode,
             cmyk_profile: (mode == ColorMode::Cmyk)
                 .then(|| file.resources.icc_profile().map(Arc::from))
                 .flatten(),
+            table: table.map(Arc::new),
+        })
+    }
+
+    /// An Indexed document of `colours` (image ADR 483).
+    pub fn indexed(colours: Vec<[u8; 3]>) -> DocMode {
+        DocMode {
+            mode: ColorMode::Indexed,
+            cmyk_profile: None,
+            table: Some(Arc::new(ModeTable::Palette {
+                colours,
+                transparent: None,
+            })),
+        }
+    }
+
+    /// A Multichannel document made from RGB (Cyan, Magenta and Yellow
+    /// inks, one a channel) or from grey (one Black ink): the channels
+    /// Photoshop makes ([OBS] `color-modes/multichannel-8`).
+    pub fn multichannel_from(from: ColorMode) -> Option<DocMode> {
+        let spot = |name: &str, ink: [u8; 3]| SpotChannel {
+            name: name.into(),
+            ink,
+        };
+        let spots = match from {
+            ColorMode::Rgb => vec![
+                spot("Cyan", [0, 255, 255]),
+                spot("Magenta", [255, 0, 255]),
+                spot("Yellow", [255, 255, 0]),
+            ],
+            ColorMode::Gray => vec![spot("Black", [0, 0, 0])],
+            _ => return None,
+        };
+        Some(DocMode {
+            mode: ColorMode::Multichannel,
+            cmyk_profile: None,
+            table: Some(Arc::new(ModeTable::Spots(spots))),
         })
     }
 
@@ -146,7 +385,10 @@ impl DocMode {
         match self.mode {
             ColorMode::Rgb => false,
             ColorMode::Cmyk => self.cmyk_profile.is_some(),
-            ColorMode::Gray | ColorMode::Lab => true,
+            ColorMode::Gray | ColorMode::Lab | ColorMode::Duotone => true,
+            ColorMode::Indexed => self.table.as_ref().is_some_and(|t| t.palette().is_some()),
+            // From RGB or grey, its inks reproduce every colour they held.
+            ColorMode::Multichannel => false,
         }
     }
 }
@@ -160,6 +402,8 @@ pub struct ModeTransform {
     to: Transform,
     back: Transform,
     space: Space,
+    /// Indexed: the colours a pixel may take (the nearest is taken).
+    palette: Option<Vec<[u8; 3]>>,
 }
 
 impl ModeTransform {
@@ -171,13 +415,17 @@ impl ModeTransform {
         let backend = Backend::preferred();
         let rendering = Rendering::default();
         let (profile, space) = match mode.mode {
-            ColorMode::Gray => (ProfileRef::Gray(GRAY_GAMMA), Space::Gray),
+            ColorMode::Gray | ColorMode::Duotone => (ProfileRef::Gray(GRAY_GAMMA), Space::Gray),
             ColorMode::Lab => (ProfileRef::Lab, Space::Lab),
+            // The table is sRGB; the transform is the identity.
+            ColorMode::Indexed => (ProfileRef::Srgb, Space::Rgb),
             ColorMode::Cmyk => (
                 ProfileRef::Icc(mode.cmyk_profile.as_deref().expect("projects() checked")),
                 Space::Cmyk,
             ),
-            ColorMode::Rgb => unreachable!("projects() is false for RGB"),
+            ColorMode::Rgb | ColorMode::Multichannel => {
+                unreachable!("projects() is false for RGB and Multichannel")
+            }
         };
         let dev = Layout::new(space, false);
         let to = Transform::new(
@@ -198,12 +446,28 @@ impl ModeTransform {
             rendering,
         )
         .map_err(cms_err)?;
-        Ok(Some(ModeTransform { to, back, space }))
+        let palette = (mode.mode == ColorMode::Indexed)
+            .then(|| mode.table.as_ref().and_then(|t| t.palette()).map(<[_]>::to_vec))
+            .flatten();
+        Ok(Some(ModeTransform {
+            to,
+            back,
+            space,
+            palette,
+        }))
     }
 
     /// Project straight RGB floats (0..=1, three per pixel) in place: to
     /// the mode's space, stored at `depth`, and back.
     pub fn project_rgb(&self, rgb: &mut [f32], depth: SampleDepth) {
+        if let Some(p) = &self.palette {
+            for c in rgb.as_chunks_mut::<3>().0 {
+                let q = c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
+                let e = p[nearest_index(p, q)];
+                *c = e.map(|v| f32::from(v) / 255.0);
+            }
+            return;
+        }
         let n = rgb.len() / 3;
         let mut dev = vec![0f32; n * self.space.channels()];
         self.to.apply_f32(rgb, &mut dev);
@@ -427,6 +691,40 @@ pub fn spot_inks(file: &image_psd::model::PsdFile) -> Vec<[f32; 3]> {
     out
 }
 
+/// The names of a document's channels beyond its colour channels, or of
+/// a Multichannel document's channels: resource 1045 (Unicode alpha
+/// names: u32 length in UTF-16 units, then the units, the last a 0),
+/// else 1006 (Pascal strings).
+pub fn spot_names(file: &image_psd::model::PsdFile) -> Vec<String> {
+    if let Some(d) = file.resources.data(1045) {
+        let mut out = Vec::new();
+        let mut o = 0;
+        while o + 4 <= d.len() {
+            let n = u32::from_be_bytes([d[o], d[o + 1], d[o + 2], d[o + 3]]) as usize;
+            o += 4;
+            let units: Vec<u16> = (0..n)
+                .filter_map(|i| d.get(o + i * 2..o + i * 2 + 2))
+                .map(|b| u16::from_be_bytes([b[0], b[1]]))
+                .take_while(|&u| u != 0)
+                .collect();
+            out.push(String::from_utf16_lossy(&units));
+            o += n * 2;
+        }
+        return out;
+    }
+    let Some(d) = file.resources.data(1006) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut o = 0;
+    while o < d.len() {
+        let n = usize::from(d[o]);
+        out.push(String::from_utf8_lossy(d.get(o + 1..o + 1 + n).unwrap_or(&[])).into_owned());
+        o += 1 + n;
+    }
+    out
+}
+
 /// One CIE Lab (D50) colour as sRGB 0..=1 through the CMS.
 fn lab_to_srgb(lab: [f32; 3]) -> [f32; 3] {
     let Ok(t) = Transform::new(
@@ -587,6 +885,7 @@ mod tests {
         let naive = DocMode {
             mode: ColorMode::Cmyk,
             cmyk_profile: None,
+            table: None,
         };
         assert!(ModeTransform::new(&naive).unwrap().is_none());
     }
@@ -596,6 +895,7 @@ mod tests {
         let t = ModeTransform::new(&DocMode {
             mode: ColorMode::Gray,
             cmyk_profile: None,
+            table: None,
         })
         .unwrap()
         .expect("gray projects");
@@ -626,6 +926,7 @@ mod tests {
         let t = ModeTransform::new(&DocMode {
             mode: ColorMode::Lab,
             cmyk_profile: None,
+            table: None,
         })
         .unwrap()
         .expect("lab projects");
@@ -674,6 +975,7 @@ mod tests {
         let t = ModeTransform::new(&DocMode {
             mode: ColorMode::Gray,
             cmyk_profile: None,
+            table: None,
         })
         .unwrap()
         .unwrap();
@@ -693,6 +995,7 @@ mod tests {
         let t = ModeTransform::new(&DocMode {
             mode: ColorMode::Gray,
             cmyk_profile: None,
+            table: None,
         })
         .unwrap()
         .unwrap();
@@ -733,6 +1036,7 @@ mod tests {
         let t = ModeTransform::new(&DocMode {
             mode: ColorMode::Cmyk,
             cmyk_profile: Some(Arc::from(bytes)),
+            table: None,
         })
         .unwrap()
         .expect("cmyk projects");

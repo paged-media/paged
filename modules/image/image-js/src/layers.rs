@@ -1643,6 +1643,7 @@ impl LayerStack {
                 crate::color_mode::DocMode {
                     mode: crate::color_mode::ColorMode::Cmyk,
                     cmyk_profile: None,
+                    table: None,
                 }
             } else {
                 Default::default()
@@ -3710,6 +3711,18 @@ impl LayerStack {
         if self.mode == mode {
             return Ok(false);
         }
+        if matches!(
+            mode.mode,
+            crate::color_mode::ColorMode::Indexed
+                | crate::color_mode::ColorMode::Multichannel
+                | crate::color_mode::ColorMode::Duotone
+        ) {
+            return Err(IngestError::Unsupported(format!(
+                "{} is converted with its table (Indexed Color…, Multichannel); a Duotone \
+                 document opens from its file",
+                mode.mode.label()
+            )));
+        }
         if self.depth() == image_core::SampleDepth::F32
             && !matches!(
                 mode.mode,
@@ -3743,6 +3756,69 @@ impl LayerStack {
                     };
                 }
             }
+            s.mode = mode;
+            Ok(true)
+        })
+    }
+
+    /// Image ▸ Mode ▸ Indexed Color… or Multichannel (image ADR 483): the
+    /// modes Photoshop keeps as ONE image. The visible stack is flattened
+    /// (over white, as Flatten Image), put in the mode — every pixel the
+    /// nearest table colour; a Multichannel document's inks reproduce its
+    /// RGB or grey — and the mode kept, all as ONE undo step named for the
+    /// mode. Indexed is 8 bits a channel. `mode` carries its table.
+    pub async fn convert_flat(
+        &mut self,
+        ctx: Option<&GpuContext>,
+        mode: crate::color_mode::DocMode,
+    ) -> Result<bool, IngestError> {
+        use crate::color_mode::ColorMode as M;
+        if !matches!(mode.mode, M::Indexed | M::Multichannel) || mode.table.is_none() {
+            return Err(IngestError::Unsupported(format!(
+                "{} is not a single-image mode with its table",
+                mode.mode.label()
+            )));
+        }
+        if self.mode == mode {
+            return Ok(false);
+        }
+        if self.depth() == image_core::SampleDepth::F32 {
+            return Err(IngestError::Unsupported(format!(
+                "{} needs 8 or 16 bits per channel: convert the 32-bit document first",
+                mode.mode.label()
+            )));
+        }
+        let depth = if mode.mode == M::Indexed {
+            image_core::SampleDepth::U8
+        } else {
+            self.depth()
+        };
+        let composite = self.composite_px(ctx, None).await?;
+        let (w, h) = (self.width, self.height);
+        // Over white, as Flatten Image does (the image has no transparency).
+        let lin = composite.at_depth(image_core::SampleDepth::U16);
+        let flat: Vec<u16> = (0..lin.pixel_count())
+            .flat_map(|i| {
+                let a = u32::from(lin.sample16(i, 3));
+                let over = |c: usize| {
+                    ((u32::from(lin.sample16(i, c)) * a + 65535 * (65535 - a) + 32767) / 65535)
+                        as u16
+                };
+                [over(0), over(1), over(2), u16::MAX]
+            })
+            .collect();
+        let mut px = crate::pixels::Pixels::from_rgba16(&flat).at_depth(depth);
+        if let Some(t) = crate::color_mode::ModeTransform::new(&mode)? {
+            px = t.project_pixels(&px, w, None);
+        }
+        let _ = h;
+        let label = mode.mode.label();
+        self.recorded(label, None, move |s| {
+            let layer = s.plain_layer(BACKGROUND_LAYER_NAME.into(), px, None);
+            s.layers = vec![layer];
+            s.groups.clear();
+            s.active = 0;
+            s.edit_mask = false;
             s.mode = mode;
             Ok(true)
         })
