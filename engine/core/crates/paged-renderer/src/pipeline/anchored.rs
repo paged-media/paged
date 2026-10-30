@@ -863,7 +863,11 @@ fn emit_one_anchored_frame(
             // bakes the page-local placement into a Rectangle whose
             // bounds sit in spread coords so `frame_outer_transform`
             // unwinds back to the right page-local position.
-            if frame_w > 0.0 && frame_h > 0.0 {
+            // A picture frame with a look (engine ADR 1045) paints its body
+            // in the picture pass, around its picture, so its opacity,
+            // blend mode and effects take the picture in: see
+            // `emit_anchored_rect_image`.
+            if frame_w > 0.0 && frame_h > 0.0 && !paints_with_picture(af) {
                 emit_anchored_rect_via_pipeline(
                     em,
                     af,
@@ -976,80 +980,7 @@ fn emit_anchored_rect_via_pipeline(
         bottom: place_y + oy + h,
         right: place_x + ox + w,
     };
-    let synthetic = Rectangle {
-        self_id: af.self_id.clone(),
-        bounds,
-        item_transform: None,
-        fill_color: af.fill_color.clone(),
-        fill_tint: af.fill_tint,
-        stroke_color: af.stroke_color.clone(),
-        stroke_weight: af.stroke_weight,
-        drop_shadow: None,
-        stroke_drop_shadow: None,
-        fill_transparency: None,
-        stroke_transparency: None,
-        content_transparency: None,
-        fill_drop_shadow: None,
-        content_drop_shadow: None,
-        // Image emission for anchored Rectangles is deferred — the
-        // per-page image cache lives in the pre-pass scope, outside
-        // StoryEmitter. The parser still surfaces image_link /
-        // image_item_transform on AnchoredFrame so a future renderer
-        // pass can pick them up. Today's anchored.idml ships no
-        // image-bearing anchored Rectangles.
-        image_link: None,
-        image_bytes: None,
-        image_clip: None,
-        has_image_element: false,
-        has_inline_pdf: false,
-        has_inline_eps: false,
-        placed_pdf: None,
-        image_item_transform: None,
-        applied_object_style: af.applied_object_style.clone(),
-        text_wrap: None,
-        frame_fitting: None,
-        stroke_type: None,
-        stroke_gap_color: None,
-        stroke_gap_tint: None,
-        stroke_dash: Vec::new(),
-        stroke_alignment: None,
-        end_cap: None,
-        end_join: None,
-        miter_limit: None,
-        item_layer: None,
-        corner_radius: None,
-        corner_option: None,
-        corners: Default::default(),
-        is_anchored: true,
-        opacity: None,
-        blend_mode: None,
-        effects: None,
-        effect_stack: Vec::new(),
-        appearance: Vec::new(),
-        gradient_fill_angle: af.gradient_fill_angle,
-        // `AnchoredFrame` carries no `GradientFillStart` / `Length` (the
-        // adapter reads only the angle on an anchored frame), so the
-        // ramp takes InDesign's default placement — bottom-left corner,
-        // the frame's width — which `gradient-geometry` case 27 measures.
-        gradient_fill_length: None,
-        gradient_fill_start: None,
-        gradient_stroke_angle: None,
-        gradient_stroke_length: None,
-        text_paths: Vec::new(),
-        // Anchored frames don't currently carry overprint attrs in our
-        // AnchoredFrame mirror; default to knockout (the IDML default).
-        overprint_fill: false,
-        overprint_stroke: false,
-        nonprinting: false,
-        visible: true,
-        locked: false,
-        anchors: Vec::new(),
-        subpath_starts: Vec::new(),
-        subpath_open: Vec::new(),
-        fill_rule: paged_model::FillRule::NonZero,
-        image_adjustments: Vec::new(),
-        media: None,
-    };
+    let synthetic = synthetic_rectangle(af, bounds, false);
     // `emit_rectangle_into` increments `page.stats.frames` internally.
     // An anchored frame's picture paints in its own pass (see
     // `emit_anchored_rect_image`).
@@ -1077,6 +1008,14 @@ fn emit_anchored_rect_via_pipeline(
 /// emitted earlier by the body / master story pass — same z-order
 /// as a spread-level Rectangle whose `<Image>` child overlays the
 /// rectangle's solid fill.
+///
+/// A picture frame with a look (engine ADR 1045: an opacity, a blend
+/// mode, an effect, a target setting) is painted WHOLE here instead —
+/// its fill, picture and stroke as one run through `emit_rectangle_into`,
+/// the picture as the run's content — so the look takes the picture in,
+/// as a free frame's does (ADR 203, ADR 1008). Its body was not drawn in
+/// the story pass ([`paints_with_picture`]).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_anchored_rect_image(
     page: &mut BuiltPage,
     af: &paged_model::AnchoredFrame,
@@ -1085,6 +1024,7 @@ pub(super) fn emit_anchored_rect_image(
     w: f32,
     h: f32,
     options: &PipelineOptions,
+    look: AnchoredLook<'_>,
     page_image_cache: &mut HashMap<String, paged_compose::ImageId>,
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
 ) {
@@ -1095,7 +1035,97 @@ pub(super) fn emit_anchored_rect_image(
         bottom: place_y + oy + h,
         right: place_x + ox + w,
     };
-    let synthetic = Rectangle {
+    let mut synthetic = synthetic_rectangle(af, bounds, true);
+    // An anchored frame's `<Image>` keeps no metadata of its own here: it
+    // follows the document's Color Settings.
+    let rendering = image_rendering(options, None);
+    if !paints_with_picture(af) {
+        emit_rectangle_image(
+            page,
+            &synthetic,
+            options,
+            page_image_cache,
+            decoded_cache,
+            None,
+            rendering,
+        );
+        return;
+    }
+    // A picture frame with neither a fill nor a stroke paints only its
+    // picture, so its object shadow is cast by the picture (a Word or
+    // Office picture's shadow): stamped under the picture's box, inside
+    // the object's group. The outline-cast object shadow finds nothing to
+    // cast from on such a frame. A stored stack draws its own shadow.
+    let bare = frame_fill_is_transparent(synthetic.fill_color.as_deref())
+        && !frame_stroke_is_visible(
+            synthetic.stroke_color.as_deref(),
+            synthetic.stroke_weight.unwrap_or(0.0),
+        )
+        && synthetic.effect_stack.is_empty();
+    let object_shadow = if bare {
+        synthetic.drop_shadow.take()
+    } else {
+        None
+    };
+    let shadow = resolve_frame_shadow(
+        synthetic
+            .content_drop_shadow
+            .as_ref()
+            .or(object_shadow.as_ref()),
+        None,
+        look.palette,
+        look.color_ctx,
+    );
+    emit_rectangle_into(
+        page,
+        &synthetic,
+        look.document,
+        look.palette,
+        options.fallback_frame_fill,
+        look.color_ctx,
+        None,
+        &mut |page: &mut BuiltPage| {
+            emit_rectangle_image(
+                page,
+                &synthetic,
+                options,
+                page_image_cache,
+                decoded_cache,
+                shadow,
+                rendering,
+            )
+        },
+        &mut |_: &mut BuiltPage| {},
+    );
+}
+
+/// What the picture pass needs to paint a whole anchored frame.
+#[derive(Clone, Copy)]
+pub(super) struct AnchoredLook<'a> {
+    pub document: &'a Document,
+    pub palette: &'a Graphic,
+    pub color_ctx: ColorCtx<'a>,
+}
+
+/// Whether an anchored frame paints its body in the picture pass: it
+/// places a picture and carries a look the picture must be inside of
+/// (engine ADR 1045). A frame without a look keeps the two passes, and
+/// so its display list, exactly as before.
+pub(super) fn paints_with_picture(af: &paged_model::AnchoredFrame) -> bool {
+    af.image_link.is_some()
+        && matches!(af.frame_kind, paged_model::AnchoredFrameKind::Rectangle)
+        && af.has_transparency()
+}
+
+/// The rectangle an anchored frame paints as, its bounds in spread
+/// coordinates: the anchored frame's own paint and look (engine ADR 1045:
+/// the free frames' fields, copied), and its picture when `with_image`.
+fn synthetic_rectangle(
+    af: &paged_model::AnchoredFrame,
+    bounds: paged_model::Bounds,
+    with_image: bool,
+) -> Rectangle {
+    Rectangle {
         self_id: af.self_id.clone(),
         bounds,
         item_transform: None,
@@ -1103,45 +1133,53 @@ pub(super) fn emit_anchored_rect_image(
         fill_tint: af.fill_tint,
         stroke_color: af.stroke_color.clone(),
         stroke_weight: af.stroke_weight,
-        drop_shadow: None,
-        stroke_drop_shadow: None,
-        fill_transparency: None,
-        stroke_transparency: None,
-        content_transparency: None,
-        fill_drop_shadow: None,
-        content_drop_shadow: None,
-        image_link: af.image_link.clone(),
-        has_image_element: af.image_link.is_some(),
+        drop_shadow: af.drop_shadow.clone(),
+        stroke_drop_shadow: af.stroke_drop_shadow.clone(),
+        fill_transparency: af.fill_transparency.clone(),
+        stroke_transparency: af.stroke_transparency.clone(),
+        content_transparency: af.content_transparency.clone(),
+        fill_drop_shadow: af.fill_drop_shadow.clone(),
+        content_drop_shadow: af.content_drop_shadow.clone(),
+        image_link: af.image_link.clone().filter(|_| with_image),
+        has_image_element: with_image && af.image_link.is_some(),
         has_inline_pdf: false,
         has_inline_eps: false,
         placed_pdf: None,
-        image_item_transform: af.image_item_transform,
+        image_item_transform: af.image_item_transform.filter(|_| with_image),
         image_bytes: None,
         image_clip: None,
         applied_object_style: af.applied_object_style.clone(),
         text_wrap: None,
         frame_fitting: None,
-        stroke_type: None,
+        stroke_type: af.stroke_type.clone(),
         stroke_gap_color: None,
         stroke_gap_tint: None,
-        stroke_dash: Vec::new(),
-        stroke_alignment: None,
-        end_cap: None,
-        end_join: None,
-        miter_limit: None,
+        stroke_dash: af.stroke_dash.clone(),
+        stroke_alignment: af.stroke_alignment.clone(),
+        end_cap: af.end_cap.clone(),
+        end_join: af.end_join.clone(),
+        miter_limit: af.miter_limit,
         item_layer: None,
         corner_radius: None,
         corner_option: None,
         corners: Default::default(),
         is_anchored: true,
-        opacity: None,
-        blend_mode: None,
-        effects: None,
-        effect_stack: Vec::new(),
+        opacity: af.opacity,
+        blend_mode: af.blend_mode.clone(),
+        effects: af.effects.clone(),
+        effect_stack: af.effect_stack.clone(),
         appearance: Vec::new(),
         gradient_fill_angle: af.gradient_fill_angle,
-        gradient_fill_length: None,
-        gradient_fill_start: None,
+        // Without a `GradientFillStart` / `Length` of its own the ramp
+        // takes InDesign's default placement — bottom-left corner, the
+        // frame's width — which `gradient-geometry` case 27 measures. A
+        // start is in the frame's inner coordinates, which for a frame
+        // placed by the anchored pass are its own box from (0, 0): moved
+        // with the box onto the page.
+        gradient_fill_length: af.gradient_fill_length,
+        gradient_fill_start: af
+            .gradient_fill_start
+            .map(|[x, y]| [bounds.left + x - af_left(af), bounds.top + y - af_top(af)]),
         gradient_stroke_angle: None,
         gradient_stroke_length: None,
         text_paths: Vec::new(),
@@ -1158,18 +1196,17 @@ pub(super) fn emit_anchored_rect_image(
         fill_rule: paged_model::FillRule::NonZero,
         image_adjustments: Vec::new(),
         media: None,
-    };
-    emit_rectangle_image(
-        page,
-        &synthetic,
-        options,
-        page_image_cache,
-        decoded_cache,
-        None,
-        // An anchored frame's `<Image>` keeps no metadata of its own here:
-        // it follows the document's Color Settings.
-        image_rendering(options, None),
-    );
+    }
+}
+
+/// The left and top of an anchored frame's own box (its `bounds` in its
+/// inner coordinates; 0 without one).
+fn af_left(af: &paged_model::AnchoredFrame) -> f32 {
+    af.bounds.map_or(0.0, |b| b.left)
+}
+
+fn af_top(af: &paged_model::AnchoredFrame) -> f32 {
+    af.bounds.map_or(0.0, |b| b.top)
 }
 
 /// Flow the story referenced by an anchored TextFrame into the

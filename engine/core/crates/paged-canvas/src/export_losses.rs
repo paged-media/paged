@@ -926,6 +926,25 @@ pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
             check("polygon", f.self_id.as_deref(), f);
         }
     }
+    // Engine ADR 1045 — an anchored frame carries the same stacks.
+    fn anchored<'a>(
+        frames: &'a [paged_model::AnchoredFrame],
+        out: &mut Vec<&'a paged_model::AnchoredFrame>,
+    ) {
+        for f in frames {
+            out.push(f);
+            anchored(&f.children, out);
+        }
+    }
+    let mut frames = Vec::new();
+    for parsed in &scene.stories {
+        for p in &parsed.story.paragraphs {
+            anchored(&p.anchored_frames, &mut frames);
+        }
+    }
+    for f in frames {
+        check("anchored frame", f.self_id.as_deref(), f);
+    }
     out
 }
 

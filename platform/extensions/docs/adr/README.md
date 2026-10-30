@@ -67,6 +67,7 @@ and each one names the plugins that follow it and those that do not.
 | [344](344-the-actions-door.md) | The actions door: named pure steps, registered by any bundle, run and cached by any | Accepted 2026-10-24 |
 | [345](345-presentations-and-module-views.md) | Presentations and module views: a bundle's surface on the screen, a second window, in place of the canvas | Accepted 2026-10-25; amended 2026-10-30 (the media door, C6) |
 | [346](346-page-layers.md) | A page as layers: the background and each item alone, at one scale | Accepted 2026-10-25; amended 2026-10-28 (paragraph layers) |
+| [347](347-the-lowering-kit-translates-a-look.md) | The lowering kit translates a look, once: `nativeFxOps`, gradient swatches, the one label escape | Accepted 2026-10-29 |
 | [348](348-editing-doors.md) | The editing doors: control-bar groups, scoped keys, status items, the text selection | Accepted 2026-10-24 |
 | [349](349-review-and-structure-doors.md) | The structure doors: headers, footers and notes edited in place (C6) | Accepted 2026-10-28 |
 
