@@ -405,6 +405,8 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
     // paragraph (see `anchor_here`), taken when it opens.
     let mut anchored_at: u32 = 0;
     let mut anchored_stack: Vec<AnchoredFrame> = Vec::new();
+    // Engine ADR 1045 — the open anchored frames' effect blocks.
+    let mut anchored_fx = crate::anchored_fx::AnchoredFx::default();
     // Suppressed-subtree depth. IDML uses `<HiddenText>` (authored
     // but not flowed), `<Note>` (sticky-note annotations), and
     // `<Index>` / `<IndexEntry>` (index markers — the marker is a
@@ -468,7 +470,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
         } else {
             None
         };
-        AnchoredFrame {
+        let mut frame = AnchoredFrame {
             frame_kind: kind,
             self_id: attr(e, b"Self"),
             bounds,
@@ -484,7 +486,14 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
             image_link: None,
             image_item_transform: None,
             children: Vec::new(),
+            ..Default::default()
+        };
+        // Engine ADR 1045 — a picture or box frame's stroke style and
+        // gradient placement.
+        if matches!(kind, AnchoredFrameKind::Rectangle) {
+            anchored_rectangle_attrs(e, &mut frame);
         }
+        frame
     }
 
     // Helper: classify an element name as a frame element (i.e.
@@ -634,6 +643,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                     } else if name == b"PathPointType" {
                         anchored_extend_path_bounds(&e, &mut anchored_stack, &mut bounds_from_path);
                     }
+                    anchored_fx.element(&e, false, &mut anchored_stack);
                     // Always bump depth on Start so we stay
                     // inside the anchored body until the
                     // matching End fires.
@@ -1404,7 +1414,9 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                 // (Group child) or the host paragraph (outermost).
                 if anchored_depth > 0 {
                     anchored_depth -= 1;
+                    anchored_fx.end(name, anchored_stack.len());
                     if anchored_kind_from_name(name).is_some() {
+                        anchored_fx.finish(&mut anchored_stack);
                         finalise_anchored_top(
                             &mut anchored_stack,
                             &mut bounds_from_path,
@@ -1812,6 +1824,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                         let frame = make_anchored_frame(&e, kind);
                         bounds_from_path.push(frame.bounds.is_none());
                         anchored_stack.push(frame);
+                        anchored_fx.finish(&mut anchored_stack);
                         finalise_anchored_top(
                             &mut anchored_stack,
                             &mut bounds_from_path,
@@ -1827,6 +1840,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                     } else if name == b"PathPointType" {
                         anchored_extend_path_bounds(&e, &mut anchored_stack, &mut bounds_from_path);
                     }
+                    anchored_fx.element(&e, true, &mut anchored_stack);
                     // No depth bump — Empty events have no
                     // matching End.
                     buf.clear();
@@ -2351,6 +2365,27 @@ fn parse_matrix_local(s: &str) -> Option<[f32; 6]> {
 /// `LinkResourceURI` (or `href`) and the image's pixel-to-frame
 /// `ItemTransform`. First-write-wins so the outer `<Image>` beats
 /// its nested `<Link>`.
+/// Engine ADR 1045 — an anchored rectangle's stroke style and gradient
+/// placement, in the spellings the spread reader takes.
+fn anchored_rectangle_attrs(e: &quick_xml::events::BytesStart, f: &mut AnchoredFrame) {
+    let list = |s: String| -> Vec<f32> {
+        s.split_ascii_whitespace()
+            .filter_map(|t| t.parse::<f32>().ok())
+            .collect()
+    };
+    f.gradient_fill_length = attr(e, b"GradientFillLength").and_then(|s| s.parse().ok());
+    f.gradient_fill_start = attr(e, b"GradientFillStart")
+        .map(list)
+        .filter(|v| v.len() == 2)
+        .map(|v| [v[0], v[1]]);
+    f.stroke_type = attr(e, b"StrokeType");
+    f.stroke_dash = attr(e, b"StrokeDashAndGap").map(list).unwrap_or_default();
+    f.stroke_alignment = attr(e, b"StrokeAlignment");
+    f.end_cap = attr(e, b"EndCap");
+    f.end_join = attr(e, b"EndJoin");
+    f.miter_limit = attr(e, b"MiterLimit").and_then(|s| s.parse().ok());
+}
+
 fn anchored_capture_image_attrs(
     e: &quick_xml::events::BytesStart,
     anchored_stack: &mut [AnchoredFrame],

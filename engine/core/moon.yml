@@ -104,6 +104,20 @@ tasks:
       # release.yml runs the same build in CI.
       runInCI: "skip"
 
+  wasm-dev:
+    description: "Local only: a fast, unoptimised build of the parts the editor and the module tests load (canvas, repo) into the workspace packages; the wasm-dev profile, no wasm-opt. Other parts: `moon run core:wasm-dev -- session`. docs/development/rust-builds.md."
+    toolchains: ["rust"]
+    command: "bash scripts/build-wasm-packages.sh --workspace"
+    env:
+      PAGED_WASM_PROFILE: "dev"
+      PAGED_WASM_PARTS: "canvas,repo"
+      PAGED_WASM_DEV_TASK: "1"
+    options:
+      # Cargo's incremental build is the cache; a moon cache entry would only
+      # restore a dev build into the paths core:wasm-pkg owns.
+      cache: false
+      runInCI: false
+
   wasm-pkg-version:
     description: "canvas-wasm, the viewer and packages/paged are versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs)."
     toolchains: ["system"]
