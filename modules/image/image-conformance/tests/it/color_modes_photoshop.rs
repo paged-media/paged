@@ -456,3 +456,156 @@ fn multichannel_channels_are_the_rgb_values__feat__image_io_depth_color_modes() 
         assert_eq!(&rgba[i * 4..i * 4 + 3], t, "pixel {i}");
     }
 }
+
+// ─────────────── what the save writes, opened by Photoshop ───────────────
+
+/// The documents the layered save writes in the modes and the depth of
+/// image ADR 483, over the background of a Photoshop-written RGB file: a
+/// painted square under Multiply at 70 %, then 32 bits; that image as
+/// Indexed (Web palette) and as Multichannel. Each with our composite
+/// (the CPU fold, deterministic).
+fn saved_cases() -> Vec<(&'static str, Vec<u8>, Pixels)> {
+    use image_js::color_mode::{web_palette, ColorMode as M};
+    let base = || {
+        let file = PsdFile::parse(
+            &std::fs::read(dir().join("adjustment-layers-ext/vibrance.psd")).expect("fixture"),
+        )
+        .expect("parse");
+        let mut bg = file.clone();
+        bg.layer_mask.layers.truncate(1);
+        bg.layer_mask.section_raw = None;
+        let import = bg.layer_plates_rgba8().expect("background");
+        let mut s = LayerStack::from_psd_plates_with(&import, Some(&bg.layer_mask.layers))
+            .expect("stack");
+        let j = s.add("painted");
+        let (w, h) = (s.width(), s.height());
+        let px: Vec<u8> = (0..w * h)
+            .flat_map(|i| {
+                let (x, y) = (i % w, i / w);
+                if (32..96).contains(&x) && (32..96).contains(&y) {
+                    [40, 160, 220, 255]
+                } else {
+                    [0, 0, 0, 0]
+                }
+            })
+            .collect();
+        s.set_active(j).expect("active");
+        s.edit_active(
+            "paint",
+            image_core::Region::new(0, 0, w, h),
+            Pixels::from_rgba8(std::sync::Arc::from(px.into_boxed_slice())),
+        )
+        .expect("paint");
+        s.set_opacity(j, 0.7).expect("opacity");
+        s.set_blend(j, "multiply").expect("blend");
+        (file, s)
+    };
+    let write = |file: &PsdFile, s: &LayerStack| -> (Vec<u8>, Pixels) {
+        let composite = pollster::block_on(s.composite_px(None, None)).expect("fold");
+        let mut out = file.clone();
+        image_js::psd_write::psd_write_stack_px(&mut out, s, &composite).expect("save");
+        (out.write().expect("bytes"), composite)
+    };
+    let mut cases = Vec::new();
+    let (file, mut s) = base();
+    s.set_depth(SampleDepth::F32).expect("32 bits");
+    let (b, c) = write(&file, &s);
+    cases.push(("saved-float-32.psd", b, c));
+    let (file, mut s) = base();
+    pollster::block_on(s.convert_flat(None, DocMode::indexed(web_palette()))).expect("indexed");
+    let (b, c) = write(&file, &s);
+    cases.push(("saved-indexed-web.psd", b, c));
+    let (file, mut s) = base();
+    pollster::block_on(s.convert_flat(
+        None,
+        DocMode::multichannel_from(M::Rgb).expect("from RGB"),
+    ))
+    .expect("multichannel");
+    let (b, c) = write(&file, &s);
+    cases.push(("saved-multichannel.psd", b, c));
+    cases
+}
+
+/// Writes the saved documents for a recording (`PAGED_MODE_READBACK_OUT`,
+/// then `scripts/photoshop/probes/mode-readback.jsx`).
+#[test]
+#[ignore = "writes the mode-readback probe's inputs; run by hand with PAGED_MODE_READBACK_OUT"]
+fn write_mode_readback_inputs() {
+    let Ok(out) = std::env::var("PAGED_MODE_READBACK_OUT") else {
+        return;
+    };
+    let out = PathBuf::from(out);
+    std::fs::create_dir_all(&out).expect("out dir");
+    let mut manifest = String::new();
+    for (name, bytes, _) in saved_cases() {
+        std::fs::write(out.join(name), &bytes).expect("write");
+        manifest.push_str(name);
+        manifest.push('\n');
+    }
+    std::fs::write(out.join("manifest.txt"), manifest).expect("manifest");
+}
+
+/// Photoshop opens what the save writes (`mode-readback.jsx`): the 32-bit
+/// document with both layers live, the Indexed and the Multichannel
+/// documents in their modes with their tables and channel names — and
+/// merges each, in its own numbers, as our fold composited it.
+#[test]
+fn photoshop_opens_the_saved_float_indexed_and_multichannel_documents__feat__image_io_depth_color_modes(
+) {
+    let text = std::fs::read_to_string(dir().join("mode-readback.photoshop.json")).expect("json");
+    let r = image_conformance::abr_corpus::json::Json::parse(&text).expect("parse");
+    let cases = r.get("cases").and_then(|c| c.as_array()).expect("cases");
+    let value = |id: &str, k: &str| -> String {
+        let c = cases
+            .iter()
+            .find(|c| c.get("id").and_then(|v| v.as_str()) == Some(id))
+            .unwrap_or_else(|| panic!("{id} recorded"));
+        let v = c.get("values").and_then(|v| v.get(k)).expect("value");
+        v.as_str()
+            .map(str::to_string)
+            .or_else(|| v.as_f64().map(|f| f.to_string()))
+            .unwrap_or_else(|| format!("{v:?}"))
+    };
+    let merged = |id: &str| -> PsdFile {
+        PsdFile::parse(
+            &std::fs::read(dir().join(format!("mode-readback/{id}.merged.psd"))).expect("merged"),
+        )
+        .expect("parse")
+    };
+    for (name, _, ours) in saved_cases() {
+        let id = name.trim_end_matches(".psd");
+        let m = merged(id).composite_samples().expect("Photoshop's merge");
+        match id {
+            "saved-float-32" => {
+                assert_eq!(value(id, "mode"), "DocumentMode.RGB");
+                assert_eq!(value(id, "bits"), "32");
+                assert_eq!(value(id, "layers"), "2", "both layers live");
+                let lin = ours.to_f32_linear();
+                let worst = (0..m.samples.len())
+                    .map(|i| (lin[(i / 3) * 4 + i % 3] - m.samples[i]).abs())
+                    .fold(0f32, f32::max);
+                println!("{id}: Photoshop's merge vs ours, max |linear| {worst:.4}");
+                assert!(worst < 2e-3, "{id}: {worst}");
+            }
+            "saved-indexed-web" => {
+                assert_eq!(value(id, "mode"), "DocumentMode.INDEXEDCOLOR");
+                let f = merged(id);
+                let pal = f.indexed_palette().expect("table");
+                let rgba = ours.to_rgba8();
+                for i in 0..m.samples.len() {
+                    let c = pal.colours[(m.samples[i] * 255.0).round() as usize];
+                    assert_eq!(&rgba[i * 4..i * 4 + 3], &c, "pixel {i}");
+                }
+            }
+            _ => {
+                assert_eq!(value(id, "mode"), "DocumentMode.MULTICHANNEL");
+                assert_eq!(m.channels, 3);
+                let rgba = ours.to_rgba8();
+                for i in 0..m.samples.len() {
+                    let want = rgba[(i / 3) * 4 + i % 3];
+                    assert_eq!((m.samples[i] * 255.0).round() as u8, want, "sample {i}");
+                }
+            }
+        }
+    }
+}

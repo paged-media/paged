@@ -28,6 +28,11 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/psd-containers.jsx
 PAGED_PSD_READBACK_OUT=<stage>/psd-readback cargo nextest run -p image-conformance \
   --run-ignored only write_psd_readback_inputs
 PAGED_PROBE_STAGE=<stage> bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/psd-readback.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/color-modes.jsx
+# mode-readback opens the 32-bit, Indexed and Multichannel files paged WROTE (image ADR 483)
+PAGED_MODE_READBACK_OUT=<stage>/mode-readback cargo nextest run -p image-conformance \
+  --run-ignored only write_mode_readback_inputs
+PAGED_PROBE_STAGE=<stage> bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/mode-readback.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/guides.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/warp-text.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/smart-objects.jsx
@@ -96,6 +101,12 @@ Photoshop's own sRGB conversions under three intent/BPC settings).
 `colour-sweep` stimulus converted to CMYK (Coated FOGRA39, named), Gray Gamma 2.2 and Lab and back
 to sRGB at 16 and 8 bits, each converted document saved as a PSD; and a Levels gamma on the
 `deep-ramp` stimulus, 16384 levels, at 16 and 8 bits).
+`image-conformance/tests/it/color_modes_photoshop.rs` (image ADR 483: layered Lab, Grayscale and
+32-bit documents folded against Photoshop's merged composite, 8/16 → 32 Bits/Channel, Indexed
+with the Web and an Exact palette, Multichannel from RGB, and `mode-readback`: Photoshop opening
+the 32-bit, Indexed and Multichannel files paged wrote and merging them; a 32-bit PSD without
+its HDR Color Mode Data is refused — "the options specified for opening are wrong" — and Convert
+Mode to Duotone takes no descriptor a script can build, so Duotone is not recorded).
 `image-conformance/tests/it/warp_text_photoshop.rs` (Warp Text: each style's
 PSD warp opens as the style that made it; paged-warp's meshes held to
 Photoshop's warped bounds as a recorded convention) and

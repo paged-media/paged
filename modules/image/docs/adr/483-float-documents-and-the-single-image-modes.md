@@ -91,6 +91,11 @@ Photoshop's sRGB render; Multichannel from RGB. `color_modes_photoshop.rs` repla
 - Indexed: our nearest Web colour is Photoshop's on all 16384 pixels; both documents decode to
   Photoshop's render exactly. Multichannel: the channels are the RGB values and the decode is
   the image.
+- `mode-readback.jsx` has Photoshop open what the save writes: the 32-bit document with both
+  layers live (its merge within 0.0014 of our fold, linear), the Indexed one (every pixel the
+  table colour of ours) and the Multichannel one (Cyan, Magenta, Yellow; every sample ours).
+  Without the HDR Color Mode Data Photoshop writes for a 32-bit document (`hdrt`, `hdra`) it
+  refuses the file, so the save writes Photoshop's defaults when the document had none.
 - `psd_cmyk_photoshop.rs`: the gate's four blockers on `blend-modes`, and `normal-stack`(-16) and
   `opaque-stack` through the ink fold.
 - `image-js`: `float_tests.rs` (linear blend, values above 1 through the fold, the 32-bit

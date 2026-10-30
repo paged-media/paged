@@ -72,6 +72,25 @@ const ICC_PROFILE_ID: u16 = 1039;
 /// The image resource that marks a document UNTAGGED (its profile ignored).
 const ICC_UNTAGGED_ID: u16 = 1041;
 
+/// The Color Mode Data of a 32-bit document: the HDR Toning settings
+/// (`hdrt`, the method "Linear" with Photoshop's defaults) and the 32-bit
+/// preview options (`hdra`), as Photoshop 27.10 writes them for a document
+/// converted to 32 Bits/Channel [OBS: `color-modes/float-32`]. Photoshop
+/// refuses to open a 32-bit PSD whose Color Mode Data is empty ("the
+/// options specified for opening are wrong"; image ADR 483).
+const HDR_COLOR_MODE_DATA: [u8; 110] = [
+    0x68, 0x64, 0x72, 0x74, 0x00, 0x00, 0x00, 0x03, 0x3e, 0x6b, 0x85, 0x1f,
+    0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x07, 0x00, 0x4c, 0x00, 0x69,
+    0x00, 0x6e, 0x00, 0x65, 0x00, 0x61, 0x00, 0x72, 0x00, 0x00, 0x00, 0x02,
+    0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0xff, 0x01, 0x01,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x80, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00,
+    0x68, 0x64, 0x72, 0x61, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00,
+    0x41, 0xa0, 0x00, 0x00, 0x41, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00,
+];
+
 fn err(e: image_psd::PsdError) -> IngestError {
     IngestError::Decode(e.to_string())
 }
@@ -1068,6 +1087,7 @@ pub fn psd_write_stack_px(
         return write_single_image(file, stack, composite);
     }
     let store = Store::of(file, stack)?;
+    let was_float = file.header.depth == 32;
     let n = width as usize * height as usize;
     if composite.pixel_count() != n {
         return Err(IngestError::Decode(
@@ -1181,6 +1201,13 @@ pub fn psd_write_stack_px(
             file.resources.blocks.retain(|b| b.id != ICC_UNTAGGED_ID);
             file.resources.set_data(ICC_PROFILE_ID, &icc);
         }
+    }
+    if store.float && file.color_mode.raw.is_empty() {
+        file.color_mode.raw = HDR_COLOR_MODE_DATA.to_vec();
+    }
+    if !store.float && was_float {
+        // Leaving 32 bits: the HDR settings belong to the float document.
+        file.color_mode.raw.clear();
     }
     file.layer_mask.layers = records;
     file.layer_mask.transparency_in_merged = true;
