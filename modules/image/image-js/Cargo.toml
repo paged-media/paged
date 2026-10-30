@@ -28,15 +28,14 @@ image-psd = { workspace = true, features = ["serde"] }
 # `straighten_crop_image_cpu`; ADR 467) — a supported backend, not a
 # kernel twin: the GPU resample kernels stay the editor's path.
 paged-resample = { workspace = true }
-# The placement homography of a smart object (ADR 482).
-paged-warp = { workspace = true }
 # The Layer Style dialog's wire form (paged-psd's style model as JSON).
 serde_json = "1"
 # CIELAB (D50) for Match Color's statistics — the engine's one conversion,
 # the same constants the `adjust.match_color` module writes out (PM-0014).
 paged-color = { workspace = true }
 # Type layers' warp (WP5.10): the envelope mesh of Photoshop's Warp Text
-# styles, inverted per texel by the `geom.warp_mesh` kernel.
+# styles, inverted per texel by the `geom.warp_mesh` kernel; and the
+# placement homography of a smart object (ADR 482).
 paged-warp = { workspace = true }
 # A type layer's source (its text, runs, paragraphs, frame and warp)
 # crosses to the bundle as JSON.
