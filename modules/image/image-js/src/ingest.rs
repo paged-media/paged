@@ -833,6 +833,9 @@ fn decode_source(mut source: RasterSource<MemoryByteSource>) -> Result<DecodedIm
                 .flat_map(|p| [p[0], p[0], p[0], p[1]])
                 .collect(),
             ChannelLayout::Cmyk | ChannelLayout::Cmyka => unreachable!("CMYK takes the 8-bit cast"),
+            ChannelLayout::Lab | ChannelLayout::LabA | ChannelLayout::Planes { .. } => {
+                unreachable!("a decoder hands over grey, RGB or CMYK (ADR 481)")
+            }
         };
         let px = crate::pixels::Pixels::from_rgba16(&samples);
         let (px, w, h) = if orientation == Orientation::TopLeft {
@@ -910,6 +913,11 @@ fn decode_source(mut source: RasterSource<MemoryByteSource>) -> Result<DecodedIm
             }
             cmyk_managed = managed;
             rgba
+        }
+        ChannelLayout::Lab | ChannelLayout::LabA | ChannelLayout::Planes { .. } => {
+            return Err(IngestError::Unsupported(format!(
+                "a decoder handed over {channels:?} (grey, RGB or CMYK expected; ADR 481)"
+            )))
         }
     };
 
@@ -1134,7 +1142,7 @@ pub async fn adjust_f16(
 
 /// A 256-entry tone LUT over straight rgba16float RGB (alpha untouched),
 /// optionally masked by the same coverage the GPU stages honour.
-fn apply_curve_lut_f16(
+pub(crate) fn apply_curve_lut_f16(
     pixels: &mut [u8],
     luts: &[[u8; 256]; 3],
     selection: Option<&SelectionCoverage>,

@@ -87,6 +87,10 @@ Rules for every code change in this repo:
   A SECOND (ADR 469): `geom.patch_vote`'s twin (`image-js` `patchmatch::vote_packed`)
   ships as the vote of the content-aware retouching verbs where no device exists; the
   PatchMatch search itself is CPU input preparation.
+  A THIRD (ADR 480): the layer fold's CPU path (`image-js` `layers/fold/cpu.rs`) folds a
+  stack without a device through the compose family's twins (`image-kernels`
+  `compose_twin`, which `image-conformance`'s `compose_ref` re-exports — one body), the
+  `cast.*`/`band.*`/`math.*` twins and the chain's; a layer style still needs a device.
   The CPU resample of `paged-resample` (ADR 467) is a supported backend, not a twin: it
   serves headless and batch actions and draws a smart object's placement (ADR 482).
 - **PRESERVATION INVARIANT (§10.4).** "Paged never destroys a PSD."
