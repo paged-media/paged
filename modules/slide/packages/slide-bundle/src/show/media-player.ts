@@ -278,7 +278,9 @@ export class MediaPlayer {
   private tick(p: Playing): void {
     const d = p.el.duration;
     const t = p.el.currentTime;
-    const end = Number.isFinite(d) ? d - num(p.m.media.trimEndMs) / 1000 : Infinity;
+    const end = Number.isFinite(d)
+      ? d - num(p.m.media.trimEndMs) / 1000
+      : Infinity;
     p.el.volume = volumeAt(p.m.media, t, Number.isFinite(d) ? d : Infinity);
     if (t >= end - 0.02) this.finish(p);
   }

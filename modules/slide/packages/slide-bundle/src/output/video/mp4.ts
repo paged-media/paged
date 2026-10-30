@@ -183,7 +183,10 @@ const AAC_RATES = [
 ];
 
 /** An AAC-LC AudioSpecificConfig for `rate` and `channels`. */
-export function audioSpecificConfig(rate: number, channels: number): Uint8Array {
+export function audioSpecificConfig(
+  rate: number,
+  channels: number,
+): Uint8Array {
   const f = Math.max(0, AAC_RATES.indexOf(rate));
   const v = (2 << 11) | (f << 7) | ((channels & 0x0f) << 3);
   return Uint8Array.from([v >>> 8, v & 0xff]);

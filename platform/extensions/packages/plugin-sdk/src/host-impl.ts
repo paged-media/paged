@@ -5673,8 +5673,7 @@ export function createBundleHost(
   const media: MediaSurface = {
     async read(id) {
       requireDocRead("media.read");
-      let props: Awaited<ReturnType<typeof document.elementProperties>> =
-        null;
+      let props: Awaited<ReturnType<typeof document.elementProperties>> = null;
       try {
         props = await document.elementProperties(id);
       } catch {
@@ -5682,9 +5681,7 @@ export function createBundleHost(
       }
       const entry = props?.entries.find((e) => e.path === "frameMedia");
       const value = entry?.value as
-        | { type: "media"; value: MediaItem | null }
-        | null
-        | undefined;
+        { type: "media"; value: MediaItem | null } | null | undefined;
       const item = value && value.type === "media" ? value.value : null;
       if (!item) return null;
       if (item.source.type === "link")
@@ -6636,7 +6633,6 @@ export function mediaExtension(mime: string, kind?: MediaKind): string {
   };
   const m = mime.toLowerCase().split(";")[0]!.trim();
   return (
-    known[m] ??
-    (kind === "sound" || m.startsWith("audio/") ? "m4a" : "mp4")
+    known[m] ?? (kind === "sound" || m.startsWith("audio/") ? "m4a" : "mp4")
   );
 }

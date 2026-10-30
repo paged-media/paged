@@ -229,7 +229,9 @@ export async function insertMedia(
 ): Promise<ElementId | null> {
   const type = mediaType(args.name);
   if (!type) {
-    host.log.warn(`paged.slide insert media: ${args.name} is no video or audio`);
+    host.log.warn(
+      `paged.slide insert media: ${args.name} is no video or audio`,
+    );
     return null;
   }
   if (!host.supports("document.media@1")) {
@@ -354,7 +356,9 @@ export function mediaStart(
 export async function pageMedia(
   host: BundleHost,
   pages: ReadonlyMap<string, PageShapes>,
-): Promise<Map<string, { item: PageShapes["items"][number]; media: MediaItem }[]>> {
+): Promise<
+  Map<string, { item: PageShapes["items"][number]; media: MediaItem }[]>
+> {
   const out = new Map<
     string,
     { item: PageShapes["items"][number]; media: MediaItem }[]
@@ -365,7 +369,10 @@ export async function pageMedia(
       if (item.id.kind !== "rectangle") continue;
       const props = await host.document.elementProperties(item.id);
       const row = props?.entries.find((e) => e.path === "frameMedia");
-      const v = row?.value as { type?: string; value?: MediaItem | null } | null;
+      const v = row?.value as {
+        type?: string;
+        value?: MediaItem | null;
+      } | null;
       if (v?.type !== "media" || !v.value) continue;
       const list = out.get(pageId) ?? [];
       list.push({ item, media: v.value });

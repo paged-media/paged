@@ -38,7 +38,11 @@ export type Frame = ImageBitmap;
 export interface FrameSource {
   /** The page as a frame at `scale` pixels per pt; null when the page is
    *  unknown or nothing could be drawn. */
-  frame(pageId: string, scale: number, hide?: readonly string[]): Promise<Frame | null>;
+  frame(
+    pageId: string,
+    scale: number,
+    hide?: readonly string[],
+  ): Promise<Frame | null>;
   /** Start drawing a frame that will be needed soon. */
   prefetch(pageId: string, scale: number, hide?: readonly string[]): void;
   /** Drop every cached frame (the document changed). */

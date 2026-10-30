@@ -3,9 +3,7 @@
   "fields": {
     "bytes": {
       "kind": "bytes",
-      "mime": [
-        "video/mp4"
-      ]
+      "mime": ["video/mp4"]
     },
     "fileName": {
       "kind": "text"

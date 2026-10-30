@@ -62,7 +62,13 @@ export interface OfflineRenderer {
   ): Promise<boolean>;
   /** Draw `image` over what is drawn, at `x, y` (`w × h`) frame pixels
    *  (a movie's picture over its frame, slide ADR 718). */
-  overlay(image: CanvasImageSource, x: number, y: number, w: number, h: number): void;
+  overlay(
+    image: CanvasImageSource,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): void;
   dispose(): void;
 }
 

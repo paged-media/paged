@@ -412,8 +412,14 @@ export async function renderVideo(
           still.close();
         }
       } else {
-        const a = await frameOf(seg.from, shown.find((x) => x.pageId === seg.from)?.hide);
-        const b = await frameOf(seg.to, shown.find((x) => x.pageId === seg.to)?.hide);
+        const a = await frameOf(
+          seg.from,
+          shown.find((x) => x.pageId === seg.from)?.hide,
+        );
+        const b = await frameOf(
+          seg.to,
+          shown.find((x) => x.pageId === seg.to)?.hide,
+        );
         for (let i = 0; i < seg.frames; i++) {
           if (a && b)
             await renderer.transition(

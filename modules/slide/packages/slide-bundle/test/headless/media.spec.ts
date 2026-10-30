@@ -64,7 +64,10 @@ afterEach(() => {
 
 const FIXTURE = new Uint8Array(
   readFileSync(
-    new URL("../../../../slide-conformance/fixtures/media.pptx", import.meta.url),
+    new URL(
+      "../../../../slide-conformance/fixtures/media.pptx",
+      import.meta.url,
+    ),
   ),
 );
 
@@ -190,7 +193,9 @@ describe("video and audio (slide ADR 718)", () => {
     expect(xml).toContain('action="ppaction://media"');
     expect(xml).toContain("<a:videoFile ");
     // The same clip as slide 1's: one part, byte for byte.
-    const media = [...parts.keys()].filter((k) => k.startsWith("ppt/media/media"));
+    const media = [...parts.keys()].filter((k) =>
+      k.startsWith("ppt/media/media"),
+    );
     for (const k of media)
       if (k.endsWith(".mp4"))
         expect(Buffer.from(parts.get(k)!).equals(CLIP)).toBe(true);

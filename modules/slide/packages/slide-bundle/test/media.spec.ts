@@ -70,7 +70,9 @@ const effect = (over: Partial<EffectInfo>): EffectInfo =>
 describe("when a medium starts (slide ADR 718)", () => {
   it("follows its mediacall effect: the click group and the offset", () => {
     expect(
-      mediaStart(movie(), "r1", null, [effect({ clickGroup: 2, beginMs: 500 })]),
+      mediaStart(movie(), "r1", null, [
+        effect({ clickGroup: 2, beginMs: 500 }),
+      ]),
     ).toEqual({ step: 2, beginMs: 500 });
     // By its shape key on a duplicated slide.
     expect(

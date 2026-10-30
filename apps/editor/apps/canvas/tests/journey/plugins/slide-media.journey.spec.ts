@@ -156,7 +156,9 @@ test.describe("journey · paged.slide video and audio", () => {
     // The next slide stops it: its element goes.
     await page.keyboard.press("n");
     await expect(stage(page)).toHaveAttribute("data-slide-number", "2");
-    await expect(stage(page).locator("video[data-show-media-item]")).toHaveCount(0);
+    await expect(
+      stage(page).locator("video[data-show-media-item]"),
+    ).toHaveCount(0);
     await page.keyboard.press("Escape");
 
     // The PowerPoint export carries the clip as it is.
@@ -186,7 +188,9 @@ test.describe("journey · paged.slide video and audio", () => {
     const slide1 = parts.get("ppt/slides/slide1.xml")!.toString("utf8");
     expect(slide1).toContain('action="ppaction://media"');
     expect(slide1).toContain("<a:videoFile ");
-    const media = [...parts.keys()].filter((k) => /^ppt\/media\/media\d+\.mp4$/.test(k));
+    const media = [...parts.keys()].filter((k) =>
+      /^ppt\/media\/media\d+\.mp4$/.test(k),
+    );
     expect(media).toHaveLength(1);
     expect(parts.get(media[0]!)!.equals(clip())).toBe(true);
   });

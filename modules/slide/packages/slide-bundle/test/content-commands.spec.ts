@@ -182,7 +182,11 @@ describe("slide W4 content commands", () => {
       );
     const data = Buffer.from([0, 0, 0, 0x18]).toString("base64");
     expect(
-      await run(CONTENT_CMD.insertVideo, { data, name: "clip.mp4", play: "auto" }),
+      await run(CONTENT_CMD.insertVideo, {
+        data,
+        name: "clip.mp4",
+        play: "auto",
+      }),
     ).toEqual({ media: expect.stringContaining("r1") });
     const batch = f.mutations[0] as {
       args: { ops: { op: string; args: Record<string, unknown> }[] };
@@ -204,9 +208,9 @@ describe("slide W4 content commands", () => {
       play: "auto",
       source: { type: "part", path: "paged/core/media/abc.mp4" },
     });
-    expect(await run(CONTENT_CMD.insertAudio, { data, name: "tone.m4a" })).toHaveProperty(
-      "media",
-    );
+    expect(
+      await run(CONTENT_CMD.insertAudio, { data, name: "tone.m4a" }),
+    ).toHaveProperty("media");
     const sound = (
       f.mutations[1] as {
         args: { ops: { args: { value?: { value: { kind: string } } } }[] };

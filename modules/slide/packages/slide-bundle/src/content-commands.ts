@@ -453,8 +453,7 @@ export function contributeContentCommands(
   add(CONTENT_CMD.insertIcon, t(CONTENT.insertIcon), slideActive, () =>
     pickAndPlace(host, deps, true),
   );
-  const mediaActive = () =>
-    slideActive() && host.supports("document.media@1");
+  const mediaActive = () => slideActive() && host.supports("document.media@1");
   add(CONTENT_CMD.insertVideo, t(CONTENT.insertVideo), mediaActive, () =>
     pickAndPlaceMedia(host, deps, "video"),
   );

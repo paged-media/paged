@@ -246,7 +246,10 @@ export class MovieFrames {
   async at(t: number): Promise<CanvasImageSource | null> {
     const el = this.el;
     if (!el) return null;
-    const target = Math.max(0, Math.min(t, Math.max(0, this.duration() - 0.001)));
+    const target = Math.max(
+      0,
+      Math.min(t, Math.max(0, this.duration() - 0.001)),
+    );
     if (Math.abs(el.currentTime - target) > 1e-4) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, 2000);
