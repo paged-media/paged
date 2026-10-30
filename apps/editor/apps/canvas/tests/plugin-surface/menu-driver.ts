@@ -116,11 +116,22 @@ const bar = (page: Page) => page.locator('nav[aria-label="Main menu"]');
 
 /** Close every open menu level. */
 export async function closeMenus(page: Page): Promise<void> {
+  const menus = page.locator('[role="menu"]');
   for (let i = 0; i < 5; i++) {
-    if ((await page.locator('[role="menu"]').count()) === 0) return;
+    const open = await menus.count();
+    if (open === 0) return;
     await page.keyboard.press("Escape");
+    // Wait for this Escape to close a menu before the next: a menu still
+    // counted while it closes would take a second Escape, and an Escape no
+    // menu holds reaches the canvas, where it leaves an entered context
+    // (image's rasterImage, which then rewrites the document under the
+    // rows' "document unchanged" checks).
+    await expect
+      .poll(() => menus.count(), { timeout: 2_000 })
+      .toBeLessThan(open)
+      .catch(() => {});
   }
-  await expect(page.locator('[role="menu"]')).toHaveCount(0);
+  await expect(menus).toHaveCount(0);
 }
 
 /** Open the route's menus and return the leaf's menu item (not clicked).
