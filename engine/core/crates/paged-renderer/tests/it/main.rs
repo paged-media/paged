@@ -80,6 +80,7 @@ mod render_honor_w7;
 mod ruby_kenten;
 mod ruby_parent_spacing;
 mod scene_layer;
+mod scene_layer_effects;
 mod seam_hand_construct;
 mod seed_hello;
 mod shaped_bands_pipeline;
