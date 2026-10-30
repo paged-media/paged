@@ -612,10 +612,7 @@ fn native_fx_rides_the_ir__feat__sheet_chart_native_effects() {
         DmlFx {
             fill: paged_ooxml::drawingml::fill_in(&el, &rels),
             line_fill: None,
-            effects: el
-                .child(paged_ooxml::tree::Ns::A, "effectLst")
-                .map(|e| paged_ooxml::drawingml::effects(e, &rels))
-                .unwrap_or_default(),
+            effects: paged_ooxml::drawingml::effects_in(&el, &rels),
         }
     };
     let mut m = chart(ChartKind::Pie, Grouping::Standard, 1);
@@ -648,11 +645,14 @@ fn native_fx_rides_the_ir__feat__sheet_chart_native_effects() {
     );
     assert!(gr.start.is_some() && gr.length.is_some());
     assert_eq!(a.outer_glow.as_ref().unwrap().opacity, 40.0);
-    assert!(
-        fx[1].is_none(),
-        "the point's own spPr has only what the page cannot hold"
+    // The point's own reflection rides its effect stack (engine ADR 1008).
+    let r = &fx[1].as_ref().unwrap().effect_stack;
+    assert_eq!(r.len(), 1);
+    assert_eq!(
+        (r[0].kind.as_str(), r[0].size_pct),
+        ("reflection", Some(55.0))
     );
-    assert_eq!(g.losses.len(), 1, "{:?}", g.losses);
+    assert!(g.losses.is_empty(), "{:?}", g.losses);
     let json = serde_json::to_string(&g).unwrap();
     assert!(
         json.contains(
@@ -664,7 +664,10 @@ fn native_fx_rides_the_ir__feat__sheet_chart_native_effects() {
         json.contains(r#""outerGlow":{"size":3.0,"opacity":40.0"#),
         "{json}"
     );
-    assert!(json.contains(r#""losses":["a:reflection"#), "{json}");
+    assert!(
+        json.contains(r#""effectStack":[{"kind":"reflection","distancePt":0.0,"sizePct":55.0"#),
+        "{json}"
+    );
 }
 
 #[test]

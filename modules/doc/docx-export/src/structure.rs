@@ -66,6 +66,9 @@ pub struct StructureIn {
     /// order: `paragraph` counts the merged read-back's paragraphs.
     #[serde(default)]
     pub anchors: Vec<AnchorIn>,
+    /// Doc ADR 614: the text boxes' stories read back, by page item.
+    #[serde(default, rename = "textBoxes")]
+    pub text_boxes: Vec<crate::textbox::TextBoxIn>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

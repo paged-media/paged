@@ -63,13 +63,24 @@ async function polygons(page: Page): Promise<number> {
   });
 }
 
-/** What the clipboard holds, by type. */
+/** What the clipboard holds, by type. The system clipboard is the
+ *  machine's, shared with the other workers: a read that a write elsewhere
+ *  overtakes ("Clipboard data has changed") is read again. */
 async function clipboardTypes(page: Page): Promise<Record<string, string>> {
   return page.evaluate(async () => {
-    const out: Record<string, string> = {};
-    for (const item of await navigator.clipboard.read())
-      for (const t of item.types) out[t] = await (await item.getType(t)).text();
-    return out;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const out: Record<string, string> = {};
+        for (const item of await navigator.clipboard.read())
+          for (const t of item.types)
+            out[t] = await (await item.getType(t)).text();
+        return out;
+      } catch (err) {
+        if (attempt >= 4 || (err as Error).name !== "InvalidStateError")
+          throw err;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
   });
 }
 

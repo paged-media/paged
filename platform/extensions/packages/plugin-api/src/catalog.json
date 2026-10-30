@@ -1783,6 +1783,8 @@
     "frameFillEffectStack",
     "frameStrokeEffectStack",
     "frameContentEffectStack",
+    "frameAppearance",
+    "frameAppearanceLayer",
     "cellFillColor",
     "cellFillTint",
     "cellInsetTop",
@@ -6725,6 +6727,31 @@
       "nullable": false,
       "access": "readWrite",
       "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameAppearance",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "PaintLayerSpec"
+      },
+      "wire": "appearance",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameAppearanceLayer",
+      "type": {
+        "kind": "operation",
+        "shape": "AppearanceLayerSpec"
+      },
+      "wire": "appearanceLayer",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": false
     },
     {
       "addressKind": "cell",
@@ -20429,6 +20456,23 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameAppearance",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "PaintLayerSpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "appearance"
       },
       {
         "addressKind": "frame",

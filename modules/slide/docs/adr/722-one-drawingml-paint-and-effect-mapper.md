@@ -91,3 +91,38 @@ Evidence: `modules/slide/slide-native/tests/effects.rs`
 (`a_vertical_or_down_diagonal_gradient_starts_where_powerpoint_starts_it__feat__plugin_slide_native_effects`),
 `platform/shared/dml-native/tests/map.rs`
 (`a_linear_axis_starts_where_office_centres_it__feat__sheet_chart_native_effects`).
+
+## Amendment 2026-10-30 — the effect stack, picture filters and the fill rule (plan C10)
+
+What the mapper reported because the engine could not hold it now lands natively, through
+`dml-native` for slide, doc and sheet alike:
+
+- **Effect list → the effect stack** (engine ADR 1008). `a:fillOverlay` with a solid paint is a
+  colour overlay under its blend (`mult`, `screen`, `darken`, `lighten`; `over` is Normal), its
+  alpha the entry's opacity; `a:blur` a Gaussian blur; `a:reflection` a reflection (gap, `endPos`
+  as its size, start and end alpha, blur). A DrawingML blur radius is three σ
+  (`BLUR_SIGMA_PER_RADIUS`): PowerPoint's PDF of a 10 pt blur ramps 16 %→84 % over 6.6 pt. The
+  stack lists InDesign's effects first, in InDesign's order (the frame body draws them as
+  before), then overlay, blur, reflection; an item with InDesign's effects alone keeps the
+  canonical empty stack. `a:effectDag` is read as a list of its direct effects
+  (`paged_ooxml::drawingml::effect::container`); its containers are reported.
+- **Still reported:** a gradient fill overlay (PowerPoint draws none — the `effect-stack`
+  fixture's PDF shows the shape unchanged), a picture or pattern overlay, `grow="0"`, a
+  reflection that is not a mirror image below, a shadow's distortion, patterns (pattern paint is
+  not on main), alpha gradient stops beyond the gradient feather (paint v2 is not on main).
+- **Picture effects** (engine ADR 1037): `a:clrRepl` is a duotone of one colour; a picture's
+  `a:blur` a blur in the picture's pixels (`Mapper::picture_at`, given its pixels per point as
+  placed). `a:clrChange` and `a:tint` have no equivalent op and stay reported.
+- **Fill rule** (engine ADR 1006): PowerPoint fills each `a:path` even-odd — two nested squares
+  turning the same way show a hole. `Mapper::fill_rule` sets even-odd where the rules differ for
+  a one-path outline and leaves every other outline non-zero (its serialisation unchanged); an
+  outline of several paths one of which needs even-odd is reported. `dml-geom`'s `SubPath`
+  names its `a:path`.
+- **Export:** `dml_native::effects_with_stack` writes the stack's overlay, blur and reflection
+  back as `a:effectLst`.
+
+Evidence: `modules/slide/slide-native/tests/effect_stack.rs` on the PowerPoint-written
+`effect-stack` fixture, `platform/shared/dml-native/tests/map.rs`
+(`blur_reflection_and_overlay_ride_the_effect_stack`, `the_effect_stack_comes_back_as_drawingml`,
+`powerpoint_fills_a_path_even_odd`, `colour_replacement_and_picture_blur_join_the_filter_stack`),
+`platform/shared/dml-native/tests/native.rs`.

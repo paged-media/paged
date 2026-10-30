@@ -133,6 +133,13 @@ pub(crate) fn apply_inner(
         // the variants the arms match on, so one apply path serves both.
         Operation::SetProperty { node, path, value } => {
             let value = value.normalized();
+            // Engine ADR 1043 — the appearance.
+            if matches!(
+                path,
+                PropertyPath::FrameAppearance | PropertyPath::FrameAppearanceLayer
+            ) {
+                return appearance::apply_appearance(doc, node, *path, &value);
+            }
             // Engine ADR 1008 — the effect stack, and the per-field
             // effect paths on an item that stores one.
             if effect_stack::stack_target(*path).is_some()
@@ -1292,6 +1299,7 @@ fn cell_paragraphs_mut<'a>(
 }
 
 mod anchored_frame;
+pub(crate) mod appearance;
 mod batch_page;
 mod character;
 mod conditions;

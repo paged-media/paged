@@ -837,6 +837,13 @@ export {
   type BakeLayer,
   type BakeRefusal,
 } from "./commands/appearance-bake";
+// Engine ADR 1043 — the metadata stack's migration to the engine's native
+// appearance (the switch of the commands and panel is plan WP6.3).
+export {
+  nativeAppearanceOf,
+  migrateAppearanceMutations,
+  type NativePaintLayer,
+} from "./commands/appearance-native";
 // The APPEARANCE panel (React, the Layers-panel idiom) — the view over
 // that stack, with the one-fill/one-stroke engine limit stated inline.
 export {
