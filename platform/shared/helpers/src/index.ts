@@ -40,6 +40,7 @@ export {
   labelKey,
   type LabelEnvelope,
 } from "./label.ts";
+export { crc32, zip, type ZipOptions } from "./zip.ts";
 export {
   isApprovedScript,
   trustedHtml,

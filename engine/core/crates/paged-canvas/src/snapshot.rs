@@ -81,11 +81,12 @@ pub struct SnapshotPng {
     pub height_px: u32,
     pub layout_generation: u64,
     pub numbering_generation: u64,
-    /// The PNG. Empty when the request asked for `format: "rgba"`.
+    /// The PNG. Empty when the request asked for another `format`.
     #[tsify(type = "number[]")]
     pub png_bytes: Vec<u8>,
     /// Extensions ADR 338 — what the bytes are. Absent for a PNG (the v1
-    /// reply), `"rgba"` when `rgba` carries them.
+    /// reply), `"rgba"` when `rgba` carries them; `"jpeg"`, `"webp"` or
+    /// `"tiff"` (editor ADR 288) when `bytes` holds that file.
     #[serde(default, skip_serializing_if = "SnapshotFormat::is_png")]
     pub format: SnapshotFormat,
     /// Extensions ADR 338 — `format: "rgba"`: `widthPx × heightPx`
@@ -94,12 +95,23 @@ pub struct SnapshotPng {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[tsify(type = "number[]")]
     pub rgba: Vec<u8>,
+    /// Editor ADR 288 — `format: "jpeg" | "webp" | "tiff"`: the encoded
+    /// file, written by `paged-raster` (sRGB profile embedded, resolution
+    /// = the snapshot's dpi). Absent for a PNG and for `rgba`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[tsify(type = "number[]")]
+    pub bytes: Vec<u8>,
     /// Extensions ADR 338 — the page region the image covers, in page pt,
     /// when the request had a `clip`: the clip grown outward to whole
     /// pixels at the snapshot's resolution, so the image maps onto it
     /// exactly. Absent for a whole page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<SnapshotClip>,
+    /// Engine ADR 1035 — the request's `story` was drawn (alone). Absent
+    /// when there was none, and from an engine that does not know the
+    /// field (it drew the page instead).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub story: bool,
 }
 
 /// Extensions ADR 338 — the encoding of a snapshot's pixels.
@@ -112,11 +124,44 @@ pub enum SnapshotFormat {
     /// Raw straight-alpha RGBA8 (`rgba`), for a caller that works on the
     /// pixels (an image layer, a rasterized vector).
     Rgba,
+    /// Editor ADR 288 (asset export) — a JPEG in `bytes`, at the request's
+    /// `quality`. JPEG has no alpha: a transparent snapshot is flattened
+    /// onto white first.
+    Jpeg,
+    /// Editor ADR 288 — a WebP in `bytes` (lossless: `paged-raster`
+    /// writes no lossy WebP), alpha kept.
+    Webp,
+    /// Editor ADR 288 — a TIFF in `bytes` (RGBA, LZW), alpha kept.
+    Tiff,
+    /// Editor ADR 288 with engine ADR 1038's encoders — a GIF in `bytes`
+    /// (quantized to its palette, one transparent index).
+    Gif,
+    /// A BMP in `bytes` (32-bit, alpha kept).
+    Bmp,
+    /// A TGA in `bytes` (32-bit, alpha kept).
+    Tga,
+    /// A lossless JPEG XL in `bytes`, alpha kept.
+    Jxl,
 }
 
 impl SnapshotFormat {
     pub fn is_png(&self) -> bool {
         *self == SnapshotFormat::Png
+    }
+
+    /// The `paged-raster` encoder of a file format (`None` for PNG, which
+    /// the snapshot writes itself, and for raw `rgba`).
+    pub fn encoder(&self) -> Option<paged_raster::EncodeFormat> {
+        match self {
+            SnapshotFormat::Png | SnapshotFormat::Rgba => None,
+            SnapshotFormat::Jpeg => Some(paged_raster::EncodeFormat::Jpeg),
+            SnapshotFormat::Webp => Some(paged_raster::EncodeFormat::WebP),
+            SnapshotFormat::Tiff => Some(paged_raster::EncodeFormat::Tiff),
+            SnapshotFormat::Gif => Some(paged_raster::EncodeFormat::Gif),
+            SnapshotFormat::Bmp => Some(paged_raster::EncodeFormat::Bmp),
+            SnapshotFormat::Tga => Some(paged_raster::EncodeFormat::Tga),
+            SnapshotFormat::Jxl => Some(paged_raster::EncodeFormat::Jxl),
+        }
     }
 }
 
@@ -157,6 +202,115 @@ impl SnapshotClip {
 /// past it): 16 384 px is 54 in at 300 ppi.
 pub const MAX_SNAPSHOT_SIDE_PX: u32 = 16_384;
 
+/// Engine ADR 1035 — a story the document does not hold, drawn by the
+/// snapshot alone: laid out by the engine's text stack (the composer,
+/// justification, hyphenation and the document's fonts) in a frame at
+/// `bounds` on the snapshot's page, in a copy of the document. The
+/// document is not changed; no undo step, no id is minted in it.
+///
+/// What paged.image's type layers are made of: their text lives in the
+/// image, and the engine draws it at the image's resolution.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotStory {
+    /// The text frame, page pt: `[top, left, bottom, right]`.
+    pub bounds: [f32; 4],
+    /// The paragraphs, in order. An empty list draws nothing.
+    #[serde(default)]
+    pub paragraphs: Vec<SnapshotParagraph>,
+    /// `"top"` (the default), `"center"`, `"bottom"` or `"justify"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vertical_justification: Option<String>,
+    /// The first line's baseline this far (pt) below the frame's top
+    /// (InDesign's Fixed first baseline offset): what places point type
+    /// exactly on its anchor. Absent: one ascent, InDesign's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_baseline: Option<f32>,
+}
+
+/// One paragraph of a [`SnapshotStory`]. Every absent value is the
+/// document's default paragraph style's.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotParagraph {
+    pub runs: Vec<SnapshotRun>,
+    /// IDML's names: `LeftAlign`, `CenterAlign`, `RightAlign`,
+    /// `LeftJustified`, `CenterJustified`, `RightJustified`,
+    /// `FullyJustified`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub justification: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_line_indent: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left_indent: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right_indent: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_before: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_after: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hyphenation: Option<bool>,
+    /// `"paragraph"` (Adobe Paragraph Composer) or `"single"` (Single-line).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composer: Option<String>,
+}
+
+/// One run of a [`SnapshotParagraph`]: text in one set of character
+/// attributes. Absent values inherit (the paragraph style's).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotRun {
+    /// The text; a `\n` or `\r` inside it is a forced line break.
+    pub text: String,
+    /// Family name, as the document's fonts name it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point_size: Option<f32>,
+    /// Leading in pt; absent is auto.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leading: Option<f32>,
+    /// The fill, sRGB 0–255. Absent is the style's (black).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_rgb: Option<[u8; 3]>,
+    /// 1/1000 em.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tracking: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline_shift: Option<f32>,
+    /// Percent (100 = none).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub horizontal_scale: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vertical_scale: Option<f32>,
+    /// Degrees.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skew: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub underline: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strikethru: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ligatures: Option<bool>,
+    /// IDML's `Normal`, `AllCaps`, `SmallCaps`, `CapToSmallCap`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capitalization: Option<String>,
+    /// IDML's `Normal`, `Superscript`, `Subscript`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<String>,
+}
+
+impl SnapshotStory {
+    /// Finite bounds with an area.
+    pub fn is_valid(&self) -> bool {
+        let [t, l, b, r] = self.bounds;
+        [t, l, b, r].iter().all(|v| v.is_finite()) && b > t && r > l
+    }
+}
+
 /// One `RequestSnapshot`, every option in one place.
 #[derive(Debug, Clone, Copy)]
 pub struct SnapshotRequest<'a> {
@@ -172,6 +326,12 @@ pub struct SnapshotRequest<'a> {
     /// Crop the image to the pixels something was drawn on (on a
     /// transparent ground; a paper ground is never trimmed).
     pub trim: bool,
+    /// Editor ADR 288 — JPEG quality, 1 to 100 (default 90); other
+    /// formats ignore it.
+    pub quality: Option<u8>,
+    /// Engine ADR 1035 — draw this story alone instead of the page's items
+    /// (`only` is then ignored).
+    pub story: Option<&'a SnapshotStory>,
 }
 
 impl<'a> SnapshotRequest<'a> {
@@ -188,6 +348,8 @@ impl<'a> SnapshotRequest<'a> {
             background: SnapshotBackground::Paper,
             markers: false,
             trim: false,
+            quality: None,
+            story: None,
         }
     }
 
@@ -195,6 +357,7 @@ impl<'a> SnapshotRequest<'a> {
     /// the GPU snapshot path draws exactly these.
     pub fn is_v1(&self) -> bool {
         self.only.is_empty()
+            && self.story.is_none()
             && self.clip.is_none()
             && !self.trim
             && self.format == SnapshotFormat::Png
@@ -210,6 +373,9 @@ pub enum SnapshotError {
     UnknownPage { page_id: PageId },
     #[error("png encoding failed: {0}")]
     PngEncode(String),
+    /// Editor ADR 288 — `paged-raster` refused to encode the `format`.
+    #[error("encoding failed: {0}")]
+    Encode(String),
     #[error("invalid target width: {0}")]
     InvalidWidth(u32),
     /// Extensions ADR 338 — a `clip` with a non-finite value or no area.
@@ -302,10 +468,44 @@ pub fn snapshot_page<'a>(
     only: &[crate::element_selection::ElementId],
     markers: bool,
 ) -> Result<(SnapshotPage<'a>, f32), SnapshotError> {
+    snapshot_page_with_story(
+        model,
+        page_id,
+        target_width_px,
+        dpi,
+        hide,
+        only,
+        markers,
+        None,
+    )
+}
+
+/// [`snapshot_page`], or — with `story` (engine ADR 1035) — the page with
+/// nothing on it but that story, laid out in a copy of the document.
+#[allow(clippy::too_many_arguments)]
+pub fn snapshot_page_with_story<'a>(
+    model: &'a CanvasModel,
+    page_id: &PageId,
+    target_width_px: u32,
+    dpi: Option<f32>,
+    hide: &[crate::element_selection::ElementId],
+    only: &[crate::element_selection::ElementId],
+    markers: bool,
+    story: Option<&SnapshotStory>,
+) -> Result<(SnapshotPage<'a>, f32), SnapshotError> {
     let unknown = || SnapshotError::UnknownPage {
         page_id: page_id.clone(),
     };
-    let page = if !hide.is_empty() || !only.is_empty() {
+    let page = if let Some(story) = story {
+        if !story.is_valid() {
+            return Err(SnapshotError::InvalidClip);
+        }
+        SnapshotPage::Hiding(Box::new(
+            model
+                .build_page_with_story(page_id, story)
+                .map_err(|_| unknown())?,
+        ))
+    } else if !hide.is_empty() || !only.is_empty() {
         SnapshotPage::Hiding(Box::new(
             model
                 .build_page_filtered(page_id, hide, only)
@@ -373,14 +573,26 @@ pub fn render_snapshot_request(
     req: &SnapshotRequest<'_>,
 ) -> Result<SnapshotPng, SnapshotError> {
     let explicit_dpi = req.dpi.filter(|d| *d > 0.0 && d.is_finite());
-    let dpi = match (explicit_dpi, req.clip) {
+    // A story without a clip draws its frame's box (engine ADR 1035).
+    let clip = req.clip.or_else(|| {
+        req.story.map(|s| {
+            let [t, l, b, r] = s.bounds;
+            SnapshotClip {
+                x: l,
+                y: t,
+                width: r - l,
+                height: b - t,
+            }
+        })
+    });
+    let dpi = match (explicit_dpi, clip) {
         (_, Some(c)) if !c.is_valid() => return Err(SnapshotError::InvalidClip),
         (Some(d), _) => Some(d),
         (None, Some(_)) if req.target_width_px == 0 => return Err(SnapshotError::InvalidWidth(0)),
         (None, Some(c)) => Some(req.target_width_px as f32 / c.width * 72.0),
         (None, None) => None,
     };
-    let (page, dpi) = snapshot_page(
+    let (page, dpi) = snapshot_page_with_story(
         model,
         req.page_id,
         req.target_width_px,
@@ -388,6 +600,7 @@ pub fn render_snapshot_request(
         req.hide,
         req.only,
         req.markers,
+        req.story,
     )?;
     let transparent = req.background == SnapshotBackground::Transparent;
     let background = if transparent {
@@ -411,7 +624,7 @@ pub fn render_snapshot_request(
             Ok(())
         }
     };
-    let (img, region) = match req.clip {
+    let (img, region) = match clip {
         None => {
             let px = |pt: f32| ((pt * scale).ceil().max(1.0)) as u32;
             fits(px(page.width_pt), px(page.height_pt))?;
@@ -479,10 +692,14 @@ pub fn render_snapshot_request(
             png_bytes: Vec::new(),
             format: SnapshotFormat::Rgba,
             rgba: snap.rgba,
+            bytes: Vec::new(),
             region: None,
+            story: false,
         },
+        format => encode_snapshot_file(snap, format, dpi, req.quality)?,
     };
     reply.region = region;
+    reply.story = req.story.is_some();
     Ok(reply)
 }
 
@@ -622,8 +839,84 @@ pub fn encode_snapshot_png(snap: Snapshot) -> Result<SnapshotPng, SnapshotError>
         png_bytes,
         format: SnapshotFormat::Png,
         rgba: Vec::new(),
+        bytes: Vec::new(),
         region: None,
+        story: false,
     })
+}
+
+/// Editor ADR 288 — encode a snapshot as a JPEG, WebP or TIFF file
+/// through `paged-raster`, the engine's one raster encoder: the sRGB
+/// profile the pixels are in is embedded, and the resolution is `dpi`.
+/// JPEG has no alpha, so its pixels are flattened onto white (paper)
+/// first; WebP and TIFF keep the straight alpha.
+pub fn encode_snapshot_file(
+    snap: Snapshot,
+    format: SnapshotFormat,
+    dpi: f32,
+    quality: Option<u8>,
+) -> Result<SnapshotPng, SnapshotError> {
+    use paged_raster::{
+        Alpha, ColorModel, EncodeOptions, Metadata, RasterImage, Samples, TiffCompression,
+        TiffEncodeOptions,
+    };
+    let Some(encoder) = format.encoder() else {
+        return encode_snapshot_png(snap);
+    };
+    let mut rgba = snap.rgba;
+    if format == SnapshotFormat::Jpeg {
+        flatten_onto_white(&mut rgba);
+    }
+    let image = RasterImage::from_samples(
+        snap.width_px,
+        snap.height_px,
+        ColorModel::Rgb,
+        Alpha::Unassociated,
+        Samples::U8(rgba),
+    );
+    let ppi = (dpi.is_finite() && dpi > 0.0).then(|| (f64::from(dpi), f64::from(dpi)));
+    let options = EncodeOptions {
+        quality: quality.unwrap_or(90).clamp(1, 100),
+        ppi,
+        metadata: Metadata {
+            icc: Some(paged_raster::srgb_icc()),
+            ..Metadata::default()
+        },
+        tiff: TiffEncodeOptions {
+            compression: TiffCompression::Lzw,
+            ..TiffEncodeOptions::default()
+        },
+    };
+    let bytes = paged_raster::encode(&image, encoder, &options)
+        .map_err(|e| SnapshotError::Encode(e.to_string()))?;
+    Ok(SnapshotPng {
+        page_id: snap.page_id,
+        width_px: snap.width_px,
+        height_px: snap.height_px,
+        layout_generation: snap.layout_generation,
+        numbering_generation: snap.numbering_generation,
+        png_bytes: Vec::new(),
+        format,
+        rgba: Vec::new(),
+        bytes,
+        region: None,
+        story: false,
+    })
+}
+
+/// Composite straight-alpha RGBA8 onto opaque white, in place (alpha
+/// becomes 255): what paper under a transparent image looks like.
+fn flatten_onto_white(rgba: &mut [u8]) {
+    for px in rgba.as_chunks_mut::<4>().0 {
+        let a = u32::from(px[3]);
+        if a == 255 {
+            continue;
+        }
+        for c in &mut px[..3] {
+            *c = ((u32::from(*c) * a + 255 * (255 - a) + 127) / 255) as u8;
+        }
+        px[3] = 255;
+    }
 }
 
 #[cfg(test)]

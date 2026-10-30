@@ -5,15 +5,17 @@
 // nor a GPU.
 //
 // The format is the engine's (image-js/src/layers_persist.rs): a compact
-// manifest plus the buffers it names by slot. Versions 1–4 are read;
-// version 4 is written (fill layers, typed adjustment layers, the
-// Photoshop-parity properties and layer comps). `writePgil(readPgil(m, b))` reproduces the
+// manifest plus the buffers it names by slot. Versions 1–7 are read;
+// version 7 is written (fill layers, typed adjustment layers, the
+// Photoshop-parity properties and layer comps since 4, the styles' state
+// since 5, the colour mode since 6, image ADR 479; a smart object's
+// placement, file, filters and record since 7, image ADR 482). `writePgil(readPgil(m, b))` reproduces the
 // engine's own export byte for byte, including the slot order — the
 // object-model spec proves that against the real wasm, so a drift in
 // either codec fails there rather than in a document.
 
 const MAGIC = [0x50, 0x47, 0x49, 0x4c]; // "PGIL"
-export const PGIL_VERSION = 5;
+export const PGIL_VERSION = 8;
 
 export interface PgilRect {
   x: number;
@@ -39,7 +41,16 @@ export interface PgilGroup {
   color: number;
 }
 
-export type PgilLayerKind = "pixels" | "adjustment" | "smart" | "fill";
+export type PgilLayerKind = "pixels" | "adjustment" | "smart" | "fill" | "type";
+
+/** A TYPE layer's payload (kind code 5, version 7; WP5.10): its source as
+ *  JSON, the PSD `TySh` block it came with while unedited, and whether
+ *  its render is stale. */
+export interface PgilType {
+  source: string;
+  psd: Uint8Array | null;
+  stale: boolean;
+}
 
 /** A TYPED adjustment layer's payload (kind code 4): `Adjustment::values`
  *  of `kind`, a Color Lookup's cube and look name. */
@@ -116,8 +127,44 @@ export interface PgilSmart {
   width: number;
   height: number;
   scale: number;
-  /** Straight RGBA8, `width·height·4`. */
+  /** Straight RGBA8, `width·height·4` — empty when the source is a
+   *  file decoded on demand (`ext.file`). */
   source: Uint8Array;
+  /** Version 7 (image ADR 482); null for an older manifest's smart
+   *  object, which meant the top-left corner at `scale`. */
+  ext: PgilSmartExt | null;
+}
+
+/** A smart object's version-8 block (`layers_persist.rs` `write_smart`). */
+export interface PgilSmartExt {
+  /** The corners, eight numbers, or null (the legacy placement). */
+  placement: number[] | null;
+  file: {
+    bytes: Uint8Array;
+    name: string;
+    /** The file type's four bytes as a big-endian u32. */
+    type: number;
+    uuid: string;
+    linked: boolean;
+    path: string;
+  } | null;
+  /** The smart filters as JSON ("" none). */
+  filters: string;
+  filterMask: {
+    data: Uint8Array;
+    /** x −1: canvas-sized. */
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    outside: number;
+  } | null;
+  /** The vector source as JSON ("" none). */
+  vector: string;
+  /** 1 warped, 2 filters pending. */
+  flags: number;
+  /** The PSD placed-layer record, or null. */
+  record: Uint8Array | null;
 }
 
 export interface PgilLayer {
@@ -147,6 +194,7 @@ export interface PgilLayer {
   typed: PgilTyped | null;
   fill: PgilFill | null;
   smart: PgilSmart | null;
+  typeLayer?: PgilType | null;
   ext: PgilExt;
 }
 
@@ -163,7 +211,18 @@ export interface PgilStack {
   /** Version 5: the layer styles' shared state (a layer's own style rides
    *  in its ext block's tail, as the engine's `lfx2` bytes). */
   styles: PgilStyles;
+  /** Version 6 (image ADR 479): the document's colour mode — 0 RGB,
+   *  1 Grayscale, 2 CMYK, 3 Lab — and the CMYK profile it converts
+   *  through (`null`: none). */
+  mode: PgilMode;
 }
+
+export interface PgilMode {
+  color: number;
+  profile: Uint8Array | null;
+}
+
+export const DEFAULT_MODE: Readonly<PgilMode> = { color: 0, profile: null };
 
 /** The document's Global Light and the patterns its styles draw. */
 export interface PgilStyles {
@@ -203,6 +262,7 @@ class Reader {
   i32 = () => this.view.getInt32(this.need(4), true);
   i64 = () => Number(this.view.getBigInt64(this.need(8), true));
   f32 = () => this.view.getFloat32(this.need(4), true);
+  f64 = () => this.view.getFloat64(this.need(8), true);
   str = () => {
     const n = this.u32();
     const at = this.need(n);
@@ -243,6 +303,7 @@ class Writer {
     this.push(8)
   );
   f32 = (v: number) => (this.scratch.setFloat32(0, v, true), this.push(4));
+  f64 = (v: number) => (this.scratch.setFloat64(0, v, true), this.push(8));
   str = (s: string) => {
     const b = new TextEncoder().encode(s);
     this.u32(b.length);
@@ -259,6 +320,87 @@ class Writer {
       this.raw(b);
     } else this.u8(0);
   };
+}
+
+function readSmartExt(
+  r: Reader,
+  buf: (slot: number) => Uint8Array,
+): PgilSmartExt {
+  const placement =
+    r.u8() !== 0 ? Array.from({ length: 8 }, () => r.f64()) : null;
+  const fileSlot = r.i64();
+  const file =
+    fileSlot < 0
+      ? null
+      : {
+          bytes: buf(fileSlot),
+          name: r.str(),
+          type: r.u32(),
+          uuid: r.str(),
+          linked: r.u8() !== 0,
+          path: r.str(),
+        };
+  const filters = r.str();
+  let filterMask: PgilSmartExt["filterMask"] = null;
+  if (filters !== "") {
+    const maskSlot = r.i64();
+    if (maskSlot >= 0) {
+      filterMask = {
+        data: buf(maskSlot),
+        x: r.i32(),
+        y: r.i32(),
+        w: r.u32(),
+        h: r.u32(),
+        outside: r.u8(),
+      };
+    }
+  }
+  const vector = r.str();
+  const flags = r.u8();
+  const recordSlot = r.i64();
+  return {
+    placement,
+    file,
+    filters,
+    filterMask,
+    vector,
+    flags,
+    record: recordSlot < 0 ? null : buf(recordSlot),
+  };
+}
+
+function writeSmartExt(
+  w: Writer,
+  ext: PgilSmartExt | null,
+  slot: (b: Uint8Array) => number,
+): void {
+  if (ext?.placement) {
+    w.u8(1);
+    for (const v of ext.placement) w.f64(v);
+  } else w.u8(0);
+  if (ext?.file) {
+    w.i64(slot(ext.file.bytes));
+    w.str(ext.file.name);
+    w.u32(ext.file.type);
+    w.str(ext.file.uuid);
+    w.u8(ext.file.linked ? 1 : 0);
+    w.str(ext.file.path);
+  } else w.i64(-1);
+  w.str(ext?.filters ?? "");
+  if (ext && ext.filters !== "") {
+    const m = ext.filterMask;
+    if (m) {
+      w.i64(slot(m.data));
+      w.i32(m.x);
+      w.i32(m.y);
+      w.u32(m.w);
+      w.u32(m.h);
+      w.u8(m.outside);
+    } else w.i64(-1);
+  }
+  w.str(ext?.vector ?? "");
+  w.u8(ext?.flags ?? 0);
+  w.i64(ext?.record ? slot(ext.record) : -1);
 }
 
 /** Decode a manifest and resolve its slots against `buffers`. Throws a
@@ -362,6 +504,7 @@ export function readPgil(
     let typed: PgilTyped | null = null;
     let fill: PgilFill | null = null;
     let smart: PgilSmart | null = null;
+    let typeLayer: PgilType | null = null;
     if (kindCode === 0) kind = "pixels";
     else if (kindCode === 1) {
       kind = "adjustment";
@@ -373,7 +516,8 @@ export function readPgil(
       const sw = r.u32(),
         sh = r.u32(),
         scale = r.f32();
-      smart = { width: sw, height: sh, scale, source: buf(r.u32()) };
+      smart = { width: sw, height: sh, scale, source: buf(r.u32()), ext: null };
+      if (version >= 8) smart.ext = readSmartExt(r.block(), buf);
     } else if (kindCode === 3 && version >= 4) {
       kind = "fill";
       const fk = r.str();
@@ -399,6 +543,15 @@ export function readPgil(
         values: r.f32s(),
         blob: r.f32s(),
         label: r.str(),
+      };
+    } else if (kindCode === 5 && version >= 7) {
+      kind = "type";
+      const source = r.str();
+      const psdSlot = opt(r.i64());
+      typeLayer = {
+        source,
+        psd: psdSlot === null ? null : buf(psdSlot),
+        stale: r.u8() !== 0,
       };
     } else throw new Error(`layer manifest: layer kind ${kindCode}`);
     let ext: PgilExt = { ...DEFAULT_EXT };
@@ -435,6 +588,7 @@ export function readPgil(
       typed,
       fill,
       smart,
+      typeLayer,
       ext,
     });
   }
@@ -496,6 +650,12 @@ export function readPgil(
       });
     }
   }
+  const mode: PgilMode = { ...DEFAULT_MODE };
+  if (version >= 6) {
+    mode.color = r.u8();
+    const at = r.i64();
+    mode.profile = at >= 0 ? buf(at) : null;
+  }
   return {
     version,
     width,
@@ -506,10 +666,11 @@ export function readPgil(
     layers,
     comps,
     styles,
+    mode,
   };
 }
 
-/** Encode a stack as the engine's version-5 export: the manifest first,
+/** Encode a stack as the engine's version-8 export: the manifest first,
  *  then the buffers, slots assigned in the engine's order (group masks,
  *  then per layer: pixels, mask, smart source). */
 export function writePgil(stack: PgilStack): Uint8Array[] {
@@ -556,7 +717,9 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
             : 1
           : l.kind === "smart"
             ? 2
-            : 3,
+            : l.kind === "type"
+              ? 5
+              : 3,
     );
     w.u8(l.depth);
     w.u32(slot(l.pixels));
@@ -601,6 +764,16 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
       w.u32(s.height);
       w.f32(s.scale);
       w.u32(slot(s.source));
+      const e = new Writer();
+      writeSmartExt(e, s.ext, slot);
+      const block = e.done();
+      w.u32(block.length);
+      w.raw(block);
+    } else if (l.kind === "type") {
+      const t = l.typeLayer!;
+      w.str(t.source);
+      w.i64(t.psd ? slot(t.psd) : -1);
+      w.u8(t.stale ? 1 : 0);
     } else if (l.kind === "fill") {
       const f = l.fill!;
       w.str(f.kind);
@@ -666,6 +839,8 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
     w.f32(p.angle);
     w.u32(slot(p.tile));
   }
+  w.u8(stack.mode.color);
+  w.i64(stack.mode.profile ? slot(stack.mode.profile) : -1);
   return [w.done(), ...buffers];
 }
 
@@ -682,7 +857,9 @@ export function clonePgil(s: PgilStack): PgilStack {
       adjust: l.adjust ? l.adjust.slice() : null,
       typed: l.typed ? { ...l.typed, values: l.typed.values.slice() } : null,
       fill: l.fill ? { ...l.fill, values: l.fill.values.slice() } : null,
-      smart: l.smart ? { ...l.smart } : null,
+      smart: l.smart
+        ? { ...l.smart, ext: l.smart.ext ? { ...l.smart.ext } : null }
+        : null,
       ext: { ...l.ext },
     })),
     comps: s.comps.map((c) => ({
@@ -690,6 +867,7 @@ export function clonePgil(s: PgilStack): PgilStack {
       entries: c.entries.map((e) => ({ ...e })),
     })),
     styles: { ...s.styles, patterns: s.styles.patterns.map((p) => ({ ...p })) },
+    mode: { ...s.mode },
   };
 }
 
@@ -734,5 +912,6 @@ export function stackFromImage(
     ],
     comps: [],
     styles: { ...DEFAULT_STYLES, patterns: [] },
+    mode: { ...DEFAULT_MODE },
   };
 }

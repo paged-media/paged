@@ -1024,6 +1024,7 @@ fn emit_anchored_rect_via_pipeline(
         opacity: None,
         blend_mode: None,
         effects: None,
+        effect_stack: Vec::new(),
         gradient_fill_angle: af.gradient_fill_angle,
         // `AnchoredFrame` carries no `GradientFillStart` / `Length` (the
         // adapter reads only the angle on an anchored frame), so the
@@ -1045,6 +1046,7 @@ fn emit_anchored_rect_via_pipeline(
         subpath_starts: Vec::new(),
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
+        image_adjustments: Vec::new(),
     };
     // `emit_rectangle_into` increments `page.stats.frames` internally.
     // An anchored frame's picture paints in its own pass (see
@@ -1057,6 +1059,7 @@ fn emit_anchored_rect_via_pipeline(
         em.options.fallback_frame_fill,
         em.color_ctx,
         None,
+        &mut |_: &mut BuiltPage| {},
         &mut |_: &mut BuiltPage| {},
     );
 }
@@ -1132,6 +1135,7 @@ pub(super) fn emit_anchored_rect_image(
         opacity: None,
         blend_mode: None,
         effects: None,
+        effect_stack: Vec::new(),
         gradient_fill_angle: af.gradient_fill_angle,
         gradient_fill_length: None,
         gradient_fill_start: None,
@@ -1149,6 +1153,7 @@ pub(super) fn emit_anchored_rect_image(
         subpath_starts: Vec::new(),
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
+        image_adjustments: Vec::new(),
     };
     emit_rectangle_image(
         page,
@@ -1268,6 +1273,7 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
         effects: None,
+        effect_stack: Vec::new(),
         gradient_fill_angle: None,
         gradient_fill_length: None,
         gradient_fill_start: None,

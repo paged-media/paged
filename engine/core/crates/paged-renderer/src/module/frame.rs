@@ -661,6 +661,7 @@ mod tests {
             opacity: None,
             blend_mode: None,
             effects: None,
+            effect_stack: Vec::new(),
             gradient_fill_angle: None,
             gradient_fill_length: None,
             gradient_fill_start: None,
@@ -676,6 +677,7 @@ mod tests {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
+            image_adjustments: Vec::new(),
         }
     }
 
@@ -744,6 +746,7 @@ mod tests {
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
             effects: None,
+            effect_stack: Vec::new(),
             gradient_fill_angle: None,
             gradient_fill_length: None,
             gradient_fill_start: None,

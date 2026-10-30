@@ -34,6 +34,9 @@ const ENGINE_TS = fileURLToPath(new URL("../src/engine.ts", import.meta.url));
 const MASKING_TS = fileURLToPath(
   new URL("../src/masking-engine.ts", import.meta.url),
 );
+const MODE_TS = fileURLToPath(
+  new URL("../src/mode-engine.ts", import.meta.url),
+);
 const RETOUCH_TS = fileURLToPath(
   new URL("../src/retouch-engine.ts", import.meta.url),
 );
@@ -42,6 +45,12 @@ const FILTERS_TS = fileURLToPath(
 );
 const VECTOR_TS = fileURLToPath(
   new URL("../src/vector-engine.ts", import.meta.url),
+);
+const WORKSPACE_TS = fileURLToPath(
+  new URL("../src/workspace-engine.ts", import.meta.url),
+);
+const SMART_TS = fileURLToPath(
+  new URL("../src/smart-engine.ts", import.meta.url),
 );
 
 /**
@@ -78,7 +87,7 @@ const UNMODELLED_ON_PURPOSE = new Map([
 function declaredIn(file: string, name: string): string[] {
   const src = readFileSync(file, "utf8");
   const block = new RegExp(
-    `export interface ${name}(?:\\s+extends [A-Za-z<>,\\s]+?)? \\{(.*?)\\n\\}`,
+    `export interface ${name}(?:\\s+extends\\s+[A-Za-z<>,\\s]+?)?\\s*\\{(.*?)\\n\\}`,
     "s",
   ).exec(src);
   if (!block) throw new Error(`${name} interface not found in ${file}`);
@@ -95,9 +104,12 @@ function declaredInTs(): string[] {
   return [
     ...declaredIn(ENGINE_TS, "ImageWasmModule"),
     ...declaredIn(MASKING_TS, "MaskingWasm"),
+    ...declaredIn(MODE_TS, "ModeWasm"),
     ...declaredIn(RETOUCH_TS, "RetouchWasm"),
     ...declaredIn(FILTERS_TS, "FilterWasm"),
     ...declaredIn(VECTOR_TS, "VectorWasm"),
+    ...declaredIn(WORKSPACE_TS, "WorkspaceWasm"),
+    ...declaredIn(SMART_TS, "SmartWasm"),
   ];
 }
 

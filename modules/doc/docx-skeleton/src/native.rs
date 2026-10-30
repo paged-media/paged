@@ -273,6 +273,7 @@ pub fn skeleton_document_with(
         text_frame_index: HashMap::new(),
         styles: styles(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     }
 }
 

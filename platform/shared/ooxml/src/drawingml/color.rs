@@ -190,6 +190,15 @@ pub trait SchemeColors {
     /// The colour of slot `name` (`accent1`, `tx1`, `phClr`, …), with no
     /// transform applied; `None` when the slot is unknown.
     fn scheme(&self, name: &str) -> Option<Rgba>;
+
+    /// What a resolved solid paint names as its theme colour (the
+    /// `theme` of [`super::resolved::Paint::Solid`]): by default the
+    /// scheme slot of a colour with no transform. A reader that keeps
+    /// theme colours live (slide ADR 713) names transformed and mapped
+    /// colours too.
+    fn theme_key(&self, c: &Color) -> Option<String> {
+        c.plain_scheme().map(str::to_string)
+    }
 }
 
 /// No theme: every slot is unknown (and resolves black).

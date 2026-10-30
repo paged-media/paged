@@ -964,6 +964,8 @@ mod wasm {
                 format,
                 background,
                 trim,
+                quality,
+                story,
             } = msg.kind
             else {
                 return None;
@@ -982,6 +984,8 @@ mod wasm {
                 background,
                 markers,
                 trim,
+                quality,
+                story: story.as_ref(),
             };
             if !v2.is_v1() {
                 return None;

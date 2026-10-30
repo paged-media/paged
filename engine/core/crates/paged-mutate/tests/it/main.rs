@@ -35,6 +35,7 @@ mod reorder_ops;
 mod replace_image_bytes;
 mod stroke_alignment;
 mod style_definition_type;
+mod symbols;
 mod table_v2;
 mod template_policy;
 mod text_frame_story_mint;

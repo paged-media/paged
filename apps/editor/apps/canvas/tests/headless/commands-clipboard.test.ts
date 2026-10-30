@@ -175,8 +175,10 @@ describe("SH-201 (UX audit F-28): the page-item clipboard", () => {
     await e.select([T.frame.id]);
     await e.invoke("paged.edit.copy");
     // Something else was copied since: the clipboard's text wins.
+    // (A new copy replaces every flavour, the SVG of ours too: ADR 289.)
     e.hostApp.systemClipboard.text = "Hello from elsewhere";
     e.hostApp.systemClipboard.html = "";
+    e.hostApp.systemClipboard.svg = "";
     const frames = await keysOf(e, "textFrame");
     await e.invoke("paged.edit.paste");
     await e.idle();

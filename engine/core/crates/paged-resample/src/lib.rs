@@ -16,9 +16,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! CPU resampling of straight-alpha RGBA8 rasters (image ADR 467).
+//! CPU resampling of straight-alpha RGBA8 rasters (image ADR 467; the
+//! warp, image ADR 482).
 //!
-//! Two operations, both pure Rust, single-threaded and deterministic (the
+//! Three operations, all pure Rust, single-threaded and deterministic (the
 //! same input gives the same bytes on a platform; the only transcendental
 //! is the Lanczos `sin`, evaluated in f64, so platforms agree after the
 //! 8-bit round):
@@ -28,6 +29,9 @@
 //! - [`rotate_crop_rgba8`] — a straightened crop: the picture turned
 //!   about the crop rectangle's centre and the rectangle cut out,
 //!   bilinear.
+//! - [`warp_projective_rgba8`] — a picture drawn through a projective
+//!   map (a smart object into its placement), bilinear or bicubic,
+//!   transparent outside the picture.
 //!
 //! # Coordinate model
 //!
@@ -466,6 +470,134 @@ pub fn rotate_crop_rgba8(
     Ok(out)
 }
 
+/// The reconstruction of [`warp_projective_rgba8`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WarpFilter {
+    /// The 2×2 footprint.
+    Bilinear,
+    /// Catmull-Rom (a = −0.5), the 4×4 footprint, separable — the
+    /// reconstruction Photoshop's "Bicubic Automatic" uses for a placed
+    /// layer when it enlarges or turns it (image ADR 482).
+    #[default]
+    Bicubic,
+}
+
+/// A destination window in canvas pixels (it may start off the canvas's
+/// origin; the caller clips it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Window {
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+}
+
+fn catmull_rom(t: f32) -> [f32; 4] {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    [
+        -0.5 * t3 + t2 - 0.5 * t,
+        1.5 * t3 - 2.5 * t2 + 1.0,
+        -1.5 * t3 + 2.0 * t2 + 0.5 * t,
+        0.5 * t3 - 0.5 * t2,
+    ]
+}
+
+/// Draw a straight-alpha RGBA8 picture through a PROJECTIVE map onto the
+/// destination `window` (image ADR 482: a smart object rendered from its
+/// source into its placement).
+///
+/// `inverse` is the 3×3 homography from destination to source pixel
+/// coordinates, row-major on column vectors. Each output pixel's centre
+/// maps back, `(sx, sy, sw) = inverse · (x + 0.5, y + 0.5, 1)`, and the
+/// source is sampled at `(sx / sw − 0.5, sy / sw − 0.5)` — the model of the
+/// GPU's `geom.warp_projective`. Taps outside the picture are TRANSPARENT,
+/// so the placed edge is antialiased against nothing; a point behind the
+/// horizon (`sw ≤ 0`) is transparent. Filtering is premultiplied; the
+/// bicubic's overshoot is clamped to a valid premultiplied colour.
+///
+/// The map is sampled as given: a caller that SHRINKS the picture reduces
+/// it first ([`resize_rgba8`]) so the taps do not alias.
+pub fn warp_projective_rgba8(
+    src: &[u8],
+    width: u32,
+    height: u32,
+    inverse: [f64; 9],
+    window: Window,
+    filter: WarpFilter,
+) -> Result<Vec<u8>, ResampleError> {
+    check_source(src, width, height)?;
+    check_target(window.w, window.h)?;
+    if inverse.iter().any(|v| !v.is_finite()) {
+        return Err(ResampleError::Angle);
+    }
+    let (w, h) = (width as i64, height as i64);
+    let (ow, oh) = (window.w as usize, window.h as usize);
+    let tap = |x: i64, y: i64| -> [f32; 4] {
+        if x < 0 || y < 0 || x >= w || y >= h {
+            return [0.0; 4];
+        }
+        let i = ((y * w + x) * 4) as usize;
+        premultiply(&src[i..i + 4])
+    };
+    let mut out = vec![0u8; ow * oh * 4];
+    let m = inverse;
+    for oy in 0..oh {
+        let dy = window.y as f64 + oy as f64 + 0.5;
+        for ox in 0..ow {
+            let dx = window.x as f64 + ox as f64 + 0.5;
+            let sw = m[6] * dx + m[7] * dy + m[8];
+            if sw <= 1e-12 {
+                continue;
+            }
+            let sx = (m[0] * dx + m[1] * dy + m[2]) / sw - 0.5;
+            let sy = (m[3] * dx + m[4] * dy + m[5]) / sw - 0.5;
+            // Wholly outside (with the widest footprint's reach): nothing.
+            if sx < -2.0 || sy < -2.0 || sx > w as f64 + 1.0 || sy > h as f64 + 1.0 {
+                continue;
+            }
+            let (x0, y0) = (sx.floor(), sy.floor());
+            let (fx, fy) = ((sx - x0) as f32, (sy - y0) as f32);
+            let (x0, y0) = (x0 as i64, y0 as i64);
+            let mut acc = [0f32; 4];
+            match filter {
+                WarpFilter::Bilinear => {
+                    let wx = [1.0 - fx, fx];
+                    let wy = [1.0 - fy, fy];
+                    for (j, wyj) in wy.iter().enumerate() {
+                        for (i, wxi) in wx.iter().enumerate() {
+                            let p = tap(x0 + i as i64, y0 + j as i64);
+                            let k = wxi * wyj;
+                            for c in 0..4 {
+                                acc[c] += p[c] * k;
+                            }
+                        }
+                    }
+                }
+                WarpFilter::Bicubic => {
+                    let wx = catmull_rom(fx);
+                    let wy = catmull_rom(fy);
+                    for (j, wyj) in wy.iter().enumerate() {
+                        let mut row = [0f32; 4];
+                        for (i, wxi) in wx.iter().enumerate() {
+                            let p = tap(x0 - 1 + i as i64, y0 - 1 + j as i64);
+                            for c in 0..4 {
+                                row[c] += p[c] * wxi;
+                            }
+                        }
+                        for c in 0..4 {
+                            acc[c] += row[c] * wyj;
+                        }
+                    }
+                }
+            }
+            let i = (oy * ow + ox) * 4;
+            unpremultiply(acc, &mut out[i..i + 4]);
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -749,5 +881,107 @@ mod tests {
             resize_rgba8(&big, 301, 207, 97, 64, Filter::Lanczos3).unwrap(),
             resize_rgba8(&big, 301, 207, 97, 64, Filter::Lanczos3).unwrap()
         );
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn the_identity_warp_copies_and_a_translation_moves__feat__image_layers_smart_objects_full() {
+        let src = noise(11, 6, true);
+        let id = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+        let win = Window {
+            x: 0,
+            y: 0,
+            w: 11,
+            h: 6,
+        };
+        for f in [WarpFilter::Bilinear, WarpFilter::Bicubic] {
+            assert_eq!(warp_projective_rgba8(&src, 11, 6, id, win, f).unwrap(), src);
+        }
+        // Moved 3 right and 2 down: the inverse subtracts the offset.
+        let inv = [1.0, 0.0, -3.0, 0.0, 1.0, -2.0, 0.0, 0.0, 1.0];
+        let out = warp_projective_rgba8(
+            &src,
+            11,
+            6,
+            inv,
+            Window {
+                x: 0,
+                y: 0,
+                w: 14,
+                h: 8,
+            },
+            WarpFilter::Bicubic,
+        )
+        .unwrap();
+        for y in 0..6 {
+            for x in 0..11 {
+                let s = (y * 11 + x) * 4;
+                let d = ((y + 2) * 14 + x + 3) * 4;
+                assert_eq!(out[d..d + 4], src[s..s + 4], "({x},{y})");
+            }
+        }
+        // What the picture does not cover is transparent.
+        assert_eq!(&out[0..4], &[0, 0, 0, 0]);
+        // A window off the origin reads the same canvas.
+        let part = warp_projective_rgba8(
+            &src,
+            11,
+            6,
+            inv,
+            Window {
+                x: 3,
+                y: 2,
+                w: 11,
+                h: 6,
+            },
+            WarpFilter::Bilinear,
+        )
+        .unwrap();
+        assert_eq!(part, src);
+    }
+
+    #[test]
+    fn a_warp_keeps_flat_colour_inside_and_fades_the_edge() {
+        let src: Vec<u8> = [40u8, 120, 200, 255].repeat(16 * 16);
+        // Doubled about the origin.
+        let inv = [0.5, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 1.0];
+        let out = warp_projective_rgba8(
+            &src,
+            16,
+            16,
+            inv,
+            Window {
+                x: 0,
+                y: 0,
+                w: 34,
+                h: 34,
+            },
+            WarpFilter::Bicubic,
+        )
+        .unwrap();
+        let px = |x: usize, y: usize| &out[(y * 34 + x) * 4..(y * 34 + x) * 4 + 4];
+        assert_eq!(px(10, 10), &[40, 120, 200, 255]);
+        // The edge is partly covered, with the colour kept (premultiplied).
+        let e = px(31, 10);
+        assert!(e[3] > 0 && e[3] < 255, "{e:?}");
+        assert!((i32::from(e[2]) - 200).abs() <= 2, "{e:?}");
+        assert_eq!(px(33, 10)[3], 0, "past the edge: nothing (the lobe clamps)");
+        // A point behind the horizon draws nothing.
+        let behind = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0];
+        let none = warp_projective_rgba8(
+            &src,
+            16,
+            16,
+            behind,
+            Window {
+                x: 0,
+                y: 0,
+                w: 4,
+                h: 4,
+            },
+            WarpFilter::Bilinear,
+        )
+        .unwrap();
+        assert!(none.iter().all(|&b| b == 0));
     }
 }

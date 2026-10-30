@@ -72,6 +72,10 @@ pub use apply::apply_checked;
 pub use apply::is_locked;
 pub use apply::{duplicate_demand, duplicate_roots, DuplicateDemand};
 pub use apply::{
+    expand_symbols_for_interchange, restore_symbols_from_labels, symbol_break_demand,
+    symbol_break_root, SYMBOLS_LABEL, SYMBOL_INSTANCE_LABEL,
+};
+pub use apply::{
     extract_snippet, parse_snippet, snippet_demand, snippet_roots, ItemSnippet, SnippetResources,
     SNIPPET_FORMAT,
 };
@@ -271,6 +275,7 @@ mod tests {
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
             effects: None,
+            effect_stack: Vec::new(),
             gradient_fill_angle: None,
             gradient_fill_length: None,
             gradient_fill_start: None,
@@ -316,6 +321,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -1899,6 +1905,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -2097,6 +2104,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -2213,6 +2221,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         };
         Project::new(doc)
     }
@@ -2382,6 +2391,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         };
         let mut project = Project::new(doc);
         let node = NodeId::GraphicLine("GraphicLine/l1".to_string());
@@ -2790,6 +2800,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -3152,6 +3163,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         }
     }
 
@@ -3855,6 +3867,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         });
         // Two rectangles: A = [0..20, 0..20], B = [10..30, 10..30].
         // A \ B is an L-shape of 6 corner vertices.
@@ -4439,6 +4452,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         });
         // Insert a fresh rectangle (the InsertNode arm fills in the
         // full struct including default `end_cap: None`).
@@ -4501,6 +4515,7 @@ mod tests {
             text_frame_index: HashMap::new(),
             styles: StyleSheet::default(),
             anchors: Vec::new(),
+            symbols: Vec::new(),
         });
         project
             .apply(Operation::InsertNode {
@@ -6942,6 +6957,68 @@ mod tests {
         );
     }
 
+    /// Engine ADR 1037 — `frame.imageAdjustments` replaces a picture's
+    /// whole filter stack, repaints without reflow, undoes to the stack it
+    /// replaced, and refuses an op out of its range or another kind.
+    #[test]
+    #[allow(non_snake_case)]
+    fn frame_image_adjustments_round_trip__feat__images_graphics_image_filter_stack() {
+        use paged_model::RasterOp;
+        let mut p = Project::new(document_with_one_rectangle("Rectangle/r1"));
+        let node = NodeId::Rectangle("Rectangle/r1".to_string());
+        let ops = vec![RasterOp::Exposure { ev: 1.0 }, RasterOp::Invert];
+        let applied = p
+            .apply(set_op(
+                node.clone(),
+                PropertyPath::FrameImageAdjustments,
+                Value::ImageAdjustments(ops.clone()),
+            ))
+            .unwrap();
+        assert_eq!(
+            p.document().spreads[0].spread.rectangles[0].image_adjustments,
+            ops
+        );
+        assert_eq!(applied.invalidation.frame_style, vec![node.clone()]);
+        assert!(applied.invalidation.text_reflow.is_empty());
+        assert!(matches!(
+            &applied.inverse,
+            Operation::SetProperty { value: Value::ImageAdjustments(v), .. } if v.is_empty()
+        ));
+        crate::apply(p.document_mut(), &applied.inverse).unwrap();
+        assert!(p.document().spreads[0].spread.rectangles[0]
+            .image_adjustments
+            .is_empty());
+        assert_round_trips(
+            &mut p,
+            set_op(
+                node.clone(),
+                PropertyPath::FrameImageAdjustments,
+                Value::ImageAdjustments(ops.clone()),
+            ),
+            |d| assert_eq!(d.spreads[0].spread.rectangles[0].image_adjustments, ops),
+        );
+        let err = p.apply(set_op(
+            node.clone(),
+            PropertyPath::FrameImageAdjustments,
+            Value::ImageAdjustments(vec![RasterOp::Posterize { levels: 1.0 }]),
+        ));
+        assert!(matches!(err, Err(OperationError::InvalidValue { .. })));
+        let err = p.apply(set_op(
+            node,
+            PropertyPath::FrameImageAdjustments,
+            Value::Text("invert".into()),
+        ));
+        assert!(matches!(err, Err(OperationError::TypeMismatch { .. })));
+        let mut t = Project::new(document_with_one_textframe("TextFrame/u1"));
+        assert!(t
+            .apply(set_op(
+                NodeId::TextFrame("TextFrame/u1".to_string()),
+                PropertyPath::FrameImageAdjustments,
+                Value::ImageAdjustments(vec![RasterOp::Invert]),
+            ))
+            .is_err());
+    }
+
     #[test]
     fn w03_stroke_family_round_trips_paint_only() {
         let mut p = Project::new(document_with_one_rectangle("Rectangle/r1"));
@@ -7783,6 +7860,7 @@ mod tests {
                 text_frame_index: HashMap::new(),
                 styles: StyleSheet::default(),
                 anchors: Vec::new(),
+                symbols: Vec::new(),
             }
         }
 
@@ -8742,6 +8820,7 @@ mod tests {
                 text_frame_index: HashMap::new(),
                 styles: StyleSheet::default(),
                 anchors: Vec::new(),
+                symbols: Vec::new(),
             }
         }
 

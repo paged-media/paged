@@ -336,7 +336,7 @@ fn elem(spread: &Spread, r: &FrameRef) -> Option<Elem> {
             Kind::TextFrame,
             serde_json::to_value(spread.text_frames.get(i)?).ok()?,
         ),
-        FrameRef::Group(_) => return None,
+        FrameRef::Group(_) | FrameRef::Instance(_) => return None,
     };
     let id = s(&v, "self_id").unwrap_or_default();
     Some(Elem { kind, id, v })

@@ -118,6 +118,7 @@ pub(super) fn ref_self_id(spread: &Spread, r: FrameRef) -> Option<&str> {
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.as_deref(),
         FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.as_deref(),
         FrameRef::Group(i) => spread.groups.get(i)?.self_id.as_deref(),
+        FrameRef::Instance(i) => spread.instances.get(i)?.self_id.as_deref(),
     }
 }
 
@@ -130,6 +131,7 @@ pub(super) fn node_for(spread: &Spread, r: FrameRef) -> NodeId {
         FrameRef::GraphicLine(_) => NodeId::GraphicLine(id),
         FrameRef::Polygon(_) => NodeId::Polygon(id),
         FrameRef::Group(_) => NodeId::Group(id),
+        FrameRef::Instance(_) => NodeId::Instance(id),
     }
 }
 
@@ -158,6 +160,9 @@ pub(super) fn ref_in_spread(spread: &Spread, node: &NodeId) -> Option<FrameRef> 
         }
         NodeId::Group(id) => {
             at(spread.groups.iter().map(|f| f.self_id.as_deref()), id).map(FrameRef::Group)
+        }
+        NodeId::Instance(id) => {
+            at(spread.instances.iter().map(|f| f.self_id.as_deref()), id).map(FrameRef::Instance)
         }
         _ => None,
     }
@@ -369,7 +374,10 @@ fn check_subtree(
                 ));
             }
         }
-        FrameRef::Oval(_) | FrameRef::GraphicLine(_) | FrameRef::Polygon(_) => {}
+        FrameRef::Oval(_)
+        | FrameRef::GraphicLine(_)
+        | FrameRef::Polygon(_)
+        | FrameRef::Instance(_) => {}
     }
     // Pasted-in children (a group hosts none; a leaf of any kind may).
     if let Some(children) = id.and_then(|id| spread.nested_children.get(id)) {
@@ -394,6 +402,7 @@ fn locate(
             | NodeId::GraphicLine(_)
             | NodeId::Polygon(_)
             | NodeId::Group(_)
+            | NodeId::Instance(_)
     ) {
         return Err(refused(
             source.clone(),
@@ -627,6 +636,16 @@ impl Cloner<'_> {
                 spread.rectangles.push(clone);
                 FrameRef::Rectangle(spread.rectangles.len() - 1)
             }
+            // Engine ADR 1039 — a copy of an instance is another
+            // instance of the same symbol.
+            FrameRef::Instance(i) => {
+                let mut clone = spread.instances[i].clone();
+                clone.self_id = Some(new_id.clone());
+                clone.item_transform[4] += dx;
+                clone.item_transform[5] += dy;
+                spread.instances.push(clone);
+                FrameRef::Instance(spread.instances.len() - 1)
+            }
             FrameRef::Oval(i) => {
                 let mut clone = spread.ovals[i].clone();
                 clone.self_id = Some(new_id.clone());
@@ -849,6 +868,7 @@ pub fn duplicate_roots(doc: &Document, op: &Operation) -> Vec<NodeId> {
             NodeId::Oval(_) => NodeId::Oval(id.clone()),
             NodeId::GraphicLine(_) => NodeId::GraphicLine(id.clone()),
             NodeId::Polygon(_) => NodeId::Polygon(id.clone()),
+            NodeId::Instance(_) => NodeId::Instance(id.clone()),
             _ => NodeId::Group(id.clone()),
         });
         next += subtree_len(spread, r);
@@ -900,6 +920,9 @@ pub(super) fn remove_ref_everywhere(spread: &mut Spread, r: FrameRef) {
         FrameRef::Group(i) => {
             spread.groups.remove(i);
         }
+        FrameRef::Instance(i) => {
+            spread.instances.remove(i);
+        }
     }
     unregister_frame_ref(spread, r, fr_index(&r));
 }
@@ -923,6 +946,7 @@ pub(super) fn remove_minted(
                 NodeId::GraphicLine(id.to_string()),
                 NodeId::Polygon(id.to_string()),
                 NodeId::Group(id.to_string()),
+                NodeId::Instance(id.to_string()),
             ]
             .iter()
             .find_map(|n| ref_in_spread(&p.spread, n))

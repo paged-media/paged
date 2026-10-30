@@ -196,6 +196,7 @@ fn outline(list: &DisplayList, px_per_pt: f32) -> DisplayList {
         spot_inks: list.spot_inks.clone(),
         glyph_runs: None,
         link_regions: None,
+        symbol_forms: Vec::new(),
     };
     let paint = Paint::Solid(OUTLINE_COLOR);
     // Inside a soft mask's SOURCE (between `BeginSoftMask` and
@@ -283,7 +284,11 @@ fn outline(list: &DisplayList, px_per_pt: f32) -> DisplayList {
             | DisplayCommand::GradientFeather { .. }
             | DisplayCommand::BeginFeatheredObject { .. }
             | DisplayCommand::PushLayer { .. }
-            | DisplayCommand::PopLayer(_) => {}
+            | DisplayCommand::PopLayer(_)
+            // Engine ADR 1039 — the copy between the markers is outlined
+            // like any other artwork.
+            | DisplayCommand::BeginSymbol { .. }
+            | DisplayCommand::EndSymbol(_) => {}
             DisplayCommand::BeginSoftMask { .. }
             | DisplayCommand::BeginMaskedContent(_)
             | DisplayCommand::EndSoftMask(_) => unreachable!("handled above"),

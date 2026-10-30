@@ -18,7 +18,7 @@ stood, for decisions made earlier; their status says so.
 | [452](452-kernel-abi.md) | The frozen shader kernel ABI (v1, amended to v1.1) | Accepted, recorded retroactively 2026-10-02 |
 | [453](453-tolerance-not-golden-bytes.md) | GPU output is verified against the scalar reference by tolerance, never by golden bytes | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-04) |
 | [454](454-two-evaluation-engines.md) | Two evaluation engines over one kernel set | Accepted, recorded retroactively 2026-10-02 |
-| [455](455-pixel-model.md) | The pixel model: explicit format, 16-bit float working tiles | Accepted, recorded retroactively 2026-10-02 |
+| [455](455-pixel-model.md) | The pixel model: explicit format, 16-bit float working tiles | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-28 by 479) |
 | [456](456-codecs.md) | Codecs are pure-Rust, permissively licensed adapters behind I/O-free traits | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-24 by 466) |
 | [457](457-colour-management.md) | Colour management: one seam, one engine for display and one for print | Accepted, recorded retroactively 2026-10-02 |
 | [458](458-psd-preservation.md) | PSD is read and written by an own parser under a preservation rule | Accepted, recorded retroactively 2026-10-02 |
@@ -37,9 +37,13 @@ stood, for decisions made earlier; their status says so.
 | [471](471-brush-engine.md) | The brush engine: Brush Settings as a seeded dab planner over the one accumulator | Accepted 2026-10-24 |
 | [472](472-layer-styles.md) | A layer style is a sequence of fold steps around the layer's pixels | Accepted 2026-10-25 (WP5.4) |
 | [473](473-filter-families-and-galleries.md) | Filter families as kernels and recipes; the galleries are workspaces over one chain | Accepted 2026-10-25 |
+| [474](474-type-layers.md) | A type layer's text lives in the image; the engine lays it out and the GPU warps it | Accepted 2026-10-27 |
+| [475](475-the-image-workspace.md) | The image workspace: guides, count, notes and slices in the stack; rulers, guides and grid are the host's | Accepted 2026-10-28 |
 | [476](476-vectors-inside-the-image.md) | Vectors inside the image: one path geometry, drawn by the vector-mask rasterizer, edited by draw's machines | Accepted 2026-10-28 (amends 470) |
 | [477](477-history-and-presets.md) | Snapshots, a configurable journal and one Preset Manager in the image context | Accepted 2026-10-28 (WP5.9; amends 463) |
 | [478](478-psd-write-depth.md) | The layered PSD save writes what it reads | Accepted 2026-10-28 (WP5.15) |
+| [479](479-depth-and-colour-modes.md) | 16 bits end to end, colour modes as a projection, and the proof view | Accepted 2026-10-28 (WP5.13; amends 455) |
+| [482](482-smart-objects-in-full.md) | A smart object is a source, a placement and its filters; the layer is their render | Accepted 2026-10-29 (WP5.14; amends 467 and 478) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

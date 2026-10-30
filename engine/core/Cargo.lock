@@ -3540,6 +3540,7 @@ dependencies = [
  "paged-introspect",
  "paged-model",
  "paged-mutate",
+ "paged-raster",
  "paged-renderer",
  "paged-scene",
  "paged-store",
@@ -3826,6 +3827,7 @@ dependencies = [
  "paged-color",
  "paged-compose",
  "paged-gen",
+ "paged-gpu",
  "paged-model",
  "paged-raster",
  "paged-renderer",
@@ -3942,6 +3944,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-kernels"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "paged-mcp"
 version = "0.0.0"
 dependencies = [
@@ -3954,8 +3963,11 @@ name = "paged-model"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "schemars",
  "serde",
  "serde_json",
+ "tsify-next",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -4078,11 +4090,14 @@ dependencies = [
  "paged-fmt",
  "paged-gen",
  "paged-gpu",
+ "paged-kernels",
  "paged-model",
  "paged-mutate",
+ "paged-pixel",
  "paged-ps",
  "paged-psd",
  "paged-raster",
+ "paged-resample",
  "paged-scene",
  "paged-store",
  "paged-svg",
@@ -4274,6 +4289,10 @@ dependencies = [
  "unicode-bidi",
  "unicode-segmentation",
 ]
+
+[[package]]
+name = "paged-warp"
+version = "0.0.0"
 
 [[package]]
 name = "paged-wire"

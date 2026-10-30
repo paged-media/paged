@@ -53,6 +53,7 @@ import { defineMessages, t } from "@paged-media/strings";
 import { sha256Hex } from "@paged-media/helpers";
 
 import { latestWins } from "./coalesce";
+import type { ColorModeName, ProofTarget } from "./mode-engine";
 import {
   initialRetouch,
   makeRetouch,
@@ -144,7 +145,21 @@ import {
   type SelectionStats,
   type StrokeTool,
 } from "./engine";
-import { imageToPage, pageToImage, resolveFrameFit } from "./frame-fit";
+import {
+  imageToPage,
+  pageToImage,
+  resolveFrameFit,
+  type FitTransform,
+} from "./frame-fit";
+import {
+  emptyRender,
+  fitRuns,
+  newTypeSource,
+  renderTypeSource,
+  type TypeFrame,
+  type TypeSource,
+  type TypeWarp,
+} from "./type-layer";
 import { claimImageTiles } from "./tile-provider";
 import { gradientKindLabel, warpKindLabel } from "./words";
 import { readPgil } from "./object-model/pgil";
@@ -171,6 +186,12 @@ import {
   createVectorController,
   type VectorController,
 } from "./vector-session";
+import {
+  createSmartController,
+  SO,
+  type SmartController,
+} from "./smart-session";
+import type { SmartInfo } from "./smart-engine";
 import {
   createBrushMachine,
   type BrushMachine,
@@ -222,6 +243,10 @@ import {
   type HistoryOps,
   type PresetOps,
 } from "./session-presets";
+import {
+  createWorkspaceController,
+  type WorkspaceController,
+} from "./workspace";
 
 /** The fixed v0 feather sigma (px) the `featherSelection` command uses
  *  when the caller passes none (a slider is a follow-up). */
@@ -341,6 +366,7 @@ export type ImageDialog =
   | { kind: "trim" }
   | { kind: "rotate" }
   | { kind: "exportAs" }
+  | { kind: "newGuide" }
   | { kind: "blendingOptions"; index: number }
   | { kind: "layerStyle"; index: number; pane: LayerStylePane }
   | { kind: "globalLight" }
@@ -348,7 +374,9 @@ export type ImageDialog =
   /** Edit ▸ Presets ▸ Preset Manager (image ADR 477), on a kind's tab. */
   | { kind: "presetManager"; tab: PresetKind }
   /** History Options (image ADR 477). */
-  | { kind: "historyOptions" };
+  | { kind: "historyOptions" }
+  /** Layer ▸ Smart objects ▸ Transform… (image ADR 482). */
+  | { kind: "smartTransform" };
 
 /** The pane the Layer Style dialog shows: an effect, or Blending Options. */
 export type LayerStylePane = EffectKind | "blending";
@@ -374,6 +402,16 @@ export type CurvesPick = "black" | "grey" | "white";
 export type ChannelCurves = Record<"r" | "g" | "b", Array<[number, number]>>;
 
 export interface ImageSessionState {
+  /** WP5.10 — the type layer being edited on the canvas, and the
+   *  session its writes merge into (one undo step), or null. */
+  typeEdit: {
+    index: number;
+    session: string;
+    text: string;
+    /** The image frame's fit on its page, for the overlay (null until
+     *  read). */
+    fit: FitTransform | null;
+  } | null;
   engine: EngineStatus;
   /** The honest boot/GPU detail when something is off. */
   engineDetail: string | null;
@@ -425,6 +463,11 @@ export interface ImageSessionState {
   /** The last revision committed to the document for this frame (the
    *  marker's `rev`), or null before the first commit. */
   committedRev: number | null;
+  /** Edit Contents (image ADR 482): the smart object whose contents the
+   *  session shows now, innermost, or null for the document itself. */
+  smartNested: string | null;
+  /** The active layer's smart-object state (ADR 482), or null. */
+  smartInfo: SmartInfo | null;
   /** Pixel edits since ingest, reopen or the last commit — what a
    *  commit would write. */
   uncommitted: boolean;
@@ -595,6 +638,14 @@ export interface ImageSessionState {
    *  `pickExportProfile`), by name; null = the source's own CMYK profile
    *  or, without one, the naive formula. */
   exportProfile: string | null;
+  /** IMAGE ▸ MODE (image ADR 479): the document's depth and colour mode,
+   *  read from the engine after every stack change, and the Proof Colors
+   *  / Gamut Warning display setup (View, never the document). */
+  mode: {
+    bits: 8 | 16;
+    color: ColorModeName;
+    proof: { target: ProofTarget; colors: boolean; gamut: boolean };
+  };
   /** The Curves eyedropper waiting for a click on the image, or null. */
   curvesPicker: CurvesPick | null;
   /** The per-channel curves the Curves tools (Auto, the eyedroppers)
@@ -619,6 +670,12 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   /** Vectors inside the image: the paths the Pen and the shape tools
    *  draw, vector masks and shape layers (image ADR 476). */
   vectors(): VectorController;
+  /** WP5.12 — guides, count, notes, slices, the Ruler, the snapping and
+   *  the Info rows (image ADR 475, `workspace.ts`). */
+  workspace(): WorkspaceController;
+  /** Smart objects in full (image ADR 482): transform, smart filters,
+   *  Edit Contents, links, vector smart objects. */
+  smart(): SmartController;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -722,6 +779,13 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   applyGradientMap(
     shadow: readonly [number, number, number],
     highlight: readonly [number, number, number],
+  ): Promise<boolean>;
+  /** FREE TRANSFORM (Edit ▸ Free Transform): resample the active layer —
+   *  or the selection's pixels — through the forward image-px `matrix`
+   *  (`geom.warp_projective`). One undo step. */
+  transformLayer(
+    matrix: readonly number[],
+    interp?: "bilinear" | "bicubic",
   ): Promise<boolean>;
   /** A parametric distortion (geom.warp_backward). */
   applyWarp(
@@ -856,7 +920,15 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   applyAverage(): Promise<boolean>;
   /** Show one of the Image dialogs (Image Size, Trim, Arbitrary
    *  rotation) on top of the panel. */
-  openDialog(kind: "imageSize" | "trim" | "rotate" | "exportAs"): boolean;
+  openDialog(
+    kind:
+      | "imageSize"
+      | "trim"
+      | "rotate"
+      | "exportAs"
+      | "newGuide"
+      | "smartTransform",
+  ): boolean;
   /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
    *  active one by default): fill opacity, knockout and Blend If. */
   openBlendingOptions(index?: number): boolean;
@@ -955,6 +1027,19 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   canvasOp(
     op: CanvasOpKind,
     size?: { width: number; height: number; anchorX: number; anchorY: number },
+  ): Promise<boolean>;
+  /** Image ▸ Mode ▸ 8 / 16 Bits/Channel (every layer; one undo step). */
+  setBits(bits: 8 | 16): Promise<boolean>;
+  /** Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color (every
+   *  layer; one undo step). CMYK converts through the chosen CMYK profile
+   *  (`pickExportProfile`); without one the plain ink formula changes no
+   *  colour, and the status says so. */
+  setColorMode(mode: ColorModeName): Promise<boolean>;
+  /** View ▸ Proof Colors / Gamut Warning on the image preview: `target`
+   *  is the output simulated (Gray Gamma 2.2, or CMYK through the chosen
+   *  profile or the document's own). A display transform only. */
+  setProof(
+    p: Partial<{ target: ProofTarget; colors: boolean; gamut: boolean }>,
   ): Promise<boolean>;
   /** Select ▸ Modify by `radius` px. */
   modifySelection(op: SelectionModifyOp, radius: number): boolean;
@@ -1406,6 +1491,38 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   /** Layer ▸ Rasterize: a fill layer's or smart object's render becomes
    *  pixels. */
   rasterizeLayer(index: number): Promise<boolean>;
+  /** WP5.10 — a new TYPE layer at `frame` (image px): a point (a click)
+   *  or a box (a drag), its text `text` (the Type section's when
+   *  omitted, else a placeholder), styled from the Type section and the
+   *  foreground colour, laid out and drawn by the engine. Opens the
+   *  on-canvas editing session on it. Resolves the new layer's index, or
+   *  null when nothing was added (no image, no story door). */
+  addTypeLayer(frame: TypeFrame, text?: string): Promise<number | null>;
+  /** A type layer's source, or null for another layer. */
+  typeLayerSource(index: number): TypeSource | null;
+  /** Change a type layer's source (`edit` returns the new one) and
+   *  re-render it through the engine. `session` names an editing
+   *  session: its writes are one undo step. */
+  editTypeLayer(
+    index: number,
+    edit: (src: TypeSource) => TypeSource,
+    session?: string,
+  ): Promise<boolean>;
+  /** Start editing a type layer's text on the canvas (the overlay). */
+  beginTypeEdit(index: number): boolean;
+  /** The text being typed in the overlay: re-rendered as it changes,
+   *  every write of the session one undo step. */
+  setTypeEditText(text: string): Promise<boolean>;
+  /** End the editing session. */
+  endTypeEdit(): void;
+  /** Type ▸ Warp Text: the active type layer's warp. */
+  setTypeWarp(warp: TypeWarp, index?: number): Promise<boolean>;
+  /** Re-render every type layer whose pixels are stale (after a move or
+   *  Image Size). */
+  refreshTypeLayers(): Promise<number>;
+  /** Type ▸ Paint text into layer: the raster type of before, at the
+   *  last type-tool point (the image centre before any). */
+  paintTextIntoLayer(): Promise<boolean>;
   setLayerFillOpacity(index: number, fill: number): Promise<boolean>;
   /** Blend If's 32 sliders, or null to clear. */
   setLayerBlendIf(
@@ -1671,6 +1788,19 @@ const S = defineMessages("image.status", {
     "{name} — {width}×{height} decoded into the selected frame. Apply to composite, or paint on it.",
   canvasSized: "Canvas size → {width}×{height}. One undo step.",
   canvasChanged: "Canvas → {width}×{height}. One undo step.",
+  modeBitsSet: "Mode → {bits} bits per channel. One undo step.",
+  modeBitsAlready: "The image already has {bits} bits per channel.",
+  modeColorSet: "Mode → {mode}. One undo step.",
+  modeColorAlready: "The image is already in {mode}.",
+  modeCmykNoProfile:
+    "CMYK Color without a CMYK profile: the plain ink formula changes no colour. Choose a CMYK profile in Export as… to convert through a press.",
+  proofOn: "Proof view on (the document is unchanged).",
+  proofOff: "Proof view off.",
+  proofFailed: "Proof view failed: {error}",
+  modeNameGray: "Greyscale",
+  modeNameRgb: "RGB colour",
+  modeNameCmyk: "CMYK colour",
+  modeNameLab: "Lab colour",
   psdSaveBack: "PSD save-back — {shape}.",
   jpegSaveBack:
     "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG).",
@@ -1876,6 +2006,7 @@ const PICK = defineMessages("image.curvesPick", {
  *  status line reports them (message keys; `applyEffect` and `layerOp`
  *  read them through `t`). */
 const E = defineMessages("image.effect", {
+  freeTransform: "Free transform",
   redEye: "Red eye",
   patch: "Patch",
   median: "Median",
@@ -1940,6 +2071,13 @@ const L = defineMessages("image.layerOps", {
   scaleEffects: "Scale effects",
   showEffects: "Show all effects",
   hideEffects: "Hide all effects",
+  newTypeLayer: "New type layer",
+  editType: "Edit type",
+  typeAdded: "Type layer “{name}” added — type to edit it, Esc to finish.",
+  typePlaceholder: "Lorem ipsum",
+  notATypeLayer: "The layer is not a type layer.",
+  noStoryDoor:
+    "This host cannot lay out type layers (it has no render.story door).",
   newAdjustmentLayer: "New adjustment layer",
   adjustment: "Adjustment",
   newFillLayer: "New fill layer",
@@ -1976,6 +2114,15 @@ const L = defineMessages("image.layerOps", {
   noPatternForFill: "No pattern defined — use Define pattern first.",
   compApplied: "Layer comp “{name}” applied.",
 });
+
+/** Each colour mode's name, as the status line says it. */
+const MODE_NAME: Record<ColorModeName, string> = {
+  gray: S.modeNameGray,
+  rgb: S.modeNameRgb,
+  cmyk: S.modeNameCmyk,
+  lab: S.modeNameLab,
+};
+const modeLabel = (m: ColorModeName): string => t(MODE_NAME[m]);
 
 /** Each selection modification's outcome. */
 const MODIFIED: Record<SelectionModifyOp, string> = {
@@ -2034,6 +2181,8 @@ export function createImageSession(host: BundleHost): ImageSession {
   // Selection and masking (created below, once `api` helpers exist).
   let maskingRef: MaskingController | null = null;
   let vectorsRef: VectorController | null = null;
+  let workspaceRef: WorkspaceController | null = null;
+  let smartRef: SmartController | null = null;
   // The paint interaction machine (pointer sampling only — the stroke's
   // base snapshot + coverage live engine-side).
   let brushMachineRef: BrushMachine | null = null;
@@ -2049,6 +2198,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     engineDetail: null,
     gpu: false,
     source: null,
+    typeEdit: null,
     params: freshIdentityParams(),
     histogram: null,
     compositedFrame: null,
@@ -2068,10 +2218,17 @@ export function createImageSession(host: BundleHost): ImageSession {
     editingAdjustment: null,
     gradientKind: "linear",
     committedRev: null,
+    smartNested: null,
+    smartInfo: null,
     uncommitted: false,
     saveBack: null,
     sourceMetadata: null,
     exportProfile: null,
+    mode: {
+      bits: 8,
+      color: "rgb",
+      proof: { target: "off", colors: false, gamut: false },
+    },
     brush: { ...DEFAULT_BRUSH_PARAMS, color: [...DEFAULT_BRUSH_PARAMS.color] },
     blendModes: [],
     strokeActive: false,
@@ -2383,11 +2540,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       // bytes survive (the importer may reuse them).
       const copy = bytes.slice();
       const decoded = await pool.decode(copy);
-      const info = engine.ingestRgba8(
-        decoded.width,
-        decoded.height,
-        decoded.rgba,
-      );
+      // A 16-bit source crosses as its samples, so the document keeps the
+      // depth the main-thread decode would have (image ADR 479).
+      const info = decoded.samples16
+        ? engine.ingestRgba16(decoded.width, decoded.height, decoded.samples16)
+        : engine.ingestRgba8(decoded.width, decoded.height, decoded.rgba);
       // The worker already ran the display transform inside its own
       // `decode_image`; `ingestRgba8` takes raw pixels and so reports
       // "sRGB assumed". Restore the treatment the worker measured, or the
@@ -2429,6 +2586,11 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       state.layers = engine.layers();
       state.history = engine.layersHistory();
+      const act = state.layers.layers.find(
+        (l) => l.index === state.layers.active,
+      );
+      state.smartInfo =
+        act?.kind === "smart" ? engine.smartInfo(act.index) : null;
       historyOps.afterLayersRead();
       state.globalLight = engine.globalLight();
       const styled =
@@ -2436,11 +2598,18 @@ export function createImageSession(host: BundleHost): ImageSession {
           ? state.dialog.index
           : state.layers.active;
       state.layerStyle = engine.layerStyle(styled);
+      state.mode = {
+        ...state.mode,
+        bits: engine.imageBits(state.source.handle),
+        color: engine.imageMode(),
+      };
     } catch (err) {
       host.log.debug("layer readout failed", err);
       state.layers = EMPTY_LAYER_STACK;
       state.history = null;
     }
+    // The workspace rides the stack (undo, redo, open all move it).
+    workspaceRef?.sync();
   };
 
   /** Fold the stack into the bound engine-held image, re-read the
@@ -2453,6 +2622,11 @@ export function createImageSession(host: BundleHost): ImageSession {
    *  slider steps costs at most two folds, each of the CURRENT stack. */
   const recompositeNow = async (): Promise<boolean> => {
     if (!engine || !state.source) return false;
+    // Smart filters an undo, a canvas op or a reopen left to run (ADR
+    // 482) land first, so the fold shows them.
+    if (state.gpu && engine.smartPending().length > 0) {
+      await smartRef?.passPending();
+    }
     try {
       await engine.layersComposite();
     } catch (err) {
@@ -3510,6 +3684,16 @@ export function createImageSession(host: BundleHost): ImageSession {
       // Compute the levels/curves histogram, bind the stack + selection,
       // and build the crop machine.
       refreshSourceReadout();
+      // The file's ruler guides (resource 1032) are where the image's
+      // workspace starts — not an undo step (image ADR 475).
+      if (psdHandle !== null && engine) {
+        try {
+          engine.adoptPsdGuides(psdHandle);
+          refreshLayers();
+        } catch (err) {
+          host.log.debug("PSD guides not adopted", err);
+        }
+      }
       // The selection kept for the revision the frame shows now; one kept
       // for another revision lay over pixels that have moved since.
       if (ref) openRecord = await frameRecordOf(ref, bytes).catch(() => null);
@@ -3668,9 +3852,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     const values = { ...d.values };
     const eng = engine;
     const ctx = filterCtx(state.source.width, state.source.height, values);
-    const ok = await api.applyEffect(def.label, (h) =>
-      def.run(eng, h, values, ctx),
-    );
+    const ok = smart.isSmart()
+      ? await smart.addFilter(state.layers.active, d.id, values)
+      : await api.applyEffect(def.label, (h) => def.run(eng, h, values, ctx));
     // The dialog may have closed (or moved on) while the pass ran.
     if (openFilter() !== d) {
       if (ok) await historyStep(true);
@@ -3989,6 +4173,34 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
   }));
 
+  const smart = (smartRef = createSmartController({
+    host,
+    engine: () => engine,
+    source: () => state.source,
+    adoptSource(info, nestedName) {
+      // Edit Contents: the session now addresses the open contents (or,
+      // closing them, the parent again). Neither handle is freed here —
+      // the engine owns both (the parent is parked, the contents are
+      // freed when they close).
+      const src = state.source;
+      if (!src) return;
+      releaseTiles();
+      src.handle = info.handle;
+      src.width = info.width;
+      src.height = info.height;
+      bumpTiles();
+      state.selection = null;
+      state.smartNested = nestedName;
+    },
+    layers: () => state.layers,
+    gpu: () => state.gpu,
+    setStatus,
+    emit,
+    refreshLayers,
+    recomposite: () => recomposite(),
+    filterContext: (w, h, values) => filterCtx(w, h, values),
+  }));
+
   const presetCtx = {
     host,
     state,
@@ -4037,12 +4249,51 @@ export function createImageSession(host: BundleHost): ImageSession {
   const historyOps = createHistoryOps(presetCtx);
   const presetOps = createPresetOps(presetCtx);
 
+  workspaceRef = createWorkspaceController({
+    host,
+    engine: () => engine,
+    source: () => state.source,
+    ppi: () => state.ppi,
+    selection: () => state.selection,
+    emit,
+    setStatus,
+    markEdited: () => {
+      state.uncommitted = true;
+      state.saveBack = null;
+      refreshLayers();
+    },
+    rotateCanvas: (degrees) => api.rotateCanvas(degrees),
+  });
+  const workspace = workspaceRef;
+  // ── type layer plumbing (WP5.10) ──
+  let typeSessionCounter = 0;
+  let lastTypePoint: [number, number] | null = null;
+  /** The page the engine draws type stories on: the image frame's (any
+   *  page would do — the story is drawn alone). */
+  const storyPage = async (): Promise<string | null> => {
+    const fit = await resolveFrameFit(host, state.source, "type layer");
+    return fit?.pageId ?? host.viewport.activePage() ?? null;
+  };
+  /** The overlay's writes, latest-wins: typing faster than the engine
+   *  renders drops the intermediate texts, never the last one. */
+  const typeTextWrites = latestWins((): Promise<boolean> => {
+    const e = state.typeEdit;
+    if (!e) return Promise.resolve(false);
+    return api.editTypeLayer(
+      e.index,
+      (src) => ({ ...src, text: e.text }),
+      e.session,
+    );
+  });
+
   const api: ImageSession = {
     ...historyOps,
     ...presetOps,
     ...retouch,
     masking: () => masking,
     vectors: () => vectors,
+    workspace: () => workspace,
+    smart: () => smart,
     state: () => state,
 
     onDidChange(listener) {
@@ -4450,6 +4701,8 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.filterNeedsAnImage, { label: t(def.label) }));
         return false;
       }
+      // On a smart object a filter is a SMART FILTER (ADR 482).
+      if (smart.isSmart()) return smart.addFilter(state.layers.active, id, v);
       const src = state.source;
       const ctx = filterCtx(src?.width ?? 1, src?.height ?? 1, v);
       return api.applyEffect(def.label, (h) => def.run(eng, h, v, ctx));
@@ -4462,6 +4715,11 @@ export function createImageSession(host: BundleHost): ImageSession {
     openDialog(kind) {
       if (!state.source) {
         setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (kind === "smartTransform" && !smart.isSmart()) {
+        setStatus(t(SO.notSmart));
+        emit();
         return false;
       }
       if (openFilter()) void cancelFilter();
@@ -4725,6 +4983,98 @@ export function createImageSession(host: BundleHost): ImageSession {
       return true;
     },
 
+    async setBits(bits) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      discardStroke();
+      let changed: boolean;
+      try {
+        engine.layersOpen(src.handle);
+        changed = await engine.imageSetBits(src.handle, bits);
+      } catch (err) {
+        setStatus(
+          t(S.whatFailed, { what: `${bits} bits`, error: errText(err) }),
+        );
+        emit();
+        return false;
+      }
+      refreshLayers();
+      if (changed) {
+        markPixelsEdited();
+        bumpTiles();
+        if (src.elementId) await api.apply();
+      }
+      setStatus(t(changed ? S.modeBitsSet : S.modeBitsAlready, { bits }));
+      emit();
+      return changed;
+    },
+
+    async setColorMode(mode) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      discardStroke();
+      const profile = mode === "cmyk" ? exportProfileBytes : null;
+      let changed: boolean;
+      try {
+        engine.layersOpen(src.handle);
+        changed = await engine.imageSetMode(src.handle, mode, profile);
+      } catch (err) {
+        setStatus(
+          t(S.whatFailed, { what: modeLabel(mode), error: errText(err) }),
+        );
+        emit();
+        return false;
+      }
+      refreshLayers();
+      if (changed) {
+        markPixelsEdited();
+        bumpTiles();
+        if (src.elementId) await api.apply();
+      }
+      setStatus(
+        mode === "cmyk" && !profile
+          ? t(S.modeCmykNoProfile)
+          : t(changed ? S.modeColorSet : S.modeColorAlready, {
+              mode: modeLabel(mode),
+            }),
+      );
+      emit();
+      return changed;
+    },
+
+    async setProof(p) {
+      if (!engine || !state.source) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      const next = { ...state.mode.proof, ...p };
+      const on = next.target !== "off" && (next.colors || next.gamut);
+      try {
+        engine.viewSetProof(
+          on ? next.target : "off",
+          next.colors,
+          next.gamut,
+          next.target === "cmyk" ? exportProfileBytes : null,
+        );
+      } catch (err) {
+        setStatus(t(S.proofFailed, { error: errText(err) }));
+        emit();
+        return false;
+      }
+      state.mode = { ...state.mode, proof: next };
+      // The frame re-derives from the composite through the view.
+      if (state.source.elementId) await api.apply();
+      setStatus(on ? t(S.proofOn) : t(S.proofOff));
+      emit();
+      return true;
+    },
+
     modifySelection(op, radius) {
       if (!engine || !state.source) {
         setStatus(t(S.nothingIngestedIngestAPlacedImage));
@@ -4791,6 +5141,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     psdExport() {
       if (psdHandle === null || !engine || !state.psd) return null;
       try {
+        // The image's guides as the file's resource 1032 (unchanged
+        // guides leave the bytes alone: the preservation rule).
+        engine.psdWriteGuides(psdHandle);
         return { bytes: engine.psdSave(psdHandle), fileName: state.psd.name };
       } catch (err) {
         setStatus(t(S.psdSaveFailed, { error: errText(err) }));
@@ -4826,6 +5179,7 @@ export function createImageSession(host: BundleHost): ImageSession {
             rgba,
           );
           refreshPsdLayers();
+          engine.psdWriteGuides(psdHandle);
           result = {
             bytes: engine.psdSave(psdHandle),
             fileName: `${stem}.psd`,
@@ -4977,6 +5331,10 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async psdExportBytes() {
       if (psdHandle === null || !engine || !state.psd) return null;
+      // The retained PSD is the parent's: open contents close first.
+      if (state.smartNested !== null && !(await smart.closeAll(true))) {
+        return null;
+      }
       // PRESERVATION FIRST: an unedited export must stay byte-identical,
       // so the save-back only runs when the panel is off identity OR the
       // pixels changed since ingest. Identity alone is not enough: a
@@ -5106,6 +5464,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
 
+    async transformLayer(matrix, interp = "bicubic") {
+      return this.applyEffect(E.freeTransform, (h) =>
+        engine!.applyProjective(h, matrix, interp),
+      );
+    },
     async applyWarp(kind, amount, frequency = 1) {
       return this.applyEffect(
         t(E.distort, { kind: warpKindLabel(kind) }),
@@ -5293,6 +5656,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       host.supports("widgets.colorPicker@1") ? host.widgets.ColorPicker : null,
 
     async commitToDocument() {
+      // Open contents are saved into their smart objects first: the
+      // document holds the parent (ADR 482).
+      if (state.smartNested !== null && !(await smart.closeAll(true))) {
+        return false;
+      }
       const src = state.source;
       if (!src || !engine || !src.elementId || !sourceRef) {
         setStatus(t(S.commitNeedsAnImageIngestedFrom));
@@ -6059,6 +6427,17 @@ export function createImageSession(host: BundleHost): ImageSession {
     setType(p) {
       state.type = { ...state.type, ...p };
       emit();
+      // The Character and Paragraph panels act on the active TYPE layer
+      // too (WP5.10): the whole layer takes the new setting.
+      const active = state.layers.layers[state.layers.active];
+      if (active?.kind === "type" && engine) {
+        const session = state.typeEdit?.session;
+        void api.editTypeLayer(
+          active.index,
+          (src) => applyTypeSettings(src, p),
+          session,
+        );
+      }
     },
 
     async paintText([x, y], text, family, sizePx) {
@@ -7022,7 +7401,154 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
 
     rasterizeLayer(index) {
+      if (state.typeEdit?.index === index) api.endTypeEdit();
       return layerOp(L.rasterize, () => engine!.layerRasterize(index));
+    },
+
+    // ── TYPE LAYERS (WP5.10) ──
+    async addTypeLayer(frame, text) {
+      if (!engine || !state.source) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return null;
+      }
+      if (!host.supports("render.story@1")) {
+        setStatus(t(L.noStoryDoor));
+        return null;
+      }
+      lastTypePoint = [frame.x, frame.y];
+      const body = text ?? (state.type.text || t(L.typePlaceholder));
+      const src = sourceFromTypeState(
+        state.type,
+        state.brush.color,
+        frame,
+        body,
+      );
+      const pageId = await storyPage();
+      if (!pageId) {
+        setStatus(t(L.noStoryDoor));
+        return null;
+      }
+      state.busy = true;
+      emit();
+      let index: number;
+      try {
+        const render =
+          (await renderTypeSource(host, pageId, src)) ?? emptyRender(src);
+        index = await engine.layerAddType(JSON.stringify(src), render, "");
+        refreshLayers();
+      } catch (err) {
+        state.busy = false;
+        setStatus(
+          t(S.whatFailed, { what: t(L.newTypeLayer), error: errText(err) }),
+        );
+        refreshLayers();
+        emit();
+        return null;
+      }
+      state.busy = false;
+      await recomposite();
+      setStatus(t(L.typeAdded, { name: activeLayerName() }));
+      api.beginTypeEdit(index);
+      return index;
+    },
+
+    typeLayerSource(index) {
+      if (!engine) return null;
+      try {
+        return (engine.layerTypeSource(index)?.source as TypeSource) ?? null;
+      } catch {
+        return null;
+      }
+    },
+
+    async editTypeLayer(index, edit, session) {
+      const current = api.typeLayerSource(index);
+      if (!engine || !current) {
+        setStatus(t(L.notATypeLayer));
+        return false;
+      }
+      const next = edit(structuredClone(current));
+      next.runs = fitRuns(next.runs, next.text);
+      const pageId = await storyPage();
+      if (!pageId || !host.supports("render.story@1")) {
+        setStatus(t(L.noStoryDoor));
+        return false;
+      }
+      return layerOpAsync(L.editType, async () => {
+        const render =
+          (await renderTypeSource(host, pageId, next)) ?? emptyRender(next);
+        await engine!.layerSetType(
+          index,
+          JSON.stringify(next),
+          render,
+          session ?? "",
+        );
+        // The rows now (the composite that follows may decline without a
+        // GPU; the layer changed either way).
+        refreshLayers();
+      });
+    },
+
+    beginTypeEdit(index) {
+      const src = api.typeLayerSource(index);
+      if (!src) {
+        setStatus(t(L.notATypeLayer));
+        return false;
+      }
+      typeSessionCounter += 1;
+      const sessionId = `edit-${typeSessionCounter}`;
+      state.typeEdit = { index, session: sessionId, text: src.text, fit: null };
+      emit();
+      void resolveFrameFit(host, state.source, "type overlay").then((fit) => {
+        if (state.typeEdit?.session !== sessionId) return;
+        state.typeEdit = { ...state.typeEdit, fit };
+        emit();
+      });
+      return true;
+    },
+
+    async setTypeEditText(text) {
+      const edit = state.typeEdit;
+      if (!edit) return false;
+      state.typeEdit = { ...edit, text };
+      emit();
+      return typeTextWrites();
+    },
+
+    endTypeEdit() {
+      if (!state.typeEdit) return;
+      state.typeEdit = null;
+      emit();
+    },
+
+    async setTypeWarp(warp, index) {
+      const i = index ?? state.layers.active;
+      return api.editTypeLayer(i, (src) => ({ ...src, warp: { ...warp } }));
+    },
+
+    async refreshTypeLayers() {
+      if (!engine) return 0;
+      let n = 0;
+      for (const row of state.layers.layers) {
+        if (row.kind !== "type" || !row.typeStale) continue;
+        if (await api.editTypeLayer(row.index, (src) => src)) n++;
+      }
+      return n;
+    },
+
+    async paintTextIntoLayer() {
+      const src = state.source;
+      if (!src) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      const at = lastTypePoint ?? [src.width / 2, src.height / 2];
+      return api.paintText(
+        at,
+        state.type.text || t(L.typePlaceholder),
+        state.type.family,
+        state.type.sizePx,
+      );
     },
 
     setLayerFillOpacity(index, fill) {
@@ -7595,4 +8121,84 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
   };
   return api;
+}
+
+// ── type layers (WP5.10) ──
+
+/** A new type layer's source from the Type section's settings and the
+ *  foreground colour. */
+export function sourceFromTypeState(
+  type: ImageSessionState["type"],
+  color: readonly number[],
+  frame: TypeFrame,
+  text: string,
+): TypeSource {
+  const c = (v: number | undefined) =>
+    Math.max(0, Math.min(255, Math.round((v ?? 0) * 255)));
+  return newTypeSource(
+    text,
+    frame,
+    {
+      font: type.family,
+      style: type.style,
+      size: type.sizePx,
+      color: [c(color[0]), c(color[1]), c(color[2])],
+      tracking: type.trackingPerMille,
+      leading: type.leadingPx,
+      baselineShift: type.baselineShiftPx,
+      horizontalScale: type.hScalePct / 100,
+      verticalScale: type.vScalePct / 100,
+      underline: type.underline,
+      strikethrough: type.strikethrough,
+      ligatures: type.ligatures,
+      caps: type.textCase === "upper" ? "allCaps" : "normal",
+    },
+    type.align,
+  );
+}
+
+/** The Character / Paragraph panel's settings (a `setType` patch) applied
+ *  to every run and paragraph of a type layer. */
+export function applyTypeSettings(
+  src: TypeSource,
+  p: Partial<ImageSessionState["type"]>,
+): TypeSource {
+  const runs = src.runs.map((r) => ({
+    ...r,
+    ...(p.family !== undefined ? { font: p.family, postscript: null } : {}),
+    ...(p.style !== undefined ? { style: p.style, postscript: null } : {}),
+    ...(p.sizePx !== undefined ? { size: p.sizePx } : {}),
+    ...(p.trackingPerMille !== undefined
+      ? { tracking: p.trackingPerMille }
+      : {}),
+    ...(p.leadingPx !== undefined ? { leading: p.leadingPx } : {}),
+    ...(p.baselineShiftPx !== undefined
+      ? { baselineShift: p.baselineShiftPx }
+      : {}),
+    ...(p.hScalePct !== undefined
+      ? { horizontalScale: p.hScalePct / 100 }
+      : {}),
+    ...(p.vScalePct !== undefined ? { verticalScale: p.vScalePct / 100 } : {}),
+    ...(p.underline !== undefined ? { underline: p.underline } : {}),
+    ...(p.strikethrough !== undefined
+      ? { strikethrough: p.strikethrough }
+      : {}),
+    ...(p.ligatures !== undefined ? { ligatures: p.ligatures } : {}),
+    ...(p.textCase !== undefined
+      ? {
+          caps:
+            p.textCase === "upper" ? ("allCaps" as const) : ("normal" as const),
+        }
+      : {}),
+  }));
+  const paragraphs =
+    p.align !== undefined
+      ? src.paragraphs.map((q) => ({ ...q, align: p.align! }))
+      : src.paragraphs;
+  return {
+    ...src,
+    ...(p.text !== undefined && p.text !== "" ? { text: p.text } : {}),
+    runs,
+    paragraphs,
+  };
 }

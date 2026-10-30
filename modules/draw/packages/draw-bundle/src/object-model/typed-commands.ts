@@ -348,6 +348,13 @@ export const TWINS: readonly TwinSpec[] = [
   recipeVerb("redefineSymbol", "symbol", "symbol", "symbolId", T),
   sel("breakSymbolLink"),
   sel("resetSymbolTransform"),
+  // WP6.8 (draw ADR 365) — engine symbols: Replace Symbol on the selected
+  // instances, and Symbol Options (name; 9-slice insets, [] removes them).
+  recipeVerb("replaceSymbol", "symbol", "symbol", "symbolId", T),
+  recipeVerb("symbolOptions", "symbol", "symbol", "symbolId", {
+    name: TEXT,
+    nineSlice: { kind: "list", of: LEN },
+  }),
   twin(
     "renameSymbol",
     { symbol: TEXT, name: TEXT },

@@ -83,8 +83,11 @@ export function makeSelectionGesture(
   let fit: FitTransform | null = null;
 
   const imageToPage = (p: [number, number]): [number, number] => toPage(fit, p);
+  // The rectangle and ellipse marquees snap to the image's guides, edges
+  // and grid (WP5.12); the freehand selections do not, as in Photoshop.
+  const snaps = kind === "rect" || kind === "ellipse";
   const pageToImage = (p: [number, number]): [number, number] =>
-    toImage(fit, p);
+    snaps ? session.workspace().snap(toImage(fit, p)) : toImage(fit, p);
 
   /** Publish the marching-ants preview: the live gesture outline while
    *  dragging, else the committed selection outline; null clears. */

@@ -31,6 +31,9 @@ paged-template = { path = "../paged-template" }
 paged-wire = { path = "../paged-wire" }
 # Engine ADR 1031 — SVG import (to wire mutations) and export (of a page's display list).
 paged-svg = { path = "../paged-svg" }
+# Editor ADR 288 — a snapshot encoded as JPEG, WebP or TIFF (asset export):
+# the engine's one raster encoder.
+paged-raster = { path = "../paged-raster" }
 # ADR 132 — the property schemas and the virtual path table `Mutation::Set`
 # resolves against (and the v65 style-properties coverage gate).
 paged-introspect = { path = "../paged-introspect", default-features = false }

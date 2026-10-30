@@ -46,6 +46,33 @@ import type {
 const ENGINE_NOT_BUILT =
   "paged.slide engine wasm not built: run scripts/build-wasm.sh";
 
+/** A theme as data (slide-resolve `ThemeIr`, slide ADR 713): its name, the
+ *  twelve slots as `RRGGBB` (`dk1`, `lt1`, `dk2`, `lt2`, `accent1`–`6`,
+ *  `hlink`, `folHlink`), the major and minor Latin fonts. */
+export interface ThemeIr {
+  name: string;
+  colors: [string, string][];
+  major: string;
+  minor: string;
+  /** The variant applied, by name. */
+  variant?: string;
+}
+
+/** One theme of the Design gallery, with its variants. */
+export interface GalleryTheme {
+  id: string;
+  name: string;
+  theme: ThemeIr;
+  variants: ThemeIr[];
+}
+
+/** A theme swatch's colour under a theme (0–255 channels). */
+export interface ThemeSwatch {
+  id: string;
+  name: string | null;
+  rgb: [number, number, number];
+}
+
 /** A DrawingML transition as the deck wrote it (pptx-core `Transition`). */
 export interface Transition {
   xml: string;
@@ -424,6 +451,7 @@ export interface SlideWasmModule extends WasmBindgenGlue {
   LiveCharts: new (pptx: Uint8Array) => LiveCharts;
   importPptx(bytes: Uint8Array, name: string): WasmImported;
   live(request: string): string;
+  theme(request: string): string;
   anim(request: string): string;
   AnimPlayer: new (input: string) => WasmAnimPlayer;
   embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
@@ -483,6 +511,32 @@ export class SlideEngine {
     } finally {
       out.free();
     }
+  }
+
+  /** The live theme (slide ADR 713): one JSON request to the Rust side,
+   *  which knows the theme keys and the gallery. */
+  private theme<T>(request: object): T {
+    return JSON.parse(this.mod.theme(JSON.stringify(request))) as T;
+  }
+
+  /** The Design gallery's themes, each with its four variants. */
+  themeGallery(): GalleryTheme[] {
+    return this.theme({ op: "gallery" });
+  }
+
+  /** A theme's four variants (as it is, dark, shifted accents, muted). */
+  themeVariants(theme: ThemeIr): ThemeIr[] {
+    return this.theme({ op: "variants", theme });
+  }
+
+  /** The colour each theme swatch among `ids` takes under `theme`. */
+  themeSwatches(theme: ThemeIr, ids: readonly string[]): ThemeSwatch[] {
+    return this.theme({ op: "swatches", theme, ids });
+  }
+
+  /** The themes of a `.thmx`, `.potx` or `.pptx` (Browse for Themes). */
+  readThemes(bytes: Uint8Array): GalleryTheme[] {
+    return this.theme({ op: "read", data: bytesToBase64(bytes) });
   }
 
   /** Live presets and connectors (slide ADR 717): one JSON request to the

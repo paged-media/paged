@@ -42,9 +42,11 @@
 //!   preset shadow as a plain drop shadow; blur, reflection, fill overlay
 //!   and shadow distortion reported, because the engine cannot hold them
 //!   yet.
-//! - **Pictures** ([`Mapper::picture`]): `a:alphaModFix` as opacity; the
-//!   Office 2010 corrections and artistic effects are already in the image
-//!   Office stored; every other picture effect is reported.
+//! - **Pictures** ([`Mapper::picture`]): `a:alphaModFix` as opacity;
+//!   `a:lum`, `a:duotone`, `a:grayscl`, `a:biLevel` and `a:hsl` as the
+//!   image frame's filter stack (engine ADR 1037); the Office 2010
+//!   corrections and artistic effects are already in the image Office
+//!   stored; every other picture effect is reported.
 //! - **The inverse** ([`effects_of`], [`dash_of`]): the engine's drop
 //!   shadow, effects and dash pattern back as the neutral IR, which
 //!   `paged_ooxml::drawingml::write` writes as DrawingML.
@@ -66,7 +68,7 @@ pub mod native;
 use paged_model::{
     ArrowheadType, ColorEntry, ColorModel, ColorSpace, DropShadowSetting, FeatherParams,
     FrameEffects, GradientEntry, GradientFeatherParams, GradientFeatherStop, GradientKind,
-    GradientStopRef, InnerShadowParams, OuterGlowParams,
+    GradientStopRef, InnerShadowParams, OuterGlowParams, RasterOp,
 };
 pub use paged_ooxml::drawingml::resolved::{
     radial_reach, Blur, Effects, FillOverlay, Glow, ImageEffect, Paint, PatternPaint, Picture,
@@ -145,11 +147,20 @@ pub fn axis_start(p: &Placement, w: f64, h: f64) -> Option<[f32; 2]> {
 /// A gradient swatch: id, kind, (location %, colour id) stops.
 type GradientSwatch = (String, GradientKind, Vec<(f64, String)>);
 
+/// How a document names the theme colour a solid paint keeps
+/// (`Paint::Solid::theme`): its swatch id and name, or `None` for a key it
+/// does not keep live.
+pub type ThemeNamer = fn(&str) -> Option<(String, String)>;
+
 /// The swatches a document's paints need.
 #[derive(Debug, Clone, Default)]
 pub struct Palette {
     colors: BTreeMap<Rgb, String>,
     theme_names: BTreeMap<Rgb, String>,
+    /// Swatches a paint names by id rather than by value: a live theme
+    /// colour (`Color/accent1`, with its transforms) and, in a palette with
+    /// a [`ThemeNamer`], a plain colour (`Color/RRRGGBB`). Id → (name, rgb).
+    named: BTreeMap<String, (String, Rgb)>,
     /// In minting order.
     gradients: Vec<GradientSwatch>,
 }
@@ -178,6 +189,30 @@ impl Palette {
         id
     }
 
+    /// The swatch `id` named `name` holding `rgb`: a theme colour a paint
+    /// refers to by id, so that recolouring the swatch recolours the paint.
+    pub fn themed(&mut self, id: &str, name: &str, rgb: Rgb) -> String {
+        self.named
+            .entry(id.to_string())
+            .or_insert_with(|| (name.to_string(), rgb));
+        id.to_string()
+    }
+
+    /// The swatch of `rgb` as a plain colour (`Color/RRRGGBB`), never a
+    /// theme colour's, whatever its value.
+    pub fn literal(&mut self, rgb: Rgb) -> String {
+        let id = format!("Color/R{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+        let name = id.trim_start_matches("Color/").to_string();
+        self.named.entry(id.clone()).or_insert((name, rgb));
+        id
+    }
+
+    /// The swatches minted by id ([`Palette::themed`], [`Palette::literal`]):
+    /// id, name and colour.
+    pub fn named(&self) -> impl Iterator<Item = (&String, &(String, Rgb))> {
+        self.named.iter()
+    }
+
     /// The gradient swatch of `kind` through `stops` (alpha aside: the
     /// engine's gradient swatches carry none).
     pub fn gradient(&mut self, kind: GradientKind, stops: &[Stop]) -> String {
@@ -199,22 +234,32 @@ impl Palette {
         self.colors.iter()
     }
 
-    /// The RGB colour entries of every colour minted.
+    /// The RGB colour entries of every colour minted, once per id (a
+    /// swatch minted by id names it).
     pub fn color_entries(&self) -> Vec<ColorEntry> {
-        self.colors
+        let entry = |id: &String, name: String, rgb: &Rgb| ColorEntry {
+            self_id: id.clone(),
+            name: Some(name),
+            space: ColorSpace::Rgb,
+            value: rgb.iter().map(|&c| c as f32).collect(),
+            model: ColorModel::Process,
+            alternate_space: None,
+            alternate_value: Vec::new(),
+            tint: None,
+            alpha: None,
+        };
+        let mut out: Vec<ColorEntry> = self
+            .colors
             .iter()
-            .map(|(rgb, id)| ColorEntry {
-                self_id: id.clone(),
-                name: Some(id.trim_start_matches("Color/").to_string()),
-                space: ColorSpace::Rgb,
-                value: rgb.iter().map(|&c| c as f32).collect(),
-                model: ColorModel::Process,
-                alternate_space: None,
-                alternate_value: Vec::new(),
-                tint: None,
-                alpha: None,
-            })
-            .collect()
+            .filter(|(_, id)| !self.named.contains_key(*id))
+            .map(|(rgb, id)| entry(id, id.trim_start_matches("Color/").to_string(), rgb))
+            .collect();
+        out.extend(
+            self.named
+                .iter()
+                .map(|(id, (name, rgb))| entry(id, name.clone(), rgb)),
+        );
+        out
     }
 
     /// The gradient entries of every gradient minted.
@@ -313,6 +358,11 @@ pub fn arrowhead(kind: &str) -> ArrowheadType {
 pub struct Mapper {
     pub palette: Palette,
     losses: Vec<String>,
+    /// Live theme colours (slide ADR 713): a solid paint that names a
+    /// theme colour fills with that colour's swatch, and one that names
+    /// none with a plain colour's, even where its value equals a theme
+    /// colour.
+    theme_namer: Option<ThemeNamer>,
 }
 
 impl Mapper {
@@ -320,6 +370,18 @@ impl Mapper {
         Mapper {
             palette: Palette::new(theme_colors),
             losses: Vec::new(),
+            theme_namer: None,
+        }
+    }
+
+    /// A mapper whose solid paints keep their theme colour by reference:
+    /// `namer` gives the swatch of each `Paint::Solid::theme` key. Colours
+    /// without one (gradient stops, effects) still take a theme colour's
+    /// swatch when their value is one.
+    pub fn with_theme_keys(theme_colors: &[(String, Rgb)], namer: ThemeNamer) -> Self {
+        Mapper {
+            theme_namer: Some(namer),
+            ..Mapper::new(theme_colors)
         }
     }
 
@@ -351,7 +413,13 @@ impl Mapper {
     pub fn paint(&mut self, p: &Paint) -> String {
         match p {
             Paint::None | Paint::Image { .. } => NONE_SWATCH.into(),
-            Paint::Solid { rgb, .. } => self.palette.color(*rgb),
+            Paint::Solid { rgb, theme, .. } => match self.theme_namer {
+                Some(namer) => match theme.as_deref().and_then(namer) {
+                    Some((id, name)) => self.palette.themed(&id, &name, *rgb),
+                    None => self.palette.literal(*rgb),
+                },
+                None => self.palette.color(*rgb),
+            },
             Paint::Linear { stops, .. } => self.palette.gradient(GradientKind::Linear, stops),
             Paint::Radial { stops, .. } => self.palette.gradient(GradientKind::Radial, stops),
             Paint::Pattern(pp) => {
@@ -523,36 +591,113 @@ impl Mapper {
         }
     }
 
-    /// A picture's opacity factor (0–1) from its blip, reporting the
-    /// picture effects the engine cannot apply yet.
-    pub fn picture(&mut self, pic: &Picture) -> f64 {
+    /// A picture's opacity factor (0–1) and its filter stack (engine ADR
+    /// 1037) from its blip, reporting the picture effects the engine
+    /// cannot apply.
+    ///
+    /// `a:lum` becomes brightness/contrast, `a:duotone` a duotone,
+    /// `a:grayscl` a black & white mixed with the luma weights Office
+    /// greys by (0.3, 0.59, 0.11), `a:biLevel` a threshold and `a:hsl` a
+    /// hue/saturation, in the blip's order. A colour change, a colour
+    /// replacement, a tint and a picture blur have no op and are reported.
+    pub fn picture(&mut self, pic: &Picture) -> MappedPicture {
+        let unit = |c: Rgb| c.map(|v| f32::from(v) / 255.0);
+        let mut adjustments = Vec::new();
         for e in &pic.effects {
             let what = match e {
                 // Office stores the image these produce as the blip: the
                 // picture as placed already shows them.
                 ImageEffect::Office2010 { .. } => continue,
-                ImageEffect::Luminance { .. } => "a:lum (brightness/contrast)",
+                ImageEffect::Luminance { bright, contrast } => {
+                    // Contrast in Office is a percentage of the full
+                    // slope: +50 % doubles it, −50 % halves it.
+                    let c = contrast.clamp(-1.0, 0.99);
+                    let slope = if c >= 0.0 { 1.0 / (1.0 - c) } else { 1.0 + c };
+                    adjustments.push(RasterOp::BrightnessContrast {
+                        brightness: bright.clamp(-1.0, 1.0) as f32,
+                        contrast: (slope as f32).min(10.0),
+                    });
+                    continue;
+                }
+                ImageEffect::Duotone { dark, light } => {
+                    adjustments.push(RasterOp::Duotone {
+                        shadow: unit(*dark),
+                        highlight: unit(*light),
+                    });
+                    continue;
+                }
+                ImageEffect::Grayscale => {
+                    adjustments.push(RasterOp::BlackWhite {
+                        reds: 0.3,
+                        yellows: 0.89,
+                        greens: 0.59,
+                        cyans: 0.7,
+                        blues: 0.11,
+                        magentas: 0.41,
+                    });
+                    continue;
+                }
+                ImageEffect::BiLevel { threshold } => {
+                    adjustments.push(RasterOp::Threshold {
+                        level: threshold.clamp(0.0, 1.0) as f32,
+                    });
+                    continue;
+                }
+                ImageEffect::Hsl { hue, sat, lum } => {
+                    adjustments.push(RasterOp::HueSaturation {
+                        hue: (hue.rem_euclid(360.0)) as f32,
+                        saturation: sat.clamp(-1.0, 1.0) as f32,
+                        lightness: lum.clamp(-1.0, 1.0) as f32,
+                    });
+                    continue;
+                }
                 ImageEffect::ColorChange { .. } => "a:clrChange",
-                ImageEffect::Duotone { .. } => "a:duotone",
-                ImageEffect::Grayscale => "a:grayscl",
-                ImageEffect::BiLevel { .. } => "a:biLevel",
                 ImageEffect::ColorReplace { .. } => "a:clrRepl",
-                ImageEffect::Hsl { .. } => "a:hsl",
                 ImageEffect::Tint { .. } => "a:tint",
                 ImageEffect::Blur { .. } => "a:blur on a picture",
                 ImageEffect::Alpha(n) | ImageEffect::Other(n) => {
                     self.lose(format!(
-                        "picture effect a:{n} is not carried (no image adjustments yet)"
+                        "picture effect a:{n} is not carried (no image adjustment for it)"
                     ));
                     continue;
                 }
             };
             self.lose(format!(
-                "picture effect {what} is not carried (no image adjustments yet)"
+                "picture effect {what} is not carried (no image adjustment for it)"
             ));
         }
-        pic.opacity
+        MappedPicture {
+            opacity: pic.opacity,
+            adjustments,
+        }
     }
+}
+
+/// A picture as [`Mapper::picture`] maps it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MappedPicture {
+    /// The opacity factor, 0–1 (`a:alphaModFix`).
+    pub opacity: f64,
+    /// The image frame's filter stack (engine ADR 1037), in blip order.
+    pub adjustments: Vec<RasterOp>,
+}
+
+/// The loss a lane that cannot hold an image filter stack (engine ADR
+/// 1037) reports for one of its ops: the DrawingML element it came from,
+/// and the op it became on the mutation lane.
+pub fn picture_adjustment_loss(op: &RasterOp) -> String {
+    let element = match op {
+        RasterOp::BrightnessContrast { .. } => "a:lum",
+        RasterOp::Duotone { .. } => "a:duotone",
+        RasterOp::BlackWhite { .. } => "a:grayscl",
+        RasterOp::Threshold { .. } => "a:biLevel",
+        RasterOp::HueSaturation { .. } => "a:hsl",
+        _ => "a picture effect",
+    };
+    format!(
+        "{element} (picture adjustment {}) is not carried on the native lane",
+        op.name()
+    )
 }
 
 /// A gradient feather for a gradient whose stops differ in alpha: the

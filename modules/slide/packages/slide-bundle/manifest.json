@@ -61,7 +61,9 @@
       "media.paged.slide.command.insertIcon",
       "media.paged.slide.command.copyFormat",
       "media.paged.slide.command.pasteFormat",
-      "media.paged.slide.command.smartArtText"
+      "media.paged.slide.command.smartArtText",
+      "media.paged.slide.command.design",
+      "media.paged.slide.command.browseThemes"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
     "exporters": [
@@ -97,7 +99,8 @@
       "media.paged.slide.panel.shapes",
       "media.paged.slide.panel.customShows",
       "media.paged.slide.panel.animations",
-      "media.paged.slide.panel.smartart"
+      "media.paged.slide.panel.smartart",
+      "media.paged.slide.panel.design"
     ],
     "partTypes": [
       {
@@ -448,6 +451,36 @@
           "id": "media.paged.slide.setSmartArtText",
           "title": "Set a SmartArt point's text",
           "args": "schema/set-smartart-text.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.design",
+          "title": "Design",
+          "args": "schema/empty.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.browseThemes",
+          "title": "Browse for Themes…",
+          "args": "schema/browse-themes.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.themes",
+          "title": "List the themes",
+          "args": "schema/empty.json",
+          "result": "schema/themes.result.json"
+        },
+        {
+          "id": "media.paged.slide.applyTheme",
+          "title": "Apply a theme",
+          "args": "schema/apply-theme.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.remapThemeReference",
+          "title": "Remap a theme reference",
+          "args": "schema/remap-theme-reference.args.json",
           "result": "schema/applied.result.json"
         }
       ],

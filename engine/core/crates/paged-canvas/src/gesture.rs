@@ -297,6 +297,30 @@ pub struct GestureAnchor {
     #[serde(default)]
     #[tsify(optional)]
     pub pivot_in_page: Option<(f32, f32)>,
+    /// Free Transform (editor ADR 295) — the axis a `Shear` slants along.
+    /// Absent (every caller before it existed) is [`ShearAxis::X`], the
+    /// horizontal shear the Shear tool has always made; `Y` is the
+    /// vertical shear a side handle of the Free Transform box drives
+    /// (`y' = y + k·(x − pivot.x)`). Ignored by every other gesture.
+    /// Additive (`serde(default)`), so it needs no protocol bump.
+    #[serde(default)]
+    #[tsify(optional)]
+    pub shear_axis: Option<ShearAxis>,
+}
+
+/// The axis a [`GestureType::Shear`] slants along (see
+/// [`GestureAnchor::shear_axis`]).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum ShearAxis {
+    /// `x' = x + k·(y − pivot.y)`: the drag's x-delta over the grabbed
+    /// point's vertical lever arm.
+    #[default]
+    X,
+    /// `y' = y + k·(x − pivot.x)`: the drag's y-delta over the grabbed
+    /// point's horizontal lever arm.
+    Y,
 }
 
 /// Pre-gesture snapshot of one node. Captured at `begin_gesture` so
@@ -358,6 +382,8 @@ pub(crate) struct GestureSession {
     /// is the centre of the selection's box (ADR 191): one item's or one
     /// group's own box, the axis-aligned box of several.
     pub pivot_spread: Option<(f32, f32)>,
+    /// The axis a `Shear` slants along (from the anchor; X when absent).
+    pub(crate) shear_axis: ShearAxis,
     /// Phase G — camera scale (px/pt) at begin time, used by the
     /// snap pass to convert its CSS-px tolerance to doc-space pt.
     /// `None` defaults to `1.0` (legacy behavior).
@@ -716,6 +742,10 @@ impl CanvasModel {
             modifiers: GestureModifiers::default(),
             anchor_spread,
             pivot_spread,
+            shear_axis: anchor
+                .as_ref()
+                .and_then(|a| a.shear_axis)
+                .unwrap_or_default(),
             camera_scale,
             scale_frame,
             group_frames,
@@ -1368,6 +1398,11 @@ impl CanvasModel {
                         .get(*idx)
                         .and_then(|g| g.self_id.clone())
                         .map(ElementId::Group),
+                    paged_model::FrameRef::Instance(idx) => s
+                        .instances
+                        .get(*idx)
+                        .and_then(|g| g.self_id.clone())
+                        .map(ElementId::Instance),
                 };
                 let Some(mid) = member_id else { continue };
                 if visited.contains(mid.raw_id()) {
@@ -1698,6 +1733,7 @@ fn compute_node_mutation_in_spread(
                 anchor,
                 delta,
                 pivot,
+                session.shear_axis,
                 session.modifiers,
             );
             NodeMutation::Transform(Some(new_m))
@@ -1978,7 +2014,8 @@ pub(crate) fn rotate_about_pivot(
     [new_a, new_b, new_c, new_d, new_tx, new_ty]
 }
 
-/// Editor-ops — compose a horizontal shear about `pivot` onto `m`.
+/// Editor-ops — compose a shear about `pivot` onto `m` (horizontal for
+/// [`ShearAxis::X`]; the Y case mirrors it on the other axis).
 /// The shear factor is the pointer's x-delta normalised by the
 /// grabbed point's vertical lever arm from the pivot (so the grabbed
 /// edge follows the pointer); points on the pivot's horizontal axis
@@ -1991,22 +2028,32 @@ pub(crate) fn shear_about_pivot(
     anchor: (f32, f32),
     delta: (f32, f32),
     pivot: (f32, f32),
+    axis: ShearAxis,
     modifiers: GestureModifiers,
 ) -> [f32; 6] {
-    let lever = anchor.1 - pivot.1;
+    // X slants along x by the vertical lever; Y along y by the
+    // horizontal one (Free Transform's side handles, editor ADR 295).
+    let (lever, drag) = match axis {
+        ShearAxis::X => (anchor.1 - pivot.1, delta.0),
+        ShearAxis::Y => (anchor.0 - pivot.0, delta.1),
+    };
     if lever.abs() < 1e-3 {
         return m;
     }
-    let mut k = delta.0 / lever;
+    let mut k = drag / lever;
     if modifiers.shift {
         let step = std::f32::consts::PI / 12.0; // 15° in radians
         let angle = k.atan();
         k = ((angle / step).round() * step).tan();
     }
     let [a, b, c, d, tx, ty] = m;
-    // S·M with S = [1 k; 0 1] (row form on column vectors), then the
-    // pivot correction keeps `pivot` a fixed point.
-    [a + k * b, b, c + k * d, d, tx + k * ty - k * pivot.1, ty]
+    match axis {
+        // S·M with S = [1 k; 0 1] (row form on column vectors), then the
+        // pivot correction keeps `pivot` a fixed point.
+        ShearAxis::X => [a + k * b, b, c + k * d, d, tx + k * ty - k * pivot.1, ty],
+        // S = [1 0; k 1]: y' = y + k·(x − pivot.x).
+        ShearAxis::Y => [a, b + k * a, c, d + k * c, tx, ty + k * tx - k * pivot.0],
+    }
 }
 
 /// Phase G — signed angle (radians) from `from` to `to` about the
@@ -2610,6 +2657,7 @@ pub(crate) fn compute_new_bounds(
         modifiers,
         anchor_spread: None,
         pivot_spread: None,
+        shear_axis: ShearAxis::X,
         camera_scale: None,
         scale_frame: None,
         group_frames: std::collections::HashMap::new(),
@@ -3084,6 +3132,7 @@ mod tests {
             modifiers: NONE,
             anchor_spread: Some((100.0, 50.0)),
             pivot_spread: Some((50.0, 50.0)),
+            shear_axis: ShearAxis::X,
             camera_scale: None,
             scale_frame: None,
             group_frames: std::collections::HashMap::new(),

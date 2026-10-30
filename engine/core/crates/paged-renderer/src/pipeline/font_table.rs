@@ -274,15 +274,25 @@ impl FontTable {
                 harvest(document, inner, keys);
             }
         }
+        // Engine ADR 1039 — a symbol definition's text is drawn with this
+        // table too (its display list is built against it), so its faces
+        // are in it; keyed `symbol:<id>/<story>`.
+        let symbol_stories = document.symbols.iter().flat_map(|def| {
+            def.stories
+                .iter()
+                .map(move |s| (format!("symbol:{}/{}", def.id, s.self_id), &s.story))
+        });
         document
             .stories
             .iter()
-            .map(|parsed| {
+            .map(|parsed| (parsed.self_id.clone(), &parsed.story))
+            .chain(symbol_stories)
+            .map(|(id, story)| {
                 let mut keys = std::collections::BTreeSet::new();
-                for paragraph in &parsed.story.paragraphs {
+                for paragraph in &story.paragraphs {
                     harvest(document, paragraph, &mut keys);
                 }
-                (parsed.self_id.clone(), keys)
+                (id, keys)
             })
             .collect()
     }
@@ -374,8 +384,17 @@ impl FontTable {
                     id_to_bytes,
                 );
             };
-        for parsed in &document.stories {
-            for paragraph in &parsed.story.paragraphs {
+        let symbol_stories = document
+            .symbols
+            .iter()
+            .flat_map(|def| def.stories.iter().map(|s| &s.story));
+        for story in document
+            .stories
+            .iter()
+            .map(|p| &p.story)
+            .chain(symbol_stories)
+        {
+            for paragraph in &story.paragraphs {
                 harvest_face_keys(paragraph, &mut face_keys, &mut id_to_bytes);
             }
         }
