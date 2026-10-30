@@ -276,7 +276,14 @@ fn emit_table(
             .or(em.column_width_pt)
             .unwrap_or(0.0);
         let extent = total_w + border_off_left + outer_border_right_offset(table);
-        ((column - extent) * line_align).max(0.0)
+        // Engine ADR 1025 — a Word table stands `w:tblInd` in from its
+        // column's start when it is left-aligned (Word ignores the indent
+        // of a centred or right-aligned table).
+        let indent = match &table.word {
+            Some(w) if line_align == 0.0 => w.indent,
+            _ => 0.0,
+        };
+        ((column - extent) * line_align).max(0.0) + indent
     } else {
         0.0
     };
@@ -2399,7 +2406,9 @@ fn plan_cell_block<'t>(
         let blank = !paragraph
             .runs
             .iter()
-            .any(|r| r.text.chars().any(|c| c != ' ' && c != '\n'));
+            .any(|r| r.text.chars().any(|c| c != ' ' && c != '\n'))
+            // Engine ADR 1050: a picture alone in its paragraph is its line.
+            && !paragraph.anchored_frames.iter().any(anchored::sits_in_line);
         let stand_in;
         let measured = if blank {
             let mut run = paragraph.runs.first().cloned().unwrap_or_default();
@@ -2587,6 +2596,9 @@ fn measure_cell_paragraph(
     by_leading: bool,
     first_baseline: CellFirstBaseline,
 ) -> Vec<f32> {
+    // Engine ADR 1050 — a picture in the cell is a character of its line.
+    let with_objects = cell_with_objects(paragraph);
+    let paragraph = with_objects.as_ref().map_or(paragraph, |(p, _, _)| p);
     // A cell paragraph takes its nested styles as a body one does.
     let paragraph = &*with_nested_styles(em.document, paragraph);
     if column_width_pt <= 0.0 || paragraph.runs.is_empty() {
@@ -2758,7 +2770,20 @@ fn measure_cell_paragraph(
         by_leading,
         first_baseline,
     );
-    let laid_out = paged_text::cache::layout_runs_cached(&styled_runs, &lopts);
+    if let Some((_, objects, _)) = &with_objects {
+        lopts.object_advances = object_advances_64(objects);
+    }
+    let mut laid_out = paged_text::cache::layout_runs_cached(&styled_runs, &lopts);
+    if let Some((_, objects, bytes)) = &with_objects {
+        shift_cell_object_lines(
+            &mut laid_out.lines,
+            bytes,
+            objects,
+            cell_lines_grow(&resolved_runs, &resolved_paragraph),
+            paragraph_size,
+            by_leading,
+        );
+    }
     laid_out
         .lines
         .iter()
@@ -2801,6 +2826,33 @@ pub(super) fn emit_cell_paragraph(
     // The cell's first-baseline settings.
     first_baseline: CellFirstBaseline,
 ) {
+    // Engine ADR 1050 — a float in the cell stands against the cell (Word's
+    // layout in the cell); a paragraph holding nothing else draws it too.
+    let floats_here = paragraph
+        .anchored_frames
+        .iter()
+        .any(|af| !anchored::sits_in_line(af));
+    let cell_box = (origin_pt.0, origin_pt.1, column_width_pt);
+    if floats_here && !paragraph.runs.iter().any(|r| !r.text.trim().is_empty()) {
+        let size = paragraph
+            .runs
+            .first()
+            .and_then(|r| em.document.resolved_run_attrs(paragraph, r).point_size)
+            .unwrap_or(em.options.default_point_size);
+        anchored::emit_cell_floats(
+            em,
+            paragraph,
+            target_page,
+            cell_box,
+            origin_pt.1 + paragraph_y + size * 0.8,
+            size,
+            pages,
+        );
+    }
+    // Engine ADR 1050 — a picture in the cell is a character of its line.
+    let with_objects = cell_with_objects(paragraph);
+    let source_paragraph = paragraph;
+    let paragraph = with_objects.as_ref().map_or(paragraph, |(p, _, _)| p);
     // A cell paragraph takes its nested styles as a body one does.
     let paragraph = &*with_nested_styles(em.document, paragraph);
     if column_width_pt <= 0.0 || paragraph.runs.is_empty() {
@@ -3012,8 +3064,21 @@ pub(super) fn emit_cell_paragraph(
         by_leading,
         first_baseline,
     );
+    if let Some((_, objects, _)) = &with_objects {
+        lopts.object_advances = object_advances_64(objects);
+    }
 
     let mut laid_out = paged_text::cache::layout_runs_cached(&styled_runs, &lopts);
+    if let Some((_, objects, bytes)) = &with_objects {
+        shift_cell_object_lines(
+            &mut laid_out.lines,
+            bytes,
+            objects,
+            cell_lines_grow(&resolved_runs, &resolved_paragraph),
+            paragraph_size,
+            by_leading,
+        );
+    }
     let left_64 = to_64(left_indent_pt);
     if left_64 != 0 || first_64 != 0 {
         for (i, line) in laid_out.lines.iter_mut().enumerate() {
@@ -3032,6 +3097,30 @@ pub(super) fn emit_cell_paragraph(
                 <= max_baseline_pt + CELL_FIT_EPSILON_PT
         })
         .count();
+    // Engine ADR 1050 — the cell's pictures where their characters landed
+    // (an overset line's are not drawn), and their characters out of the
+    // lines: the model's text has none.
+    let mut placed_objects: Vec<(usize, f32, f32)> = Vec::new();
+    let placeholder_bytes: &[u32] = with_objects.as_ref().map_or(&[], |(_, _, b)| b);
+    if let Some((_, objects, bytes)) = &with_objects {
+        for line in laid_out.lines.iter_mut().take(fitting) {
+            for (k, b) in bytes.iter().enumerate() {
+                if let Some(g) = line.glyphs.iter().find(|g| g.cluster == *b) {
+                    let Some(o) = objects.objects.get(k) else {
+                        continue;
+                    };
+                    let x = g.x as f32 / paged_text::shape::ADVANCE_PRECISION;
+                    let baseline = line.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION;
+                    placed_objects.push((
+                        o.frame,
+                        x + o.stroke_half,
+                        baseline - o.y_offset - o.height + o.stroke_half,
+                    ));
+                }
+            }
+            line.glyphs.retain(|g| !bytes.contains(&g.cluster));
+        }
+    }
     let lines = &laid_out.lines[..fitting];
     if lines.is_empty() {
         return;
@@ -3120,7 +3209,7 @@ pub(super) fn emit_cell_paragraph(
                 last_cluster = Some(g.cluster);
                 let x_pt_page = cell_origin.0 + g.x as f32 / paged_text::shape::ADVANCE_PRECISION;
                 clusters.push(ClusterPos {
-                    byte: g.cluster,
+                    byte: model_byte(placeholder_bytes, g.cluster),
                     x_pt: x_pt_page,
                     advance_pt: adv,
                 });
@@ -3135,11 +3224,36 @@ pub(super) fn emit_cell_paragraph(
                 baseline_y_pt: cell_origin.1 + baseline_pt_local,
                 ascent_pt: 0.8 * line_h_pt,
                 descent_pt: 0.2 * line_h_pt,
-                byte_range: line.byte_range.start as u32..line.byte_range.end as u32,
+                byte_range: model_byte(placeholder_bytes, line.byte_range.start as u32)
+                    ..model_byte(placeholder_bytes, line.byte_range.end as u32),
                 clusters,
                 marker: Vec::new(),
             });
         }
+    }
+
+    for &(frame, x, y) in &placed_objects {
+        if let Some(af) = source_paragraph.anchored_frames.get(frame) {
+            anchored::emit_one_anchored_frame(
+                em,
+                af,
+                target_page,
+                cell_origin.0 + x,
+                cell_origin.1 + y,
+                pages,
+            );
+        }
+    }
+    if floats_here {
+        anchored::emit_cell_floats(
+            em,
+            source_paragraph,
+            target_page,
+            cell_box,
+            cell_origin.1 + lines[0].baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION,
+            paragraph_size,
+            pages,
+        );
     }
 
     let list = &mut pages[target_page].list;
@@ -3202,4 +3316,102 @@ pub(super) fn emit_cell_paragraph(
     pages[target_page].stats.runs += paragraph.runs.len();
     pages[target_page].stats.glyphs += glyph_count;
     pages[target_page].stats.lines += lines.len();
+}
+
+/// Engine ADR 1050 — a cell paragraph with one placeholder character per
+/// in-line object (a picture in a table cell), the objects, and each
+/// placeholder's byte in the placeholder text. `None` without one.
+fn cell_with_objects(
+    paragraph: &paged_model::Paragraph,
+) -> Option<(paged_model::Paragraph, anchored::InlineObjects, Vec<u32>)> {
+    let (with, objects) = anchored::with_object_placeholders(paragraph)?;
+    let mut bytes = Vec::with_capacity(objects.objects.len());
+    let mut at = 0u32;
+    for run in &with.runs {
+        for (i, c) in run.text.char_indices() {
+            if c == paged_text::layout::OBJECT_REPLACEMENT {
+                bytes.push(at + i as u32);
+            }
+        }
+        at += run.text.len() as u32;
+    }
+    Some((with, objects, bytes))
+}
+
+/// The width each in-line object takes in its line, 1/64 pt.
+fn object_advances_64(objects: &anchored::InlineObjects) -> Vec<i32> {
+    objects
+        .objects
+        .iter()
+        .map(|o| (o.width * paged_text::shape::ADVANCE_PRECISION).round() as i32)
+        .collect()
+}
+
+/// A byte of the placeholder text as a byte of the model's: every
+/// placeholder before it is a character the model does not hold.
+fn model_byte(placeholders: &[u32], byte: u32) -> u32 {
+    let before = placeholders.iter().filter(|&&p| p < byte).count() as u32;
+    byte.saturating_sub(before * paged_text::layout::OBJECT_REPLACEMENT.len_utf8() as u32)
+}
+
+/// Whether a cell paragraph's lines grow to hold a picture: under auto
+/// leading (InDesign) and under Word's first-fit, whose lines always make
+/// room for a picture; a fixed InDesign leading holds and the picture
+/// overlaps the line above.
+fn cell_lines_grow(
+    resolved_runs: &[paged_scene::ResolvedRunAttrs],
+    resolved_paragraph: &paged_scene::ResolvedParagraphAttrs,
+) -> bool {
+    resolved_runs.first().and_then(|r| r.leading).is_none()
+        || resolved_paragraph
+            .composer
+            .as_ref()
+            .is_some_and(|c| c.is_word_first_fit())
+}
+
+/// Engine ADR 1050 — move a cell paragraph's lines down to make room for
+/// their pictures, as a body line does (`anchored::line_object_shift`): a
+/// paragraph's first line set from its ascent stands at least the picture's
+/// rise below the paragraph's top; a later line (or a first one set one
+/// leading below the paragraph before) at least the rise and a fifth of the
+/// size below the line above, when its lines grow (`grow`). Every line after
+/// a moved one moves with it.
+fn shift_cell_object_lines(
+    lines: &mut [paged_text::layout::LaidOutLine],
+    bytes: &[u32],
+    objects: &anchored::InlineObjects,
+    grow: bool,
+    point_size: f32,
+    by_leading: bool,
+) {
+    let to_64 = |pt: f32| (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+    let original: Vec<i32> = lines.iter().map(|l| l.baseline_y).collect();
+    let mut moved = 0i32;
+    for (k, line) in lines.iter_mut().enumerate() {
+        let rise = bytes
+            .iter()
+            .zip(&objects.objects)
+            .filter(|(b, _)| line.byte_range.contains(&(**b as usize)))
+            .map(|(_, o)| to_64(o.rise()))
+            .max();
+        if let Some(rise) = rise {
+            let below = to_64(0.2 * point_size);
+            let (need, have) = match k {
+                0 if !by_leading => (rise, original[0]),
+                0 => (if grow { rise + below } else { 0 }, original[0]),
+                _ => (
+                    if grow { rise + below } else { 0 },
+                    original[k] - original[k - 1],
+                ),
+            };
+            moved += (need - have).max(0);
+        }
+        if moved != 0 {
+            line.baseline_y += moved;
+            line.baseline_exact += moved as f64;
+            for g in &mut line.glyphs {
+                g.y += moved;
+            }
+        }
+    }
 }

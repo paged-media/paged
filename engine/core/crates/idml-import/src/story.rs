@@ -484,6 +484,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
             image_link: None,
             image_item_transform: None,
             children: Vec::new(),
+            layout: Default::default(),
         }
     }
 
@@ -1115,6 +1116,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                                     end_gap_color: attr(&e, b"EndColumnStrokeGapColor"),
                                     end_gap_tint: parse_tint_attr(&e, b"EndColumnStrokeGapTint"),
                                 },
+                                word: None,
                             },
                         });
                     }

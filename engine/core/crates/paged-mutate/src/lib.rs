@@ -3185,6 +3185,11 @@ mod tests {
                 height: 80.0,
                 image_uri: Some("data:image/png;base64,AAAA".to_string()),
                 self_id: "Rectangle/img1".to_string(),
+                frame_kind: Default::default(),
+                frame_story: None,
+                layout: None,
+                restore: None,
+                cell: None,
             })
             .unwrap();
 
@@ -3225,6 +3230,11 @@ mod tests {
                 height: 10.0,
                 image_uri: None,
                 self_id: "Rectangle/img2".to_string(),
+                frame_kind: Default::default(),
+                frame_story: None,
+                layout: None,
+                restore: None,
+                cell: None,
             })
             .unwrap();
         let p2 = &project.document().stories[0].story.paragraphs[1];
@@ -9019,6 +9029,8 @@ mod tests {
                 table_id: "Table/tbl1".into(),
                 row: 1,
                 height: Some(99.0),
+                auto_grow: None,
+                clear_auto_grow: false,
             })
             .expect("set row height");
             assert_eq!(table_of(p.document()).rows[1].single_row_height, Some(99.0));
@@ -9286,6 +9298,8 @@ mod tests {
                 footer_rows: 0,
                 column_widths: vec![80.0, 80.0],
                 row_heights: vec![20.0, 20.0],
+                cell: None,
+                word: None,
             };
             let table = spec.to_parse_table();
             assert_eq!(table.cells.len(), 4);

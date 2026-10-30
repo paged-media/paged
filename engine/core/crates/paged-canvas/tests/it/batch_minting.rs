@@ -331,6 +331,8 @@ fn table() -> Mutation {
         footer_rows: 0,
         column_widths: Vec::new(),
         row_heights: Vec::new(),
+        cell: None,
+        word: None,
     }
 }
 
@@ -342,6 +344,9 @@ fn anchored(offset: u32) -> Mutation {
         width: 40.0,
         height: 40.0,
         image_uri: None,
+        kind: None,
+        layout: None,
+        cell: None,
     }
 }
 

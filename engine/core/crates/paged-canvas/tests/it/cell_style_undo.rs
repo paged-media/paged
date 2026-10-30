@@ -86,6 +86,8 @@ fn fixture() -> Fixture {
             footer_rows: 0,
             column_widths: vec![],
             row_heights: vec![],
+            cell: None,
+            word: None,
         })
         .expect("table");
     let Some(ElementId::Table { table_id, .. }) = out.created_id else {

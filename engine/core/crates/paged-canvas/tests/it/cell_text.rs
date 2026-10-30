@@ -266,6 +266,8 @@ fn pour_text_into_a_freshly_inserted_empty_table_cell_does_not_panic() {
             footer_rows: 0,
             column_widths: vec![],
             row_heights: vec![],
+            cell: None,
+            word: None,
         })
         .expect("insert a 2x2 table into the story");
     let table_id = match out.created_id {

@@ -637,6 +637,7 @@ impl CanvasModel {
                         table_id: table_id.clone(),
                         row: index,
                         height: n,
+                        auto_grow: None,
                     }
                 } else {
                     Mutation::SetColumnWidth {
@@ -1013,15 +1014,8 @@ impl CanvasModel {
     }
 
     fn find_table(&self, story_id: &str, table_id: &str) -> Option<&paged_model::Table> {
-        self.scene
-            .stories
-            .iter()
-            .find(|s| s.self_id == story_id)?
-            .story
-            .paragraphs
-            .iter()
-            .filter_map(|p| p.table.as_ref())
-            .find(|t| t.self_id.as_deref() == Some(table_id))
+        let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
+        paged_model::table_in(&story.story.paragraphs, table_id)
     }
 
     /// v71 — for an application-state mutation (unlogged when applied on

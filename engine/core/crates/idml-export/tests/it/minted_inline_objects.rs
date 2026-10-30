@@ -70,6 +70,7 @@ fn rectangle(id: &str, w: f32, h: f32) -> AnchoredFrame {
         image_link: None,
         image_item_transform: None,
         children: Vec::new(),
+        layout: Default::default(),
     }
 }
 

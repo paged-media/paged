@@ -3519,6 +3519,9 @@ fn paged_insert_anchored_frame(
         width,
         height,
         image_uri,
+        kind: None,
+        layout: None,
+        cell: None,
     }))
 }
 
@@ -3991,6 +3994,8 @@ fn paged_insert_table(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> J
         footer_rows: spec.footer_rows,
         column_widths: spec.column_widths,
         row_heights: spec.row_heights,
+        cell: None,
+        word: None,
     }))
 }
 
@@ -4012,6 +4017,7 @@ fn paged_set_row_height(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
         table_id,
         row,
         height,
+        auto_grow: None,
     }))
 }
 

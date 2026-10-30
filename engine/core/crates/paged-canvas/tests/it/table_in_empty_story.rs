@@ -55,6 +55,8 @@ fn insert_table(story_id: &str) -> Mutation {
         footer_rows: 0,
         column_widths: vec![],
         row_heights: vec![],
+        cell: None,
+        word: None,
     }
 }
 

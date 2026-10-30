@@ -160,26 +160,28 @@ pub(super) fn find_anchored_setting_mut<'a>(
     doc: &'a mut Document,
     self_id: &str,
 ) -> Option<&'a mut paged_model::AnchoredObjectSetting> {
-    fn in_frames<'b>(
-        frames: &'b mut [paged_model::AnchoredFrame],
-        self_id: &str,
-    ) -> Option<&'b mut paged_model::AnchoredObjectSetting> {
-        for frame in frames.iter_mut() {
-            if frame.self_id.as_deref() == Some(self_id) {
-                return Some(frame.setting.get_or_insert_with(Default::default));
-            }
-            // Anchored Groups can nest further anchored frames.
-            if let Some(found) = in_frames(&mut frame.children, self_id) {
-                return Some(found);
-            }
-        }
-        None
-    }
+    // Engine ADR 1050: the frames in table cells too.
     for parsed in &mut doc.stories {
-        for para in &mut parsed.story.paragraphs {
-            if let Some(found) = in_frames(&mut para.anchored_frames, self_id) {
-                return Some(found);
-            }
+        if let Some(frame) =
+            paged_model::anchored_frame_in_mut(&mut parsed.story.paragraphs, self_id)
+        {
+            return Some(frame.setting.get_or_insert_with(Default::default));
+        }
+    }
+    None
+}
+
+/// Engine ADR 1050 — the layout (wrap, z-order) of the anchored frame
+/// `self_id`, in any story, table cells included.
+pub(super) fn find_anchored_frame_mut<'a>(
+    doc: &'a mut Document,
+    self_id: &str,
+) -> Option<&'a mut paged_model::AnchoredFrame> {
+    for parsed in &mut doc.stories {
+        if let Some(frame) =
+            paged_model::anchored_frame_in_mut(&mut parsed.story.paragraphs, self_id)
+        {
+            return Some(frame);
         }
     }
     None
@@ -633,6 +635,21 @@ pub(super) fn find_text_wrap_mut<'a>(
     node: &NodeId,
 ) -> Option<&'a mut Option<paged_model::TextWrap>> {
     let raw = node.self_id();
+    // Engine ADR 1050: an anchored object takes the same wrap properties,
+    // addressed by its own id as its anchoring settings are.
+    let on_spread = doc.spreads.iter().any(|p| {
+        p.spread
+            .text_frames
+            .iter()
+            .any(|f| f.self_id.as_deref() == Some(raw))
+            || p.spread
+                .rectangles
+                .iter()
+                .any(|r| r.self_id.as_deref() == Some(raw))
+    });
+    if matches!(node, NodeId::TextFrame(_) | NodeId::Rectangle(_)) && !on_spread {
+        return find_anchored_frame_mut(doc, raw).map(|f| &mut f.layout.text_wrap);
+    }
     for parsed in &mut doc.spreads {
         match node {
             NodeId::TextFrame(_) => {

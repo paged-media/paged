@@ -170,6 +170,8 @@ fn author() -> Authored {
             footer_rows: 0,
             column_widths: vec![60.0, 60.0, 60.0],
             row_heights: vec![20.0, 20.0],
+            cell: None,
+            word: None,
         })
         .expect("table");
     let table_id = match out.created_id {
@@ -401,6 +403,8 @@ fn insert_table(model: &mut CanvasModel, story: &str) -> String {
             footer_rows: 0,
             column_widths: vec![60.0, 60.0],
             row_heights: vec![20.0, 20.0, 20.0],
+            cell: None,
+            word: None,
         })
         .expect("table");
     match out.created_id {
@@ -484,6 +488,8 @@ fn a_table_replaced_after_a_paged_reopen_exports_without_loss() {
                     footer_rows: 0,
                     column_widths: vec![60.0, 60.0],
                     row_heights: vec![20.0, 20.0, 20.0],
+                    cell: None,
+                    word: None,
                 },
             ],
         })

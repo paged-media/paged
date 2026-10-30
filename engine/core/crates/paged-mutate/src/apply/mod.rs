@@ -601,6 +601,11 @@ pub(crate) fn apply_inner(
             image_uri,
             self_id,
             paragraph,
+            frame_kind,
+            frame_story,
+            layout,
+            restore,
+            cell,
         } => anchored_frame::apply_insert_anchored_frame(
             doc,
             story_id,
@@ -610,6 +615,11 @@ pub(crate) fn apply_inner(
             *height,
             image_uri.as_deref(),
             self_id,
+            *frame_kind,
+            frame_story.as_deref(),
+            layout.as_ref(),
+            restore.as_deref(),
+            cell.as_ref(),
         ),
         Operation::RemoveAnchoredFrame { story_id, self_id } => {
             anchored_frame::apply_remove_anchored_frame(doc, story_id, self_id)
@@ -959,7 +969,17 @@ pub(crate) fn apply_inner(
             table_id,
             row,
             height,
-        } => apply_set_row_height(doc, story_id, table_id, *row, *height),
+            auto_grow,
+            clear_auto_grow,
+        } => apply_set_row_height(
+            doc,
+            story_id,
+            table_id,
+            *row,
+            *height,
+            *auto_grow,
+            *clear_auto_grow,
+        ),
         Operation::SetColumnWidth {
             story_id,
             table_id,
@@ -1281,20 +1301,8 @@ fn cell_paragraphs_mut<'a>(
     let Some(addr) = cell else {
         return Some(&mut story.paragraphs);
     };
-    for para in story.paragraphs.iter_mut() {
-        let Some(table) = para.table.as_mut() else {
-            continue;
-        };
-        if table.self_id.as_deref() != Some(addr.table_id.as_str()) {
-            continue;
-        }
-        for c in table.cells.iter_mut() {
-            if c.coords() == Some((addr.col, addr.row)) {
-                return Some(&mut c.paragraphs);
-            }
-        }
-    }
-    None
+    // Engine ADR 1050: a nested table's cell too.
+    paged_model::cell_paragraphs_in_mut(&mut story.paragraphs, &addr.table_id, addr.col, addr.row)
 }
 
 mod anchored_frame;

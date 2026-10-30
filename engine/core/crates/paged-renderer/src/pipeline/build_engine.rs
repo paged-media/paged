@@ -2810,6 +2810,7 @@ pub(super) fn build_document_inner(
             emitter.emit_paragraph(paragraph, &mut pages, &mut total_stats);
         }
         emitter.apply_vertical_justification(&mut pages);
+        emitter.apply_behind_text(&mut pages);
         emitter.apply_column_rules(&mut pages);
         emitter.apply_polygon_clip(&mut pages);
         emitter.apply_container_clip(&mut pages, &container_clips);
@@ -3653,6 +3654,7 @@ pub(super) fn build_document_inner(
                 .map(|&p| pages[p].list.commands.len())
                 .collect();
             emitter.apply_vertical_justification(&mut pages);
+            emitter.apply_behind_text(&mut pages);
             emitter.apply_column_rules(&mut pages);
             emitter.apply_polygon_clip(&mut pages);
             emitter.apply_container_clip(&mut pages, &container_clips);
@@ -3987,6 +3989,7 @@ pub(super) fn build_document_inner(
     // captures (master frames currently never carry anchored
     // images, but the queue is unified for symmetry).
     for entry in anchored_image_queue {
+        let before = pages[entry.target_page].list.commands.len();
         emit_anchored_rect_image(
             &mut pages[entry.target_page],
             &entry.af,
@@ -3998,6 +4001,20 @@ pub(super) fn build_document_inner(
             &mut page_image_caches[entry.target_page],
             decoded_image_cache,
         );
+        // Engine ADR 1050 — a behind-text float's picture goes under
+        // everything on its page, the text blocks waiting for their z-slot
+        // moving past it.
+        let n = pages[entry.target_page].list.commands.len() - before;
+        if entry.af.layout.behind_text && n > 0 {
+            pages[entry.target_page].list.move_tail_to(before, 0);
+            if let Some(blocks) = pending_text.get_mut(entry.target_page) {
+                for b in blocks.iter_mut() {
+                    b.start += n;
+                    b.end += n;
+                    b.slot += n;
+                }
+            }
+        }
     }
 
     total_stats.decoded_images = decoded_image_cache.len();
@@ -4862,6 +4879,9 @@ pub(super) struct StoryEmitter<'a> {
     /// The inline and above-line objects of the paragraph being emitted,
     /// set while its lines are composed (see [`anchored::InlineObjects`]).
     pub(super) inline_objects: Option<anchored::InlineObjects>,
+    /// Engine ADR 1050 — the story's floats (wrapping, behind-text and
+    /// non-overlapping anchored objects).
+    pub(super) floats: anchored::FloatState,
     /// The footnotes of the paragraph being emitted that no line has
     /// carried yet: `(the anchor's byte in the paragraph's text, the
     /// note)`, in text order. See [`capture_footnotes`].
@@ -5171,6 +5191,7 @@ impl<'a> StoryEmitter<'a> {
             anchored_recursion_depth: 0,
             anchored_image_queue: Vec::new(),
             inline_objects: None,
+            floats: anchored::FloatState::default(),
             pending_footnotes: Vec::new(),
             in_segments: false,
             footnote_counter: 0,
@@ -6609,6 +6630,15 @@ pub(super) fn emit_paragraph_into_chain(
     // where an object sits.
     let styled = anchored::with_style_anchoring(paragraph, &em.document.styles);
     let paragraph = styled.as_ref().unwrap_or(paragraph);
+    // Engine ADR 1050 — a float that wraps text is placed before the
+    // paragraph's first line is composed (the piece holding the objects,
+    // when the paragraph is laid out piece by piece).
+    if !em.in_segments {
+        em.floats.placed.clear();
+    }
+    if anchored::has_wrapping_objects(paragraph) {
+        em.floats.pending = true;
+    }
     // A footnote is set at the foot of the frame holding its REFERENCE's
     // line (InDesign, thoughts ADR 034 R1), so its notes wait here until
     // the line holding each one's reference is placed
@@ -6830,6 +6860,21 @@ fn emit_paragraph_lines(
         // 12pt empty after a 12pt run unchanged (no-op when prev
         // and current leadings agree).
         let prev_lh = em.prev_line_height_exact().unwrap_or(line_height_exact);
+        // Engine ADR 1050 — a float anchored in an empty paragraph stands
+        // against the paragraph's one (blank) line.
+        if em.floats.pending {
+            let blank_baseline =
+                em.y_exact() + space_before_64 as f64 - prev_lh + line_height_exact;
+            anchored::place_wrapping_objects(
+                em,
+                paragraph,
+                pages,
+                blank_baseline.round() as i32,
+                para_pt,
+                line_height_exact as f32 / paged_text::shape::ADVANCE_PRECISION,
+                None,
+            );
+        }
         em.set_y_exact(
             em.y_exact() + space_before_64 as f64 - prev_lh + line_height_exact + line_height_exact,
         );
@@ -6881,6 +6926,39 @@ fn emit_paragraph_lines(
         let space_after_64 =
             resolved_paragraph.space_after.unwrap_or(0.0) * paged_text::shape::ADVANCE_PRECISION;
         em.set_y_exact(em.y_exact() + space_after_64 as f64);
+        // Engine ADR 1050 — a float's paragraph may hold no text (Word
+        // anchors many a float in an empty paragraph): it is drawn all the
+        // same. An object with no layout keeps the earlier behaviour.
+        if paragraph
+            .anchored_frames
+            .iter()
+            .any(|af| !anchored::sits_in_line(af) && !af.layout.is_unset())
+        {
+            let blank_baseline_pt = {
+                let frame = em.chain[em.frame_idx];
+                let (_ox, oy) = pages[em.chain_pages[em.frame_idx]].spread_origin;
+                let (_sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+                sy - oy
+                    + (em.y_exact() - space_after_64 as f64 - line_height_exact) as f32
+                        / paged_text::shape::ADVANCE_PRECISION
+            };
+            let line_metrics = anchored::LineRefMetrics::resolve(
+                blank_baseline_pt,
+                para_pt,
+                line_height_exact as f32 / paged_text::shape::ADVANCE_PRECISION,
+                None,
+            );
+            let margin_box =
+                resolve_page_margin_box(em.document, &pages[em.chain_pages[em.frame_idx]]);
+            emit_anchored_frames_for_paragraph(
+                em,
+                paragraph,
+                pages,
+                line_metrics,
+                margin_box,
+                total_stats,
+            );
+        }
         return;
     }
     // A forced line break's pieces are lines of ONE paragraph, as
@@ -7760,6 +7838,20 @@ fn emit_paragraph_lines(
     // so the post-layout pass can add them to each glyph's x;
     // twin_after[i] = true means line i shares its baseline with
     // line i-1 (BothSides flow around an obstacle).
+    // Engine ADR 1050 — the paragraph's wrapping floats stand before its
+    // lines are measured, so its own lines wrap around them.
+    if em.floats.pending {
+        anchored::place_wrapping_objects(
+            em,
+            paragraph,
+            pages,
+            lopts.first_baseline,
+            paragraph_size,
+            lopts.leading_override.unwrap_or(lopts.line_height).max(1) as f32
+                / paged_text::shape::ADVANCE_PRECISION,
+            head_font_metrics,
+        );
+    }
     let WrapPlan {
         line_x_shifts_64,
         twin_after,

@@ -675,8 +675,18 @@ fn created_element_id(
     }
     // v52 — an inserted anchored frame is a Rectangle; report its minted id so
     // the caller can address it (e.g. offset the anchor after placement).
-    if let paged_mutate::Operation::InsertAnchoredFrame { self_id, .. } = op {
-        return Some(ElementId::Rectangle(self_id.clone()));
+    if let paged_mutate::Operation::InsertAnchoredFrame {
+        self_id,
+        frame_story,
+        ..
+    } = op
+    {
+        // Engine ADR 1050 — an anchored text frame is a text frame.
+        return Some(if frame_story.is_some() {
+            ElementId::TextFrame(self_id.clone())
+        } else {
+            ElementId::Rectangle(self_id.clone())
+        });
     }
     // Protocol v34 — a batch reports its LAST creating child (the id
     // the batch-created sentinel resolved to), so insert-with-
@@ -746,6 +756,8 @@ fn created_story_id(op: &paged_mutate::Operation) -> Option<String> {
             },
             _ => None,
         },
+        // Engine ADR 1050 — an anchored text frame's own story.
+        paged_mutate::Operation::InsertAnchoredFrame { frame_story, .. } => frame_story.clone(),
         _ => None,
     }
 }
@@ -4134,7 +4146,14 @@ impl CanvasModel {
                 .iter()
                 .flat_map(|parsed| parsed.spread.text_frames.iter())
                 .find(|f| f.self_id.as_deref() == Some(frame_id.as_str()))
-                .and_then(|f| f.parent_story.clone()),
+                .and_then(|f| f.parent_story.clone())
+                // Engine ADR 1050 — an anchored text frame's own story.
+                .or_else(|| {
+                    self.scene.stories.iter().find_map(|s| {
+                        paged_model::anchored_frame_in(&s.story.paragraphs, frame_id)
+                            .and_then(|af| af.parent_story.clone())
+                    })
+                }),
             ElementId::StoryRange { story_id, .. }
             | ElementId::Table { story_id, .. }
             | ElementId::TableCell { story_id, .. } => Some(story_id.clone()),
@@ -5337,6 +5356,8 @@ impl CanvasModel {
                 footer_rows,
                 column_widths,
                 row_heights,
+                cell,
+                word,
             } => Some(Operation::InsertNode {
                 parent: NodeId::Story(story_id.clone()),
                 position: 0,
@@ -5348,6 +5369,12 @@ impl CanvasModel {
                     footer_rows: *footer_rows,
                     column_widths: column_widths.clone(),
                     row_heights: row_heights.clone(),
+                    cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                        table_id: c.table_id.clone(),
+                        row: c.row,
+                        col: c.col,
+                    }),
+                    word: word.clone(),
                 },
                 z_slot: None,
             }),
@@ -5362,15 +5389,36 @@ impl CanvasModel {
                 height,
                 image_uri,
                 paragraph,
-            } => Some(Operation::InsertAnchoredFrame {
-                paragraph: *paragraph,
-                story_id: story_id.clone(),
-                offset: *offset,
-                width: *width,
-                height: *height,
-                image_uri: image_uri.clone(),
-                self_id: self.mint_page_item_id_with_offset(mint_offset),
-            }),
+                kind,
+                layout,
+                cell,
+            } => {
+                let kind = kind.unwrap_or_default();
+                // Engine ADR 1050 — a text frame's story, numbered past
+                // every minted story at this child's offset (as
+                // `insertTextFrame` does), before the frame takes its id.
+                let frame_story = (kind == paged_mutate::operation::AnchoredFrameInsertKind::Text)
+                    .then(|| self.mint_story_ids(1, *mint_offset).remove(0));
+                let self_id = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::InsertAnchoredFrame {
+                    paragraph: *paragraph,
+                    story_id: story_id.clone(),
+                    offset: *offset,
+                    width: *width,
+                    height: *height,
+                    image_uri: image_uri.clone(),
+                    self_id,
+                    frame_kind: kind,
+                    frame_story,
+                    layout: layout.clone(),
+                    restore: None,
+                    cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                        table_id: c.table_id.clone(),
+                        row: c.row,
+                        col: c.col,
+                    }),
+                })
+            }
             Mutation::InsertHyperlink {
                 story_id,
                 start,
@@ -5929,11 +5977,14 @@ impl CanvasModel {
                 table_id,
                 row,
                 height,
+                auto_grow,
             } => Some(Operation::SetRowHeight {
                 story_id: story_id.clone(),
                 table_id: table_id.clone(),
                 row: *row,
                 height: *height,
+                auto_grow: *auto_grow,
+                clear_auto_grow: false,
             }),
             Mutation::SetColumnWidth {
                 story_id,
@@ -10222,11 +10273,7 @@ impl CanvasModel {
     /// inspector read-side. Returns the host paragraph's table ref.
     fn find_table_read(&self, story_id: &str, table_id: &str) -> Option<&paged_model::Table> {
         let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
-        story.story.paragraphs.iter().find_map(|p| {
-            p.table
-                .as_ref()
-                .filter(|t| t.self_id.as_deref() == Some(table_id))
-        })
+        paged_model::table_in(&story.story.paragraphs, table_id)
     }
 
     /// W3.A1 — table-scoped property snapshot (the `AppliedTableStyle`
@@ -12626,19 +12673,12 @@ impl CanvasModel {
         let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
         let paragraphs: &[paged_model::Paragraph] = match cell {
             None => &story.story.paragraphs,
-            Some(addr) => {
-                let table = story
-                    .story
-                    .paragraphs
-                    .iter()
-                    .filter_map(|p| p.table.as_ref())
-                    .find(|t| t.self_id.as_deref() == Some(addr.table_id.as_str()))?;
-                &table
-                    .cells
-                    .iter()
-                    .find(|c| c.coords() == Some((addr.col, addr.row)))?
-                    .paragraphs
-            }
+            Some(addr) => paged_model::cell_paragraphs_in(
+                &story.story.paragraphs,
+                &addr.table_id,
+                addr.col,
+                addr.row,
+            )?,
         };
         let mut text = String::new();
         for (i, para) in paragraphs.iter().enumerate() {

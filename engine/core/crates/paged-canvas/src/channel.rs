@@ -5953,6 +5953,7 @@ mod tests {
                 table_id: "Table/tbl1".into(),
                 row: 1,
                 height: Some(42.0),
+                auto_grow: None,
             },
             Mutation::SetColumnWidth {
                 story_id: "Story/t1".into(),
@@ -6007,6 +6008,8 @@ mod tests {
             footer_rows: 0,
             column_widths: vec![120.0, 80.0],
             row_heights: vec![],
+            cell: None,
+            word: None,
         };
         assert_eq!(m.discriminant(), "InsertTable");
         let env = MainToWorker {
@@ -6030,6 +6033,7 @@ mod tests {
                 footer_rows,
                 column_widths,
                 row_heights,
+                ..
             }) => {
                 assert_eq!(story_id, "Story/u30");
                 assert_eq!((rows, cols), (3, 2));
@@ -6057,6 +6061,7 @@ mod tests {
                 footer_rows,
                 column_widths,
                 row_heights,
+                ..
             } => {
                 assert_eq!(story_id, "u30");
                 assert_eq!((rows, cols), (2, 2));
