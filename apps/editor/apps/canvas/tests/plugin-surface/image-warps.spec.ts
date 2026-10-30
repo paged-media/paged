@@ -65,12 +65,23 @@ async function open(page: Page): Promise<Designer> {
 const readout = (page: Page, key: string) =>
   page.locator(`[data-filter-data="${key}"]`).first().textContent();
 
-/** OK, then the lane's honest answer: applied on the GPU, declined on CPU. */
+/** OK, then the lane's honest answer: applied on the GPU lane; on the CPU
+ *  lane the dialog's OK is disabled (it cannot apply) and the status names
+ *  the GPU, and Cancel leaves the image as it was. */
 async function okApplies(page: Page, label: RegExp): Promise<void> {
-  await page.locator("[data-filter-ok]").click();
+  const ok = page.locator("[data-filter-ok]").first();
+  if (await ok.isDisabled()) {
+    await expect
+      .poll(() => statusText(page), { timeout: 30_000 })
+      .toMatch(/GPU/);
+    await page.locator("[data-filter-cancel]").first().click();
+    await expect(page.locator("[data-filter-dialog]")).toHaveCount(0);
+    return;
+  }
+  await ok.click();
   await expect
     .poll(() => statusText(page), { timeout: 30_000 })
-    .toMatch(new RegExp(`${label.source}.*(applied|GPU-only)`, "i"));
+    .toMatch(new RegExp(`${label.source}.*applied`, "i"));
 }
 
 test.describe("paged.image · warps", () => {
