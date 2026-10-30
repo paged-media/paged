@@ -27,7 +27,7 @@
 
 import type { BundleHost, MutationInput } from "@paged-media/plugin-api";
 
-import { storiesOf } from "./format-painter.js";
+import { storiesOf, storyLength } from "./format-painter.js";
 import {
   SLIDE_CALLER,
   SLIDE_KEY,
@@ -607,6 +607,13 @@ async function placeholderStory(
 ): Promise<{ story: string; length: number } | null> {
   const frame = ph.elements.find((e) => e.kind === "textFrame");
   if (!frame) return null;
+  // The geometry read names a frame's story, a master's frame included
+  // (engine ADR 1026); the frame chain walks pages only.
+  const [g] = (await host.document.elementGeometry([frame] as never)) as {
+    storyId?: string | null;
+  }[];
+  if (g?.storyId)
+    return { story: g.storyId, length: await storyLength(host, g.storyId) };
   const stories = await storiesOf(host, [frame as never]);
   return stories.get(frame.id) ?? null;
 }

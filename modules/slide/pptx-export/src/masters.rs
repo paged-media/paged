@@ -116,25 +116,19 @@ fn text_style(doc: &Document, shape: &native::NShape) -> Option<(Option<f32>, Op
     Some((run.point_size, run.font_style.clone()))
 }
 
-/// The `a:defRPr` attributes of a text style.
+/// The `a:defRPr` attributes of a text style: the size, and bold and
+/// italic only when the run names its font style.
 fn def_rpr_attrs(size: Option<f32>, style: Option<&str>) -> Vec<(&'static str, Option<String>)> {
-    let style = style.unwrap_or("").to_ascii_lowercase();
+    let flag = |on: bool| Some(if on { "1" } else { "0" }.to_string());
+    let style = style.map(str::to_ascii_lowercase);
     vec![
         ("sz", size.map(|s| ((s * 100.0).round() as i64).to_string())),
-        (
-            "b",
-            Some(if style.contains("bold") { "1" } else { "0" }.to_string()),
-        ),
+        ("b", style.as_deref().and_then(|s| flag(s.contains("bold")))),
         (
             "i",
-            Some(
-                if style.contains("italic") || style.contains("oblique") {
-                    "1"
-                } else {
-                    "0"
-                }
-                .to_string(),
-            ),
+            style
+                .as_deref()
+                .and_then(|s| flag(s.contains("italic") || s.contains("oblique"))),
         ),
     ]
 }
@@ -454,7 +448,8 @@ mod tests {
         );
         // Again: the existing level's defaults are updated in place.
         let y = set_level1_style(&x, 2, Some(40.0), None).unwrap();
-        assert!(y.contains(r#"<a:defRPr sz="4000" b="0" i="0"/>"#), "{y}");
+        // No font style named: bold and italic stay as they were.
+        assert!(y.contains(r#"<a:defRPr sz="4000" b="1" i="0"/>"#), "{y}");
         assert_eq!(y.matches("<a:lvl1pPr").count(), 1, "{y}");
         assert!(set_level1_style(LAYOUT, 9, Some(40.0), None).is_none());
     }

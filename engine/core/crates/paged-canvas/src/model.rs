@@ -12936,8 +12936,20 @@ impl CanvasModel {
                 continue;
             }
             let raw = id.raw_id();
-            for parsed in &self.scene().spreads {
-                let spread = &parsed.spread;
+            // Engine ADR 1026 — a master's items too, after the pages':
+            // their page is the master's page, their transform in its space.
+            let candidates = self
+                .scene()
+                .spreads
+                .iter()
+                .map(|p| (&p.spread, None))
+                .chain(self.scene().master_spreads.values().map(|m| {
+                    (
+                        &m.spread,
+                        m.spread.pages.first().and_then(|pg| pg.self_id.clone()),
+                    )
+                }));
+            for (spread, master_page) in candidates {
                 let mut story_id = None;
                 let resolved: Option<(paged_model::Bounds, Option<[f32; 6]>, bool)> = match id {
                     ElementId::TextFrame(_) => spread
@@ -13028,7 +13040,20 @@ impl CanvasModel {
                 let Some((bounds, item_transform, has_image)) = resolved else {
                     continue;
                 };
-                let built_page = self.host_page(&parsed.spread, bounds, item_transform);
+                if let Some(page) = master_page {
+                    out.push(crate::channel::ElementGeometryItem {
+                        id: id.clone(),
+                        page_id: Some(PageId(page)),
+                        spread_id: spread.self_id.clone(),
+                        bounds: [bounds.top, bounds.left, bounds.bottom, bounds.right],
+                        item_transform,
+                        page_origin: Some([0.0, 0.0]),
+                        has_image,
+                        story_id,
+                    });
+                    break;
+                }
+                let built_page = self.host_page(spread, bounds, item_transform);
                 // C-23 — an element whose centroid lands on no page is
                 // ON THE PASTEBOARD, not absent. This used to `if let`
                 // the push away, so the door answered nothing for an
@@ -13036,7 +13061,7 @@ impl CanvasModel {
                 out.push(crate::channel::ElementGeometryItem {
                     id: id.clone(),
                     page_id: built_page.map(|bp| bp.id.clone()),
-                    spread_id: parsed.spread.self_id.clone(),
+                    spread_id: spread.self_id.clone(),
                     bounds: [bounds.top, bounds.left, bounds.bottom, bounds.right],
                     item_transform: page_space_transform(built_page, item_transform),
                     page_origin: built_page.map(|bp| [bp.spread_origin.0, bp.spread_origin.1]),

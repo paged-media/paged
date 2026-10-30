@@ -11,18 +11,11 @@
       "readNative": true,
       "openNative": true
     },
-    "rendering": [
-      "overlay"
-    ],
-    "editContext": [
-      "slideDeck",
-      "slideChart"
-    ],
+    "rendering": ["overlay"],
+    "editContext": ["slideDeck", "slideChart"],
     "clipboard": "none",
     "keybindings": true,
-    "assets": [
-      "fonts"
-    ],
+    "assets": ["fonts"],
     "wasm": [
       {
         "name": "slide-engine",
@@ -74,16 +67,12 @@
       "media.paged.slide.command.slideMaster",
       "media.paged.slide.command.resetSlide"
     ],
-    "importers": [
-      "media.paged.slide.importer.pptx"
-    ],
+    "importers": ["media.paged.slide.importer.pptx"],
     "exporters": [
       "media.paged.slide.exporter.pptx",
       "media.paged.slide.exporter.potx"
     ],
-    "presentations": [
-      "media.paged.slide.show"
-    ],
+    "presentations": ["media.paged.slide.show"],
     "views": [
       "media.paged.slide.view.sorter",
       "media.paged.slide.view.export",

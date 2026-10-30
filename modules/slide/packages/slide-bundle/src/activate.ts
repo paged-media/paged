@@ -423,7 +423,8 @@ export function activate(host: BundleHost): BundleHandle {
   const masterDeps: MasterDeps = {
     activePage: () => store?.activePage() ?? null,
     deckOpen: () => (store ? store.isDeck() : false),
-    views: host.supports("contribute.view@1") && host.supports("shell.views@1"),
+    // Set once the Slide Master view is registered (below).
+    views: false,
   };
   const model = contributeSlideObjectModel(host, {
     openDeck,
@@ -727,7 +728,11 @@ export function activate(host: BundleHost): BundleHandle {
 
   // Slide ADR 712 — View ▸ Slide Master (a module view) and Reset Slide.
   if (store && host.supports("contribute.command@1")) {
-    if (masterDeps.views && host.supports("render.snapshot@1")) {
+    if (
+      host.supports("contribute.view@1") &&
+      host.supports("shell.views@1") &&
+      host.supports("render.snapshot@1")
+    ) {
       disposers.push(
         host.contribute.view({
           id: MASTER_VIEW,
@@ -735,7 +740,8 @@ export function activate(host: BundleHost): BundleHandle {
           render: makeSlideMaster(host),
         }).dispose,
       );
-    } else masterDeps.views = false;
+      masterDeps.views = true;
+    }
     const cmds = contributeMasterCommands(host, masterDeps);
     disposers.push(() => cmds.dispose());
   }

@@ -78,7 +78,7 @@ bytes and the state hash of every document without one are unchanged.
 
 **Reads.** `masterPages` gives each master's pages (size, `appliedMaster`, `overrideList`,
 plugin metadata) and its items as scene-tree rows with their metadata, as `tree` gives a
-page's. `pages` gives each page's `overrideList`. A snapshot of a master page's id draws the
+page's. `pages` gives each page's `overrideList`. `elementGeometry` answers a master's items too (their page is the master's page, their transform in its space, a text frame with its story). A snapshot of a master page's id draws the
 master as a page of its own: its items over the masters it is based on (a layout's
 thumbnail).
 

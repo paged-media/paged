@@ -22,7 +22,7 @@
 // layout), a placeholder's text style that the slides follow, Change
 // Layout and Reset Slide, and the layouts written back on export.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "bun:test";
@@ -180,11 +180,24 @@ describe("slide masters and layouts", () => {
     const title = (await slidePlaceholders(host, slide.selfId)).find(
       (p) => p.type === "title",
     );
-    if (title) {
-      const frame = title.elements.find((e) => e.kind === "textFrame")!;
-      const props = await host.document.elementProperties(frame as never);
-      expect(props).not.toBeNull();
-    }
+    expect(title, "the slide has a title placeholder").toBeDefined();
+    const frame = title!.elements.find((e) => e.kind === "textFrame")!;
+    const [g] = (await host.document.elementGeometry([frame] as never)) as {
+      storyId?: string;
+    }[];
+    const content = await host.document.storyContent(g!.storyId!);
+    const sizes = content!.paragraphs.flatMap((p) =>
+      p.runs.map((r) => r.pointSize),
+    );
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(
+      sizes.every((s) => s === 61),
+      JSON.stringify(sizes),
+    ).toBe(true);
+    // One step: undo puts the layout and the slide back.
+    await host.document.undo();
+    const again = await host.document.storyContent(g!.storyId!);
+    expect(again!.paragraphs[0]!.runs[0]!.pointSize).not.toBe(61);
   }, 120_000);
 
   it("changes a slide's layout and resets it, each one step", async () => {
@@ -240,6 +253,12 @@ describe("slide masters and layouts", () => {
     );
     const out = await exporter.export();
     expect(out).not.toBeNull();
+    // The deck PowerPoint's open check reads (slide ADR 705), when asked.
+    if (process.env.SLIDE_KEEP_DIR)
+      writeFileSync(
+        `${process.env.SLIDE_KEEP_DIR}/masters-title-style.pptx`,
+        out!.bytes,
+      );
     const back = await open(out!.bytes, "back");
     const again = await readMasters(back.host);
     const l = again.find((m) => m.name === "Renamed layout");
@@ -301,7 +320,9 @@ describe("slide masters and layouts", () => {
       }),
     ).toEqual({ applied: true });
     covers("command:media.paged.slide.command.resetSlide");
-    await run("media.paged.slide.command.resetSlide", { slide: slideAddress(first!) });
+    await run("media.paged.slide.command.resetSlide", {
+      slide: slideAddress(first!),
+    });
     await host.document.undo();
     await host.document.undo();
     covers("command:media.paged.slide.deleteLayout");

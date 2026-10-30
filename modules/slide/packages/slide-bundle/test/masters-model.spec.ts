@@ -310,21 +310,69 @@ describe("masters and layouts", () => {
         collection: async (name: string) => {
           if (name === "masterPages")
             return [
-              { selfId: "M1", label: "Office", pages: [{ selfId: "M1pg", appliedMaster: "n", pluginMetadata: label({ kind: "master" }) }], items: [] },
-              { selfId: "m1", label: "Title", pages: [{ selfId: "m1pg", appliedMaster: "M1", pluginMetadata: label({ kind: "layout" }) }], items: [title("u5t", "textFrame")] },
-              { selfId: "m2", label: "Blank", pages: [{ selfId: "m2pg", appliedMaster: "M1", pluginMetadata: label({ kind: "layout" }) }], items: [] },
+              {
+                selfId: "M1",
+                label: "Office",
+                pages: [
+                  {
+                    selfId: "M1pg",
+                    appliedMaster: "n",
+                    pluginMetadata: label({ kind: "master" }),
+                  },
+                ],
+                items: [],
+              },
+              {
+                selfId: "m1",
+                label: "Title",
+                pages: [
+                  {
+                    selfId: "m1pg",
+                    appliedMaster: "M1",
+                    pluginMetadata: label({ kind: "layout" }),
+                  },
+                ],
+                items: [title("u5t", "textFrame")],
+              },
+              {
+                selfId: "m2",
+                label: "Blank",
+                pages: [
+                  {
+                    selfId: "m2pg",
+                    appliedMaster: "M1",
+                    pluginMetadata: label({ kind: "layout" }),
+                  },
+                ],
+                items: [],
+              },
             ];
           if (name === "pages")
             return [{ selfId: "p1", appliedMaster: "m1", pluginMetadata: [] }];
           if (name === "stories") return [{ selfId: "Story/1" }];
           return [];
         },
-        tree: async () => [{ kind: "Spread", children: [{ kind: "Page", children: [title("s5t", "textFrame")] }] }],
+        tree: async () => [
+          {
+            kind: "Spread",
+            children: [{ kind: "Page", children: [title("s5t", "textFrame")] }],
+          },
+        ],
         frameChain: async () => [{ frameId: "u5t" }],
-        storyContent: async () => ({ paragraphs: [{ runs: [{ text: "Click" }] }] }),
-        elementProperties: async () => ({ entries: [{ path: "characterFontSize", value: { type: "length", value: 44 } }] }),
+        storyContent: async () => ({
+          paragraphs: [{ runs: [{ text: "Click" }] }],
+        }),
+        elementProperties: async () => ({
+          entries: [
+            { path: "characterFontSize", value: { type: "length", value: 44 } },
+          ],
+        }),
         elementGeometry: async (ids: { id: string }[]) =>
-          ids.map((id) => ({ id, itemTransform: [1, 0, 0, 1, 0, 0], bounds: [0, 0, 10, 10] })),
+          ids.map((id) => ({
+            id,
+            itemTransform: [1, 0, 0, 1, 0, 0],
+            bounds: [0, 0, 10, 10],
+          })),
         mutate: async (m: { op: string; args: Record<string, unknown> }) => {
           sent.push(m);
           return { applied: true, createdId: null, pageIds: [] };
@@ -332,22 +380,46 @@ describe("masters and layouts", () => {
       },
     } as unknown as BundleHost;
     const cmds = new Map(
-      masterTypedCommands(host, { activePage: () => "p1", deckOpen: () => true, views: false }).map(
-        (c) => [c.id, c],
-      ),
+      masterTypedCommands(host, {
+        activePage: () => "p1",
+        deckOpen: () => true,
+        views: false,
+      }).map((c) => [c.id, c]),
     );
     const run = (id: string, args: object) =>
-      (cmds.get(id)!.handler as (ctx: unknown, a: object) => Promise<unknown>)({}, args);
-    const listed = (await run("media.paged.slide.layouts", {})) as { layouts: { kind: string }[] };
-    expect(listed.layouts.map((l) => l.kind)).toEqual(["master", "layout", "layout"]);
-    await run("media.paged.slide.renameLayout", { layout: "m2", name: "Empty" });
-    await run("media.paged.slide.setPreserve", { layout: "m2", preserve: true });
+      (cmds.get(id)!.handler as (ctx: unknown, a: object) => Promise<unknown>)(
+        {},
+        args,
+      );
+    const listed = (await run("media.paged.slide.layouts", {})) as {
+      layouts: { kind: string }[];
+    };
+    expect(listed.layouts.map((l) => l.kind)).toEqual([
+      "master",
+      "layout",
+      "layout",
+    ]);
+    await run("media.paged.slide.renameLayout", {
+      layout: "m2",
+      name: "Empty",
+    });
+    await run("media.paged.slide.setPreserve", {
+      layout: "m2",
+      preserve: true,
+    });
     await run("media.paged.slide.deleteLayout", { layout: "m2" });
-    await expect(run("media.paged.slide.deleteLayout", { layout: "m1" })).rejects.toThrow(
-      /used by 1 slide/,
-    );
-    await run("media.paged.slide.insertPlaceholder", { layout: "m2", type: "pic" });
-    await run("media.paged.slide.setPlaceholderStyle", { layout: "m1", type: "title", size: 60 });
+    await expect(
+      run("media.paged.slide.deleteLayout", { layout: "m1" }),
+    ).rejects.toThrow(/used by 1 slide/);
+    await run("media.paged.slide.insertPlaceholder", {
+      layout: "m2",
+      type: "pic",
+    });
+    await run("media.paged.slide.setPlaceholderStyle", {
+      layout: "m1",
+      type: "title",
+      size: 60,
+    });
     await run("media.paged.slide.changeLayout", { slide: "p1", layout: "m2" });
     expect(sent.map((m) => m.op)).toEqual([
       "renameMaster",
@@ -362,4 +434,3 @@ describe("masters and layouts", () => {
     expect(change.at(-2)!.op).toBe("setPageOverrides");
   });
 });
-
