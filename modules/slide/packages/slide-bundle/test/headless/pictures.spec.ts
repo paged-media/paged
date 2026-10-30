@@ -132,7 +132,8 @@ const W = 8;
 const H = 4;
 /** An opaque blue picture, `W` × `H`. */
 const pixel = [0x44, 0x72, 0xc4];
-function png(): Uint8Array {
+/** The picture as a PNG: RGB, or RGBA (opaque) with `alpha`. */
+function png(alpha = false): Uint8Array {
   const chunk = (type: string, data: Uint8Array) => {
     const b = Buffer.alloc(12 + data.length);
     b.writeUInt32BE(data.length, 0);
@@ -144,10 +145,12 @@ function png(): Uint8Array {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(W, 0);
   ihdr.writeUInt32BE(H, 4);
-  ihdr.set([8, 2, 0, 0, 0], 8);
-  const raw = Buffer.alloc(H * (1 + W * 3));
+  const n = alpha ? 4 : 3;
+  ihdr.set([8, alpha ? 6 : 2, 0, 0, 0], 8);
+  const raw = Buffer.alloc(H * (1 + W * n));
+  const px = alpha ? [...pixel, 0xff] : pixel;
   for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++) raw.set(pixel, y * (1 + W * 3) + 1 + x * 3);
+    for (let x = 0; x < W; x++) raw.set(px, y * (1 + W * n) + 1 + x * n);
   return new Uint8Array(
     Buffer.concat([
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -215,7 +218,8 @@ function psd(): Uint8Array {
   return new Uint8Array(Buffer.concat([head, lens, comp, planes]));
 }
 function ico(): Uint8Array {
-  const p = png();
+  // An icon's PNG is RGBA (decoders refuse another colour type).
+  const p = png(true);
   const d = Buffer.alloc(22);
   d.writeUInt16LE(1, 2);
   d.writeUInt16LE(1, 4);
@@ -229,7 +233,13 @@ function ico(): Uint8Array {
 }
 const b64 = (s: string) => new Uint8Array(Buffer.from(s, "base64"));
 const GIF = b64("R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==");
-const WEBP = b64("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==");
+/** An 8 × 4 lossless WebP of the pixel above (image-webp's encoder): an
+ *  opaque picture, so the PNG the engine renders of it has pixels. */
+const WEBP = b64(
+  "UklGRpgAAABXRUJQVlA4TIsAAAAvB8AAAM1VICICHogEAAAAAIABAAAAAAAAAAAAAAAAAAwA" +
+    "AAAAAAAAAAAAAAAAAAAAAAAEAHggAQAAAAAA5x8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+    "QAAAAAAA4IEEAAAAAACcfwAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAABA5IcCAA==",
+);
 /** An 8 × 4 baseline JPEG (macOS `sips` from the PNG above). */
 const JPEG = b64(
   "/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAA" +
