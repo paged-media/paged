@@ -2324,3 +2324,66 @@ fn the_history_depth_survives_a_load__feat__plugin_platform_undo_log_labels() {
     assert_eq!(reload["kind"], "documentLoaded", "{reload}");
     assert_eq!(undo_log(&mut core, None)["depth"], 2);
 }
+
+// ---------------------------------------------------------------------
+// SVG import limits (paged_svg::limits)
+// ---------------------------------------------------------------------
+
+/// A pathological SVG (nesting far past the depth limit, a `<use>` chain
+/// that multiplies past the node limit) is answered with a plan that
+/// carries the reason, and the worker goes on answering: the next,
+/// ordinary import plans and its batch applies.
+#[test]
+fn a_pathological_svg_import_is_refused_and_the_worker_goes_on() {
+    let mut core = loaded_core();
+    let deep = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">{}{}</svg>"#,
+        "<g>".repeat(50_000),
+        "</g>".repeat(50_000)
+    );
+    let mut defs = String::from(r#"<rect id="l0" width="1" height="1"/>"#);
+    for i in 1..=24 {
+        defs.push_str(&format!(
+            r##"<g id="l{i}"><use href="#l{p}"/><use href="#l{p}"/></g>"##,
+            p = i - 1
+        ));
+    }
+    let bomb = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><defs>{defs}</defs><use href="#l24"/></svg>"##
+    );
+    let plan_msg = |seq: u64, svg: &str| {
+        serde_json::json!({
+            "seq": seq,
+            "protocol": protocol(),
+            "kind": "requestSvgImport",
+            "payload": {
+                "pageId": "p1",
+                "bytes": svg.as_bytes(),
+                "options": { "origin": [0.0, 0.0] },
+            }
+        })
+    };
+    for (seq, svg, why) in [(2, &deep, "nest"), (3, &bomb, "XML nodes")] {
+        let reply = roundtrip(&mut core, &plan_msg(seq, svg));
+        assert_eq!(reply["kind"], "svgImportPlanned", "{reply}");
+        assert!(reply["payload"]["mutation"].is_null());
+        let e = reply["payload"]["error"].as_str().expect("an error");
+        assert!(e.contains(why), "{e}");
+    }
+    let ok = r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M0 0h10v10z" fill="#123456"/></svg>"##;
+    let reply = roundtrip(&mut core, &plan_msg(4, ok));
+    assert_eq!(reply["kind"], "svgImportPlanned", "{reply}");
+    assert!(reply["payload"]["error"].is_null(), "{reply}");
+    let mutation = reply["payload"]["mutation"].clone();
+    assert!(!mutation.is_null());
+    let reply = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 5,
+            "protocol": protocol(),
+            "kind": "mutate",
+            "payload": mutation,
+        }),
+    );
+    assert_eq!(reply["kind"], "mutationApplied", "{reply}");
+}

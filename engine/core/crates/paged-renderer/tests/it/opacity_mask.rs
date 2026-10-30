@@ -37,6 +37,15 @@ use paged_renderer::{pipeline, PipelineOptions};
 /// The fixture with rectangle 1 installed as rectangle 0's mask.
 /// Returns `(document, target_id, mask_id)`.
 fn masked_document(mask_type: OpacityMaskType, invert: bool) -> paged_scene::Document {
+    masked_document_clip(mask_type, invert, true)
+}
+
+/// As [`masked_document`], with Illustrator's Clip switch.
+fn masked_document_clip(
+    mask_type: OpacityMaskType,
+    invert: bool,
+    clip: bool,
+) -> paged_scene::Document {
     let bytes = paged_gen::write_idml(&paged_gen::samples::layers_z::build()).expect("write_idml");
     let mut doc = idml_import::import_idml_doc(&bytes).expect("import");
     let spread = &mut doc.spreads[0].spread;
@@ -49,6 +58,7 @@ fn masked_document(mask_type: OpacityMaskType, invert: bool) -> paged_scene::Doc
             mask_item: mask,
             mask_type,
             invert,
+            clip,
         },
     );
     // The artwork stops painting on its own — exactly what
@@ -180,4 +190,82 @@ fn luminosity_mode_reads_the_artwork_colour() {
     );
     // Outside the artwork it is still fully hidden.
     assert!(is_paper(img.get_pixel(180, 280).0));
+}
+
+/// Clip off (Illustrator's Clip switch): what the artwork does not
+/// paint SHOWS the target — the artwork is resolved over a white
+/// backdrop — while the artwork's own colour still modulates the
+/// overlap, and the artwork itself still never paints.
+#[test]
+#[allow(non_snake_case)]
+fn clip_off_shows_the_target_outside_the_artwork__feat__effects_transparency_opacity_mask() {
+    let doc = masked_document_clip(OpacityMaskType::Luminosity, false, false);
+    let img = render(&doc);
+    let px = |x: u32, y: u32| img.get_pixel(x, y).0;
+    // Inside the target, outside the artwork: shown (hidden with Clip).
+    assert!(
+        is_dark(px(180, 280)),
+        "clip off: the target outside the artwork must show: {:?}",
+        px(180, 280)
+    );
+    // The overlap is still modulated by the red artwork's luminance.
+    let p = px(300, 400);
+    assert!(
+        p[0] > 150 && p[0] < 235,
+        "clip off: the overlap still reads the artwork, got {p:?}"
+    );
+    // The artwork never paints on its own.
+    assert!(
+        is_paper(px(420, 520)),
+        "artwork painted: {:?}",
+        px(420, 520)
+    );
+}
+
+/// Clip off and inverted: the white backdrop inverts to black, so the
+/// target outside the artwork hides again and the overlap shows the
+/// inverse of the artwork's luminance.
+#[test]
+fn clip_off_and_invert_hide_the_target_outside_the_artwork() {
+    let doc = masked_document_clip(OpacityMaskType::Luminosity, true, false);
+    let img = render(&doc);
+    let px = |x: u32, y: u32| img.get_pixel(x, y).0;
+    assert!(
+        is_paper(px(180, 280)),
+        "clip off + invert: outside the artwork hides: {:?}",
+        px(180, 280)
+    );
+    let p = px(300, 400);
+    assert!(
+        p[0] < 120,
+        "clip off + invert: red (~21% luminance) inverts to ~79% coverage, got {p:?}"
+    );
+}
+
+/// A clipping mask (the default) emits exactly what it emitted before
+/// the switch existed: the bracket's artwork section holds the
+/// artwork's commands only.
+#[test]
+fn clip_on_emits_no_backdrop() {
+    let on = masked_document_clip(OpacityMaskType::Luminosity, false, true);
+    let off = masked_document_clip(OpacityMaskType::Luminosity, false, false);
+    let opts = PipelineOptions::default();
+    let count = |doc: &paged_scene::Document| {
+        let built = pipeline::build_document(doc, &opts).expect("build");
+        let cmds = &built.pages[0].list.commands;
+        let b = cmds
+            .iter()
+            .position(|c| matches!(c, DisplayCommand::BeginSoftMask { .. }))
+            .unwrap();
+        let m = cmds
+            .iter()
+            .position(|c| matches!(c, DisplayCommand::BeginMaskedContent(_)))
+            .unwrap();
+        m - b
+    };
+    assert_eq!(
+        count(&off),
+        count(&on) + 1,
+        "clip off adds one backdrop fill"
+    );
 }

@@ -17,92 +17,75 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Engine ADR 1008 — the ordered effect stack, as the Effects panel edits
-// it. The engine keeps one stack per transparency target and takes it
-// whole (`frameEffectStack`, `frameFillEffectStack`, …: one write, one
-// undo step); every gesture here — add, remove, move, switch on or off,
-// change a stack-only effect's parameter — is a pure function from the
-// stack read to the stack written.
+// Engine ADR 1008, editor ADR 309 — the ordered effect stack, as the
+// Effects and Appearance panels and the Effect menu edit it. The engine
+// keeps one stack per transparency target and takes it whole
+// (`frameEffectStack`, `frameFillEffectStack`, …: one write, one undo
+// step); every gesture here — add, remove, move, switch on or off, change
+// a stack-only effect's parameter — is a pure function from the stack read
+// to the stack written.
 //
-// InDesign's nine effects carry no parameters in the stack: theirs stay
-// on their own per-field paths (`frameInnerShadowSize`, …), which the
-// panel's existing disclosures edit. The stack-only effects carry theirs
-// in the entry, flat (the wire's `EffectEntrySpec`).
+// WHICH kinds exist, which targets take them, how often a stack may hold
+// one and the form of their parameters are core's (`CORE_EFFECT_KINDS`,
+// the catalog's `effectKinds`): nothing here lists a kind, so a kind the
+// engine adds is offered without a change to the editor (plan C16).
+// InDesign's nine carry no parameters in the stack: theirs stay on their
+// own per-field paths (`frameInnerShadowSize`, …), which the Effects
+// panel's disclosures edit.
 
-/** An effect kind, as the wire spells it. */
-export type EffectKind =
-  | "dropShadow"
-  | "innerShadow"
-  | "outerGlow"
-  | "innerGlow"
-  | "bevelEmboss"
-  | "satin"
-  | "feather"
-  | "directionalFeather"
-  | "gradientFeather"
-  | "gaussianBlur"
-  | "outlineStroke"
-  | "colorOverlay"
-  | "gradientOverlay"
-  | "reflection"
-  | "softEdge"
-  | "noise"
-  | "colorAdjust";
+import {
+  CORE_EFFECT_CATEGORIES,
+  CORE_EFFECT_KINDS,
+} from "@paged-media/plugin-sdk";
+import type {
+  EffectKindDescriptor,
+  EffectParamDescriptor,
+} from "@paged-media/plugin-api";
 
-/** One stack entry (the wire's `EffectEntrySpec`). */
+/** An effect kind, as the wire spells it (`gaussianBlur`). */
+export type EffectKind = string;
+
+/** One stack entry (the wire's `EffectEntrySpec`): `kind`, `enabled`, and
+ *  the flat optional parameters each kind reads. */
 export interface StackEntry {
   kind: EffectKind;
   enabled: boolean;
   blendMode?: string | null;
   opacityPct?: number | null;
-  radiusPt?: number | null;
-  sizePt?: number | null;
-  position?: string | null;
-  color?: string | null;
-  gradient?: string | null;
-  angleDeg?: number | null;
-  reverse?: boolean | null;
-  distancePt?: number | null;
-  sizePct?: number | null;
-  startOpacityPct?: number | null;
-  endOpacityPct?: number | null;
-  blurPt?: number | null;
-  amountPct?: number | null;
-  monochromatic?: boolean | null;
-  brightness?: number | null;
-  contrast?: number | null;
-  saturation?: number | null;
-  hueDeg?: number | null;
+  [param: string]: unknown;
 }
 
-/** InDesign's nine, in its own order. */
-export const INDESIGN_KINDS: readonly EffectKind[] = [
-  "dropShadow",
-  "innerShadow",
-  "outerGlow",
-  "innerGlow",
-  "bevelEmboss",
-  "satin",
-  "feather",
-  "directionalFeather",
-  "gradientFeather",
-];
-
-/** The effects only the stack has (applied to the object target). */
-export const STACK_ONLY_KINDS: readonly EffectKind[] = [
-  "gaussianBlur",
-  "outlineStroke",
-  "colorOverlay",
-  "gradientOverlay",
-  "reflection",
-  "softEdge",
-  "noise",
-  "colorAdjust",
-];
-
-export const isIndesign = (k: EffectKind) => INDESIGN_KINDS.includes(k);
-
 export type StackTarget = "object" | "fill" | "stroke" | "content";
+
+/** Every kind core describes, in the wire's order. */
+export function effectKinds(): readonly EffectKindDescriptor[] {
+  return CORE_EFFECT_KINDS;
+}
+
+/** Core's description of `kind`, or `undefined` for a kind this build's
+ *  catalog does not know (a newer document): it is listed, not edited. */
+export function kindOf(kind: EffectKind): EffectKindDescriptor | undefined {
+  return CORE_EFFECT_KINDS.find((k) => k.kind === kind);
+}
+
+/** One of InDesign's nine (its parameters are per-field paths). */
+export const isIndesign = (k: EffectKind) => kindOf(k)?.indesign === true;
+
+/** The parameters of a stack-only kind, in form order. */
+export const paramsOf = (k: EffectKind): readonly EffectParamDescriptor[] =>
+  kindOf(k)?.params ?? [];
+
+/** The Effect menu's groups that hold a kind, in menu order, each with
+ *  its kinds in the wire's order. */
+export function effectMenu(): {
+  category: string;
+  kinds: EffectKindDescriptor[];
+}[] {
+  return CORE_EFFECT_CATEGORIES.map((category) => ({
+    category,
+    kinds: CORE_EFFECT_KINDS.filter((k) => k.category === category),
+  })).filter((g) => g.kinds.length > 0);
+}
 
 /** The stack path of a target. */
 export const STACK_PATHS: Record<StackTarget, string> = {
@@ -130,16 +113,27 @@ export function stackValue(entries: readonly StackEntry[]) {
   return { type: "effectStack", value: { entries: [...entries] } } as const;
 }
 
-/** The kinds the add menu offers a target: every kind not on it yet that
- *  the target takes (InDesign's once each; the stack-only ones on the
- *  object target, as often as wanted). */
+/** Whether `kind` may join this target's stack: the target takes it and
+ *  the stack holds fewer than its limit. */
+export function canAdd(
+  entries: readonly StackEntry[],
+  target: StackTarget,
+  kind: EffectKind,
+): boolean {
+  const k = kindOf(kind);
+  if (!k || !k.targets.includes(target)) return false;
+  const held = entries.filter((e) => e.kind === kind).length;
+  return k.maxPerStack === undefined || held < k.maxPerStack;
+}
+
+/** The kinds the add menu offers a target, in the wire's order. */
 export function addable(
   entries: readonly StackEntry[],
   target: StackTarget,
 ): EffectKind[] {
-  const present = new Set(entries.map((e) => e.kind));
-  const indesign = INDESIGN_KINDS.filter((k) => !present.has(k));
-  return target === "object" ? [...indesign, ...STACK_ONLY_KINDS] : indesign;
+  return CORE_EFFECT_KINDS.filter((k) => canAdd(entries, target, k.kind)).map(
+    (k) => k.kind,
+  );
 }
 
 /** Add `kind` at the end: an enabled entry at its defaults. */
@@ -180,125 +174,38 @@ export function setEnabled(
 }
 
 /** Set one parameter of the entry at `index`. */
-export function setParam<K extends keyof StackEntry>(
+export function setParam(
   entries: readonly StackEntry[],
   index: number,
-  key: K,
-  value: StackEntry[K],
+  key: string,
+  value: unknown,
 ): StackEntry[] {
   return entries.map((e, i) => (i === index ? { ...e, [key]: value } : e));
 }
 
-/** One parameter control of a stack-only effect. */
-export interface ParamSpec {
-  key: keyof StackEntry;
-  /** The message key of its label (see effects-panel's messages). */
-  label: string;
-  control: "number" | "color" | "gradient" | "position" | "bool";
-  suffix?: string;
-  min?: number;
-  max?: number;
+/** The control a parameter's value type takes. */
+export type ParamControl = "number" | "enum" | "bool" | "color" | "swatch";
+
+export function controlOf(p: EffectParamDescriptor): ParamControl {
+  switch (p.type.kind) {
+    case "bool":
+      return "bool";
+    case "enum":
+      return "enum";
+    case "color":
+      return "color";
+    case "ref":
+      return "swatch";
+    default:
+      return "number";
+  }
 }
 
-/** The parameter controls of each stack-only kind, in panel order. */
-export const PARAMS: Partial<Record<EffectKind, readonly ParamSpec[]>> = {
-  gaussianBlur: [
-    {
-      key: "radiusPt",
-      label: "radius",
-      control: "number",
-      suffix: "pt",
-      min: 0,
-    },
-  ],
-  outlineStroke: [
-    { key: "sizePt", label: "size", control: "number", suffix: "pt", min: 0 },
-    { key: "position", label: "position", control: "position" },
-    { key: "color", label: "color", control: "color" },
-  ],
-  colorOverlay: [{ key: "color", label: "color", control: "color" }],
-  gradientOverlay: [
-    { key: "gradient", label: "gradient", control: "gradient" },
-    { key: "angleDeg", label: "angle", control: "number", suffix: "°" },
-    { key: "reverse", label: "reverse", control: "bool" },
-  ],
-  reflection: [
-    {
-      key: "distancePt",
-      label: "distance",
-      control: "number",
-      suffix: "pt",
-      min: 0,
-    },
-    {
-      key: "sizePct",
-      label: "size",
-      control: "number",
-      suffix: "%",
-      min: 0,
-      max: 100,
-    },
-    {
-      key: "startOpacityPct",
-      label: "startOpacity",
-      control: "number",
-      suffix: "%",
-      min: 0,
-      max: 100,
-    },
-    {
-      key: "endOpacityPct",
-      label: "endOpacity",
-      control: "number",
-      suffix: "%",
-      min: 0,
-      max: 100,
-    },
-    { key: "blurPt", label: "blur", control: "number", suffix: "pt", min: 0 },
-  ],
-  softEdge: [
-    { key: "sizePt", label: "size", control: "number", suffix: "pt", min: 0 },
-  ],
-  noise: [
-    {
-      key: "amountPct",
-      label: "amount",
-      control: "number",
-      suffix: "%",
-      min: 0,
-      max: 100,
-    },
-    { key: "monochromatic", label: "monochromatic", control: "bool" },
-  ],
-  colorAdjust: [
-    {
-      key: "brightness",
-      label: "brightness",
-      control: "number",
-      min: -100,
-      max: 100,
-    },
-    {
-      key: "contrast",
-      label: "contrast",
-      control: "number",
-      min: -100,
-      max: 100,
-    },
-    {
-      key: "saturation",
-      label: "saturation",
-      control: "number",
-      min: -100,
-      max: 100,
-    },
-    {
-      key: "hueDeg",
-      label: "hue",
-      control: "number",
-      suffix: "°",
-      min: -180,
-      max: 180,
-    },
-  ],
-};
+/** The unit suffix a number parameter shows. */
+export function suffixOf(p: EffectParamDescriptor): string | undefined {
+  const t = p.type;
+  if (t.kind === "length") return "pt";
+  if (t.kind === "number")
+    return t.unit === "percent" ? "%" : t.unit === "deg" ? "°" : undefined;
+  return undefined;
+}
