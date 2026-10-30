@@ -120,6 +120,7 @@ fn unedited(base: &LoweredDoc) -> StructureIn {
         footnotes: notes(base, false),
         endnotes: notes(base, true),
         anchors: Vec::new(),
+        text_boxes: Vec::new(),
     }
 }
 

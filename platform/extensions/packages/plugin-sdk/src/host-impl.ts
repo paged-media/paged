@@ -535,6 +535,15 @@ export const HOST_FEATURES: readonly string[] = [
   // refuses the path (an outcome) and reads no row. A bundle that would
   // otherwise bake an effect into pixels asks this flag first.
   "document.effectStack@1",
+  // Engine ADR 1043 — native appearance: several fills and strokes on one
+  // page item. The vendored wire and catalog carry `frameAppearance` (the
+  // whole layer list, `{ type: "appearance", value: { layers } }`, one
+  // write and one undo step per gesture) and `frameAppearanceLayer` (one
+  // layer by index, `{ type: "appearanceLayer", value: { index, layer } }`).
+  // STATIC like the effect stack: additive at protocol 78, so an older
+  // engine refuses the paths (an outcome) and reads no row. paged.draw
+  // asks it before it moves an appearance off its metadata stack.
+  "document.appearance@1",
   // Engine ADR 1037 — an image frame's filter stack: `frameImageAdjustments`
   // (a list of `RasterOp`: exposure, levels, curves, hue/saturation,
   // recolor, duotone, black & white, sharpen, blur, posterize, threshold,

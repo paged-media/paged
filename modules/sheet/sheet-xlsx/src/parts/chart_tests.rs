@@ -433,7 +433,7 @@ fn styled_charts_lower_onto_native_items_through_the_shared_mapper__feat__sheet_
     assert_eq!(bars.len(), 3, "{:?}", g.prims);
     let b0 = &bars[0];
     let gr = b0.gradient.as_ref().unwrap();
-    assert_eq!((gr.kind, gr.angle), ("linear", Some(-90.0)));
+    assert_eq!((gr.kind.as_str(), gr.angle), ("linear", Some(-90.0)));
     assert_eq!(gr.stops[1], (100.0, "#4472C4".to_string()));
     assert_eq!(
         b0.gradient_feather.as_ref().unwrap().stops[1],
@@ -445,9 +445,15 @@ fn styled_charts_lower_onto_native_items_through_the_shared_mapper__feat__sheet_
     let b1 = &bars[1];
     assert!(b1.gradient.is_none() && b1.drop_shadow.is_none());
     assert_eq!(b1.outer_glow.as_ref().unwrap().color, "#FFC000");
-    // What the page cannot hold is said once per kind.
+    // The reflection rides an effect stack (engine ADR 1008); what the
+    // page cannot hold is said once per kind.
     assert!(
-        g.losses.iter().any(|l| l.contains("reflection")),
+        format!("{:?}", g.prims).contains(r#"NativeEffect { kind: "reflection""#),
+        "{:?}",
+        g.prims
+    );
+    assert!(
+        !g.losses.iter().any(|l| l.contains("reflection")),
         "{:?}",
         g.losses
     );
@@ -456,10 +462,7 @@ fn styled_charts_lower_onto_native_items_through_the_shared_mapper__feat__sheet_
         "{:?}",
         g.losses
     );
-    assert_eq!(
-        g.losses.iter().filter(|l| l.contains("reflection")).count(),
-        1
-    );
+    assert_eq!(g.losses.iter().filter(|l| l.contains("pattern")).count(), 1);
 }
 
 #[test]

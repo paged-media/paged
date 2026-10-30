@@ -7059,6 +7059,16 @@
           "const": "frameContentEffectStack"
         },
         {
+          "description": "Engine ADR 1043 — the item's appearance (`Value::Appearance`):\nits extra fills and strokes, bottom to top, with the `frameFill` /\n`frameStroke` placeholders putting them in order with its own fill\nand stroke. Whole-list replacement: add, remove, reorder and any\nlayer field are one write each. The empty list is the item as it\nalways was. The inverse carries a snapshot (`prev`), so undo\nrestores the model exactly. Text frames, rectangles, ovals and\npolygons. Paint-only.",
+          "type": "string",
+          "const": "frameAppearance"
+        },
+        {
+          "description": "ADR 1043 — one layer of the appearance, by index\n(`Value::AppearanceLayer`): the per-layer edit (a colour, an\nopacity, a blend mode, a stroke weight, its effects). An index one\npast the last layer appends. Undoes through `FrameAppearance`.",
+          "type": "string",
+          "const": "frameAppearanceLayer"
+        },
+        {
           "description": "Editor-ops (Page tool) — a page's `GeometricBounds`\n`[top, left, bottom, right]` in the page's INNER coordinate\nsystem (`Value::Bounds`). Only `NodeId::Page` carries it.\nItems keep their coordinates (InDesign's layout-adjust off);\n`spread_origin` re-derives on rebuild.",
           "type": "string",
           "const": "pageBounds"
@@ -9328,6 +9338,72 @@
           ]
         },
         {
+          "description": "Engine ADR 1043 — an item's whole appearance. `prev` is the apply\nlayer's snapshot of the stored layers (JSON); an inverse carries it\nso undo restores exactly. Wire callers leave it `None`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "appearance"
+            },
+            "value": {
+              "type": "object",
+              "properties": {
+                "layers": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/PaintLayerSpec"
+                  }
+                },
+                "prev": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "layers"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "description": "Engine ADR 1043 — one layer of an item's appearance, at `index`\n(one past the last appends).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "appearanceLayer"
+            },
+            "value": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "layer": {
+                  "$ref": "#/$defs/PaintLayerSpec"
+                }
+              },
+              "required": [
+                "index",
+                "layer"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
           "description": "W0.2 — whole paragraph rule struct (`RuleAbove` / `RuleBelow`).\n`None` clears the rule back to the all-`None` default. The\ninverse carries the prior `Option<spec>` so undo round-trips\nbytewise. Same whole-struct precedent as `GradientFeather`.",
           "type": "object",
           "properties": {
@@ -9803,6 +9879,150 @@
         "softEdge",
         "noise",
         "colorAdjust"
+      ]
+    },
+    "PaintLayerSpec": {
+      "description": "Engine ADR 1043 — one layer of an appearance on the wire. Every field\nbut `kind` is optional; a fill reads the paint fields, a stroke the\npaint fields (no `tint`, no `gradientStart`) and the stroke fields, a\nplaceholder only `enabled`.\n\n| field | meaning |\n| --- | --- |\n| `color` | swatch, colour or gradient reference (`Color/…`, `Gradient/…`, `Swatch/None`) |\n| `tint` | a fill's tint, 0..100 |\n| `gradientAngle`, `gradientLength`, `gradientStart` | a gradient paint's geometry |\n| `opacityPct` | the layer's opacity, 0..100 |\n| `blendMode` | IDML blend mode name (`Multiply`, `Screen`, …) |\n| `effects` | the layer's effect stack (the stack-only kinds of `EffectEntrySpec`) |\n| `weight` | stroke weight in pt (default 1) |\n| `alignment` | `CenterAlignment`, `InsideAlignment`, `OutsideAlignment` |\n| `endCap`, `endJoin`, `miterLimit` | stroke caps and joins |\n| `strokeType` | `StrokeStyle/…` reference |\n| `dash` | dash and gap lengths in pt |",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/PaintLayerKind"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "tint": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "gradientAngle": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "gradientLength": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "gradientStart": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": null
+        },
+        "opacityPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "blendMode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EffectEntrySpec"
+          },
+          "default": []
+        },
+        "weight": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "alignment": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "endCap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "endJoin": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "miterLimit": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "strokeType": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "dash": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "PaintLayerKind": {
+      "description": "What a paint layer paints: an extra `fill` or `stroke`, or the item's\nown fill (`frameFill`, with its picture) or stroke (`frameStroke`),\nplaced among the extra layers.",
+      "type": "string",
+      "enum": [
+        "fill",
+        "stroke",
+        "frameFill",
+        "frameStroke"
       ]
     },
     "ParagraphRuleSpec": {

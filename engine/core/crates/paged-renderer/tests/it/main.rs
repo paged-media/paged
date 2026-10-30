@@ -5,6 +5,7 @@
 
 mod anchored_custom;
 mod anchors_in_text;
+mod appearance;
 mod applied_language;
 mod baseline_grid_pipeline;
 mod blank_paragraphs_pipeline;

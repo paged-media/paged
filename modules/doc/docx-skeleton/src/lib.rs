@@ -45,6 +45,7 @@
 //! assigns each section the same story index, so the pour and save-back stay
 //! aligned with this skeleton.
 
+pub mod items;
 pub mod native;
 
 use docx_core::{DocxDocument, Section};
@@ -219,7 +220,13 @@ pub fn skeleton_with(
 ) -> Result<Skeleton, String> {
     let pages = skeleton_pages_with(doc, options);
     let (masters, _) = masters_with(doc, options);
-    let document = native::skeleton_document_with(&pages, &masters, name);
+    let mut document = native::skeleton_document_with(&pages, &masters, name);
+    // Doc ADR 614: the floats and text boxes placed as page items.
+    let items: Vec<_> = docx_lower::objects::plan_page_items(doc, options)
+        .into_iter()
+        .map(|(_, item)| item)
+        .collect();
+    items::add_page_items(&mut document, &items);
     // The container's fallback page (read only if the model part ever
     // fails to decode) takes the first story's page size.
     let (w, h) = pages

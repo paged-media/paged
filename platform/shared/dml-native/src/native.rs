@@ -28,8 +28,9 @@
 //! in the item's inner coordinates). What the engine cannot hold is in
 //! [`Lowering::take_losses`], one line per kind.
 
+use paged_model::effect_stack::{Effect, EffectEntry};
 use paged_ooxml::drawingml::resolved::{self, Paint};
-use paged_ooxml::drawingml::{Blip, Rgba, ShapeProperties};
+use paged_ooxml::drawingml::{self, Blip, Fill, Rgba, ShapeProperties};
 use serde::{Deserialize, Serialize};
 
 use crate::{axis_start, feather_of, placement, pt, Mapper, Transparency};
@@ -122,6 +123,43 @@ pub struct NativeStroke {
     pub miter_limit: Option<f32>,
 }
 
+/// One entry of the object's effect stack (engine ADR 1008), as the wire's
+/// `EffectEntrySpec` states it, its colour as `#RRGGBB`. An InDesign kind
+/// (`dropShadow`, `innerShadow`, `outerGlow`, `feather`,
+/// `gradientFeather`) carries only its place: its parameters are the
+/// item's own fields.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeEffect {
+    /// `gaussianBlur`, `colorOverlay`, `reflection`, or an InDesign kind.
+    pub kind: String,
+    /// An IDML `BlendMode` name; absent is Normal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend_mode: Option<String>,
+    /// 0–100; absent is 100.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity_pct: Option<f32>,
+    /// A blur's σ, pt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radius_pt: Option<f32>,
+    /// An overlay's colour, `#RRGGBB`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// A reflection's gap below the item, pt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance_pt: Option<f32>,
+    /// How much of the item's height a reflection shows, 0–100.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_pct: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_opacity_pct: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_opacity_pct: Option<f32>,
+    /// A reflection's blur, σ in pt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blur_pt: Option<f32>,
+}
+
 /// What an item carries beyond its geometry: each field omitted when
 /// unset.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -148,6 +186,11 @@ pub struct NativeFx {
     pub feather: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gradient_feather: Option<NativeFeather>,
+    /// The object's effect stack, when it holds an effect InDesign has
+    /// none of (a blur, a reflection, a colour overlay): every effect in
+    /// the order it is drawn. Empty for InDesign's effects alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<NativeEffect>,
 }
 
 impl NativeFx {
@@ -167,6 +210,7 @@ impl NativeFx {
         out.extend(self.drop_shadow.as_ref().map(|s| s.color.as_str()));
         out.extend(self.inner_shadow.as_ref().map(|s| s.color.as_str()));
         out.extend(self.outer_glow.as_ref().map(|s| s.color.as_str()));
+        out.extend(self.effect_stack.iter().filter_map(|e| e.color.as_deref()));
         out
     }
 
@@ -201,6 +245,14 @@ impl NativeFx {
         }
         if self.gradient_feather.is_some() {
             out.push("gradient transparency");
+        }
+        for e in &self.effect_stack {
+            out.push(match e.kind.as_str() {
+                "gaussianBlur" => "blur",
+                "reflection" => "reflection",
+                "colorOverlay" => "colour overlay",
+                _ => continue,
+            });
         }
         out.join(", ")
     }
@@ -248,6 +300,34 @@ impl Lowering {
         }
     }
 
+    /// Report a loss (once per distinct line).
+    pub fn lose(&mut self, what: impl Into<String>) {
+        self.mapper.lose(what);
+    }
+
+    /// A fill resolved against the scheme colours, what the resolution
+    /// could not hold reported.
+    pub fn resolve_paint(&mut self, fill: &Fill) -> Paint {
+        let mut notes: Vec<String> = Vec::new();
+        let p = resolved::paint(fill, &self.slots, &mut |n| notes.push(n));
+        self.note_all(notes);
+        p
+    }
+
+    /// An effect list resolved against the scheme colours; the effects the
+    /// reader met but does not model (an `a:effectDag`'s containers, …)
+    /// reported.
+    pub fn resolve_effects(&mut self, fx: &drawingml::Effects) -> resolved::Effects {
+        let mut notes: Vec<String> = Vec::new();
+        let out = resolved::effects(fx, &self.slots, &mut |n| notes.push(n));
+        self.note_all(notes);
+        for name in &fx.unknown {
+            self.mapper
+                .lose(format!("effect {name} is not carried (not read)"));
+        }
+        out
+    }
+
     /// A shape's look on a `w` × `h` box: its fill (solid, gradient with
     /// its placement, a pattern as its mixed colour), its outline, its
     /// opacity and effects.
@@ -262,17 +342,26 @@ impl Lowering {
             .line
             .as_ref()
             .and_then(|l| resolved::stroke(l, &self.slots, 0, &mut |n| notes.push(n)));
-        let effects = resolved::effects(&sp.effects, &self.slots, &mut |n| notes.push(n));
         self.note_all(notes);
-        self.unread(sp);
+        let effects = self.resolve_effects(&sp.effects);
         let mut out = NativeFx::default();
-        match &paint {
+        self.fill_into(&paint, w, h, &mut out);
+        out.stroke = self.stroke(stroke.as_ref());
+        self.look_into(&paint, &effects, 1.0, true, &mut out);
+        out
+    }
+
+    /// A fill on a `w` × `h` box: a solid colour or a pattern's mixed one
+    /// as `fill`, a gradient with its placement (its start from the box's
+    /// top-left), a picture reported.
+    pub fn fill_into(&mut self, paint: &Paint, w: f64, h: f64, out: &mut NativeFx) {
+        match paint {
             Paint::Solid { rgb, .. } => out.fill = Some(hex(*rgb)),
             Paint::Linear { .. } | Paint::Radial { .. } => {
-                out.gradient = self.gradient(&paint, w, h);
+                out.gradient = self.gradient(paint, w, h);
             }
             Paint::Pattern(_) => {
-                let id = self.mapper.paint(&paint);
+                let id = self.mapper.paint(paint);
                 out.fill = self.hex_of(&id);
             }
             Paint::Image { .. } => self
@@ -280,14 +369,37 @@ impl Lowering {
                 .lose("a picture fill of a shape is not carried (drawn unfilled)"),
             Paint::None => {}
         }
-        out.stroke = self.stroke(stroke.as_ref());
-        // A translucent fill (one alpha throughout) is the item's opacity;
-        // stops that differ in alpha fade it through a gradient feather.
-        let opacity = paint.uniform_alpha().unwrap_or(1.0);
-        let fade = feather_of(&paint).is_some().then_some(&paint);
-        let t = self.mapper.transparency(opacity, &effects, fade);
-        self.restate(&t, &mut out);
-        out
+    }
+
+    /// An item's opacity and effects: a translucent fill (one alpha
+    /// throughout) times `alpha` is the item's opacity; stops that differ
+    /// in alpha fade it through a gradient feather (when `fades`, the
+    /// fill being drawn).
+    pub fn look_into(
+        &mut self,
+        paint: &Paint,
+        effects: &resolved::Effects,
+        alpha: f64,
+        fades: bool,
+        out: &mut NativeFx,
+    ) {
+        let opacity = paint.uniform_alpha().unwrap_or(1.0) * alpha;
+        let fade = (fades && feather_of(paint).is_some()).then_some(paint);
+        let t = self.mapper.transparency(opacity, effects, fade);
+        self.restate(&t, out);
+    }
+
+    /// A picture's opacity factor (`a:alphaModFix`, 0–1), each other
+    /// picture effect reported: the filter stack (engine ADR 1037) is not
+    /// carried on this lane, and the Office 2010 corrections are already in
+    /// the stored image.
+    pub fn picture_alpha(&mut self, blip: &Blip) -> f64 {
+        let pic = resolved::picture(blip, &self.slots);
+        let mapped = self.mapper.picture(&pic);
+        for l in mapped.native_lane_losses() {
+            self.mapper.lose(l);
+        }
+        mapped.opacity
     }
 
     /// A picture's look on a `w` × `h` box: its shape properties (the fill
@@ -296,15 +408,7 @@ impl Lowering {
     /// reported (the Office 2010 corrections are already in the stored
     /// image).
     pub fn picture(&mut self, blip: &Blip, sp: &ShapeProperties, w: f64, h: f64) -> NativeFx {
-        let pic = resolved::picture(blip, &self.slots);
-        // The filter stack (engine ADR 1037) is carried by the mutation
-        // lane's mapping; the native form keeps the opacity and reports
-        // each adjustment it cannot hold.
-        let mapped = self.mapper.picture(&pic);
-        for op in &mapped.adjustments {
-            self.mapper.lose(crate::picture_adjustment_loss(op));
-        }
-        let alpha = mapped.opacity;
+        let alpha = self.picture_alpha(blip);
         let mut out = self.shape(sp, w, h);
         if alpha < 0.999 {
             // The picture's alpha multiplies whatever the fill gave.
@@ -312,14 +416,6 @@ impl Lowering {
             out.opacity = Some(pt(base * alpha * 100.0));
         }
         out
-    }
-
-    /// Effects the reader met but does not model.
-    fn unread(&mut self, sp: &ShapeProperties) {
-        for name in &sp.effects.unknown {
-            self.mapper
-                .lose(format!("effect {name} is not carried (not read)"));
-        }
     }
 
     fn gradient(&mut self, paint: &Paint, w: f64, h: f64) -> Option<NativeGradient> {
@@ -377,8 +473,13 @@ impl Lowering {
     }
 
     /// The mapper's transparency restated for the wire: colours as hex, the
-    /// inner shadow by angle and distance.
-    fn restate(&self, t: &Transparency, out: &mut NativeFx) {
+    /// inner shadow by angle and distance, the effect stack's entries.
+    fn restate(&mut self, t: &Transparency, out: &mut NativeFx) {
+        out.effect_stack = t
+            .stack
+            .iter()
+            .filter_map(|e| self.native_effect(e))
+            .collect();
         let color = |c: &Option<String>| {
             c.as_deref()
                 .and_then(|c| self.hex_of(c))
@@ -425,5 +526,42 @@ impl Lowering {
                 .map(|s| (s.location_pct, s.alpha_pct))
                 .collect(),
         });
+    }
+
+    /// One stack entry for the wire; a gradient overlay, which this lane
+    /// cannot mint a gradient swatch for, is reported.
+    fn native_effect(&mut self, e: &EffectEntry) -> Option<NativeEffect> {
+        let mut n = NativeEffect {
+            kind: e.effect.kind_name().to_string(),
+            blend_mode: e.blend_mode.clone(),
+            opacity_pct: e.opacity_pct,
+            ..NativeEffect::default()
+        };
+        match &e.effect {
+            Effect::GaussianBlur(p) => n.radius_pt = Some(p.radius_pt),
+            Effect::ColorOverlay(p) => {
+                n.color = Some(
+                    p.color
+                        .as_deref()
+                        .and_then(|c| self.hex_of(c))
+                        .unwrap_or_else(|| "#000000".into()),
+                );
+            }
+            Effect::Reflection(p) => {
+                n.distance_pt = Some(p.distance_pt);
+                n.size_pct = Some(p.size_pct);
+                n.start_opacity_pct = Some(p.start_opacity_pct);
+                n.end_opacity_pct = Some(p.end_opacity_pct);
+                n.blur_pt = Some(p.blur_pt);
+            }
+            Effect::GradientOverlay(_) => {
+                self.mapper
+                    .lose("a gradient fill overlay is not carried on the native lane");
+                return None;
+            }
+            _ if e.effect.indesign().is_some() => {}
+            _ => return None,
+        }
+        Some(n)
     }
 }

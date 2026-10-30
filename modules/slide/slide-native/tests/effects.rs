@@ -81,6 +81,26 @@ fn powerpoints_effects_open_as_the_engine_effects__feat__plugin_slide_native_eff
         .as_ref()
         .expect("preset as drop");
     assert!((p.x_offset - 2.121).abs() < 1e-3);
+    // PowerPoint's reflection rides the effect stack (engine ADR 1008).
+    let stack = &shape(&doc, "reflection").effect_stack;
+    assert_eq!(stack.len(), 1, "{stack:?}");
+    let paged_model::effect_stack::Effect::Reflection(r) = &stack[0].effect else {
+        panic!("{stack:?}")
+    };
+    assert_eq!(
+        (
+            r.distance_pt,
+            r.size_pct,
+            r.start_opacity_pct,
+            r.end_opacity_pct
+        ),
+        (0.0, 35.0, 52.0, 0.3)
+    );
+    assert!((r.blur_pt - 0.5 / 3.0).abs() < 1e-3, "{}", r.blur_pt);
+    // The other effects are InDesign's alone: the canonical, empty stack.
+    for n in ["outer shadow", "inner shadow", "glow", "soft edge"] {
+        assert!(shape(&doc, n).effect_stack.is_empty(), "{n}");
+    }
 }
 
 #[test]
@@ -113,8 +133,13 @@ fn alpha_stops_patterns_and_dashes_open_as_powerpoint_draws_them__feat__plugin_s
         shape(&doc, "dash custom").stroke_dash,
         [15.0, 6.0, 3.0, 6.0]
     );
-    // What the engine cannot hold yet is reported, once per kind.
-    for what in ["a:reflection", "pattern fill", "preset shadow shdw17"] {
+    // What the engine cannot hold yet is reported, once per kind; the
+    // reflection is carried (engine ADR 1008) and is not.
+    assert!(
+        !diagnostics.iter().any(|d| d.contains("reflection")),
+        "{diagnostics:?}"
+    );
+    for what in ["pattern fill", "preset shadow shdw17"] {
         assert_eq!(
             diagnostics.iter().filter(|d| d.contains(what)).count(),
             1,

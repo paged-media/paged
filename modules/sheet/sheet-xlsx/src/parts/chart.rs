@@ -271,10 +271,7 @@ fn dml_fx(sp: &El) -> Option<Box<DmlFx>> {
             .child(Ns::A, "ln")
             .and_then(|ln| paged_ooxml::drawingml::fill_in(ln, &rels))
             .and_then(beyond_solid),
-        effects: sp
-            .child(Ns::A, "effectLst")
-            .map(|e| paged_ooxml::drawingml::effects(e, &rels))
-            .unwrap_or_default(),
+        effects: paged_ooxml::drawingml::effects_in(sp, &rels),
     };
     (!fx.is_empty()).then(|| Box::new(fx))
 }
