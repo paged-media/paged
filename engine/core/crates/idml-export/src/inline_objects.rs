@@ -122,8 +122,41 @@ pub(crate) fn source_cannot_hold(original: &[u8], story: &idml_import::Story) ->
         parsed
             .paragraphs
             .get(i)
-            .map_or(!m.anchored_frames.is_empty(), |s| ids(m) != ids(s))
+            .map_or(!m.anchored_frames.is_empty(), |s| {
+                ids(m) != ids(s) || looks(&m.anchored_frames) != looks(&s.anchored_frames)
+            })
     })
+}
+
+/// Engine ADR 1045 — the looks of a paragraph's anchored frames (and of
+/// their group members), as data: the patch lane passes an object's
+/// source bytes through, so an object whose look the model changed is a
+/// reason to write the part fresh.
+fn looks(frames: &[AnchoredFrame]) -> Vec<String> {
+    fn walk(frames: &[AnchoredFrame], out: &mut Vec<String>) {
+        for f in frames {
+            out.push(
+                serde_json::json!([
+                    f.opacity,
+                    f.blend_mode,
+                    f.drop_shadow,
+                    f.effects,
+                    f.effect_stack,
+                    f.fill_transparency,
+                    f.stroke_transparency,
+                    f.content_transparency,
+                    f.fill_drop_shadow,
+                    f.stroke_drop_shadow,
+                    f.content_drop_shadow,
+                ])
+                .to_string(),
+            );
+            walk(&f.children, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(frames, &mut out);
+    out
 }
 
 /// What stands at a character of the paragraph.
@@ -423,12 +456,34 @@ pub(crate) fn write_anchored_frame(
     if let Some(a) = f.gradient_fill_angle {
         attrs.push(("GradientFillAngle", format_f32(a)));
     }
+    push_look_attrs(&mut attrs, f);
     emit_start_with_attrs(writer, name, &attrs)?;
-    if let (Some(b), false) = (f.bounds, matches!(f.frame_kind, AnchoredFrameKind::Group)) {
+    let label = paged_model::effect_stack::label::encode(f);
+    let geometry = f
+        .bounds
+        .filter(|_| !matches!(f.frame_kind, AnchoredFrameKind::Group));
+    if geometry.is_some() || label.is_some() {
         writer.write_event(Event::Start(BytesStart::new("Properties")))?;
-        write_box_geometry(writer, b)?;
+        // Engine ADR 1008 / 1045 — what the effect stack adds to the
+        // InDesign settings below rides the item's label.
+        if let Some(v) = label {
+            writer.write_event(Event::Start(BytesStart::new("Label")))?;
+            emit_empty_with_attrs(
+                writer,
+                "KeyValuePair",
+                &[
+                    ("Key", paged_model::effect_stack::label::KEY.to_string()),
+                    ("Value", v),
+                ],
+            )?;
+            writer.write_event(Event::End(BytesEnd::new("Label")))?;
+        }
+        if let Some(b) = geometry {
+            write_box_geometry(writer, b)?;
+        }
         writer.write_event(Event::End(BytesEnd::new("Properties")))?;
     }
+    write_look(writer, f)?;
     if let Some(s) = &f.setting {
         write_anchored_object_setting(writer, s)?;
     }
@@ -439,6 +494,16 @@ pub(crate) fn write_anchored_frame(
             image.push(("ItemTransform", crate::images::format_image_transform(&t)));
         }
         emit_start_with_attrs(writer, "Image", &image)?;
+        // A graphic frame's content target is its picture's own
+        // `<TransparencySetting>` (R-10), inside `<Image>`.
+        crate::effects::write_target(
+            writer,
+            "TransparencySetting",
+            &crate::effects::Target {
+                setting: f.content_transparency.as_ref(),
+                drop_shadow: f.content_drop_shadow.as_ref(),
+            },
+        )?;
         emit_empty_with_attrs(
             writer,
             "Link",
@@ -455,6 +520,75 @@ pub(crate) fn write_anchored_frame(
     }
     writer.write_event(Event::End(BytesEnd::new(name)))?;
     Ok(())
+}
+
+/// Engine ADR 1045 — the stroke style and gradient placement an anchored
+/// frame carries, on its start tag as on a free frame's.
+fn push_look_attrs(attrs: &mut Vec<(&str, String)>, f: &AnchoredFrame) {
+    if let Some(l) = f.gradient_fill_length {
+        attrs.push(("GradientFillLength", format_f32(l)));
+    }
+    if let Some([x, y]) = f.gradient_fill_start {
+        attrs.push((
+            "GradientFillStart",
+            format!("{} {}", format_f32(x), format_f32(y)),
+        ));
+    }
+    if let Some(t) = &f.stroke_type {
+        attrs.push(("StrokeType", t.clone()));
+    }
+    if !f.stroke_dash.is_empty() {
+        let dash: Vec<String> = f.stroke_dash.iter().map(|v| format_f32(*v)).collect();
+        attrs.push(("StrokeDashAndGap", dash.join(" ")));
+    }
+    for (k, v) in [
+        ("StrokeAlignment", &f.stroke_alignment),
+        ("EndCap", &f.end_cap),
+        ("EndJoin", &f.end_join),
+    ] {
+        if let Some(v) = v {
+            attrs.push((k, v.clone()));
+        }
+    }
+    if let Some(m) = f.miter_limit {
+        attrs.push(("MiterLimit", format_f32(m)));
+    }
+}
+
+/// Engine ADR 1045 — an anchored frame's transparency: the object's
+/// `<TransparencySetting>` and its stroke and fill targets (and a text
+/// frame's text, `<ContentTransparencySetting>`), as InDesign writes a
+/// free frame's (InDesign's nine effects only: the stack's own ride the
+/// label). A graphic frame's content target is written inside `<Image>`.
+fn write_look(writer: &mut W, f: &AnchoredFrame) -> Result<(), quick_xml::Error> {
+    use crate::effects::{ItemTransparency, Target};
+    let text = matches!(f.frame_kind, AnchoredFrameKind::TextFrame);
+    crate::effects::write_item_transparency(
+        writer,
+        &ItemTransparency {
+            opacity: f.opacity,
+            blend_mode: f.blend_mode.as_deref(),
+            drop_shadow: f.drop_shadow.as_ref(),
+            effects: f.effects.as_ref(),
+            stroke: Target {
+                setting: f.stroke_transparency.as_ref(),
+                drop_shadow: f.stroke_drop_shadow.as_ref(),
+            },
+            fill: Target {
+                setting: f.fill_transparency.as_ref(),
+                drop_shadow: f.fill_drop_shadow.as_ref(),
+            },
+            content: if text {
+                Target {
+                    setting: f.content_transparency.as_ref(),
+                    drop_shadow: f.content_drop_shadow.as_ref(),
+                }
+            } else {
+                Target::default()
+            },
+            ..Default::default()
+        },
+    )
 }
 
 /// A closed four-corner `<PathGeometry>` for `b` (top-left, bottom-left,
