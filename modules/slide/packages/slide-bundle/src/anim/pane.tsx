@@ -74,6 +74,8 @@ export interface PaneDeps {
   preview(pageId: string): void;
   /** Arm the Animation Painter with the selected shape's effects. */
   painter(pageId: string, from: ElementId): void;
+  /** Show the picked effect's motion path on the canvas (none: hide it). */
+  motionPath?(pageId: string | null, effect: EffectInfo | null): void;
 }
 
 /** A shape's name for a list row: its key's id, else its item. */
@@ -151,6 +153,12 @@ export function makeAnimationsPanel(
         live = false;
       };
     }, [pageId, timing]);
+
+    const pickedEffect = picked !== null ? list.effects[picked] : undefined;
+    React.useEffect(() => {
+      deps.motionPath?.(pageId, pickedEffect ?? null);
+    }, [pageId, pickedEffect]);
+    React.useEffect(() => () => deps.motionPath?.(null, null), []);
 
     if (!slide || !pageId) {
       return (
@@ -362,6 +370,15 @@ export function makeAnimationsPanel(
             page={page}
             count={list.effects.length}
             onTiming={(patch) => void setTiming(patch)}
+            onPathLock={(locked) =>
+              void run(
+                deps.authoring.edit(pageId, {
+                  kind: "path",
+                  index: effect.index,
+                  locked,
+                }),
+              )
+            }
             onOption={(presetSubtype) =>
               void run(
                 deps.authoring.edit(pageId, {
@@ -544,6 +561,7 @@ function EffectOptions(props: {
   page: PageShapes | undefined;
   count: number;
   onTiming(patch: Record<string, unknown>): void;
+  onPathLock(locked: boolean): void;
   onOption(subtype: number): void;
   onMove(to: number): void;
   onRemove(): void;
@@ -688,6 +706,45 @@ function EffectOptions(props: {
         />
         {t(ANIM.rewind)}
       </label>
+      <label
+        style={{
+          display: "flex",
+          gap: 4,
+          alignItems: "center",
+          margin: "2px 0",
+        }}
+      >
+        <input
+          type="checkbox"
+          data-animation-autoreverse=""
+          disabled={disabled}
+          checked={e.rewind === true}
+          onChange={(ev) => props.onTiming({ rewind: ev.target.checked })}
+        />
+        {t(ANIM.autoReverse)}
+      </label>
+      {e.path ? (
+        <>
+          <label
+            style={{
+              display: "flex",
+              gap: 4,
+              alignItems: "center",
+              margin: "2px 0",
+            }}
+          >
+            <input
+              type="checkbox"
+              data-animation-path-locked=""
+              disabled={disabled}
+              checked={e.pathLocked === true}
+              onChange={(ev) => props.onPathLock(ev.target.checked)}
+            />
+            {t(ANIM.pathLocked)}
+          </label>
+          <div style={{ opacity: 0.7, margin: "2px 0" }}>{t(ANIM.pathHint)}</div>
+        </>
+      ) : null}
       {row(
         t(ANIM.trigger),
         <select

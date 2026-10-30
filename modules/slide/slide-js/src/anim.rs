@@ -63,6 +63,18 @@ pub fn anim_json(request: &str) -> Result<String, String> {
             serde_json::json!({ "timing": after })
         }
         "presets" => serde_json::to_value(presets::table()).map_err(|e| e.to_string())?,
+        // A motion path as the canvas editor's segments, and back (slide
+        // ADR 714, amendment 2026-10-30).
+        "pathSegments" => {
+            let p = v.get("path").and_then(|p| p.as_str()).unwrap_or("");
+            serde_json::to_value(slide_anim::path::segments(p)).map_err(|e| e.to_string())?
+        }
+        "pathWrite" => {
+            let segs: Vec<slide_anim::path::Seg> =
+                serde_json::from_value(v.get("segments").cloned().unwrap_or_default())
+                    .map_err(|e| format!("segments: {e}"))?;
+            serde_json::Value::from(slide_anim::path::write(&segs))
+        }
         other => return Err(format!("unknown anim op {other:?}")),
     };
     Ok(out.to_string())

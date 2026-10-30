@@ -172,6 +172,126 @@ impl MotionPath {
     }
 }
 
+/// One segment of a motion path as the editor shows it (slide ADR 714,
+/// amendment 2026-10-30): absolute slide fractions, relative commands
+/// resolved.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Seg {
+    Move {
+        to: [f64; 2],
+    },
+    Line {
+        to: [f64; 2],
+    },
+    Curve {
+        c1: [f64; 2],
+        c2: [f64; 2],
+        to: [f64; 2],
+    },
+    Close,
+}
+
+/// `path` as segments: `M`, `L`, `C` and `Z`, relative ones made absolute;
+/// the path ends at `E` or its last number. A path that does not start
+/// with a move starts at the shape (`0 0`).
+pub fn segments(path: &str) -> Vec<Seg> {
+    let toks = tokens(path);
+    let mut out = Vec::new();
+    let mut cur = [0.0, 0.0];
+    let mut start = [0.0, 0.0];
+    let mut i = 0;
+    let mut cmd = 'M';
+    let num = |i: &mut usize| -> Option<f64> {
+        match toks.get(*i) {
+            Some(Tok::Num(n)) => {
+                *i += 1;
+                Some(*n)
+            }
+            _ => None,
+        }
+    };
+    while i < toks.len() {
+        if let Tok::Cmd(c) = toks[i] {
+            cmd = c;
+            i += 1;
+        }
+        let rel = cmd.is_ascii_lowercase();
+        let pt = |i: &mut usize, cur: [f64; 2]| -> Option<[f64; 2]> {
+            let (x, y) = (num(i)?, num(i)?);
+            Some(if rel {
+                [x + cur[0], y + cur[1]]
+            } else {
+                [x, y]
+            })
+        };
+        match cmd.to_ascii_uppercase() {
+            'M' => {
+                let Some(p) = pt(&mut i, cur) else { break };
+                cur = p;
+                start = p;
+                out.push(Seg::Move { to: p });
+                cmd = if rel { 'l' } else { 'L' };
+            }
+            'L' => {
+                let Some(p) = pt(&mut i, cur) else { break };
+                if out.is_empty() {
+                    out.push(Seg::Move { to: cur });
+                }
+                cur = p;
+                out.push(Seg::Line { to: p });
+            }
+            'C' => {
+                let base = cur;
+                let (Some(c1), Some(c2), Some(to)) =
+                    (pt(&mut i, base), pt(&mut i, base), pt(&mut i, base))
+                else {
+                    break;
+                };
+                if out.is_empty() {
+                    out.push(Seg::Move { to: cur });
+                }
+                cur = to;
+                out.push(Seg::Curve { c1, c2, to });
+            }
+            'Z' => {
+                cur = start;
+                out.push(Seg::Close);
+            }
+            'E' => break,
+            _ => {
+                while num(&mut i).is_some() {}
+                if i < toks.len() && !matches!(toks[i], Tok::Cmd(_)) {
+                    i += 1;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Segments written back as PowerPoint writes a motion path: absolute
+/// commands, numbers to the hundred-thousandth, ending in `E`.
+pub fn write(segs: &[Seg]) -> String {
+    let n = |v: f64| {
+        let r = (v * 100_000.0).round() / 100_000.0;
+        let r = if r == 0.0 { 0.0 } else { r };
+        format!("{r}")
+    };
+    let p = |q: [f64; 2]| format!("{} {}", n(q[0]), n(q[1]));
+    let mut out: Vec<String> = Vec::new();
+    for s in segs {
+        out.push(match s {
+            Seg::Move { to } => format!("M {}", p(*to)),
+            Seg::Line { to } => format!("L {}", p(*to)),
+            Seg::Curve { c1, c2, to } => format!("C {} {} {}", p(*c1), p(*c2), p(*to)),
+            Seg::Close => "Z".into(),
+        });
+    }
+    out.push("E".into());
+    out.join(" ")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Tok {
     Cmd(char),
@@ -237,5 +357,31 @@ mod tests {
         assert_eq!(MotionPath::parse("", 1.0, 1.0).at(0.5), (0.0, 0.0));
         let sci = MotionPath::parse("M 0 0 L 1.5e-2 -2E-2 E", 1.0, 1.0);
         assert!((sci.end().0 - 0.015).abs() < 1e-12 && (sci.end().1 + 0.02).abs() < 1e-12);
+    }
+
+    #[test]
+    fn segments_read_back_from_what_they_write() {
+        let s = segments("m 0 0 l 0.1 0.1 c 0.1 0 0.2 0 0.2 0.1 Z E");
+        assert_eq!(
+            s,
+            [
+                Seg::Move { to: [0.0, 0.0] },
+                Seg::Line { to: [0.1, 0.1] },
+                Seg::Curve {
+                    c1: [0.2, 0.1],
+                    c2: [0.30000000000000004, 0.1],
+                    to: [0.30000000000000004, 0.2]
+                },
+                Seg::Close,
+            ]
+        );
+        let w = write(&s);
+        assert_eq!(w, "M 0 0 L 0.1 0.1 C 0.2 0.1 0.3 0.1 0.3 0.2 Z E");
+        assert_eq!(write(&segments(&w)), w);
+        // The player reads the written path as it read the original.
+        let a = MotionPath::parse("m 0 0 l 0.1 0.1 c 0.1 0 0.2 0 0.2 0.1 E", 960.0, 540.0);
+        let b = MotionPath::parse(&w.replace(" Z", ""), 960.0, 540.0);
+        let (pa, pb) = (a.at(0.6), b.at(0.6));
+        assert!((pa.0 - pb.0).abs() < 1e-5 && (pa.1 - pb.1).abs() < 1e-5);
     }
 }

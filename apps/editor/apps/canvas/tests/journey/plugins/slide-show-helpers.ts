@@ -26,6 +26,7 @@ import { expect, type Page } from "@playwright/test";
 import { dirname, resolve as pathResolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { inflateRawSync } from "node:zlib";
 
 import { Designer } from "../driver/designer";
 
@@ -52,10 +53,21 @@ type G = { __slideProbe?: Probe };
 /** A blank editor with the fixture deck open (ten 960 × 540 pt slides).
  *  Answers the page ids. */
 export async function openDeck(page: Page): Promise<string[]> {
+  return openDeckFile(page, PPTX_FIXTURE, "slide-deck.pptx", 10);
+}
+
+/** A blank editor with the deck at `path` open (`pages` slides) and the
+ *  probe bundle loaded. Answers the page ids. */
+export async function openDeckFile(
+  page: Page,
+  path: string,
+  name: string,
+  pages: number,
+): Promise<string[]> {
   const designer = new Designer(page);
   await designer.open();
   await designer.newDocument();
-  const bytes = [...readFileSync(PPTX_FIXTURE)];
+  const bytes = [...readFileSync(path)];
   await page.evaluate(
     async ({ bytes, name }) => {
       const reg = (
@@ -81,11 +93,11 @@ export async function openDeck(page: Page): Promise<string[]> {
         mimeType: "",
       });
     },
-    { bytes, name: "slide-deck.pptx" },
+    { bytes, name },
   );
   await expect
     .poll(async () => (await designer.handle()).pageCount, { timeout: 30_000 })
-    .toBe(10);
+    .toBe(pages);
   // A probe bundle: the page doors as a plugin has them.
   await page.waitForFunction(
     () =>
@@ -155,4 +167,93 @@ export async function focusEditor(page: Page): Promise<void> {
   await page.evaluate(() => {
     (document.activeElement as HTMLElement | null)?.blur?.();
   });
+}
+
+/** The deck the exporter writes now: part `name` as text. */
+export async function exportedPart(page: Page, name: string): Promise<string> {
+  const bytes = await page.evaluate(async () => {
+    const ex = (
+      globalThis as unknown as {
+        __canvas: {
+          registries: {
+            exporters?: {
+              list: () => {
+                id: string;
+                export: () => Promise<{ bytes: Uint8Array } | null>;
+              }[];
+            };
+          };
+        };
+      }
+    ).__canvas.registries.exporters
+      ?.list()
+      .find((e) => e.id === "media.paged.slide.exporter.pptx");
+    const out = ex ? await ex.export() : null;
+    return out ? Array.from(out.bytes) : null;
+  });
+  const b = Buffer.from(bytes!);
+  let eocd = b.length - 22;
+  while (b.readUInt32LE(eocd) !== 0x06054b50) eocd--;
+  let p = b.readUInt32LE(eocd + 16);
+  for (let i = 0; i < b.readUInt16LE(eocd + 10); i++) {
+    const n = b.readUInt16LE(p + 28);
+    const local = b.readUInt32LE(p + 42);
+    if (b.toString("utf8", p + 46, p + 46 + n) === name) {
+      const start =
+        local + 30 + b.readUInt16LE(local + 26) + b.readUInt16LE(local + 28);
+      const data = b.subarray(start, start + b.readUInt32LE(p + 20));
+      return (
+        b.readUInt16LE(p + 10) === 8 ? inflateRawSync(data) : data
+      ).toString("utf8");
+    }
+    p += 46 + n + b.readUInt16LE(p + 30) + b.readUInt16LE(p + 32);
+  }
+  throw new Error(`no ${name}`);
+}
+
+type TreeNode = {
+  id?: { kind: string; id: string };
+  children?: TreeNode[];
+  pluginMetadata?: { key: string; value: string }[];
+};
+
+/** The shapes on a slide, one element per shape (its first item) with its
+ *  shape key (`<slide part>#<cNvPr id>`), in order, as a plugin reads them. */
+export async function shapesOn(
+  page: Page,
+  pageId: string,
+): Promise<{ kind: string; id: string; key: string }[]> {
+  return page.evaluate(async (pid) => {
+    const host = (
+      globalThis as unknown as {
+        __slideProbe: {
+          document: {
+            tree(): Promise<TreeNode[]>;
+            elementGeometry(
+              ids: unknown[],
+            ): Promise<{ id: { id: string }; pageId?: string | null }[]>;
+          };
+        };
+      }
+    ).__slideProbe;
+    const rows: { kind: string; id: string; key: string }[] = [];
+    const keys = new Set<string>();
+    const walk = (nodes: TreeNode[] | undefined) => {
+      for (const n of nodes ?? []) {
+        if (n.id) {
+          const key = /"shape":"([^"]+)"/.exec(
+            n.pluginMetadata?.map((m) => m.value).join("") ?? "",
+          )?.[1];
+          if (key && !keys.has(key)) {
+            keys.add(key);
+            rows.push({ ...n.id, key });
+          }
+        } else walk(n.children);
+      }
+    };
+    walk(await host.document.tree());
+    const geo = await host.document.elementGeometry(rows);
+    const on = new Set(geo.filter((g) => g.pageId === pid).map((g) => g.id.id));
+    return rows.filter((r) => on.has(r.id));
+  }, pageId);
 }

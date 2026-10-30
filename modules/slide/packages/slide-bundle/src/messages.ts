@@ -102,6 +102,14 @@ export const MODEL = defineMessages("slide.model", {
 });
 
 /** The Shapes panel (Insert ▸ Shapes) and its categories, PowerPoint's. */
+export const ICONS_MSG = defineMessages("slide.icons", {
+  title: "Icons",
+  empty: "Go to a slide to insert icons.",
+  insert: "Insert the {name} icon",
+  fromFile: "From a file…",
+  licence: "These icons are paged's own, dedicated to the public domain (CC0).",
+});
+
 export const SHAPES = defineMessages("slide.shapes", {
   title: "Shapes",
   empty: "Go to a slide to insert shapes.",
@@ -203,6 +211,9 @@ export const ANIM = defineMessages("slide.anim", {
   repeatNone: "None",
   repeatUntilClick: "Until Next Click",
   rewind: "Rewind when done playing",
+  autoReverse: "Auto-reverse",
+  pathLocked: "Lock the path",
+  pathHint: "Drag the path's points and handles on the slide.",
   trigger: "Trigger",
   triggerSequence: "As part of click sequence",
   triggerOn: "On click of {shape}",
@@ -406,6 +417,10 @@ export const TEMPLATE = defineMessages("slide.template", {
 export const CONTENT = defineMessages("slide.content", {
   insertPicture: "Insert picture…",
   insertIcon: "Insert icon…",
+  formatPainter: "Format Painter",
+  formatPainterOff: "Put the Format Painter down",
+  formatPainterArmed:
+    "Click a shape to give it this formatting (twice quickly: keep painting; Esc stops).",
   copyFormat: "Copy formatting",
   pasteFormat: "Paste formatting",
   smartArtText: "SmartArt text pane",
