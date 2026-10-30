@@ -5,13 +5,14 @@
 `docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-release` profile,
 then `wasm-opt -Oz`):
 
-|                      | bytes                |
-| -------------------- | -------------------- |
-| raw (2026-10-25, W5) | 7,321,347 (6.98 MiB) |
-| raw                  | 6,879,227 (6.56 MiB) |
-| gzip -9              | 1,876,393 (1.79 MiB) |
-| brotli -q 11         | 1,070,924 (1.02 MiB) |
-| manifest `maxBytes`  | 8,388,608 (8 MiB)    |
+|                       | bytes                |
+| --------------------- | -------------------- |
+| raw (2026-10-29, W4a) | 7,686,229 (7.33 MiB) |
+| raw (2026-10-25, W5)  | 7,321,347 (6.98 MiB) |
+| raw                   | 6,879,227 (6.56 MiB) |
+| gzip -9               | 1,876,393 (1.79 MiB) |
+| brotli -q 11          | 1,070,924 (1.02 MiB) |
+| manifest `maxBytes`   | 8,388,608 (8 MiB)    |
 
 That leaves 1.44 MiB of headroom under the budget. The 8.64 MB in the editor's
 panel audit (2026-10-11) was measured before the `wasm-release` profile existed.
@@ -29,6 +30,49 @@ and `flat-opc`). So dropping schemas the plugin never reads means forking the
 crate. That is the next lever if later waves outgrow the headroom.
 `opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
 fifth slower (see `Cargo.toml`).
+
+## W4a: floating objects, text boxes, nested tables, table look, language (2026-10-29)
+
+Doc ADR [614](adr/614-floating-objects-and-content-controls.md). Plugin only: Word mapped onto
+what the engine's wire already makes; no engine change.
+
+| Area          | Built                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Floats        | A float anchored in a section's first paragraph, and every float of a header or footer, is a page item (written by the skeleton) at Word's position with Word's wrap: square → bounding box, top and bottom → jump object, tight / through → contour, behind the text under the page's frame. Elsewhere an anchored object of its paragraph: top and bottom (or no room beside it) above the line, aligned in the column; square / tight / through / in front / behind custom at Word's position (page, margin, column, character, paragraph, line, margin bands, align, offset, percent, `simplePos`) |
+| Text boxes    | `wps:txbx` (the `mc:Choice`; its VML fallback not read again) and legacy `v:textbox` read with extent, position, wrap, insets and look; placed as text frames with their own stories where the page is known (as floats), poured; edits spliced into their `w:txbxContent` and the fallback's copy                                                                                                                                                                                                                                                                                                     |
+| Nested tables | Read whole (`TableCell::nested_tables`), shown as their paragraphs in the cell, held; the cell's own paragraphs keep their patcher ordinals; round-trip untouched                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Table look    | Every cell edge from `w:tcBorders` / `w:tblBorders` / the table style chain (the default table style too), fills from `w:shd`; `w:jc` centre / right through the table's paragraph's style; `hRule="auto"` ignores the height; `tblLayout`, `tblW`, `tcW`, `tblInd`, `cantSplit` and exact rows carried in `LoweredTable::layout`                                                                                                                                                                                                                                                                      |
+| Language      | `w:lang` per run, style and defaults; the Latin tag becomes `characterLanguage` in InDesign's names (en/de/fr/es/it/nl/pt hyphenate, others keep their name and are not hyphenated as English); `eastAsia` / `bidi` and `rFonts` `eastAsia` / `cs` read, not lowered                                                                                                                                                                                                                                                                                                                                   |
+
+Word's answers (`scripts/word-objects-probe.sh`, Word 16 for Mac, 2026-10-29):
+`fixtures/objects-{floats,text-boxes,nested-tables,table-look,languages}.word.json`. Every
+page-item float stands at Word's picture box (±1.5 pt); the text boxes' first lines stand
+where Word draws them (FA at 288/144, FB at 432/108; TB1, the header box and the legacy box
+inside their frames past the insets); the centred table's first cell text at Word's x. Word
+opened every fixture and every saved output (zero-edit and with a text box edit) without a
+repair prompt (the PDF is the evidence).
+
+Not yet (engine work, ADR 614 residuals): wrap on anchored objects (a square float past a
+section's first paragraph has text under it; a top-and-bottom one starts at its anchor line);
+anchored text frames (a text box past a section's first paragraph is not shown, with a
+warning); a table inside a cell; fixed-height rows; table indent; a custom wrap contour;
+pictures in cells.
+
+Pagination acceptance (`docs/reference/acceptance-real-docx.md`'s three real documents, Word 16's
+PDFs of 2026-10-29, measured headless with `test/headless/real-docx-measure.spec.ts` and Word's
+faces; "before" is the same tree with the docx-js wasm of the base commit): page starts
+13.1 % → 13.1 % (parentinvguid, 60 of Word's 61 pages), 2.0 % → 2.0 % (Bug50936_3, 48 of 50),
+3.8 % → 3.8 % (bug59058, 33 of 52). Unchanged: none of the three has a float or text box the
+lowering can place as a page item (their floats are VML top-and-bottom pictures, already set in
+their band), and their tables' borders do not move a page start.
+
+Hyphenation: Word 16 on the probe machine set no hyphen in any paragraph of
+`objects_languages_docx()` (automatic hyphenation on, `de-DE`, `fr-FR` and `en-US` runs): an
+over-long German word is split hard, as on a machine without the language's proofing tools. The
+fixture records that; the lowering's applied language is tested against the engine's names.
+
+Tests: `docx-conformance/tests/it/objects.rs` (16), `floats.rs` (updated),
+`doc-host-model/test/objects.spec.ts` (4), `doc-bundle/test/headless/objects.spec.ts`.
 
 ## W2: document structure (2026-10-28)
 

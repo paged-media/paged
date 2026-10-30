@@ -184,6 +184,7 @@ pub fn native_document(input: &NativeDocIn) -> DocxDocument {
             .unwrap_or(12.0);
         based_tokens.push((paragraph, st.based_on.clone()));
         styles.push(Style {
+            table: None,
             is_default: id == "Normal",
             style_id: id,
             name: Some(word_name),
