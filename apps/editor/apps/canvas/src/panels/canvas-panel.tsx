@@ -39,6 +39,7 @@ import {
   useSelection,
   useScoped,
   ALIGN_SCOPE,
+  CONTEXT_SHARED_TOOL_IDS,
   clickKeyObject,
   useOptionalEditContextStack,
   useOptionalTableSelection,
@@ -575,6 +576,9 @@ export function CanvasPanel(_props: PanelProps) {
         onCameraChange={setCamera}
         activeTool={activeTool}
         toolGesture={toolGesture}
+        toolSharedAcrossContexts={CONTEXT_SHARED_TOOL_IDS.includes(
+          effectiveTool,
+        )}
         legacyKeyForTool={legacyKeyForTool}
         cursor={toolCursor}
         forcePan={forcePan}

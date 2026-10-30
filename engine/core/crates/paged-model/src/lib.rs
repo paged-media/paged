@@ -7825,7 +7825,15 @@ pub struct IndexMarker {
 /// frame carries its own geometry / transform and an
 /// `<AnchoredObjectSetting>` describing where it should land relative
 /// to the anchor character.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// An anchored frame paints as a free frame does (engine ADR 1045): its
+/// fill, outline, opacity, blend mode, InDesign's effects in their slots,
+/// the ordered effect stack (ADR 1008) and the three transparency targets
+/// are the free frames' own fields and types, read by the same renderer
+/// modules through the rectangle the anchored pass synthesises. Each is
+/// absent from the serialised form while unset, so an anchored frame
+/// without a look serialises and hashes as before.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AnchoredFrame {
     pub frame_kind: AnchoredFrameKind,
     pub self_id: Option<String>,
@@ -7861,10 +7869,88 @@ pub struct AnchoredFrame {
     /// Children of an anchored Group, in z-order. Empty for non-Group
     /// anchored frames.
     pub children: Vec<AnchoredFrame>,
+    /// `GradientFillLength`; see [`Rectangle::gradient_fill_length`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient_fill_length: Option<f32>,
+    /// `GradientFillStart`; see [`Rectangle::gradient_fill_start`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient_fill_start: Option<[f32; 2]>,
+    /// `StrokeType`; see [`Rectangle::stroke_type`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_type: Option<String>,
+    /// `StrokeDashAndGap`; see [`Rectangle::stroke_dash`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stroke_dash: Vec<f32>,
+    /// `StrokeAlignment`; see [`Rectangle::stroke_alignment`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_alignment: Option<String>,
+    /// `EndCap`; see [`Rectangle::end_cap`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_cap: Option<String>,
+    /// `EndJoin`; see [`Rectangle::end_join`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_join: Option<String>,
+    /// `MiterLimit`; see [`Rectangle::miter_limit`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub miter_limit: Option<f32>,
+    /// The object's `<BlendingSetting Opacity>`, 0–100; see
+    /// [`Rectangle::opacity`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f32>,
+    /// The object's `<BlendingSetting BlendMode>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend_mode: Option<String>,
+    /// The object's `<DropShadowSetting>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drop_shadow: Option<DropShadowSetting>,
+    /// The object's other InDesign effects; see [`Rectangle::effects`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effects: Option<FrameEffects>,
+    /// The object target's ordered effect stack (engine ADR 1008), empty
+    /// in the canonical form.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// The fill, stroke and content targets (R-10); see
+    /// [`TargetTransparency`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_transparency: Option<TargetTransparency>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_transparency: Option<TargetTransparency>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_transparency: Option<TargetTransparency>,
+    /// The targets' own drop shadows (R-10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_drop_shadow: Option<DropShadowSetting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_drop_shadow: Option<DropShadowSetting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_drop_shadow: Option<DropShadowSetting>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+
+impl AnchoredFrame {
+    /// Whether the frame carries anything of a look beyond its fill and
+    /// stroke colours: an opacity, a blend mode, an effect in any slot or
+    /// stack, a target setting. Such a frame's picture is painted inside
+    /// its effect run (see the renderer's anchored pass).
+    pub fn has_transparency(&self) -> bool {
+        self.opacity.is_some()
+            || self.blend_mode.is_some()
+            || self.drop_shadow.is_some()
+            || self.effects.is_some()
+            || !self.effect_stack.is_empty()
+            || self.fill_transparency.is_some()
+            || self.stroke_transparency.is_some()
+            || self.content_transparency.is_some()
+            || self.fill_drop_shadow.is_some()
+            || self.stroke_drop_shadow.is_some()
+            || self.content_drop_shadow.is_some()
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnchoredFrameKind {
     TextFrame,
+    #[default]
     Rectangle,
     Group,
 }

@@ -2,6 +2,10 @@
 
 - **Status:** Accepted, 2026-10-28. Extends 519 (charts as Excel draws them) and 525 (document
   chart styles); builds on slide ADR 722 (`platform/shared/dml-native`).
+- **Note 2026-10-29:** the translation of `fx` into ops (decision 5's "sets angle, length,
+  opacity, …" and decision 8's picture effects) is the lowering kit's `nativeFxOps` (extensions
+  ADR 347); `chartFxOps` is that call with the chart's swatch mapping, and `NativeFx` is the
+  SDK's type. The ids and the ops are unchanged.
 - **Scope:** `sheet-xlsx/src/parts/chart.rs` (the Excel profile's `c:spPr` reading),
   `sheet-chart/src/{model,native,geometry,style,cartesian,radial}.rs`, `sheet-xlsx/src/chart_write.rs`
   (the splice), `sheet-xlsx/src/parts/pictures.rs` and `sheet-js/src/core/annotations.rs`
