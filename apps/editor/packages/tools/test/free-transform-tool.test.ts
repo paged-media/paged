@@ -207,6 +207,18 @@ describe("Free Transform tool [editor-tools.free-transform]", () => {
     expectOneCommit(side.fake, mark);
   });
 
+  it("Ctrl is Cmd off the Mac: Ctrl on a side shears @level:gesture", async () => {
+    const { fake, g } = setup();
+    await g
+      .tool(createFreeTransformHandler)
+      .drag({ from: [200, 100], to: [240, 100], mods: ["ctrl"] })
+      .settle();
+    expect(msgs(fake)[0]).toMatchObject({
+      gesture: { kind: "shear" },
+      anchor: { shearAxis: "x" },
+    });
+  });
+
   it("Cmd on a corner free-distorts the path: one framePath, the corner moved, no gesture @level:gesture", async () => {
     const { fake, g } = setup([POLY]);
     const mark = fake.mark();
