@@ -1125,30 +1125,6 @@
           }
         },
         {
-          "id": "media.paged.image.command.rasterizeType",
-          "title": "Rasterize type layer",
-          "args": {
-            "kind": "struct",
-            "fields": {}
-          }
-        },
-        {
-          "id": "media.paged.image.command.paintTextIntoLayer",
-          "title": "Paint text into layer",
-          "args": {
-            "kind": "struct",
-            "fields": {}
-          }
-        },
-        {
-          "id": "media.paged.image.command.warpText",
-          "title": "Warp text…",
-          "args": {
-            "kind": "struct",
-            "fields": {}
-          }
-        },
-        {
           "id": "media.paged.image.command.filterFresco",
           "title": "Fresco… (filter)",
           "args": {
@@ -1823,6 +1799,30 @@
         {
           "id": "media.paged.image.command.scaleEffects",
           "title": "Scale effects…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rasterizeType",
+          "title": "Rasterize type layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.paintTextIntoLayer",
+          "title": "Paint text into layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.warpText",
+          "title": "Warp text…",
           "args": {
             "kind": "struct",
             "fields": {}
