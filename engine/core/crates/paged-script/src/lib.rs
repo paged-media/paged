@@ -3441,18 +3441,20 @@ fn paged_apply_opacity_mask(
     else {
         return Ok(JsValue::from(false));
     };
-    let (mask_type, invert) = match args.get_or_undefined(2).as_object() {
+    let (mask_type, invert, clip) = match args.get_or_undefined(2).as_object() {
         Some(o) => (
             prop_string(&o, "maskType", ctx),
             prop_bool(&o, "invert", ctx),
+            prop_bool(&o, "clip", ctx),
         ),
-        None => (None, None),
+        None => (None, None, None),
     };
     Ok(apply_bool(&Mutation::ApplyOpacityMask {
         target_id,
         mask_id,
         mask_type,
         invert,
+        clip,
     }))
 }
 

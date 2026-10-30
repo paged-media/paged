@@ -800,6 +800,16 @@ value, on a rectangle, oval or polygon. The engine draws and exports the
 picture through it; IDML keeps it in a label. Additive at protocol 77:
 an older engine refuses the write as an unknown path and reads no row.
 
+`"document.liveShapes@1"` (engine ADR 1047) says the vendored wire and
+catalog carry the live-shape paths: `frameShapeSides` and
+`frameShapeStarInset` on a Polygon (a live polygon or star the engine
+redraws from its side count and inset, keeping its outer radius) and
+`frameShapePieStart` / `frameShapePieEnd` on an Oval (the wedge the oval
+draws). Additive at protocol 78: an older engine refuses the writes as
+unknown paths. paged.draw's Star tool asks it before it inserts a live
+star (the plain polygon, then its points and inset in the same batch)
+instead of a plain path.
+
 `"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
 protocol 77) are SVG in and out through the engine's `paged-svg`.
 `importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the
@@ -834,6 +844,26 @@ noise, colour adjustment) apply to the object target, and a target stack
 refuses them. Additive at protocol 76: an older engine refuses the path.
 A bundle that would otherwise bake an effect into its pixels (paged.draw's
 appearance, paged.image's layer styles placed on a page) asks it first.
+
+The catalog also DESCRIBES the stack's kinds (editor ADR 309, plan C16):
+`effectKinds`, one row per kind in the wire's order — `kind`, an English
+`title`, the Effect menu `category` (one of `effectCategories`), whether it
+is one of `indesign`'s nine, the `targets` that take it, `maxPerStack`,
+whether the entry carries its own `blend`, the `params` of a stack-only
+kind (each an `EffectEntrySpec` field with a `ValueType`, `range` and
+`default`), and for InDesign's kinds the `enablePath` and `fieldPaths`
+that hold their parameters. The SDK serves them as `CORE_EFFECT_KINDS`
+and `CORE_EFFECT_CATEGORIES` (types `EffectKindDescriptor`,
+`EffectParamDescriptor`), so an effects UI lists from core and a kind core
+adds needs no change to it. The frame rows `opacityMaskType`
+(`luminosity` | `alpha`), `opacityMaskInvert` and `opacityMaskClip`
+(Illustrator's Clip: off, what the mask artwork does not paint shows the
+item) edit a mask's options, each write one undo step (the release and the
+re-apply, the artwork keeping its place); on an item without a mask they
+read as a new mask would take them and a write is refused.
+`applyOpacityMask` takes an optional `clip` (absent: `true`). A snapshot
+whose `only` names a mask item without its target draws the mask artwork
+alone (the Transparency panel's thumbnail). All additive: no protocol bump.
 
 `"document.appearance@1"` (engine ADR 1043) says the vendored wire and
 catalog carry native appearance: an item's extra fills and strokes, bottom

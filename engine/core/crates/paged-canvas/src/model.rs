@@ -4746,6 +4746,7 @@ impl CanvasModel {
                 mask_id,
                 mask_type,
                 invert,
+                clip,
             } => Some(Operation::ApplyOpacityMask {
                 target: element_to_leaf_node_id(target_id)?,
                 mask: element_to_leaf_node_id(mask_id)?,
@@ -4754,6 +4755,7 @@ impl CanvasModel {
                     _ => paged_mutate::OpacityMaskMode::Luminosity,
                 },
                 invert: invert.unwrap_or(false),
+                clip: clip.unwrap_or(true),
             }),
             Mutation::ReleaseOpacityMask { target_id } => Some(Operation::ReleaseOpacityMask {
                 target: element_to_leaf_node_id(target_id)?,
@@ -7721,6 +7723,7 @@ impl CanvasModel {
             &mut self.scene.clone(),
         ));
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
+        out.extend(crate::export_losses::live_shape_losses(&self.scene));
         out.extend(crate::export_losses::effect_stack_losses(&self.scene));
         out.extend(crate::export_losses::appearance_losses(&self.scene));
         out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
@@ -9246,6 +9249,15 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(p.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1047 — the live polygon's side
+                            // count: `None` for a path that is not one.
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapeSides,
+                                value: Some(Value::Length(
+                                    paged_model::live_shape::live_polygon(p)
+                                        .map(|s| s.sides as f32),
+                                )),
+                            },
                             // Engine ADR 1037 — the placed picture's filter stack.
                             PropertyEntry {
                                 path: PropertyPath::FrameImageAdjustments,
@@ -9416,6 +9428,15 @@ impl CanvasModel {
                         entries.extend(visible_locked_entries(p.visible, p.locked));
                         entries.push(frame_path_entry(&p.anchors, &p.subpath_starts));
                         entries.push(item_name_entry(spread, raw));
+                        // Engine ADR 1047 — a live polygon's star inset
+                        // (`None` for a path that is not one, which takes
+                        // only `None` back).
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FrameShapeStarInset,
+                            value: Some(Value::Length(
+                                paged_model::live_shape::live_polygon(p).map(|s| s.star_inset),
+                            )),
+                        });
                         entries
                     }),
                 ElementId::GraphicLine(_) => spread
@@ -9623,6 +9644,20 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(o.fill_rule.as_str().into())),
+                            },
+                            // Engine ADR 1047 — the live pie (0 and 360
+                            // for the whole ellipse).
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapePieStart,
+                                value: Some(Value::Length(Some(
+                                    paged_model::live_shape::pie_start(o),
+                                ))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapePieEnd,
+                                value: Some(Value::Length(Some(
+                                    paged_model::live_shape::pie_end(o),
+                                ))),
                             },
                             // Engine ADR 1037 — the placed picture's filter stack.
                             PropertyEntry {
@@ -14061,6 +14096,58 @@ impl CanvasModel {
         }
         for m in scene.master_spreads.values_mut() {
             hide_in(&mut m.spread);
+        }
+        // Editor ADR 309 — a mask item named in `only` without its
+        // target is drawn as an object of its own (the Transparency
+        // panel's mask thumbnail): in this throwaway copy the relation
+        // is released and the artwork stacks on top.
+        if !only.is_empty() {
+            let named: HashSet<&str> = only.iter().map(|e| e.raw_id()).collect();
+            for p in scene.spreads.iter_mut() {
+                let sp = &mut p.spread;
+                let freed: Vec<String> = sp
+                    .opacity_masks
+                    .iter()
+                    .filter(|(target, m)| {
+                        named.contains(m.mask_item.as_str()) && !named.contains(target.as_str())
+                    })
+                    .map(|(target, _)| target.clone())
+                    .collect();
+                for target in freed {
+                    let Some(mask) = sp.opacity_masks.remove(&target) else {
+                        continue;
+                    };
+                    let id = Some(mask.mask_item.as_str());
+                    let found = sp
+                        .rectangles
+                        .iter()
+                        .position(|f| f.self_id.as_deref() == id)
+                        .map(paged_model::FrameRef::Rectangle)
+                        .or_else(|| {
+                            sp.ovals
+                                .iter()
+                                .position(|f| f.self_id.as_deref() == id)
+                                .map(paged_model::FrameRef::Oval)
+                        })
+                        .or_else(|| {
+                            sp.polygons
+                                .iter()
+                                .position(|f| f.self_id.as_deref() == id)
+                                .map(paged_model::FrameRef::Polygon)
+                        })
+                        .or_else(|| {
+                            sp.graphic_lines
+                                .iter()
+                                .position(|f| f.self_id.as_deref() == id)
+                                .map(paged_model::FrameRef::GraphicLine)
+                        });
+                    if let Some(r) = found {
+                        if !sp.frames_in_order.is_empty() {
+                            sp.frames_in_order.push(r);
+                        }
+                    }
+                }
+            }
         }
         let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
         let resource_providers = self.resource_tiles.provider_entries();

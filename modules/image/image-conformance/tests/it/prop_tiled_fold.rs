@@ -773,3 +773,44 @@ fn the_cpu_fold_runs_without_a_device_and_names_what_it_cannot__feat__image_io_d
     let err = pollster::block_on(s.composite(None, None)).expect_err("a style needs a GPU");
     assert!(err.to_string().contains("layer style"), "{err}");
 }
+
+/// A found case: a transparent dab on the background, then a translucent
+/// paint of it, with a BOUNDED layer above. The whole fold's refold of the
+/// dirty window blended the bounded plate over the whole window, so its
+/// texels outside the layer's rectangle met a transparent texel — the
+/// identity only up to f16 rounding — and landed a level off the fold
+/// that blends a bounded plate inside its rectangle only (ADR 464). The
+/// tiled fold was right; the refold now blends the rectangle alone.
+#[test]
+fn a_dirty_window_refold_blends_a_bounded_plate_inside_its_rectangle__feat__image_io_depth_color_modes(
+) {
+    let Some(ctx) = device() else { return };
+    let (w, h) = (70u32, 45u32);
+    let gens = vec![LayerGen::Bounded {
+        seed: 0,
+        x: 0,
+        y: 9,
+    }];
+    let edits = [Edit::Dabs(2, 0, 1), Edit::Paint(6, 3045, 1)];
+    let mut whole = build(w, h, &gens);
+    let mut tiled = build(w, h, &gens);
+    tiled.set_fold_tile(Some(16));
+    check(ctx, &whole, &tiled, "built").unwrap();
+    for (n, e) in edits.iter().enumerate() {
+        apply(&mut whole, e, w, h);
+        apply(&mut tiled, e, w, h);
+        if let Edit::Dabs(k, seed, count) = e {
+            for s in [&mut whole, &mut tiled] {
+                let k = k % s.len();
+                let _ = s.set_active(k);
+            }
+            for d in 0..*count as u32 {
+                let r = seed.wrapping_add(d.wrapping_mul(7919));
+                dab(&mut whole, r, w, h);
+                dab(&mut tiled, r, w, h);
+                check(ctx, &whole, &tiled, &format!("edit {n} dab {d}")).unwrap();
+            }
+        }
+        check(ctx, &whole, &tiled, &format!("edit {n} {e:?}")).unwrap();
+    }
+}

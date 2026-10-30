@@ -2527,13 +2527,37 @@ pub(super) fn build_document_inner(
                 paged_model::OpacityMaskType::Alpha => paged_compose::SoftMaskType::Alpha,
             };
             for &local_idx in &union {
-                pages[range.start + local_idx].list.push(
-                    paged_compose::DisplayCommand::BeginSoftMask {
+                let page = &mut pages[range.start + local_idx];
+                page.list
+                    .push(paged_compose::DisplayCommand::BeginSoftMask {
                         mask_type,
                         invert: mask.invert,
                         transform: Transform::IDENTITY,
-                    },
-                );
+                    });
+                // Illustrator's Clip off: the artwork is resolved over a
+                // white backdrop, so what it does not paint shows the
+                // target (PDF's `/BC [1 1 1]`). One opaque white fill
+                // under the artwork, past the page by a page's size on
+                // every side so bleed and pasteboard content are
+                // covered; every rasterizer and the PDF writer read it
+                // as ordinary mask artwork.
+                if !mask.clip {
+                    let (w, h) = (page.width_pt, page.height_pt);
+                    let m = w.max(h);
+                    use paged_compose::PathSegment as S;
+                    let path_id = page.list.paths.push_anon(paged_compose::PathData::new(vec![
+                        S::MoveTo { x: -m, y: -m },
+                        S::LineTo { x: w + m, y: -m },
+                        S::LineTo { x: w + m, y: h + m },
+                        S::LineTo { x: -m, y: h + m },
+                        S::Close,
+                    ]));
+                    page.list.push(paged_compose::DisplayCommand::FillPath {
+                        path_id,
+                        paint: paged_compose::Paint::Solid(paged_compose::Color::WHITE),
+                        transform: Transform::IDENTITY,
+                    });
+                }
             }
             emit_one(
                 artwork_ref,

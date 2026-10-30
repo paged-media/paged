@@ -142,6 +142,7 @@ fn apply_and_release_opacity_mask_round_trip_through_the_wire() {
             mask_id: ElementId::Rectangle("artwork".into()),
             mask_type: Some("alpha".into()),
             invert: Some(true),
+            clip: None,
         })
         .expect("applyOpacityMask");
     let entry = mask_entry(&model, "target").expect("side-map entry");
@@ -189,6 +190,7 @@ fn mask_type_defaults_to_luminosity() {
             mask_id: ElementId::Rectangle("artwork".into()),
             mask_type: None,
             invert: None,
+            clip: None,
         })
         .expect("applyOpacityMask");
     let entry = mask_entry(&model, "target").unwrap();
@@ -218,6 +220,7 @@ fn a_mask_survives_paged_and_is_reported_lost_on_idml() {
             mask_id: ElementId::Rectangle("artwork".into()),
             mask_type: Some("alpha".into()),
             invert: Some(true),
+            clip: None,
         })
         .expect("applyOpacityMask");
 
@@ -369,4 +372,161 @@ fn the_attached_story_actually_renders_along_the_path() {
         before,
         "detaching removes exactly the glyphs the attach added"
     );
+}
+
+// ---- Editor ADR 309 — the mask's options through `Mutation::Set` -----
+
+fn set_option(
+    model: &mut CanvasModel,
+    path: &str,
+    value: paged_mutate::Value,
+) -> Result<(), String> {
+    model
+        .apply_mutation(&Mutation::Set {
+            address: paged_wire::Address::parse("rectangle:target").unwrap(),
+            path: path.to_string(),
+            value,
+        })
+        .map(|_| ())
+        .map_err(|e| format!("{e:?}"))
+}
+
+fn read(model: &CanvasModel, path: &str) -> paged_mutate::Value {
+    model
+        .read_property("rectangle:target", path)
+        .unwrap_or_else(|e| panic!("read {path}: {e:?}"))
+}
+
+/// The Transparency panel's mode, Invert Mask and Clip: each a write of
+/// its own, one undo step, the artwork staying out of the z-order, and
+/// the undo restoring the exact state.
+#[test]
+#[allow(non_snake_case)]
+fn mask_options_set_read_and_undo__feat__effects_transparency_opacity_mask() {
+    use paged_mutate::Value;
+    let mut model = load();
+    // Without a mask the options read as a new mask would take them, and
+    // a write is refused.
+    assert!(matches!(read(&model, "opacityMaskClip"), Value::Bool(true)));
+    assert!(set_option(&mut model, "opacityMaskInvert", Value::Bool(true)).is_err());
+
+    model
+        .apply_mutation(&Mutation::ApplyOpacityMask {
+            target_id: ElementId::Rectangle("target".into()),
+            mask_id: ElementId::Rectangle("artwork".into()),
+            mask_type: None,
+            invert: None,
+            clip: None,
+        })
+        .expect("applyOpacityMask");
+    let z = top_level_len(&model);
+    let h0 = model.current_state_hash();
+    assert!(matches!(read(&model, "opacityMaskType"), Value::Text(t) if t == "luminosity"));
+    assert!(matches!(
+        read(&model, "opacityMaskInvert"),
+        Value::Bool(false)
+    ));
+    assert!(matches!(read(&model, "opacityMaskClip"), Value::Bool(true)));
+
+    set_option(&mut model, "opacityMaskClip", Value::Bool(false)).expect("clip off");
+    let entry = mask_entry(&model, "target").expect("still masked");
+    assert!(!entry.clip);
+    assert_eq!(entry.mask_item, "artwork");
+    assert_eq!(
+        top_level_len(&model),
+        z,
+        "the artwork stays out of the z-order"
+    );
+    assert!(matches!(
+        read(&model, "opacityMaskClip"),
+        Value::Bool(false)
+    ));
+    let h1 = model.current_state_hash();
+
+    set_option(&mut model, "opacityMaskInvert", Value::Bool(true)).expect("invert");
+    set_option(&mut model, "opacityMaskType", Value::Text("alpha".into())).expect("alpha");
+    let entry = mask_entry(&model, "target").unwrap();
+    assert!(entry.invert && !entry.clip);
+    assert_eq!(entry.mask_type, paged_model::OpacityMaskType::Alpha);
+    assert!(set_option(
+        &mut model,
+        "opacityMaskType",
+        Value::Text("lightness".into())
+    )
+    .is_err());
+
+    // One undo per write.
+    model.undo().expect("undo type");
+    model.undo().expect("undo invert");
+    assert_eq!(model.current_state_hash(), h1);
+    model.undo().expect("undo clip");
+    assert_eq!(model.current_state_hash(), h0);
+    assert!(mask_entry(&model, "target").unwrap().clip);
+    assert_eq!(top_level_len(&model), z);
+
+    // A release followed by its undo keeps the switch.
+    set_option(&mut model, "opacityMaskClip", Value::Bool(false)).unwrap();
+    model
+        .apply_mutation(&Mutation::ReleaseOpacityMask {
+            target_id: ElementId::Rectangle("target".into()),
+        })
+        .unwrap();
+    model.undo().unwrap();
+    assert!(
+        !mask_entry(&model, "target").unwrap().clip,
+        "undo of a release keeps Clip"
+    );
+}
+
+/// The panel's thumbnail: a snapshot naming only the mask item draws the
+/// artwork alone, although it is no page item of its own while it masks.
+#[test]
+fn a_snapshot_of_the_mask_item_alone_draws_the_artwork() {
+    use paged_canvas::{
+        render_snapshot_request, SnapshotBackground, SnapshotFormat, SnapshotRequest,
+    };
+    let sample = paged_gen::samples::build("layers-z").expect("sample");
+    let bytes = paged_gen::write_idml(&sample).expect("write");
+    let mut model = CanvasModel::load(
+        "mask-thumb",
+        &bytes,
+        CanvasOptions {
+            fonts: vec![read_font("Inter.ttf")],
+            ..Default::default()
+        },
+    )
+    .expect("load");
+    let rects: Vec<String> = model.scene().spreads[0]
+        .spread
+        .rectangles
+        .iter()
+        .filter_map(|r| r.self_id.clone())
+        .collect();
+    model
+        .apply_mutation(&Mutation::ApplyOpacityMask {
+            target_id: ElementId::Rectangle(rects[0].clone()),
+            mask_id: ElementId::Rectangle(rects[1].clone()),
+            mask_type: None,
+            invert: None,
+            clip: None,
+        })
+        .expect("mask");
+    let page = paged_wire::PageId(model.pages()[0].self_id.clone());
+    let drawn = |only: &[ElementId]| {
+        let snap = render_snapshot_request(
+            &model,
+            &SnapshotRequest {
+                only,
+                format: SnapshotFormat::Rgba,
+                background: SnapshotBackground::Transparent,
+                ..SnapshotRequest::page(&page, 200)
+            },
+        )
+        .expect("snapshot");
+        snap.rgba.chunks(4).filter(|p| p[3] > 0).count()
+    };
+    let mask_only = [ElementId::Rectangle(rects[1].clone())];
+    assert!(drawn(&mask_only) > 0, "the mask artwork draws alone");
+    // The document itself is untouched: the artwork is still the mask.
+    assert!(mask_entry(&model, &rects[0]).is_some());
 }

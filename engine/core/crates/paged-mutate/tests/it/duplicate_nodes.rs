@@ -811,6 +811,7 @@ fn a_mask_and_a_masked_item_are_refused_by_name() {
             mask: mask.clone(),
             mask_type: OpacityMaskMode::default(),
             invert: false,
+            clip: true,
         },
     )
     .expect("apply mask");

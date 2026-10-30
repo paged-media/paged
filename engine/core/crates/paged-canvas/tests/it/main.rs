@@ -74,6 +74,7 @@ mod late_fonts;
 mod layers_wire;
 mod layout_cache;
 mod line_setting_paths;
+mod live_shapes;
 mod load_sniff;
 mod master_crud;
 mod minted_page_names;

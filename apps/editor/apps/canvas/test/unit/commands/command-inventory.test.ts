@@ -54,6 +54,7 @@ import { buildSvgCommands } from "../../../src/svg-commands";
 import { buildAssetExportCommands } from "../../../src/asset-export/commands";
 import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
+import { buildEffectMenuCommands } from "../../../src/effect-menu";
 import { buildViewCommands } from "../../../src/view-commands";
 import { OPEN_AS_TEMPLATE_COMMANDS } from "../../../src/panels/template/open-as-template-dialog";
 import { PDF_VECTORS_COMMANDS } from "../../../src/panels/pdf-vectors-dialog";
@@ -170,6 +171,7 @@ function tableIds(): string[] {
     ...buildCoreCommandEntries(),
     ...buildTransformCommands(noop),
     ...GLOBAL_LIGHT_COMMANDS,
+    ...buildEffectMenuCommands(),
     ...buildTransformEachDialogCommands(() => []),
     ...buildBatchCommands(),
     ...buildViewCommands(noop),
@@ -255,6 +257,7 @@ describe("the host command inventory", () => {
       "insertCommands",
       "alignCommands",
       "GLOBAL_LIGHT_COMMANDS",
+      "buildEffectMenuCommands()",
       "transformEachDialogCommands",
       "buildBatchCommands()",
       "viewCommands",
@@ -271,15 +274,25 @@ describe("the host command inventory", () => {
       pathToFileURL(at("scripts/surface/enumerate.mjs")).href
     )) as {
       enumerateSurface(root: string): {
-        items: Array<{ kind: string; id: string; origin: string }>;
+        items: Array<{
+          kind: string;
+          id: string;
+          origin: string;
+          family?: boolean;
+          members?: string[];
+        }>;
       };
     };
     const surface = enumerateSurface(
       fileURLToPath(new URL("../../../../../../../", import.meta.url)),
     );
+    // A family the app registers from data (the Effect menu's commands,
+    // one per core effect kind) counts as its members.
     const gate = surface.items
       .filter((i) => i.kind === "command" && i.origin === "host")
-      .map((i) => i.id)
+      .flatMap((i) =>
+        i.id === "paged.effect.add.*" && i.members ? i.members : [i.id],
+      )
       .sort();
     const host = [...hostIds()].sort();
     expect(host.length).toBeGreaterThanOrEqual(100);
