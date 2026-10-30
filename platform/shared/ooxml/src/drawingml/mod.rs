@@ -28,7 +28,7 @@
 //! - [`paint`], `a:noFill`, `a:solidFill`, `a:gradFill`, `a:pattFill`,
 //!   `a:blipFill` with every picture effect of its `a:blip`, `a:grpFill`,
 //!   and `a:ln`;
-//! - [`effect`], `a:effectLst`;
+//! - [`effect`], `a:effectLst` (or an `a:effectDag`'s direct effects);
 //! - [`resolved`], the NEUTRAL resolved IR (points, degrees, fractions,
 //!   sRGB bytes) the modules lower from, and the resolution into it;
 //! - [`write`], the resolved IR back as DrawingML, for the save paths.
@@ -45,7 +45,9 @@ pub mod resolved;
 pub mod write;
 
 pub use color::{color, color_in, resolve, Color, ColorBase, Rgba, SchemeColors};
-pub use effect::{effects, Blur, Effects, FillOverlay, Glow, PresetShadow, Reflection, Shadow};
+pub use effect::{
+    effects, effects_in, Blur, Effects, FillOverlay, Glow, PresetShadow, Reflection, Shadow,
+};
 pub use paint::{
     blip, fill, fill_in, gradient, line, rect_attrs, Blip, BlipEffect, Fill, Gradient,
     GradientStop, Line, LineEnd, Pattern, RelRect, Rels, Shade, Tile,
@@ -81,9 +83,6 @@ pub fn shape_properties(sp_pr: &El, rels: Rels) -> ShapeProperties {
     ShapeProperties {
         fill: fill_in(sp_pr, rels),
         line: sp_pr.child(Ns::A, "ln").map(|l| line(l, rels)),
-        effects: sp_pr
-            .child(Ns::A, "effectLst")
-            .map(|e| effects(e, rels))
-            .unwrap_or_default(),
+        effects: effects_in(sp_pr, rels),
     }
 }

@@ -115,8 +115,11 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
         .expect("inner shadow");
     assert_eq!((i.angle, i.size, i.opacity), (-45.0, 2.5, 50.0));
     assert!((i.distance - 4.0).abs() < 2e-3);
+    // The reflection rides the look's effect stack (engine ADR 1008).
+    let stack = &p3.fx.as_ref().unwrap().effect_stack;
+    assert!(stack.iter().any(|e| e.kind == "reflection"), "{stack:?}");
     assert!(
-        p3.losses.iter().any(|l| l.contains("a:reflection")),
+        !p3.losses.iter().any(|l| l.contains("reflection")),
         "{:?}",
         p3.losses
     );
@@ -138,10 +141,11 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
         "inner shadow",
         "outline",
         "soft edge",
+        "reflection",
     ] {
         assert!(shown.contains(kind), "{kind}: {shown}");
     }
-    for what in ["a:reflection", "a:grayscl"] {
+    for what in ["a:grayscl"] {
         assert_eq!(
             messages
                 .iter()
