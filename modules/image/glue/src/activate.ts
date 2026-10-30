@@ -748,8 +748,7 @@ export function activate(host: BundleHost): BundleHandle {
     icon: "tool-crop",
     group: CROP_TOOL_ID,
     section: "transform",
-    gesture: () =>
-      makePerspectiveCropGesture(host, session, perspectiveCrop),
+    gesture: () => makePerspectiveCropGesture(host, session, perspectiveCrop),
   });
   command({
     id: "media.paged.image.command.commitPerspectiveCrop",

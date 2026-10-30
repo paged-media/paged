@@ -51,7 +51,10 @@ describe("WP5.6 Edit ▸ Transform [image.editor.transform-warp]", () => {
     // the opposite corner stays.
     const at = (x: number, y: number) => {
       const w = m[6]! * x + m[7]! * y + m[8]!;
-      return [(m[0]! * x + m[1]! * y + m[2]!) / w, (m[3]! * x + m[4]! * y + m[5]!) / w];
+      return [
+        (m[0]! * x + m[1]! * y + m[2]!) / w,
+        (m[3]! * x + m[4]! * y + m[5]!) / w,
+      ];
     };
     expect(at(4, 2)[0]).toBeCloseTo(4.6);
     expect(at(4, 2)[1]).toBeCloseTo(2.4);

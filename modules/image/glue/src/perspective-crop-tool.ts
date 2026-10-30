@@ -51,7 +51,10 @@ function inside(q: CropQuad, p: Pt): boolean {
   for (let i = 0, j = 3; i < 4; j = i++) {
     const [xi, yi] = q[i]!;
     const [xj, yj] = q[j]!;
-    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi)
+    if (
+      yi > p[1] !== yj > p[1] &&
+      p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi
+    )
       c = !c;
   }
   return c;
@@ -173,7 +176,8 @@ export function makePerspectiveCropGesture(
   machine: PerspectiveCropMachine,
 ): GestureHandler {
   let fit: FitTransform | null = null;
-  let layer: (Disposable & { set(s: ToolPreviewShape[]): void; clear(): void }) | null =
+  let layer:
+    (Disposable & { set(s: ToolPreviewShape[]): void; clear(): void }) | null =
     null;
   const render = () => {
     if (!fit) return;
@@ -187,9 +191,7 @@ export function makePerspectiveCropGesture(
     const page = (p: Pt) => imageToPage(f, p);
     const shapes: ToolPreviewShape[] = [
       { pageId: f.pageId, points: q.map(page), close: true },
-      ...machine
-        .grid()
-        .map((l) => ({ pageId: f.pageId, points: l.map(page) })),
+      ...machine.grid().map((l) => ({ pageId: f.pageId, points: l.map(page) })),
       ...q.map((c): ToolPreviewShape => {
         const [x, y] = page(c);
         return { kind: "handle", pageId: f.pageId, x, y, shape: "square" };
@@ -201,12 +203,14 @@ export function makePerspectiveCropGesture(
     fit && e.pagePoint ? pageToImage(fit, e.pagePoint) : null;
   return {
     onActivate(_paged: PagedEditor) {
-      void resolveFrameFit(host, session.state().source, "perspective crop").then(
-        (f) => {
-          fit = f;
-          render();
-        },
-      );
+      void resolveFrameFit(
+        host,
+        session.state().source,
+        "perspective crop",
+      ).then((f) => {
+        fit = f;
+        render();
+      });
     },
     onDeactivate() {
       machine.clear();

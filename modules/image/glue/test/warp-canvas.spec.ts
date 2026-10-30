@@ -26,13 +26,20 @@ import {
 } from "../src/perspective-crop-tool";
 
 const FIT = { pageId: "p1", originX: 10, originY: 20, scale: 0.5 };
-const ctx = { width: 200, height: 100, fg: [0, 0, 0], bg: [1, 1, 1], resource: () => null } as const;
+const ctx = {
+  width: 200,
+  height: 100,
+  fg: [0, 0, 0],
+  bg: [1, 1, 1],
+  resource: () => null,
+} as const;
 
 function env(over: Partial<WarpCanvasEnv> = {}): WarpCanvasEnv {
   return {
     width: 200,
     height: 100,
-    mesh: () => warpMesh({ warpStyleMesh: () => [] }, { rect: [0, 0, 1, 1] }, ctx),
+    mesh: () =>
+      warpMesh({ warpStyleMesh: () => [] }, { rect: [0, 0, 1, 1] }, ctx),
     edges: () => [0, 0, 10, 10, 10, 10, 20, 0],
     restPoint: (at) => [at[0] - 5, at[1]],
     brushAt: null,
@@ -68,16 +75,32 @@ describe("the warps on the canvas [image.editor.transform-warp]", () => {
   it("warp: eight grid curves and sixteen handles; a handle drag makes it custom", () => {
     const shapes = warpCanvasShapes("warp", { rect: [0, 0, 1, 1] }, env(), FIT);
     expect(shapes.filter((s) => "points" in s)).toHaveLength(8);
-    expect(shapes.filter((s) => "kind" in s && s.kind === "handle")).toHaveLength(16);
-    const drag = warpCanvasHit("warp", { rect: [0, 0, 1, 1] }, env(), [199, 99], false);
+    expect(
+      shapes.filter((s) => "kind" in s && s.kind === "handle"),
+    ).toHaveLength(16);
+    const drag = warpCanvasHit(
+      "warp",
+      { rect: [0, 0, 1, 1] },
+      env(),
+      [199, 99],
+      false,
+    );
     const patch = drag!.move([150, 80])!;
     expect(patch.style).toBe(STYLE_CUSTOM);
     expect((patch.mesh as number[]).slice(30)).toEqual([0.75, 0.8]);
-    expect(warpCanvasHit("warp", { rect: [0, 0, 1, 1] }, env(), [50, 50], false)).toBeNull();
+    expect(
+      warpCanvasHit("warp", { rect: [0, 0, 1, 1] }, env(), [50, 50], false),
+    ).toBeNull();
   });
 
   it("puppet: a click adds a pin at its rest point; Alt on a pin removes it", () => {
-    const add = warpCanvasHit("puppetWarp", { pins: [] }, env(), [100, 50], false)!;
+    const add = warpCanvasHit(
+      "puppetWarp",
+      { pins: [] },
+      env(),
+      [100, 50],
+      false,
+    )!;
     const p = add.move([100, 50])!.pins as number[];
     expect(p).toEqual([0.475, 0.5, 0.5, 0.5]);
     const moved = add.move([120, 50])!.pins as number[];
@@ -85,15 +108,33 @@ describe("the warps on the canvas [image.editor.transform-warp]", () => {
     expect(puppetPins({ pins: moved }, 200, 100)).toEqual([
       { at: [95, 50], to: [120, 50] },
     ]);
-    const del = warpCanvasHit("puppetWarp", { pins: p }, env(), [100, 50], true)!;
+    const del = warpCanvasHit(
+      "puppetWarp",
+      { pins: p },
+      env(),
+      [100, 50],
+      true,
+    )!;
     expect(del.move([100, 50])).toEqual({ pins: [] });
     expect(del.move([100, 50])).toBeNull();
-    const shapes = warpCanvasShapes("puppetWarp", { pins: p, showMesh: true }, env(), FIT);
+    const shapes = warpCanvasShapes(
+      "puppetWarp",
+      { pins: p, showMesh: true },
+      env(),
+      FIT,
+    );
     expect(shapes).toHaveLength(3);
   });
 
   it("liquify: a drag is one stroke in image fractions; px and the wire follow", () => {
-    const v = { tool: 3, size: 50, pressure: 100, density: 50, rate: 80, strokes: [] };
+    const v = {
+      tool: 3,
+      size: 50,
+      pressure: 100,
+      density: 50,
+      rate: 80,
+      strokes: [],
+    };
     const d = warpCanvasHit("liquify", v, env(), [20, 10], false)!;
     d.move([20, 10]);
     d.move([20.2, 10]);
@@ -113,8 +154,15 @@ describe("the warps on the canvas [image.editor.transform-warp]", () => {
         ],
       },
     ]);
-    expect([...liquifyWire(px)]).toEqual([3, 50, 1, 0.5, 0.800000011920929, 2, 20, 10, 40, 10]);
-    const shapes = warpCanvasShapes("liquify", v, env({ brushAt: [40, 10] }), FIT);
+    expect([...liquifyWire(px)]).toEqual([
+      3, 50, 1, 0.5, 0.800000011920929, 2, 20, 10, 40, 10,
+    ]);
+    const shapes = warpCanvasShapes(
+      "liquify",
+      v,
+      env({ brushAt: [40, 10] }),
+      FIT,
+    );
     expect(shapes).toHaveLength(1);
   });
 });

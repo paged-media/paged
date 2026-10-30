@@ -553,12 +553,8 @@ export function FilterDialog({
       )}
       {def.id === "blurGallery" && <div style={note}>{t(M.onCanvas)}</div>}
       {def.id === "warp" && <div style={note}>{t(M.warpOnCanvas)}</div>}
-      {def.id === "puppetWarp" && (
-        <div style={note}>{t(M.puppetOnCanvas)}</div>
-      )}
-      {def.id === "liquify" && (
-        <div style={note}>{t(M.liquifyOnCanvas)}</div>
-      )}
+      {def.id === "puppetWarp" && <div style={note}>{t(M.puppetOnCanvas)}</div>}
+      {def.id === "liquify" && <div style={note}>{t(M.liquifyOnCanvas)}</div>}
       <div style={{ ...row, borderBottom: "none", flexWrap: "wrap" }}>
         <label style={{ font: `12px ${font.sans}` }}>
           <input
