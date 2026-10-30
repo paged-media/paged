@@ -150,5 +150,6 @@ mod wire_robustness;
 mod wire_vocabulary;
 mod word_editing;
 mod word_structure;
+mod word_tables;
 mod xml_tags_wire;
 mod xref_ops;
