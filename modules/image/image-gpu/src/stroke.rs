@@ -105,7 +105,6 @@ use image_kernels::families::band::{
 use image_kernels::families::cast::{
     CastPremultiplyParams, CastUnpremultiplyParams, CAST_PREMULTIPLY, CAST_UNPREMULTIPLY,
 };
-use image_kernels::families::compose::ComposeParams;
 use image_kernels::families::conv::{
     ConvGaussianParams, ConvUnsharpParams, CONV_GAUSSIAN_H, CONV_GAUSSIAN_V, CONV_UNSHARP,
     GAUSSIAN_MAX_RADIUS,
@@ -429,7 +428,9 @@ pub async fn composite_stroke_window(
             b.dispatch(
                 blend,
                 &[&bp, &sp],
-                ComposeParams::new(1.0).as_bytes(),
+                // Dissolve takes its own block (its pattern at this
+                // buffer's pixels); every other mode the opacity block.
+                &image_kernels::families::compose::layer_params(blend, 1.0, (0, 0)),
                 Some(&mask),
                 &composed,
             )?;
@@ -562,7 +563,9 @@ pub async fn composite_stroke_window(
             b.dispatch(
                 blend,
                 &[&bp, &paint],
-                ComposeParams::new(1.0).as_bytes(),
+                // Dissolve takes its own block (its pattern at this
+                // buffer's pixels); every other mode the opacity block.
+                &image_kernels::families::compose::layer_params(blend, 1.0, (0, 0)),
                 Some(&mask),
                 &composed,
             )?;

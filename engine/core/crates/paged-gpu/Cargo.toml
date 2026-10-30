@@ -27,6 +27,7 @@ svg = ["dep:vello_cpu", "dep:usvg", "dep:paged-svg"]
 
 [dependencies]
 paged-compose = { path = "../paged-compose" }
+paged-blend = { path = "../paged-blend" }
 # vello 0.11 / vello_cpu 0.3 / wgpu 30 — current Chrome ships the
 # post-2024 WebGPU spec and rejects wgpu < 24's
 # `maxInterStageShaderComponents` limit. wgpu is direct-deps so its

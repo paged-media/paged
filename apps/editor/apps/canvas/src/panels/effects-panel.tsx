@@ -67,7 +67,7 @@
 // edge, noise, colour adjustment). The blend lists come from the
 // engine's schema row (`frameBlendMode`'s members).
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import {
   CatalogRegistryProvider,
@@ -84,9 +84,10 @@ import type { CompositionNode } from "@paged-media/catalog";
 import type { PropertyPath, Value } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
-import { EffectStackSection, type BlendOption } from "./effect-stack-section";
+import { EffectStackSection } from "./effect-stack-section";
 import {
-  blendModes,
+  allBlendModes,
+  type BlendModeOption,
   bevelComposition,
   directionalFeatherComposition,
   dropShadowComposition,
@@ -94,6 +95,7 @@ import {
   innerGlowComposition,
   innerShadowComposition,
   outerGlowComposition,
+  notInIdmlLabel,
   satinComposition,
 } from "./effects.composition";
 import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
@@ -308,21 +310,28 @@ function EffectDisclosure({
 }
 
 /** The blend modes the engine's schema row lists (plan C1: the list is
- *  the engine's, not hand-kept here), labelled from the panel's
- *  messages; a mode without a label shows its IDML name. Without a row
- *  (no selection yet) the panel's own list stands in. */
+ *  the engine's, not hand-kept here), each with its label, Photoshop menu
+ *  group and IDML standing from the SDK's table (engine ADR 1034); a mode
+ *  the table lacks shows its own name. Without a row (no selection yet)
+ *  the SDK's list stands in. */
 function schemaBlendModes(
   strings: Strings,
   row: ObjectField["row"],
-): BlendOption[] {
-  const labelled = blendModes(strings);
+): BlendModeOption[] {
+  const known = allBlendModes(strings);
   const type = row?.type as
     { kind?: string; members?: readonly string[] } | undefined;
-  if (type?.kind !== "enum" || !type.members?.length) return labelled;
-  return type.members.map((m) => ({
-    value: m,
-    label: labelled.find((l) => l.value === m)?.label ?? m,
-  }));
+  if (type?.kind !== "enum" || !type.members?.length) return known;
+  return type.members.map(
+    (m) =>
+      known.find((k) => k.value === m) ?? {
+        value: m,
+        label: m,
+        group: known.at(-1)?.group ?? 0,
+        native: true,
+        idml: m,
+      },
+  );
 }
 
 /** A target's current setting as InDesign lists it ("Multiply 60%"):
@@ -334,7 +343,7 @@ function targetSummary(
 ): string {
   if (blend.state.state !== "value" || opacity.state.state !== "value")
     return "—";
-  const modes = blendModes(strings);
+  const modes = allBlendModes(strings);
   const mode =
     modes.find((m) => m.value === unwrapText(blend.value))?.label ??
     modes[0]!.label;
@@ -407,6 +416,12 @@ export function EffectsPanel() {
   const blendDisabled = blendField.onCommit == null;
   const blendMixed = blendField.value == null;
   const modes = schemaBlendModes(strings, fields.objectBlend.row);
+  // A Photoshop mode (engine ADR 1034): say what an IDML save keeps.
+  const blendOpt = modes.find((m) => m.value === blendId);
+  const blendNote =
+    !blendMixed && blendOpt && !blendOpt.native
+      ? notInIdmlLabel(strings, blendOpt)
+      : null;
 
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
@@ -470,13 +485,30 @@ export function EffectsPanel() {
                 —
               </option>
             )}
-            {modes.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
+            {modes.map((opt, i, all) => (
+              <Fragment key={opt.value}>
+                {/* Photoshop's separators between its six groups. */}
+                {i > 0 && all[i - 1]!.group !== opt.group && <hr />}
+                <option
+                  value={opt.value}
+                  data-not-in-idml={opt.native ? undefined : ""}
+                  title={opt.native ? undefined : notInIdmlLabel(strings, opt)}
+                >
+                  {opt.native ? opt.label : `${opt.label} \u2020`}
+                </option>
+              </Fragment>
             ))}
           </KitSelect>
         </ObjectFieldFrame>
+        {blendNote && (
+          <div
+            className="text-[11px] pl-[92px]"
+            style={{ color: "var(--pg-muted-fg)" }}
+            data-blend-not-in-idml=""
+          >
+            {`\u2020 ${blendNote}`}
+          </div>
+        )}
         <div
           className="flex flex-col"
           role="radiogroup"

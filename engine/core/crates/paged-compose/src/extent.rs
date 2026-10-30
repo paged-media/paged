@@ -708,6 +708,81 @@ fn fit_bounds(declared: Rect, painted: Option<Extent>) -> Rect {
         .to_rect()
 }
 
+/// Wrap every `FillPathBlend` in one of Photoshop's eleven blend modes
+/// (engine ADR 1034) in a `BeginBlendGroup` / `EndBlendGroup` of that
+/// mode around a plain `FillPath`. Returns how many it wrapped.
+///
+/// A fill's blend is drawn by the rasterizer's own blend (`peniko::Mix`),
+/// which has only the sixteen PDF modes; the other eleven are composited
+/// against the backdrop when a GROUP closes, so they travel on groups
+/// only. One pass on the finished list, before
+/// [`fit_transparency_group_bounds`] (which then confirms the bracket's
+/// bounds), keeps every emitter of `FillPathBlend` unaware of the
+/// difference. The glyph-run side channel addresses commands by
+/// position, so its indices move with the inserted brackets.
+pub fn lift_photoshop_fill_blends(list: &mut DisplayList) -> usize {
+    let wraps = |c: &DisplayCommand| matches!(c, DisplayCommand::FillPathBlend { blend_mode, .. } if !blend_mode.is_native());
+    if !list.commands.iter().any(wraps) {
+        return 0;
+    }
+    let mut cache = PathBboxes::default();
+    let old = std::mem::take(&mut list.commands);
+    // new_index[i] = where old command i lands.
+    let mut new_index = Vec::with_capacity(old.len());
+    let mut out = Vec::with_capacity(old.len() + 8);
+    let mut wrapped = 0;
+    for cmd in old {
+        if !wraps(&cmd) {
+            new_index.push(out.len() as u32);
+            out.push(cmd);
+            continue;
+        }
+        let bounds = painted_extent(&cmd, &list.paths, &list.images, &mut cache)
+            .filter(|e| e.is_finite())
+            .map(|e| e.inflate(GROUP_AA_PAD_PT).to_rect())
+            .unwrap_or(Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 0.0,
+                h: 0.0,
+            });
+        let DisplayCommand::FillPathBlend {
+            path_id,
+            paint,
+            transform,
+            blend_mode,
+        } = cmd
+        else {
+            unreachable!("`wraps` matched a FillPathBlend");
+        };
+        out.push(DisplayCommand::BeginBlendGroup {
+            bounds,
+            blend_mode,
+            opacity: 1.0,
+            isolated: false,
+            knockout: false,
+            transform: Transform::IDENTITY,
+        });
+        new_index.push(out.len() as u32);
+        out.push(DisplayCommand::FillPath {
+            path_id,
+            paint,
+            transform,
+        });
+        out.push(DisplayCommand::EndBlendGroup(Transform::IDENTITY));
+        wrapped += 1;
+    }
+    list.commands = out;
+    if let Some(table) = list.glyph_runs.as_mut() {
+        for entry in table.entries.iter_mut() {
+            if let Some(n) = new_index.get(entry.command_index as usize) {
+                entry.command_index = *n;
+            }
+        }
+    }
+    wrapped
+}
+
 /// Grow every transparency group's `bounds` to cover what its contents
 /// paint. Idempotent; a group whose contents already fit is untouched.
 ///

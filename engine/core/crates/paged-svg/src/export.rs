@@ -197,25 +197,14 @@ fn css(c: Color) -> String {
     format!("#{:02x}{:02x}{:02x}", srgb(c.r), srgb(c.g), srgb(c.b))
 }
 
+/// The CSS `mix-blend-mode` of a mode; one of Photoshop's eleven, which
+/// CSS has no keyword for, writes its nearest of the sixteen (engine ADR
+/// 1034), as an IDML save does.
 fn blend_css(b: BlendMode) -> Option<&'static str> {
-    Some(match b {
-        BlendMode::Normal => return None,
-        BlendMode::Multiply => "multiply",
-        BlendMode::Screen => "screen",
-        BlendMode::Overlay => "overlay",
-        BlendMode::Darken => "darken",
-        BlendMode::Lighten => "lighten",
-        BlendMode::ColorDodge => "color-dodge",
-        BlendMode::ColorBurn => "color-burn",
-        BlendMode::HardLight => "hard-light",
-        BlendMode::SoftLight => "soft-light",
-        BlendMode::Difference => "difference",
-        BlendMode::Exclusion => "exclusion",
-        BlendMode::Hue => "hue",
-        BlendMode::Saturation => "saturation",
-        BlendMode::Color => "color",
-        BlendMode::Luminosity => "luminosity",
-    })
+    match b.nearest_native() {
+        BlendMode::Normal => None,
+        native => native.css_name(),
+    }
 }
 
 fn esc(s: &str) -> String {

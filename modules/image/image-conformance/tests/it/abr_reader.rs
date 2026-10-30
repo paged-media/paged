@@ -570,7 +570,10 @@ fn image_abr_join_runs_over_the_dual_brush_tip_as_well() {
     assert_eq!(b.tip.as_sampled().unwrap().sample_index, Some(0));
     let db = b.dual_brush.as_ref().unwrap();
     assert!(db.enabled);
-    assert_eq!(db.blend_mode, Some(BlendMode::Multiply));
+    assert_eq!(
+        db.blend_mode,
+        Some(BlendMode::Layer(paged_blend::BlendMode::Multiply))
+    );
     assert_eq!(db.count, Some(2.0));
     assert_eq!(
         db.tip.as_ref().unwrap().as_sampled().unwrap().sample_index,
@@ -945,7 +948,7 @@ fn image_abr_brush_model_blend_modes_arrive_in_both_dialects_in_one_file() {
     assert_eq!(mode(0), Some(BlendMode::SubtractionTexture), "4cc form");
     assert_eq!(mode(1), Some(BlendMode::LinearHeight), "long form");
     // An unknown identifier substitutes Normal and is REPORTED.
-    assert_eq!(mode(2), Some(BlendMode::Normal));
+    assert_eq!(mode(2), Some(BlendMode::NORMAL));
     assert!(f
         .warnings
         .iter()
@@ -1052,7 +1055,7 @@ fn image_abr_brush_model_tool_options_class_id_names_the_tool_and_unknown_ids_fa
     let t = f.brushes[0].tool_options.as_ref().unwrap();
     assert_eq!(t.flow, 100.0, "a 0..100 plain number, not a #Prc float");
     assert_eq!(t.opacity, 100.0);
-    assert_eq!(t.blend_mode, BlendMode::Normal);
+    assert_eq!(t.blend_mode, BlendMode::NORMAL);
     // The ~25 keys this view deliberately does not model are still there.
     assert_eq!(t.descriptor.number(b"smoothingValue"), Some(0.0));
     assert_eq!(t.descriptor.i32(b"Smoo"), Some(0));

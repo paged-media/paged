@@ -74,7 +74,7 @@ use image_kernels::families::cast::{
     CastPremultiplyParams, CastUnpremultiplyParams, CAST_PREMULTIPLY, CAST_UNPREMULTIPLY,
 };
 use image_kernels::families::compose::{
-    ComposeGammaParams, ComposeParams, COMPOSE_NORMAL, COMPOSE_NORMAL_GAMMA,
+    layer_params, ComposeGammaParams, ComposeParams, COMPOSE_NORMAL, COMPOSE_NORMAL_GAMMA,
 };
 use image_kernels::KernelDef;
 
@@ -1066,6 +1066,15 @@ impl LayerStack {
         frame: Frame,
     ) -> Result<(FoldState, Option<FoldState>), IngestError> {
         let (w, h) = (frame.w, frame.h);
+        // Where this frame's first texel lies on the canvas: Dissolve's
+        // pattern is a function of the canvas pixel, so a tile dissolves as
+        // the whole fold does there (engine ADR 1034, image ADR 480).
+        let at = |x: u32, y: u32| {
+            (
+                (frame.ox as u32).wrapping_add(x),
+                (frame.oy as u32).wrapping_add(y),
+            )
+        };
         let mut snap = None;
         let mut folded = 0u64;
         // Each styled layer's source alpha (and distance field), shared by
@@ -1163,7 +1172,7 @@ impl LayerStack {
                                 .dispatch(
                                     pixel_kernel(blend, *gamma),
                                     &[&acc, &src],
-                                    &pixel_params(*opacity, *gamma),
+                                    &pixel_params(blend, *opacity, *gamma, at(0, 0)),
                                     mask.as_ref(),
                                     &out,
                                 )
@@ -1196,7 +1205,7 @@ impl LayerStack {
                                 .dispatch(
                                     pixel_kernel(blend, *gamma),
                                     &[&hole, &src],
-                                    &pixel_params(*opacity, *gamma),
+                                    &pixel_params(blend, *opacity, *gamma, at(0, 0)),
                                     None,
                                     &blended,
                                 )
@@ -1326,7 +1335,7 @@ impl LayerStack {
                                 .dispatch(
                                     def,
                                     &[&a, &b],
-                                    ComposeParams::new(*opacity).as_bytes(),
+                                    &layer_params(def, *opacity, (0, 0)),
                                     mask.as_ref(),
                                     &out,
                                 )
@@ -1367,7 +1376,7 @@ impl LayerStack {
                         .dispatch(
                             pixel_kernel(blend, *gamma),
                             &[&win, &plate],
-                            &pixel_params(*opacity, *gamma),
+                            &pixel_params(blend, *opacity, *gamma, at(rx, ry)),
                             mask.as_ref(),
                             &blended,
                         )
@@ -1395,7 +1404,7 @@ impl LayerStack {
                         .dispatch(
                             pixel_kernel(blend, *gamma),
                             &[&acc, &plate],
-                            &pixel_params(*opacity, *gamma),
+                            &pixel_params(blend, *opacity, *gamma, at(0, 0)),
                             mask.as_ref(),
                             &out,
                         )
@@ -1606,7 +1615,7 @@ pub(super) fn clip_close(
         .dispatch(
             blend,
             &[outer, &group],
-            ComposeParams::new(opacity).as_bytes(),
+            &layer_params(blend, opacity, (0, 0)),
             None,
             &out,
         )
@@ -1722,11 +1731,18 @@ fn pixel_kernel(blend: &'static KernelDef, gamma: Option<f32>) -> &'static Kerne
     }
 }
 
-/// The parameter block for [`pixel_kernel`].
-fn pixel_params(opacity: f32, gamma: Option<f32>) -> Vec<u8> {
+/// The parameter block for [`pixel_kernel`], for a dispatch whose
+/// window starts at `origin` on the canvas (Dissolve's pattern is a
+/// function of the canvas pixel).
+fn pixel_params(
+    blend: &'static KernelDef,
+    opacity: f32,
+    gamma: Option<f32>,
+    origin: (u32, u32),
+) -> Vec<u8> {
     match gamma {
         Some(g) => ComposeGammaParams::new(opacity, g).as_bytes().to_vec(),
-        None => ComposeParams::new(opacity).as_bytes().to_vec(),
+        None => layer_params(blend, opacity, origin),
     }
 }
 
@@ -1942,7 +1958,7 @@ impl LayerStack {
                                 .dispatch(
                                     def,
                                     &[&a, &b],
-                                    ComposeParams::new(*opacity).as_bytes(),
+                                    &layer_params(def, *opacity, (rx, ry)),
                                     mask.as_ref(),
                                     &out,
                                 )
@@ -2006,7 +2022,7 @@ impl LayerStack {
                         .dispatch(
                             pixel_kernel(blend, *gamma),
                             &[&a, &plate],
-                            &pixel_params(*opacity, *gamma),
+                            &pixel_params(blend, *opacity, *gamma, (rx, ry)),
                             mask.as_ref(),
                             &out,
                         )

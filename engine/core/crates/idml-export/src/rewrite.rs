@@ -9730,6 +9730,35 @@ mod tests {
         assert_eq!(back.blend_mode.as_deref(), Some("Multiply"));
     }
 
+    /// Engine ADR 1034 — a Photoshop blend mode is written as the
+    /// nearest of InDesign's sixteen (the canvas's `idml_export_losses`
+    /// names the change); the sixteen are written as they are.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_photoshop_blend_mode_is_written_as_the_nearest_indesign_mode__feat__effects_transparency_blend_modes_27(
+    ) {
+        for (model, written) in [
+            ("LinearBurn", "Multiply"),
+            ("Dissolve", "Normal"),
+            ("Divide", "ColorDodge"),
+            ("Screen", "Screen"),
+        ] {
+            let mut spread = grouped();
+            let mut p = inserted_polygon(&spread, "u5", None);
+            p.blend_mode = Some(model.to_string());
+            spread.polygons.push(p);
+            spread
+                .frames_in_order
+                .push(idml_import::FrameRef::Polygon(1));
+            let out = rewrite_spread(GROUP_SPREAD, &spread).expect("rewrite");
+            let s = String::from_utf8(out).unwrap();
+            assert!(
+                s.contains(&format!(r#"<BlendingSetting BlendMode="{written}"/>"#)),
+                "{model}: {s}"
+            );
+        }
+    }
+
     /// THE BAKE SHAPE: a group over one SOURCE carrier (paint cleared,
     /// plugin metadata intact) plus N inserted derived paths. The
     /// carrier moves into the wrapper and keeps its `<Label>` — the

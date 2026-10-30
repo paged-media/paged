@@ -42,36 +42,13 @@
 
 /// A blend mode as it appears in `.abr` (`textureBlendMode`, the dual
 /// brush's `BlnM`, and `toolOptions`' `Md  ` — one vocabulary, three
-/// sites).
+/// sites): one of the 27 layer modes of `paged-blend` (engine ADR 1034,
+/// whose descriptor tables both dialects resolve through), or one of
+/// three ABR-only texture modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BlendMode {
-    Normal,
-    Dissolve,
-    Darken,
-    Multiply,
-    ColorBurn,
-    LinearBurn,
-    DarkerColor,
-    Lighten,
-    Screen,
-    ColorDodge,
-    LinearDodge,
-    LighterColor,
-    Overlay,
-    SoftLight,
-    HardLight,
-    VividLight,
-    LinearLight,
-    PinLight,
-    HardMix,
-    Difference,
-    Exclusion,
-    Subtract,
-    Divide,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity,
+    /// A layer blend mode.
+    Layer(paged_blend::BlendMode),
     /// ABR-only: texture blending against a height field. `[OBS]`
     LinearHeight,
     /// ABR-only. `[REF]` — never observed.
@@ -80,100 +57,56 @@ pub enum BlendMode {
     SubtractionTexture,
 }
 
-/// The legacy four-character vocabulary. `[PUB]` for the layer modes,
-/// `[OBS]`/`[REF]` for the three ABR-only ones (see the module docs).
-const LEGACY: &[(&[u8; 4], BlendMode)] = &[
-    (b"Nrml", BlendMode::Normal),
-    (b"Dslv", BlendMode::Dissolve),
-    (b"Drkn", BlendMode::Darken),
-    (b"Mltp", BlendMode::Multiply),
-    (b"CBrn", BlendMode::ColorBurn),
-    (b"Lghn", BlendMode::Lighten),
-    (b"Scrn", BlendMode::Screen),
-    (b"CDdg", BlendMode::ColorDodge),
-    (b"Ovrl", BlendMode::Overlay),
-    (b"SftL", BlendMode::SoftLight),
-    (b"HrdL", BlendMode::HardLight),
-    (b"Dfrn", BlendMode::Difference),
-    (b"Xclu", BlendMode::Exclusion),
-    (b"H   ", BlendMode::Hue),
-    (b"Strt", BlendMode::Saturation),
-    (b"Clr ", BlendMode::Color),
-    (b"Lmns", BlendMode::Luminosity),
-    (b"Hght", BlendMode::Height),
-    (b"Sbtr", BlendMode::SubtractionTexture),
-];
-
-/// The long-form vocabulary. The modes added after the 4-character era
-/// were *born* long-form and have no legacy code at all.
-const LONG_FORM: &[(&str, BlendMode)] = &[
-    ("normal", BlendMode::Normal),
-    ("dissolve", BlendMode::Dissolve),
-    ("darken", BlendMode::Darken),
-    ("multiply", BlendMode::Multiply),
-    ("colorBurn", BlendMode::ColorBurn),
-    ("linearBurn", BlendMode::LinearBurn),
-    ("darkerColor", BlendMode::DarkerColor),
-    ("lighten", BlendMode::Lighten),
-    ("screen", BlendMode::Screen),
-    ("colorDodge", BlendMode::ColorDodge),
-    ("linearDodge", BlendMode::LinearDodge),
-    ("lighterColor", BlendMode::LighterColor),
-    ("overlay", BlendMode::Overlay),
-    ("softLight", BlendMode::SoftLight),
-    ("hardLight", BlendMode::HardLight),
-    ("vividLight", BlendMode::VividLight),
-    ("linearLight", BlendMode::LinearLight),
-    ("pinLight", BlendMode::PinLight),
-    ("hardMix", BlendMode::HardMix),
-    ("difference", BlendMode::Difference),
-    ("exclusion", BlendMode::Exclusion),
-    ("blendSubtraction", BlendMode::Subtract),
-    ("blendDivide", BlendMode::Divide),
-    ("hue", BlendMode::Hue),
-    ("saturation", BlendMode::Saturation),
-    ("color", BlendMode::Color),
-    ("luminosity", BlendMode::Luminosity),
-    ("linearHeight", BlendMode::LinearHeight),
-    ("height", BlendMode::Height),
-];
-
 impl BlendMode {
+    /// `Layer(Normal)`, the default every unrecognised value reads as.
+    pub const NORMAL: BlendMode = BlendMode::Layer(paged_blend::BlendMode::Normal);
+
+    /// The ABR-only modes in both dialects. `[OBS]`/`[REF]` (see the
+    /// module docs).
+    const ABR_ONLY: &[(&str, BlendMode)] = &[
+        ("Hght", BlendMode::Height),
+        ("Sbtr", BlendMode::SubtractionTexture),
+        ("linearHeight", BlendMode::LinearHeight),
+        ("height", BlendMode::Height),
+    ];
+
     /// Resolve an enum VALUE key (the second of the two `key-or-4cc`
     /// fields — there is no `.`-joined form in the bytes, spec §9
-    /// CORRECTION).
+    /// CORRECTION): the legacy four-character code first, the long-form
+    /// id second (`paged_blend::BlendMode::from_descriptor`), the
+    /// ABR-only modes alongside.
     ///
     /// Returns `None` for an unrecognised identifier so the caller can
-    /// report it and substitute [`BlendMode::Normal`]. Callers must not
+    /// report it and substitute [`BlendMode::NORMAL`]. Callers must not
     /// fail the file on a miss.
     pub fn from_key(key: &[u8]) -> Option<BlendMode> {
-        if key.len() == 4 {
-            if let Some((_, m)) = LEGACY.iter().find(|(c, _)| c.as_slice() == key) {
-                return Some(*m);
-            }
-        }
         let s = std::str::from_utf8(key).ok()?;
-        LONG_FORM.iter().find(|(n, _)| *n == s).map(|(_, m)| *m)
+        if let Some((_, m)) = Self::ABR_ONLY.iter().find(|(n, _)| *n == s) {
+            return Some(*m);
+        }
+        paged_blend::BlendMode::from_descriptor(s).map(BlendMode::Layer)
     }
 
-    /// A stable identifier for logs and for the wasm/TS surface.
     /// The legacy four-character code, where the mode has one (the
     /// writer prefers it: it is what the classic vocabulary readers know).
     pub fn legacy_code(self) -> Option<&'static [u8; 4]> {
-        LEGACY.iter().find(|(_, m)| *m == self).map(|(c, _)| *c)
+        match self {
+            BlendMode::Layer(m) => m.descriptor_code(),
+            BlendMode::Height => Some(b"Hght"),
+            BlendMode::SubtractionTexture => Some(b"Sbtr"),
+            BlendMode::LinearHeight => None,
+        }
     }
 
+    /// A stable identifier for logs and for the wasm/TS surface: the
+    /// long-form descriptor id.
     pub fn name(self) -> &'static str {
-        LONG_FORM
-            .iter()
-            .find(|(_, m)| *m == self)
-            .map(|(n, _)| *n)
-            .unwrap_or(match self {
-                BlendMode::Subtract => "blendSubtraction",
-                BlendMode::Divide => "blendDivide",
-                BlendMode::SubtractionTexture => "subtractionTexture",
-                _ => "normal",
-            })
+        match self {
+            BlendMode::Layer(m) => m.descriptor_id(),
+            BlendMode::LinearHeight => "linearHeight",
+            BlendMode::Height => "height",
+            BlendMode::SubtractionTexture => "subtractionTexture",
+        }
     }
 }
 
@@ -183,12 +116,15 @@ mod tests {
 
     #[test]
     fn image_abr_brush_model_blend_accepts_both_dialects_for_the_same_mode() {
-        assert_eq!(BlendMode::from_key(b"Nrml"), Some(BlendMode::Normal));
-        assert_eq!(BlendMode::from_key(b"normal"), Some(BlendMode::Normal));
-        assert_eq!(BlendMode::from_key(b"CBrn"), Some(BlendMode::ColorBurn));
+        assert_eq!(BlendMode::from_key(b"Nrml"), Some(BlendMode::NORMAL));
+        assert_eq!(BlendMode::from_key(b"normal"), Some(BlendMode::NORMAL));
+        assert_eq!(
+            BlendMode::from_key(b"CBrn"),
+            Some(BlendMode::Layer(paged_blend::BlendMode::ColorBurn))
+        );
         assert_eq!(
             BlendMode::from_key(b"colorBurn"),
-            Some(BlendMode::ColorBurn)
+            Some(BlendMode::Layer(paged_blend::BlendMode::ColorBurn))
         );
     }
 
@@ -198,8 +134,14 @@ mod tests {
         // key meaning hue jitter (spec §6.6 trap) — which is why the
         // table is scoped to blend-mode SITES and never shared by 4-char
         // code across contexts.
-        assert_eq!(BlendMode::from_key(b"H   "), Some(BlendMode::Hue));
-        assert_eq!(BlendMode::from_key(b"Strt"), Some(BlendMode::Saturation));
+        assert_eq!(
+            BlendMode::from_key(b"H   "),
+            Some(BlendMode::Layer(paged_blend::BlendMode::Hue))
+        );
+        assert_eq!(
+            BlendMode::from_key(b"Strt"),
+            Some(BlendMode::Layer(paged_blend::BlendMode::Saturation))
+        );
     }
 
     #[test]
@@ -218,17 +160,12 @@ mod tests {
     #[test]
     fn image_abr_brush_model_blend_modes_born_long_form_have_no_legacy_code() {
         for born_long in ["linearBurn", "vividLight", "hardMix", "blendDivide"] {
-            assert!(BlendMode::from_key(born_long.as_bytes()).is_some());
-        }
-        // …and nothing in the legacy table maps to them.
-        for (_, m) in LEGACY {
-            assert!(!matches!(
-                m,
-                BlendMode::LinearBurn
-                    | BlendMode::VividLight
-                    | BlendMode::HardMix
-                    | BlendMode::Divide
-            ));
+            let m = BlendMode::from_key(born_long.as_bytes());
+            let Some(BlendMode::Layer(layer)) = m else {
+                panic!("{born_long} resolves to a layer mode");
+            };
+            // …and the legacy table has no code for them.
+            assert!(layer.descriptor_code().is_none(), "{born_long}");
         }
     }
 

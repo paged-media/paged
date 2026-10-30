@@ -559,6 +559,11 @@ enum FrameKind {
         /// A `PushLayer` (an effect layer), not a `BeginBlendGroup`: a
         /// knockout parent does not knock it out.
         layer: bool,
+        /// Dissolve's seed: the group's identity, hashed from its bounds
+        /// (the display list carries no element id), ADR 1034.
+        seed: u32,
+        /// The command that opened the group (a blend bake's key).
+        begin: usize,
     },
     /// Capturing soft-mask artwork until `BeginMaskedContent`.
     SoftMask {
@@ -666,6 +671,44 @@ struct Raster<'a> {
     planes: Option<CmykPlanes>,
     want_planes: bool,
     next_id: u64,
+    /// Collect a [`BlendBake`] for every group in one of Photoshop's
+    /// blend modes ([`rasterize_with_blend_bakes`]).
+    bakes: Option<Vec<BlendBake>>,
+}
+
+pub use crate::BlendBake;
+
+/// Rasterise `list` as [`rasterize`] does and hand back a [`BlendBake`]
+/// for every group in one of Photoshop's blend modes, in the order the
+/// groups close. The image is bit-identical to [`rasterize`]'s.
+pub fn rasterize_with_blend_bakes(
+    list: &DisplayList,
+    options: &RasterOptions,
+) -> (RgbaImage, Vec<BlendBake>) {
+    let (image, _, bakes) = rasterize_inner_with(list, options, false, true);
+    (image, bakes)
+}
+
+/// Does `list` hold a group in one of Photoshop's eleven blend modes
+/// (ADR 1034)? Those are the pages a lane without a backdrop-reading
+/// composite has to have baked.
+pub fn has_photoshop_blend(list: &DisplayList) -> bool {
+    list.commands.iter().any(|c| match c {
+        DisplayCommand::BeginBlendGroup { blend_mode, .. }
+        | DisplayCommand::PushLayer { blend_mode, .. }
+        | DisplayCommand::FillPathBlend { blend_mode, .. } => !blend_mode.is_native(),
+        _ => false,
+    })
+}
+
+/// Dissolve's seed for a group: its page-space bounds' bit patterns.
+fn group_seed(bounds: paged_compose::Rect) -> u32 {
+    paged_blend::seed_of(&[
+        bounds.x.to_bits(),
+        bounds.y.to_bits(),
+        bounds.w.to_bits(),
+        bounds.h.to_bits(),
+    ])
 }
 
 impl Raster<'_> {
@@ -1203,6 +1246,7 @@ impl Raster<'_> {
                         *knockout,
                         None,
                         info,
+                        idx,
                     );
                 }
                 DisplayCommand::PushLayer {
@@ -1221,6 +1265,7 @@ impl Raster<'_> {
                         false,
                         Some(*effect),
                         info,
+                        idx,
                     );
                 }
                 DisplayCommand::InnerShadow {
@@ -1364,6 +1409,7 @@ impl Raster<'_> {
         knockout: bool,
         effect: Option<LayerEffect>,
         info: GroupInfo,
+        begin: usize,
     ) {
         let scale = self.scale;
         let opacity = opacity.clamp(0.0, 1.0);
@@ -1482,6 +1528,8 @@ impl Raster<'_> {
                 },
                 pixel_fx: effect.filter(paged_compose::layer_fx::is_per_pixel),
                 layer: effect.is_some(),
+                seed: group_seed(bounds),
+                begin,
             },
         });
     }
@@ -1507,7 +1555,7 @@ impl Raster<'_> {
         };
         let Frame { surface, kind } = frame;
         let mut pixel_fx = None;
-        let (blend, opacity, backdrop_copied, blur_sigma_px, layer) = match kind {
+        let (blend, opacity, backdrop_copied, blur_sigma_px, layer, seed, begin) = match kind {
             FrameKind::Direct { clip_floor } => {
                 let surface = self.active();
                 while surface.clips.len() >= clip_floor && !surface.clips.is_empty() {
@@ -1519,7 +1567,7 @@ impl Raster<'_> {
                 // A capture frame is consumed by BeginMaskedContent; one
                 // that reaches here came from a malformed list — composite
                 // it as an ordinary group rather than lose it.
-                (BlendMode::Normal, 1.0, false, 0.0, true)
+                (BlendMode::Normal, 1.0, false, 0.0, true, 0, 0)
             }
             FrameKind::Group {
                 blend,
@@ -1528,10 +1576,20 @@ impl Raster<'_> {
                 blur_sigma_px,
                 layer,
                 pixel_fx: fx,
+                seed,
+                begin,
                 ..
             } => {
                 pixel_fx = fx;
-                (blend, opacity, backdrop_copied, blur_sigma_px, layer)
+                (
+                    blend,
+                    opacity,
+                    backdrop_copied,
+                    blur_sigma_px,
+                    layer,
+                    seed,
+                    begin,
+                )
             }
         };
         let Some(mut group) = surface else {
@@ -1569,7 +1627,8 @@ impl Raster<'_> {
             })
         );
         if !layer && parent_has_knockout {
-            self.knockout_member(pixmap, goff, blend, opacity);
+            self.knockout_member(pixmap, goff, blend, opacity, seed);
+            self.record_bake(blend, begin, goff, gw, gh);
             return;
         }
 
@@ -1596,6 +1655,34 @@ impl Raster<'_> {
             return;
         }
 
+        if !blend.is_native() {
+            // ADR 1034: one of Photoshop's modes, composited here against
+            // the pixels it lands on, through the parent's clip.
+            let (parent, res, scratch) = self.split();
+            let dst = (goff.0 - parent.offset.0, goff.1 - parent.offset.1);
+            let clip = parent.clip_coverage(scratch, res, dst.0, dst.1, gw, gh);
+            let (pw, ph, origin) = (parent.w, parent.h, parent.offset);
+            let data = parent.pixels(res);
+            blend_region(
+                data,
+                pw,
+                ph,
+                dst,
+                pixmap.data_as_u8_slice(),
+                gw,
+                gh,
+                BlendStep {
+                    mode: blend,
+                    opacity,
+                    origin,
+                    seed,
+                },
+                clip.as_deref(),
+            );
+            self.record_bake(blend, begin, goff, gw, gh);
+            return;
+        }
+
         let (parent, res, _) = self.split();
         let dst = (goff.0 - parent.offset.0, goff.1 - parent.offset.1);
         parent.draw_image(
@@ -1607,12 +1694,42 @@ impl Raster<'_> {
         );
     }
 
+    /// After a group in one of Photoshop's modes composited: keep what
+    /// the surface it landed on now holds over the group's buffer (cut
+    /// to the page), when bakes are being collected.
+    fn record_bake(&mut self, blend: BlendMode, begin: usize, goff: (i32, i32), gw: u32, gh: u32) {
+        if blend.is_native() || self.bakes.is_none() {
+            return;
+        }
+        let x0 = goff.0.max(0);
+        let y0 = goff.1.max(0);
+        let x1 = (goff.0 + gw as i32).min(self.px_w as i32);
+        let y1 = (goff.1 + gh as i32).min(self.px_h as i32);
+        if x1 <= x0 || y1 <= y0 {
+            return;
+        }
+        let (w, h) = ((x1 - x0) as u32, (y1 - y0) as u32);
+        let rgba = self.snapshot(x0, y0, w, h, true);
+        paged_compose::perf::count(|c| c.blend_cpu_composites += 1);
+        if let Some(bakes) = self.bakes.as_mut() {
+            bakes.push(BlendBake {
+                begin,
+                x: x0,
+                y: y0,
+                w,
+                h,
+                rgba,
+            });
+        }
+    }
+
     fn knockout_member(
         &mut self,
         member: Pixmap,
         goff: (i32, i32),
         blend: BlendMode,
         opacity: f32,
+        seed: u32,
     ) {
         let (gw, gh) = (member.width() as u32, member.height() as u32);
         let (base, parent_off, pw, ph) = {
@@ -1636,13 +1753,33 @@ impl Raster<'_> {
         element.px.data_as_u8_slice_mut().copy_from_slice(&start);
         element.has_base = true;
         let coverage = member.data_as_u8_slice().to_vec();
-        element.draw_image(
-            &mut self.res,
-            Arc::new(member),
-            Affine::IDENTITY,
-            nearest().with_alpha(opacity),
-            vello_map::blend_to_peniko(blend),
-        );
+        if blend.is_native() {
+            element.draw_image(
+                &mut self.res,
+                Arc::new(member),
+                Affine::IDENTITY,
+                nearest().with_alpha(opacity),
+                vello_map::blend_to_peniko(blend),
+            );
+        } else {
+            let data = element.pixels(&mut self.res);
+            blend_region(
+                data,
+                gw,
+                gh,
+                (0, 0),
+                member.data_as_u8_slice(),
+                gw,
+                gh,
+                BlendStep {
+                    mode: blend,
+                    opacity,
+                    origin: goff,
+                    seed,
+                },
+                None,
+            );
+        }
         element.flush(&mut self.res);
         let res = &mut self.res;
         let scratch = &mut self.scratch;
@@ -2014,6 +2151,91 @@ fn copy_region(src: &[u8], sw: i32, sh: i32, x: i32, y: i32, w: u32, h: u32) -> 
         out[di..di + n].copy_from_slice(&src[si..si + n]);
     }
     out
+}
+
+/// The arithmetic of one Photoshop-mode composite ([`blend_region`]).
+#[derive(Clone, Copy)]
+struct BlendStep {
+    mode: BlendMode,
+    opacity: f32,
+    /// Page pixel of the target's `(0, 0)`: Dissolve's noise is a
+    /// function of the device pixel.
+    origin: (i32, i32),
+    seed: u32,
+}
+
+/// ADR 1034 — composite `src` onto `dst` at `at` (both premultiplied
+/// sRGB8) with one of Photoshop's modes, by `paged-blend`'s formulas on
+/// the encoded values (the space `vello_cpu` and Photoshop blend in),
+/// then weigh the result by the target's `clip` over the region.
+#[allow(clippy::too_many_arguments)]
+fn blend_region(
+    dst: &mut [u8],
+    dw: u32,
+    dh: u32,
+    at: (i32, i32),
+    src: &[u8],
+    sw: u32,
+    sh: u32,
+    step: BlendStep,
+    clip: Option<&[u8]>,
+) {
+    let opacity = step.opacity.clamp(0.0, 1.0);
+    const K: f32 = 1.0 / 255.0;
+    for j in 0..sh as i32 {
+        let py = j + at.1;
+        if py < 0 || py >= dh as i32 {
+            continue;
+        }
+        for i in 0..sw as i32 {
+            let px = i + at.0;
+            if px < 0 || px >= dw as i32 {
+                continue;
+            }
+            let s_idx = (j as u32 * sw + i as u32) as usize;
+            let s = s_idx * 4;
+            // A transparent source pixel is a no-op under every mode.
+            if src[s + 3] == 0 {
+                continue;
+            }
+            let t = clip.map_or(1.0, |c| c[s_idx] as f32 * K);
+            if t <= 0.0 {
+                continue;
+            }
+            let d = ((py as u32 * dw + px as u32) * 4) as usize;
+            let a = [
+                dst[d] as f32 * K,
+                dst[d + 1] as f32 * K,
+                dst[d + 2] as f32 * K,
+                dst[d + 3] as f32 * K,
+            ];
+            let b = [
+                src[s] as f32 * K,
+                src[s + 1] as f32 * K,
+                src[s + 2] as f32 * K,
+                src[s + 3] as f32 * K,
+            ];
+            let r = if step.mode == BlendMode::Dissolve {
+                paged_blend::composite_dissolve(
+                    a,
+                    b,
+                    opacity,
+                    (px + step.origin.0) as u32,
+                    (py + step.origin.1) as u32,
+                    step.seed,
+                )
+            } else {
+                paged_blend::composite(a, b, opacity, step.mode)
+            };
+            let q = |v: f32| (v * 255.0).round().clamp(0.0, 255.0) as u8;
+            let out_a = q(a[3] + (r[3] - a[3]) * t);
+            for ch in 0..3 {
+                // Premultiplied channels never exceed alpha.
+                dst[d + ch] = q(a[ch] + (r[ch] - a[ch]) * t).min(out_a);
+            }
+            dst[d + 3] = out_a;
+        }
+    }
 }
 
 /// R-10 — fade `dst` toward `src` (both premultiplied) over `src`'s
@@ -2408,6 +2630,7 @@ pub fn rasterize_layer(
         planes: None,
         want_planes: false,
         next_id: 0,
+        bakes: None,
     };
     let options = RasterOptions {
         dpi,
@@ -2446,6 +2669,16 @@ fn rasterize_inner(
     options: &RasterOptions,
     want_separation: bool,
 ) -> (RgbaImage, Option<CmykPlanes>) {
+    let (image, planes, _) = rasterize_inner_with(list, options, want_separation, false);
+    (image, planes)
+}
+
+fn rasterize_inner_with(
+    list: &DisplayList,
+    options: &RasterOptions,
+    want_separation: bool,
+    want_bakes: bool,
+) -> (RgbaImage, Option<CmykPlanes>, Vec<BlendBake>) {
     let (px_w, px_h) = options.pixel_size();
     let scale = options.dpi / 72.0;
     let paper = premul_rgba8(options.background);
@@ -2467,12 +2700,14 @@ fn rasterize_inner(
         planes: None,
         want_planes: want_separation || has_cmyk_overprint(list),
         next_id: 0,
+        bakes: want_bakes.then(Vec::new),
     };
     raster.run(options);
     let Raster {
         mut page,
         mut res,
         planes,
+        bakes,
         ..
     } = raster;
     page.flush(&mut res);
@@ -2500,7 +2735,7 @@ fn rasterize_inner(
         Some(img)
     }
     .unwrap_or_else(|| RgbaImage::from_pixel(px_w, px_h, Rgba([0, 0, 0, 0])));
-    (image, planes)
+    (image, planes, bakes.unwrap_or_default())
 }
 
 /// `data` (premultiplied RGBA8) over the opaque or translucent `paper`:
@@ -5807,5 +6042,140 @@ mod tests {
             at(&img, 10, 10)[0] < 15,
             "stray markers must leave the page drawable"
         );
+    }
+
+    fn transparent_opts() -> RasterOptions {
+        let mut opts = RasterOptions::new(crate::blend_fixtures::W, crate::blend_fixtures::H);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(0.0, 0.0, 0.0, 0.0);
+        opts
+    }
+
+    /// Engine ADR 1034 — every Photoshop mode composites by
+    /// `paged-blend`'s formulas on the pixels it lands on: the group's
+    /// render equals the formula applied to the backdrop's render and the
+    /// source's own (isolated) render, within a rounding step.
+    #[test]
+    #[allow(non_snake_case)]
+    fn photoshop_modes_composite_by_the_shared_formulas__feat__effects_transparency_blend_modes_27()
+    {
+        use crate::blend_fixtures::*;
+        let opts = transparent_opts();
+        let mut b = DisplayList::new();
+        backdrop(&mut b);
+        let backdrop_px = rasterize(&b, &opts).into_raw();
+        let mut s = DisplayList::new();
+        source(&mut s);
+        let source_px = rasterize(&s, &opts).into_raw();
+        for mode in photoshop_modes() {
+            if mode == BlendMode::Dissolve {
+                continue;
+            }
+            for opacity in [1.0f32, 0.6] {
+                let got = rasterize(&scene(mode, opacity), &opts).into_raw();
+                let mut worst = 0u8;
+                for i in 0..got.len() / 4 {
+                    let q = i * 4;
+                    let f = |p: &[u8]| {
+                        [
+                            p[q] as f32 / 255.0,
+                            p[q + 1] as f32 / 255.0,
+                            p[q + 2] as f32 / 255.0,
+                            p[q + 3] as f32 / 255.0,
+                        ]
+                    };
+                    let want =
+                        paged_blend::composite(f(&backdrop_px), f(&source_px), opacity, mode);
+                    for c in 0..4 {
+                        let w = (want[c] * 255.0).round() as u8;
+                        worst = worst.max(w.abs_diff(got[q + c]));
+                    }
+                }
+                assert!(worst <= 2, "{mode:?} at {opacity}: worst {worst}");
+                assert_ne!(
+                    got,
+                    rasterize(&scene(BlendMode::Normal, opacity), &opts).into_raw(),
+                    "{mode:?} differs from Normal"
+                );
+            }
+        }
+    }
+
+    /// Dissolve: deterministic, and every pixel is either the backdrop or
+    /// the source made opaque — at 50 % about half the source's pixels.
+    #[test]
+    #[allow(non_snake_case)]
+    fn dissolve_dithers_deterministically__feat__effects_transparency_blend_modes_27() {
+        use crate::blend_fixtures::*;
+        let opts = transparent_opts();
+        let a = rasterize(&scene(BlendMode::Dissolve, 0.5), &opts).into_raw();
+        let b = rasterize(&scene(BlendMode::Dissolve, 0.5), &opts).into_raw();
+        assert_eq!(a, b, "the same render twice");
+        let mut back = DisplayList::new();
+        backdrop(&mut back);
+        let backdrop_px = rasterize(&back, &opts).into_raw();
+        // Inside the opaque warm rectangle over the white band: each
+        // pixel is white or the warm colour, never a blend.
+        let warm = premul_rgba8(ComposeColor::rgba(0.8, 0.45, 0.1, 1.0));
+        let (mut kept, mut total) = (0, 0);
+        for y in 9..13u32 {
+            for x in 50..56u32 {
+                let q = ((y * W as u32 + x) * 4) as usize;
+                let px = [a[q], a[q + 1], a[q + 2], a[q + 3]];
+                let under = [
+                    backdrop_px[q],
+                    backdrop_px[q + 1],
+                    backdrop_px[q + 2],
+                    backdrop_px[q + 3],
+                ];
+                assert!(px == warm || px == under, "({x},{y}) {px:?}");
+                total += 1;
+                kept += (px == warm) as u32;
+            }
+        }
+        assert!(kept > 0 && kept < total, "dithered: {kept}/{total}");
+    }
+
+    /// A fill whose own blend is a Photoshop mode is lifted into a group
+    /// of that mode by the build pass, and then composites alike.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_photoshop_fill_blend_lifts_into_a_group__feat__effects_transparency_blend_modes_27() {
+        use crate::blend_fixtures::*;
+        let opts = transparent_opts();
+        let mut list = DisplayList::new();
+        backdrop(&mut list);
+        let mut src = DisplayList::new();
+        source(&mut src);
+        for cmd in src.commands {
+            if let DisplayCommand::FillPath {
+                path_id,
+                paint,
+                transform,
+            } = cmd
+            {
+                let data = src.paths.get(path_id).cloned().unwrap();
+                let id = list.paths.push_anon(data);
+                list.commands.push(DisplayCommand::FillPathBlend {
+                    path_id: id,
+                    paint,
+                    transform,
+                    blend_mode: BlendMode::LinearBurn,
+                });
+            }
+        }
+        assert_eq!(paged_compose::lift_photoshop_fill_blends(&mut list), 2);
+        assert!(!list.commands.iter().any(|c| matches!(
+            c,
+            DisplayCommand::FillPathBlend { blend_mode, .. } if !blend_mode.is_native()
+        )));
+        let got = rasterize(&list, &opts).into_raw();
+        let plain = {
+            let mut l = DisplayList::new();
+            backdrop(&mut l);
+            source(&mut l);
+            rasterize(&l, &opts).into_raw()
+        };
+        assert_ne!(got, plain, "linear burn is not normal");
     }
 }

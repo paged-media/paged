@@ -7609,6 +7609,7 @@ impl CanvasModel {
         out.extend(crate::export_losses::effect_stack_losses(&self.scene));
         out.extend(crate::export_losses::appearance_losses(&self.scene));
         out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
+        out.extend(crate::export_losses::blend_mode_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"

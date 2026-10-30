@@ -580,7 +580,7 @@ mod tests {
                     hardness: 1.0,
                 }))),
                 flip: Some(true),
-                blend_mode: Some(BlendMode::ColorBurn),
+                blend_mode: Some(BlendMode::Layer(paged_blend::BlendMode::ColorBurn)),
                 use_scatter: Some(true),
                 spacing: Some(0.4),
                 count: Some(2.0),
@@ -752,7 +752,7 @@ mod tests {
             class_id: "PbTl".into(),
             flow: 80.0,
             opacity: 60.0,
-            blend_mode: BlendMode::Normal,
+            blend_mode: BlendMode::NORMAL,
             descriptor: tool,
         });
         let f = AbrFile::parse(&write_abr(&[b.clone()], &[])).unwrap();

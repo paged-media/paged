@@ -104,6 +104,22 @@ fn push_str(out: &mut Vec<(&'static str, String)>, key: &'static str, v: &Option
     }
 }
 
+/// The IDML `BlendMode` value for a model blend mode: InDesign's sixteen
+/// as they are; Photoshop's eleven (engine ADR 1034) as the nearest of
+/// the sixteen, which `idml_export_losses` reports. Text the engine does
+/// not know passes through unchanged.
+pub(crate) fn idml_blend(mode: &str) -> String {
+    paged_blend::BlendMode::from_name(mode)
+        .map_or(mode, |m| m.idml_name())
+        .to_string()
+}
+
+fn push_blend(out: &mut Vec<(&'static str, String)>, key: &'static str, v: &Option<String>) {
+    if let Some(v) = v {
+        out.push((key, idml_blend(v)));
+    }
+}
+
 fn push_bool(out: &mut Vec<(&'static str, String)>, key: &'static str, v: Option<bool>) {
     if let Some(v) = v {
         out.push((key, v.to_string()));
@@ -180,7 +196,7 @@ fn write_blending(
     let mut attrs: Vec<(&'static str, String)> = Vec::new();
     push_f32(&mut attrs, "Opacity", b.opacity);
     if let Some(m) = b.blend_mode {
-        attrs.push(("BlendMode", m.to_string()));
+        attrs.push(("BlendMode", idml_blend(m)));
     }
     if b.isolate_blending {
         attrs.push(("IsolateBlending", "true".to_string()));
@@ -225,7 +241,7 @@ fn write_setting(
             ("KnockedOut", d.knocked_out.unwrap_or(true).to_string()),
         ];
         push_str(&mut attrs, "EffectColor", &d.effect_color);
-        push_str(&mut attrs, "BlendMode", &d.blend_mode);
+        push_blend(&mut attrs, "BlendMode", &d.blend_mode);
         push_f32(&mut attrs, "Spread", d.spread_pct);
         push_f32(&mut attrs, "Noise", d.noise_pct);
         push_bool(&mut attrs, "HonorOtherEffects", d.honor_other_effects);
@@ -245,7 +261,7 @@ fn write_setting(
         push_f32(&mut attrs, "Angle", s.angle_deg);
         push_f32(&mut attrs, "ChokeAmount", s.choke_pct);
         push_f32(&mut attrs, "Noise", s.noise_pct);
-        push_str(&mut attrs, "BlendMode", &s.blend_mode);
+        push_blend(&mut attrs, "BlendMode", &s.blend_mode);
         push_str(&mut attrs, "EffectColor", &s.effect_color);
         push_bool(&mut attrs, "UseGlobalLight", s.use_global_light);
         emit_empty_with_attrs(writer, "InnerShadowSetting", &attrs)?;
@@ -256,7 +272,7 @@ fn write_setting(
         push_f32(&mut attrs, "Size", g.size);
         push_f32(&mut attrs, "Spread", g.spread_pct);
         push_f32(&mut attrs, "Noise", g.noise_pct);
-        push_str(&mut attrs, "BlendMode", &g.blend_mode);
+        push_blend(&mut attrs, "BlendMode", &g.blend_mode);
         push_str(&mut attrs, "EffectColor", &g.effect_color);
         push_str(&mut attrs, "Technique", &g.technique);
         emit_empty_with_attrs(writer, "OuterGlowSetting", &attrs)?;
@@ -268,7 +284,7 @@ fn write_setting(
         // InDesign's inner glow has no ChokeAmount: its choke is `Spread`.
         push_f32(&mut attrs, "Spread", g.choke_pct);
         push_f32(&mut attrs, "Noise", g.noise_pct);
-        push_str(&mut attrs, "BlendMode", &g.blend_mode);
+        push_blend(&mut attrs, "BlendMode", &g.blend_mode);
         push_str(
             &mut attrs,
             "Source",
@@ -296,8 +312,8 @@ fn write_setting(
             "Technique",
             &b.technique.as_deref().map(bevel_technique),
         );
-        push_str(&mut attrs, "HighlightBlendMode", &b.highlight_blend_mode);
-        push_str(&mut attrs, "ShadowBlendMode", &b.shadow_blend_mode);
+        push_blend(&mut attrs, "HighlightBlendMode", &b.highlight_blend_mode);
+        push_blend(&mut attrs, "ShadowBlendMode", &b.shadow_blend_mode);
         push_bool(&mut attrs, "UseGlobalLight", b.use_global_light);
         emit_empty_with_attrs(writer, "BevelAndEmbossSetting", &attrs)?;
     }
@@ -307,7 +323,7 @@ fn write_setting(
         push_f32(&mut attrs, "Size", s.size);
         push_f32(&mut attrs, "Angle", s.angle_deg);
         push_f32(&mut attrs, "Distance", s.distance);
-        push_str(&mut attrs, "BlendMode", &s.blend_mode);
+        push_blend(&mut attrs, "BlendMode", &s.blend_mode);
         push_str(&mut attrs, "EffectColor", &s.effect_color);
         if let Some(i) = s.invert {
             attrs.push(("InvertEffect", i.to_string()));
