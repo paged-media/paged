@@ -522,6 +522,11 @@ export const HOST_FEATURES: readonly string[] = [
   // refuses the path (an outcome) and reads no row. A bundle that would
   // otherwise bake an effect into pixels asks this flag first.
   "document.effectStack@1",
+  // Engine ADR 1042 (protocol 78) — live vector effects: the vector kinds
+  // on `frameEffectStack`, `groupEffectStack` (a group's Pathfinder
+  // effect) and the `expandAppearance` op. STATIC: the worker handshake
+  // pins protocol 78, which applies them.
+  "document.vectorEffects@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never

@@ -1769,6 +1769,7 @@
     "groupIsolateBlending",
     "groupKnockout",
     "groupClip",
+    "groupEffectStack",
     "symbolInstanceTint",
     "symbolInstanceNineSlice",
     "frameDropShadowBlendMode",
@@ -2044,6 +2045,7 @@
     "placeSymbolInstance",
     "breakSymbolLink",
     "deleteSymbol",
+    "expandAppearance",
     "onMaster",
     "createMaster",
     "deleteMaster",
@@ -6483,6 +6485,19 @@
       "wire": "bool",
       "nullable": false,
       "default": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "groupEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
       "access": "readWrite",
       "bindable": true
     },
@@ -20090,6 +20105,23 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "bool"
+      },
+      {
+        "addressKind": "frame",
+        "path": "groupEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
       },
       {
         "addressKind": "frame",
