@@ -13503,9 +13503,21 @@ impl CanvasModel {
         hide: &[crate::element_selection::ElementId],
         only: &[crate::element_selection::ElementId],
     ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
+        self.build_page_filtered_in(self.scene.clone(), page_id, hide, only)
+    }
+
+    /// [`build_page_filtered`](Self::build_page_filtered) over `scene`, a
+    /// copy of the model's scene a caller may have added to (engine ADR
+    /// 10XX's snapshot story).
+    pub(crate) fn build_page_filtered_in(
+        &self,
+        mut scene: Document,
+        page_id: &PageId,
+        hide: &[crate::element_selection::ElementId],
+        only: &[crate::element_selection::ElementId],
+    ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
         use crate::element_selection::ElementId;
         use std::collections::HashSet;
-        let mut scene = self.scene.clone();
         let spreads = || {
             scene
                 .spreads

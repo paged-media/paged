@@ -5795,10 +5795,88 @@ mod wasm {
         .await
     }
 
-    /// Rasterize a fill layer or smart object (its render becomes pixels).
+    /// Rasterize a fill layer, smart object or type layer (its render
+    /// becomes pixels).
     #[wasm_bindgen]
     pub fn layers_rasterize(index: usize) -> Result<(), JsValue> {
         recorded_edit("Rasterize Layer", None, |st| st.rasterize(index))
+    }
+
+    /// Layer ▸ New ▸ Type Layer (WP5.10): a type layer of `source` (the
+    /// `TypeSource` JSON) whose pixels are the engine's render `rgba`
+    /// (`w × h`, its top-left at canvas `(x, y)`), bent by the source's
+    /// warp on the GPU. One undo step. An empty `name` names it after the
+    /// text.
+    #[wasm_bindgen]
+    pub async fn layers_add_type(
+        source: &str,
+        rgba: Vec<u8>,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        name: &str,
+    ) -> Result<usize, JsValue> {
+        let source =
+            crate::layers::TypeSource::from_json(source).map_err(|e| JsValue::from_str(&e))?;
+        let render = crate::layers::type_layer::TypeRender { rgba, x, y, w, h };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        let (cw, ch) = with_stack(|d| Ok((d.stack.width(), d.stack.height())))?;
+        let px = render
+            .warped(ctx.as_deref(), &source.warp, cw, ch)
+            .await
+            .map_err(ingest_err)?;
+        recorded_edit("New Type Layer", None, |st| {
+            st.add_type_layer(name, source, px)
+        })
+    }
+
+    /// A type layer's new source and render (an edit of its text, styles,
+    /// frame or warp). Writes sharing a non-empty `session` merge into one
+    /// undo step: one per editing session on the canvas.
+    #[wasm_bindgen]
+    pub async fn layers_set_type(
+        index: usize,
+        source: &str,
+        rgba: Vec<u8>,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        session: &str,
+    ) -> Result<(), JsValue> {
+        let source =
+            crate::layers::TypeSource::from_json(source).map_err(|e| JsValue::from_str(&e))?;
+        let render = crate::layers::type_layer::TypeRender { rgba, x, y, w, h };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        let (cw, ch) = with_stack(|d| Ok((d.stack.width(), d.stack.height())))?;
+        let px = render
+            .warped(ctx.as_deref(), &source.warp, cw, ch)
+            .await
+            .map_err(ingest_err)?;
+        let merge = (!session.is_empty()).then(|| format!("type:{index}:{session}"));
+        recorded_edit("Edit Type", merge, |st| st.set_type(index, source, px))
+    }
+
+    /// A type layer's source as JSON, with `"stale"` (its pixels need a
+    /// new render); `""` for any other layer.
+    #[wasm_bindgen]
+    pub fn layers_type_source(index: usize) -> Result<String, JsValue> {
+        with_stack(|d| {
+            Ok(d.stack
+                .layers()
+                .get(index)
+                .and_then(|l| l.type_layer())
+                .map(|t| {
+                    format!(
+                        "{{\"stale\":{},\"fromPsd\":{},\"source\":{}}}",
+                        t.stale,
+                        t.psd.is_some(),
+                        t.source.to_json()
+                    )
+                })
+                .unwrap_or_default())
+        })
     }
 
     /// Fill opacity 0–1 (a drag is one undo step).
@@ -8289,7 +8367,7 @@ mod wasm {
             },
         );
         format!(
-            ",\"style\":[{}],\"styleOn\":{},\"styleOptions\":{},\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{}}}",
+            ",\"style\":[{}],\"styleOn\":{},\"styleOptions\":{},\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{},\"typeStale\":{}}}",
             l.ext
                 .style
                 .as_ref()
@@ -8313,6 +8391,8 @@ mod wasm {
                 .map_or_else(|| "null".to_string(), |a| format!("\"{}\"", a.kind_name())),
             l.fill()
                 .map_or_else(|| "null".to_string(), |f| format!("\"{}\"", f.source.kind_name())),
+            l.type_layer()
+                .map_or_else(|| "null".to_string(), |t| t.stale.to_string()),
         )
         .trim_end_matches('}')
         .to_string()

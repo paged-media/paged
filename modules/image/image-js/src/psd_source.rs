@@ -68,6 +68,8 @@ pub enum KindState {
     Smart,
     Adjustment(Box<crate::layers::Adjustment>),
     Fill(crate::layers::FillSource),
+    /// A type layer (image ADR 474): its source as JSON.
+    Type(String),
 }
 
 /// Two sources are the same source only by identity.
@@ -127,6 +129,7 @@ fn kind_state(l: &Layer) -> KindState {
         LayerKind::Smart(_) => KindState::Smart,
         LayerKind::Adjustment(a) => KindState::Adjustment(a.clone()),
         LayerKind::Fill(f) => KindState::Fill(f.source.clone()),
+        LayerKind::Type(t) => KindState::Type(t.source.to_json()),
     }
 }
 
