@@ -184,6 +184,9 @@ const PALETTE = {
   // Slide W4: pictures and icons, the format painter, the SmartArt text pane.
   "media.paged.slide.command.insertPicture": "Insert/Pictures…",
   "media.paged.slide.command.insertIcon": "Insert/Icons…",
+  // Slide W4: video and audio (ADR 718).
+  "media.paged.slide.command.insertVideo": "Insert/Video…",
+  "media.paged.slide.command.insertAudio": "Insert/Audio…",
   "media.paged.slide.command.copyFormat": "Slide/Copy formatting",
   "media.paged.slide.command.pasteFormat": "Slide/Paste formatting",
   "media.paged.slide.command.smartArtText": "Slide/SmartArt text pane",
@@ -316,6 +319,8 @@ const DECLARED = {
     // Slide W4's palette twins and SmartArt's text, for scripts.
     "media.paged.slide.command.insertPicture",
     "media.paged.slide.command.insertIcon",
+    "media.paged.slide.command.insertVideo",
+    "media.paged.slide.command.insertAudio",
     "media.paged.slide.command.copyFormat",
     "media.paged.slide.command.pasteFormat",
     "media.paged.slide.command.smartArtText",
@@ -1426,6 +1431,8 @@ test.describe("plugin surface · paged.slide", () => {
       "media.paged.slide.command.insertShapes": "Insert shape…",
       "media.paged.slide.command.insertPicture": "Insert picture…",
       "media.paged.slide.command.insertIcon": "Insert icon…",
+      "media.paged.slide.command.insertVideo": "Insert video…",
+      "media.paged.slide.command.insertAudio": "Insert audio…",
       "media.paged.slide.command.copyFormat": "Copy formatting",
       "media.paged.slide.command.pasteFormat": "Paste formatting",
       "media.paged.slide.command.smartArtText": "SmartArt text pane",
