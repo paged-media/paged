@@ -387,6 +387,17 @@ fn item_view(spread: &paged_model::Spread, frame: &paged_model::FrameRef) -> Opt
                 .map_or(0, |(p, _)| p);
             return Some((page, json!({ "kind": "Group" })));
         }
+        F::Instance(i) => {
+            let f = spread.instances.get(i)?;
+            (
+                "Instance",
+                &f.self_id,
+                f.bounds,
+                Some(f.item_transform),
+                f.visible,
+                f.locked,
+            )
+        }
     };
     let page = paged_scene::page_index_for_bounds(&spread.pages, bounds, xf).unwrap_or(0);
     let (ox, oy) = spread.pages.get(page).map_or((0.0, 0.0), |p| {

@@ -131,14 +131,35 @@ pub(crate) fn apply_inner(
     match op {
         // ADR 132 — the typed value forms (`Number`, `Enum`, `Ref`) fold into
         // the variants the arms match on, so one apply path serves both.
-        Operation::SetProperty { node, path, value } => match review::format_scope(doc, op) {
-            // Engine ADR 1037 — a range's formatting, recorded while the
-            // document tracks changes.
-            Some(scope) => review::tracked_format(doc, scope, |doc| {
-                apply_set_property(doc, node, *path, &value.normalized())
-            }),
-            None => apply_set_property(doc, node, *path, &value.normalized()),
-        },
+        Operation::SetProperty { node, path, value } => {
+            let value = value.normalized();
+            // Engine ADR 1008 — the effect stack, and the per-field
+            // effect paths on an item that stores one.
+            if effect_stack::stack_target(*path).is_some()
+                && matches!(
+                    node,
+                    NodeId::TextFrame(_)
+                        | NodeId::Rectangle(_)
+                        | NodeId::Oval(_)
+                        | NodeId::Polygon(_)
+                )
+            {
+                return effect_stack::apply_effect_stack(doc, node, *path, &value);
+            }
+            if let Some(result) =
+                effect_stack::apply_effect_field_on_stack(doc, node, *path, &value)
+            {
+                return result;
+            }
+            match review::format_scope(doc, op) {
+                // Engine ADR 1037 — a range's formatting, recorded while the
+                // document tracks changes.
+                Some(scope) => review::tracked_format(doc, scope, |doc| {
+                    apply_set_property(doc, node, *path, &value)
+                }),
+                None => apply_set_property(doc, node, *path, &value),
+            }
+        }
         Operation::InsertNode {
             parent,
             position,
@@ -319,6 +340,59 @@ pub(crate) fn apply_inner(
             story_ids,
             added,
         } => apply_remove_snippet(doc, snippet, spread, *dx, *dy, ids, story_ids, added),
+        Operation::CreateSymbol {
+            symbol_id,
+            name,
+            sources,
+            replace,
+            instance_id,
+            nine_slice,
+        } => symbol::apply_create_symbol(
+            doc,
+            symbol_id,
+            name,
+            sources,
+            *replace,
+            instance_id.as_deref(),
+            *nine_slice,
+        ),
+        Operation::RedefineSymbol {
+            symbol_id,
+            sources,
+            name,
+            nine_slice,
+            replace,
+            instance_id,
+        } => symbol::apply_redefine_symbol(
+            doc,
+            symbol_id,
+            sources,
+            name.as_deref(),
+            nine_slice.as_deref(),
+            *replace,
+            instance_id.as_deref(),
+        ),
+        Operation::PlaceSymbolInstance {
+            symbol_id,
+            spread,
+            transform,
+            instance_id,
+            nine_slice,
+        } => symbol::apply_place_symbol_instance(
+            doc,
+            symbol_id,
+            spread,
+            *transform,
+            instance_id.as_deref(),
+            *nine_slice,
+        ),
+        Operation::BreakSymbolLink {
+            instance,
+            ids,
+            story_ids,
+        } => symbol::apply_break_symbol_link(doc, instance, ids, story_ids),
+        Operation::DeleteSymbol { symbol_id } => symbol::apply_delete_symbol(doc, symbol_id),
+        Operation::RestoreSymbolState { state } => symbol::apply_restore_symbol_state(doc, state),
         Operation::CreateGroup { spec } => apply_create_group(doc, spec),
         Operation::DissolveGroup {
             group_id,
@@ -1301,11 +1375,17 @@ mod batch_page;
 mod character;
 mod conditions;
 mod duplicate_nodes;
+pub(crate) mod effect_stack;
 pub use duplicate_nodes::{duplicate_demand, duplicate_roots, DuplicateDemand};
 mod snippet;
+mod symbol;
 pub use snippet::{
     extract_snippet, parse_snippet, snippet_demand, snippet_roots, ItemSnippet, SnippetResources,
     SNIPPET_FORMAT,
+};
+pub use symbol::{
+    expand_symbols_for_interchange, restore_symbols_from_labels, symbol_break_demand,
+    symbol_break_root, SYMBOLS_LABEL, SYMBOL_INSTANCE_LABEL,
 };
 mod bookmark;
 mod duplicate_page;

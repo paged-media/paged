@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/paged",
-  "version": "0.77.0-dev",
+  "version": "0.78.0-dev",
   "description": "The paged engine: the editing canvas (wire types, document model, WebGPU rendering), its introspection (./introspect) and the document repository (./repo) as wasm for the browser and Node, and the `paged` command line over it, with `paged mcp` for agents.",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "repository": {

@@ -1938,6 +1938,92 @@ export interface RenderSurface {
     pageId: PageId,
     options?: RenderLayersOptions,
   ): Promise<RenderedLayers | null>;
+  /** Extensions ADR 342 — a story the DOCUMENT DOES NOT HOLD, laid out by
+   *  the engine (its composer, justification, hyphenation and the
+   *  document's fonts) in a frame at `story.bounds` on `pageId`, and drawn
+   *  alone on a transparent ground, cropped to what it draws within
+   *  `marginPt` of the frame. The document is not changed: no undo step,
+   *  no item, no id. What paged.image's type layers are made of: their
+   *  text lives in the image, the engine draws it. `null` for an unknown
+   *  page, a story that draws nothing, or an engine without the door:
+   *  `supports("render.story@1")`. */
+  story(
+    pageId: PageId,
+    story: RenderStory,
+    options?: RenderStoryOptions,
+  ): Promise<RenderedElement | null>;
+}
+
+/** Extensions ADR 342 — a story for {@link RenderSurface.story}. Every
+ *  absent value is the document's default paragraph style's. */
+export interface RenderStory {
+  /** The frame, page pt: `[top, left, bottom, right]`. Lines wrap at its
+   *  width; text past its bottom is overset and not drawn. */
+  bounds: [number, number, number, number];
+  paragraphs: RenderStoryParagraph[];
+  verticalJustification?: "top" | "center" | "bottom" | "justify";
+  /** The first line's baseline this far (pt) below the frame's top: what
+   *  places point type exactly on its anchor. Absent: one ascent. */
+  firstBaseline?: number;
+}
+
+/** Extensions ADR 342 — one paragraph of a {@link RenderStory}. */
+export interface RenderStoryParagraph {
+  runs: RenderStoryRun[];
+  /** IDML's names: `LeftAlign`, `CenterAlign`, `RightAlign`,
+   *  `LeftJustified`, `CenterJustified`, `RightJustified`,
+   *  `FullyJustified`. */
+  justification?: string;
+  firstLineIndent?: number;
+  leftIndent?: number;
+  rightIndent?: number;
+  spaceBefore?: number;
+  spaceAfter?: number;
+  hyphenation?: boolean;
+  composer?: "paragraph" | "single";
+}
+
+/** Extensions ADR 342 — one run of a {@link RenderStoryParagraph}: text in
+ *  one set of character attributes. A `\n` in `text` is a forced line
+ *  break. Lengths are pt. */
+export interface RenderStoryRun {
+  text: string;
+  font?: string;
+  fontStyle?: string;
+  pointSize?: number;
+  /** Absent is auto leading. */
+  leading?: number;
+  /** sRGB, 0 to 255 per channel. Absent is the style's (black). */
+  fillRgb?: [number, number, number];
+  /** 1/1000 em. */
+  tracking?: number;
+  baselineShift?: number;
+  /** Percent (100 = none). */
+  horizontalScale?: number;
+  verticalScale?: number;
+  /** Degrees. */
+  skew?: number;
+  underline?: boolean;
+  strikethru?: boolean;
+  ligatures?: boolean;
+  /** IDML's `Normal`, `AllCaps`, `SmallCaps`, `CapToSmallCap`. */
+  capitalization?: string;
+  /** IDML's `Normal`, `Superscript`, `Subscript`. */
+  position?: string;
+}
+
+/** Extensions ADR 342 — how {@link RenderSurface.story} draws. */
+export interface RenderStoryOptions {
+  /** Pixels per inch, 1 to 2400 (default 72: one pixel per pt). */
+  dpi?: number;
+  /** `"rgba"` (the default) or `"png"`. */
+  format?: "png" | "rgba";
+  /** How far past the frame, in pt, the pixels may reach (an italic's
+   *  overhang, a descender below the last line); default 0. */
+  marginPt?: number;
+  /** Crop the image to the pixels drawn (default `true`); `false` keeps
+   *  the frame's box grown by `marginPt`. */
+  trim?: boolean;
 }
 
 /** Extensions ADR 346 — what `host.render.layers` renders. */

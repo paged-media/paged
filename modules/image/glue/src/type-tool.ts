@@ -16,15 +16,15 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The RASTER TYPE tool: a click sets the baseline origin and the panel's
-// Type section supplies the string, family and size.
+// The TYPE tool (WP5.10): Photoshop's horizontal type tool on the image.
 //
-// A CLICK, not a drag, and that is a scope decision rather than a
-// simplification. Dragging would imply a text BOX — wrapping, alignment,
-// overflow, a caret — which is a text engine, and the host already has
-// one that is better at it. This paints a run of shaped glyphs at a
-// point, which is what "raster type" means in the Photoshop catalog's
-// sense: committed glyphs become pixels in the layer.
+// - A CLICK on empty canvas makes a POINT type layer whose first baseline
+//   starts at the click; a DRAG makes PARAGRAPH type in the dragged box.
+// - A click on an existing TYPE layer's text opens its editing session.
+// Either way the text is then typed in the on-canvas overlay
+// (`type-overlay.tsx`), laid out by the engine, and each editing session
+// is one undo step. The type of before — glyphs painted straight into the
+// active layer — is Type ▸ Paint text into layer.
 
 import type {
   BundleHost,
@@ -36,12 +36,17 @@ import type {
 
 import { pageToImage, resolveFrameFit, type FitTransform } from "./frame-fit";
 import type { ImageSession } from "./session";
+import { hitsType } from "./type-layer";
+
+/** Below this many image px a drag is a click. */
+export const TYPE_DRAG_PX = 4;
 
 export function makeTypeGesture(
   host: BundleHost,
   session: ImageSession,
 ): GestureHandler {
   let fit: FitTransform | null = null;
+  let down: [number, number] | null = null;
 
   const ensureFit = async () => {
     fit = await resolveFrameFit(host, session.state().source, "type tool");
@@ -54,29 +59,56 @@ export function makeTypeGesture(
 
     onDeactivate(_reason: DeactivateReason) {
       fit = null;
+      down = null;
+      session.endTypeEdit();
     },
 
     onPointerDown(e: CanvasPointerEvent) {
       if (!e.pagePoint || !fit) return;
-      // The click is the BASELINE origin — where type is positioned
-      // from. Passing the ink's top-left instead would drop every run by
-      // its own ascender, which looks like a bug that moves with the
-      // font.
-      const point = pageToImage(fit, e.pagePoint);
-      const t = session.state().type;
-      if (!t.text) {
-        // Nothing to set. Saying so beats a click that silently does
-        // nothing, which reads as a broken tool.
-        return;
-      }
-      void session.paintText(point, t.text, t.family, t.sizePx);
+      down = pageToImage(fit, e.pagePoint);
     },
 
-    // A click, not a drag — so move and up have nothing to do. Present
-    // because the handler contract requires them, and empty rather than
-    // faked: dragging a type run would imply a text box, which is the
-    // host's job (see the header).
     onPointerMove(_e: CanvasPointerEvent) {},
-    onPointerUp(_e: CanvasPointerEvent) {},
+
+    onPointerUp(e: CanvasPointerEvent) {
+      const start = down;
+      down = null;
+      if (!start || !e.pagePoint || !fit) return;
+      const end = pageToImage(fit, e.pagePoint);
+      void typeAt(session, start, end);
+    },
   };
+}
+
+/** What a type-tool click or drag from `start` to `end` (image px) does. */
+export async function typeAt(
+  session: ImageSession,
+  start: [number, number],
+  end: [number, number],
+): Promise<number | null> {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  if (Math.hypot(dx, dy) >= TYPE_DRAG_PX) {
+    session.endTypeEdit();
+    return session.addTypeLayer({
+      kind: "box",
+      x: Math.min(start[0], end[0]),
+      y: Math.min(start[1], end[1]),
+      width: Math.max(1, Math.abs(dx)),
+      height: Math.max(1, Math.abs(dy)),
+    });
+  }
+  // A click on a type layer's text edits it (the topmost first).
+  const rows = [...session.state().layers.layers].reverse();
+  for (const row of rows) {
+    if (row.kind !== "type" || !row.visible) continue;
+    const src = session.typeLayerSource(row.index);
+    if (src && hitsType(src, start[0], start[1])) {
+      session.setActiveLayer(row.index);
+      session.beginTypeEdit(row.index);
+      return row.index;
+    }
+  }
+  session.endTypeEdit();
+  return session.addTypeLayer({ kind: "point", x: start[0], y: start[1] });
 }

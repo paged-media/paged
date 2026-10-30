@@ -3827,6 +3827,7 @@ dependencies = [
  "paged-color",
  "paged-compose",
  "paged-gen",
+ "paged-gpu",
  "paged-model",
  "paged-raster",
  "paged-renderer",

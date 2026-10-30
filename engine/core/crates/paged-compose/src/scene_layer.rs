@@ -590,7 +590,10 @@ fn build_path(segs: &[ScenePathSeg]) -> PathData {
 /// Items render in submission order, ON TOP of the frame's own content
 /// (the plugin layer is the frontmost content of its frame). A `PushClip`
 /// / `PopClip` pair brackets them so nothing escapes the (possibly
-/// rotated) content box.
+/// rotated) content box. The renderer calls this INSIDE the frame's
+/// object group and effect-stack run, so the frame's opacity, blend mode
+/// and effects apply to the layer with the rest of the frame (engine
+/// ADR 1046); the commands emitted here carry no group of their own.
 ///
 /// `emit_text` lowers a [`SceneItem::Text`] (C-1.1): `paged-compose` has no
 /// fonts, so the RENDERER passes a closure that resolves a face, shapes the

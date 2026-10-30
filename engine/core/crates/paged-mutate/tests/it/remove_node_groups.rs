@@ -129,6 +129,7 @@ fn id_of(spread: &paged_model::Spread, r: FrameRef) -> String {
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i).and_then(|f| f.self_id.clone()),
         FrameRef::Polygon(i) => spread.polygons.get(i).and_then(|f| f.self_id.clone()),
         FrameRef::Group(i) => spread.groups.get(i).and_then(|f| f.self_id.clone()),
+        FrameRef::Instance(i) => spread.instances.get(i).and_then(|f| f.self_id.clone()),
     }
     .unwrap_or_else(|| format!("<dangling {r:?}>"))
 }

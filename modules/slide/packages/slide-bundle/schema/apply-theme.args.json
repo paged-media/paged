@@ -1,0 +1,7 @@
+{
+  "kind": "struct",
+  "fields": {
+    "theme": { "kind": "text" },
+    "variant": { "kind": "text", "optional": true }
+  }
+}

@@ -30,26 +30,71 @@
 // spine. The controller (GuideDragController) tracks the rest of the
 // drag and commits on release; here we only START it.
 
+//
+// Extensions ADR 340 — while an edit context supplies a WORKSPACE (a
+// raster image), the rulers measure IT: zero at its origin, counting in
+// its unit (pixels, inches, …), and a guide dragged out lands in the
+// context instead of on the spread.
+
+import { useContextWorkspace } from "../../catalog/binding-providers";
 import { useCamera } from "../../state/camera-context";
+import { ptPerRulerUnit } from "../../state/context-workspace";
+import { useOptionalDocument } from "../../state/document-context";
 import { useOptionalGuideDrag } from "../../state/guide-drag-context";
+import { layoutPageRects } from "./page-layout";
 import { RULER_LABEL_INSET, rulerMarks } from "./ruler-marks";
+
+/** The frame the rulers count in: document pt per ruler unit and the
+ *  document coordinate of the zero, per axis — the page's (pt from the
+ *  document origin) or the active context's workspace. */
+interface RulerFrame {
+  unit: string | null;
+  ptPerUnit: number;
+  zero: [number, number];
+}
+
+const PAGE_FRAME: RulerFrame = { unit: null, ptPerUnit: 1, zero: [0, 0] };
+
+function useRulerFrame(): RulerFrame {
+  const ctx = useContextWorkspace();
+  const handle = useOptionalDocument()?.handle ?? null;
+  if (!ctx || !handle) return PAGE_FRAME;
+  const ws = ctx.workspace;
+  const index = handle.pageIds.indexOf(ws.pageId);
+  const page = index >= 0 ? layoutPageRects(handle.pageSizesPt)[index] : null;
+  if (!page) return PAGE_FRAME;
+  return {
+    unit: ws.unit.label,
+    ptPerUnit: ptPerRulerUnit(ws),
+    zero: [page.x + ws.origin[0], page.y + ws.origin[1]],
+  };
+}
 
 export function HRuler() {
   const { camera, viewportSize } = useCamera();
   const guideDrag = useOptionalGuideDrag();
+  const frame = useRulerFrame();
   // Labels thinned so the widest one in view fits between two marks
   // (UX audit F-31, ADR 263).
-  const marks = rulerMarks(camera.scale, camera.tx, viewportSize[0] || 0);
+  const marks = rulerMarks(
+    camera.scale * frame.ptPerUnit,
+    camera.tx + frame.zero[0] * camera.scale,
+    viewportSize[0] || 0,
+  );
   return (
     <div
       data-h-ruler
+      data-ruler-unit={frame.unit ?? undefined}
       onPointerDown={
         guideDrag
           ? (e) => {
               // GD-01 — drag a HORIZONTAL guide out of the top ruler.
               if (e.button !== 0) return;
               e.preventDefault();
-              guideDrag.beginCreate("horizontal");
+              guideDrag.beginCreate(
+                "horizontal",
+                frame.unit !== null ? "workspace" : "page",
+              );
             }
           : undefined
       }
@@ -103,17 +148,26 @@ export function HRuler() {
 export function VRulerStrip() {
   const { camera, viewportSize } = useCamera();
   const guideDrag = useOptionalGuideDrag();
-  const marks = rulerMarks(camera.scale, camera.ty, viewportSize[1] || 0);
+  const frame = useRulerFrame();
+  const marks = rulerMarks(
+    camera.scale * frame.ptPerUnit,
+    camera.ty + frame.zero[1] * camera.scale,
+    viewportSize[1] || 0,
+  );
   return (
     <div
       data-v-ruler
+      data-ruler-unit={frame.unit ?? undefined}
       onPointerDown={
         guideDrag
           ? (e) => {
               // GD-01 — drag a VERTICAL guide out of the left ruler.
               if (e.button !== 0) return;
               e.preventDefault();
-              guideDrag.beginCreate("vertical");
+              guideDrag.beginCreate(
+                "vertical",
+                frame.unit !== null ? "workspace" : "page",
+              );
             }
           : undefined
       }

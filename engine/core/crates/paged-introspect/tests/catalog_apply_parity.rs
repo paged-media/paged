@@ -317,7 +317,39 @@ fn every_advertised_schema_names_the_wire_apply_takes() {
         fixture("anchored.idml"),
     ];
     let line = mint_graphic_line(&mut docs[0]);
-    let mut nodes: Vec<(usize, NodeId)> = vec![(0, NodeId::GraphicLine(line))];
+    // Engine ADR 1039 — a symbol of the line, and an instance of it.
+    let spread = docs[0].spreads[0]
+        .spread
+        .self_id
+        .clone()
+        .expect("spread id");
+    apply(
+        &mut docs[0],
+        &Operation::CreateSymbol {
+            symbol_id: "Symbol/probe".into(),
+            name: "Probe".into(),
+            sources: vec![NodeId::GraphicLine(line.clone())],
+            replace: false,
+            instance_id: None,
+            nine_slice: None,
+        },
+    )
+    .expect("a symbol");
+    apply(
+        &mut docs[0],
+        &Operation::PlaceSymbolInstance {
+            symbol_id: "Symbol/probe".into(),
+            spread,
+            transform: [1.0, 0.0, 0.0, 1.0, 100.0, 100.0],
+            instance_id: Some("uprobeinst".into()),
+            nine_slice: None,
+        },
+    )
+    .expect("an instance");
+    let mut nodes: Vec<(usize, NodeId)> = vec![
+        (0, NodeId::GraphicLine(line)),
+        (0, NodeId::Instance("uprobeinst".into())),
+    ];
     for (i, d) in docs.iter().enumerate() {
         for kind in SCOPE {
             if let Some(id) = find_kind(d, kind) {

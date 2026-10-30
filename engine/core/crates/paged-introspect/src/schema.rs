@@ -140,6 +140,8 @@ pub enum Wire {
     SimplifyPath,
     ClosePath,
     PluginMetadata,
+    /// Engine ADR 1008 — `Value::EffectStack`.
+    EffectStack,
 }
 
 /// A schema default. Untagged, so it serialises as the bare value.
@@ -855,6 +857,10 @@ pub fn coerce(schema: &PropertySchema, input: Input<'_>) -> Result<Value, String
                 Wire::TabStops => Value::TabStops(Vec::new()),
                 Wire::ParagraphRule => Value::ParagraphRule(None),
                 Wire::GradientFeather => Value::GradientFeather(None),
+                Wire::EffectStack => Value::EffectStack {
+                    entries: Vec::new(),
+                    prev: None,
+                },
                 // A tri-state bool clears with `Text("")`.
                 Wire::Bool => Value::Text(String::new()),
                 other => return Err(format!("null has no {other:?} form")),
@@ -984,6 +990,10 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
                 Wire::TabStops => Value::TabStops(
                     serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
                 ),
+                Wire::EffectStack => Value::EffectStack {
+                    entries: serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
+                    prev: None,
+                },
                 Wire::Text => Value::Text(
                     items
                         .iter()
@@ -1057,6 +1067,7 @@ pub fn wire_of(value: &Value) -> Option<Wire> {
         Value::TabStops(_) => Wire::TabStops,
         Value::ParagraphRule(_) => Wire::ParagraphRule,
         Value::GradientFeather(_) => Wire::GradientFeather,
+        Value::EffectStack { .. } => Wire::EffectStack,
         Value::GradientStops(_) => Wire::GradientStops,
         Value::SwatchColor(_) => Wire::SwatchColor,
         Value::FramePath { .. } => Wire::FramePath,

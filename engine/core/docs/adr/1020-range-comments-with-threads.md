@@ -1,7 +1,7 @@
 # ADR 1020 — Range comments with threads
 
 - **Status:** Accepted 2026-10-29.
-- **Scope:** rides protocol v77 as a rider. Extends [ADR 172](172-editorial-notes.md):
+- **Scope:** rides protocol v78 as a rider. Extends [ADR 172](172-editorial-notes.md):
   InDesign's notes stay points in the text; a comment covers a range and holds a thread.
   Part of engine wave E3; tracked changes are [ADR 1037](1037-word-change-tracking.md).
   The plugin's `comments.xml`, `commentsExtended.xml` and `commentsIds.xml` are paged.doc

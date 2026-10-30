@@ -92,7 +92,14 @@ canary added is under [Releases](#releases).
   the stack to a group of single-paint items and Release restores it.
 - **Graphic styles and symbols.** A named appearance that objects stay linked to; a named
   artwork definition with placed instances. Both have a panel, and their libraries are
-  stored in the `.paged` file.
+  stored in the `.paged` file. On an engine that keeps symbols (`document.symbols@1`, engine
+  ADR 1039) a symbol is the engine's: an instance draws it, text, gradients and images
+  included, and follows a redefinition at once ([ADR 365](adr/365-live-symbols-on-the-engine-node.md)).
+  There the Symbol Sprayer, Shifter, Scruncher, Sizer, Spinner, Stainer and Screener (a keyless
+  flyout) place instances and change their transform, tint and opacity, one undo step per drag;
+  the 9-Slice Guides tool drags a symbol's guides on the canvas; the Symbols panel chooses a
+  symbol, replaces the selected instances' symbol and edits its options (name, 9-slice guides);
+  and a document with a v0 library has it moved onto the engine's symbols when it opens.
 - **Live paint, pattern, repeat, blend, objects on a path.** Each keeps a stored recipe and
   has a panel plus commands to make, update and release it. The first four insert artwork;
   objects on a path moves the selected objects and creates none. Since WP6.6 a blend takes
@@ -288,7 +295,9 @@ A template can open four parts of a drawing to a filler (extensions ADR 335; cod
   its top layer (the layer that bakes to the frame).
 - **symbolChoice** re-shapes the instance leaf in place (path, paint and link, one batch),
   so the element and its field label survive. Only one-piece symbols can be chosen: a
-  rebuild would mint new elements, which a filler may not, and drop the field's label.
+  rebuild would mint new elements, which a filler may not, and drop the field's label. On an
+  engine that keeps symbols the field targets an instance and writes the symbol it draws
+  (`symbolInstanceSymbol`): any symbol can be chosen, and the instance keeps its id.
 - **textOnPath** reads and writes the story on the path. A story on a path has no text frame;
   the engine decides it by the item that carries the path, so the field's `text.edit` reaches
   it (engine ADR 1000, amendment of 2026-10-23).
@@ -395,8 +404,11 @@ Recolouring a raster is pixel work and is not registered.
   **Repeat** and **blend** stop at 200 instances or steps. A blend refuses an open key
   against a closed one, groups of different sizes, a linear gradient against a radial one,
   and stops in different places when a midpoint other than 50 % would have to be resampled.
-- **Symbols.** An instance is re-created geometry with flat paint: no text, gradient stops,
-  image content or per-instance override. Redefine and reset give its items new ids.
+- **Symbols.** Without engine symbols an instance is re-created geometry with flat paint: no
+  text, gradient stops, image content or per-instance override, and redefine and reset give
+  its items new ids. With them, an instance carries a transform, opacity, blend mode and tint
+  only (no Symbol Styler); the Stainer stains with the colour in its own options; migrating a
+  v0 library drops what an instance changed on its own items and its stacking order.
 - **Live paint** has no gap handling and cannot stroke edges (WP6.6 leaves both to the
   engine's arrangement work, WP2.4). The engine's arrangement (engine ADR 1019) takes up to
   1000 inputs and 100 000 faces, and refuses an input past its work budget with a sentence
@@ -486,8 +498,7 @@ Recolouring a raster is pixel work and is not registered.
 - A content type or rendering of its own ([ADR 351](adr/351-shapes-are-native-page-items.md)).
 - A pattern as a paint (a swatch), and a clipping mask over a group of items. Nesting into
   a container is used only for a repeat's clipping.
-- Symbol sets and their tools, nine-slice scaling, per-instance override records (an
-  instance's deviations are its items' own properties); merging,
+- The Symbol Styler, nested symbols and per-item overrides inside an instance; merging,
   importing, exporting and organising graphic styles.
 - A variable-width centreline (a traced stroke has the ink's mean width); a Color Guide
   "save group"; Recolor Artwork's per-row colour editing in the panel (the `map` payload

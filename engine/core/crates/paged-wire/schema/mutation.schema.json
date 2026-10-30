@@ -5720,6 +5720,246 @@
           ]
         },
         {
+          "description": "v78 (engine ADR 1039) — make a SYMBOL named `name` from the page\nitems `element_ids` (copied whole, as a copy takes them: text with\nits story, gradients, placed images, groups). The centre of their\nbox is the symbol's registration point. With `replace` (the\ndefault) the items leave the page and one instance takes their\nplace, drawn where they were; the reply's `createdId` is that\ninstance. `symbol_id` names the symbol (absent: minted, `Symbol/<n>`).\n`nine_slice` sets 9-slice guides, `[left, top, right, bottom]`\ninsets. Refused, by name, for what a copy refuses and for an\ninstance among the items. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "createSymbol"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "elementIds": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ElementId"
+                  }
+                },
+                "symbolId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "replace": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "nineSlice": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number",
+                    "format": "float"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "default": null
+                }
+              },
+              "required": [
+                "name",
+                "elementIds"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v78 (engine ADR 1039) — edit the symbol `symbol_id`: new artwork\nfrom `element_ids` (when given; every instance draws it at once),\na new `name`, new 9-slice guides (`[]` removes them). With\n`replace` (default `true` when items are given) the items become an\ninstance. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "redefineSymbol"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "symbolId": {
+                  "type": "string"
+                },
+                "elementIds": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ElementId"
+                  },
+                  "default": []
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "nineSlice": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number",
+                    "format": "float"
+                  },
+                  "default": null
+                },
+                "replace": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "symbolId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v78 (engine ADR 1039) — place an instance of `symbol_id` on\n`page_id`, its registration point at `at` (page space; absent: the\npage's centre), scaled / rotated by `linear` (`[a, b, c, d]`, absent:\nidentity), on top of the spread's z-order. The reply's `createdId`\nis the instance (`instance:<id>` addresses it). One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "placeSymbolInstance"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "symbolId": {
+                  "type": "string"
+                },
+                "pageId": {
+                  "$ref": "#/$defs/PageId"
+                },
+                "at": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "format": "float"
+                    },
+                    {
+                      "type": "number",
+                      "format": "float"
+                    }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "default": null
+                },
+                "linear": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number",
+                    "format": "float"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "default": null
+                },
+                "nineSlice": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number",
+                    "format": "float"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "default": null
+                }
+              },
+              "required": [
+                "symbolId",
+                "pageId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v78 (engine ADR 1039) — Break Link to Symbol: the instance\n`element_id` becomes its symbol's artwork as ordinary page items,\nwhere it was, in its z slot (a group when there is more than one\nitem or the instance overrides opacity or blending). The reply's\n`minted` lists the new root. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "breakSymbolLink"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "elementId": {
+                  "$ref": "#/$defs/ElementId"
+                }
+              },
+              "required": [
+                "elementId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v78 (engine ADR 1039) — delete the symbol `symbol_id`; its\ninstances are broken into ordinary items first, so nothing on the\npage disappears. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "deleteSymbol"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "symbolId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "symbolId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — insert a `<Section>` anchored at `at_page`.",
           "type": "object",
           "properties": {
@@ -6610,6 +6850,23 @@
           ]
         },
         {
+          "description": "Engine ADR 1039 — a symbol instance. Rides v78 as an additive\nenum member.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "instance"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        },
+        {
           "description": "SDK Phase 3 — addresses a half-open `[start, end)` character\nrange inside a story for character / paragraph property\nwrites. Maps to `paged_mutate::NodeId::StoryRange { ... }`.",
           "type": "object",
           "properties": {
@@ -6977,6 +7234,26 @@
           "description": "Editor-ops — whole gradient-feather replacement on an\neffect-bearing page item (`Value::GradientFeather`). One path\nfor the whole struct — kind + axis + the stop LIST edit\ntogether, and per-field shapes can't carry a list.",
           "type": "string",
           "const": "frameGradientFeather"
+        },
+        {
+          "description": "Engine ADR 1008 — the object target's ordered effect stack\n(`Value::EffectStack`), whole-list replacement: add, remove,\nreorder, enable and the stack-only effects' parameters are one\nwrite each. The InDesign effects' parameters stay on their own\nper-field paths. Reads the canonical stack (the effects that are\non, in InDesign's order) for an item that stores none. The inverse\ncarries a snapshot (`prev`), so undo restores the model exactly.\nText frames, rectangles, ovals and polygons. Paint-only.",
+          "type": "string",
+          "const": "frameEffectStack"
+        },
+        {
+          "description": "ADR 1008 — the fill target's stack (InDesign effects only).",
+          "type": "string",
+          "const": "frameFillEffectStack"
+        },
+        {
+          "description": "ADR 1008 — the stroke target's stack (InDesign effects only).",
+          "type": "string",
+          "const": "frameStrokeEffectStack"
+        },
+        {
+          "description": "ADR 1008 — the content target's stack (InDesign effects only).",
+          "type": "string",
+          "const": "frameContentEffectStack"
         },
         {
           "description": "Editor-ops (Page tool) — a page's `GeometricBounds`\n`[top, left, bottom, right]` in the page's INNER coordinate\nsystem (`Value::Bounds`). Only `NodeId::Page` carries it.\nItems keep their coordinates (InDesign's layout-adjust off);\n`spread_origin` re-derives on rebuild.",
@@ -8225,6 +8502,21 @@
           "const": "groupClip"
         },
         {
+          "description": "Engine ADR 1039 — a symbol instance's colour tint:\n`Value::Lengths([r, g, b, amount])` (sRGB and amount `0..=1`); the\nempty list removes it. Only `NodeId::Instance` carries it. Native.",
+          "type": "string",
+          "const": "symbolInstanceTint"
+        },
+        {
+          "description": "Engine ADR 1039 — a symbol instance's 9-slice guides:\n`Value::Lengths([left, top, right, bottom])` insets in definition\nspace; the empty list falls back to the definition's. Only\n`NodeId::Instance` carries it. Native.",
+          "type": "string",
+          "const": "symbolInstanceNineSlice"
+        },
+        {
+          "description": "Engine ADR 1039 (draw ADR 365) — the symbol a symbol instance draws,\n`Value::Text(symbol id)`: Illustrator's Replace Symbol. The\ninstance keeps its id, transform and overrides; a symbol id the\nstore does not hold is refused. Only `NodeId::Instance`. Native.",
+          "type": "string",
+          "const": "symbolInstanceSymbol"
+        },
+        {
           "description": "`<DropShadowSetting BlendMode>`; `\"\"` is InDesign's `Multiply`.",
           "type": "string",
           "const": "frameDropShadowBlendMode"
@@ -9208,6 +9500,41 @@
           ]
         },
         {
+          "description": "Engine ADR 1008 — a target's whole effect stack. `prev` is the\napply layer's snapshot of the target's effect state (JSON); an\ninverse carries it so undo restores exactly. Wire callers leave\nit `None`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "effectStack"
+            },
+            "value": {
+              "type": "object",
+              "properties": {
+                "entries": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/EffectEntrySpec"
+                  }
+                },
+                "prev": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "entries"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
           "description": "W0.2 — whole paragraph rule struct (`RuleAbove` / `RuleBelow`).\n`None` clears the rule back to the all-`None` default. The\ninverse carries the prior `Option<spec>` so undo round-trips\nbytewise. Same whole-struct precedent as `GradientFeather`.",
           "type": "object",
           "properties": {
@@ -9470,6 +9797,199 @@
       "required": [
         "locationPct",
         "alphaPct"
+      ]
+    },
+    "EffectEntrySpec": {
+      "description": "Engine ADR 1008 — one entry of an effect stack on the wire. Every\nentry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`\nand `opacityPct`. The parameter fields are flat and optional; each\nkind reads its own and an absent one takes the kind's default:\n\n| kind | fields |\n| --- | --- |\n| `gaussianBlur` | `radiusPt` (σ, pt) |\n| `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |\n| `colorOverlay` | `color` |\n| `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |\n| `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |\n| `softEdge` | `sizePt` |\n| `noise` | `amountPct`, `monochromatic` |\n| `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |\n\nInDesign's kinds carry no parameters here: theirs are the per-field\npaths (`frameInnerShadowSize`, …), and the stack keeps them.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/EffectKind"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "blendMode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "opacityPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "radiusPt": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "sizePt": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "position": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "gradient": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "angleDeg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "reverse": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "distancePt": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "sizePct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "startOpacityPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "endOpacityPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "blurPt": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "amountPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "monochromatic": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "brightness": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "contrast": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "saturation": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "hueDeg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "EffectKind": {
+      "description": "Engine ADR 1008 — an effect kind on the stack: InDesign's nine, then\nthe stack-only ones.",
+      "type": "string",
+      "enum": [
+        "dropShadow",
+        "innerShadow",
+        "outerGlow",
+        "innerGlow",
+        "bevelEmboss",
+        "satin",
+        "feather",
+        "directionalFeather",
+        "gradientFeather",
+        "gaussianBlur",
+        "outlineStroke",
+        "colorOverlay",
+        "gradientOverlay",
+        "reflection",
+        "softEdge",
+        "noise",
+        "colorAdjust"
       ]
     },
     "ParagraphRuleSpec": {

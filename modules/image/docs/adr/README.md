@@ -37,10 +37,13 @@ stood, for decisions made earlier; their status says so.
 | [471](471-brush-engine.md) | The brush engine: Brush Settings as a seeded dab planner over the one accumulator | Accepted 2026-10-24 |
 | [472](472-layer-styles.md) | A layer style is a sequence of fold steps around the layer's pixels | Accepted 2026-10-25 (WP5.4) |
 | [473](473-filter-families-and-galleries.md) | Filter families as kernels and recipes; the galleries are workspaces over one chain | Accepted 2026-10-25 |
+| [474](474-type-layers.md) | A type layer's text lives in the image; the engine lays it out and the GPU warps it | Accepted 2026-10-27 |
+| [475](475-the-image-workspace.md) | The image workspace: guides, count, notes and slices in the stack; rulers, guides and grid are the host's | Accepted 2026-10-28 |
 | [476](476-vectors-inside-the-image.md) | Vectors inside the image: one path geometry, drawn by the vector-mask rasterizer, edited by draw's machines | Accepted 2026-10-28 (amends 470) |
 | [477](477-history-and-presets.md) | Snapshots, a configurable journal and one Preset Manager in the image context | Accepted 2026-10-28 (WP5.9; amends 463) |
 | [478](478-psd-write-depth.md) | The layered PSD save writes what it reads | Accepted 2026-10-28 (WP5.15) |
 | [479](479-depth-and-colour-modes.md) | 16 bits end to end, colour modes as a projection, and the proof view | Accepted 2026-10-28 (WP5.13; amends 455) |
+| [482](482-smart-objects-in-full.md) | A smart object is a source, a placement and its filters; the layer is their render | Accepted 2026-10-29 (WP5.14; amends 467 and 478) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

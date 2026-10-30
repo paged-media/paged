@@ -143,7 +143,7 @@
     },
     "apps/editor/packages/editor": {
       "name": "@paged-media/editor",
-      "version": "0.77.0-dev",
+      "version": "0.78.0-dev",
       "dependencies": {
         "@paged-media/paged": "workspace:*",
       },
@@ -280,11 +280,11 @@
     },
     "engine/core/packages/canvas-wasm": {
       "name": "@paged-media/canvas-wasm",
-      "version": "0.77.0-dev",
+      "version": "0.78.0-dev",
     },
     "engine/core/web/idml-viewer": {
       "name": "@paged-media/viewer",
-      "version": "0.77.0-dev",
+      "version": "0.78.0-dev",
       "devDependencies": {
         "@types/bun": "catalog:",
         "typescript": "catalog:",
@@ -717,7 +717,7 @@
     },
     "packages/paged": {
       "name": "@paged-media/paged",
-      "version": "0.77.0-dev",
+      "version": "0.78.0-dev",
       "bin": {
         "paged": "./dist/paged.js",
       },
@@ -731,7 +731,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.74.3-canary.41",
+      "version": "0.74.3-canary.47",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -741,7 +741,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.74.3-canary.41",
+      "version": "0.74.3-canary.47",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },

@@ -83,6 +83,8 @@ Rules for every code change in this repo:
   A SECOND (ADR 469): `geom.patch_vote`'s twin (`image-js` `patchmatch::vote_packed`)
   ships as the vote of the content-aware retouching verbs where no device exists; the
   PatchMatch search itself is CPU input preparation.
+  The CPU resample of `paged-resample` (ADR 467) is a supported backend, not a twin: it
+  serves headless and batch actions and draws a smart object's placement (ADR 482).
 - **PRESERVATION INVARIANT (§10.4).** "Paged never destroys a PSD."
   Every unmodeled block is retained as opaque bytes attached to its
   owner node and re-emitted verbatim; zero-edit round-trip is

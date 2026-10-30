@@ -309,6 +309,48 @@
       "summary": "Put a page (an artboard) at [x, y] pt on the canvas (omit/null: its default slot)."
     },
     {
+      "name": "paged.symbols",
+      "params": "()",
+      "returns": "SymbolSummary[] JSON",
+      "kind": "read",
+      "summary": "The document's symbols: id, name, revision, bounds, 9-slice guides, instances."
+    },
+    {
+      "name": "paged.createSymbol",
+      "params": "(name, elementIds, { symbolId?, replace?, nineSlice? }?)",
+      "returns": "string | null",
+      "kind": "write",
+      "summary": "Make a symbol from page items; with replace (default) they become an instance, which is selected. Returns the symbol id."
+    },
+    {
+      "name": "paged.redefineSymbol",
+      "params": "(symbolId, { elementIds?, name?, nineSlice?, replace? })",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "New artwork, name or 9-slice guides ([] removes) for a symbol; every instance follows."
+    },
+    {
+      "name": "paged.placeSymbolInstance",
+      "params": "(symbolId, pageId, [x, y]?, [a, b, c, d]?)",
+      "returns": "string | null",
+      "kind": "write",
+      "summary": "Place an instance, its registration point at [x, y] page pt (omit: the page centre); returns its instance:<id> address."
+    },
+    {
+      "name": "paged.breakSymbolLink",
+      "params": "(elementId)",
+      "returns": "string | null",
+      "kind": "write",
+      "summary": "Break Link to Symbol: the instance becomes ordinary items; returns the new root's address."
+    },
+    {
+      "name": "paged.deleteSymbol",
+      "params": "(symbolId)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Delete a symbol; its instances become ordinary items first."
+    },
+    {
       "name": "paged.createMaster",
       "params": "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })",
       "returns": "bool",
@@ -1621,6 +1663,11 @@
       "form": "$h:<name>",
       "example": "$h:newFrame",
       "note": "A batch handle bound earlier in the same batch."
+    },
+    {
+      "form": "instance:<id>",
+      "example": "instance:u9a",
+      "note": "A symbol instance (engine ADR 1039): a placed reference to a symbol definition."
     }
   ],
   "settablePaths": [
@@ -1778,12 +1825,19 @@
     "groupIsolateBlending",
     "groupKnockout",
     "groupClip",
+    "symbolInstanceTint",
+    "symbolInstanceNineSlice",
+    "symbolInstanceSymbol",
     "frameDropShadowBlendMode",
     "frameDropShadowSpread",
     "frameDropShadowNoise",
     "frameDropShadowKnockedOut",
     "frameDropShadowUseGlobalLight",
     "frameGradientFeather",
+    "frameEffectStack",
+    "frameFillEffectStack",
+    "frameStrokeEffectStack",
+    "frameContentEffectStack",
     "cellFillColor",
     "cellFillTint",
     "cellInsetTop",
@@ -2050,6 +2104,11 @@
     "duplicatePage",
     "movePage",
     "placePage",
+    "createSymbol",
+    "redefineSymbol",
+    "placeSymbolInstance",
+    "breakSymbolLink",
+    "deleteSymbol",
     "onMaster",
     "createMaster",
     "deleteMaster",
@@ -6494,6 +6553,43 @@
     },
     {
       "addressKind": "frame",
+      "path": "symbolInstanceTint",
+      "type": {
+        "kind": "list",
+        "unit": "pt",
+        "of": "length"
+      },
+      "wire": "lengths",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "symbolInstanceNineSlice",
+      "type": {
+        "kind": "list",
+        "unit": "pt",
+        "of": "length"
+      },
+      "wire": "lengths",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "symbolInstanceSymbol",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
       "path": "frameDropShadowBlendMode",
       "type": {
         "kind": "enum",
@@ -6625,6 +6721,58 @@
       },
       "wire": "gradientFeather",
       "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameFillEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameStrokeEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameContentEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
       "access": "readWrite",
       "bindable": true
     },
@@ -20127,6 +20275,45 @@
       },
       {
         "addressKind": "frame",
+        "path": "symbolInstanceTint",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "length"
+          }
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "lengths"
+      },
+      {
+        "addressKind": "frame",
+        "path": "symbolInstanceNineSlice",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "length"
+          }
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "lengths"
+      },
+      {
+        "addressKind": "frame",
+        "path": "symbolInstanceSymbol",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
         "path": "frameDropShadowBlendMode",
         "type": {
           "kind": "enum",
@@ -20261,6 +20448,74 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "gradientFeather"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameFillEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameStrokeEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameContentEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
       },
       {
         "addressKind": "frame",

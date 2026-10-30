@@ -123,6 +123,9 @@ pub enum ElementId {
     Polygon(String),
     GraphicLine(String),
     Group(String),
+    /// Engine ADR 1039 — a symbol instance. Rides v78 as an additive
+    /// enum member.
+    Instance(String),
     /// SDK Phase 3 — addresses a half-open `[start, end)` character
     /// range inside a story for character / paragraph property
     /// writes. Maps to `paged_mutate::NodeId::StoryRange { ... }`.
@@ -162,7 +165,8 @@ impl ElementId {
             | ElementId::Oval(id)
             | ElementId::Polygon(id)
             | ElementId::GraphicLine(id)
-            | ElementId::Group(id) => id,
+            | ElementId::Group(id)
+            | ElementId::Instance(id) => id,
             ElementId::StoryRange { story_id, .. } => story_id,
             // The story is the container; table / cell ids ride the
             // variant. `raw_id` returns the story for table addresses
@@ -210,6 +214,7 @@ impl ElementId {
             ElementId::Polygon(_) => "Polygon",
             ElementId::GraphicLine(_) => "GraphicLine",
             ElementId::Group(_) => "Group",
+            ElementId::Instance(_) => "Instance",
             ElementId::StoryRange { .. } => "StoryRange",
             ElementId::Table { .. } => "Table",
             ElementId::TableCell { .. } => "TableCell",
@@ -805,6 +810,7 @@ impl VirtualTarget {
             VirtualTarget::Cell { .. } => "cell",
             VirtualTarget::Element { element_id } => match element_id {
                 ElementId::Group(_) => "group",
+                ElementId::Instance(_) => "instance",
                 ElementId::StoryRange { .. } => "storyRange",
                 ElementId::Table { .. } => "table",
                 ElementId::TableCell { .. } => "cell",
@@ -871,6 +877,7 @@ impl VirtualTarget {
             | Address::Polygon { .. }
             | Address::GraphicLine { .. }
             | Address::Group { .. }
+            | Address::Instance { .. }
             | Address::StoryRange { .. } => VirtualTarget::Element {
                 element_id: a.to_element_id().expect("a page item or a story range"),
             },
@@ -2773,6 +2780,71 @@ pub enum Mutation {
         #[serde(default)]
         origin_pt: Option<(f32, f32)>,
     },
+    /// v78 (engine ADR 1039) — make a SYMBOL named `name` from the page
+    /// items `element_ids` (copied whole, as a copy takes them: text with
+    /// its story, gradients, placed images, groups). The centre of their
+    /// box is the symbol's registration point. With `replace` (the
+    /// default) the items leave the page and one instance takes their
+    /// place, drawn where they were; the reply's `createdId` is that
+    /// instance. `symbol_id` names the symbol (absent: minted, `Symbol/<n>`).
+    /// `nine_slice` sets 9-slice guides, `[left, top, right, bottom]`
+    /// insets. Refused, by name, for what a copy refuses and for an
+    /// instance among the items. One undo step.
+    CreateSymbol {
+        name: String,
+        element_ids: Vec<ElementId>,
+        #[serde(default)]
+        symbol_id: Option<String>,
+        #[serde(default)]
+        replace: Option<bool>,
+        #[serde(default)]
+        nine_slice: Option<[f32; 4]>,
+    },
+    /// v78 (engine ADR 1039) — edit the symbol `symbol_id`: new artwork
+    /// from `element_ids` (when given; every instance draws it at once),
+    /// a new `name`, new 9-slice guides (`[]` removes them). With
+    /// `replace` (default `true` when items are given) the items become an
+    /// instance. One undo step.
+    RedefineSymbol {
+        symbol_id: String,
+        #[serde(default)]
+        element_ids: Vec<ElementId>,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        nine_slice: Option<Vec<f32>>,
+        #[serde(default)]
+        replace: Option<bool>,
+    },
+    /// v78 (engine ADR 1039) — place an instance of `symbol_id` on
+    /// `page_id`, its registration point at `at` (page space; absent: the
+    /// page's centre), scaled / rotated by `linear` (`[a, b, c, d]`, absent:
+    /// identity), on top of the spread's z-order. The reply's `createdId`
+    /// is the instance (`instance:<id>` addresses it). One undo step.
+    PlaceSymbolInstance {
+        symbol_id: String,
+        page_id: PageId,
+        #[serde(default)]
+        at: Option<(f32, f32)>,
+        #[serde(default)]
+        linear: Option<[f32; 4]>,
+        #[serde(default)]
+        nine_slice: Option<[f32; 4]>,
+    },
+    /// v78 (engine ADR 1039) — Break Link to Symbol: the instance
+    /// `element_id` becomes its symbol's artwork as ordinary page items,
+    /// where it was, in its z slot (a group when there is more than one
+    /// item or the instance overrides opacity or blending). The reply's
+    /// `minted` lists the new root. One undo step.
+    BreakSymbolLink {
+        element_id: ElementId,
+    },
+    /// v78 (engine ADR 1039) — delete the symbol `symbol_id`; its
+    /// instances are broken into ordinary items first, so nothing on the
+    /// page disappears. One undo step.
+    DeleteSymbol {
+        symbol_id: String,
+    },
     /// W0.5 — insert a `<Section>` anchored at `at_page`.
     InsertSection {
         at_page: PageId,
@@ -3105,6 +3177,11 @@ mutation_vocabulary! {
     DuplicatePage,
     MovePage,
     PlacePage,
+    CreateSymbol,
+    RedefineSymbol,
+    PlaceSymbolInstance,
+    BreakSymbolLink,
+    DeleteSymbol,
     OnMaster,
     CreateMaster,
     DeleteMaster,

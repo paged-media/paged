@@ -81,9 +81,21 @@
       "media.paged.image.command.flipVertical",
       "media.paged.image.command.commitImage",
       "media.paged.image.command.convertLayerToSmart",
+      "media.paged.image.command.smartEditContents",
+      "media.paged.image.command.smartSaveContents",
+      "media.paged.image.command.smartCloseContents",
+      "media.paged.image.command.smartTransform",
+      "media.paged.image.command.smartReplaceContents",
+      "media.paged.image.command.smartRelink",
+      "media.paged.image.command.smartUpdateLinked",
+      "media.paged.image.command.smartEmbed",
+      "media.paged.image.command.smartExportContents",
+      "media.paged.image.command.smartPlacePageItems",
+      "media.paged.image.command.convertForSmartFilters",
       "media.paged.image.command.definePattern",
       "media.paged.image.command.fillPattern",
       "media.paged.image.command.shapeBlur",
+      "media.paged.image.command.filterGaussianBlur",
       "media.paged.image.command.filterBoxBlur",
       "media.paged.image.command.filterSurfaceBlur",
       "media.paged.image.command.filterMotionBlur",
@@ -229,6 +241,9 @@
       "media.paged.image.command.globalLight",
       "media.paged.image.command.toggleEffects",
       "media.paged.image.command.scaleEffects",
+      "media.paged.image.command.rasterizeType",
+      "media.paged.image.command.paintTextIntoLayer",
+      "media.paged.image.command.warpText",
       "media.paged.image.command.newAdjustmentBrightnessContrast",
       "media.paged.image.command.newAdjustmentLevels",
       "media.paged.image.command.newAdjustmentCurves",
@@ -286,7 +301,24 @@
       "media.paged.image.command.proofColors",
       "media.paged.image.command.gamutWarning",
       "media.paged.image.command.proofSetupCmyk",
-      "media.paged.image.command.proofSetupGray"
+      "media.paged.image.command.proofSetupGray",
+      "media.paged.image.command.rulerUnitPx",
+      "media.paged.image.command.rulerUnitIn",
+      "media.paged.image.command.rulerUnitCm",
+      "media.paged.image.command.rulerUnitMm",
+      "media.paged.image.command.toggleGuides",
+      "media.paged.image.command.toggleLockGuides",
+      "media.paged.image.command.toggleSnapGuides",
+      "media.paged.image.command.clearGuides",
+      "media.paged.image.command.newGuide",
+      "media.paged.image.command.slicesFromGuides",
+      "media.paged.image.command.clearSlices",
+      "media.paged.image.command.exportSlices",
+      "media.paged.image.command.clearNotes",
+      "media.paged.image.command.clearCount",
+      "media.paged.image.command.newCountGroup",
+      "media.paged.image.command.straightenToRuler",
+      "media.paged.image.command.clearRuler"
     ],
     "tools": [
       "media.paged.image.tool.crop",
@@ -336,7 +368,11 @@
       "media.paged.image.tool.ellipseShape",
       "media.paged.image.tool.polygonShape",
       "media.paged.image.tool.lineShape",
-      "media.paged.image.tool.customShape"
+      "media.paged.image.tool.customShape",
+      "media.paged.image.tool.ruler",
+      "media.paged.image.tool.count",
+      "media.paged.image.tool.note",
+      "media.paged.image.tool.slice"
     ],
     "importers": ["media.paged.image.importer.raster"],
     "exporters": [
@@ -626,6 +662,14 @@
                 "optional": true
               }
             }
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterGaussianBlur",
+          "title": "Gaussian blur… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
           }
         },
         {
@@ -1781,6 +1825,30 @@
           }
         },
         {
+          "id": "media.paged.image.command.rasterizeType",
+          "title": "Rasterize type layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.paintTextIntoLayer",
+          "title": "Paint text into layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.warpText",
+          "title": "Warp text…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.newAdjustmentBrightnessContrast",
           "title": "New adjustment layer: Brightness/Contrast",
           "args": {
@@ -1935,6 +2003,94 @@
                 "to": "plugin:media.paged.image/layer"
               }
             }
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartEditContents",
+          "title": "Edit smart object contents",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartSaveContents",
+          "title": "Save and close smart object contents",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartCloseContents",
+          "title": "Close smart object contents without saving",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartTransform",
+          "title": "Transform smart object…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartReplaceContents",
+          "title": "Replace smart object contents…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartRelink",
+          "title": "Relink smart object to file…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartUpdateLinked",
+          "title": "Update linked smart object from file…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartEmbed",
+          "title": "Embed linked smart object",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartExportContents",
+          "title": "Export smart object contents…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartPlacePageItems",
+          "title": "Place selected page items as a smart object",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.convertForSmartFilters",
+          "title": "Convert for smart filters",
+          "args": {
+            "kind": "struct",
+            "fields": {}
           }
         },
         {
@@ -2388,6 +2544,142 @@
         {
           "id": "media.paged.image.command.proofSetupGray",
           "title": "Proof setup: working grey (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rulerUnitPx",
+          "title": "Rulers in pixels",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rulerUnitIn",
+          "title": "Rulers in inches",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rulerUnitCm",
+          "title": "Rulers in centimetres",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rulerUnitMm",
+          "title": "Rulers in millimetres",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleGuides",
+          "title": "Show or hide guides",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleLockGuides",
+          "title": "Lock or unlock guides",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleSnapGuides",
+          "title": "Snap to guides on or off",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearGuides",
+          "title": "Clear guides",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newGuide",
+          "title": "New guide…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.slicesFromGuides",
+          "title": "Slices from guides",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearSlices",
+          "title": "Delete all slices",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.exportSlices",
+          "title": "Export slices…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearNotes",
+          "title": "Delete all notes",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearCount",
+          "title": "Clear count",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newCountGroup",
+          "title": "New count group",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.straightenToRuler",
+          "title": "Straighten to ruler",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearRuler",
+          "title": "Clear ruler",
           "args": {
             "kind": "struct",
             "fields": {}

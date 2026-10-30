@@ -1,7 +1,7 @@
 # ADR 1037 — Word's change tracking: changes carried by what they changed, recorded while typing, accepted and rejected
 
 - **Status:** Accepted 2026-10-29.
-- **Scope:** rides protocol v77 as a rider (every addition is optional on the wire and
+- **Scope:** rides protocol v78 as a rider (every addition is optional on the wire and
   skipped in the model when unset). Amends [ADR 184](184-tracked-changes.md): InDesign's
   tracked deletions stay as that ADR keeps them, and Word's model of a change joins them.
   Part of engine wave E3 of the paged.doc Word-parity program; the plugin's `w:ins`,

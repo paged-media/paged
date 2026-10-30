@@ -69,6 +69,7 @@ pub mod selection;
 pub mod snap;
 pub mod snap_point;
 pub mod snapshot;
+mod snapshot_story;
 pub mod svg_io;
 pub mod template;
 pub mod undo_label;
@@ -126,8 +127,9 @@ pub use resolve::{
     resolve, AnchorPosition, FieldChange, NumberingMap, ResolutionResult, ResolveOptions,
 };
 pub use snapshot::{
-    encode_snapshot_png, snapshot_page, Snapshot, SnapshotBackground, SnapshotClip, SnapshotError,
-    SnapshotFormat, SnapshotPage, SnapshotPng, SnapshotRequest, MAX_SNAPSHOT_SIDE_PX,
+    encode_snapshot_png, snapshot_page, snapshot_page_with_story, Snapshot, SnapshotBackground,
+    SnapshotClip, SnapshotError, SnapshotFormat, SnapshotPage, SnapshotParagraph, SnapshotPng,
+    SnapshotRequest, SnapshotRun, SnapshotStory, MAX_SNAPSHOT_SIDE_PX,
 };
 #[cfg(feature = "cpu")]
 pub use snapshot::{

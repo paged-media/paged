@@ -73,6 +73,7 @@ pub fn empty_text_frame(self_id: &str, bounds: Bounds) -> TextFrame {
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
         effects: None,
+        effect_stack: Vec::new(),
         gradient_fill_angle: None,
         gradient_fill_length: None,
         gradient_fill_start: None,
@@ -132,5 +133,6 @@ pub fn document_with_one_textframe(self_id: &str) -> Document {
         text_frame_index: HashMap::new(),
         styles: StyleSheet::default(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     }
 }
