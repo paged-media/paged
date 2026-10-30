@@ -18,16 +18,16 @@
 
 //! Floating drawings (`wp:anchor`, thoughts ADR 035, RFI DOC-07) from
 //! `floats_docx()`: their position and wrap are read and carried in the
-//! lowered IR, they stay placed inline, and every one is named in a
-//! diagnostic (ADR 035 work item 0) rather than silently becoming an
-//! inline picture.
+//! lowered IR, and each is placed (doc ADR 614) as a page item where its
+//! page is known, else as an anchored object of its paragraph, and counted
+//! in a diagnostic by how.
 
 #![allow(non_snake_case)] // `…__feat__<id>` test names link the cockpit feature
 
 use docx_conformance::{floats_docx, image_docx, FLOAT_CASES};
 use docx_core::{Block, FloatWrap, Paragraph};
 use docx_import::import_docx;
-use docx_lower::ir::{LoweredDoc, LoweredFloatPosition};
+use docx_lower::ir::{LoweredDoc, LoweredItemHost, LoweredItemKind};
 
 fn para(doc: &docx_core::DocxDocument, i: usize) -> &Paragraph {
     match &doc.body[i] {
@@ -108,74 +108,131 @@ fn every_drawing_in_a_run_is_kept_and_a_non_picture_is_counted__feat__plugin_doc
 }
 
 #[test]
-fn the_lowered_ir_carries_the_float_in_points_and_places_it_inline__feat__plugin_doc_read_path() {
+fn the_lowered_ir_carries_the_float_in_points_and_places_it__feat__plugin_doc_read_path() {
     let ir = lowered();
     let p = ir.story.paragraphs();
-    let img = &p[0].images[0];
-    assert_eq!((img.width_pt, img.height_pt), (72.0, 54.0));
-    let f = img.float.as_ref().expect("the float is carried");
-    assert_eq!(f.wrap, "wrapSquare");
+    // F1 stands in the story's first paragraph, on the story's own page: a
+    // page item with Word's square wrap, not a picture of the text.
+    assert!(p[0].images.is_empty(), "F1 is a page item");
+    let f1 = &ir.page_items[0];
     assert_eq!(
-        f.horizontal,
-        Some(LoweredFloatPosition {
-            relative_from: "column".into(),
-            offset_pt: Some(12.0),
-            align: None,
-            percent: None,
-        })
+        f1.host,
+        LoweredItemHost::Page {
+            page_id: "docx_p0".into()
+        }
     );
-    assert_eq!((f.dist_left_pt, f.dist_right_pt), (9.0, 9.0));
+    // 12 pt right of the column (72 pt margin), at the paragraph's top.
+    assert_eq!(f1.bounds, [72.0, 84.0, 126.0, 156.0]);
+    let wrap = f1.wrap.as_ref().expect("square wraps");
+    assert_eq!(wrap.mode, "BoundingBoxTextWrap");
+    assert_eq!(wrap.offsets_pt, [0.0, 9.0, 0.0, 9.0]);
+    assert_eq!(wrap.side.as_deref(), Some("BothSides"));
+    assert!(matches!(f1.item, LoweredItemKind::Picture { .. }));
+
+    // F2, top and bottom: a band of its own above its anchor line, centred
+    // as Word centres it on the margin, Word's distance below it.
+    let f2 = &p[1].images[0];
+    let a2 = f2.anchor.as_ref().expect("anchored");
+    assert_eq!(
+        (a2.position.as_str(), a2.horizontal_alignment.as_str()),
+        ("AbovePosition", "CenterAlign")
+    );
+    assert_eq!(a2.y_offset_pt, 4.0);
+    assert_eq!(f2.at, 0, "at its paragraph's start");
+    let f = f2.float.as_ref().expect("the float is carried");
+    assert_eq!(f.wrap, "wrapTopAndBottom");
+
+    // F3, behind the text: custom, at the page's left edge and the margin's
+    // top.
+    let a3 = p[2].images[0].anchor.as_ref().unwrap();
+    assert_eq!(a3.position, "Anchored");
+    assert_eq!(
+        (
+            a3.anchor_point.as_str(),
+            a3.horizontal_reference.as_str(),
+            a3.horizontal_alignment.as_str(),
+            a3.vertical_reference.as_str(),
+            a3.vertical_alignment.as_str(),
+        ),
+        (
+            "TopLeftAnchor",
+            "PageEdge",
+            "LeftAlign",
+            "TextFrame",
+            "TopAlign"
+        )
+    );
+
+    // F4, a simple position: against the page's top-left.
+    let a4 = p[3].images[0].anchor.as_ref().unwrap();
+    assert_eq!(
+        (
+            a4.horizontal_reference.as_str(),
+            a4.vertical_reference.as_str(),
+            a4.x_offset_pt,
+            a4.y_offset_pt
+        ),
+        ("PageEdge", "PageEdge", 100.0, 200.0)
+    );
     assert_eq!(
         p[3].images[0].float.as_ref().unwrap().simple_pos_pt,
         Some((100.0, 200.0))
     );
-    // Both drawings of the two-drawing run reach the paragraph.
-    assert_eq!(p[FLOAT_CASES.len()].images.len(), 2);
+    // Its wrap polygon, in the picture's points.
+    assert_eq!(
+        p[3].images[0].float.as_ref().unwrap().wrap_polygon_pt,
+        vec![
+            (0.0, 0.0),
+            (0.0, 54.0),
+            (72.0, 54.0),
+            (72.0, 0.0),
+            (0.0, 0.0)
+        ]
+    );
+
+    // Both drawings of the two-drawing run reach the paragraph; the float,
+    // past the story's first paragraph, is anchored against the column and
+    // its paragraph.
+    let two = &p[FLOAT_CASES.len()].images;
+    assert_eq!(two.len(), 2);
+    assert!(two[0].anchor.is_none(), "the inline picture");
+    let a5 = two[1].anchor.as_ref().unwrap();
+    assert_eq!(
+        (
+            a5.horizontal_reference.as_str(),
+            a5.x_offset_pt,
+            a5.vertical_reference.as_str(),
+            a5.y_offset_pt
+        ),
+        ("ColumnEdge", 12.0, "TopOfLeading", 0.0)
+    );
+    assert_eq!((two[1].width_pt, two[1].height_pt), (72.0, 54.0));
     // The JSON the bundle reads: an inline picture carries no `float` key.
     let json = serde_json::to_value(&ir).unwrap();
     let images = &json["story"]["blocks"][FLOAT_CASES.len()]["images"];
     assert!(images[0].get("float").is_none(), "{images}");
+    assert!(images[0].get("anchor").is_none(), "{images}");
     assert_eq!(images[1]["float"]["wrapText"], "bothSides");
     assert_eq!(images[1]["float"]["horizontal"]["offsetPt"], 12.0);
+    assert_eq!(images[1]["anchor"]["position"], "Anchored");
 }
 
 #[test]
-fn every_floating_picture_is_named_in_a_diagnostic__feat__plugin_doc_read_path() {
+fn every_floating_picture_is_counted_in_a_diagnostic__feat__plugin_doc_read_path() {
     let ir = lowered();
-    let floats: Vec<&str> = ir
-        .diagnostics
-        .iter()
-        .filter(|d| d.message.contains("floating picture"))
-        .map(|d| d.message.as_str())
-        .collect();
-    // F1..F4 plus the float in the two-drawing run; the cell's float is
-    // reported with the cell pictures.
-    assert_eq!(floats.len(), FLOAT_CASES.len() + 1, "{floats:#?}");
-    for m in &floats {
-        assert!(m.contains("placed INLINE"), "{m}");
-        assert!(m.contains("not carried onto the page yet"), "{m}");
-    }
-    assert!(floats[0].contains("body block 0"), "{}", floats[0]);
-    assert!(floats[0].contains("wrapSquare bothSides"), "{}", floats[0]);
-    assert!(
-        floats[0].contains("horizontally column +12.0 pt"),
-        "{}",
-        floats[0]
-    );
-    assert!(floats[1].contains("wrapTopAndBottom"), "{}", floats[1]);
-    assert!(
-        floats[1].contains("horizontally margin center"),
-        "{}",
-        floats[1]
-    );
-    assert!(floats[2].contains("behind the text"), "{}", floats[2]);
-    assert!(floats[3].contains("at (100.0, 200.0) pt"), "{}", floats[3]);
-    assert!(floats.iter().all(|m| ir
-        .diagnostics
-        .iter()
-        .any(|d| d.message == *m && d.severity == "warning")));
-
     let msgs: Vec<&str> = ir.diagnostics.iter().map(|d| d.message.as_str()).collect();
+    let find = |needle: &str| {
+        msgs.iter()
+            .find(|m| m.contains(needle))
+            .unwrap_or_else(|| panic!("no diagnostic with {needle:?}: {msgs:#?}"))
+    };
+    // F1 is a page item; F3, F4 and F5's float custom (F4 and F5 wrap in
+    // Word, which the anchored objects do not yet); F2 above its line.
+    assert!(find("placed as page items").contains("1 floating picture(s) and 0 text box(es)"));
+    let custom = find("as anchored objects");
+    assert!(custom.contains("3 floating picture(s)"), "{custom}");
+    assert!(custom.contains("2 of them wrap text in Word"), "{custom}");
+    assert!(find("band of their own").starts_with("1 floating picture(s)"));
     let cell = msgs
         .iter()
         .find(|m| m.contains("table cells"))

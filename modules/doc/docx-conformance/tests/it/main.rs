@@ -23,6 +23,7 @@ mod line_breaks;
 mod line_spacing;
 mod merge_fields;
 mod mixed_sizes;
+mod objects;
 mod paragraph_spacing;
 mod picture_effects;
 mod pictures;
