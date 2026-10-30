@@ -872,6 +872,31 @@ pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<String> {
     out
 }
 
+/// Engine ADR 10XX — the live shapes IDML cannot keep live. A pie oval
+/// exports its wedge as the `<Oval>`'s path, which InDesign draws, and its
+/// angles in the item's `paged:liveShape` label, which InDesign keeps and
+/// a paged reader lifts back; in InDesign it is a plain path. A live
+/// polygon is not listed: InDesign keeps no polygon's sides either, and
+/// its anchors are exact. Declared from the model, like the opacity masks.
+pub(crate) fn live_shape_losses(scene: &Document) -> Vec<String> {
+    let mut out = Vec::new();
+    for parsed in &scene.spreads {
+        for o in &parsed.spread.ovals {
+            if let Some(pie) = paged_model::live_shape::cut_pie(o) {
+                out.push(format!(
+                    "pie angles ({}° to {}°) on oval `{}` are a paged-native live shape — IDML \
+                     draws the wedge as the oval's path, and the angles ride its \
+                     `paged:liveShape` label: InDesign shows the pie but cannot edit its angles.",
+                    pie.start,
+                    pie.end,
+                    o.self_id.as_deref().unwrap_or("?")
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// Engine ADR 1008 — what an item's effect stack says that IDML cannot:
 /// an effect InDesign does not have (it rides the item's
 /// `paged:effectStack` label, which InDesign keeps and does not draw, so a

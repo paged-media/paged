@@ -797,6 +797,11 @@ property_paths! {
         FrameFillRule => "frameFillRule" : enum_(FILL_RULES).default_text("NonZero"),
         // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
+        // Engine ADR 10XX — live shapes; IDML has none (the outline is written, the parameters ride a label).
+        FrameShapeSides => "frameShapeSides" : count().range(3.0, 100.0),
+        FrameShapeStarInset => "frameShapeStarInset" : pct().range(0.0, 99.0).default_num(0.0),
+        FrameShapePieStart => "frameShapePieStart" : deg().default_num(0.0),
+        FrameShapePieEnd => "frameShapePieEnd" : deg().default_num(360.0),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
         FrameStrokeMiterLimit => "frameStrokeMiterLimit" : number().range(1.0, 500.0).default_num(4.0).idml(idml![attr(Rectangle | GraphicLine | Polygon, MiterLimit)]),
@@ -1489,7 +1494,10 @@ mod tests {
         // 262 -> 264: ADR 1039 — a symbol instance's tint and 9-slice guides.
         //
         // 264 -> 265: draw ADR 365 — the symbol an instance draws.
-        assert_eq!(cat.settable_paths.len(), 265, "settable path count drifted");
+        //
+        // 265 -> 269: ADR 10XX — live shapes (a polygon's sides and star
+        // inset, an oval's pie angles).
+        assert_eq!(cat.settable_paths.len(), 269, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

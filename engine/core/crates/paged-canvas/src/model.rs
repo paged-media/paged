@@ -7454,6 +7454,7 @@ impl CanvasModel {
             &mut self.scene.clone(),
         ));
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
+        out.extend(crate::export_losses::live_shape_losses(&self.scene));
         out.extend(crate::export_losses::effect_stack_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
@@ -8962,6 +8963,15 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(p.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 10XX — the live polygon's side
+                            // count: `None` for a path that is not one.
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapeSides,
+                                value: Some(Value::Length(
+                                    paged_model::live_shape::live_polygon(p)
+                                        .map(|s| s.sides as f32),
+                                )),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
                                 value: Some(Value::Length(p.opacity)),
@@ -9122,6 +9132,15 @@ impl CanvasModel {
                         entries.extend(visible_locked_entries(p.visible, p.locked));
                         entries.push(frame_path_entry(&p.anchors, &p.subpath_starts));
                         entries.push(item_name_entry(spread, raw));
+                        // Engine ADR 10XX — a live polygon's star inset
+                        // (`None` for a path that is not one, which takes
+                        // only `None` back).
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FrameShapeStarInset,
+                            value: Some(Value::Length(
+                                paged_model::live_shape::live_polygon(p).map(|s| s.star_inset),
+                            )),
+                        });
                         entries
                     }),
                 ElementId::GraphicLine(_) => spread
@@ -9329,6 +9348,20 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(o.fill_rule.as_str().into())),
+                            },
+                            // Engine ADR 10XX — the live pie (0 and 360
+                            // for the whole ellipse).
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapePieStart,
+                                value: Some(Value::Length(Some(
+                                    paged_model::live_shape::pie_start(o),
+                                ))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapePieEnd,
+                                value: Some(Value::Length(Some(
+                                    paged_model::live_shape::pie_end(o),
+                                ))),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,

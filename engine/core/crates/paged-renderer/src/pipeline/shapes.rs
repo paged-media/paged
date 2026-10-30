@@ -56,6 +56,13 @@ pub(super) fn emit_oval_into(
     color_ctx: ColorCtx<'_>,
     content: ContentPainter<'_>,
 ) {
+    // Engine ADR 10XX — a pie is drawn as the polygon of its wedge, with
+    // the oval's paint, effects and picture.
+    if let Some(twin) = paged_model::live_shape::pie_polygon(oval) {
+        return super::text_path::emit_polygon_into(
+            page, &twin, document, palette, fallback, color_ctx, content,
+        );
+    }
     let Some(mode) = crate::module::effect_stack::stack_mode(&oval.effect_stack) else {
         return emit_oval_body(page, oval, document, palette, fallback, color_ctx, content);
     };

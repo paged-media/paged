@@ -1691,6 +1691,30 @@ pub enum PropertyPath {
     /// braces instead of its result (engine ADR 1022). A whole-document
     /// reflow.
     DocumentShowFieldCodes,
+    // ---- engine ADR 10XX — live shapes ------------------------------
+    /// A live polygon's side count (a star's points): `Value::Length` of a
+    /// whole number in 3..=100, on a Polygon that is one closed contour.
+    /// Setting it makes the polygon live and redraws its anchors in their
+    /// own bounding box, keeping a live star's inset;
+    /// `Length(None)` ends the live shape and keeps the path. Reads `None`
+    /// for a path that is not a live polygon. Reshapes
+    /// (`frame_geometry`); the inverse restores the parameters and the
+    /// anchors exactly. No IDML attribute: the anchors are written, the
+    /// parameters ride the item's label (`paged:liveShape`).
+    FrameShapeSides,
+    /// A live polygon's star inset, percent: `Value::Length` in 0..=99, 0
+    /// (or `None`) the plain polygon. Only on a LIVE polygon; any other
+    /// path refuses it (set `FrameShapeSides` first). Redraws the anchors.
+    FrameShapeStarInset,
+    /// An oval's pie start angle, degrees counter-clockwise from three
+    /// o'clock (Illustrator's Pie Start Angle): `Value::Length`, `None`
+    /// is 0. The oval draws the wedge from the start counter-clockwise to
+    /// the end; a whole turn between them is the whole ellipse. Reshapes
+    /// (`frame_geometry`).
+    FrameShapePieStart,
+    /// An oval's pie end angle (Illustrator's Pie End Angle):
+    /// `Value::Length`, `None` is 360.
+    FrameShapePieEnd,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -2091,6 +2115,10 @@ impl PropertyPath {
             PropertyPath::DocumentShowHiddenText => "document.showHiddenText",
             PropertyPath::FrameGradientFillStart => "frame.gradientFillStart",
             PropertyPath::DocumentShowFieldCodes => "document.showFieldCodes",
+            PropertyPath::FrameShapeSides => "frame.shapeSides",
+            PropertyPath::FrameShapeStarInset => "frame.shapeStarInset",
+            PropertyPath::FrameShapePieStart => "frame.shapePieStart",
+            PropertyPath::FrameShapePieEnd => "frame.shapePieEnd",
         }
     }
 }

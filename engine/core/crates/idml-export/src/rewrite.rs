@@ -833,11 +833,22 @@ fn model_geometry(
         b"Oval" => ovals
             .iter()
             .find(|o| o.self_id.as_deref() == Some(self_id))
-            .map(|o| ModelGeometry {
-                oval: true,
-                anchors: Vec::new(),
-                subpath_starts: Vec::new(),
-                bounds: o.bounds,
+            .map(|o| match paged_model::live_shape::oval_outline(o) {
+                // Engine ADR 10XX — a pie's path IS its wedge (InDesign
+                // draws an `<Oval>` by its path); the angles ride the
+                // item's label.
+                Some(anchors) => ModelGeometry {
+                    oval: false,
+                    bounds: paged_model::live_shape::anchor_box(&anchors).unwrap_or(o.bounds),
+                    anchors,
+                    subpath_starts: Vec::new(),
+                },
+                None => ModelGeometry {
+                    oval: true,
+                    anchors: Vec::new(),
+                    subpath_starts: Vec::new(),
+                    bounds: o.bounds,
+                },
             }),
         b"TextFrame" => frames.get(self_id).map(|f| ModelGeometry {
             oval: false,
@@ -1824,6 +1835,7 @@ fn write_new_box_item(
     item_transform: Option<[f32; 6]>,
     paint: &NewItemPaint<'_>,
     bounds: Bounds,
+    outline: Option<Vec<PathAnchor>>,
     spread: &Spread,
 ) -> Result<(), quick_xml::Error> {
     let mut attrs: Vec<(&str, String)> = vec![("Self", self_id.to_string())];
@@ -1833,7 +1845,10 @@ fn write_new_box_item(
     emit_start_with_attrs(writer, kind, &attrs)?;
     writer.write_event(Event::Start(BytesStart::new("Properties")))?;
     write_item_label(writer, spread, self_id)?;
-    if kind == "Oval" {
+    if let Some(outline) = outline {
+        // Engine ADR 10XX — a pie oval's wedge.
+        write_closed_path_geometry(writer, &outline)?;
+    } else if kind == "Oval" {
         write_oval_path_geometry(writer, bounds)?;
     } else {
         write_box_path_geometry(writer, bounds)?;
@@ -2392,6 +2407,7 @@ fn write_new_item(
                         content_target: Default::default(),
                     },
                     rect.bounds,
+                    None,
                     spread,
                 )?;
             }
@@ -2436,6 +2452,7 @@ fn write_new_item(
                         content_target: Default::default(),
                     },
                     o.bounds,
+                    paged_model::live_shape::oval_outline(o),
                     spread,
                 )?;
             }
