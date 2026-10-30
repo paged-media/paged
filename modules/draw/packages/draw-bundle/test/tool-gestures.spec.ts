@@ -611,8 +611,21 @@ describe("paged.draw tools through the gesture DSL — WP6.1 part 2 [plugin-draw
     const insert = r.leaves().find((m) => m.op === "insertPath") as {
       args: { anchors: unknown[]; open: boolean };
     };
-    expect(insert.args.anchors).toHaveLength(10);
+    // Engine ADR 1047: an upright star is a LIVE star — the pentagon on
+    // Radius 1, then its points and inset in the same batch; the engine
+    // draws the ten points.
+    expect(insert.args.anchors).toHaveLength(5);
     expect(insert.args.open).toBe(false);
+    expect(
+      r
+        .leaves()
+        .filter((m) =>
+          String((m.args as { path?: string }).path ?? "").startsWith(
+            "frameShape",
+          ),
+        )
+        .map((m) => (m.args as { path: string }).path),
+    ).toEqual(["frameShapeSides", "frameShapeStarInset"]);
     await oneUndoStep(r, before);
     await cancelCommitsNothing(`${T}.star`, [], [600, 600], [600, 560]);
   });
