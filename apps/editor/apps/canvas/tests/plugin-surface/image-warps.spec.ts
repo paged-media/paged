@@ -31,7 +31,6 @@ import { covers } from "@paged-media/test-kit";
 import { Designer } from "../journey/driver/designer";
 import {
   ADJ_PANEL,
-  FRAME,
   armTool,
   clickPt,
   dragPt,
