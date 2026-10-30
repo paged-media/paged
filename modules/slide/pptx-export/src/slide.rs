@@ -130,6 +130,13 @@ pub struct Shared<'a> {
     /// The pictures written without the PNG they needed: (element id,
     /// resolution in dpi). The caller renders them and exports again.
     pub needs: RefCell<Vec<(String, f64)>>,
+    /// The document's media parts (`paged/core/media/…`, engine ADR 1027),
+    /// by container path: a movie or sound made in the editor is written
+    /// from them (slide ADR 718).
+    pub doc_media: BTreeMap<String, Vec<u8>>,
+    /// Media parts written for them, by container path, and the last
+    /// `mediaN` number.
+    pub media_files: RefCell<(BTreeMap<String, String>, u32)>,
 }
 
 /// The `asvg:svgBlip` extension of an `a:blip` (Office 2016).
@@ -253,6 +260,8 @@ pub struct Out {
     /// ids, its group's and its shape key (slide ADR 714: animation targets
     /// follow them).
     pub ids: BTreeMap<String, u32>,
+    /// The media whose timing the slide must say (slide ADR 718).
+    pub media_timing: Vec<crate::media::TimingEdit>,
 }
 
 /// An original shape of the slide.
@@ -528,6 +537,7 @@ struct Writer<'a, 'j> {
     seen: RefCell<BTreeSet<String>>,
     next_id: RefCell<u32>,
     ids: RefCell<BTreeMap<String, u32>>,
+    media_timing: RefCell<Vec<crate::media::TimingEdit>>,
 }
 
 /// Write `job`. `None` when the page is the slide as import made it.
@@ -693,6 +703,7 @@ pub fn write<'a>(
         seen: RefCell::new(BTreeSet::new()),
         next_id: RefCell::new(max_id),
         ids: RefCell::new(BTreeMap::new()),
+        media_timing: RefCell::new(Vec::new()),
     };
     let top: Vec<El> = level_els(xml, &tree);
     let ctx = Ctx {
@@ -715,12 +726,14 @@ pub fn write<'a>(
     let media = w.media.into_inner();
     let ids = w.ids.into_inner();
     let parts = w.parts.into_inner();
+    let media_timing = w.media_timing.into_inner();
     Ok(Some(Out {
         xml: out,
         media,
         parts,
         lost,
         ids,
+        media_timing,
     }))
 }
 
@@ -1809,8 +1822,31 @@ impl<'a> Writer<'a, '_> {
                 BEFORE_EFFECTS,
             )?;
         }
+        // Slide ADR 718: the medium's trim and fade are the picture's, its
+        // volume, loop and hide the slide timing's. Its medium itself (a
+        // replaced video, a frame that became one) is not written.
+        let mut media_keys = false;
+        if keys.contains("media") {
+            media_keys = true;
+            match (crate::media::of(&eb.v), crate::media::of(&ec.v)) {
+                (Some(mb), Some(mc)) if mb.source == mc.source && mb.kind == mc.kind => {
+                    x = crate::media::patch_p14(&x, &mc);
+                    if let Some(id) = o.shape.and_then(nv).map(|n| n.id).filter(|&id| id > 0) {
+                        self.media_timing
+                            .borrow_mut()
+                            .push(crate::media::TimingEdit {
+                                spid: id,
+                                media: mc,
+                                new: false,
+                            });
+                    }
+                }
+                _ => self.note(name, "a changed medium is not exported"),
+            }
+        }
         let other: Vec<String> = keys
             .into_iter()
+            .filter(|k| !(media_keys && k == "media"))
             .filter(|k| {
                 ![PLACE, IMAGE, IGNORE, LINE, EFFECTS]
                     .iter()
@@ -1821,6 +1857,61 @@ impl<'a> Writer<'a, '_> {
             self.note(name, format!("{} not exported", other.join(", ")));
         }
         Ok(x)
+    }
+
+    /// The medium of a movie or sound frame made in the editor as the
+    /// picture's `p:nvPr` (slide ADR 718): an embedded medium's part
+    /// written byte for byte as `ppt/media/mediaN.<ext>`, a linked one's
+    /// URL; `None` (and a note) when the document lacks its part.
+    fn media_nv_pr(&self, m: &paged_model::MediaItem, name: &str) -> Option<String> {
+        use paged_model::{MediaKind, MediaSource};
+        let file_rel = match m.kind {
+            MediaKind::Movie => crate::media::REL_VIDEO,
+            MediaKind::Sound => crate::media::REL_AUDIO,
+        };
+        let dir = self.rels.borrow().dir.clone();
+        match &m.source {
+            MediaSource::Link { uri } => {
+                let rid = self.rels.borrow_mut().add(file_rel, uri, true);
+                Some(crate::media::nv_pr(m, &rid, None))
+            }
+            MediaSource::Part { path } => {
+                let Some(bytes) = self.sh.doc_media.get(path) else {
+                    self.note(
+                        name,
+                        "its medium is not in the document; written as a picture",
+                    );
+                    return None;
+                };
+                let part = {
+                    let mut f = self.sh.media_files.borrow_mut();
+                    if let Some(p) = f.0.get(path) {
+                        p.clone()
+                    } else {
+                        f.1 += 1;
+                        let ext = m
+                            .mime
+                            .as_deref()
+                            .and_then(pptx_core::av::extension_for_mime)
+                            .or_else(|| path.rsplit('.').next())
+                            .unwrap_or("bin");
+                        let p = format!("ppt/media/media{}.{ext}", f.1);
+                        f.0.insert(path.clone(), p.clone());
+                        self.media.borrow_mut().push((p.clone(), bytes.clone()));
+                        p
+                    }
+                };
+                // PowerPoint's own form: the file relationship is an
+                // external `NULL`, `p14:media` names the part.
+                let file_rid = self.rels.borrow_mut().add(file_rel, "NULL", true);
+                let media_rid = self.rels.borrow_mut().add(
+                    crate::media::REL_MEDIA,
+                    &relative(&dir, &part),
+                    false,
+                );
+                Some(crate::media::nv_pr(m, &file_rid, Some(&media_rid)))
+            }
+        }
     }
 
     /// A new image part and the slide's relationship to it.
@@ -2285,6 +2376,33 @@ impl<'a> Writer<'a, '_> {
             Kind::Rectangle if image_bytes(e).is_some() => {
                 let bytes = image_bytes(e).unwrap_or_default();
                 let blip = self.add_image(e, &bytes)?;
+                // Slide ADR 718: a movie or sound frame is a picture that
+                // names its medium, and plays it on a click of its own.
+                let media = crate::media::of(&e.v);
+                let nv_pr = media
+                    .as_ref()
+                    .and_then(|m| self.media_nv_pr(m, &name))
+                    .unwrap_or_else(|| "<p:nvPr/>".to_string());
+                let cnv = match &media {
+                    Some(m) if nv_pr != "<p:nvPr/>" => {
+                        self.media_timing
+                            .borrow_mut()
+                            .push(crate::media::TimingEdit {
+                                spid: id,
+                                media: m.clone(),
+                                new: true,
+                            });
+                        if link.is_empty() {
+                            format!(
+                                r#"<p:cNvPr id="{id}" name="{}"><a:hlinkClick r:id="" action="ppaction://media"/></p:cNvPr>"#,
+                                esc(&name)
+                            )
+                        } else {
+                            cnv.clone()
+                        }
+                    }
+                    _ => cnv.clone(),
+                };
                 let crop = crop_of(e)
                     .filter(|_| !blip.baked)
                     .filter(|c| c.iter().any(|v| v.abs() > 0.001))
@@ -2299,7 +2417,7 @@ impl<'a> Writer<'a, '_> {
                     })
                     .unwrap_or_default();
                 Ok(format!(
-                    r#"<p:pic><p:nvPicPr>{cnv}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>{}{crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>{xfrm}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>{}</p:spPr></p:pic>"#,
+                    r#"<p:pic><p:nvPicPr>{cnv}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>{nv_pr}</p:nvPicPr><p:blipFill>{}{crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>{xfrm}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>{}</p:spPr></p:pic>"#,
                     blip.xml(),
                     self.line_of(e)
                 ))

@@ -20,8 +20,8 @@
 
 use pptx_core::{
     Blip, CustomGeometry, CxnRef, FrameContent, Geometry, GraphicFrame, Group, Hyperlink, NvProps,
-    Pic, Placeholder, Shape, ShapeProps, ShapeStyle, Sp, StyleRef, Table, TableCell, TableRow,
-    Xfrm,
+    Pic, PicMedia, PicMediaKind, Placeholder, Shape, ShapeProps, ShapeStyle, Sp, StyleRef, Table,
+    TableCell, TableRow, Xfrm,
 };
 
 use crate::paint::{color_in, effects, fill_in, line};
@@ -229,6 +229,9 @@ pub fn blip(el: &El, ctx: &Ctx) -> Blip {
 
 fn pic(el: &El, ctx: &Ctx) -> Pic {
     Pic {
+        media: el
+            .path(&[(Ns::P, "nvPicPr"), (Ns::P, "nvPr")])
+            .and_then(|nv| pic_media(nv, ctx)),
         nv: el
             .child(Ns::P, "nvPicPr")
             .map(|n| nv_props(n, ctx))
@@ -243,6 +246,86 @@ fn pic(el: &El, ctx: &Ctx) -> Pic {
             .map(|b| blip(b, ctx))
             .unwrap_or_default(),
     }
+}
+
+/// A video or audio picture's medium (slide ADR 718), from its `p:nvPr`:
+/// `a:videoFile` / `a:audioFile` (`r:link`: the medium, inside the package
+/// or a URL) and the `p14:media` extension (`r:embed`, trim and fade). PowerPoint
+/// writes both for an embedded medium; `p14:media` wins for the part.
+fn pic_media(nv: &El, ctx: &Ctx) -> Option<PicMedia> {
+    let (file, kind) = nv.children.iter().find_map(|c| {
+        if c.ns != Ns::A {
+            return None;
+        }
+        match c.local.as_str() {
+            "videoFile" | "quickTimeFile" => Some((c, PicMediaKind::Video)),
+            "audioFile" | "wavAudioFile" => Some((c, PicMediaKind::Audio)),
+            _ => None,
+        }
+    })?;
+    let mut m = PicMedia {
+        kind,
+        name: file.attr("name").map(str::to_string),
+        ..Default::default()
+    };
+    // PowerPoint writes an embedded medium's `r:link` as an external
+    // relationship to `NULL`, and names the part through `p14:media`.
+    let rel = |id: &str| -> (Option<String>, Option<String>) {
+        match ctx.rels.by_id(id) {
+            Some(r) if r.target_mode.as_deref() == Some("External") => {
+                let t = r.target.trim();
+                let none = t.is_empty() || t.eq_ignore_ascii_case("NULL");
+                (None, (!none).then(|| t.to_string()))
+            }
+            Some(r) => (Some(ctx.resolve(&r.target)), None),
+            None => (None, None),
+        }
+    };
+    // `wavAudioFile` names its part with `r:embed`.
+    if let Some(id) = file
+        .attr_ns(Ns::R, "link")
+        .or_else(|| file.attr_ns(Ns::R, "embed"))
+    {
+        (m.part, m.link) = rel(id);
+    }
+    let media = nv
+        .path(&[(Ns::P, "extLst")])
+        .into_iter()
+        .flat_map(|x| x.children.iter())
+        .filter(|e| e.local == "ext")
+        .flat_map(|e| e.children.iter())
+        .find(|c| c.ns == Ns::P14 && c.local == "media");
+    if let Some(media) = media {
+        if let Some(id) = media.attr_ns(Ns::R, "embed").filter(|id| !id.is_empty()) {
+            let (part, _) = rel(id);
+            if part.is_some() {
+                m.part = part;
+            }
+        }
+        if let Some(id) = media.attr_ns(Ns::R, "link").filter(|id| !id.is_empty()) {
+            let (_, link) = rel(id);
+            if link.is_some() {
+                m.link = link;
+            }
+        }
+        let ms = |el: Option<&El>, name: &str| {
+            el.and_then(|e| e.attr(name))
+                .and_then(|v| v.trim().parse::<f64>().ok())
+        };
+        let trim = media.child(Ns::P14, "trim");
+        m.trim_start_ms = ms(trim, "st");
+        m.trim_end_ms = ms(trim, "end");
+        let fade = media.child(Ns::P14, "fade");
+        m.fade_in_ms = ms(fade, "in");
+        m.fade_out_ms = ms(fade, "out");
+    }
+    if m.part.is_some() {
+        m.link = None;
+    }
+    if m.part.is_none() && m.link.is_none() {
+        ctx.note("a video or audio picture names no medium".to_string());
+    }
+    Some(m)
 }
 
 fn graphic_frame(el: &El, ctx: &Ctx) -> GraphicFrame {

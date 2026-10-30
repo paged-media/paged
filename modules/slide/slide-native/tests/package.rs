@@ -185,6 +185,7 @@ fn a_picture_travels_as_a_blob_stretched_over_its_crop() {
             // The left half of the image shows.
             crop: (0.0, 0.0, 0.5, 0.0),
             image_effects: Vec::new(),
+            media: None,
         },
         opacity: 1.0,
         effects: Default::default(),

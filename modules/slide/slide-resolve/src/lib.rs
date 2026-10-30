@@ -832,6 +832,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     image_part: part,
                     crop,
                     image_effects: look.effects,
+                    media: p.media.clone(),
                 },
                 opacity: look.opacity,
                 effects: effects(&p.props, p.style.as_ref(), ctx),

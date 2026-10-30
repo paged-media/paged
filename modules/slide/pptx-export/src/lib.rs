@@ -47,6 +47,7 @@ use serde::Deserialize;
 
 pub mod comments;
 pub mod geom;
+pub mod media;
 pub mod native;
 pub mod outline;
 pub mod presentation;
@@ -405,7 +406,19 @@ fn add_defaults(xml: &str, parts: &[String]) -> String {
         };
         let ct = match ext {
             "xlsx" => slide_sheet::CT_XLSX,
-            e => match pptx_core::media::content_type_of_extension(e) {
+            e => match pptx_core::media::content_type_of_extension(e).or_else(|| {
+                // Slide ADR 718: a `mediaN` part is a video or a sound.
+                let kind = if p.rsplit('/').next().is_some_and(|f| f.starts_with("media"))
+                    && matches!(
+                        e,
+                        "m4a" | "mp3" | "wav" | "wma" | "aac" | "ogg" | "flac" | "aiff" | "mid"
+                    ) {
+                    pptx_core::PicMediaKind::Audio
+                } else {
+                    pptx_core::PicMediaKind::Video
+                };
+                pptx_core::av::mime_for_extension(e, kind)
+            }) {
                 Some(ct) => ct,
                 None => continue,
             },
@@ -791,6 +804,17 @@ pub fn export_with(
         live_charts: plan.charts.iter().map(|c| c.part.clone()).collect(),
         rasters: &rasters,
         needs: std::cell::RefCell::new(Vec::new()),
+        doc_media: document.map(native::media_parts).unwrap_or_default(),
+        media_files: std::cell::RefCell::new((
+            BTreeMap::new(),
+            pkg.file_names()
+                .filter_map(|n| {
+                    let f = n.strip_prefix("ppt/media/media")?;
+                    f.split('.').next()?.parse::<u32>().ok()
+                })
+                .max()
+                .unwrap_or(0),
+        )),
         pkg: &pkg,
         diagram_no: std::cell::RefCell::new(
             pkg.file_names()
@@ -834,6 +858,7 @@ pub fn export_with(
         // targets follow them, slide ADR 714).
         let mut page_shapes: Vec<native::NShape> = Vec::new();
         let mut written_ids: BTreeMap<String, u32> = BTreeMap::new();
+        let mut media_timing: Vec<media::TimingEdit> = Vec::new();
         // What is on the slide, from the document.
         if let (Some(sh), Some(deck), Some(base), Some(pid)) =
             (&shared, &deck, &base, s.page_id.as_deref())
@@ -877,7 +902,9 @@ pub fn export_with(
                                         parts: Vec::new(),
                                         lost: Vec::new(),
                                         ids: BTreeMap::new(),
+                                        media_timing: Vec::new(),
                                     });
+                                    media_timing = out.media_timing.clone();
                                     written_ids = out.ids.clone();
                                     slide_xml = set_hidden(&out.xml, s.hidden);
                                     for (p, b) in out.media {
@@ -931,6 +958,7 @@ pub fn export_with(
                         match slide::write(sh, &job, &mut r) {
                             Ok(Some(out)) => {
                                 written_ids = out.ids.clone();
+                                media_timing = out.media_timing.clone();
                                 slide_xml = out.xml;
                                 for (p, b) in out.media {
                                     media_parts.push(p.clone());
@@ -1164,6 +1192,13 @@ pub fn export_with(
             if changed {
                 slide_xml = timing::splice(&slide_xml, resolved.as_ref());
             }
+        }
+        // Video and audio (slide ADR 718): what the slide's timing says
+        // of each medium the document changed or made.
+        if !media_timing.is_empty() {
+            let mut lost = Vec::new();
+            slide_xml = media::apply_timing(&slide_xml, &media_timing, &mut lost);
+            not_exported.extend(lost.into_iter().map(|l| format!("slide {}: {l}", n + 1)));
         }
         out_parts.insert(part.clone(), slide_xml.into_bytes());
         written.push((part, t.id, t.rid.clone(), src.to_string()));

@@ -138,6 +138,9 @@ pub enum ItemKind {
         /// The blip's picture effects (`a:duotone`, `a:lum`, …).
         #[serde(default)]
         image_effects: Vec<ImageEffect>,
+        /// The video or audio this picture is the poster of (slide ADR 718).
+        #[serde(default)]
+        media: Option<pptx_core::PicMedia>,
     },
     Group {
         children: Vec<Item>,

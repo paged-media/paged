@@ -74,6 +74,9 @@ pub struct Built {
     pub stories: BTreeMap<String, String>,
     pub elements: BTreeMap<String, (&'static str, String)>,
     pub diagnostics: Vec<String>,
+    /// The media the deck's video and audio name (slide ADR 718), by
+    /// container path (`paged/core/media/…`, engine ADR 1027).
+    pub media: BTreeMap<String, Vec<u8>>,
 }
 
 /// Where PowerPoint puts a text frame's first baseline, in pt below the top
@@ -702,6 +705,10 @@ struct Builder<'a> {
     /// and each one's definition.
     object_styles: Vec<(String, ObjectStyleDef)>,
     diagnostics: Vec<String>,
+    /// The media parts the video and audio pictures name, by container path.
+    media: BTreeMap<String, Vec<u8>>,
+    /// How the slide being built plays its media, by `spid` (slide ADR 718).
+    media_timing: BTreeMap<String, pptx_core::av::MediaTiming>,
 }
 
 /// What makes two table styles one: name, region cell styles, alternating
@@ -894,6 +901,7 @@ impl Builder<'_> {
                 image_part,
                 crop,
                 image_effects,
+                media,
             } => {
                 // Engine ADR 1037 — the blip's picture effects the engine
                 // models ride the frame's filter stack; the rest are reported.
@@ -972,12 +980,80 @@ impl Builder<'_> {
                     rect.subpath_starts = path.starts;
                     rect.subpath_open = path.open;
                 }
+                // Slide ADR 718: a video or audio picture is a movie or
+                // sound frame; the picture is its poster.
+                if let Some(m) = media {
+                    rect.media = self.media_item(m, it.meta.shape_id);
+                }
                 let idx = sb.spread.rectangles.len();
                 sb.spread.rectangles.push(rect);
                 sb.register(FrameRef::Rectangle(idx));
             }
             ItemKind::Table(t) => self.table(sb, it, t, label),
         }
+    }
+
+    /// A video or audio picture's medium as the engine's (engine ADR 1027):
+    /// an embedded medium becomes a media part of the document, a linked
+    /// one stays a link; trim and fade from `p14:media`, volume, loop,
+    /// hide and start from the slide's timing. `None` (and a diagnostic)
+    /// when the medium is missing.
+    fn media_item(&mut self, m: &pptx_core::PicMedia, spid: u32) -> Option<paged_model::MediaItem> {
+        use paged_model::{MediaItem, MediaKind, MediaPlay, MediaSource};
+        let kind = match m.kind {
+            pptx_core::PicMediaKind::Video => MediaKind::Movie,
+            pptx_core::PicMediaKind::Audio => MediaKind::Sound,
+        };
+        let file = m.part.as_deref().or(m.link.as_deref()).unwrap_or("");
+        let ext = file
+            .rsplit('/')
+            .next()
+            .and_then(|f| f.rsplit_once('.').map(|(_, e)| e))
+            .unwrap_or("");
+        let source = if let Some(part) = &m.part {
+            let Some(bytes) = (self.images)(part) else {
+                self.diagnostics
+                    .push(format!("{part}: the medium is missing from the deck"));
+                return None;
+            };
+            let path = paged_store::media_part_path(&bytes, ext);
+            self.media.entry(path.clone()).or_insert(bytes);
+            MediaSource::Part { path }
+        } else if let Some(uri) = &m.link {
+            MediaSource::Link { uri: uri.clone() }
+        } else {
+            return None;
+        };
+        let timing = self.media_timing.get(&spid.to_string());
+        let ms = |v: Option<f64>| v.map(|v| v.max(0.0).round() as u32).unwrap_or(0);
+        let mut out = MediaItem {
+            mime: pptx_core::av::mime_for_extension(ext, m.kind).map(str::to_string),
+            name: m
+                .name
+                .clone()
+                .filter(|n| !n.is_empty())
+                .or_else(|| file.rsplit('/').next().map(str::to_string)),
+            trim_start_ms: ms(m.trim_start_ms),
+            trim_end_ms: ms(m.trim_end_ms),
+            fade_in_ms: ms(m.fade_in_ms),
+            fade_out_ms: ms(m.fade_out_ms),
+            ..MediaItem::new(kind, source)
+        };
+        if let Some(t) = timing {
+            if t.muted {
+                out.volume = 0.0;
+            } else if let Some(v) = t.volume {
+                out.volume = v as f32;
+            }
+            out.looped = t.looped;
+            out.hide_while_not_playing = t.hide_while_not_playing;
+            out.full_screen = t.full_screen;
+            out.play = match t.start {
+                Some(pptx_core::av::MediaStart::Auto) => MediaPlay::Auto,
+                _ => MediaPlay::OnClick,
+            };
+        }
+        out.is_valid().then_some(out)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1627,6 +1703,8 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         links: Vec::new(),
         object_styles: Vec::new(),
         diagnostics: Vec::new(),
+        media: BTreeMap::new(),
+        media_timing: BTreeMap::new(),
     };
     const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
     let bounds = Bounds {
@@ -1684,6 +1762,11 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         });
         // The slide's notes, hidden flag and transition ride its page as
         // plugin metadata, so they move, duplicate and undo with it.
+        w.media_timing = s
+            .timing
+            .as_ref()
+            .map(pptx_core::av::media_timing)
+            .unwrap_or_default();
         for it in &s.items {
             w.item(&mut sb, it, Some(&format!("{}#{}", s.part, slide_key(it))));
         }
@@ -1977,6 +2060,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             d.extend(w.dml.take_losses());
             d
         },
+        media: w.media,
     }
 }
 
@@ -1988,9 +2072,14 @@ pub fn write(
     name: &str,
 ) -> Result<Written, String> {
     let built = build(deck, images, name);
-    let paged =
-        paged_store::package::wrap_document(&built.document, name, n(deck.width), n(deck.height))
-            .map_err(|e| format!("package the deck: {e}"))?;
+    let paged = paged_store::package::wrap_document_with_parts(
+        &built.document,
+        name,
+        n(deck.width),
+        n(deck.height),
+        &built.media,
+    )
+    .map_err(|e| format!("package the deck: {e}"))?;
     Ok(Written {
         paged,
         stories: built.stories,

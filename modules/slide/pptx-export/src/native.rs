@@ -59,6 +59,25 @@ pub fn read(paged: &[u8]) -> Result<Document, String> {
         .ok_or_else(|| "the native model part does not read".into())
 }
 
+/// A `.paged` container's media parts (`paged/core/media/…`, engine ADR
+/// 1027), by container path. Empty when the container does not read.
+pub fn media_parts(paged: &[u8]) -> BTreeMap<String, Vec<u8>> {
+    let Ok(entries) = paged_ooxml::opc::read_zip(paged, 2 << 30) else {
+        return BTreeMap::new();
+    };
+    entries
+        .into_iter()
+        .filter_map(|e| match e {
+            paged_ooxml::opc::ZipEntry::File { name, bytes }
+                if name.starts_with(paged_model::media::MEDIA_PART_PREFIX) =>
+            {
+                Some((name, bytes))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// A shape's click action as the importer labelled it.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Link {

@@ -32,6 +32,7 @@
 //! [`Presentation::diagnostics`].
 
 pub mod anim;
+pub mod av;
 pub mod chart;
 pub mod media;
 
@@ -528,6 +529,39 @@ pub struct Pic {
     pub props: ShapeProps,
     pub style: Option<ShapeStyle>,
     pub blip: Blip,
+    /// The video or audio the picture is the poster of (slide ADR 718).
+    #[serde(default)]
+    pub media: Option<PicMedia>,
+}
+
+/// Whether a picture's medium has pictures.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PicMediaKind {
+    /// `a:videoFile` (or `a:quickTimeFile`).
+    #[default]
+    Video,
+    /// `a:audioFile` (or `a:wavAudioFile`).
+    Audio,
+}
+
+/// A video or audio picture's medium (slide ADR 718): `p:nvPr`'s
+/// `a:videoFile` / `a:audioFile` and its `p14:media` extension.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PicMedia {
+    pub kind: PicMediaKind,
+    /// The media part the deck embeds (`p14:media r:embed`, or the
+    /// `r:link` target when it is inside the package).
+    pub part: Option<String>,
+    /// The URL of a linked medium (an external `r:link`).
+    pub link: Option<String>,
+    /// `p14:trim st` / `end`, ms.
+    pub trim_start_ms: Option<f64>,
+    pub trim_end_ms: Option<f64>,
+    /// `p14:fade in` / `out`, ms.
+    pub fade_in_ms: Option<f64>,
+    pub fade_out_ms: Option<f64>,
+    /// `a:videoFile name` / `a:audioFile name`, the medium's name.
+    pub name: Option<String>,
 }
 
 /// `p:grpSp`.
