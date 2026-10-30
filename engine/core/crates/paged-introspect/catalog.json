@@ -1736,6 +1736,10 @@
     "frameFillRule",
     "frameImageAdjustments",
     "frameGradientFillStart",
+    "frameShapeSides",
+    "frameShapeStarInset",
+    "frameShapePieStart",
+    "frameShapePieEnd",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -4165,6 +4169,73 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapeSides",
+      "type": {
+        "kind": "number",
+        "unit": "count"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 3.0,
+        "max": 100.0
+      },
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapeStarInset",
+      "type": {
+        "kind": "number",
+        "unit": "percent"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0,
+        "max": 99.0
+      },
+      "default": 0.0,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePieStart",
+      "type": {
+        "kind": "number",
+        "unit": "degrees"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": -360.0,
+        "max": 360.0
+      },
+      "default": 0.0,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePieEnd",
+      "type": {
+        "kind": "number",
+        "unit": "degrees"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": -360.0,
+        "max": 360.0
+      },
+      "default": 360.0,
+      "access": "readWrite",
+      "bindable": true
     },
     {
       "addressKind": "frame",
@@ -18486,6 +18557,73 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapeSides",
+        "type": {
+          "kind": "number",
+          "integer": true
+        },
+        "nullable": true,
+        "range": {
+          "min": 3.0,
+          "max": 100.0
+        },
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapeStarInset",
+        "type": {
+          "kind": "number",
+          "unit": "percent"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0,
+          "max": 99.0
+        },
+        "default": 0.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePieStart",
+        "type": {
+          "kind": "number",
+          "unit": "deg"
+        },
+        "nullable": true,
+        "range": {
+          "min": -360.0,
+          "max": 360.0
+        },
+        "default": 0.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePieEnd",
+        "type": {
+          "kind": "number",
+          "unit": "deg"
+        },
+        "nullable": true,
+        "range": {
+          "min": -360.0,
+          "max": 360.0
+        },
+        "default": 360.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
       },
       {
         "addressKind": "frame",
