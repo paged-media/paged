@@ -76,6 +76,7 @@ import type {
   ViewContribution,
 } from "./editor.js";
 import type { SceneLayer } from "./wire.js";
+import type { MediaItem, MediaKind, MediaSource } from "./wire.js";
 
 import type { AssetSurface } from "./assets.js";
 import type {
@@ -2859,6 +2860,59 @@ export interface PartsSurface {
   delete(path: string): Promise<boolean>;
 }
 
+// -------------------------------------------------------------- media
+
+/**
+ * Extensions ADR 347 (contract C6) — the MEDIA door. A movie or sound frame
+ * (engine ADR 1027) is a rectangle whose placed picture is its poster and
+ * whose `frameMedia` property says where its medium is and how it plays.
+ * The engine never plays a medium; a bundle that presents the document (a
+ * slide show on its presentation surface, ADR 345) reads the medium here and
+ * plays it in its own `<video>` / `<audio>` element over the frame.
+ *
+ * Always present. Without a document, `read` answers `null`; `store`
+ * rejects when the host wires no container writer. Probe
+ * `supports("document.media@1")`.
+ */
+export interface MediaSurface {
+  /**
+   * The medium of frame `id`: its description, and its bytes (a medium kept
+   * as a container part, `source.type === "part"`, read from the document)
+   * or its URL (a linked one). `null` when `id` names no movie or sound
+   * frame. A medium whose part the document lacks answers `bytes: null`.
+   * Gated on `capabilities.document.read`.
+   */
+  read(id: ElementId): Promise<MediaRead | null>;
+  /**
+   * Keep `bytes` in the document as a media part and answer the source a
+   * frame's medium names it by (`{ type: "part", path }`), for a
+   * `setElementProperty(id, "frameMedia", …)` write. The part lives in the
+   * engine's shared media folder (`paged/core/media/`), named by its content,
+   * written once: storing the same bytes again answers the same path, and no
+   * bundle can change a stored medium. It travels with the `.paged` file and
+   * is not undoable (a part, like `host.parts`). Gated on
+   * `capabilities.document.write`.
+   */
+  store(bytes: Uint8Array, options: MediaStoreOptions): Promise<MediaSource>;
+}
+
+/** What {@link MediaSurface.read} answers. */
+export interface MediaRead {
+  media: MediaItem;
+  /** The medium's bytes when it is a part of the document, else null. */
+  bytes: Uint8Array | null;
+  /** The medium's URL when it is linked, else null. */
+  url: string | null;
+}
+
+/** Options of {@link MediaSurface.store}. */
+export interface MediaStoreOptions {
+  /** The medium's type (`video/mp4`, `audio/mpeg`, …): names the part's
+   *  extension. */
+  mime: string;
+  kind?: MediaKind;
+}
+
 // ------------------------------------------------------- nativeDocument
 //
 // The isolate-safe NATIVE-DOCUMENT door (ADR-021 / document-model direction):
@@ -3680,6 +3734,10 @@ export interface BundleHost {
    *  null/`[]`, writes reject, and `supports("storage.parts@1")` is false. The
    *  part-types are declared in `contributes.partTypes`. */
   readonly parts: PartsSurface;
+  /** Extensions ADR 347 (C6) — a movie or sound frame's medium: read its
+   *  bytes or URL, and keep new media in the document. Always present;
+   *  probe `supports("document.media@1")`. */
+  readonly media: MediaSurface;
   /** The isolate-safe NATIVE-DOCUMENT door (ADR-021): capability-gated read of
    *  the host document's CORE-OWNED native parts (`paged/core/` MODEL +
    *  COMPOSITION) + loading a plugin-produced native/importable package as the

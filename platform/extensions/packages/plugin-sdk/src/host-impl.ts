@@ -63,6 +63,9 @@ import type {
   PropertyPath,
   Value,
   PartsSurface,
+  MediaSurface,
+  MediaItem,
+  MediaKind,
   NativeDocumentSurface,
   DocumentsSurface,
   OpenDocumentResult,
@@ -554,6 +557,12 @@ export const HOST_FEATURES: readonly string[] = [
   // reads no row. A bundle that would otherwise bake a picture fix into
   // the pixels (paged.slide's DrawingML picture effects) asks it first.
   "document.imageAdjustments@1",
+  // Extensions ADR 347 (C6) — the media door over engine ADR 1027's movie
+  // and sound frames: `host.media.read` (a frame's medium, its bytes or
+  // URL) and `host.media.store` (keep media bytes in the document).
+  // STATIC: `frameMedia` is additive at protocol 78, so an older engine
+  // reads no row (`read` answers null) and refuses the write.
+  "document.media@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -5643,6 +5652,82 @@ export function createBundleHost(
     },
   };
 
+  // ----------------------------------------------------- media
+  // Extensions ADR 347 (C6) — a movie or sound frame's medium (engine ADR
+  // 1027). `read` is the frame's `frameMedia` row plus its bytes (a part,
+  // read by its full path: the engine serves any `paged/` part for
+  // reading) or its URL; `store` writes the bytes into the engine's shared
+  // media folder, `paged/core/media/<sha-256>.<ext>`, which the engine
+  // keeps write-once for every caller.
+  const readFullPart = async (full: string): Promise<Uint8Array | null> => {
+    const binary = getEditor().parts;
+    if (binary) return binary.read(full);
+    const reply = await getEditor().client.send({
+      kind: "readPagedPart",
+      payload: { path: full },
+    });
+    return reply.kind === "pagedPartRead" && reply.payload.found
+      ? Uint8Array.from(reply.payload.bytes)
+      : null;
+  };
+  const media: MediaSurface = {
+    async read(id) {
+      requireDocRead("media.read");
+      let props: Awaited<ReturnType<typeof document.elementProperties>> =
+        null;
+      try {
+        props = await document.elementProperties(id);
+      } catch {
+        return null;
+      }
+      const entry = props?.entries.find((e) => e.path === "frameMedia");
+      const value = entry?.value as
+        | { type: "media"; value: MediaItem | null }
+        | null
+        | undefined;
+      const item = value && value.type === "media" ? value.value : null;
+      if (!item) return null;
+      if (item.source.type === "link")
+        return { media: item, bytes: null, url: item.source.uri };
+      let bytes: Uint8Array | null = null;
+      try {
+        bytes = await readFullPart(item.source.path);
+      } catch {
+        bytes = null;
+      }
+      return { media: item, bytes, url: null };
+    },
+    async store(bytes, opts) {
+      requireDeclared(
+        hasDoc("write"),
+        "media.store",
+        "capabilities.document.write",
+      );
+      const path = `paged/core/media/${await sha256Name(bytes)}.${mediaExtension(opts.mime, opts.kind)}`;
+      const binary = getEditor().parts;
+      if (binary) {
+        try {
+          await binary.write(path, bytes, manifest.id);
+        } catch (err) {
+          throw new Error(`host.media.store: ${String(err)}`);
+        }
+        return { type: "part", path };
+      }
+      const reply = await getEditor().client.send({
+        kind: "writePagedPart",
+        payload: { path, bytes: Array.from(bytes), caller: manifest.id },
+      });
+      if (reply.kind !== "pagedPartWritten") {
+        const err =
+          reply.kind === "pagedPartFailed"
+            ? reply.payload.error
+            : `unexpected ${reply.kind}`;
+        throw new Error(`host.media.store: ${err}`);
+      }
+      return { type: "part", path };
+    },
+  };
+
   // ----------------------------------------------- nativeDocument
   // The isolate-safe NATIVE-DOCUMENT door (ADR-021 / document-model direction):
   // the isolate-safe replacement for an importer/exporter reaching through
@@ -6479,6 +6564,7 @@ export function createBundleHost(
     storage,
     blob,
     parts,
+    media,
     nativeDocument,
     documents,
     network,
@@ -6514,4 +6600,43 @@ export function createBundleHost(
       store.dispose();
     },
   };
+}
+
+/** Extensions ADR 347 — a media part's name: the first 128 bits of the
+ *  bytes' SHA-256, in hex. */
+async function sha256Name(bytes: Uint8Array): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>),
+  );
+  return Array.from(digest.slice(0, 16), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+/** The extension a media part of type `mime` is named with. */
+export function mediaExtension(mime: string, kind?: MediaKind): string {
+  const known: Record<string, string> = {
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+    "video/ogg": "ogv",
+    "video/x-m4v": "m4v",
+    "video/x-msvideo": "avi",
+    "video/x-ms-wmv": "wmv",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/webm": "weba",
+    "audio/aac": "aac",
+    "audio/flac": "flac",
+  };
+  const m = mime.toLowerCase().split(";")[0]!.trim();
+  return (
+    known[m] ??
+    (kind === "sound" || m.startsWith("audio/") ? "m4a" : "mp4")
+  );
 }

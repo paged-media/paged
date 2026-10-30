@@ -795,6 +795,8 @@ export const CORE_PATHS: Record<
   frameAppearanceLayer: OP,
   // An image frame's filter stack is protocol 77 (engine ADR 1037).
   frameImageAdjustments: V71,
+  // A movie or sound frame's medium is protocol 78 (engine ADR 1027).
+  frameMedia: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",
