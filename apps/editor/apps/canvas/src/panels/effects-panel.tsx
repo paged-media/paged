@@ -85,11 +85,7 @@ import type { PropertyPath, Value } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
 import { effectKinds } from "./effect-stack";
-import {
-  EffectStackSection,
-  effectName,
-  type BlendOption,
-} from "./effect-stack-section";
+import { EffectStackSection, effectName } from "./effect-stack-section";
 import {
   allBlendModes,
   type BlendModeOption,
