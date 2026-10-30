@@ -361,24 +361,48 @@ describe("paged.draw tool options, no engine — Star and Reshape [plugin-draw.t
     inserted(r)!.args.anchors.map((a) =>
       Math.hypot(a.anchor[0]! - 500, a.anchor[1]! - 600),
     );
+  /** A live star's write (engine ADR 1047): the star a drag makes is
+   *  the polygon on Radius 1 plus its points and inset. */
+  const shape = (r: UnitRig, path: string) =>
+    (
+      r.leaves().find((m) => (m.args as { path?: string }).path === path)!
+        .args as {
+        value: { value: number };
+      }
+    ).value.value;
 
   it("points: the star a drag starts with has that many tips", async () => {
     covers("setting:media.paged.draw.tool.star.points");
     const base = await withOptions(`${T}.star`, [], {}, starDrag);
-    expect(inserted(base)!.args.anchors).toHaveLength(10);
+    expect(inserted(base)!.args.anchors).toHaveLength(5);
+    expect(shape(base, "frameShapeSides")).toBe(5);
     const eight = await withOptions(`${T}.star`, [], { points: 8 }, starDrag);
-    expect(inserted(eight)!.args.anchors).toHaveLength(16);
+    expect(inserted(eight)!.args.anchors).toHaveLength(8);
+    expect(shape(eight, "frameShapeSides")).toBe(8);
   });
 
   it("radius2: the valleys sit at that percentage of Radius 1", async () => {
     covers("setting:media.paged.draw.tool.star.radius2");
-    const base = radii(await withOptions(`${T}.star`, [], {}, starDrag));
-    expect(base[1]).toBeCloseTo(20, 6);
-    const deep = radii(
-      await withOptions(`${T}.star`, [], { radius2: 25 }, starDrag),
+    // The outer points sit on Radius 1; the valleys are the inset's
+    // 1 − inset/100 of it.
+    const baseRig = await withOptions(`${T}.star`, [], {}, starDrag);
+    const base = radii(baseRig);
+    expect(base[0]).toBeCloseTo(40, 6);
+    expect(40 * (1 - shape(baseRig, "frameShapeStarInset") / 100)).toBeCloseTo(
+      20,
+      6,
     );
-    expect(deep[0]).toBeCloseTo(40, 6);
-    expect(deep[1]).toBeCloseTo(10, 6);
+    const deepRig = await withOptions(
+      `${T}.star`,
+      [],
+      { radius2: 25 },
+      starDrag,
+    );
+    expect(radii(deepRig)[0]).toBeCloseTo(40, 6);
+    expect(40 * (1 - shape(deepRig, "frameShapeStarInset") / 100)).toBeCloseTo(
+      10,
+      6,
+    );
   });
 
   it("radius: a small falloff moves only the dragged anchor; a wide one carries its neighbours", async () => {

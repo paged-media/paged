@@ -344,6 +344,7 @@ import {
 } from "../select-all";
 import { CorpusPicker } from "../ui/CorpusPicker";
 import { templateFieldsContribution } from "../overlays/template-fields";
+import { liveShapeHandlesContribution } from "../overlays/live-shape-handles";
 import {
   EditorInstanceProvider,
   createEditorServices,
@@ -386,6 +387,8 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   selectionChromeContribution,
   resizeHandlesContribution,
   rotateHandleContribution,
+  // Editor ADR 310 — the live-shape widgets (corners, sides, star, pie).
+  liveShapeHandlesContribution,
   // W2.9 — text-frame threading ports on the selection chrome.
   threadingPortsContribution,
   // B4 — the story's route across the spread (View ▸ Show text

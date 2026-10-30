@@ -39,7 +39,7 @@ import {
 } from "../src/handlers/pencil-tool";
 import { createPolygonHandler } from "../src/handlers/polygon-tool";
 import { createSmoothHandler } from "../src/handlers/smooth-tool";
-import { harness, leaves } from "./support";
+import { harness, leaves, previews } from "./support";
 
 const PATH = { kind: "polygon", id: "path-1" } as ElementId;
 
@@ -78,8 +78,13 @@ async function polygonAnchors(
     .tool(() => createPolygonHandler())
     .drag({ from: [100, 100], to: [300, 300] })
     .settle();
+  // Engine ADR 1047: the insert is the plain polygon and the engine draws
+  // the star from the sides and inset written with it; the shape the
+  // tool makes is the one it previewed, which these tests read.
   const insert = leaves(fake).find((m) => m.op === "insertPath");
-  return (insert!.args as { anchors: Array<{ anchor: number[] }> }).anchors;
+  expect(insert).toBeTruthy();
+  const shown = previews(fake).at(-1) as { points: number[][] };
+  return shown.points.map((anchor) => ({ anchor }));
 }
 
 /** The tolerance one Smooth click sends with these settings. */
@@ -180,13 +185,13 @@ describe("setting paged.tool.polygon.starInset", () => {
     r.forEach((x, i) => expect(x).toBeCloseTo(i % 2 === 0 ? 100 : 75, 9));
   });
 
-  it("the declared bounds 0…100 are the clamp; a non-number is the default", async () => {
+  it("the declared bounds 0…99 are the clamp (the engine's live-star limit); a non-number is the default", async () => {
     covers("setting:paged.tool.polygon.starInset");
     expect(declared.min).toBe(0);
-    expect(declared.max).toBe(100);
+    expect(declared.max).toBe(99);
     expect(await polygonAnchors({ sides: 5, starInset: -10 })).toHaveLength(5);
     const full = radii(await polygonAnchors({ sides: 5, starInset: 250 }));
-    full.forEach((x, i) => expect(x).toBeCloseTo(i % 2 === 0 ? 100 : 0, 9));
+    full.forEach((x, i) => expect(x).toBeCloseTo(i % 2 === 0 ? 100 : 1, 9));
     expect(
       await polygonAnchors({ sides: 5, starInset: "40" as unknown as number }),
     ).toHaveLength(5);

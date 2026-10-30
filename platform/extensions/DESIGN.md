@@ -800,6 +800,16 @@ value, on a rectangle, oval or polygon. The engine draws and exports the
 picture through it; IDML keeps it in a label. Additive at protocol 77:
 an older engine refuses the write as an unknown path and reads no row.
 
+`"document.liveShapes@1"` (engine ADR 1047) says the vendored wire and
+catalog carry the live-shape paths: `frameShapeSides` and
+`frameShapeStarInset` on a Polygon (a live polygon or star the engine
+redraws from its side count and inset, keeping its outer radius) and
+`frameShapePieStart` / `frameShapePieEnd` on an Oval (the wedge the oval
+draws). Additive at protocol 78: an older engine refuses the writes as
+unknown paths. paged.draw's Star tool asks it before it inserts a live
+star (the plain polygon, then its points and inset in the same batch)
+instead of a plain path.
+
 `"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
 protocol 77) are SVG in and out through the engine's `paged-svg`.
 `importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the

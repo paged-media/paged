@@ -530,6 +530,16 @@ export const HOST_FEATURES: readonly string[] = [
   // ignores `clip` (a plain group) and refuses a group child. paged.draw's
   // clipped repeat asks it before choosing a clip group over paste-into.
   "document.clipGroups@1",
+  // Engine ADR 1047 — live shapes. The vendored wire and catalog carry
+  // `frameShapeSides` / `frameShapeStarInset` (a live polygon or star on
+  // a Polygon) and `frameShapePieStart` / `frameShapePieEnd` (a pie on an
+  // Oval), through the ordinary property doors. STATIC, like
+  // `document.fillRule@1`: the paths are additive at protocol 78, so the
+  // handshake does not prove the engine has them — an older engine
+  // refuses the write as an unknown path. paged.draw's Star tool asks it
+  // before it makes a live star (a polygon, then its points and inset)
+  // rather than a plain path.
+  "document.liveShapes@1",
   // Engine ADR 1031 (protocol v77) — SVG in and out through paged-svg.
   // STATIC: the flag says this SDK forwards both doors. The worker
   // handshake pins the protocol, and an engine without the messages
