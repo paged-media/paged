@@ -53,6 +53,11 @@ paged-store = { path = "../paged-store" }
 paged-flow = { path = "../paged-flow" }
 paged-text = { path = "../paged-text" }
 paged-color = { path = "../paged-color" }
+# Engine ADR 1037 — the image filter stack: the kernel twins, the curve
+# spline, the reduction to display size.
+paged-kernels = { path = "../paged-kernels" }
+paged-pixel = { path = "../paged-pixel" }
+paged-resample = { path = "../paged-resample" }
 # A placed EPS is drawn from its PostScript (engine ADR 1033).
 paged-ps = { path = "../paged-ps" }
 paged-compose = { path = "../paged-compose" }

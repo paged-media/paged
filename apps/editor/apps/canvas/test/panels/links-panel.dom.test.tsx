@@ -23,6 +23,8 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
+import { createBindingProviderRegistry } from "@paged-media/plugin-sdk";
+import { settleTimers } from "./support/styles";
 
 import { LinksPanel } from "../../src/panels/links-panel";
 import { mountPanel, unmountAll } from "./harness";
@@ -132,5 +134,62 @@ describe("Links panel: controls", () => {
       await h.click(b);
     }
     expect(h.mutations(from)).toEqual([]);
+  });
+});
+
+// Image ADR 482 — a bundle whose content links files (paged.image's smart
+// objects) serves `links` rows while its edit context is active; the row
+// names the commands the panel's Relink / Update / Embed run.
+describe("Links panel: rows a binding provider serves", () => {
+  const PLUGIN = "media.paged.image";
+  const RELINK = "media.paged.image.command.smartRelink";
+  const EMBED = "media.paged.image.command.smartEmbed";
+  const owner = () => {
+    const registry = createBindingProviderRegistry();
+    registry.register({
+      plugin: PLUGIN,
+      contextType: "rasterImage",
+      provider: {
+        provides: { collections: ["links"] },
+        readCollection: () => ({
+          kind: "rows",
+          rows: [
+            {
+              hostSelfId: "smart:7",
+              hostKind: "smartObject",
+              uri: "/art/logo.psb",
+              status: "ok",
+              actions: { relink: RELINK, embed: EMBED },
+            },
+          ],
+        }),
+      },
+    });
+    registry.setContextActive(PLUGIN, "rasterImage", null, true);
+    return registry;
+  };
+
+  test("lists the smart object's file after the document's links; a selected row's actions run the row's commands", async () => {
+    covers("panel:paged.links");
+    const h = await mountPanel(LinksPanel, {
+      id: "paged.links",
+      document: structureIdml(),
+      bindingProviders: owner(),
+    });
+    const relinks = h.spyCommand(RELINK);
+    const embeds = h.spyCommand(EMBED);
+    await settleTimers(h);
+    const keys = rows(h.root).map((r) => r.key);
+    expect(keys).toEqual([STRUCTURE.imageFrame.id, "smart:7"]);
+    expect(h.root.querySelector("[data-provided-link-actions]")).toBeNull();
+    const row = h.root.querySelector<HTMLElement>('[data-list-row="smart:7"]')!;
+    await h.act(() => row.click());
+    const button = (a: string) =>
+      h.root.querySelector<HTMLButtonElement>(`[data-link-action="${a}"]`)!;
+    expect(button("update").disabled).toBe(true);
+    await h.act(() => button("relink").click());
+    await h.act(() => button("embed").click());
+    expect(relinks).toEqual([{ link: "smart:7" }]);
+    expect(embeds).toEqual([{ link: "smart:7" }]);
   });
 });

@@ -96,6 +96,15 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.puppetWarp",
       "media.paged.draw.tool.perspectiveGrid",
       "media.paged.draw.tool.perspectiveSelect",
+      // WP6.8 — the Symbolism flyout (draw ADR 365).
+      "media.paged.draw.tool.symbolSprayer",
+      "media.paged.draw.tool.symbolShifter",
+      "media.paged.draw.tool.symbolScruncher",
+      "media.paged.draw.tool.symbolSizer",
+      "media.paged.draw.tool.symbolSpinner",
+      "media.paged.draw.tool.symbolStainer",
+      "media.paged.draw.tool.symbolScreener",
+      "media.paged.draw.tool.symbolNineSlice",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
@@ -207,6 +216,8 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.resetSymbolTransform",
       "media.paged.draw.command.renameSymbol",
       "media.paged.draw.command.deleteSymbol",
+      "media.paged.draw.command.replaceSymbol",
+      "media.paged.draw.command.symbolOptions",
       // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0 (a
       // REGENERABLE recipe in a container part + real artwork per
       // painted face; no gap handling and no edges — see

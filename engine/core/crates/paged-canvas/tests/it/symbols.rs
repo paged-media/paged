@@ -540,3 +540,139 @@ fn a_copy_of_an_instance_is_an_instance__feat__frames_paths_symbol_instance() {
     );
     assert_eq!(instances(&m), 2);
 }
+
+/// Draw ADR 365 — Replace Symbol: `symbolInstanceSymbol` points an
+/// instance at another definition in one undo step, keeping its id,
+/// transform and overrides; an id the store does not hold is refused.
+#[test]
+fn replace_symbol_points_an_instance_at_another_definition__feat__frames_paths_symbol_instance() {
+    let (mut m, square, instance) = square_symbol();
+    let page = first_page(&m);
+    let oval = m
+        .apply_mutation(&Mutation::InsertOval {
+            page_id: page.clone(),
+            bounds: (400.0, 400.0, 420.0, 460.0),
+        })
+        .expect("insertOval")
+        .created_id
+        .expect("oval");
+    m.apply_mutation(&create("Ellipse", vec![oval]))
+        .expect("a second symbol");
+    let ellipse = m
+        .symbols()
+        .iter()
+        .find(|s| s.name == "Ellipse")
+        .expect("the ellipse symbol")
+        .id
+        .clone();
+    let id = ElementId::Instance(instance.clone());
+    m.apply_mutation(&Mutation::SetElementProperty {
+        element_id: id.clone(),
+        path: PropertyPath::FrameOpacity,
+        value: Value::Length(Some(40.0)),
+    })
+    .expect("an override");
+    let before = pixels(&m);
+    m.apply_mutation(&Mutation::SetElementProperty {
+        element_id: id.clone(),
+        path: PropertyPath::SymbolInstanceSymbol,
+        value: Value::Text(ellipse.clone()),
+    })
+    .expect("replace symbol");
+    gate(&m, "replace");
+    let names = |m: &CanvasModel, sym: &str| {
+        m.symbols()
+            .iter()
+            .find(|s| s.id == sym)
+            .map(|s| s.instances.len())
+            .unwrap_or(0)
+    };
+    assert_eq!(names(&m, &square), 0, "the square lost its instance");
+    assert_eq!(names(&m, &ellipse), 2, "the ellipse gained it");
+    assert_ne!(pixels(&m), before, "the instance draws the ellipse now");
+    // The override stays with the instance.
+    let props = m.element_properties(&id).expect("properties");
+    let entry = |p: PropertyPath| {
+        props
+            .entries
+            .iter()
+            .find(|e| e.path == p)
+            .and_then(|e| e.value.clone())
+    };
+    assert_eq!(
+        entry(PropertyPath::FrameOpacity),
+        Some(Value::Length(Some(40.0)))
+    );
+    assert_eq!(
+        entry(PropertyPath::SymbolInstanceSymbol),
+        Some(Value::Text(ellipse.clone()))
+    );
+    m.undo().expect("undo replace");
+    assert_eq!(names(&m, &square), 1);
+    assert_eq!(pixels(&m), before, "one undo step puts the square back");
+    // An unknown symbol is refused and changes nothing.
+    assert!(m
+        .apply_mutation(&Mutation::SetElementProperty {
+            element_id: id,
+            path: PropertyPath::SymbolInstanceSymbol,
+            value: Value::Text("no-such-symbol".to_string()),
+        })
+        .is_err());
+    assert_eq!(names(&m, &square), 1);
+}
+
+/// Draw ADR 365 — the SVG export writes a definition once as `<symbol>`
+/// and every instance as a `<use>` of it; a re-import draws both.
+#[test]
+fn an_svg_export_writes_one_symbol_and_a_use_per_instance__feat__frames_paths_symbol_instance() {
+    let (mut m, symbol, _) = square_symbol();
+    let page = first_page(&m);
+    m.apply_mutation(&place(
+        &symbol,
+        &page,
+        (300.0, 200.0),
+        Some([2.0, 0.0, 0.0, 1.0]),
+    ))
+    .expect("a second, stretched instance");
+    let (svg, report) = m
+        .export_svg(&page, &[], &paged_svg::SvgExportOptions::default())
+        .expect("export");
+    assert_eq!(svg.matches("<symbol ").count(), 1, "{svg}");
+    assert_eq!(svg.matches("<use ").count(), 2, "{svg}");
+    assert!(svg.contains("xmlns:xlink=\"http://www.w3.org/1999/xlink\""));
+    assert!(
+        svg.contains("matrix(2 0 0 1 "),
+        "the stretch rides the use: {svg}"
+    );
+    assert!(report.items >= 2, "{report:?}");
+}
+
+/// Draw ADR 365 — `deleteFrame` removes a symbol instance by its id or its
+/// `instance:` address, in one undo step (the Symbol Sprayer's Alt-drag).
+#[test]
+fn delete_frame_removes_an_instance__feat__frames_paths_symbol_instance() {
+    let (mut m, symbol, first) = square_symbol();
+    let page = first_page(&m);
+    let Some(ElementId::Instance(second)) = m
+        .apply_mutation(&place(&symbol, &page, (300.0, 200.0), None))
+        .expect("place")
+        .created_id
+    else {
+        panic!("an instance");
+    };
+    m.apply_mutation(&Mutation::DeleteFrame {
+        frame_id: first.clone(),
+    })
+    .expect("delete by id");
+    gate(&m, "delete by id");
+    m.apply_mutation(&Mutation::DeleteFrame {
+        frame_id: format!("instance:{second}"),
+    })
+    .expect("delete by address");
+    gate(&m, "delete by address");
+    assert_eq!(instances(&m), 0);
+    assert_eq!(m.symbols().len(), 1, "the definition stays");
+    m.undo().expect("undo");
+    m.undo().expect("undo");
+    assert_eq!(instances(&m), 2);
+}

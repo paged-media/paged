@@ -167,6 +167,7 @@ pub(crate) fn polygon_outline_path(
 /// from them; otherwise fall back to drawing the AABB so synthetic
 /// IDMLs that declare a polygon via `GeometricBounds` still render.
 /// A polygon, with its effect stack applied (engine ADR 1008).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_polygon_into(
     page: &mut BuiltPage,
     poly: &Polygon,
@@ -175,15 +176,18 @@ pub(super) fn emit_polygon_into(
     fallback: Paint,
     color_ctx: ColorCtx<'_>,
     content: super::shapes::ContentPainter<'_>,
+    module: super::shapes::ModulePainter<'_>,
 ) {
     // Engine ADR 1042 — draw the polygon its vector effects describe.
     if let Some(baked) = paged_vector_fx::bake::bake_polygon(poly) {
         return emit_polygon_into(
-            page, &baked, document, palette, fallback, color_ctx, content,
+            page, &baked, document, palette, fallback, color_ctx, content, module,
         );
     }
     let Some(mode) = crate::module::effect_stack::stack_mode(&poly.effect_stack) else {
-        return emit_polygon_body(page, poly, document, palette, fallback, color_ctx, content);
+        return emit_polygon_body(
+            page, poly, document, palette, fallback, color_ctx, content, module,
+        );
     };
     let stripped;
     let base = if mode == crate::module::effect_stack::StackMode::Ordered {
@@ -197,7 +201,9 @@ pub(super) fn emit_polygon_into(
         poly
     };
     let start = page.list.commands.len();
-    emit_polygon_body(page, base, document, palette, fallback, color_ctx, content);
+    emit_polygon_body(
+        page, base, document, palette, fallback, color_ctx, content, module,
+    );
     let mut resolved = ResolvedFrame::from_polygon(poly);
     let style = crate::module::resolve_applied_style(&resolved, document);
     if let Some(s) = &style {
@@ -216,6 +222,7 @@ pub(super) fn emit_polygon_into(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_polygon_body(
     page: &mut BuiltPage,
     poly: &Polygon,
@@ -224,6 +231,7 @@ pub(super) fn emit_polygon_body(
     fallback: Paint,
     color_ctx: ColorCtx<'_>,
     content: super::shapes::ContentPainter<'_>,
+    module: super::shapes::ModulePainter<'_>,
 ) {
     let mut resolved = ResolvedFrame::from_polygon(poly);
     let style = crate::module::resolve_applied_style(&resolved, document);
@@ -417,6 +425,7 @@ pub(super) fn emit_polygon_body(
     if stroke_group {
         pop_blend_group(page);
     }
+    module(page);
     // The feathers come last, over the stroke as well (ADR 204).
     if let (Some(pid), Some(fpid), Some(effects)) = (path_id, feather_path, poly.effects.as_ref()) {
         crate::module::emit_feathers(

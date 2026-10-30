@@ -235,6 +235,9 @@ export function isCopiedFramePath(path: string): boolean {
   );
 }
 
+/** An effect stack with no entries (engine ADR 1008). */
+const EMPTY_EFFECT_STACK = { entries: [], prev: null };
+
 /** Values a frame property takes when nothing sets it — what a fresh frame
  *  already has, and what InDesign writes into every frame of a template
  *  (`[Normal Text Frame]`, no wrap, one column, zero gradient angles, …).
@@ -272,6 +275,12 @@ const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
   frameCornerOptionTopRight: ["None"],
   frameCornerOptionBottomLeft: ["None"],
   frameCornerOptionBottomRight: ["None"],
+  // Engine ADR 1008: every frame reads its four effect stacks, empty on a
+  // fresh one; only a stack with entries is worth a copy.
+  frameEffectStack: [EMPTY_EFFECT_STACK],
+  frameFillEffectStack: [EMPTY_EFFECT_STACK],
+  frameStrokeEffectStack: [EMPTY_EFFECT_STACK],
+  frameContentEffectStack: [EMPTY_EFFECT_STACK],
 };
 
 /** Whether a read property value says something a fresh frame does not:

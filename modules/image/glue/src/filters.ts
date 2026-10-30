@@ -22,6 +22,7 @@ import {
   bool,
   BOX_MAX_RADIUS,
   F,
+  GAUSSIAN_MAX_SIGMA,
   HIGH_PASS_MAX_SIGMA,
   MEDIAN_MAX_RADIUS,
   MORPH_MAX_RADIUS,
@@ -36,6 +37,7 @@ import {
   type FilterValues,
 } from "./filters-schema";
 import { BLUR_GALLERY } from "./filters-blur-gallery";
+import { freshIdentityParams } from "./engine";
 import { FAMILY_FILTERS } from "./filters-families";
 import { FG, GALLERY_FILTERS, galleryWorkspace } from "./filters-gallery";
 import { DEVELOP_FILTERS } from "./develop";
@@ -45,6 +47,36 @@ export * from "./filters-schema";
 /** The first families (the panel keeps a button for each). */
 export const FIRST_FAMILIES: readonly FilterDef[] = [
   // ── Blur ───────────────────────────────────────────────────────────
+  {
+    // Photoshop's Gaussian Blur (its radius is the Gaussian's sigma, as
+    // the oracle's `gaussian-r*` cases show) — the adjust chain's blur
+    // kernel, run detached and landed once (`filterSource` / `filterLand`),
+    // so on a layer it is one step and on a smart object a smart filter
+    // (image ADR 482).
+    id: "gaussianBlur",
+    label: F.gaussianBlur,
+    group: "Blur",
+    params: [
+      range("radius", F.radius, 0.1, GAUSSIAN_MAX_SIGMA, 0.1, 2, { px: true }),
+    ],
+    run: async (e, h, v) => {
+      const src = e.filterSource(h);
+      try {
+        const px = await e.adjust(src.handle, {
+          ...freshIdentityParams(),
+          blurSigma: num(v, "radius"),
+        });
+        const out = e.ingestRgba8(src.width, src.height, px);
+        try {
+          return await e.filterLand(h, out.handle);
+        } finally {
+          e.freeImage(out.handle);
+        }
+      } finally {
+        e.freeImage(src.handle);
+      }
+    },
+  },
   {
     id: "boxBlur",
     label: F.boxBlur,

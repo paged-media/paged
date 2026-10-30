@@ -132,6 +132,8 @@ impl From<Value> for AuthoredValue {
             | Value::Lengths(_)
             | Value::GradientStops(_)
             | Value::EffectStack { .. }
+            // Engine ADR 1037 — the filter stack, a whole list.
+            | Value::ImageAdjustments(_)
             | Value::SwatchColor(_) => AuthoredValue::None,
         }
     }

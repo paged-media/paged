@@ -153,3 +153,6 @@ mod tests {
         assert!(invert([1.0, 2.0, 0.0, 2.0, 4.0, 0.0, 0.0, 0.0, 1.0]).is_none());
     }
 }
+
+/// Envelope warps: the Bézier mesh and Photoshop's warp styles (WP5.10).
+pub mod envelope;

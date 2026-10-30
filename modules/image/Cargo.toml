@@ -38,12 +38,14 @@ image-psd = { path = "../../engine/core/crates/paged-psd", package = "paged-psd"
 # The CPU resample of the headless and batch actions (ADR 467): a leaf
 # engine crate, under its own name.
 paged-resample = { path = "../../engine/core/crates/paged-resample" }
+paged-kernels = { path = "../../engine/core/crates/paged-kernels" }
 # The codecs (ADR 468): every decoder and encoder of the module is the
 # engine's raster crate; image-codecs adapts it to the frozen traits.
 paged-raster = { path = "../../engine/core/crates/paged-raster" }
 # The engine's colour conversions (CIELAB for Match Color; PM-0014 shared capability).
 paged-color = { path = "../../engine/core/crates/paged-color" }
-# Free transform's homography (paged-warp, PM-0014 L2).
+# Free transform's homography, type layers' warp envelopes and smart objects'
+# projective warp (paged-warp, PM-0014 L2).
 paged-warp = { path = "../../engine/core/crates/paged-warp" }
 thiserror = "2"
 anyhow = "1"

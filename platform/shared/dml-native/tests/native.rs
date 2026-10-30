@@ -103,7 +103,10 @@ fn a_picture_takes_its_alpha_and_reports_what_the_engine_cannot_hold__feat__plug
     assert_eq!((i.angle, i.size), (-45.0, 2.5));
     assert_eq!(fx.feather, Some(2.5));
     let losses = l.take_losses();
-    assert!(losses.iter().any(|m| m.contains("a:grayscl")), "{losses:?}");
+    assert!(
+        losses.iter().any(|m| m.contains("adjustment blackWhite")),
+        "{losses:?}"
+    );
     assert!(
         losses.iter().any(|m| m.contains("a:reflection")),
         "{losses:?}"

@@ -28,6 +28,7 @@ their status says so.
 | [362](362-retrace-recolour-blend-matching.md) | A trace keeps its options and re-traces in one step; blends match structure; recolouring re-points | Accepted 2026-10-24 |
 | [363](363-distortion-tools.md) | The distortion tools rewrite paths; their maths is pure warp geometry; the grid is a view setting | Accepted 2026-10-24 |
 | [364](364-interchange-rides-the-engines-doors.md) | Interchange rides the engine's doors: one SVG reader and writer, DXF through SVG, AI and EPS through the host | Accepted 2026-10-28 (amends 357) |
+| [365](365-live-symbols-on-the-engine-node.md) | Live symbols run on the engine's instance node; the Symbolism tools change what an instance carries | Accepted 2026-10-29 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

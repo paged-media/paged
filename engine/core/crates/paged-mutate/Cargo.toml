@@ -13,10 +13,10 @@ workspace = true
 [features]
 # ADR 187 — `schemars::JsonSchema` next to the `Tsify` derive of each type the
 # wire's `Mutation` carries; `paged-wire`'s `schema` feature turns it on.
-schema = ["dep:schemars"]
+schema = ["dep:schemars", "paged-model/schema"]
 
 [dependencies]
-paged-model = { path = "../paged-model" }
+paged-model = { path = "../paged-model", features = ["wire"] }
 paged-scene = { path = "../paged-scene" }
 paged-template = { path = "../paged-template" }
 # The path kernels (outline, offset, simplify, booleans, the arrangement)

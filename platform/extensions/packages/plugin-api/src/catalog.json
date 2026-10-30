@@ -1678,6 +1678,7 @@
     "frameAutoFit",
     "framePdfPage",
     "frameFillRule",
+    "frameImageAdjustments",
     "frameGradientFillStart",
     "frameStrokeType",
     "frameStrokeJoin",
@@ -1772,6 +1773,7 @@
     "groupEffectStack",
     "symbolInstanceTint",
     "symbolInstanceNineSlice",
+    "symbolInstanceSymbol",
     "frameDropShadowBlendMode",
     "frameDropShadowSpread",
     "frameDropShadowNoise",
@@ -4036,6 +4038,19 @@
       "wire": "text",
       "nullable": true,
       "default": "NonZero",
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameImageAdjustments",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "RasterOp"
+      },
+      "wire": "imageAdjustments",
+      "nullable": false,
       "access": "readWrite",
       "bindable": true
     },
@@ -6523,6 +6538,17 @@
         "of": "length"
       },
       "wire": "lengths",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "symbolInstanceSymbol",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
       "nullable": true,
       "access": "readWrite",
       "bindable": true
@@ -17700,6 +17726,23 @@
       },
       {
         "addressKind": "frame",
+        "path": "frameImageAdjustments",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "RasterOp",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "imageAdjustments"
+      },
+      {
+        "addressKind": "frame",
         "path": "frameGradientFillStart",
         "type": {
           "kind": "list",
@@ -20150,6 +20193,17 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "lengths"
+      },
+      {
+        "addressKind": "frame",
+        "path": "symbolInstanceSymbol",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
       },
       {
         "addressKind": "frame",

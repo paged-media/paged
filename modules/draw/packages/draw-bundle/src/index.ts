@@ -973,6 +973,11 @@ export {
   applyBreakSymbolLink,
   applyRenameSymbol,
   applyDeleteSymbol,
+  applyReplaceSymbol,
+  applySymbolOptions,
+  REPLACE_SYMBOL_COMMAND_ID,
+  SYMBOL_OPTIONS_COMMAND_ID,
+  BIND_SYMBOL_OPTIONS_FOCUS,
   contributeSymbolCommands,
   type SymbolRegistration,
   type SymbolPiece,
@@ -994,6 +999,31 @@ export {
   SYMBOLS_PANEL_ID,
   SYMBOLS_NOTE,
 } from "./panels/symbols-panel";
+// WP6.8 (draw ADR 365) — live symbols on the engine node: the Symbolism
+// tools' document lane, the instance reads, Replace Symbol, Symbol
+// Options, and the migration of a v0 library onto engine symbols.
+export {
+  symbolismScope,
+  symbolismBatchFor,
+  writeSymbolism,
+  symbolBox,
+  type SymbolismScope,
+} from "./commands/symbolism";
+export {
+  ENGINE_SYMBOLS_FEATURE,
+  engineSymbols,
+  readEngineSymbols,
+  readInstanceStates,
+  engineInstanceIds,
+  chooseSymbol,
+  currentSymbol,
+  engineReplaceSymbol,
+  engineSymbolOptions,
+  type EngineSymbol,
+  type InstanceState,
+} from "./commands/symbols-engine";
+export { createSymbolismHandler } from "./handlers/symbolism";
+export { createNineSliceHandler } from "./handlers/nine-slice";
 // Phase 9 (Tier B) — Select-same: the pure matcher + tree flattener,
 // exported for the conformance spec.
 export {
@@ -1659,7 +1689,11 @@ export { RESHAPE_OPTIONS, STAR_OPTIONS } from "./tool-options";
 // WP6.7 — the distortion tools: the Liquify family, Puppet Warp, the
 // Perspective Grid and Perspective Selection; their commands, the grid
 // store and its overlay layer.
-export { DISTORTION_TOOL_IDS, LIQUIFY_TOOL_IDS } from "./tools";
+export {
+  DISTORTION_TOOL_IDS,
+  LIQUIFY_TOOL_IDS,
+  SYMBOLISM_TOOL_IDS,
+} from "./tools";
 export {
   distortTargetsOn,
   readDistortTargets,
@@ -1730,6 +1764,8 @@ export {
 } from "./handlers/preview-shapes";
 export {
   LIQUIFY_OPTIONS,
+  SYMBOLISM_OPTIONS,
+  SYMBOL_SPRAYER_OPTIONS,
   WARP_OPTIONS,
   TWIRL_OPTIONS,
   PUCKER_OPTIONS,
@@ -1740,3 +1776,9 @@ export {
   PUPPET_WARP_OPTIONS,
   PERSPECTIVE_SELECT_OPTIONS,
 } from "./tool-options";
+export {
+  migrateSymbolLibrary,
+  installSymbolMigration,
+  fitInstanceTransform,
+  type SymbolMigration,
+} from "./commands/symbols-migrate";

@@ -124,3 +124,10 @@ GPU texture door is still not built
 ([ADR 018](018-stage-b-gpu-texture-defer-record-only.md)). The layer registry is still
 render-time state on the canvas model, not part of the document
 (`crates/paged-canvas/src/model.rs:1156-1161`).
+
+## Amendment — 2026-10-30
+
+The layer is still the frontmost content of its frame, but it is no longer drawn outside the
+frame's compositing: it paints inside the frame's object group, inside the run its effect
+stack applies to, and before its feathers, so the frame's opacity, blend mode and effects
+apply to it ([ADR 1046](1046-a-scene-layer-takes-its-frames-effects.md)).

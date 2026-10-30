@@ -789,6 +789,8 @@ export const CORE_PATHS: Record<
   frameFillEffectStack: V71,
   frameStrokeEffectStack: V71,
   frameContentEffectStack: V71,
+  // An image frame's filter stack is protocol 77 (engine ADR 1037).
+  frameImageAdjustments: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",
@@ -969,6 +971,12 @@ export const CORE_PATHS: Record<
     scope: "frame",
     wire: "lengths",
     type: { kind: "list", of: { kind: "length" } },
+  },
+  // Draw ADR 365 — the symbol an instance draws (Replace Symbol).
+  symbolInstanceSymbol: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
   },
   // Word's character and paragraph additions are protocol 76 (engine ADR
   // 1018); a pre-71 engine has none.

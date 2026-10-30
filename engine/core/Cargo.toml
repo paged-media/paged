@@ -12,6 +12,7 @@ members = [
     "crates/paged-warp",
     "crates/paged-geom",
     "crates/paged-vector-fx",
+    "crates/paged-kernels",
     "crates/paged-psd",
     "crates/paged-resample",
     "crates/paged-raster",

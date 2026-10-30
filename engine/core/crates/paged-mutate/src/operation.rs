@@ -1570,6 +1570,11 @@ pub enum PropertyPath {
     /// space; the empty list falls back to the definition's. Only
     /// `NodeId::Instance` carries it. Native.
     SymbolInstanceNineSlice,
+    /// Engine ADR 1039 (draw ADR 365) — the symbol a symbol instance draws,
+    /// `Value::Text(symbol id)`: Illustrator's Replace Symbol. The
+    /// instance keeps its id, transform and overrides; a symbol id the
+    /// store does not hold is refused. Only `NodeId::Instance`. Native.
+    SymbolInstanceSymbol,
 
     // ---- R-11 — drop-shadow attributes and the global light -------
     /// `<DropShadowSetting BlendMode>`; `""` is InDesign's `Multiply`.
@@ -1639,6 +1644,14 @@ pub enum PropertyPath {
     /// an even-odd outline whose contours do not cross and reports the
     /// rest as lost. Paint-only (`frame_style`).
     FrameFillRule,
+
+    // ---- engine ADR 1037 — the image filter stack ----------------------
+    /// The placed picture's filter stack, in order: `Value::ImageAdjustments`
+    /// (the whole list; the empty list clears it). On a Rectangle, Oval or
+    /// Polygon (the kinds that place a picture). IDML has no such construct:
+    /// the export keeps the stack in a label and reports it as lost.
+    /// Paint-only (`frame_style`).
+    FrameImageAdjustments,
 
     // ---- engine ADR 1018 — Word's character and paragraph additions --
     /// A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a
@@ -2058,6 +2071,7 @@ impl PropertyPath {
             PropertyPath::GroupEffectStack => "group.effectStack",
             PropertyPath::SymbolInstanceTint => "symbolInstance.tint",
             PropertyPath::SymbolInstanceNineSlice => "symbolInstance.nineSlice",
+            PropertyPath::SymbolInstanceSymbol => "symbolInstance.symbol",
             PropertyPath::FrameDropShadowBlendMode => "frame.dropShadowBlendMode",
             PropertyPath::FrameDropShadowSpread => "frame.dropShadowSpread",
             PropertyPath::FrameDropShadowNoise => "frame.dropShadowNoise",
@@ -2079,6 +2093,7 @@ impl PropertyPath {
             PropertyPath::DocumentFootnoteContinuingRuleOn => "document.footnoteContinuingRuleOn",
             PropertyPath::FramePdfPage => "frame.pdfPage",
             PropertyPath::FrameFillRule => "frame.fillRule",
+            PropertyPath::FrameImageAdjustments => "frame.imageAdjustments",
             PropertyPath::CharacterHighlightColor => "character.highlightColor",
             PropertyPath::CharacterHidden => "character.hidden",
             PropertyPath::CharacterUnderlineType => "character.underlineType",
@@ -3372,6 +3387,12 @@ pub enum Value {
     /// half-written colour behind), with the colour model and tint kept
     /// unless given.
     SwatchColor(SwatchColorSpec),
+    /// Engine ADR 1037 — an image frame's whole filter stack, the value of
+    /// `frame.imageAdjustments`. Serialises as `{ type:
+    /// "imageAdjustments", value: [{ op: "exposure", ev: 0.5 }, …] }`. The
+    /// inverse carries the prior stack, so undo restores it exactly.
+    /// Additive new variant (the `TabStops` / `Lengths` precedent).
+    ImageAdjustments(Vec<paged_model::RasterOp>),
 }
 
 /// v71 polish — a `text` / `enum` / `ref` payload of `null` is the empty

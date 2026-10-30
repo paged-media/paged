@@ -66,7 +66,15 @@
       "media.paged.draw.tool.wrinkle",
       "media.paged.draw.tool.puppetWarp",
       "media.paged.draw.tool.perspectiveGrid",
-      "media.paged.draw.tool.perspectiveSelect"
+      "media.paged.draw.tool.perspectiveSelect",
+      "media.paged.draw.tool.symbolSprayer",
+      "media.paged.draw.tool.symbolShifter",
+      "media.paged.draw.tool.symbolScruncher",
+      "media.paged.draw.tool.symbolSizer",
+      "media.paged.draw.tool.symbolSpinner",
+      "media.paged.draw.tool.symbolStainer",
+      "media.paged.draw.tool.symbolScreener",
+      "media.paged.draw.tool.symbolNineSlice"
     ],
     "panels": [
       "media.paged.draw.panel.appearance",
@@ -164,6 +172,8 @@
       "media.paged.draw.command.resetSymbolTransform",
       "media.paged.draw.command.renameSymbol",
       "media.paged.draw.command.deleteSymbol",
+      "media.paged.draw.command.replaceSymbol",
+      "media.paged.draw.command.symbolOptions",
       "media.paged.draw.command.makeLivePaintGroup",
       "media.paged.draw.command.fillLivePaintFace",
       "media.paged.draw.command.regenerateLivePaint",
@@ -2426,6 +2436,46 @@
                 "of": {
                   "kind": "ref",
                   "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.replaceSymbol",
+          "title": "Replace symbol",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "symbol": {
+                "kind": "text"
+              },
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.symbolOptions",
+          "title": "Symbol options",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "symbol": {
+                "kind": "text"
+              },
+              "name": {
+                "kind": "text"
+              },
+              "nineSlice": {
+                "kind": "list",
+                "of": {
+                  "kind": "length"
                 }
               }
             }
