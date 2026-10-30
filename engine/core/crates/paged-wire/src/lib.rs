@@ -2917,6 +2917,30 @@ pub enum Mutation {
         story_id: String,
         table_id: String,
     },
+    /// Engine ADR 1052 — set content control `controlId` of story `storyId`
+    /// to `value`: free text (plain / rich text), an item's value or
+    /// display text (drop-down, combo box), a date `YYYY-MM-DD`, or a
+    /// checkbox's `true` / `false`. The control's text becomes the value's.
+    /// Refused for a locked control or a value its kind does not take.
+    /// Undoable in one step. // rides v78.
+    SetContentControlValue {
+        story_id: String,
+        control_id: String,
+        value: String,
+    },
+    /// Engine ADR 1052 — toggle checkbox control `controlId`: its glyph
+    /// and state flip. Undoable in one step. // rides v78.
+    ToggleContentControl {
+        story_id: String,
+        control_id: String,
+    },
+    /// Engine ADR 1052 — choose item `index` (0-based) of drop-down or
+    /// combo box control `controlId`. Undoable in one step. // rides v78.
+    ChooseContentControlItem {
+        story_id: String,
+        control_id: String,
+        index: u32,
+    },
 }
 
 /// The wire op vocabulary, written once.
@@ -3124,6 +3148,9 @@ mutation_vocabulary! {
     SetCellSpan,
     InsertTable,
     DeleteTable,
+    SetContentControlValue,
+    ToggleContentControl,
+    ChooseContentControlItem,
 }
 
 #[cfg(feature = "mutations")]

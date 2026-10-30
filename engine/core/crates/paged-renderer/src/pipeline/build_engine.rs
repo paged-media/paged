@@ -7405,6 +7405,23 @@ fn emit_paragraph_lines(
     let col_pt = (full_col_pt - left_indent_pt - right_indent_pt).max(1.0);
     let mut lopts = paged_text::LayoutOptions::new(col_pt, paragraph_size);
     lopts.vertical = em.vertical;
+    // Engine ADR 1051 — a stated direction: composed in logical order,
+    // put in visual order after the tab pass below.
+    let stated_bidi = if em.vertical {
+        None
+    } else {
+        super::direction::stated_bidi(
+            resolved_paragraph.direction,
+            styled_runs.iter().enumerate().map(|(k, r)| {
+                let dir = k
+                    .checked_sub(head_run)
+                    .and_then(|i| resolved_runs.get(i))
+                    .and_then(|a| a.script.direction);
+                (r.text, dir)
+            }),
+        )
+    };
+    lopts.bidi = stated_bidi.clone();
     let binding = em
         .chain_pages
         .get(em.frame_idx)
@@ -8362,6 +8379,13 @@ fn emit_paragraph_lines(
                 line_leaders.push(drawn);
             }
         }
+    }
+    // Engine ADR 1051 — every logical pass is done: the lines go into
+    // visual order, mirrored in the column right to left.
+    if let Some(spec) = &stated_bidi {
+        let text: String = styled_runs_ref.iter().map(|r| r.text).collect();
+        let full_64 = (full_col_pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+        paged_text::set_stated_bidi(&mut laid_out.lines, &text, spec, |_| (0, full_64));
     }
 
     // The marker's paint, when its character style gives it one:

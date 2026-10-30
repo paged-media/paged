@@ -388,16 +388,134 @@ pub fn with_nested_styles<'p>(
         let text: String = paragraph.runs.iter().map(|r| r.text.as_str()).collect();
         compute_nested_style_overlay(&text, &resolved.nested_styles, cap_chars)
     };
-    if overlay.is_empty() && !cap_from_style {
-        return Cow::Borrowed(paragraph);
+    let mut out = if overlay.is_empty() && !cap_from_style {
+        Cow::Borrowed(paragraph)
+    } else {
+        let mut owned = paragraph.clone();
+        if !overlay.is_empty() {
+            owned.runs = split_runs_for_nested_styles(&paragraph.runs, &overlay);
+        }
+        if cap_from_style {
+            owned.drop_cap_characters = cap_chars;
+            owned.drop_cap_lines = cap_lines;
+        }
+        Cow::Owned(owned)
+    };
+    // Engine ADR 1051 — a run's East Asian and complex-script characters
+    // in the faces its script slots name.
+    if let Some(runs) = split_runs_for_scripts(document, &out) {
+        out.to_mut().runs = runs;
     }
-    let mut owned = paragraph.clone();
-    if !overlay.is_empty() {
-        owned.runs = split_runs_for_nested_styles(&paragraph.runs, &overlay);
+    out
+}
+
+/// Engine ADR 1051 — the runs of `paragraph` split where a run's
+/// characters change script slot ([`paged_model::ScriptProperties::segments`]),
+/// each piece carrying the face, size and weight of its slot as its own
+/// formatting, so everything downstream draws it as an ordinary run. `None`
+/// when no run has a slot that changes anything (every document that sets
+/// none: IDML, and Word documents without East Asian or complex-script
+/// fonts). A slot left unset falls back to the run's own font. Runs whose
+/// text is generated at emit (fields, variables, placeholders) are not
+/// split: their substitution is per run.
+pub fn split_runs_for_scripts(
+    document: &paged_scene::Document,
+    paragraph: &paged_model::Paragraph,
+) -> Option<Vec<paged_model::CharacterRun>> {
+    let style_splits = paragraph
+        .paragraph_style
+        .as_deref()
+        .is_some_and(|id| document.styles.resolve_paragraph(id).script.splits_runs());
+    let mut out: Option<Vec<paged_model::CharacterRun>> = None;
+    for (i, run) in paragraph.runs.iter().enumerate() {
+        let candidate = !run.text.is_empty()
+            && run.field.is_none()
+            && run.text_variable.is_none()
+            && run.placeholder.is_none()
+            && (style_splits
+                || !run.script.is_unset()
+                || run.character_style.is_some()
+                || !run.text.is_ascii());
+        let attrs = candidate.then(|| document.resolved_run_attrs(paragraph, run));
+        let pieces = attrs
+            .as_ref()
+            .filter(|a| a.script.splits_runs())
+            .map(|a| script_pieces(run, a))
+            .filter(|p| {
+                p.len() > 1
+                    || p.first().is_some_and(|r| {
+                        r.font != run.font
+                            || r.point_size != run.point_size
+                            || r.font_style != run.font_style
+                    })
+            });
+        match (pieces, out.as_mut()) {
+            (Some(p), Some(v)) => v.extend(p),
+            (Some(p), None) => {
+                let mut v = paragraph.runs[..i].to_vec();
+                v.extend(p);
+                out = Some(v);
+            }
+            (None, Some(v)) => v.push(run.clone()),
+            (None, None) => {}
+        }
     }
-    if cap_from_style {
-        owned.drop_cap_characters = cap_chars;
-        owned.drop_cap_lines = cap_lines;
+    out
+}
+
+/// One run cut at its script changes, each piece in its slot's face.
+fn script_pieces(
+    run: &paged_model::CharacterRun,
+    attrs: &paged_scene::ResolvedRunAttrs,
+) -> Vec<paged_model::CharacterRun> {
+    use paged_model::ScriptClass;
+    let script = &attrs.script;
+    let segments = script.segments(&run.text);
+    let mut pieces = Vec::with_capacity(segments.len());
+    for (k, (start, class)) in segments.iter().enumerate() {
+        let end = segments.get(k + 1).map_or(run.text.len(), |(e, _)| *e);
+        let mut piece = run.clone();
+        piece.text = run.text[*start..end].to_string();
+        match class {
+            ScriptClass::EastAsian => {
+                if let Some(face) = &script.east_asian_font {
+                    piece.font = Some(face.clone());
+                }
+            }
+            ScriptClass::Complex => {
+                if let Some(face) = &script.complex_font {
+                    piece.font = Some(face.clone());
+                }
+                if let Some(size) = script.complex_point_size {
+                    piece.point_size = Some(size);
+                }
+                if script.complex_bold.is_some() || script.complex_italic.is_some() {
+                    let own = attrs.font_style.as_deref().unwrap_or("Regular");
+                    let bold = script.complex_bold.unwrap_or_else(|| own.contains("Bold"));
+                    let italic = script
+                        .complex_italic
+                        .unwrap_or_else(|| own.contains("Italic") || own.contains("Oblique"));
+                    piece.font_style = Some(
+                        match (bold, italic) {
+                            (true, true) => "Bold Italic",
+                            (true, false) => "Bold",
+                            (false, true) => "Italic",
+                            (false, false) => "Regular",
+                        }
+                        .to_string(),
+                    );
+                }
+            }
+            ScriptClass::Latin | ScriptClass::Neutral => {}
+        }
+        pieces.push(piece);
     }
-    Cow::Owned(owned)
+    // A ruby run carries its ruby once: kept whole, in its first piece's
+    // face (kinsoku and ruby see the run as before).
+    if pieces.len() > 1 && attrs.ruby_flag == Some(true) {
+        let mut whole = pieces.swap_remove(0);
+        whole.text = run.text.clone();
+        return vec![whole];
+    }
+    pieces
 }

@@ -789,6 +789,7 @@ pub(crate) fn paragraph_attrs(p: &idml_import::Paragraph) -> Vec<(&'static str, 
     paragraph_rule_attrs(&mut out, &RULE_ABOVE, &p.rule_above);
     paragraph_rule_attrs(&mut out, &RULE_BELOW, &p.rule_below);
     shading_border_attrs(&mut out, &p.shading, &p.border);
+    paragraph_direction_attrs(&mut out, p.direction);
     out
 }
 
@@ -898,6 +899,68 @@ pub(crate) fn decoration_patch(
         }
         _ => return None,
     })
+}
+
+/// Engine ADR 1051 — `ParagraphDirection` on a range or a paragraph style.
+/// `Auto` has no InDesign spelling and is written left to right.
+pub(crate) fn paragraph_direction_attrs(
+    out: &mut Vec<(&'static str, String)>,
+    d: Option<paged_model::ParagraphDirection>,
+) {
+    if let Some(d) = d {
+        out.push(("ParagraphDirection", d.as_idml().to_string()));
+    }
+}
+
+/// Engine ADR 1051 — `CharacterDirection` on a range or a style. The script
+/// slots have no IDML attribute (InDesign sets them through composite
+/// fonts); the `.paged` model part keeps them.
+pub(crate) fn character_direction_attrs(
+    out: &mut Vec<(&'static str, String)>,
+    s: &paged_model::ScriptProperties,
+) {
+    if let Some(d) = s.direction {
+        out.push(("CharacterDirection", d.as_idml().to_string()));
+    }
+}
+
+/// Engine ADR 1051 — the patch of `ParagraphDirection` / `CharacterDirection`
+/// against the model: a source spelling that reads as the model's value
+/// keeps its bytes (`DefaultDirection` reads as unset).
+pub(crate) fn direction_patch(
+    key: &[u8],
+    raw: Option<&str>,
+    paragraph: Option<Option<paged_model::ParagraphDirection>>,
+    script: Option<&paged_model::ScriptProperties>,
+) -> Option<rewrite::Patch> {
+    use rewrite::Patch;
+    match (key, paragraph, script) {
+        (b"ParagraphDirection", Some(model), _) => {
+            let source = raw.and_then(paged_model::ParagraphDirection::from_idml);
+            Some(match model {
+                Some(d) if source == Some(d) => Patch::Keep,
+                // `Auto` is written left to right and reads back so.
+                Some(paged_model::ParagraphDirection::Auto)
+                    if source == Some(paged_model::ParagraphDirection::LeftToRight) =>
+                {
+                    Patch::Keep
+                }
+                Some(d) => Patch::Set(d.as_idml().to_string()),
+                None if source.is_some() => Patch::Remove,
+                None => Patch::Keep,
+            })
+        }
+        (b"CharacterDirection", _, Some(s)) => {
+            let source = raw.and_then(paged_model::CharacterDirection::from_idml);
+            Some(match s.direction {
+                Some(d) if source == Some(d) => Patch::Keep,
+                Some(d) => Patch::Set(d.as_idml().to_string()),
+                None if source.is_some() => Patch::Remove,
+                None => Patch::Keep,
+            })
+        }
+        _ => None,
+    }
 }
 
 /// The `ParagraphShading*` / `ParagraphBorder*` attributes of a range's own
@@ -1343,6 +1406,7 @@ pub(crate) fn character_run_attrs(r: &CharacterRun) -> Vec<(&'static str, String
         r.strikethru,
         r.point_size,
     );
+    character_direction_attrs(&mut out, &r.script);
     // A text variable instance sits in a range of its own marked
     // `PageNumberType="TextVariable"` — InDesign's own spelling.
     if r.text_variable.is_some() {

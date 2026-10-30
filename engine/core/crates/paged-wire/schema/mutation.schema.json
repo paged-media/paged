@@ -6256,6 +6256,103 @@
             "op",
             "args"
           ]
+        },
+        {
+          "description": "Engine ADR 1052 — set content control `controlId` of story `storyId`\nto `value`: free text (plain / rich text), an item's value or\ndisplay text (drop-down, combo box), a date `YYYY-MM-DD`, or a\ncheckbox's `true` / `false`. The control's text becomes the value's.\nRefused for a locked control or a value its kind does not take.\nUndoable in one step. // rides v78.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setContentControlValue"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "controlId": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "storyId",
+                "controlId",
+                "value"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1052 — toggle checkbox control `controlId`: its glyph\nand state flip. Undoable in one step. // rides v78.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "toggleContentControl"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "controlId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "storyId",
+                "controlId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1052 — choose item `index` (0-based) of drop-down or\ncombo box control `controlId`. Undoable in one step. // rides v78.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "chooseContentControlItem"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "controlId": {
+                  "type": "string"
+                },
+                "index": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "storyId",
+                "controlId",
+                "index"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
         }
       ]
     },
@@ -8393,6 +8490,51 @@
           "description": "Word's \"show field codes\" (Alt+F9), on `NodeId::Document`:\n`Value::Bool`, default false. Every Word field sets its code in\nbraces instead of its result (engine ADR 1022). A whole-document\nreflow.",
           "type": "string",
           "const": "documentShowFieldCodes"
+        },
+        {
+          "description": "A paragraph's base direction: `Value::Text` of `ltr`, `rtl` or\n`auto` (from the first strong character); `\"\"` clears (inherit).\nOn a `StoryRange` or a paragraph style. Reflows.",
+          "type": "string",
+          "const": "paragraphDirection"
+        },
+        {
+          "description": "A run's direction (Word's `w:rtl`): `Value::Text` of `ltr` or `rtl`,\n`\"\"` clears. A right-to-left run is complex script throughout.\nReflows.",
+          "type": "string",
+          "const": "characterDirection"
+        },
+        {
+          "description": "The face of a run's East Asian characters (`w:rFonts/@w:eastAsia`):\n`Value::Text` of a family, `\"\"` clears (the run's own font).",
+          "type": "string",
+          "const": "characterEastAsianFont"
+        },
+        {
+          "description": "The face of a run's complex-script characters (`w:rFonts/@w:cs`):\n`Value::Text`, `\"\"` clears.",
+          "type": "string",
+          "const": "characterComplexFont"
+        },
+        {
+          "description": "The size of a run's complex-script characters in pt (`w:szCs`):\n`Value::Length`, `None` clears.",
+          "type": "string",
+          "const": "characterComplexFontSize"
+        },
+        {
+          "description": "Bold for a run's complex-script characters (`w:bCs`): `Value::Bool`,\n`Text(\"\")` clears.",
+          "type": "string",
+          "const": "characterComplexBold"
+        },
+        {
+          "description": "Italic for a run's complex-script characters (`w:iCs`).",
+          "type": "string",
+          "const": "characterComplexItalic"
+        },
+        {
+          "description": "The whole run is complex script (`w:cs`): `Value::Bool`.",
+          "type": "string",
+          "const": "characterComplexScript"
+        },
+        {
+          "description": "Which slot shared characters take (`w:rFonts/@w:hint`):\n`Value::Text` of `default`, `eastAsia` or `cs`; `\"\"` clears.",
+          "type": "string",
+          "const": "characterFontHint"
         }
       ]
     },

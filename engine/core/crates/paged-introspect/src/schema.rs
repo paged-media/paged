@@ -682,6 +682,15 @@ pub const STROKE_TYPES: &[&str] = &[
 pub const STROKE_ALIGNMENT: &[&str] = &["CenterAlignment", "InsideAlignment", "OutsideAlignment"];
 /// Engine ADR 1006 — a frame's fill rule.
 pub const FILL_RULES: &[&str] = &["NonZero", "EvenOdd"];
+/// Engine ADR 1051 — a paragraph's base direction.
+pub const PARAGRAPH_DIRECTIONS: &[&str] = &["ltr", "rtl", "auto"];
+
+/// Engine ADR 1051 — a run's direction.
+pub const CHARACTER_DIRECTIONS: &[&str] = &["ltr", "rtl"];
+
+/// Engine ADR 1051 — Word's font hint.
+pub const FONT_HINTS: &[&str] = &["default", "eastAsia", "cs"];
+
 /// Engine ADR 1018 — Word's underline kinds (`UnderlineKind::as_name`).
 pub const UNDERLINE_KINDS: &[&str] = &[
     "none",

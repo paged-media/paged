@@ -2603,6 +2603,15 @@ pub(super) fn set_paragraph_style_field(
                     .0,
             )
         }
+        // Engine ADR 1051 — direction and script slots on a paragraph style.
+        PropertyPath::ParagraphDirection => {
+            Ok(super::script::set_direction_field(&mut def.direction, path, value)?.0)
+        }
+        p if super::script::is_script_path(p) => {
+            Ok(super::script::set_script_field(&mut def.script, p, value)
+                .expect("a script path")?
+                .0)
+        }
         _ => Err(OperationError::UnsupportedProperty {
             node: style_node_marker(style_id),
             path,
@@ -2686,6 +2695,12 @@ pub(super) fn set_character_style_field(
         )
         .expect("a decoration path")?
         .0),
+        // Engine ADR 1051 — script slots on a character style.
+        p if super::script::is_script_path(p) => {
+            Ok(super::script::set_script_field(&mut def.script, p, value)
+                .expect("a script path")?
+                .0)
+        }
         _ => Err(OperationError::UnsupportedProperty {
             node: style_node_marker(style_id),
             path,

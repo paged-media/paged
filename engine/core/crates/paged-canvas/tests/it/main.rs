@@ -25,6 +25,7 @@ mod cell_text;
 mod clip_groups;
 mod color_settings;
 mod composition_part;
+mod content_controls;
 mod content_gesture;
 mod created_pages;
 mod data_merge_pages;

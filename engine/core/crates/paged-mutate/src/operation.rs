@@ -1713,6 +1713,42 @@ pub enum PropertyPath {
     /// braces instead of its result (engine ADR 1022). A whole-document
     /// reflow.
     DocumentShowFieldCodes,
+
+    // ---- engine ADR 1051 — direction and script slots -----------------
+    /// A paragraph's base direction: `Value::Text` of `ltr`, `rtl` or
+    /// `auto` (from the first strong character); `""` clears (inherit).
+    /// On a `StoryRange` or a paragraph style. Reflows.
+    ParagraphDirection,
+    /// A run's direction (Word's `w:rtl`): `Value::Text` of `ltr` or `rtl`,
+    /// `""` clears. A right-to-left run is complex script throughout.
+    /// Reflows.
+    CharacterDirection,
+    /// The face of a run's East Asian characters (`w:rFonts/@w:eastAsia`):
+    /// `Value::Text` of a family, `""` clears (the run's own font).
+    CharacterEastAsianFont,
+    /// The face of a run's complex-script characters (`w:rFonts/@w:cs`):
+    /// `Value::Text`, `""` clears.
+    CharacterComplexFont,
+    /// The size of a run's complex-script characters in pt (`w:szCs`):
+    /// `Value::Length`, `None` clears.
+    CharacterComplexFontSize,
+    /// Bold for a run's complex-script characters (`w:bCs`): `Value::Bool`,
+    /// `Text("")` clears.
+    CharacterComplexBold,
+    /// Italic for a run's complex-script characters (`w:iCs`).
+    CharacterComplexItalic,
+    /// The whole run is complex script (`w:cs`): `Value::Bool`.
+    CharacterComplexScript,
+    /// Which slot shared characters take (`w:rFonts/@w:hint`):
+    /// `Value::Text` of `default`, `eastAsia` or `cs`; `""` clears.
+    CharacterFontHint,
+
+    // ---- engine ADR 1052 — content controls ---------------------------
+    /// Make a run range a content control (Word's inline `w:sdt`):
+    /// `Value::Text` of a JSON `paged_model::ContentControl`; `""` makes it
+    /// ordinary text again. Every run of the range carries the control.
+    /// On a `StoryRange` only. Paint-only (the text is the runs').
+    CharacterContentControl,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -2116,6 +2152,16 @@ impl PropertyPath {
             PropertyPath::DocumentShowHiddenText => "document.showHiddenText",
             PropertyPath::FrameGradientFillStart => "frame.gradientFillStart",
             PropertyPath::DocumentShowFieldCodes => "document.showFieldCodes",
+            PropertyPath::ParagraphDirection => "paragraph.direction",
+            PropertyPath::CharacterDirection => "character.direction",
+            PropertyPath::CharacterEastAsianFont => "character.eastAsianFont",
+            PropertyPath::CharacterComplexFont => "character.complexFont",
+            PropertyPath::CharacterComplexFontSize => "character.complexFontSize",
+            PropertyPath::CharacterComplexBold => "character.complexBold",
+            PropertyPath::CharacterComplexItalic => "character.complexItalic",
+            PropertyPath::CharacterComplexScript => "character.complexScript",
+            PropertyPath::CharacterFontHint => "character.fontHint",
+            PropertyPath::CharacterContentControl => "character.contentControl",
         }
     }
 }
@@ -4706,6 +4752,25 @@ pub enum Operation {
         markers_json: String,
         topics_json: String,
         parents_json: String,
+    },
+    /// Engine ADR 1052 — set content control `control_id` of story
+    /// `story_id` to `value`: free text, a list item's value or display
+    /// text, a date (`YYYY-MM-DD`) or a checkbox state (`true` / `false`).
+    /// The control's runs become one run with the value's text. Inverse:
+    /// `RestoreContentControl`. // rides v78.
+    SetContentControlValue {
+        story_id: String,
+        control_id: String,
+        value: String,
+    },
+    /// Engine ADR 1052 — inverse-only: content control `control_id`'s runs
+    /// replaced by `runs_json` (a JSON `CharacterRun` list, each carrying
+    /// the control). Inverse: the same op with the runs it replaced.
+    /// // rides v78.
+    RestoreContentControl {
+        story_id: String,
+        control_id: String,
+        runs_json: String,
     },
     /// Engine ADR 1022 — create, replace (`def_json`: a JSON `TOCStyleDef`)
     /// or delete (`None`) TOC style `toc_style_id`. Inverse: the same op

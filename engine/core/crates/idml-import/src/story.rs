@@ -966,6 +966,8 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                             // border, over its style's.
                             shading: crate::styles::parse_paragraph_shading(&e),
                             border: crate::styles::parse_paragraph_border(&e),
+                            direction: attr(&e, b"ParagraphDirection")
+                                .and_then(|s| paged_model::ParagraphDirection::from_idml(&s)),
                             rule_below: crate::styles::parse_paragraph_rule(&e, "RuleBelow"),
                             kinsoku_set: attr(&e, b"KinsokuSet"),
                             kinsoku_type: attr(&e, b"KinsokuType"),
@@ -1263,6 +1265,7 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                             tracking: attr(&e, b"Tracking").and_then(|s| s.parse().ok()),
                             underline: attr(&e, b"Underline").and_then(|s| s.parse::<bool>().ok()),
                             decorations: crate::styles::parse_character_decorations(&e),
+                            script: crate::styles::parse_character_script(&e),
                             strikethru: attr(&e, b"StrikeThru")
                                 .and_then(|s| s.parse::<bool>().ok()),
                             no_break: attr(&e, b"NoBreak").and_then(|s| s.parse::<bool>().ok()),

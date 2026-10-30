@@ -805,6 +805,17 @@ export type WorkerToMain = WorkerToMainKind & {
 //   (`instance:<id>`), the element paths `symbolInstanceTint` /
 //   `symbolInstanceNineSlice`, the `symbols` collection. New Mutation kinds
 //   an older worker cannot apply, hence the bump.
+// v78 (rider) — direction and script slots (engine ADR 1051): the
+//   PropertyPaths paragraphDirection, characterDirection,
+//   characterEastAsianFont, characterComplexFont, characterComplexFontSize,
+//   characterComplexBold, characterComplexItalic, characterComplexScript and
+//   characterFontHint; `ParagraphContent.direction` and `RunContent.script`
+//   (`RunScriptContent`) on the story read. All optional: an older worker
+//   refuses only the new paths.
+// v78 (rider) — content controls (engine ADR 1052): the mutations
+//   setContentControlValue, toggleContentControl and
+//   chooseContentControlItem; `RunContent.control` (`ContentControlContent`)
+//   on the story read. New mutations an older worker refuses.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -4528,6 +4539,36 @@ pub struct ParagraphContent {
     /// entry of (`Paragraph.toc`), when it is one. Additive on 77.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toc: Option<String>,
+    /// Engine ADR 1051 — the paragraph's own base direction (`ltr`, `rtl`,
+    /// `auto`), when it sets one. Additive on 78.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<String>,
+}
+
+/// Engine ADR 1051 — a run's own script slots and direction, as the
+/// property paths spell them. Each field absent = inherit.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct RunScriptContent {
+    /// `ltr` or `rtl`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub east_asian_font: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complex_font: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complex_point_size: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complex_bold: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complex_italic: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complex: Option<bool>,
+    /// `default`, `eastAsia` or `cs`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
 /// DOC-03 — one run's text + its applied character style + its DIRECT character
@@ -4572,6 +4613,53 @@ pub struct RunContent {
     /// is the field's result. Additive on 77.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field_code: Option<String>,
+    /// Engine ADR 1051 — the run's own script slots and direction, when it
+    /// sets any. Additive on 78.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub script: Option<RunScriptContent>,
+    /// Engine ADR 1052 — the content control this run is text of. Additive
+    /// on 78.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control: Option<ContentControlContent>,
+}
+
+/// Engine ADR 1052 — a content control as the story read gives it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentControlContent {
+    pub id: String,
+    /// `plainText`, `richText`, `checkbox`, `dropDown`, `comboBox`, `date`.
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lock: Option<String>,
+    #[serde(default)]
+    pub showing_placeholder: bool,
+    /// A checkbox's state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked: Option<bool>,
+    /// A drop-down's or combo box's items.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ContentControlItem>,
+    /// The chosen item's value, or a date's `YYYY-MM-DD`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// A date's Word picture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_format: Option<String>,
+}
+
+/// Engine ADR 1052 — one item of a drop-down or combo box.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentControlItem {
+    pub display: String,
+    pub value: String,
 }
 
 /// Inspector P1 — one node in the scene tree. Children are nested

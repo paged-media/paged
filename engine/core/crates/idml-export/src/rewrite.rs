@@ -8495,7 +8495,8 @@ pub(crate) fn paragraph_attr_patch(
             })
             .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_ABOVE, &p.rule_above))
             .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_BELOW, &p.rule_below))
-            .or_else(|| crate::emit::shading_border_patch(key, raw, &p.shading, &p.border)),
+            .or_else(|| crate::emit::shading_border_patch(key, raw, &p.shading, &p.border))
+            .or_else(|| crate::emit::direction_patch(key, raw, Some(p.direction), None)),
     }
 }
 
@@ -8588,7 +8589,8 @@ fn character_attr_patch(key: &[u8], raw: &[u8], r: &CharacterRun) -> Option<Patc
         b"StrikeThru" => Some(opt_bool_patch(r.strikethru)),
         b"Ligatures" => Some(opt_bool_patch(r.ligatures_on)),
         b"NoBreak" => Some(opt_bool_patch(r.no_break)),
-        _ => crate::emit::decoration_patch(key, raw, &r.decorations, r.underline),
+        _ => crate::emit::decoration_patch(key, raw, &r.decorations, r.underline)
+            .or_else(|| crate::emit::direction_patch(key, raw, None, Some(&r.script))),
     }
 }
 
@@ -8623,6 +8625,8 @@ fn character_extras(r: &CharacterRun) -> Vec<(&'static str, String)> {
         r.strikethru,
         r.point_size,
     );
+    // Engine ADR 1051 — appended only where the source has none.
+    crate::emit::character_direction_attrs(&mut out, &r.script);
     out
 }
 

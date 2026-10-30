@@ -55,6 +55,7 @@ mod conditions;
 mod datefmt;
 mod decorations;
 mod deltas;
+mod direction;
 mod font_table;
 mod footnotes;
 mod geom;

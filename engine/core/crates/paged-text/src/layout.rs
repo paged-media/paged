@@ -245,6 +245,28 @@ pub struct LayoutOptions<'a> {
     /// are shaped top to bottom ([`crate::shape::shape_run_vertical_at`]),
     /// and the renderer turns its lines into columns.
     pub vertical: bool,
+    /// The paragraph states its direction (engine ADR 1051): the lines are
+    /// left in logical order for [`set_stated_bidi`], which the caller runs
+    /// once every pass that reads logical positions (tab leaders, indents)
+    /// is done. `None` keeps the older pass, which reorders a line holding
+    /// right-to-left characters from the paragraph's first strong
+    /// character and leaves it where it stands.
+    pub bidi: Option<BidiLayout>,
+}
+
+/// A paragraph's stated direction, as the composer sets it (engine ADR
+/// 1051). The paragraph is composed left to right in logical order — its
+/// alignment, indents and tab stops read from the START edge — and each
+/// line is then put in visual order; right to left, the line is mirrored
+/// in its measure, so the start edge is the right one.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BidiLayout {
+    /// The base direction is right to left (`Auto` already resolved).
+    pub rtl: bool,
+    /// Byte ranges of the paragraph text whose run states a direction
+    /// (`true`: right to left): their weak and neutral characters (digits,
+    /// punctuation, spaces) are embedded at that direction.
+    pub runs: Vec<(std::ops::Range<u32>, bool)>,
 }
 
 /// How a ruby base is spaced out to a ruby wider than it is, as the
@@ -348,6 +370,7 @@ impl LayoutOptions<'_> {
             object_advances: Vec::new(),
             ruby_aki: Vec::new(),
             vertical: false,
+            bidi: None,
         }
     }
 }
@@ -1811,17 +1834,19 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
     // out line to put glyphs in visual order. Pure-LTR paragraphs
     // skip via the fast-path inside `apply_bidi_reorder` (a single
     // `BidiInfo::has_rtl()` check).
-    if paragraph_text.chars().any(|c| {
-        // Hebrew, Arabic, Syriac, Thaana, NKo, Samaritan, Mandaic
-        // — quick "has any RTL char" pre-check that avoids
-        // building a BidiInfo for pure-LTR paragraphs (the common
-        // case). The full unicode-bidi pass runs anyway when this
-        // returns true; this is just a fast bail.
-        matches!(
-            c as u32,
-            0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF
-        )
-    }) {
+    if options.bidi.is_none()
+        && paragraph_text.chars().any(|c| {
+            // Hebrew, Arabic, Syriac, Thaana, NKo, Samaritan, Mandaic
+            // — quick "has any RTL char" pre-check that avoids
+            // building a BidiInfo for pure-LTR paragraphs (the common
+            // case). The full unicode-bidi pass runs anyway when this
+            // returns true; this is just a fast bail.
+            matches!(
+                c as u32,
+                0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF
+            )
+        })
+    {
         for line in lines.iter_mut() {
             apply_bidi_reorder(line, &paragraph_text, BidiDirection::Auto);
         }
@@ -2762,6 +2787,159 @@ fn run_index_for_word(flat: &[FlatGlyph], start: u32, end: u32) -> Option<usize>
     run
 }
 
+/// Engine ADR 1051 — put a paragraph that states its direction in visual
+/// order. `lines` were composed left to right in logical order (with
+/// [`LayoutOptions::bidi`] set, so the older reordering stayed out) and
+/// placed in the frame: indents, tabs and leaders already stand where the
+/// START edge puts them. `text` is the text the lines' clusters index.
+/// `measure(i)` is line `i`'s measure, `(left, right)` in the lines' own x
+/// space (1/64 pt): right to left, each line is mirrored inside it.
+pub fn set_stated_bidi(
+    lines: &mut [LaidOutLine],
+    text: &str,
+    spec: &BidiLayout,
+    measure: impl Fn(usize) -> (i32, i32),
+) {
+    let bidi = stated_bidi_info(text, spec);
+    for (i, line) in lines.iter_mut().enumerate() {
+        let range = line.byte_range.clone();
+        set_line_visual(&mut line.glyphs, &bidi, range, spec.rtl, measure(i));
+    }
+}
+
+/// Engine ADR 1051 — the paragraph's bidi analysis at its stated base
+/// level, with each run's own direction embedded: a weak or neutral
+/// character (a digit, punctuation, a space) of a right-to-left run is
+/// raised to an odd level, of a left-to-right run to an even one, the way
+/// an embedding would set it. Strong characters keep the level UAX #9 gave
+/// them.
+fn stated_bidi_info<'t>(text: &'t str, spec: &BidiLayout) -> unicode_bidi::BidiInfo<'t> {
+    use unicode_bidi::BidiClass;
+    let base = if spec.rtl {
+        unicode_bidi::Level::rtl()
+    } else {
+        unicode_bidi::Level::ltr()
+    };
+    let mut bidi = unicode_bidi::BidiInfo::new(text, Some(base));
+    for (range, rtl) in &spec.runs {
+        let end = (range.end as usize).min(bidi.levels.len());
+        for i in (range.start as usize)..end {
+            if matches!(
+                bidi.original_classes[i],
+                BidiClass::L | BidiClass::R | BidiClass::AL | BidiClass::B | BidiClass::S
+            ) {
+                continue;
+            }
+            let level = bidi.levels[i];
+            if level.is_rtl() != *rtl {
+                if let Ok(raised) = unicode_bidi::Level::new(level.number() + 1) {
+                    bidi.levels[i] = raised;
+                }
+            }
+        }
+    }
+    bidi
+}
+
+/// Engine ADR 1051 — put one composed line in visual order. The line was
+/// composed left to right in logical order inside `measure` (1/64 pt):
+/// alignment, justification and tabs already placed it. Each cluster keeps
+/// the room it took (its advance plus whatever the line put after it — a
+/// justified space's stretch, a tab's jump to its stop); the clusters are
+/// reordered by UAX #9 (a tab resets to the base level, so each
+/// tab-delimited stretch reorders on its own) and laid side by side again.
+/// Right to left, the line is set from the mirrored edge of its measure, so
+/// what the logical layout put at the start edge stands at the right.
+fn set_line_visual(
+    glyphs: &mut [PositionedGlyph],
+    bidi: &unicode_bidi::BidiInfo,
+    line: std::ops::Range<usize>,
+    rtl: bool,
+    measure: (i32, i32),
+) {
+    if glyphs.is_empty() {
+        return;
+    }
+    let line_end = line.end.min(bidi.text.len());
+    let Some(para) = bidi
+        .paragraphs
+        .iter()
+        .find(|p| p.range.start <= line.start && p.range.end >= line_end)
+    else {
+        return;
+    };
+    let levels = if line.start < line_end {
+        bidi.reordered_levels(para, line.start..line_end)
+    } else {
+        bidi.levels.clone()
+    };
+    // Clusters in the order the line set them (x ascending).
+    struct Group {
+        from: usize,
+        to: usize,
+        cluster: u32,
+        x0: i32,
+        slot: i32,
+    }
+    let mut groups: Vec<Group> = Vec::new();
+    let mut i = 0;
+    while i < glyphs.len() {
+        let cluster = glyphs[i].cluster;
+        let mut j = i + 1;
+        while j < glyphs.len() && glyphs[j].cluster == cluster {
+            j += 1;
+        }
+        let x0 = glyphs[i..j]
+            .iter()
+            .find(|g| g.x_advance != 0)
+            .unwrap_or(&glyphs[i])
+            .x;
+        let width: i32 = glyphs[i..j].iter().map(|g| g.x_advance).sum();
+        groups.push(Group {
+            from: i,
+            to: j,
+            cluster,
+            x0,
+            slot: width,
+        });
+        i = j;
+    }
+    let left = groups.first().map_or(0, |g| g.x0);
+    let right = groups.last().map_or(0, |g| g.x0 + g.slot);
+    for k in 0..groups.len().saturating_sub(1) {
+        groups[k].slot = (groups[k + 1].x0 - groups[k].x0).max(0);
+    }
+    // Logical order, then UAX #9's visual order of the logical clusters.
+    let mut logical: Vec<usize> = (0..groups.len()).collect();
+    logical.sort_by_key(|&g| groups[g].cluster);
+    let group_levels: Vec<unicode_bidi::Level> = logical
+        .iter()
+        .map(|&g| {
+            levels
+                .get(groups[g].cluster as usize)
+                .copied()
+                .unwrap_or(para.level)
+        })
+        .collect();
+    let visual = unicode_bidi::BidiInfo::reorder_visual(&group_levels);
+    let mut pen = if rtl {
+        measure.0 + measure.1 - right
+    } else {
+        left
+    };
+    let mut placed: Vec<PositionedGlyph> = Vec::with_capacity(glyphs.len());
+    for v in visual {
+        let g = &groups[logical[v]];
+        for glyph in &glyphs[g.from..g.to] {
+            let mut out = *glyph;
+            out.x = pen + (glyph.x - g.x0);
+            placed.push(out);
+        }
+        pen += g.slot;
+    }
+    glyphs.copy_from_slice(&placed);
+}
+
 /// Phase 7 — apply the Unicode Bidirectional Algorithm (UAX #9) to
 /// a laid-out line, reordering its glyphs to visual order.
 ///
@@ -2934,6 +3112,7 @@ mod tests {
             object_advances: Vec::new(),
             ruby_aki: Vec::new(),
             vertical: false,
+            bidi: None,
         }
     }
 
@@ -3712,6 +3891,84 @@ mod tests {
                                                     // Then C, D (LTR).
         assert_eq!(line.glyphs[4].glyph_id, 'C' as u32);
         assert_eq!(line.glyphs[5].glyph_id, 'D' as u32);
+    }
+
+    /// Engine ADR 1051: the visual x of each glyph, by its character, after
+    /// the stated-direction pass.
+    fn stated(
+        text: &str,
+        rtl: bool,
+        runs: Vec<(std::ops::Range<u32>, bool)>,
+        column: i32,
+    ) -> Vec<(char, i32)> {
+        let mut line = line_for_bidi(text, text);
+        let spec = BidiLayout { rtl, runs };
+        let bidi = stated_bidi_info(text, &spec);
+        set_line_visual(&mut line.glyphs, &bidi, 0..text.len(), rtl, (0, column));
+        let mut out: Vec<(char, i32)> = line
+            .glyphs
+            .iter()
+            .map(|g| (char::from_u32(g.glyph_id).unwrap(), g.x))
+            .collect();
+        out.sort_by_key(|(_, x)| *x);
+        out
+    }
+
+    #[test]
+    fn stated_rtl_paragraph_is_set_from_the_right_edge() {
+        // Hebrew Alef-Bet in a 1000-wide measure: the first letter stands
+        // at the right edge, the second left of it.
+        let v = stated("\u{5D0}\u{5D1}", true, Vec::new(), 1000);
+        assert_eq!(v, vec![('\u{5D1}', 800), ('\u{5D0}', 900)]);
+        // A Latin word in a right-to-left paragraph keeps its letters'
+        // order but sits at the right; its full stop goes to its left.
+        let v = stated("ab.", true, Vec::new(), 1000);
+        assert_eq!(v, vec![('.', 700), ('a', 800), ('b', 900)]);
+        // Left to right with the same text: nothing moves.
+        let v = stated("ab.", false, Vec::new(), 1000);
+        assert_eq!(v, vec![('a', 0), ('b', 100), ('.', 200)]);
+    }
+
+    #[test]
+    fn stated_rtl_tabs_measure_from_the_right_edge() {
+        // "a", a tab the logical layout set 300 wide, "b": right to left
+        // the first stretch stands at the right edge and the second
+        // starts where the tab's stop is, measured from the right.
+        let text = "a\tb";
+        let mut line = line_for_bidi(text, text);
+        // The tab jumps to 400 (logical): b at 400.
+        line.glyphs[1].x_advance = 300;
+        line.glyphs[2].x = 400;
+        let spec = BidiLayout {
+            rtl: true,
+            runs: Vec::new(),
+        };
+        let bidi = stated_bidi_info(text, &spec);
+        set_line_visual(&mut line.glyphs, &bidi, 0..text.len(), true, (0, 1000));
+        let x_of = |c: char| {
+            line.glyphs
+                .iter()
+                .find(|g| g.glyph_id == c as u32)
+                .unwrap()
+                .x
+        };
+        assert_eq!(x_of('a'), 900);
+        assert_eq!(x_of('b'), 500);
+        assert_eq!(x_of('\t'), 600);
+    }
+
+    #[test]
+    fn a_right_to_left_run_embeds_its_digits_and_punctuation() {
+        // "AB 12 CD" left to right, with "12 " stated right to left: the
+        // run's neutrals and digits go to odd levels, so the run reads
+        // right to left as a whole ("21" stays a number: UAX #9 keeps a
+        // digit run in order, the space moves before it).
+        let base = stated("AB 12 CD", false, Vec::new(), 1000);
+        let embedded = stated("AB 12 CD", false, vec![(2..6, true)], 1000);
+        assert_ne!(base, embedded);
+        // The letters outside the run do not move.
+        assert_eq!(embedded[0], ('A', 0));
+        assert_eq!(embedded[7], ('D', 700));
     }
 
     #[test]

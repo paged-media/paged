@@ -31,12 +31,19 @@
 //! compile unchanged.
 
 pub mod appearance;
+pub mod content_control;
 pub mod effect_stack;
 pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
+pub mod script;
 pub mod winding;
 pub mod word_field;
+pub use content_control::{ContentControl, ContentControlKind, ListItem};
+pub use script::{
+    CharacterDirection, FontHint, ParagraphDirection, ResolvedDirection, ScriptClass,
+    ScriptProperties,
+};
 pub use word_field::{WordField, WordFieldKind};
 
 use std::collections::BTreeMap;
@@ -6031,6 +6038,11 @@ pub struct CharacterStyleDef {
     /// as before.
     #[serde(default, skip_serializing_if = "CharacterDecorations::is_unset")]
     pub decorations: CharacterDecorations,
+    /// The script slots and direction (engine ADR 1051): East Asian and
+    /// complex-script faces, the complex-script size and weight, the
+    /// direction, the font hint. Skipped when unset.
+    #[serde(default, skip_serializing_if = "ScriptProperties::is_unset")]
+    pub script: ScriptProperties,
 }
 /// Q-09: `ParagraphShading*` attributes parsed off a
 /// `<ParagraphStyle>` or `<ParagraphStyleRange>`. The renderer emits
@@ -6171,6 +6183,11 @@ pub struct ParagraphStyleDef {
     /// as before.
     #[serde(default, skip_serializing_if = "CharacterDecorations::is_unset")]
     pub decorations: CharacterDecorations,
+    /// The script slots and direction (engine ADR 1051): East Asian and
+    /// complex-script faces, the complex-script size and weight, the
+    /// direction, the font hint. Skipped when unset.
+    #[serde(default, skip_serializing_if = "ScriptProperties::is_unset")]
+    pub script: ScriptProperties,
     /// `<TabList>` parsed from the style. Empty means "no
     /// declaration" — the cascade may inherit from `BasedOn`.
     pub tab_list: Vec<TabStop>,
@@ -6400,6 +6417,11 @@ pub struct ParagraphStyleDef {
     pub rule_below: ParagraphRule,
     /// Q-09: rectangular border around the paragraph's content box.
     pub border: ParagraphBorder,
+    /// The paragraph's base direction (engine ADR 1051); `None` inherits,
+    /// and unset everywhere the engine reorders mixed text as before
+    /// without mirroring the paragraph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<ParagraphDirection>,
     /// Nested character styles applied to the paragraph's leading
     /// characters (`<Properties><AllNestedStyles type="list">`, InDesign's
     /// spelling; the engine's older `<NestedStyle>` children still read).
@@ -6595,6 +6617,8 @@ pub struct ResolvedCharacter {
     pub otf: OtfFeatures,
     /// Cascaded Word character additions (engine ADR 1018).
     pub decorations: CharacterDecorations,
+    /// Cascaded script slots and direction (engine ADR 1051).
+    pub script: ScriptProperties,
 }
 /// Effective paragraph-level attributes after walking BasedOn.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -6635,6 +6659,8 @@ pub struct ResolvedParagraph {
     pub otf: OtfFeatures,
     /// Cascaded Word character additions (engine ADR 1018).
     pub decorations: CharacterDecorations,
+    /// Cascaded script slots and direction (engine ADR 1051).
+    pub script: ScriptProperties,
     /// `<TabList>` from the cascade. Empty means inherited / none.
     pub tab_list: Vec<TabStop>,
     pub bullets_list_type: Option<String>,
@@ -6766,6 +6792,8 @@ pub struct ResolvedParagraph {
     pub rule_above: ParagraphRule,
     pub rule_below: ParagraphRule,
     pub border: ParagraphBorder,
+    /// Cascaded base direction (engine ADR 1051).
+    pub direction: Option<ParagraphDirection>,
     /// Cascaded nested styles: the list of the nearest style that
     /// declares one (or says, with `EmptyNestedStyles="true"`, that it
     /// has none). Replaces rather than merges.
@@ -6996,6 +7024,7 @@ impl ResolvedCharacter {
         }
         self.otf.merge_below(&def.otf);
         self.decorations.fill_from(&def.decorations);
+        self.script.fill_from(&def.script);
     }
 }
 impl ResolvedParagraph {
@@ -7031,6 +7060,7 @@ impl ResolvedParagraph {
         }
         self.tracking = self.tracking.or(def.tracking);
         self.justification = self.justification.or(def.justification);
+        self.direction = self.direction.or(def.direction);
         self.first_line_indent = self.first_line_indent.or(def.first_line_indent);
         self.left_indent = self.left_indent.or(def.left_indent);
         self.right_indent = self.right_indent.or(def.right_indent);
@@ -7044,6 +7074,7 @@ impl ResolvedParagraph {
         }
         self.otf.merge_below(&def.otf);
         self.decorations.fill_from(&def.decorations);
+        self.script.fill_from(&def.script);
         if self.tab_list.is_empty() && !def.tab_list.is_empty() {
             self.tab_list = def.tab_list.clone();
         }
@@ -7476,6 +7507,11 @@ pub struct Paragraph {
     /// `w:pBdr`), over the style's per field. All-`None` inherits.
     #[serde(default, skip_serializing_if = "is_default")]
     pub border: ParagraphBorder,
+    /// The paragraph's base direction (engine ADR 1051); `None` inherits,
+    /// and unset everywhere the engine reorders mixed text as before
+    /// without mirroring the paragraph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<ParagraphDirection>,
     /// A LOCAL nested-style list: `<Properties><AllNestedStyles>` on the
     /// `<ParagraphStyleRange>` itself (InDesign writes one when a
     /// paragraph's list differs from its style's). Non-empty replaces
@@ -8793,6 +8829,11 @@ pub struct CharacterRun {
     /// as before.
     #[serde(default, skip_serializing_if = "CharacterDecorations::is_unset")]
     pub decorations: CharacterDecorations,
+    /// The script slots and direction (engine ADR 1051): East Asian and
+    /// complex-script faces, the complex-script size and weight, the
+    /// direction, the font hint. Skipped when unset.
+    #[serde(default, skip_serializing_if = "ScriptProperties::is_unset")]
+    pub script: ScriptProperties,
     /// Phase 5 — `AppliedConditions="Condition/A Condition/B"`.
     /// Space-separated list of `<Condition>` references. Empty
     /// means "no condition gating" (always visible). A run with
@@ -8835,6 +8876,10 @@ pub struct CharacterRun {
     /// when the fields are updated (Word's F9). `None` for ordinary text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field: Option<WordField>,
+    /// Engine ADR 1052 — the content control this run is text of (Word's
+    /// inline `w:sdt`). Every run of one control carries it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control: Option<ContentControl>,
     pub text: String,
 }
 impl CharacterRun {

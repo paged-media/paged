@@ -3013,6 +3013,15 @@ pub(super) fn emit_cell_paragraph(
         first_baseline,
     );
 
+    // Engine ADR 1051 — a stated direction, set as in body text.
+    let stated_bidi = super::direction::stated_bidi(
+        resolved_paragraph.direction,
+        styled_runs
+            .iter()
+            .zip(&resolved_runs)
+            .map(|(r, a)| (r.text, a.script.direction)),
+    );
+    lopts.bidi = stated_bidi.clone();
     let mut laid_out = paged_text::cache::layout_runs_cached(&styled_runs, &lopts);
     let left_64 = to_64(left_indent_pt);
     if left_64 != 0 || first_64 != 0 {
@@ -3022,6 +3031,11 @@ pub(super) fn emit_cell_paragraph(
                 g.x += dx;
             }
         }
+    }
+    if let Some(spec) = &stated_bidi {
+        let text: String = styled_runs.iter().map(|r| r.text).collect();
+        let width_64 = to_64(column_width_pt);
+        paged_text::set_stated_bidi(&mut laid_out.lines, &text, spec, |_| (0, width_64));
     }
     // Only the lines the cell has room for: the rest are overset.
     let fitting = laid_out

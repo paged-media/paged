@@ -491,6 +491,17 @@ fn fold_layout_options(h: &mut LayoutKeyHasher, options: &LayoutOptions) {
             }
         }
     }
+    // Engine ADR 1051 — a stated direction re-sets every line. Folded
+    // only when stated, so every other key stays as it was.
+    if let Some(bidi) = &options.bidi {
+        h.add_bool(bidi.rtl);
+        h.add_u32(bidi.runs.len() as u32);
+        for (range, rtl) in &bidi.runs {
+            h.add_u32(range.start);
+            h.add_u32(range.end);
+            h.add_bool(*rtl);
+        }
+    }
     fold_compose_options(h, &options.compose);
 }
 

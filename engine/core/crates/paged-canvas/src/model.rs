@@ -2327,6 +2327,42 @@ fn decoration_values(
     ]
 }
 
+/// Engine ADR 1051 — a level's script slots and direction as the setters
+/// read them back (`""` / `None` unset).
+fn script_values(
+    s: &paged_model::ScriptProperties,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 8] {
+    use paged_mutate::{PropertyPath as P, Value as V};
+    let flag = |o: Option<bool>| o.map(V::Bool).unwrap_or(V::Text(String::new()));
+    let text = |o: &Option<String>| V::Text(o.clone().unwrap_or_default());
+    [
+        (
+            P::CharacterDirection,
+            V::Text(s.direction.map(|d| d.as_name()).unwrap_or("").to_string()),
+        ),
+        (P::CharacterEastAsianFont, text(&s.east_asian_font)),
+        (P::CharacterComplexFont, text(&s.complex_font)),
+        (P::CharacterComplexFontSize, V::Length(s.complex_point_size)),
+        (P::CharacterComplexBold, flag(s.complex_bold)),
+        (P::CharacterComplexItalic, flag(s.complex_italic)),
+        (P::CharacterComplexScript, flag(s.complex)),
+        (
+            P::CharacterFontHint,
+            V::Text(s.hint.map(|h| h.as_name()).unwrap_or("").to_string()),
+        ),
+    ]
+}
+
+/// Engine ADR 1051 — a paragraph's base direction, read back.
+fn direction_value(
+    d: Option<paged_model::ParagraphDirection>,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 1] {
+    [(
+        paged_mutate::PropertyPath::ParagraphDirection,
+        paged_mutate::Value::Text(d.map(|d| d.as_name()).unwrap_or("").to_string()),
+    )]
+}
+
 /// Engine ADR 1018 — a level's shading and border paths, read back.
 fn shading_border_values(
     s: &paged_model::ParagraphShading,
@@ -2369,6 +2405,7 @@ fn character_style_entries(
         paged_mutate::Value::Bool(d.no_break.unwrap_or(false)),
     ));
     pairs.extend(decoration_values(&d.decorations));
+    pairs.extend(script_values(&d.script));
     into_entries(pairs)
 }
 
@@ -2385,6 +2422,8 @@ fn paragraph_style_entries(
     let mut pairs = style_run_entries!(d);
     pairs.extend(decoration_values(&d.decorations));
     pairs.extend(shading_border_values(&d.shading, &d.border));
+    pairs.extend(script_values(&d.script));
+    pairs.extend(direction_value(d.direction));
     pairs.extend([
         (
             P::ParagraphJustification,
@@ -4233,6 +4272,23 @@ impl CanvasModel {
     /// gets N distinct ids instead of N copies of `u<max+1>`. Top-level
     /// callers pass `&mut 0`; the `Batch` arm threads the SAME counter
     /// through every child so the ids stay unique across the batch.
+    /// Engine ADR 1052 — content control `control_id` of story `story_id`.
+    fn content_control(
+        &self,
+        story_id: &str,
+        control_id: &str,
+    ) -> Option<paged_model::ContentControl> {
+        self.scene
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)?
+            .story
+            .paragraphs
+            .iter()
+            .flat_map(|p| &p.runs)
+            .find_map(|r| r.control.as_ref().filter(|c| c.id == control_id).cloned())
+    }
+
     fn try_translate_frame_mutation_to_operation(
         &self,
         mutation: &Mutation,
@@ -5956,6 +6012,43 @@ impl CanvasModel {
                 at: *at,
                 restore: None,
             }),
+            // Engine ADR 1052 — content controls: each one value set.
+            Mutation::SetContentControlValue {
+                story_id,
+                control_id,
+                value,
+            } => Some(Operation::SetContentControlValue {
+                story_id: story_id.clone(),
+                control_id: control_id.clone(),
+                value: value.clone(),
+            }),
+            Mutation::ToggleContentControl {
+                story_id,
+                control_id,
+            } => Some(Operation::SetContentControlValue {
+                story_id: story_id.clone(),
+                control_id: control_id.clone(),
+                value: "toggle".to_string(),
+            }),
+            Mutation::ChooseContentControlItem {
+                story_id,
+                control_id,
+                index,
+            } => {
+                let item =
+                    self.content_control(story_id, control_id)
+                        .and_then(|c| match c.kind {
+                            paged_model::ContentControlKind::DropDown { items, .. } => {
+                                items.get(*index as usize).map(|i| i.value.clone())
+                            }
+                            _ => None,
+                        })?;
+                Some(Operation::SetContentControlValue {
+                    story_id: story_id.clone(),
+                    control_id: control_id.clone(),
+                    value: item,
+                })
+            }
             Mutation::DeleteTable { story_id, table_id } => Some(Operation::RemoveNode {
                 node: NodeId::Table {
                     story_id: story_id.clone(),
@@ -9612,6 +9705,9 @@ impl CanvasModel {
         // Engine ADR 1018.
         let mut decorations = Vec::new();
         let mut shadings = Vec::new();
+        // Engine ADR 1051.
+        let mut scripts = Vec::new();
+        let mut directions = Vec::new();
         let mut ligatures: Vec<Option<bool>> = Vec::new();
         let mut space_before: Vec<Option<f32>> = Vec::new();
         let mut space_after: Vec<Option<f32>> = Vec::new();
@@ -9708,6 +9804,7 @@ impl CanvasModel {
                 };
                 space_before.push(rp.space_before);
                 shadings.push(shading_border_values(&rp.shading, &rp.border));
+                directions.push(direction_value(rp.direction));
                 space_after.push(rp.space_after);
                 first_line_indent.push(rp.first_line_indent);
                 applied_paragraph_styles.push(para.paragraph_style.clone().unwrap_or_default());
@@ -9791,6 +9888,7 @@ impl CanvasModel {
                 strikethrus.push(rr.strikethru);
                 no_breaks.push(rr.no_break);
                 decorations.push(decoration_values(&rr.decorations));
+                scripts.push(script_values(&rr.script));
                 ligatures.push(rr.ligatures_on);
                 applied_conditions.push(run.applied_conditions.join(" "));
             }
@@ -10209,6 +10307,12 @@ impl CanvasModel {
             &shadings,
             shading_border_values(&Default::default(), &Default::default()),
         ));
+        // Engine ADR 1051 — script slots per run, the direction per paragraph.
+        entries.extend(collapsed_entries(
+            &scripts,
+            script_values(&Default::default()),
+        ));
+        entries.extend(collapsed_entries(&directions, direction_value(None)));
 
         Some(ElementProperties {
             id: id.clone(),
@@ -16445,10 +16549,60 @@ pub(crate) fn paragraph_content(para: &paged_model::Paragraph) -> crate::channel
                 tracking: run.tracking,
                 text_variable: run.text_variable.clone(),
                 field_code: run.field.as_ref().map(|f| f.code.clone()),
+                script: script_content(&run.script),
+                control: run.control.as_ref().map(control_content),
             })
             .collect(),
         toc: para.toc.clone(),
+        direction: para.direction.map(|d| d.as_name().to_string()),
     }
+}
+
+/// Engine ADR 1052 — a content control as the story read gives it.
+fn control_content(c: &paged_model::ContentControl) -> crate::channel::ContentControlContent {
+    use paged_model::ContentControlKind as K;
+    let (items, value, date_format) = match &c.kind {
+        K::DropDown { items, value, .. } => (
+            items
+                .iter()
+                .map(|i| crate::channel::ContentControlItem {
+                    display: i.display.clone(),
+                    value: i.value.clone(),
+                })
+                .collect(),
+            value.clone(),
+            None,
+        ),
+        K::Date { format, value } => (Vec::new(), value.clone(), format.clone()),
+        _ => (Vec::new(), None, None),
+    };
+    crate::channel::ContentControlContent {
+        id: c.id.clone(),
+        kind: c.kind_name().to_string(),
+        tag: c.tag.clone(),
+        alias: c.alias.clone(),
+        lock: c.lock.clone(),
+        showing_placeholder: c.showing_placeholder,
+        checked: c.checked(),
+        items,
+        value,
+        date_format,
+    }
+}
+
+/// Engine ADR 1051 — a run's script properties as the story read gives
+/// them; `None` when it sets none.
+fn script_content(s: &paged_model::ScriptProperties) -> Option<crate::channel::RunScriptContent> {
+    (!s.is_unset()).then(|| crate::channel::RunScriptContent {
+        direction: s.direction.map(|d| d.as_name().to_string()),
+        east_asian_font: s.east_asian_font.clone(),
+        complex_font: s.complex_font.clone(),
+        complex_point_size: s.complex_point_size,
+        complex_bold: s.complex_bold,
+        complex_italic: s.complex_italic,
+        complex: s.complex,
+        hint: s.hint.map(|h| h.as_name().to_string()),
+    })
 }
 
 #[cfg(test)]

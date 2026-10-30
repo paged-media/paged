@@ -466,6 +466,17 @@ pub(crate) fn apply_inner(
         Operation::DeleteTextAnchor { anchor_id } => {
             word_structure::apply_delete_text_anchor(doc, anchor_id)
         }
+        // Engine ADR 1052 — content controls.
+        Operation::SetContentControlValue {
+            story_id,
+            control_id,
+            value,
+        } => content_control::apply_set_value(doc, story_id, control_id, value),
+        Operation::RestoreContentControl {
+            story_id,
+            control_id,
+            runs_json,
+        } => content_control::apply_restore(doc, story_id, control_id, runs_json),
         Operation::SetStoryDestinations {
             story_id,
             destinations_json,
@@ -1316,6 +1327,7 @@ pub use symbol::{
     symbol_break_root, SYMBOLS_LABEL, SYMBOL_INSTANCE_LABEL,
 };
 mod bookmark;
+mod content_control;
 mod duplicate_page;
 mod endnote;
 mod flow;
@@ -1330,6 +1342,7 @@ mod list_ops;
 mod lock;
 mod note;
 pub mod permit;
+mod script;
 mod tracked_change;
 mod word;
 pub mod word_structure;

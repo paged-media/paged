@@ -1223,6 +1223,7 @@ impl ResolvedRunAttrs {
             kerning_method: run.kerning_method.clone(),
             otf: run.otf.clone(),
             decorations: run.decorations.clone(),
+            script: run.script.clone(),
         }
     }
 
@@ -1275,6 +1276,7 @@ impl ResolvedRunAttrs {
             kerning_method,
             otf,
             decorations,
+            script,
         } = r;
         fn fill<T: Clone>(slot: &mut Option<T>, below: &Option<T>) {
             if slot.is_none() {
@@ -1313,6 +1315,7 @@ impl ResolvedRunAttrs {
         fill(&mut self.kerning_method, kerning_method);
         self.otf.merge_below(otf);
         self.decorations.fill_from(decorations);
+        self.script.fill_from(script);
     }
 
     /// Fill any unset field from a resolved character style.
@@ -1372,6 +1375,7 @@ impl ResolvedRunAttrs {
         // on the run inherits the character style's value.
         self.otf.merge_below(&c.otf);
         self.decorations.fill_from(&c.decorations);
+        self.script.fill_from(&c.script);
     }
 
     /// Fill any unset field from a resolved paragraph style.
@@ -1426,6 +1430,7 @@ impl ResolvedRunAttrs {
         self.overprint_fill = self.overprint_fill.or(p.overprint_fill);
         self.overprint_stroke = self.overprint_stroke.or(p.overprint_stroke);
         self.decorations.fill_from(&p.decorations);
+        self.script.fill_from(&p.script);
     }
 }
 
@@ -1515,6 +1520,8 @@ impl ResolvedParagraphAttrs {
             // border (Word's direct `w:shd` / `w:pBdr`) win per field;
             // `merge_below` fills the rest from the style cascade.
             shading: paragraph.shading.clone(),
+            // Engine ADR 1051 — the paragraph's own base direction.
+            direction: paragraph.direction,
             // FINDING #7.3 — capture the paragraph's INSTANCE rule
             // structs (set directly on the ParagraphStyleRange, e.g. by
             // the `ParagraphRuleAbove` / `Below` mutation). `merge_below`
@@ -1641,6 +1648,7 @@ impl ResolvedParagraphAttrs {
     /// Fill any unset field from a resolved paragraph style.
     pub fn merge_below(&mut self, p: &paged_model::ResolvedParagraph) {
         self.justification = self.justification.or(p.justification);
+        self.direction = self.direction.or(p.direction);
         self.first_line_indent = self.first_line_indent.or(p.first_line_indent);
         // FINDING #7.2 — fall back to the cascaded style indents.
         self.left_indent = self.left_indent.or(p.left_indent);
@@ -1940,6 +1948,9 @@ pub struct ResolvedRunAttrs {
     /// Word's character additions (engine ADR 1018), cascaded direct >
     /// character style > paragraph style.
     pub decorations: paged_model::CharacterDecorations,
+    /// Script slots and direction (engine ADR 1051), cascaded direct >
+    /// character style > paragraph style.
+    pub script: paged_model::ScriptProperties,
 }
 
 /// Effective paragraph-level attributes after walking the cascade
@@ -2116,6 +2127,10 @@ pub struct ResolvedParagraphAttrs {
     /// The face a Word list level sets its marker in (engine ADR 1018,
     /// `NumberingLevelDef::bullet_font`), over the marker's style.
     pub list_marker_font: Option<String>,
+    /// The base direction (engine ADR 1051), direct > style. `None`
+    /// keeps the engine's older reading: mixed text reorders from its
+    /// first strong character and the paragraph is not mirrored.
+    pub direction: Option<paged_model::ParagraphDirection>,
 }
 
 /// IDML's `AppliedParagraphStyle` is OPTIONAL, and a range without one

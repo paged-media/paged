@@ -977,6 +977,7 @@ fn continuation(paragraph: &paged_model::Paragraph) -> paged_model::Paragraph {
         rule_above: paragraph.rule_above.clone(),
         rule_below: paragraph.rule_below.clone(),
         shading: paragraph.shading.clone(),
+        direction: paragraph.direction,
         border: paragraph.border.clone(),
         // The lists are already layered into the runs (and a segment
         // never recomputes them); they ride along for the read side.
@@ -1081,6 +1082,7 @@ pub(super) fn split_paragraph_into_segments(
         rule_above: paragraph.rule_above.clone(),
         rule_below: paragraph.rule_below.clone(),
         shading: paragraph.shading.clone(),
+        direction: paragraph.direction,
         border: paragraph.border.clone(),
         // The lists are already layered into the runs (and a segment
         // never recomputes them); they ride along for the read side.
@@ -1372,6 +1374,7 @@ pub(super) fn split_paragraph_into_segments(
                 rule_above: paragraph.rule_above.clone(),
                 rule_below: paragraph.rule_below.clone(),
                 shading: paragraph.shading.clone(),
+                direction: paragraph.direction,
                 border: paragraph.border.clone(),
                 // The lists are already layered into the runs (and a segment
                 // never recomputes them); they ride along for the read side.

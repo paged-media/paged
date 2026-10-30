@@ -1839,6 +1839,16 @@
     "characterUnderlineType",
     "characterUnderlineColor",
     "characterDoubleStrikethrough",
+    "paragraphDirection",
+    "characterDirection",
+    "characterEastAsianFont",
+    "characterComplexFont",
+    "characterComplexFontSize",
+    "characterComplexBold",
+    "characterComplexItalic",
+    "characterComplexScript",
+    "characterFontHint",
+    "characterContentControl",
     "paragraphShadingOn",
     "paragraphShadingColor",
     "paragraphShadingTint",
@@ -2067,7 +2077,10 @@
     "removeFooterRow",
     "setCellSpan",
     "insertTable",
-    "deleteTable"
+    "deleteTable",
+    "setContentControlValue",
+    "toggleContentControl",
+    "chooseContentControlItem"
   ],
   "elements": [
     {
@@ -7932,6 +7945,153 @@
     },
     {
       "addressKind": "storyRange",
+      "path": "paragraphDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl",
+          "auto"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyleRange",
+          "attribute": "CharacterDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterEastAsianFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexFontSize",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.1,
+        "max": 1296.0
+      },
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexBold",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexItalic",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexScript",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterFontHint",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "default",
+          "eastAsia",
+          "cs"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "default",
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterContentControl",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
       "path": "paragraphShadingOn",
       "type": {
         "kind": "bool"
@@ -11801,6 +11961,205 @@
     {
       "addressKind": "style",
       "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "CharacterDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterEastAsianFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexFontSize",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.1,
+        "max": 1296.0
+      },
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexBold",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexItalic",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexScript",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterFontHint",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "default",
+          "eastAsia",
+          "cs"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "default",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl",
+          "auto"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
         "character"
       ],
       "path": "characterFontSize",
@@ -12336,6 +12695,175 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyle",
+          "attribute": "CharacterDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterEastAsianFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexFontSize",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.1,
+        "max": 1296.0
+      },
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexBold",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexItalic",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexScript",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterFontHint",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "default",
+          "eastAsia",
+          "cs"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "default",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
     },
     {
       "addressKind": "style",
@@ -22428,6 +22956,152 @@
       },
       {
         "addressKind": "storyRange",
+        "path": "paragraphDirection",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "ltr",
+            "rtl",
+            "auto"
+          ]
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphDirection",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterDirection",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "ltr",
+            "rtl"
+          ]
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "CharacterStyleRange",
+            "attribute": "CharacterDirection",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterEastAsianFont",
+        "type": {
+          "kind": "ref",
+          "to": "font"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexFont",
+        "type": {
+          "kind": "ref",
+          "to": "font"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexFontSize",
+        "type": {
+          "kind": "length"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.1,
+          "max": 1296.0
+        },
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexBold",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexItalic",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexScript",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterFontHint",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "default",
+            "eastAsia",
+            "cs"
+          ]
+        },
+        "nullable": true,
+        "default": "default",
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterContentControl",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "storyRange",
         "path": "paragraphShadingOn",
         "type": {
           "kind": "bool"
@@ -25322,6 +25996,217 @@
           {
             "element": "ParagraphStyle",
             "attribute": "ParagraphBorderWeight",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterDirection",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "ltr",
+            "rtl"
+          ]
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "CharacterDirection",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "CharacterDirection",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterEastAsianFont",
+        "type": {
+          "kind": "ref",
+          "to": "font"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexFont",
+        "type": {
+          "kind": "ref",
+          "to": "font"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexFontSize",
+        "type": {
+          "kind": "length"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.1,
+          "max": 1296.0
+        },
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexBold",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexItalic",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexScript",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterFontHint",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "default",
+            "eastAsia",
+            "cs"
+          ]
+        },
+        "nullable": true,
+        "default": "default",
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphDirection",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "ltr",
+            "rtl",
+            "auto"
+          ]
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphDirection",
             "kind": "attr"
           }
         ]

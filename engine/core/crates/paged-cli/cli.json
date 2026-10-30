@@ -4731,7 +4731,10 @@
             "removeFooterRow",
             "setCellSpan",
             "insertTable",
-            "deleteTable"
+            "deleteTable",
+            "setContentControlValue",
+            "toggleContentControl",
+            "chooseContentControlItem"
           ],
           "repeatable": false,
           "required": true,

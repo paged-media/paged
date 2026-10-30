@@ -2874,8 +2874,36 @@ pub(super) fn apply_set_property(
             | PropertyPath::CharacterHidden
             | PropertyPath::CharacterUnderlineType
             | PropertyPath::CharacterUnderlineColor
-            | PropertyPath::CharacterDoubleStrikethrough,
+            | PropertyPath::CharacterDoubleStrikethrough
+            | PropertyPath::CharacterDirection
+            | PropertyPath::CharacterEastAsianFont
+            | PropertyPath::CharacterComplexFont
+            | PropertyPath::CharacterComplexFontSize
+            | PropertyPath::CharacterComplexBold
+            | PropertyPath::CharacterComplexItalic
+            | PropertyPath::CharacterComplexScript
+            | PropertyPath::CharacterFontHint
+            | PropertyPath::CharacterContentControl,
         ) => {
+            if path == PropertyPath::CharacterContentControl {
+                if let Err(reason) = super::content_control::parse_control(value) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason,
+                    });
+                }
+            }
+            // Engine ADR 1051 — a bad value is refused before any run splits.
+            if super::script::is_script_path(path) {
+                if let Err(reason) = super::script::validate(path, value) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason,
+                    });
+                }
+            }
             // An unknown underline kind is refused before any run splits.
             if let (PropertyPath::CharacterUnderlineType, Value::Text(t)) = (path, value) {
                 if let Err(reason) = super::word::parse_underline_type(t) {
@@ -3014,8 +3042,18 @@ pub(super) fn apply_set_property(
             | PropertyPath::ParagraphShadingTint
             | PropertyPath::ParagraphBorderOn
             | PropertyPath::ParagraphBorderColor
-            | PropertyPath::ParagraphBorderWeight,
+            | PropertyPath::ParagraphBorderWeight
+            | PropertyPath::ParagraphDirection,
         ) => {
+            if path == PropertyPath::ParagraphDirection {
+                if let Err(reason) = super::script::validate(path, value) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason,
+                    });
+                }
+            }
             return apply_paragraph_property(doc, story_id, *start, *end, node, path, value);
         }
 
