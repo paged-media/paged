@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 814,
+    "command": 817,
     "keybinding": 164,
-    "menu": 581,
+    "menu": 584,
     "panel": 142,
     "tool": 126
   },
@@ -2426,6 +2426,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.paintTextIntoLayer",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.pasteLayerStyle",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2462,6 +2467,11 @@
     },
     {
       "id": "command:media.paged.image.command.rasterizeLayer",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rasterizeType",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2662,6 +2672,11 @@
     },
     {
       "id": "command:media.paged.image.command.vectorMaskToggle",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.warpText",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -6942,6 +6957,21 @@
     },
     {
       "id": "menu:Image/Trim…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Type/Paint text into layer",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Type/Rasterize type layer",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Type/Warp text…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
