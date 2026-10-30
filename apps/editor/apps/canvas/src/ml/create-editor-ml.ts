@@ -54,9 +54,7 @@ export function createEditorMlService(backend: MlBackend): MlService {
       origin: location.origin,
       admitted: reachableOrigin,
     }),
-    worker: MlWorker
-      ? () => (worker ??= workerClient(new MlWorker()))
-      : null,
+    worker: MlWorker ? () => (worker ??= workerClient(new MlWorker())) : null,
     host: createMlHostClient({ baseUrl: "" }),
     codec: browserPngCodec,
     detectGpu: () => detectGpu(),
