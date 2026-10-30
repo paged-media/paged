@@ -134,7 +134,7 @@ export function makeSlideMaster(
     const [fontStyle, setFontStyle] = React.useState<string>("");
     const [styled, setStyled] = React.useState<string | null>(null);
     const [, repaint] = React.useReducer((n: number) => n + 1, 0);
-    const thumbs = React.useMemo(() => new Thumbs(host, repaint), []);
+    const [thumbs] = React.useState(() => new Thumbs(host, repaint));
 
     React.useEffect(() => {
       let live = true;
