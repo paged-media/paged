@@ -178,6 +178,7 @@ fn a_picture_travels_as_a_blob_stretched_over_its_crop() {
                 filled: true,
                 stroked: true,
                 fill_mode: None,
+                path: 0,
             }],
             stroke: None,
             image_part: "ppt/media/image1.png".into(),

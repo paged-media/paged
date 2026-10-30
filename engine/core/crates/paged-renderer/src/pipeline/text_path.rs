@@ -178,6 +178,11 @@ pub(super) fn emit_polygon_into(
     content: super::shapes::ContentPainter<'_>,
     module: super::shapes::ModulePainter<'_>,
 ) {
+    if !poly.appearance.is_empty() {
+        return super::appearance::emit_polygon(
+            page, poly, document, palette, fallback, color_ctx, content, module,
+        );
+    }
     let Some(mode) = crate::module::effect_stack::stack_mode(&poly.effect_stack) else {
         return emit_polygon_body(
             page, poly, document, palette, fallback, color_ctx, content, module,
