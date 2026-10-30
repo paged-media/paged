@@ -49,6 +49,12 @@
 //! an opaque texel divides by one and is the identity (asserted
 //! exhaustively over f16 by the same test file).
 
+mod cpu;
+mod ink;
+mod tiled;
+pub(super) use cpu::CPU_TILE_SIDE;
+pub(super) use tiled::TILE_SIDE;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -158,6 +164,34 @@ pub(super) struct KnockoutStep {
     /// The layer's opacity: the knocked-out result mixes in by it (the
     /// blend itself runs at the fill).
     pub opacity: f32,
+}
+
+/// Where the textures a fold runs on lie on the canvas: the whole canvas
+/// (origin 0, the canvas's size), or one tile of the tiled fold (ADR 480)
+/// — `w × h` texels whose first lies at `(ox, oy)` on a `cw × ch` canvas.
+/// Everything drawn in canvas coordinates (gradients, patterns, noise)
+/// reads it, so a tile shows what the whole fold shows there.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Frame {
+    pub w: u32,
+    pub h: u32,
+    pub ox: i32,
+    pub oy: i32,
+    pub cw: u32,
+    pub ch: u32,
+}
+
+impl Frame {
+    pub fn whole(w: u32, h: u32) -> Frame {
+        Frame {
+            w,
+            h,
+            ox: 0,
+            oy: 0,
+            cw: w,
+            ch: h,
+        }
+    }
 }
 
 /// The slot the Background layer's fold state is saved under.
@@ -496,14 +530,29 @@ pub(super) struct FoldCache {
     checkpoint: Option<(Vec<Step>, FoldState)>,
     /// The last composite's steps and result.
     last: Option<(Vec<Step>, Pixels)>,
+    /// Fold in tiles of this side whatever the canvas's size (ADR 480;
+    /// `None`: only past the device's limits).
+    tile: Option<u32>,
+    /// The ink planes derived for the last ink fold (ADR 481).
+    inks: ink::InkCache,
+    /// Plates to premultiply even where they are opaque: a tile's cut of a
+    /// plate that is not (the whole fold decides on the whole plate).
+    premultiply: Vec<Pixels>,
 }
 
 impl FoldCache {
     fn bind(&mut self, ctx: &GpuContext) {
-        let id = ctx as *const GpuContext as usize;
+        self.bind_to(Some(ctx));
+    }
+
+    /// Bind to a device, or (`None`) to the CPU fold: what one folded is
+    /// never handed to the other as its own.
+    fn bind_to(&mut self, ctx: Option<&GpuContext>) {
+        let id = ctx.map_or(0, |c| c as *const GpuContext as usize);
         if self.device != id {
             *self = FoldCache {
                 device: id,
+                tile: self.tile,
                 ..FoldCache::default()
             };
         }
@@ -536,7 +585,8 @@ impl FoldCache {
             )));
         }
         let straight = px.to_f16();
-        let tex = if window_is_opaque(&straight) {
+        let forced = self.premultiply.iter().any(|p| p.same(px));
+        let tex = if window_is_opaque(&straight) && !forced {
             batch.upload(w, h, TexFormat::Rgba16Float, &straight)
         } else {
             let src = batch.upload(w, h, TexFormat::Rgba16Float, &straight);
@@ -1013,8 +1063,9 @@ impl LayerStack {
         from: usize,
         mut st: FoldState,
         checkpoint: usize,
+        frame: Frame,
     ) -> Result<(FoldState, Option<FoldState>), IngestError> {
-        let (w, h) = (self.width, self.height);
+        let (w, h) = (frame.w, frame.h);
         let mut snap = None;
         let mut folded = 0u64;
         // Each styled layer's source alpha (and distance field), shared by
@@ -1220,7 +1271,7 @@ impl LayerStack {
                     };
                     let acc = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
                     let drawn =
-                        super::styles::draw(ctx, batch, &acc, &mut sources[src].2, fx, w, h)?;
+                        super::styles::draw(ctx, batch, &acc, &mut sources[src].2, fx, frame)?;
                     st.acc = Some(if *interior {
                         let shape = sources[src].2.alpha.clone();
                         take_through(batch, &acc, &drawn, &shape, w, h)?
@@ -1432,7 +1483,16 @@ impl LayerStack {
 
         let mut batch = GpuBatch::new(ctx);
         let (st, snap) = self
-            .run_steps(ctx, &mut cache, &mut batch, &steps, from, state, checkpoint)
+            .run_steps(
+                ctx,
+                &mut cache,
+                &mut batch,
+                &steps,
+                from,
+                state,
+                checkpoint,
+                Frame::whole(w, h),
+            )
             .await?;
         if let Some(snap) = snap {
             cache.checkpoint = Some((steps[..checkpoint].to_vec(), snap));

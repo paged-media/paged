@@ -1007,8 +1007,9 @@ impl LayerStack {
                 let mut e = block(&mut r)?;
                 LayerExt {
                     // A session reopens without its PSD records: its
-                    // layers save as built ones.
+                    // layers save as built ones (and without their inks).
                     source: None,
+                    inks: Default::default(),
                     fill_opacity: e.f32()?.clamp(0.0, 1.0),
                     knockout: Knockout::from_code(e.u8()?),
                     locks: LayerLocks::from_bits(e.u8()?),
