@@ -102,6 +102,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [295](295-free-transform.md) | Free Transform: one box, the engine's arms, a destructive distort until envelopes | Accepted 2026-10-24 |
 | [298](298-control-bar-groups-per-edit-context.md) | Control-bar groups and status items follow the edit context | Accepted 2026-10-24 |
 | [299](299-scoped-keybindings-over-text-input.md) | Keybindings scoped to an edit context win over the text input | Accepted 2026-10-24 |
+| [300](300-markup-margin-band.md) | The markup margin band: balloons beside the page follow their anchors | Accepted 2026-10-29 |
 | [301](301-in-place-header-footer-editing.md) | Headers, footers and notes are edited in place | Accepted 2026-10-28 |
 | [303](303-find-and-replace.md) | Find & Replace | Accepted 2026-10-25 |
 | [304](304-a-module-presentation-fills-the-screen.md) | A module's presentation fills the screen | Accepted 2026-10-25 |
@@ -110,6 +111,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [307](307-the-slide-profile.md) | The slide profile: PowerPoint's Normal view and its keys | Accepted 2026-10-25 |
 | [308](308-video-export-runner.md) | Video export runner: the show drawn offline, WebCodecs, an MP4 muxer, progress and Cancel | Accepted 2026-10-28 |
 | [309](309-effects-transparency-and-appearance-panels.md) | The Effects, Transparency and Appearance panels and the Effect menu: kinds from core's catalog, the mask's options and Clip, every edit context | Accepted 2026-10-29 |
+| [311](311-shared-host-surfaces-in-every-context.md) | Gradients, Picture adjustments, History and Free Transform in every edit context | Accepted 2026-10-30 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

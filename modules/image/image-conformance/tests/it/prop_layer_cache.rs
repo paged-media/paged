@@ -462,3 +462,28 @@ fn unpremultiply_is_the_identity_on_opaque_texels__feat__image_editor_layers() {
         &bad[..bad.len().min(16)]
     );
 }
+
+/// The regression's root cause, in the blend itself: a non-separable mode
+/// over a backdrop an adjustment lifted past 1, under a TRANSPARENT source
+/// texel, was 0/0 in `ClipColor` (a flat colour above 1) and NaN — black
+/// where the resident fold, which never touches texels outside a bounded
+/// plate, showed the backdrop. Now it is the backdrop (the source has no
+/// alpha), finite, in every mode.
+#[test]
+fn a_transparent_texel_over_a_backdrop_past_one_leaves_it__feat__image_editor_layers() {
+    use image_conformance::compose_ref::{composite, Blend};
+    use image_conformance::Px;
+    let backdrop = Px([1.4, 1.3, 0.5, 1.0]);
+    for b in [
+        Blend::Hue,
+        Blend::Saturation,
+        Blend::Color,
+        Blend::Luminosity,
+    ] {
+        let out = composite(backdrop, Px([0.0; 4]), 1.0, b);
+        assert!(out.0.iter().all(|v| v.is_finite()), "{b:?}: {out:?}");
+        for c in 0..4 {
+            assert!((out.0[c] - backdrop.0[c]).abs() < 1e-6, "{b:?}: {out:?}");
+        }
+    }
+}

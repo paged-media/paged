@@ -40,7 +40,7 @@ it stood, for decisions made earlier; their status says so.
 | [524](524-excel-named-styles-map-to-document-styles.md) | Excel named styles map to the document's styles: the switch, the mapping table, one fold in the engine | Accepted 2026-10-23 |
 | [525](525-document-chart-styles.md) | Document chart styles: roles, a colour-group palette, a workbook default | Accepted 2026-10-23; extends 503, 518, 519, 520 |
 | [526](526-hyperlinks-notes-and-pictures.md) | Hyperlinks, notes and pictures: authored by splice, drawn on both surfaces | Accepted 2026-10-24; extends 510, 517 |
-| [527](527-chart-effects-through-the-shared-drawingml-mapper.md) | Chart gradients and effects onto native items, through the shared DrawingML mapper | Accepted 2026-10-28; extends 519, 525 |
+| [527](527-chart-effects-through-the-shared-drawingml-mapper.md) | Chart gradients and effects onto native items, through the shared DrawingML mapper | Accepted 2026-10-28; extends 519, 525; note 2026-10-29 (the lowering kit, extensions ADR 347) |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed

@@ -1205,6 +1205,62 @@
       "summary": "Reject a tracked deletion at its story offset: its text comes back where it stood, as InDesign rejects one. Undoable."
     },
     {
+      "name": "paged.recordChange",
+      "params": "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?}, paragraph?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Record a tracked change (insert, delete, format, paraProps, insertMark, deleteMark) over story chars [start, end), or on a paragraph for the paragraph kinds: what an importer writes for Word's revisions. Undoable."
+    },
+    {
+      "name": "paged.acceptChange",
+      "params": "({storyId?, id?, author?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Accept a tracked change by id, every change by an author, or all (in one story when storyId is set). One undo step."
+    },
+    {
+      "name": "paged.rejectChange",
+      "params": "({storyId?, id?, author?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Reject a tracked change by id, an author's, or all: insertions go, deletions stay, formatting goes back. One undo step."
+    },
+    {
+      "name": "paged.insertComment",
+      "params": "(storyId, start, end, {text, id?, author?, initials?, date?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "A comment on story chars [start, end) (paged.collection(\"comments\")). Undoable."
+    },
+    {
+      "name": "paged.replyComment",
+      "params": "(parentId, {text, id?, author?, initials?, date?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Reply to a comment; the reply joins its thread. Undoable."
+    },
+    {
+      "name": "paged.resolveComment",
+      "params": "(commentId, resolved?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Resolve (or, with false, reopen) a comment's thread. Undoable."
+    },
+    {
+      "name": "paged.deleteComment",
+      "params": "(commentId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Delete a comment; a thread's first comment takes its replies and its range. Undoable."
+    },
+    {
+      "name": "paged.editComment",
+      "params": "(commentId, text, date?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Rewrite a comment's text. Undoable."
+    },
+    {
       "name": "paged.find",
       "params": "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})",
       "returns": "string",
@@ -2032,6 +2088,14 @@
     "insertCrossReference",
     "insertTableOfContents",
     "insertIndexMarker",
+    "recordChange",
+    "acceptChange",
+    "rejectChange",
+    "insertComment",
+    "replyComment",
+    "resolveComment",
+    "deleteComment",
+    "editComment",
     "insertOval",
     "insertGuide",
     "moveGuide",
@@ -9794,6 +9858,59 @@
       "bindable": true
     },
     {
+      "addressKind": "doc",
+      "path": "documentTrackChanges",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentTrackChangesAuthor",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentMarkupView",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "simple",
+          "all",
+          "none",
+          "original"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "all",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
       "addressKind": "textVariable",
       "path": "textVariableName",
       "type": {
@@ -16331,6 +16448,59 @@
         },
         "bindable": true,
         "wire": "bool"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentTrackChanges",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentTrackChangesAuthor",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentMarkupView",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "simple",
+            "all",
+            "none",
+            "original"
+          ]
+        },
+        "nullable": true,
+        "default": "all",
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
       },
       {
         "addressKind": "doc",

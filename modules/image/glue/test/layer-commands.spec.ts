@@ -442,14 +442,18 @@ describe("the Layer menu's parity commands [image.layers.photoshop-parity]", () 
     k.dispose();
   });
 
-  it("flattenImage declines without WebGPU (the white matte is a blend) and changes nothing", async () => {
+  it("flattenImage flattens without WebGPU, on the CPU fold (image ADR 480); undo brings the layers back", async () => {
     covers("command:media.paged.image.command.flattenImage");
     const k = await ingested();
     const before = imageShape(k.session);
+    const layers = k.session.state().layers.layers.length;
     await k.run(`${C}.flattenImage`);
-    expect(k.session.state().status).toMatch(/GPU-only/);
-    expect(imageShape(k.session)).toEqual(before);
-    expect(k.docOps()).toEqual([]);
+    expect(k.session.state().status).toMatch(/Flatten image done/);
+    expect(k.session.state().layers.layers).toHaveLength(1);
+    expect(imageShape(k.session).source).toEqual(before.source);
+    expect(k.session.state().history?.undoLabel).toBe("Flatten Image");
+    await k.run(`${C}.undo`);
+    expect(k.session.state().layers.layers).toHaveLength(layers);
     k.dispose();
   });
 

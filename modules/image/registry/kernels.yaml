@@ -753,6 +753,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — color_dodge"
+    - "the singular points as ranges (Cs ≥ 1 / Cb ≥ 1, Cb ≤ 0 / Cs ≤ 0): an unpremultiplied colour an ulp past full divided by a negative `1 − x` on a paravirtual Metal GPU; mirrored by compose_twin"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'div '"
   tests:
@@ -768,6 +769,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — color_burn"
+    - "the singular points as ranges (Cs ≥ 1 / Cb ≥ 1, Cb ≤ 0 / Cs ≤ 0): an unpremultiplied colour an ulp past full divided by a negative `1 − x` on a paravirtual Metal GPU; mirrored by compose_twin"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'idiv'"
   tests:
@@ -843,6 +845,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — hue"
+    - "ClipColor of a flat colour out of range (every channel the luminance) clips to 0 or 1, the formula's limit, instead of 0/0 — a backdrop past 1 under a transparent texel was NaN; mirrored by compose_ref"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'hue '"
   tests:
@@ -858,6 +861,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — saturation"
+    - "ClipColor of a flat colour out of range (every channel the luminance) clips to 0 or 1, the formula's limit, instead of 0/0 — a backdrop past 1 under a transparent texel was NaN; mirrored by compose_ref"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'sat '"
   tests:
@@ -873,6 +877,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — color"
+    - "ClipColor of a flat colour out of range (every channel the luminance) clips to 0 or 1, the formula's limit, instead of 0/0 — a backdrop past 1 under a transparent texel was NaN; mirrored by compose_ref"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'colr'"
   tests:
@@ -888,6 +893,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — luminosity"
+    - "ClipColor of a flat colour out of range (every channel the luminance) clips to 0 or 1, the formula's limit, instead of 0/0 — a backdrop past 1 under a transparent texel was NaN; mirrored by compose_ref"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'lum '"
   tests:
@@ -2394,6 +2400,7 @@
   status: implemented
   provenance:
     - "coverage to a premultiplied colour through a 256-entry RGBA lookup (one colour, or a gradient across the falloff or along its parameter) with noise on alpha and jitter on the gradient position from an integer hash (Photoshop User Guide: Noise, Jitter)"
+    - "the hash reads canvas coordinates: (ox, oy) is the output's origin on the canvas, so a tile of the tiled fold draws the whole fold's noise (image ADR 480)"
     - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
   tests:
     rust: ["image-conformance/tests/it/family_style.rs"]

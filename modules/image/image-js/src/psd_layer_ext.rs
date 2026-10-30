@@ -130,6 +130,7 @@ pub fn record_ext(rec: &LayerRecord) -> LayerExt {
         style_options: style_options(rec),
         vector_mask: None,
         source: None,
+        inks: Default::default(),
     }
 }
 
