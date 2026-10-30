@@ -51,6 +51,7 @@ import type {
 } from "@paged-media/plugin-api";
 import {
   flareParts,
+  regularPolygonPath,
   starPath,
   FLARE_MAX_RAYS,
   FLARE_MAX_RINGS,
@@ -179,6 +180,44 @@ export function starTableFor(p: StarParams): AnchorTable {
   return starPath(p);
 }
 
+/** The engine's star-inset ceiling (engine ADR 1047, percent). */
+const MAX_LIVE_STAR_INSET = 99;
+
+/**
+ * Engine ADR 1047 — the star as a LIVE shape, or null when the engine's
+ * live star cannot be this one: the insert is the plain polygon on
+ * Radius 1, and the engine draws the star from its points and inset
+ * (`frameShapeSides`, `frameShapeStarInset`, written to `$created`), so
+ * the Transform panel and the canvas widgets edit it later. Only an
+ * upright star whose inner radius is the smaller one is a live star
+ * (the engine's points start at twelve o'clock; its inset is
+ * `1 − Radius 2 ÷ Radius 1`). Pure.
+ */
+export function liveStarMutationFor(
+  pageId: string,
+  p: StarParams,
+): Mutation | null {
+  const turned = ((p.rotationDeg % 360) + 360) % 360 !== 0;
+  if (turned || !(p.radius1 > 0) || !(p.radius2 < p.radius1)) return null;
+  const inset = Math.round((1 - p.radius2 / p.radius1) * 1e4) / 100;
+  if (inset > MAX_LIVE_STAR_INSET) return null;
+  const polygon = regularPolygonPath(p.cx, p.cy, p.radius1, p.points);
+  const elementId = { kind: "polygon", id: "$created" } as ElementId;
+  return {
+    op: "batch",
+    args: {
+      ops: [
+        insertPathMutationFor(pageId, polygon.anchors, false),
+        prop(elementId, "frameShapeSides", { type: "length", value: p.points }),
+        prop(elementId, "frameShapeStarInset", {
+          type: "length",
+          value: inset,
+        }),
+      ],
+    },
+  } as Mutation;
+}
+
 // ----------------------------------------------------------------- star
 
 /** Insert a star on `pageId` (default: the active page). Answers the new
@@ -190,11 +229,20 @@ export async function applyInsertStar(
 ): Promise<ElementId | null> {
   const page = pageId ?? (await resolveTargetPage(host));
   if (!page) return null;
-  const table = starTableFor(starParamsFrom(payload));
+  const params = starParamsFrom(payload);
+  const table = starTableFor(params);
   if (table.anchors.length < 3) return null;
   const paint = await graphicPaintFor(host).catch(() => null);
+  // A live star where the engine has live shapes; the plain path where
+  // it has not, or where the star is not one the engine draws.
+  const live = host.supports("document.liveShapes@1")
+    ? liveStarMutationFor(page, params)
+    : null;
   const outcome = await host.document.mutate(
-    withGraphicPaint(insertPathMutationFor(page, table.anchors, false), paint),
+    withGraphicPaint(
+      live ?? insertPathMutationFor(page, table.anchors, false),
+      paint,
+    ),
   );
   if (!outcome.applied) {
     host.log.warn(
