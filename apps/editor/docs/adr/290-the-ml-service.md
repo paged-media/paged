@@ -133,6 +133,12 @@ budget. `bun audit` gates its advisories as for every package (PM-0011). NOTICE 
 
 - Every bundle can call `host.ml.*`. The image module's ML features (WP8.2) and Generate Image in
   every module (WP8.3) build on the doors, with no model code of their own.
+- The embedded editor (`@paged-media/editor`) ships without the ML worker, and so without
+  onnxruntime-web, whose runtime alone is 26 MB, past the package's size budget (PM-0013): its
+  build resolves the worker to nothing, no Tier-A provider registers, `ml.segment@1` and its kin
+  answer false, and Settings ▸ Models says the embed runs no in-browser model. Tier B, the local
+  host over the editor's origin, works as in the app. `check-dist` fails a package that carries
+  the runtime.
 - A deployment can serve Tier-A models from its own origin (`/ml/…`), or list a model host in
   `PAGED_DATA_ORIGINS` (ADR 218). The public build lists none, so only same-origin files install.
 - Not part of this record:

@@ -36,7 +36,9 @@ import { SHIPPED_REGISTRY } from "./registry";
 import { MlService } from "./service";
 import { workerClient, type MlWorkerClient } from "./worker-protocol";
 // Vite `?worker`: the ML worker as its own chunk, served with the page's
-// COOP/COEP headers.
+// COOP/COEP headers. `@paged-media/editor`'s build resolves it to nothing
+// (onnxruntime-web is not in the package): `MlWorker` is then undefined
+// and the embedded editor runs no in-browser model (editor ADR 290).
 import MlWorker from "./ml-worker.ts?worker";
 
 export function createEditorMlService(backend: MlBackend): MlService {
@@ -52,7 +54,9 @@ export function createEditorMlService(backend: MlBackend): MlService {
       origin: location.origin,
       admitted: reachableOrigin,
     }),
-    worker: () => (worker ??= workerClient(new MlWorker())),
+    worker: MlWorker
+      ? () => (worker ??= workerClient(new MlWorker()))
+      : null,
     host: createMlHostClient({ baseUrl: "" }),
     codec: browserPngCodec,
     detectGpu: () => detectGpu(),

@@ -52,6 +52,8 @@ const M = defineMessages("app.modelsPanel", {
   checking: "Checking…",
   disk: "Model cache on this machine: {size}",
   tierA: "In the editor",
+  tierANone:
+    "This embedded editor runs no in-browser models: its package does not ship the model runtime.",
   tierAIntro:
     "Small models that run in this browser. Each is downloaded only when you install it, and nothing you process leaves this machine.",
   tierB: "Local image model",
@@ -645,11 +647,17 @@ export function ModelsPanel() {
       <p className="text-xs text-muted-foreground m-0">
         {strings.t(M.tierAIntro)}
       </p>
-      <ul className="flex flex-col gap-2 m-0 p-0 list-none">
-        {tierA.map((m) => (
-          <TierAModel key={m.entry.id} model={m} service={service} />
-        ))}
-      </ul>
+      {snapshot.tierA ? (
+        <ul className="flex flex-col gap-2 m-0 p-0 list-none">
+          {tierA.map((m) => (
+            <TierAModel key={m.entry.id} model={m} service={service} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs m-0" data-ml-tier-a="unavailable">
+          {strings.t(M.tierANone)}
+        </p>
+      )}
 
       {tierB.length > 0 && (
         <>

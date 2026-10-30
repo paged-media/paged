@@ -141,6 +141,9 @@ export interface ModelState {
 export interface MlServiceSnapshot {
   models: ModelState[];
   diskTotal: number;
+  /** Whether this editor runs in-browser models (Tier A): an embed of
+   *  `@paged-media/editor` ships without the ML worker (editor ADR 290). */
+  tierA: boolean;
   gpu: GpuInfo | null;
   host: {
     health: MlHostHealth | null;
@@ -154,7 +157,10 @@ export interface MlServiceOptions {
   backend: MlBackend;
   registry: ModelRegistry;
   store: ModelStore;
-  worker: () => MlWorkerClient;
+  /** The ML worker; `null` where the build has none (the embedded editor):
+   *  no Tier-A provider is registered, so `ml.segment@1` and its kin
+   *  answer false. */
+  worker: (() => MlWorkerClient) | null;
   host: MlHostClient;
   codec: MlPngCodec;
   settings?: SettingsStorage;
@@ -215,12 +221,13 @@ export class MlService {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    const worker = this.o.worker;
     for (const entry of this.entries) {
-      if (entry.tier !== "A") continue;
+      if (entry.tier !== "A" || !worker) continue;
       const p = tierAProvider({
         entry,
         store: this.o.store,
-        worker: this.o.worker,
+        worker,
         record: null,
         onStatus: () => this.changed(),
       });
@@ -313,6 +320,7 @@ export class MlService {
     return {
       models,
       diskTotal: this.disk.total,
+      tierA: this.o.worker !== null,
       gpu: this.gpu,
       host: {
         health,

@@ -133,7 +133,7 @@ const codec = {
   encode: async () => new Uint8Array([0]),
 };
 
-function setup(settings = memorySettings()) {
+function setup(settings = memorySettings(), withWorker = true) {
   const backend = createMlRegistry();
   const net = publicFetch();
   const host = fakeHost();
@@ -146,7 +146,7 @@ function setup(settings = memorySettings()) {
       origin: ORIGIN,
       fetch: net.fetch,
     }),
-    worker: () => worker,
+    worker: withWorker ? () => worker : null,
     host,
     codec,
     settings,
@@ -167,6 +167,19 @@ const grey = (v: number): MlImage => ({
 });
 
 describe("[plugin-platform.ml-service] the editor's ML service", () => {
+  test("without the ML worker (the embedded editor) Tier A answers false, installed or not", async () => {
+    const { service, bundle } = setup(memorySettings(), false);
+    await service.start();
+    expect(service.snapshot().tierA).toBe(false);
+    await service.install("paged.fixture.matte", {
+      consented: true,
+      licenceAcknowledged: false,
+    });
+    expect(bundle.supports("ml.matting@1")).toBe(false);
+    expect(bundle.supports("ml.segment@1")).toBe(false);
+    service.dispose();
+  });
+
   test("install with consent → ml.matting@1 answers from the fixture through the worker → remove", async () => {
     const { service, bundle } = setup();
     await service.start();

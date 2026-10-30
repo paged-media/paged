@@ -97,6 +97,11 @@ The paged.data bundle's engine (with its query store) is not in the package: the
 from `https://modules.paged.media` when a profile activates paged.data, and its loader from the
 package's `dist/bin/` (beside its chunk, or under `assetBase`).
 
+The in-browser ML models (Settings ▸ Models, "In the editor") are not in the package either: the
+embedded editor ships no model runtime, so segmentation, matting and the other in-browser
+capabilities report unavailable. The local image model (Tier B, `paged-ml-host` on the user's
+machine) works as in the app.
+
 ## Feature ids and deprecations
 
 `@paged-media/editor/feature-ids.json` is the public list of the ids a profile's `features`,

@@ -2726,6 +2726,7 @@
   "app.modelsPanel.checking": "Wird geprüft…",
   "app.modelsPanel.disk": "Modell-Cache auf diesem Gerät: {size}",
   "app.modelsPanel.tierA": "Im Editor",
+  "app.modelsPanel.tierANone": "Dieser eingebettete Editor führt keine Modelle im Browser aus: sein Paket liefert die Modell-Laufzeit nicht mit.",
   "app.modelsPanel.tierAIntro": "Kleine Modelle, die in diesem Browser laufen. Jedes wird erst heruntergeladen, wenn Sie es installieren, und nichts, was Sie verarbeiten, verlässt dieses Gerät.",
   "app.modelsPanel.tierB": "Lokales Bildmodell",
   "app.modelsPanel.tierBIntro": "Generieren und Bearbeiten laufen in paged-ml-host, einem Programm auf diesem Gerät, das stable-diffusion.cpp mit Modelldateien ausführt, die Sie selbst installieren.",
