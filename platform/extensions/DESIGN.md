@@ -780,6 +780,16 @@ Additive at protocol 76 like the fill rule: an older engine makes a plain
 group of `clip: true` and refuses a group child. paged.draw's clipped
 repeat asks it before choosing a clip group over paste-into.
 
+`"document.liveShapes@1"` (engine ADR 10XX) says the vendored wire and
+catalog carry the live-shape paths: `frameShapeSides` and
+`frameShapeStarInset` on a Polygon (a live polygon or star the engine
+redraws from its side count and inset, keeping its outer radius) and
+`frameShapePieStart` / `frameShapePieEnd` on an Oval (the wedge the oval
+draws). Additive at protocol 78: an older engine refuses the writes as
+unknown paths. paged.draw's Star tool asks it before it inserts a live
+star (the plain polygon, then its points and inset in the same batch)
+instead of a plain path.
+
 `"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
 protocol 77) are SVG in and out through the engine's `paged-svg`.
 `importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the

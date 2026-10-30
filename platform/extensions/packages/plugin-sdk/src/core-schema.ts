@@ -789,6 +789,11 @@ export const CORE_PATHS: Record<
   frameFillEffectStack: V71,
   frameStrokeEffectStack: V71,
   frameContentEffectStack: V71,
+  // The live shapes are protocol 78 (engine ADR 10XX).
+  frameShapeSides: V71,
+  frameShapeStarInset: V71,
+  frameShapePieStart: V71,
+  frameShapePieEnd: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",
