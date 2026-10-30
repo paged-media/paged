@@ -83,11 +83,12 @@ function boot(opts: { active?: boolean } = {}) {
     // prove the providers exist BEFORE it interprets a refusal as
     // theirs. A refusal from an absent provider and a refusal from a
     // present one are different facts and must not share a test.
-    // Layers, character, colour and (WP5.12) the workspace.
+    // Layers, character, colour, (WP5.12) the workspace and links
+    // (image ADR 482).
     expect(
       registry.activeProviders(),
-      "all four providers must be active before a refusal means anything",
-    ).toHaveLength(4);
+      "all five providers must be active before a refusal means anything",
+    ).toHaveLength(5);
   }
   return { registry, fake, handle, bundle };
 }
@@ -103,8 +104,8 @@ describe("the ADR-023 providers reach the registry at all", () => {
 
     registry.setContextActive(PLUGIN, CTX, "u1", true);
     const active = registry.activeProviders();
-    // Layers, character, colour and links (image ADR 482).
-    expect(active).toHaveLength(4);
+    // Layers, character, colour, the workspace and links (image ADR 482).
+    expect(active).toHaveLength(5);
 
     // Exiting takes them away again — a stale provider answering for a
     // frame the user has left is the same bug in the other direction.
