@@ -54,7 +54,7 @@ is not written yet.
 | [121](121-public-repo-builds-alone.md) | The public engine repo builds and gates without any private repo | Accepted, recorded retroactively 2026-10-02 |
 | 122 | Dual licence, per-file header, one contributor agreement | Reserved (not yet written) |
 | [123](123-viewer-ships-from-core.md) | The viewer ships from core | Accepted 2026-06-07, recorded here 2026-10-02 |
-| [124](124-opacity-masks-native.md) | Opacity masks are a native construct; loss is reported on IDML export | Accepted, recorded retroactively 2026-10-02 |
+| [124](124-opacity-masks-native.md) | Opacity masks are a native construct; loss is reported on IDML export | Accepted, recorded retroactively 2026-10-02; amended 2026-10-29 (Clip and the mask's option rows, editor ADR 309) |
 | [125](125-snapping-lives-in-the-engine.md) | Snapping lives in the engine | Accepted 2026-10-05 |
 | [126](126-scene-text-in-its-own-face.md) | Scene-layer text draws in its own face | Accepted 2026-10-05 |
 | [127](127-fields-and-document-labels-for-data.md) | Field offsets, typing at a field, document labels and delete undo | Accepted 2026-10-05 |
@@ -147,7 +147,7 @@ is not written yet.
 | [1004](1004-a-follow-up-write-can-join-the-step-that-provoked-it.md) | A follow-up write can join the undo step that provoked it | Accepted 2026-10-23 |
 | [1005](1005-a-raster-is-read-by-paged-raster.md) | A raster is read by `paged-raster`, and a TIFF through `tiff` | Accepted 2026-10-24; note 2026-10-24 (the frame's intent, ADR 1032); note 2026-10-28 (the remaining codecs, ADR 1038) |
 | [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
-| [1008](1008-an-items-effects-are-an-ordered-stack.md) | An item's effects are an ordered stack | Accepted 2026-10-25 |
+| [1008](1008-an-items-effects-are-an-ordered-stack.md) | An item's effects are an ordered stack | Accepted 2026-10-25; note 2026-10-29 (the kinds described in the catalog, editor ADR 309; Photoshop styles mapped, ADR 1044) |
 | [1010](1010-a-group-can-clip-and-be-pasted-in.md) | A group can clip, and a group can be pasted into a frame | Accepted 2026-10-24 |
 | [1011](1011-a-page-has-a-place-on-the-canvas.md) | A page has a place on the canvas (artboards) | Accepted 2026-10-25 |
 | [1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md) | Bindings live in labels, and the engine reads and applies them | Accepted 2026-10-24 |
@@ -170,8 +170,10 @@ is not written yet.
 | [1039](1039-a-symbol-is-drawn-by-its-instances.md) | A symbol is kept once and drawn by its instances: 9-slice, overrides, one PDF form, IDML through labels | Accepted 2026-10-28 |
 | [1040](1040-word-change-tracking.md) | Word's change tracking: changes carried by what they changed, recorded while typing, accepted and rejected as each other's opposite, shown by the markup view (amends 184) | Accepted 2026-10-29 |
 | [1043](1043-an-item-has-several-fills-and-strokes.md) | An item has several fills and strokes (native appearance), drawn as parts, baked to a group in IDML and restored from its label | Accepted 2026-10-29 |
+| [1044](1044-a-photoshop-layer-style-maps-onto-the-effect-stack.md) | A Photoshop layer style maps onto the effect stack: `paged-psd-fx`, losses named | Accepted 2026-10-29 |
 | [1045](1045-an-anchored-frame-paints-as-a-free-frame.md) | An anchored frame paints as a free frame does: its look, its picture in its effects, IDML both ways | Accepted 2026-10-29 |
 | [1046](1046-a-scene-layer-takes-its-frames-effects.md) | A scene layer takes its frame's opacity, blend mode and effects | Accepted 2026-10-30 |
+| [1047](1047-live-shapes.md) | A polygon, a star and a pie stay live shapes: parameters on the item, the outline in IDML, the parameters in a label | Accepted 2026-10-30 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
