@@ -305,6 +305,221 @@ impl PsdFile {
     }
 }
 
+/// A merged composite in the document's OWN numbers, whatever its mode
+/// and depth ([`PsdFile::composite_samples`]): what a consumer with a
+/// colour engine converts (Lab, Grayscale, Indexed through its colour
+/// table, Multichannel, Duotone as its grey) — this crate has none.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompositeSamples {
+    pub width: u32,
+    pub height: u32,
+    pub mode: ColorMode,
+    /// Bits per sample as stored: 8, 16 or 32 (float).
+    pub depth: u16,
+    /// Colour channels a pixel: 1 for Grayscale, Indexed and Duotone, 3
+    /// for RGB and Lab, 4 for CMYK, every channel for Multichannel.
+    pub channels: usize,
+    /// Interleaved, `channels` a pixel, as STORED and normalised: an
+    /// integer sample is `v / (2^depth − 1)` (an index stays its byte
+    /// over 255; CMYK is the stored ink BRIGHTNESS, 1 = no ink; Lab is
+    /// L* over the full range and a*, b* about the middle), a 32-bit one
+    /// is the float itself (linear light). Un-matted when `alpha` is set.
+    pub samples: Vec<f32>,
+    /// Straight transparency (the first extra channel, when the layer
+    /// count's sign says so), normalised.
+    pub alpha: Option<Vec<f32>>,
+}
+
+impl PsdFile {
+    /// The merged composite as the file stores it, for every mode but
+    /// Bitmap, at 8, 16 or 32 bits ([`CompositeSamples`]). RAW at any
+    /// depth, RLE at 8 bits (the encodings Photoshop writes a composite
+    /// in; a ZIP composite and 16-bit RLE are refused as in
+    /// [`composite_rgba8`](Self::composite_rgba8)).
+    ///
+    /// A transparent document's composite is matted against WHITE in the
+    /// stored numbers (`v·α + white·(1 − α)`: 1 for every channel but
+    /// Lab's a* and b*, whose white is their middle) and is un-matted
+    /// here, as the RGB and CMYK decodes do.
+    pub fn composite_samples(&self) -> Result<CompositeSamples> {
+        let h = &self.header;
+        if !matches!(h.depth, 8 | 16 | 32) {
+            return Err(PsdError::Unsupported(format!(
+                "composite decode at depth {} (8, 16 and 32 bits)",
+                h.depth
+            )));
+        }
+        let channels = match h.color_mode {
+            ColorMode::Grayscale | ColorMode::Indexed | ColorMode::Duotone => 1,
+            ColorMode::Rgb | ColorMode::Lab => 3,
+            ColorMode::Cmyk => 4,
+            ColorMode::Multichannel => h.channels as usize,
+            ColorMode::Bitmap => {
+                return Err(PsdError::Unsupported(
+                    "composite decode of a Bitmap (1-bit) document".into(),
+                ))
+            }
+        };
+        if (h.channels as usize) < channels || channels == 0 {
+            return Err(PsdError::Malformed {
+                section: "image data",
+                detail: format!(
+                    "{:?} needs {channels} channel(s), header says {}",
+                    h.color_mode, h.channels
+                ),
+            });
+        }
+        let planes = decode_planes_f32(self)?;
+        let alpha = if self.layer_mask.transparency_in_merged && h.color_mode != ColorMode::Multichannel
+        {
+            planes.get(channels).cloned()
+        } else {
+            None
+        };
+        let n = (h.width as usize) * (h.height as usize);
+        let mid = if h.depth == 16 {
+            32768.0 / 65535.0
+        } else {
+            128.0 / 255.0
+        };
+        let white = |c: usize| -> f32 {
+            if h.color_mode == ColorMode::Lab && c > 0 {
+                mid
+            } else {
+                1.0
+            }
+        };
+        let mut samples = Vec::with_capacity(n * channels);
+        for i in 0..n {
+            let a = alpha.as_ref().map_or(1.0, |p| p[i].clamp(0.0, 1.0));
+            for (c, plane) in planes.iter().take(channels).enumerate() {
+                let v = plane[i];
+                samples.push(if a >= 1.0 {
+                    v
+                } else if a <= 0.0 {
+                    0.0
+                } else {
+                    let w = white(c);
+                    let u = (v - w * (1.0 - a)) / a;
+                    if h.depth == 32 {
+                        u
+                    } else {
+                        u.clamp(0.0, 1.0)
+                    }
+                });
+            }
+        }
+        Ok(CompositeSamples {
+            width: h.width,
+            height: h.height,
+            mode: h.color_mode,
+            depth: h.depth,
+            channels,
+            samples,
+            alpha,
+        })
+    }
+
+    /// The colour table of an Indexed document (the Color Mode Data
+    /// section: 256 reds, then 256 greens, then 256 blues), with the
+    /// transparent index (resource 1047) when there is one.
+    pub fn indexed_palette(&self) -> Option<IndexedPalette> {
+        if self.header.color_mode != ColorMode::Indexed {
+            return None;
+        }
+        let raw = &self.color_mode.raw;
+        if raw.len() < 768 {
+            return None;
+        }
+        let colours = (0..256)
+            .map(|i| [raw[i], raw[256 + i], raw[512 + i]])
+            .collect();
+        let count = self
+            .resources
+            .data(RESOURCE_INDEXED_COUNT)
+            .and_then(|d| d.get(..2))
+            .map(|d| usize::from(u16::from_be_bytes([d[0], d[1]])));
+        let transparent = self
+            .resources
+            .data(RESOURCE_TRANSPARENT_INDEX)
+            .and_then(|d| d.get(..2))
+            .map(|d| u16::from_be_bytes([d[0], d[1]]));
+        Some(IndexedPalette {
+            colours,
+            count,
+            transparent,
+        })
+    }
+}
+
+/// Resource 1046: the number of colours an Indexed table holds.
+const RESOURCE_INDEXED_COUNT: u16 = 1046;
+/// Resource 1047: the index that is transparent.
+const RESOURCE_TRANSPARENT_INDEX: u16 = 1047;
+
+/// An Indexed document's colour table ([`PsdFile::indexed_palette`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexedPalette {
+    /// 256 sRGB-as-stored colours (the table is always 768 bytes).
+    pub colours: Vec<[u8; 3]>,
+    /// How many of them are used (resource 1046), when the file says.
+    pub count: Option<usize>,
+    /// The transparent index (resource 1047; 0xFFFF = none), when said.
+    pub transparent: Option<u16>,
+}
+
+/// [`decode_planes`] normalised to `0..=1` floats, at full depth: RAW at
+/// 8, 16 and 32 bits, RLE at 8.
+fn decode_planes_f32(file: &PsdFile) -> Result<Vec<Vec<f32>>> {
+    let h = &file.header;
+    if file.composite.compression != COMPRESSION_RAW || h.depth == 8 {
+        if h.depth == 32 {
+            return Err(PsdError::Unsupported(format!(
+                "32-bit composite with compression {} (RAW is read)",
+                file.composite.compression
+            )));
+        }
+        let max = 255.0;
+        return Ok(decode_planes(file)?
+            .into_iter()
+            .map(|p| p.into_iter().map(|v| f32::from(v) / max).collect())
+            .collect());
+    }
+    let channels = h.channels as usize;
+    let plane_len = (h.width as usize)
+        .checked_mul(h.height as usize)
+        .ok_or_else(|| malformed("composite plane size overflows usize"))?;
+    let sample = usize::from(h.depth / 8);
+    let stride = plane_len * sample;
+    let data = &file.composite.raw;
+    if data.len() != stride * channels {
+        return Err(malformed(format!(
+            "RAW composite is {} byte(s), expected {}",
+            data.len(),
+            stride * channels
+        )));
+    }
+    Ok((0..channels)
+        .map(|c| {
+            let plane = &data[c * stride..(c + 1) * stride];
+            match h.depth {
+                16 => plane
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|s| f32::from(u16::from_be_bytes(*s)) / 65535.0)
+                    .collect(),
+                _ => plane
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|s| f32::from_be_bytes(*s))
+                    .collect(),
+            }
+        })
+        .collect())
+}
+
 /// Undo the merged composite's matte against white (`v·α + 255·(1 − α)`
 /// on the STORED value). Fully transparent pixels answer 0.
 fn unmatte_white(v: u8, a: u8) -> u8 {

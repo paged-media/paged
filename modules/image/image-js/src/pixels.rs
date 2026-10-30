@@ -38,12 +38,21 @@ use std::sync::Arc;
 
 use image_core::SampleDepth;
 
-/// Straight (non-premultiplied) RGBA at 8 or 16 bits per sample.
+/// Straight (non-premultiplied) RGBA at 8 or 16 bits per sample, or 32-bit
+/// float (image ADR 483).
+///
+/// The integer depths hold sRGB-ENCODED colour; `F32` holds LINEAR light,
+/// scene-referred (a value may exceed 1), as a Photoshop 32-bit document
+/// does — which is why its blends are made on linear values and why every
+/// conversion between the two applies the sRGB transfer
+/// ([`at_depth`](Self::at_depth), [`to_rgba8`](Self::to_rgba8),
+/// [`sample16`](Self::sample16)). Alpha is linear coverage at every depth.
 #[derive(Clone, Debug)]
 pub struct Pixels {
     /// Tightly packed RGBA. At `U16` the samples are NATIVE-endian
     /// pairs — the codec already resolved wire order (PNG is
-    /// big-endian on disk; `zune` hands back assembled `u16`s).
+    /// big-endian on disk; `zune` hands back assembled `u16`s). At `F32`,
+    /// native-endian `f32` quadruples.
     bytes: Arc<[u8]>,
     depth: SampleDepth,
 }
@@ -70,6 +79,59 @@ impl Pixels {
         }
     }
 
+    /// Wrap 32-bit float samples (linear light, straight alpha), packed to
+    /// native-endian bytes.
+    pub fn from_rgba32f(samples: &[f32]) -> Self {
+        let mut b = Vec::with_capacity(samples.len() * 4);
+        for s in samples {
+            b.extend_from_slice(&s.to_ne_bytes());
+        }
+        Self {
+            bytes: Arc::from(b),
+            depth: SampleDepth::F32,
+        }
+    }
+
+    /// The samples as linear-light floats, whatever the store: an integer
+    /// depth is decoded through the sRGB transfer (alpha is not).
+    pub fn to_f32_linear(&self) -> Vec<f32> {
+        match self.depth {
+            SampleDepth::F32 => self
+                .bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_ne_bytes(*b))
+                .collect(),
+            _ => {
+                let n = self.pixel_count();
+                let mut out = Vec::with_capacity(n * 4);
+                for i in 0..n {
+                    for c in 0..4 {
+                        let v = f32::from(self.sample16(i, c)) / 65535.0;
+                        out.push(if c == 3 {
+                            v
+                        } else {
+                            paged_color::math::srgb_to_linear(v)
+                        });
+                    }
+                }
+                out
+            }
+        }
+    }
+
+    /// One 32-bit sample (`F32` only; the caller checked the depth).
+    fn f32_at(&self, pixel: usize, channel: usize) -> f32 {
+        let i = pixel * 16 + channel * 4;
+        f32::from_ne_bytes([
+            self.bytes[i],
+            self.bytes[i + 1],
+            self.bytes[i + 2],
+            self.bytes[i + 3],
+        ])
+    }
+
     /// Re-wrap bytes that are ALREADY at `depth` — for a caller that
     /// took `raw()` apart and is putting it back, such as the undo
     /// journal. Wrong `depth` here is a silent misread, so this is
@@ -86,10 +148,15 @@ impl Pixels {
         self.depth == SampleDepth::U16
     }
 
-    /// 4 at `U8`, 8 at `U16`. Never write the literal.
+    pub fn is_float(&self) -> bool {
+        self.depth == SampleDepth::F32
+    }
+
+    /// 4 at `U8`, 8 at `U16`, 16 at `F32`. Never write the literal.
     pub fn bytes_per_pixel(&self) -> usize {
         match self.depth {
             SampleDepth::U16 => 8,
+            SampleDepth::F32 => 16,
             _ => 4,
         }
     }
@@ -135,6 +202,20 @@ impl Pixels {
                         .collect(),
                 )
             }
+            // The display view of linear light: the sRGB transfer at
+            // exposure 0, clamped (what Photoshop's 32-bit preview shows
+            // by default).
+            SampleDepth::F32 => {
+                crate::counters::bump(|c| {
+                    c.depth_narrowings += 1;
+                    c.narrowed_bytes += (self.bytes.len() / 4) as u64;
+                });
+                std::borrow::Cow::Owned(
+                    (0..self.pixel_count() * 4)
+                        .map(|i| (encode_f32(self.f32_at(i / 4, i % 4), i % 4) * 255.0).round() as u8)
+                        .collect(),
+                )
+            }
             _ => std::borrow::Cow::Borrowed(&self.bytes),
         }
     }
@@ -148,6 +229,9 @@ impl Pixels {
             SampleDepth::U16 => {
                 let i = pixel * 8 + channel * 2;
                 u16::from_ne_bytes([self.bytes[i], self.bytes[i + 1]])
+            }
+            SampleDepth::F32 => {
+                (encode_f32(self.f32_at(pixel, channel), channel) * 65535.0).round() as u16
             }
             _ => {
                 let v = u16::from(self.bytes[pixel * 4 + channel]);
@@ -181,6 +265,19 @@ impl Pixels {
         Arc::get_mut(&mut self.bytes).expect("unique after the copy")
     }
 
+    /// One sample as the 8-bit DISPLAY view reads it (what
+    /// [`to_rgba8`](Self::to_rgba8) holds at that place), without
+    /// converting the whole buffer.
+    pub fn display8(&self, pixel: usize, channel: usize) -> u8 {
+        match self.depth {
+            SampleDepth::U16 => self.sample16(pixel, channel).to_be_bytes()[0],
+            SampleDepth::F32 => {
+                (encode_f32(self.f32_at(pixel, channel), channel) * 255.0).round() as u8
+            }
+            _ => self.bytes[pixel * 4 + channel],
+        }
+    }
+
     /// One pixel's alpha as 8 bits (the high byte at `U16`): what a
     /// transparency test or a clip's coverage reads.
     pub fn alpha8(&self, pixel: usize) -> u8 {
@@ -189,14 +286,25 @@ impl Pixels {
                 let i = pixel * 8 + 6;
                 u16::from_ne_bytes([self.bytes[i], self.bytes[i + 1]]).to_be_bytes()[0]
             }
+            SampleDepth::F32 => (self.f32_at(pixel, 3).clamp(0.0, 1.0) * 255.0).round() as u8,
             _ => self.bytes[pixel * 4 + 3],
         }
     }
 
     /// Straight rgba16float bytes (little-endian halves), the working
-    /// window every kernel reads: `v / 255` at 8 bits, `v / 65535` at 16.
+    /// window every kernel reads: `v / 255` at 8 bits, `v / 65535` at 16,
+    /// the linear value itself at 32 (f16 keeps up to 65504, so a
+    /// scene-referred value above 1 goes through the fold unclamped).
     pub fn to_f16(&self) -> Vec<u8> {
         match self.depth {
+            SampleDepth::F32 => {
+                let mut out = Vec::with_capacity(self.bytes.len() / 2);
+                for p in self.bytes.as_chunks::<4>().0 {
+                    let v = f32::from_ne_bytes(*p);
+                    out.extend_from_slice(&half::f16::from_f32(v).to_le_bytes());
+                }
+                out
+            }
             SampleDepth::U16 => {
                 let mut out = Vec::with_capacity(self.bytes.len());
                 for p in self.bytes.as_chunks::<2>().0 {
@@ -210,9 +318,27 @@ impl Pixels {
     }
 
     /// Straight rgba16float bytes back to pixels at `depth` (clamped and
-    /// rounded; `U8` and `U16` only).
+    /// rounded at `U8` and `U16`; at `F32` the values as they are, only
+    /// the alpha clamped).
     pub fn from_f16(bytes: &[u8], depth: SampleDepth) -> Pixels {
         match depth {
+            SampleDepth::F32 => {
+                let s: Vec<f32> = bytes
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        let v = half::f16::from_le_bytes(*p).to_f32();
+                        if i % 4 == 3 {
+                            v.clamp(0.0, 1.0)
+                        } else {
+                            v
+                        }
+                    })
+                    .collect();
+                Pixels::from_rgba32f(&s)
+            }
             SampleDepth::U16 => {
                 let s: Vec<u16> = bytes
                     .as_chunks::<2>()
@@ -260,10 +386,38 @@ impl Pixels {
                     .collect();
                 Pixels::from_rgba8(Arc::from(b.into_boxed_slice()))
             }
-            // F16/F32 are not a layer's store (the fold's and the
-            // chain's working windows are bytes, not `Pixels`).
+            // Into 32-bit float: linear light (the sRGB transfer
+            // decoded, exactly as Photoshop's 8/16 → 32 Bits/Channel).
+            (_, SampleDepth::F32) => Pixels::from_rgba32f(&self.to_f32_linear()),
+            // Out of 32-bit float: encoded, clamped and rounded (Photoshop's
+            // HDR Toning "Exposure and Gamma" at exposure 0, gamma 1).
+            (SampleDepth::F32, SampleDepth::U16) => {
+                let n = self.pixel_count();
+                let s: Vec<u16> = (0..n * 4).map(|i| self.sample16(i / 4, i % 4)).collect();
+                Pixels::from_rgba16(&s)
+            }
+            (SampleDepth::F32, SampleDepth::U8) => {
+                let n = self.pixel_count();
+                let b: Vec<u8> = (0..n * 4)
+                    .map(|i| (encode_f32(self.f32_at(i / 4, i % 4), i % 4) * 255.0).round() as u8)
+                    .collect();
+                Pixels::from_rgba8(Arc::from(b.into_boxed_slice()))
+            }
+            // F16 is not a layer's store (the fold's and the chain's
+            // working windows are bytes, not `Pixels`).
             _ => self.clone(),
         }
+    }
+}
+
+/// A 32-bit sample as an encoded value in 0..=1: colour through the sRGB
+/// transfer, alpha (`channel` 3) as it is; clamped (a display view).
+fn encode_f32(v: f32, channel: usize) -> f32 {
+    let v = if v.is_nan() { 0.0 } else { v };
+    if channel == 3 {
+        v.clamp(0.0, 1.0)
+    } else {
+        paged_color::math::linear_to_srgb(v.max(0.0)).clamp(0.0, 1.0)
     }
 }
 
@@ -283,6 +437,7 @@ impl From<Arc<[u8]>> for Pixels {
 }
 
 #[cfg(test)]
+#[allow(non_snake_case)]
 mod tests {
     use super::*;
 
@@ -317,6 +472,28 @@ mod tests {
         let p = Pixels::from_rgba16(&[0x1234, 0x5678, 0x9ABC, 0xFFFF]);
         assert_eq!(p.sample16(0, 0), 0x1234);
         assert_eq!(p.sample16(0, 3), 0xFFFF);
+    }
+
+    #[test]
+    fn float_is_linear_light_and_round_trips_every_8bit_level__feat__image_io_depth_color_modes() {
+        let src: Vec<u8> = (0..=255).collect();
+        let p = Pixels::from_rgba8(Arc::from(src.clone()));
+        let f = p.at_depth(SampleDepth::F32);
+        assert!(f.is_float());
+        assert_eq!(f.bytes_per_pixel(), 16);
+        assert_eq!(f.pixel_count(), 64);
+        // 188 (sRGB) is about 0.5 linear; alpha (channel 3) is not decoded.
+        let lin = f.to_f32_linear();
+        assert!((lin[188] - 0.5029).abs() < 1e-3, "{}", lin[188]);
+        assert!((lin[191] - 191.0 / 255.0).abs() < 1e-6);
+        assert_eq!(&*f.to_rgba8(), &src[..], "8 → 32 → display is the identity");
+        assert_eq!(&*f.at_depth(SampleDepth::U8).to_rgba8(), &src[..]);
+        // A scene-referred value survives the f16 working window.
+        let hdr = Pixels::from_rgba32f(&[2.5, 0.25, -0.0, 0.5]);
+        let back = Pixels::from_f16(&hdr.to_f16(), SampleDepth::F32);
+        assert_eq!(back.to_f32_linear(), vec![2.5, 0.25, 0.0, 0.5]);
+        assert_eq!(hdr.alpha8(0), 128);
+        assert_eq!(hdr.sample16(0, 0), 65535, "the display view clamps");
     }
 
     #[test]

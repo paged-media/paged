@@ -158,6 +158,8 @@ mod verbs;
 pub use verbs::{AlignEdge, Axis};
 #[cfg(test)]
 mod depth_tests;
+#[cfg(test)]
+mod float_tests;
 pub mod mask;
 #[cfg(test)]
 mod parity_tests;
@@ -844,8 +846,8 @@ fn alpha_of(rgba: &[u8]) -> Vec<u8> {
 /// [`alpha_of`] at the pixels' own depth (8-bit coverage either way).
 fn alpha_of_px(px: &crate::pixels::Pixels) -> Vec<u8> {
     match px.depth() {
-        image_core::SampleDepth::U16 => (0..px.pixel_count()).map(|i| px.alpha8(i)).collect(),
-        _ => alpha_of(px.raw()),
+        image_core::SampleDepth::U8 => alpha_of(px.raw()),
+        _ => (0..px.pixel_count()).map(|i| px.alpha8(i)).collect(),
     }
 }
 
@@ -941,8 +943,8 @@ fn is_fully_transparent(rgba: &[u8]) -> bool {
 /// [`is_fully_transparent`] at the pixels' own depth.
 fn is_fully_transparent_px(px: &crate::pixels::Pixels) -> bool {
     match px.depth() {
-        image_core::SampleDepth::U16 => (0..px.pixel_count()).all(|i| px.sample16(i, 3) == 0),
-        _ => is_fully_transparent(px.raw()),
+        image_core::SampleDepth::U8 => is_fully_transparent(px.raw()),
+        _ => (0..px.pixel_count()).all(|i| px.sample16(i, 3) == 0),
     }
 }
 
@@ -973,6 +975,10 @@ fn keep_alpha(
 /// `edit` (canvas-sized, at another depth) at `layer`'s depth: the
 /// layer's own samples, with `damage` taken from `edit` converted to that
 /// depth ([`Pixels::at_depth`](crate::pixels::Pixels::at_depth)'s rules).
+/// A pixel inside `damage` the edit did not change — its value is the
+/// layer's own seen at the edit's depth — keeps the layer's sample, so a
+/// brush stroke's rectangle does not quantise (or, in a 32-bit document,
+/// clip) the pixels the stroke never touched.
 fn adopt_depth(
     layer: &crate::pixels::Pixels,
     edit: &crate::pixels::Pixels,
@@ -984,13 +990,29 @@ fn adopt_depth(
     let mut out = layer.raw().to_vec();
     let src = converted.raw();
     let (x0, y0) = (damage.x.max(0) as usize, damage.y.max(0) as usize);
-    let row = damage.w as usize * bpp;
+    let n = layer.pixel_count().min(edit.pixel_count());
+    let edit8 = edit.depth() == image_core::SampleDepth::U8;
+    let untouched = |i: usize| -> bool {
+        (0..4).all(|c| {
+            if edit8 {
+                edit.display8(i, c) == layer.display8(i, c)
+            } else {
+                edit.sample16(i, c) == layer.sample16(i, c)
+            }
+        })
+    };
     for y in y0..y0 + damage.h as usize {
-        let at = (y * width as usize + x0) * bpp;
-        if at + row > out.len() || at + row > src.len() {
-            continue;
+        for x in x0..x0 + damage.w as usize {
+            let i = y * width as usize + x;
+            let at = i * bpp;
+            if x >= width as usize || i >= n || at + bpp > out.len() || at + bpp > src.len() {
+                continue;
+            }
+            if untouched(i) {
+                continue;
+            }
+            out[at..at + bpp].copy_from_slice(&src[at..at + bpp]);
         }
-        out[at..at + row].copy_from_slice(&src[at..at + row]);
     }
     crate::pixels::Pixels::from_raw(Arc::from(out.into_boxed_slice()), layer.depth())
 }
@@ -1525,6 +1547,15 @@ impl LayerStack {
                 // At its BOUNDS (ADR 464): an adjustment keeps an empty
                 // rectangle, a pixel layer its record's.
                 rgba: match (&adjustment, &plate.rgba16) {
+                    // A 32-bit document's layer: linear floats (ADR 483).
+                    (None, _) if plate.rgba32.is_some() => bounded_px(
+                        plate_rect,
+                        crate::pixels::Pixels::from_rgba32f(
+                            plate.rgba32.as_deref().expect("checked"),
+                        ),
+                        width,
+                        height,
+                    )?,
                     // A 16-bit RGB document's layer at full depth (ADR 479).
                     (None, Some(deep)) => bounded_px(
                         plate_rect,
@@ -2695,7 +2726,7 @@ impl LayerStack {
     pub fn shrink_to_content(&mut self, index: usize) -> Result<Option<Region>, IngestError> {
         let (w, h) = (self.width, self.height);
         let layer = self.layer_mut(index)?;
-        if !layer.is_pixels() || layer.rgba.is_16bit() {
+        if !layer.is_pixels() || layer.rgba.depth() != image_core::SampleDepth::U8 {
             return Ok(None);
         }
         let px = layer.rgba.canvas().raw_arc();
@@ -3507,6 +3538,10 @@ impl LayerStack {
         override_active: Option<&crate::pixels::Pixels>,
         fresh: &[(usize, Arc<[u8]>)],
     ) -> Vec<(usize, Plate)> {
+        // A 32-bit document blends linear light: a plate at an integer
+        // depth in it (a fill's 8-bit render, a stroke's preview) is
+        // decoded first, or the fold would mix encoded and linear values.
+        let float = self.depth() == image_core::SampleDepth::F32;
         self.layers
             .iter()
             .enumerate()
@@ -3547,6 +3582,14 @@ impl LayerStack {
                 if l.is_pixels() && is_fully_transparent_px(&plate.px) {
                     return None;
                 }
+                let plate = if float && !plate.px.is_float() {
+                    Plate {
+                        px: plate.px.at_depth(image_core::SampleDepth::F32),
+                        rect: plate.rect,
+                    }
+                } else {
+                    plate
+                };
                 Some((i, plate))
             })
             .collect()
@@ -3561,14 +3604,28 @@ impl LayerStack {
     pub fn set_depth(&mut self, depth: image_core::SampleDepth) -> Result<bool, IngestError> {
         if !matches!(
             depth,
-            image_core::SampleDepth::U8 | image_core::SampleDepth::U16
+            image_core::SampleDepth::U8 | image_core::SampleDepth::U16 | image_core::SampleDepth::F32
         ) {
             return Err(IngestError::Unsupported(format!(
-                "a layer stack holds 8 or 16 bits per channel, not {depth:?}"
+                "a layer stack holds 8, 16 or 32 bits per channel, not {depth:?}"
+            )));
+        }
+        // A 32-bit document is RGB or Grayscale in Photoshop; the stack's
+        // other modes have no float encoding.
+        if depth == image_core::SampleDepth::F32
+            && !matches!(
+                self.mode.mode,
+                crate::color_mode::ColorMode::Rgb | crate::color_mode::ColorMode::Gray
+            )
+        {
+            return Err(IngestError::Unsupported(format!(
+                "32 Bits/Channel needs an RGB or Grayscale document, not {}",
+                self.mode.mode.label()
             )));
         }
         let label = match depth {
             image_core::SampleDepth::U16 => "16 Bits/Channel",
+            image_core::SampleDepth::F32 => "32 Bits/Channel",
             _ => "8 Bits/Channel",
         };
         self.recorded_if_changed(label, |s| {
@@ -3609,7 +3666,7 @@ impl LayerStack {
         for (n, &i) in from_records.iter().enumerate() {
             let (c, kp) = (&cmy.layers[n], &k.layers[n]);
             let l = &mut self.layers[i];
-            if !l.is_pixels() || l.rgba.is_16bit() {
+            if !l.is_pixels() || l.rgba.depth() != image_core::SampleDepth::U8 {
                 continue;
             }
             // The plate at the layer's shape: its own rectangle, or the
@@ -3653,6 +3710,17 @@ impl LayerStack {
         if self.mode == mode {
             return Ok(false);
         }
+        if self.depth() == image_core::SampleDepth::F32
+            && !matches!(
+                mode.mode,
+                crate::color_mode::ColorMode::Rgb | crate::color_mode::ColorMode::Gray
+            )
+        {
+            return Err(IngestError::Unsupported(format!(
+                "{} needs 8 or 16 bits per channel: convert the 32-bit document first",
+                mode.mode.label()
+            )));
+        }
         let t = crate::color_mode::ModeTransform::new(&mode)?;
         let w = self.width;
         self.recorded(mode.mode.label(), None, |s| {
@@ -3684,7 +3752,13 @@ impl LayerStack {
     /// else 8 (Image ▸ Mode ▸ 8/16 Bits/Channel sets every layer's;
     /// [`set_depth`](Self::set_depth)). The composite is read back at it.
     pub fn depth(&self) -> image_core::SampleDepth {
-        if self.layers.iter().any(|l| l.rgba.is_16bit()) {
+        if self
+            .layers
+            .iter()
+            .any(|l| l.rgba.depth() == image_core::SampleDepth::F32)
+        {
+            image_core::SampleDepth::F32
+        } else if self.layers.iter().any(|l| l.rgba.is_16bit()) {
             image_core::SampleDepth::U16
         } else {
             image_core::SampleDepth::U8
@@ -5164,31 +5238,12 @@ fn cut_window(src: &[u8], w: u32, bpp: usize, (x, y, cw, ch): (u32, u32, u32, u3
 /// A layer's pixels as the rgba16float working window, at their own
 /// depth (a 16-bit sample is not narrowed to a byte on the way in).
 fn pixels_to_f16(px: &crate::pixels::Pixels) -> Vec<u8> {
-    use half::f16;
-    if !px.is_16bit() {
-        return rgba8_to_f16(px.raw());
-    }
-    let mut out = Vec::with_capacity(px.raw().len());
-    for pair in px.raw().as_chunks::<2>().0 {
-        let v = f32::from(u16::from_ne_bytes(*pair)) / 65535.0;
-        out.extend_from_slice(&f16::from_f32(v).to_le_bytes());
-    }
-    out
+    px.to_f16()
 }
 
 /// The window back to pixels at `depth`.
 fn f16_to_pixels(win: &[u8], depth: image_core::SampleDepth) -> crate::pixels::Pixels {
-    use half::f16;
-    if depth != image_core::SampleDepth::U16 {
-        return crate::pixels::Pixels::from_rgba8(Arc::from(f16_to_rgba8(win).into_boxed_slice()));
-    }
-    let samples: Vec<u16> = win
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|p| (f16::from_le_bytes(*p).to_f32().clamp(0.0, 1.0) * 65535.0).round() as u16)
-        .collect();
-    crate::pixels::Pixels::from_rgba16(&samples)
+    crate::pixels::Pixels::from_f16(win, depth)
 }
 
 /// A one-byte coverage field as a window (the value in every channel).
@@ -6304,6 +6359,7 @@ mod tests {
     fn image_editor_layers_a_psd_import_becomes_a_stack_bottom_first() {
         let plate = |name: &str, key: &[u8; 4], opacity: u8, hidden: bool| image_psd::LayerPlate {
             rgba16: None,
+            rgba32: None,
             clipped: false,
             group: None,
             mask: None,
@@ -6354,6 +6410,7 @@ mod tests {
             height: 4,
             layers: vec![image_psd::LayerPlate {
                 rgba16: None,
+                rgba32: None,
                 clipped: false,
                 group: None,
                 mask: None,

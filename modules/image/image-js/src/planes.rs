@@ -193,6 +193,126 @@ pub fn rgb_of_ink_planes(
     Pixels::from_rgba16(&out).at_depth(depth)
 }
 
+/// A Grayscale document's plane of straight RGB pixels `px`: the stored
+/// grey (the mode's grey profile) in every colour channel, `(G, G, G, α)`
+/// at `px`'s depth (image ADR 483).
+pub fn gray_plane_of(t: &ModeTransform, px: &Pixels) -> Pixels {
+    let n = px.pixel_count();
+    let rgb: Vec<f32> = (0..n)
+        .flat_map(|i| (0..3).map(move |c| f32::from(px.sample16(i, c)) / 65535.0))
+        .collect();
+    let g = t.device_of(&rgb);
+    let q = |v: f32| (v.clamp(0.0, 1.0) * 65535.0).round() as u16;
+    let p: Vec<u16> = (0..n)
+        .flat_map(|i| {
+            let v = q(g[i]);
+            [v, v, v, px.sample16(i, 3)]
+        })
+        .collect();
+    Pixels::from_rgba16(&p).at_depth(px.depth())
+}
+
+/// A Lab document's two planes: `(L*, L*, L*, α)` and `(a*, b*, b*, α)`
+/// as the document stores them, normalised — L* over the full range, a*
+/// and b* about the middle (+128 of 255 at 8 bits; 256 a unit about 32768
+/// at 16) — at `px`'s depth. Photoshop blends a Lab document's L* with
+/// the layer's mode and its a*, b* by a chroma rule of its own (image ADR
+/// 483, `color-modes/lab-*`), so the two fold apart.
+pub fn lab_planes_of(t: &ModeTransform, px: &Pixels, sixteen: bool) -> [Pixels; 2] {
+    let n = px.pixel_count();
+    let rgb: Vec<f32> = (0..n)
+        .flat_map(|i| (0..3).map(move |c| f32::from(px.sample16(i, c)) / 65535.0))
+        .collect();
+    let lab = t.device_of(&rgb);
+    let q = |v: f32| (v.clamp(0.0, 1.0) * 65535.0).round() as u16;
+    let mut l = Vec::with_capacity(n * 4);
+    let mut ab = Vec::with_capacity(n * 4);
+    for i in 0..n {
+        let d = &lab[i * 3..i * 3 + 3];
+        let a = px.sample16(i, 3);
+        let lv = q(d[0] / 100.0);
+        l.extend_from_slice(&[lv, lv, lv, a]);
+        let (av, bv) = (
+            q(lab_ab_stored(d[1], sixteen)),
+            q(lab_ab_stored(d[2], sixteen)),
+        );
+        ab.extend_from_slice(&[av, bv, bv, a]);
+    }
+    [
+        Pixels::from_rgba16(&l).at_depth(px.depth()),
+        Pixels::from_rgba16(&ab).at_depth(px.depth()),
+    ]
+}
+
+/// A chroma plane as the source of Photoshop's Lab Linear Burn and Linear
+/// Dodge, `(v + ½) / 2` in every colour channel: Linear Light over it is
+/// `Cb + Cs − ½`, the sum of the two a* (b*) offsets Photoshop makes.
+pub fn halved_about_middle(px: &Pixels) -> Pixels {
+    let n = px.pixel_count();
+    let s: Vec<u16> = (0..n)
+        .flat_map(|i| {
+            let h = |c: usize| ((u32::from(px.sample16(i, c)) + 32768) / 2) as u16;
+            [h(0), h(1), h(2), px.sample16(i, 3)]
+        })
+        .collect();
+    Pixels::from_rgba16(&s).at_depth(px.depth())
+}
+
+/// a* or b* as its stored number, normalised.
+fn lab_ab_stored(v: f32, sixteen: bool) -> f32 {
+    if sixteen {
+        (v * 256.0 + 32768.0) / 65535.0
+    } else {
+        (v + 128.0) / 255.0
+    }
+}
+
+/// Straight RGB of a folded grey plane, at `depth`.
+pub fn rgb_of_gray_plane(t: &ModeTransform, p: &Pixels, depth: image_core::SampleDepth) -> Pixels {
+    let n = p.pixel_count();
+    let g: Vec<f32> = (0..n).map(|i| f32::from(p.sample16(i, 0)) / 65535.0).collect();
+    let rgb = t.rgb_of(&g);
+    finish_rgb(&rgb, p, depth)
+}
+
+/// Straight RGB of a Lab document's folded planes (L* from `l`, a* and
+/// b* from `ab`), at `depth`.
+pub fn rgb_of_lab_planes(
+    t: &ModeTransform,
+    l: &Pixels,
+    ab: &Pixels,
+    sixteen: bool,
+    depth: image_core::SampleDepth,
+) -> Pixels {
+    let n = l.pixel_count();
+    let off = |v: f32| {
+        if sixteen {
+            (v * 65535.0 - 32768.0) / 256.0
+        } else {
+            v * 255.0 - 128.0
+        }
+    };
+    let lab: Vec<f32> = (0..n)
+        .flat_map(|i| {
+            let s = |p: &Pixels, c: usize| f32::from(p.sample16(i, c)) / 65535.0;
+            [s(l, 0) * 100.0, off(s(ab, 0)), off(s(ab, 1))]
+        })
+        .collect();
+    let rgb = t.rgb_of(&lab);
+    finish_rgb(&rgb, l, depth)
+}
+
+fn finish_rgb(rgb: &[f32], alpha_of: &Pixels, depth: image_core::SampleDepth) -> Pixels {
+    let n = alpha_of.pixel_count();
+    let out: Vec<u16> = (0..n)
+        .flat_map(|i| {
+            let c = |k: usize| (rgb[i * 3 + k].clamp(0.0, 1.0) * 65535.0).round() as u16;
+            [c(0), c(1), c(2), alpha_of.sample16(i, 3)]
+        })
+        .collect();
+    Pixels::from_rgba16(&out).at_depth(depth)
+}
+
 /// `win` of `px` (a `w`-wide image), as new pixels at its depth.
 fn crop(px: &Pixels, w: u32, win: image_core::Region) -> Pixels {
     let bpp = px.bytes_per_pixel();

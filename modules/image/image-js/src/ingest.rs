@@ -666,6 +666,14 @@ impl DecodedImage {
                     *d = u16::from_ne_bytes([s[0], s[1]]).to_be_bytes()[0];
                 }
             }
+        } else if self.rgba.is_float() {
+            // 32-bit float: the display view of the window's own samples.
+            for row in 0..th as usize {
+                let first = (y0 as usize + row) * self.width as usize + x0 as usize;
+                for i in 0..tw as usize * 4 {
+                    out[row * len + i] = self.rgba.display8(first + i / 4, i % 4);
+                }
+            }
         } else {
             let src8 = self.rgba.raw();
             let stride = self.width as usize * 4;
@@ -729,6 +737,9 @@ fn decode_psd(bytes: &[u8]) -> Result<DecodedImage, IngestError> {
     if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
         return decode_psd_cmyk(&file).map_err(psd_err);
     }
+    if decodes_from_samples(&file) {
+        return decode_psd_samples(&file);
+    }
     let composite = file.composite_rgba8().map_err(psd_err)?;
     Ok(DecodedImage {
         width: composite.width,
@@ -740,6 +751,122 @@ fn decode_psd(bytes: &[u8]) -> Result<DecodedImage, IngestError> {
         display: crate::display::DisplayTreatment::AssumedSrgb,
         depth_reduced: composite.depth_reduced,
     })
+}
+
+/// Does this PSD's composite open through its own stored numbers
+/// ([`decode_psd_samples`]) rather than the RGB8 decode? Every mode but
+/// RGB and CMYK, and every 32-bit document (image ADR 483).
+fn decodes_from_samples(file: &PsdFile) -> bool {
+    use image_psd::model::ColorMode as P;
+    file.header.depth == 32
+        || matches!(
+            file.header.color_mode,
+            P::Grayscale | P::Lab | P::Indexed | P::Duotone | P::Multichannel
+        )
+}
+
+/// A PSD's merged composite from its stored numbers (image ADR 483):
+/// 32-bit RGB and Grayscale as linear floats; Grayscale, Duotone (its
+/// grey) and Lab through [`crate::color_mode::StoredToSrgb`] at the file's
+/// depth; Indexed through its colour table; Multichannel as its channels'
+/// inks multiplied ([`multichannel_rgb`]).
+fn decode_psd_samples(file: &PsdFile) -> Result<DecodedImage, IngestError> {
+    use image_psd::model::ColorMode as P;
+    let c = file.composite_samples().map_err(|e| match e {
+        image_psd::PsdError::Unsupported(s) => IngestError::Unsupported(s),
+        other => IngestError::Decode(other.to_string()),
+    })?;
+    let n = c.width as usize * c.height as usize;
+    let alpha = |i: usize| c.alpha.as_ref().map_or(1.0, |a| a[i].clamp(0.0, 1.0));
+    let q16 = |v: f32| (v.clamp(0.0, 1.0) * 65535.0).round() as u16;
+    let rgba = if c.depth == 32 {
+        let k = c.channels;
+        let f: Vec<f32> = (0..n)
+            .flat_map(|i| {
+                let s = &c.samples[i * k..i * k + k];
+                let (r, g, b) = if k >= 3 { (s[0], s[1], s[2]) } else { (s[0], s[0], s[0]) };
+                [r, g, b, alpha(i)]
+            })
+            .collect();
+        crate::pixels::Pixels::from_rgba32f(&f)
+    } else {
+        let rgb: Vec<f32> = match c.mode {
+            P::Indexed => {
+                let pal = file.indexed_palette().ok_or_else(|| {
+                    IngestError::Decode("an Indexed PSD without its colour table".into())
+                })?;
+                c.samples
+                    .iter()
+                    .flat_map(|&v| {
+                        let p = pal.colours[(v * 255.0).round() as usize % 256];
+                        p.map(|x| f32::from(x) / 255.0)
+                    })
+                    .collect()
+            }
+            P::Multichannel => multichannel_rgb(file, &c.samples, c.channels),
+            _ => match crate::color_mode::StoredToSrgb::for_psd(file)? {
+                Some(t) => t.rgb_of(&c.samples),
+                None => {
+                    return Err(IngestError::Unsupported(format!(
+                        "composite decode of a {:?} document",
+                        c.mode
+                    )))
+                }
+            },
+        };
+        // Indexed: the transparent index (resource 1047) is clear.
+        let clear: Option<usize> = (c.mode == P::Indexed)
+            .then(|| file.indexed_palette())
+            .flatten()
+            .and_then(|p| p.transparent)
+            .filter(|&t| t < 256)
+            .map(usize::from);
+        let s: Vec<u16> = (0..n)
+            .flat_map(|i| {
+                let a = match clear {
+                    Some(t) if (c.samples[i] * 255.0).round() as usize == t => 0.0,
+                    _ => alpha(i),
+                };
+                [q16(rgb[i * 3]), q16(rgb[i * 3 + 1]), q16(rgb[i * 3 + 2]), q16(a)]
+            })
+            .collect();
+        let px = crate::pixels::Pixels::from_rgba16(&s);
+        if c.depth == 16 {
+            px
+        } else {
+            px.at_depth(SampleDepth::U8)
+        }
+    };
+    Ok(DecodedImage {
+        width: c.width,
+        height: c.height,
+        rgba,
+        display: crate::display::DisplayTreatment::AssumedSrgb,
+        depth_reduced: false,
+    })
+}
+
+/// A Multichannel document's RGB: every channel is one ink, stored as its
+/// brightness (1 = no ink), drawn in its display colour (resource 1077,
+/// else 1007; a CMYK colour by the plain ink formula) and the inks
+/// multiplied — the spot-channel model at 0 % solidity. A channel without
+/// a colour is black ink.
+pub fn multichannel_rgb(file: &PsdFile, samples: &[f32], k: usize) -> Vec<f32> {
+    let inks = crate::color_mode::spot_inks(file);
+    let n = samples.len() / k.max(1);
+    let mut out = Vec::with_capacity(n * 3);
+    for i in 0..n {
+        let mut rgb = [1f32; 3];
+        for c in 0..k {
+            let amount = 1.0 - samples[i * k + c].clamp(0.0, 1.0);
+            let ink = inks.get(c).copied().unwrap_or([0.0; 3]);
+            for j in 0..3 {
+                rgb[j] *= 1.0 - amount * (1.0 - ink[j]);
+            }
+        }
+        out.extend_from_slice(&rgb);
+    }
+    out
 }
 
 /// A CMYK PSD's merged composite, converted to straight RGBA8 through
@@ -1452,7 +1579,7 @@ pub async fn adjust_px(
     params: &AdjustParams,
     selection: Option<Arc<SelectionCoverage>>,
 ) -> Result<crate::pixels::Pixels, IngestError> {
-    if !image.rgba.is_16bit() {
+    if image.rgba.depth() == SampleDepth::U8 {
         let out = adjust_rgba8(ctx, image, params, selection).await?;
         return Ok(crate::pixels::Pixels::from_rgba8(Arc::from(
             out.into_boxed_slice(),
@@ -1470,7 +1597,7 @@ pub async fn adjust_px(
         selection,
     )
     .await?;
-    Ok(crate::pixels::Pixels::from_f16(&out, SampleDepth::U16))
+    Ok(crate::pixels::Pixels::from_f16(&out, image.rgba.depth()))
 }
 
 pub(crate) async fn adjust_rgba8_uncached(
@@ -1481,7 +1608,7 @@ pub(crate) async fn adjust_rgba8_uncached(
 ) -> Result<Vec<u8>, IngestError> {
     // A 16-bit image runs the chain at f16 on its own samples and is
     // narrowed only for this 8-bit result (the panel's preview).
-    if image.rgba.is_16bit() {
+    if image.rgba.depth() != SampleDepth::U8 {
         let out = adjust_f16(
             ctx,
             image.width,
@@ -1491,7 +1618,11 @@ pub(crate) async fn adjust_rgba8_uncached(
             selection,
         )
         .await?;
-        return Ok(crate::fill::f16_to_rgba8(&out));
+        return Ok(
+            crate::pixels::Pixels::from_f16(&out, image.rgba.depth())
+                .to_rgba8()
+                .into_owned(),
+        );
     }
     // The GPU kernel chain (skipped wholesale when only a curve is set).
     let mut pixels = if params.has_gpu_stage() {

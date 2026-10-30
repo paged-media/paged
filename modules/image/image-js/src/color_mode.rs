@@ -245,6 +245,9 @@ impl ModeTransform {
         if r.w == 0 || r.h == 0 {
             return px.clone();
         }
+        if px.is_float() {
+            return self.project_float(px, width, r);
+        }
         let sixteen = px.is_16bit();
         let full = if sixteen { 65535.0 } else { 255.0 };
         let mut out = px.clone();
@@ -276,6 +279,175 @@ impl ModeTransform {
         }
         out
     }
+}
+
+impl ModeTransform {
+    /// [`project_pixels`](Self::project_pixels) for 32-bit float (linear
+    /// light, scene-referred): a Grayscale document's grey is the linear
+    /// luminance (`Y` of sRGB's primaries adapted to D50, the white of
+    /// the grey space), which keeps values above 1 — Gray Gamma 2.2 is the
+    /// same `Y` encoded, so an 8-bit grey document and a 32-bit one agree.
+    /// The other modes have no float document (refused before this).
+    fn project_float(&self, px: &Pixels, width: u32, r: Region) -> Pixels {
+        if self.space != Space::Gray {
+            return px.clone();
+        }
+        let mut v = px.to_f32_linear();
+        for y in r.y as usize..(r.y as usize + r.h as usize) {
+            for x in r.x as usize..(r.x as usize + r.w as usize) {
+                let i = (y * width as usize + x) * 4;
+                let g = 0.222_5 * v[i] + 0.716_9 * v[i + 1] + 0.060_6 * v[i + 2];
+                v[i] = g;
+                v[i + 1] = g;
+                v[i + 2] = g;
+            }
+        }
+        Pixels::from_rgba32f(&v)
+    }
+}
+
+/// A Grayscale, Duotone or Lab PSD's STORED colours to sRGB (image ADR
+/// 483): the numbers [`image_psd::CompositeSamples`] and the layer import
+/// hand over (normalised; Lab's L* over the full range, a* and b* about
+/// the middle) through the file's own grey profile (else Gray Gamma 2.2;
+/// a Duotone is read as its grey, which is what the file format tells a
+/// reader without its inks to do) or CIE Lab (D50). One transform for the
+/// merged composite and the layer plates, so the layered open and the
+/// flattened one cannot drift apart.
+pub struct StoredToSrgb {
+    t: Transform,
+    lab: bool,
+    sixteen: bool,
+}
+
+impl StoredToSrgb {
+    /// `None` for a mode whose stored colours need no CMS here (RGB,
+    /// CMYK through its ink lane, Indexed, Multichannel, and a 32-bit
+    /// document, whose grey is linear light).
+    pub fn for_psd(file: &image_psd::model::PsdFile) -> Result<Option<StoredToSrgb>, IngestError> {
+        use image_psd::model::ColorMode as P;
+        let h = &file.header;
+        if h.depth == 32 {
+            return Ok(None);
+        }
+        let icc = file.resources.icc_profile();
+        let (profile, space, lab) = match h.color_mode {
+            P::Grayscale | P::Duotone => (
+                match icc {
+                    Some(p) if is_gray_icc(p) => ProfileRef::Icc(p),
+                    _ => ProfileRef::Gray(GRAY_GAMMA),
+                },
+                Space::Gray,
+                false,
+            ),
+            P::Lab => (ProfileRef::Lab, Space::Lab, true),
+            _ => return Ok(None),
+        };
+        let t = Transform::new(
+            Backend::preferred(),
+            profile,
+            Layout::new(space, false),
+            ProfileRef::Srgb,
+            Layout::RGB,
+            Rendering::default(),
+        )
+        .map_err(cms_err)?;
+        Ok(Some(StoredToSrgb {
+            t,
+            lab,
+            sixteen: h.depth == 16,
+        }))
+    }
+
+    /// Straight sRGB (three a pixel, 0..=1) of stored samples (one a pixel
+    /// for grey, three for Lab, normalised).
+    pub fn rgb_of(&self, stored: &[f32]) -> Vec<f32> {
+        let dev: Vec<f32> = if self.lab {
+            stored
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .flat_map(|p| {
+                    let ab = |v: f32| {
+                        if self.sixteen {
+                            (v * 65535.0 - 32768.0) / 256.0
+                        } else {
+                            v * 255.0 - 128.0
+                        }
+                    };
+                    [p[0] * 100.0, ab(p[1]), ab(p[2])]
+                })
+                .collect()
+        } else {
+            stored.to_vec()
+        };
+        let k = if self.lab { 3 } else { 1 };
+        let mut rgb = vec![0f32; dev.len() / k * 3];
+        self.t.apply_f32(&dev, &mut rgb);
+        for v in &mut rgb {
+            *v = v.clamp(0.0, 1.0);
+        }
+        rgb
+    }
+}
+
+/// The display colours of a document's spot channels (Multichannel's
+/// channels, in order), sRGB 0..=1: resource 1077 (DisplayInfo: a u32
+/// version, then 13 bytes a channel — u16 colour space, four u16
+/// components, u16 opacity, u8 kind) or the older 1007 (the same without
+/// the version, 14 bytes a channel). RGB as stored; CMYK stored inverted
+/// (65535 = no ink) by the plain ink formula; grey (0–10000) as grey;
+/// Lab (L* 0–10000, a* b* signed) through CIE Lab. [OBS: Photoshop
+/// 27.10's own Multichannel document, `color-modes/multichannel-8`.]
+pub fn spot_inks(file: &image_psd::model::PsdFile) -> Vec<[f32; 3]> {
+    let (data, at, stride) = match (file.resources.data(1077), file.resources.data(1007)) {
+        (Some(d), _) => (d, 4usize, 13usize),
+        (None, Some(d)) => (d, 0, 14),
+        _ => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    let mut o = at;
+    while o + 10 <= data.len() {
+        let u = |i: usize| u16::from_be_bytes([data[o + i], data[o + i + 1]]);
+        let (space, a, b, c, d) = (u(0), u(2), u(4), u(6), u(8));
+        let f = |v: u16| f32::from(v) / 65535.0;
+        out.push(match space {
+            0 => [f(a), f(b), f(c)],
+            2 => paged_color::math::naive_cmyk_to_srgb(1.0 - f(a), 1.0 - f(b), 1.0 - f(c), 1.0 - f(d)),
+            8 => [1.0 - f32::from(a) / 10000.0; 3],
+            7 => {
+                let l = f32::from(a) / 100.0;
+                let (aa, bb) = (f32::from(b as i16) / 100.0, f32::from(c as i16) / 100.0);
+                lab_to_srgb([l, aa, bb])
+            }
+            _ => [0.0; 3],
+        });
+        o += stride;
+    }
+    out
+}
+
+/// One CIE Lab (D50) colour as sRGB 0..=1 through the CMS.
+fn lab_to_srgb(lab: [f32; 3]) -> [f32; 3] {
+    let Ok(t) = Transform::new(
+        Backend::preferred(),
+        ProfileRef::Lab,
+        Layout::new(Space::Lab, false),
+        ProfileRef::Srgb,
+        Layout::RGB,
+        Rendering::default(),
+    ) else {
+        return [0.0; 3];
+    };
+    let mut rgb = [0f32; 3];
+    t.apply_f32(&lab, &mut rgb);
+    rgb.map(|v| v.clamp(0.0, 1.0))
+}
+
+/// Is this ICC profile a grey one (data colour space `GRAY`, header bytes
+/// 16..20)?
+fn is_gray_icc(p: &[u8]) -> bool {
+    p.get(16..20) == Some(b"GRAY")
 }
 
 /// View ▸ Proof Colors and Gamut Warning on the image preview: what the

@@ -664,6 +664,7 @@ impl LayerStack {
 fn blank(w: u32, h: u32, depth: image_core::SampleDepth) -> Pixels {
     let bpp = match depth {
         image_core::SampleDepth::U16 => 8,
+        image_core::SampleDepth::F32 => 16,
         _ => 4,
     };
     Pixels::from_raw(

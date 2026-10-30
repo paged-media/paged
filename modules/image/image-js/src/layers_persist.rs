@@ -521,7 +521,7 @@ impl LayerStack {
                 // An older reader takes a type layer's render as pixels.
                 LayerKind::Type(_) => 0,
             });
-            w.u8(if l.rgba.is_16bit() { 16 } else { 8 });
+            w.u8(depth_code(l.rgba.depth()));
             // A bounded layer is stored as it lives — expanding it here
             // would cost every untouched layer its canvas on each save.
             match l.rgba.bounded().filter(|_| version >= 3) {
@@ -701,7 +701,7 @@ impl LayerStack {
                                 None => (px.raw_arc(), None),
                             };
                             w.i64(i64::from(slot(buf)));
-                            w.u8(if px.is_16bit() { 16 } else { 8 });
+                            w.u8(depth_code(px.depth()));
                             match rect {
                                 Some(r) => {
                                     w.i32(r.x);
@@ -867,10 +867,15 @@ impl LayerStack {
             let depth = match r.u8()? {
                 8 => SampleDepth::U8,
                 16 => SampleDepth::U16,
+                32 => SampleDepth::F32,
                 d => return Err(IngestError::Decode(format!("layer manifest: depth {d}"))),
             };
             let px = buffer(r.u32()?)?;
-            let bpp = if depth == SampleDepth::U16 { 8 } else { 4 };
+            let bpp = match depth {
+                SampleDepth::U16 => 8,
+                SampleDepth::F32 => 16,
+                _ => 4,
+            };
             let (rect, blend_gamma) = if version >= 3 {
                 let (x, y, rw, rh) = (r.i32()?, r.i32()?, r.u32()?, r.u32()?);
                 let g = r.f32()?;
@@ -1073,6 +1078,7 @@ impl LayerStack {
                     let px_slot = u32::try_from(r.i64()?).ok();
                     let depth = match r.u8()? {
                         16 => SampleDepth::U16,
+                        32 => SampleDepth::F32,
                         _ => SampleDepth::U8,
                     };
                     let (x, y, rw, rh) = (r.i32()?, r.i32()?, r.u32()?, r.u32()?);
@@ -1215,6 +1221,15 @@ fn f32s(r: &mut R<'_>) -> Result<Vec<f32>, IngestError> {
         return Err(IngestError::Decode("layer manifest is truncated".into()));
     }
     (0..n).map(|_| r.f32()).collect()
+}
+
+/// The persisted code of a layer's depth (bits per sample; 32 is float).
+fn depth_code(d: SampleDepth) -> u8 {
+    match d {
+        SampleDepth::U16 => 16,
+        SampleDepth::F32 => 32,
+        _ => 8,
+    }
 }
 
 #[cfg(test)]

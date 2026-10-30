@@ -136,8 +136,8 @@ fn mode_8_and_16_bits_convert_every_layer_as_one_undo_step__feat__image_io_depth
         [0xFFFF, 0, 0x8080, 0xFFFF]
     );
     assert!(
-        s.set_depth(SampleDepth::F32).is_err(),
-        "a stack holds 8 or 16 bits"
+        s.set_depth(SampleDepth::F16).is_err(),
+        "a stack holds 8, 16 or 32 bits"
     );
 }
 

@@ -153,6 +153,11 @@ pub struct LayerPlate {
     /// document, an adjustment, and a channel stored as 16-bit RLE (read
     /// at 8 bits only, see `ChannelData::decode`).
     pub rgba16: Option<Vec<u16>>,
+    /// The same pixels as 32-bit FLOAT, linear light, when the document is
+    /// 32 bits per channel (RGB, or Grayscale replicated to RGB; image ADR
+    /// 483). `rgba` is then the linear values clamped to a byte — not a
+    /// display view; the consumer reads these.
+    pub rgba32: Option<Vec<f32>>,
     /// The rectangle `rgba` covers, in canvas pixels; `None` = the whole
     /// canvas.
     pub rect: Option<paged_pixel::Region>,
@@ -396,11 +401,11 @@ fn crop_rgba(
 }
 
 /// [`crop_rgba`] for 16-bit samples.
-fn crop_rgba16(
+fn crop_rgba16<T: Copy>(
     r: paged_pixel::Region,
-    px: &[u16],
+    px: &[T],
     to: paged_pixel::Region,
-) -> (paged_pixel::Region, Vec<u16>) {
+) -> (paged_pixel::Region, Vec<T>) {
     if to.w == 0 || to.h == 0 {
         return (paged_pixel::Region::new(0, 0, 0, 0), Vec::new());
     }
@@ -509,6 +514,15 @@ pub const CMYK_RGB_SAFE_BLENDS: &[&[u8; 4]] = &[b"norm", b"mul "];
 /// A CMYK document's ink transform as the import takes it: packed 4-ink
 /// CMYK8 (0 = no ink) in, the same number of RGBA8 pixels out.
 pub type InkToRgba8<'a> = &'a dyn Fn(&[u8]) -> Vec<u8>;
+
+/// A Grayscale or Lab document's colour transform as the import takes it
+/// (image ADR 483): the colour channels of a run of pixels as the file
+/// stores them, normalised to `0..=1` (`v / 255` or `v / 65535`; Lab's L*
+/// over the full range, a* and b* about the middle), interleaved — one a
+/// pixel for Grayscale, three for Lab — in; straight sRGB `0..=1`, three a
+/// pixel, out. This crate has no CMS; the caller's transform must be the
+/// one its merged composite took.
+pub type DeviceToRgb<'a> = &'a dyn Fn(&[f32]) -> Vec<f32>;
 
 /// A readable name for a blend-mode key in a refusal.
 fn blend_name(key: &[u8; 4]) -> String {
@@ -735,6 +749,15 @@ impl PsdFile {
         self.layer_plates_checked(Some(ink_to_rgba8), true)
     }
 
+    /// [`Self::layer_plates_rgba8`] for a GRAYSCALE or LAB document (image
+    /// ADR 483): every plate's stored colour goes through `to_rgb`
+    /// ([`DeviceToRgb`]) at the file's depth, so a 16-bit document's plates
+    /// carry `rgba16`. A 32-bit Grayscale document needs no transform (its
+    /// grey is linear light, replicated); an RGB one ignores it.
+    pub fn layer_plates_device(&self, to_rgb: DeviceToRgb<'_>) -> Result<LayerImport> {
+        self.layer_plates_checked_with(None, Some(to_rgb), false)
+    }
+
     fn layer_plates_impl(&self, ink_to_rgba8: Option<InkToRgba8<'_>>) -> Result<LayerImport> {
         self.layer_plates_checked(ink_to_rgba8, false)
     }
@@ -742,6 +765,15 @@ impl PsdFile {
     fn layer_plates_checked(
         &self,
         ink_to_rgba8: Option<InkToRgba8<'_>>,
+        measuring_cmyk_blends: bool,
+    ) -> Result<LayerImport> {
+        self.layer_plates_checked_with(ink_to_rgba8, None, measuring_cmyk_blends)
+    }
+
+    fn layer_plates_checked_with(
+        &self,
+        ink_to_rgba8: Option<InkToRgba8<'_>>,
+        to_rgb: Option<DeviceToRgb<'_>>,
         measuring_cmyk_blends: bool,
     ) -> Result<LayerImport> {
         let h = &self.header;
@@ -761,6 +793,18 @@ impl PsdFile {
         }
         let (cw, ch) = (h.width, h.height);
         let sixteen_rgb = h.depth == 16 && h.color_mode == ColorMode::Rgb;
+        let float = h.depth == 32;
+        // Grayscale and Lab at 8 or 16 bits go through the caller's
+        // transform; without one they are refused here, by name.
+        let device = matches!(h.color_mode, ColorMode::Grayscale | ColorMode::Lab) && !float;
+        let device16 = device && h.depth == 16;
+        if device && to_rgb.is_none() {
+            return Err(PsdError::Unsupported(format!(
+                "layer import for color mode {:?} needs the colour transform: call \
+                 `layer_plates_device` with the file's {:?} → sRGB conversion",
+                h.color_mode, h.color_mode
+            )));
+        }
         let canvas_texels = (cw as usize)
             .checked_mul(ch as usize)
             .ok_or_else(|| PsdError::Unsupported("canvas extent overflows usize".into()))?;
@@ -775,9 +819,16 @@ impl PsdFile {
             let h = (i64::from(l.bottom).clamp(0, i64::from(ch))
                 - i64::from(l.top).clamp(0, i64::from(ch)))
             .max(0) as usize;
-            // A 16-bit RGB document's plates are held twice during the
-            // import: their 8-bit view and their 16-bit samples.
-            w * h * if sixteen_rgb { 12 } else { 4 }
+            // A 16-bit document's plates are held twice during the
+            // import: their 8-bit view and their 16-bit samples; a 32-bit
+            // one's, its byte view and its floats.
+            w * h * if float {
+                20
+            } else if sixteen_rgb || device16 {
+                12
+            } else {
+                4
+            }
         };
         // Masks: a group's is canvas-extent, an adjustment's too (it says
         // where the adjustment applies); a pixel layer's is cut to its
@@ -815,7 +866,7 @@ impl PsdFile {
 
         let mut layers = Vec::with_capacity(pixel_layers.len());
         // Every pixel layer was read at 16 bits.
-        let mut all_deep = sixteen_rgb;
+        let mut all_deep = sixteen_rgb || float || (device && h.depth == 16);
         for (layer, group) in pixel_layers {
             let adjustment = adjustment_of(layer)?;
             // An adjustment has no pixels of its own (its channels hold
@@ -829,29 +880,51 @@ impl PsdFile {
                 }
                 cur = groups[gi].parent;
             }
-            let (rect, rgba) = if adjustment.is_some() {
-                (paged_pixel::Region::new(0, 0, 0, 0), Vec::new())
+            let empty = paged_pixel::Region::new(0, 0, 0, 0);
+            let cut = |r: paged_pixel::Region| match clip {
+                Some(c) => intersect(r, c),
+                None => r,
+            };
+            let (rect, rgba, rgba16, rgba32) = if adjustment.is_some() {
+                (empty, Vec::new(), None, None)
+            } else if float {
+                // 32 bits: linear floats, the byte view their clamp.
+                let (r, f) = self.layer_bounded_rgba32(layer, cw, ch)?;
+                let (r, f) = crop_rgba16(r, &f, cut(r));
+                let b = f
+                    .iter()
+                    .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
+                    .collect();
+                (r, b, None, Some(f))
+            } else if device {
+                let convert = to_rgb.expect("checked above");
+                let (r, deep) = self.layer_bounded_device(layer, cw, ch, convert)?;
+                let (r, deep) = crop_rgba16(r, &deep, cut(r));
+                let b = deep.iter().map(|v| (v >> 8) as u8).collect();
+                let keep16 = h.depth == 16 && self.layer_channels_read_at_16(layer);
+                (r, b, keep16.then_some(deep), None)
             } else {
                 let (r, px) = self.layer_bounded_rgba8(layer, cw, ch, ink_to_rgba8)?;
-                match clip {
+                let (r, px) = match clip {
                     Some(c) => crop_rgba(r, &px, intersect(r, c)),
                     None => (r, px),
-                }
+                };
+                // The same rectangle at 16 bits (a channel it cannot read
+                // at full depth leaves the layer at 8).
+                let rgba16 = if sixteen_rgb {
+                    self.layer_bounded_rgba16(layer, cw, ch)
+                        .ok()
+                        .map(|(r, px)| match clip {
+                            Some(c) => crop_rgba16(r, &px, intersect(r, c)).1,
+                            None => px,
+                        })
+                        .filter(|deep| deep.len() == px.len())
+                } else {
+                    None
+                };
+                (r, px, rgba16, None)
             };
-            // The same rectangle at 16 bits (a channel it cannot read at
-            // full depth leaves the layer at 8).
-            let rgba16 = if sixteen_rgb && adjustment.is_none() {
-                self.layer_bounded_rgba16(layer, cw, ch)
-                    .ok()
-                    .map(|(r, px)| match clip {
-                        Some(c) => crop_rgba16(r, &px, intersect(r, c)).1,
-                        None => px,
-                    })
-                    .filter(|px| px.len() == rgba.len())
-            } else {
-                None
-            };
-            all_deep &= adjustment.is_some() || rgba16.is_some();
+            all_deep &= adjustment.is_some() || rgba16.is_some() || rgba32.is_some();
             // The walk refused every style it does not model.
             let style = effects_of(layer)
                 .ok()
@@ -890,6 +963,7 @@ impl PsdFile {
                 // hold an empty rect or a mask).
                 rgba,
                 rgba16,
+                rgba32,
                 rect: Some(rect),
                 group,
                 // A pixel layer's mask at its rectangle; an adjustment's
@@ -941,7 +1015,7 @@ impl PsdFile {
             // A 16-bit document whose every layer came with its 16-bit
             // samples lost nothing; a CMYK one (converted through 8-bit
             // ink) or one with a 16-bit RLE channel did.
-            depth_reduced: h.depth == 16 && !all_deep,
+            depth_reduced: h.depth >= 16 && !all_deep,
             converted_from_cmyk: h.color_mode == ColorMode::Cmyk,
             global_light: crate::effects::GlobalLight::of(self),
             layers,
@@ -977,23 +1051,29 @@ impl PsdFile {
         // its own evidence, so a 16-bit RLE file still declines — but a
         // 16-bit RAW one imports its LAYERS instead of the whole file
         // falling back to a flattened composite.
-        if h.depth != 8 && h.depth != 16 {
+        let float_ok = h.depth == 32
+            && matches!(h.color_mode, ColorMode::Rgb | ColorMode::Grayscale);
+        if h.depth != 8 && h.depth != 16 && !float_ok {
             block(
                 "depth",
                 format!(
-                    "layer import at depth {} (8- and 16-bit only; 1-bit and 32-bit \
-                     float are separate lanes)",
+                    "layer import at depth {} (8 and 16 bits, and 32-bit float RGB or \
+                     Grayscale; 1-bit is a separate lane)",
                     h.depth
                 ),
             );
         }
         let cmyk = h.color_mode == ColorMode::Cmyk;
-        if h.color_mode != ColorMode::Rgb && !cmyk {
+        if !matches!(
+            h.color_mode,
+            ColorMode::Rgb | ColorMode::Cmyk | ColorMode::Grayscale | ColorMode::Lab
+        ) {
             block(
                 "colour-mode",
                 format!(
-                    "layer import for color mode {:?} (RGB, and CMYK through its \
-                     profile; Lab and the indexed modes are not imported)",
+                    "layer import for color mode {:?} (RGB, Grayscale and Lab, and CMYK \
+                     through its profile; Indexed, Duotone and Multichannel documents \
+                     have no layers in Photoshop and open as their composite)",
                     h.color_mode
                 ),
             );
@@ -1625,6 +1705,201 @@ impl PsdFile {
             }
         }
         Ok((rect, out))
+    }
+
+    /// Every colour and transparency channel of `layer` stored without
+    /// RLE, so it reads at 16 bits ([`ChannelData::decode_samples16`]).
+    fn layer_channels_read_at_16(&self, layer: &LayerRecord) -> bool {
+        layer
+            .channels
+            .iter()
+            .zip(&layer.channel_data)
+            .filter(|(c, _)| c.id >= -1)
+            .all(|(_, d)| d.compression != crate::model::Compression::Rle)
+    }
+
+    /// The record's rectangle clipped to the canvas, and the record's own
+    /// size: what every bounded decode starts from.
+    fn layer_rect(
+        layer: &LayerRecord,
+        cw: u32,
+        ch: u32,
+    ) -> (paged_pixel::Region, u32, u32) {
+        let lw = (layer.right - layer.left).max(0) as u32;
+        let lh = (layer.bottom - layer.top).max(0) as u32;
+        let x0 = i64::from(layer.left).clamp(0, i64::from(cw));
+        let y0 = i64::from(layer.top).clamp(0, i64::from(ch));
+        let x1 = i64::from(layer.right).clamp(0, i64::from(cw));
+        let y1 = i64::from(layer.bottom).clamp(0, i64::from(ch));
+        (
+            paged_pixel::Region::new(
+                x0 as i32,
+                y0 as i32,
+                (x1 - x0).max(0) as u32,
+                (y1 - y0).max(0) as u32,
+            ),
+            lw,
+            lh,
+        )
+    }
+
+    /// Place a record-sized interleaved buffer (`px`, four values a pixel)
+    /// into its clipped rectangle's own frame.
+    fn place<T: Copy + Default>(
+        layer: &LayerRecord,
+        rect: paged_pixel::Region,
+        lw: u32,
+        lh: u32,
+        px: &[T],
+    ) -> Vec<T> {
+        let (cw2, ch2) = (rect.w as i64, rect.h as i64);
+        let mut out = vec![T::default(); rect.w as usize * rect.h as usize * 4];
+        for ly in 0..lh as i64 {
+            let dy = layer.top as i64 + ly - i64::from(rect.y);
+            if dy < 0 || dy >= ch2 {
+                continue;
+            }
+            for lx in 0..lw as i64 {
+                let dx = layer.left as i64 + lx - i64::from(rect.x);
+                if dx < 0 || dx >= cw2 {
+                    continue;
+                }
+                let si = ((ly * lw as i64 + lx) as usize) * 4;
+                let di = ((dy * cw2 + dx) as usize) * 4;
+                out[di..di + 4].copy_from_slice(&px[si..si + 4]);
+            }
+        }
+        out
+    }
+
+    /// One channel of `layer` as normalised floats at the document's
+    /// depth (`v / 255`, `v / 65535`, or the float itself; a 16-bit RLE
+    /// channel is read at 8 bits).
+    fn channel_f32(&self, layer: &LayerRecord, ci: usize, lw: u32, lh: u32) -> Result<Vec<f32>> {
+        let info = &layer.channels[ci];
+        let data = layer
+            .channel_data
+            .get(ci)
+            .ok_or_else(|| PsdError::Malformed {
+                section: "layer channel image data",
+                detail: format!("layer \"{}\" is missing channel {}", layer.name(), info.id),
+            })?;
+        let plane: Vec<f32> = match self.header.depth {
+            32 => data.decode_samples32(lh, lw)?,
+            16 if data.compression != crate::model::Compression::Rle => data
+                .decode_samples16(lh, lw)?
+                .iter()
+                .map(|&v| f32::from(v) / 65535.0)
+                .collect(),
+            d => data
+                .decode(self.container, lh, lw, d)?
+                .iter()
+                .map(|&v| f32::from(v) / 255.0)
+                .collect(),
+        };
+        let want = lw as usize * lh as usize;
+        if plane.len() != want {
+            return Err(PsdError::Malformed {
+                section: "layer channel image data",
+                detail: format!(
+                    "layer \"{}\" channel {} decoded to {} samples, expected {want}",
+                    layer.name(),
+                    info.id,
+                    plane.len()
+                ),
+            });
+        }
+        Ok(plane)
+    }
+
+    /// A 32-bit RGB or Grayscale layer's linear floats (grey replicated),
+    /// straight RGBA over its clipped rectangle (image ADR 483).
+    fn layer_bounded_rgba32(
+        &self,
+        layer: &LayerRecord,
+        cw: u32,
+        ch: u32,
+    ) -> Result<(paged_pixel::Region, Vec<f32>)> {
+        let (rect, lw, lh) = Self::layer_rect(layer, cw, ch);
+        let n = lw as usize * lh as usize;
+        if n == 0 || rect.w == 0 || rect.h == 0 {
+            return Ok((paged_pixel::Region::new(0, 0, 0, 0), Vec::new()));
+        }
+        let gray = self.header.color_mode == ColorMode::Grayscale;
+        let mut planes = vec![vec![0f32; n]; 3];
+        let mut a = vec![1f32; n];
+        for ci in 0..layer.channels.len() {
+            match layer.channels[ci].id {
+                0 if gray => {
+                    let p = self.channel_f32(layer, ci, lw, lh)?;
+                    planes[1].clone_from(&p);
+                    planes[2].clone_from(&p);
+                    planes[0] = p;
+                }
+                id @ 0..=2 if !gray => planes[id as usize] = self.channel_f32(layer, ci, lw, lh)?,
+                -1 => a = self.channel_f32(layer, ci, lw, lh)?,
+                _ => {}
+            }
+        }
+        let px: Vec<f32> = (0..n)
+            .flat_map(|i| [planes[0][i], planes[1][i], planes[2][i], a[i].clamp(0.0, 1.0)])
+            .collect();
+        Ok((rect, Self::place(layer, rect, lw, lh, &px)))
+    }
+
+    /// A Grayscale or Lab layer through the caller's transform, as
+    /// straight RGBA16 over its clipped rectangle (8-bit documents
+    /// widened); see [`DeviceToRgb`].
+    fn layer_bounded_device(
+        &self,
+        layer: &LayerRecord,
+        cw: u32,
+        ch: u32,
+        to_rgb: DeviceToRgb<'_>,
+    ) -> Result<(paged_pixel::Region, Vec<u16>)> {
+        let (rect, lw, lh) = Self::layer_rect(layer, cw, ch);
+        let n = lw as usize * lh as usize;
+        if n == 0 || rect.w == 0 || rect.h == 0 {
+            return Ok((paged_pixel::Region::new(0, 0, 0, 0), Vec::new()));
+        }
+        let lab = self.header.color_mode == ColorMode::Lab;
+        let k = if lab { 3 } else { 1 };
+        let mid = if self.header.depth == 16 {
+            32768.0 / 65535.0
+        } else {
+            128.0 / 255.0
+        };
+        let mut planes: Vec<Vec<f32>> = (0..k)
+            .map(|c| vec![if lab && c > 0 { mid } else { 0.0 }; n])
+            .collect();
+        let mut a = vec![1f32; n];
+        for ci in 0..layer.channels.len() {
+            match layer.channels[ci].id {
+                id @ 0..=2 if (id as usize) < k => {
+                    planes[id as usize] = self.channel_f32(layer, ci, lw, lh)?
+                }
+                -1 => a = self.channel_f32(layer, ci, lw, lh)?,
+                _ => {}
+            }
+        }
+        let dev: Vec<f32> = (0..n)
+            .flat_map(|i| planes.iter().map(move |p| p[i]))
+            .collect();
+        let rgb = to_rgb(&dev);
+        if rgb.len() != n * 3 {
+            return Err(PsdError::Malformed {
+                section: "layer channel image data",
+                detail: format!(
+                    "the colour transform answered {} values for {n} pixels",
+                    rgb.len()
+                ),
+            });
+        }
+        let q = |v: f32| (v.clamp(0.0, 1.0) * 65535.0).round() as u16;
+        let px: Vec<u16> = (0..n)
+            .flat_map(|i| [q(rgb[i * 3]), q(rgb[i * 3 + 1]), q(rgb[i * 3 + 2]), q(a[i])])
+            .collect();
+        Ok((rect, Self::place(layer, rect, lw, lh, &px)))
     }
 
     /// One layer's canvas-extent straight RGBA8: decode its modeled
