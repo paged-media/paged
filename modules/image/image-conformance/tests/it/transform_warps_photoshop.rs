@@ -130,7 +130,7 @@ fn warped(style: WarpStyle) -> Vec<[u8; 3]> {
         },
     );
     let out = warp_map_rgba8(&stimulus(), N, N, WINDOW, WarpFilter::Bilinear, |x, y| {
-        envelope::invert(&mesh, (x, y), 0.5).map(|(u, v)| (u * n - 0.5, v * n - 0.5))
+        envelope::invert_extended(&mesh, (x, y), 0.5).map(|(u, v)| (u * n - 0.5, v * n - 0.5))
     })
     .expect("warp");
     on_white(&out)

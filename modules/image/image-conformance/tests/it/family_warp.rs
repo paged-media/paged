@@ -498,3 +498,73 @@ fn geom_warp_field_cpu_twin_agrees__feat__image_editor_transform_warp() {
     }
     assert!(worst <= 2.0, "worst {worst} levels");
 }
+
+/// `geom.warp_mesh`'s CPU twin — `paged-resample`'s `warp_map_rgba8`
+/// through `paged_warp::envelope::invert` — agrees with the kernel's
+/// scalar twin within the 8-bit rounding, edge pixels aside (the two
+/// Newton solves stop at different residuals on the outline).
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_mesh_cpu_twin_agrees__feat__image_editor_transform_warp() {
+    let (w, h) = (40u32, 24u32);
+    let rgba: Vec<u8> = (0..w * h)
+        .flat_map(|i| {
+            let (x, y) = (i % w, i / w);
+            [(x * 6) as u8, (y * 10) as u8, 128, 255]
+        })
+        .collect();
+    let src = RefTile::from_fn(w, h, |x, y| {
+        let i = ((y * w + x) * 4) as usize;
+        Px(std::array::from_fn(|c| f32::from(rgba[i + c]) / 255.0))
+    });
+    let q = src.quantized_px();
+    for style in [WarpStyle::Arc, WarpStyle::Flag, WarpStyle::Twist] {
+        let (p, ow, oh) = placed(style, 0.5, w, h);
+        let mesh: envelope::Mesh =
+            std::array::from_fn(|i| [f64::from(p.c[2 * i]), f64::from(p.c[2 * i + 1])]);
+        let cpu = paged_resample::warp_map_rgba8(
+            &rgba,
+            w,
+            h,
+            paged_resample::Window {
+                x: 0,
+                y: 0,
+                w: ow,
+                h: oh,
+            },
+            paged_resample::WarpFilter::Bilinear,
+            |x, y| {
+                envelope::invert_extended(&mesh, (x, y), 0.5)
+                    .map(|(u, v)| (u * f64::from(w) - 0.5, v * f64::from(h) - 0.5))
+            },
+        )
+        .unwrap();
+        let (mut worst, mut off) = (0f32, 0usize);
+        for y in 0..oh {
+            for x in 0..ow {
+                let r = warp_mesh_ref(&q, w, h, x, y, &p);
+                let i = ((y * ow + x) * 4) as usize;
+                // The reference is premultiplied, the twin straight.
+                let a = f32::from(cpu[i + 3]) / 255.0;
+                let d = (0..4)
+                    .map(|c| {
+                        let v = f32::from(cpu[i + c]) * if c < 3 { a } else { 1.0 };
+                        (r.0[c] * 255.0 - v).abs()
+                    })
+                    .fold(0.0, f32::max);
+                // The outline: one lane covers the pixel, the other not.
+                if (r.0[3] == 0.0) != (cpu[i + 3] == 0) {
+                    off += 1;
+                    continue;
+                }
+                worst = worst.max(d);
+            }
+        }
+        let total = (ow * oh) as usize;
+        assert!(
+            off * 50 <= total,
+            "{style:?}: {off} of {total} pixels disagree on coverage"
+        );
+        assert!(worst <= 3.0, "{style:?}: worst {worst} levels");
+    }
+}
