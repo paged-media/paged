@@ -233,13 +233,16 @@ describe("a new slide from a layout", () => {
     pluginMetadata?: { key: string; value: string }[];
   };
 
-  it("offers the deck's layouts by name, each with a slide to copy", async () => {
+  it("offers every layout of every master by name, used or not (slide ADR 712)", async () => {
     const { h, host, store } = await open("placeholders");
     try {
       const ls = await layouts(host, store.list());
       expect(ls.length).toBeGreaterThan(1);
+      expect(ls.every((l) => l.name.length > 0)).toBe(true);
+      const used = new Set(store.list().map((s) => s.state.layout));
       expect(
-        ls.every((l) => l.name.length > 0 && l.templatePageId.length > 0),
+        ls.some((l) => !used.has(l.masterId)),
+        "a layout no slide uses is offered too",
       ).toBe(true);
     } finally {
       store.dispose();
@@ -247,31 +250,49 @@ describe("a new slide from a layout", () => {
     }
   }, 60_000);
 
-  it("keeps only the layout's placeholders, empty, after the given slide", async () => {
+  it("makes a slide of the layout's placeholders, empty, after the given slide, in one step", async () => {
     const { h, host, store } = await open("geometry");
     try {
       const before = store.list();
       const ls = await layouts(host, before);
       expect(ls.length).toBeGreaterThan(0);
-      const layout = ls[0];
-      const id = await newSlide(host, layout, before[0].pageId);
+      // A layout with placeholders that are not footers.
+      const layout = ls.find((l) => /title/i.test(l.name)) ?? ls[0];
+      let mutations = 0;
+      const doc = host.document;
+      const counted: BundleHost = {
+        ...host,
+        document: {
+          ...doc,
+          mutate: async (m) => {
+            mutations += 1;
+            return doc.mutate(m);
+          },
+        },
+      };
+      const id = await newSlide(counted, layout, before[0].pageId);
       expect(id).not.toBeNull();
+      expect(mutations, "one mutation, one undo step").toBe(1);
       await store.refresh();
       const after = store.list();
       expect(after.length).toBe(before.length + 1);
       expect(after[1].pageId, "right after the first slide").toBe(id);
       expect(after[1].state).toEqual({ layout: layout.masterId });
+      const pages = await host.document.collection<{
+        selfId: string;
+        appliedMaster?: string | null;
+        overrideList?: string[];
+      }>("pages");
+      const page = pages.find((p) => p.selfId === id)!;
+      expect(page.appliedMaster).toBe(layout.masterId);
+      expect(
+        page.overrideList?.length,
+        "the slide hides its layout's placeholders",
+      ).toBeGreaterThan(0);
 
-      // Only placeholders are left on it, and they hold no text.
+      // Only placeholders are on it, and they hold no text.
       const tree = (await host.document.tree()) as Node[];
       const items = tree[1].children?.[0]?.children ?? [];
-      // The copied slide had more than its placeholders: they were removed.
-      const at = after.findIndex((s) => s.pageId === layout.templatePageId);
-      const templateItems = tree[at].children?.[0]?.children ?? [];
-      expect(
-        templateItems.length,
-        "the template carries art beside its placeholders",
-      ).toBeGreaterThan(items.length);
       for (const n of items) {
         expect(
           n.pluginMetadata?.some(
@@ -279,7 +300,7 @@ describe("a new slide from a layout", () => {
               m.key === "x-paged:media.paged.slide" &&
               m.value.includes("placeholder"),
           ),
-          "only placeholders remain",
+          "only placeholders",
         ).toBe(true);
       }
       const stories = await host.document.collection<{
@@ -298,47 +319,9 @@ describe("a new slide from a layout", () => {
         if (own)
           expect(own[0].characterCount, "an emptied placeholder").toBe(0);
       }
-    } finally {
-      store.dispose();
-      h.dispose();
-    }
-  }, 60_000);
-
-  it("takes the new slide's page from the engine's outcome, reading the page list once", async () => {
-    const { h, host, store } = await open("geometry");
-    try {
-      const before = store.list();
-      const [layout] = await layouts(host, before);
-      // Count what newSlide asks of the page list, and keep what the
-      // duplicate answered.
-      let pageReads = 0;
-      let reported: string[] | undefined;
-      const doc = host.document;
-      const counted: BundleHost = {
-        ...host,
-        document: {
-          ...doc,
-          collection: ((name: string) => {
-            if (name === "pages") pageReads += 1;
-            return doc.collection(name as never);
-          }) as typeof doc.collection,
-          mutate: async (m) => {
-            const outcome = await doc.mutate(m);
-            if (outcome.applied && m.op === "duplicatePage")
-              reported = outcome.createdPages;
-            return outcome;
-          },
-        },
-      };
-      const id = await newSlide(counted, layout, before[0].pageId);
-      expect(reported, "the engine named the copy").toHaveLength(1);
-      expect(id).toBe(reported![0]);
-      expect(
-        pageReads,
-        "one read, for where the copy landed; no before/after diff",
-      ).toBe(1);
+      await host.document.undo();
       await store.refresh();
-      expect(store.list()[1].pageId).toBe(id);
+      expect(store.list().length).toBe(before.length);
     } finally {
       store.dispose();
       h.dispose();

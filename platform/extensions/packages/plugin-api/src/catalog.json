@@ -372,6 +372,27 @@
       "summary": "Set (omit/null: clear) a master's name."
     },
     {
+      "name": "paged.setPageOverrides",
+      "params": "(pageId, itemIds)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Set a page's (or master page's) override list: the master items it hides."
+    },
+    {
+      "name": "paged.overrideMasterItems",
+      "params": "(pageId, itemIds, emptyText?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Copy master items onto a page where the master draws them and hide the master's."
+    },
+    {
+      "name": "paged.insertItemHyperlink",
+      "params": "(itemId, url, pageId?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Make a page item a hyperlink's source, to a URL or a page."
+    },
+    {
       "name": "paged.onMaster",
       "params": "(masterId, mutation)",
       "returns": "bool",
@@ -1959,6 +1980,7 @@
     "insertFootnote",
     "deleteFootnote",
     "deleteHyperlink",
+    "insertItemHyperlink",
     "editHyperlink",
     "updateTableOfContents",
     "generateIndex",
@@ -2116,6 +2138,8 @@
     "createMaster",
     "deleteMaster",
     "renameMaster",
+    "setPageOverrides",
+    "overrideMasterItems",
     "insertSection",
     "editSection",
     "deleteSection",

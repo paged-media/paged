@@ -41,7 +41,8 @@ import {
 } from "../slides-model.js";
 import { color } from "@paged-media/panel-kit";
 
-import { SLIDES } from "../messages.js";
+import { changeLayout, resetSlide } from "../masters-commands.js";
+import { MASTERS, SLIDES } from "../messages.js";
 
 const list: React.CSSProperties = {
   display: "flex",
@@ -147,6 +148,38 @@ export function makeSlidesPanel(
           }}
         >
           {t(SLIDES.newSlide)}
+        </button>
+        <button
+          type="button"
+          data-change-layout
+          disabled={busy || !store.activePage()}
+          title={t(MASTERS.changeLayout)}
+          onClick={() => {
+            const page = store.activePage();
+            if (!page) return;
+            setBusy(true);
+            void changeLayout(host, page, layout.masterId)
+              .catch((e) => host.log.warn(`paged.slide: ${String(e)}`))
+              .finally(() => setBusy(false));
+          }}
+        >
+          {t(MASTERS.changeLayout)}
+        </button>
+        <button
+          type="button"
+          data-reset-slide
+          disabled={busy || !store.activePage()}
+          title={t(MASTERS.resetSlide)}
+          onClick={() => {
+            const page = store.activePage();
+            if (!page) return;
+            setBusy(true);
+            void resetSlide(host, page)
+              .catch((e) => host.log.warn(`paged.slide: ${String(e)}`))
+              .finally(() => setBusy(false));
+          }}
+        >
+          ↺
         </button>
       </div>
     );

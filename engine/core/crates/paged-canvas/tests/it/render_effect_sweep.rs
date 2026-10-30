@@ -342,6 +342,24 @@ fn with_deletion(m: &mut CanvasModel) -> String {
 // fails loudly in one place instead of silently turning a case into a
 // no-op against an element that is not there.
 
+/// The first rectangle of the master the first page applies.
+fn first_page_master_rect(m: &CanvasModel) -> String {
+    let page = first_page(m);
+    let master = m
+        .scene()
+        .spreads
+        .iter()
+        .flat_map(|s| s.spread.pages.iter())
+        .find(|p| p.self_id.as_deref() == Some(page.as_str()))
+        .and_then(|p| p.applied_master.clone())
+        .expect("the first page applies a master");
+    m.scene()
+        .master_spread(&master)
+        .and_then(|ms| ms.spread.rectangles.first())
+        .and_then(|r| r.self_id.clone())
+        .expect("its master has a rectangle")
+}
+
 fn first_page(m: &CanvasModel) -> PageId {
     page_at(m, 0)
 }
@@ -2440,6 +2458,33 @@ fn page_cases(c: &mut Vec<Case>) {
                 master: ids[0].clone(),
                 name: Some("Renamed".into()),
             }
+        },
+    ));
+    // Engine ADR 1026 — the first page hides its master's first rectangle.
+    c.push(paints("SetPageOverrides", "masters", |m| {
+        Mutation::SetPageOverrides {
+            page: first_page(m),
+            overrides: vec![first_page_master_rect(m)],
+        }
+    }));
+    // The page's copy draws where the master's did, but as a page item: above
+    // the page's own items, where the master's drew below them.
+    c.push(paints("OverrideMasterItems", "masters", |m| {
+        Mutation::OverrideMasterItems {
+            page: first_page(m),
+            items: vec![first_page_master_rect(m)],
+            empty_text: false,
+        }
+    }));
+    c.push(inert(
+        "InsertItemHyperlink",
+        "masters",
+        "a link is where a click goes; the renderer draws no link areas",
+        |m| Mutation::InsertItemHyperlink {
+            item: first_page_master_rect(m),
+            url: "https://paged.media".into(),
+            page: None,
+            name: None,
         },
     ));
     c.push(paints("MovePage", "layout", |m| Mutation::MovePage {
