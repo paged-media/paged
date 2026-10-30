@@ -1240,7 +1240,10 @@ pub const EFFECT_KEYS: &[&str] = &[
 /// not parse.
 pub fn layer_style(rec: &crate::model::LayerRecord) -> Option<LayerStyle> {
     let block = |k: &[u8; 4]| rec.addl.iter().find(|a| &a.key == k);
-    let payload = block(b"lmfx").or_else(|| block(b"lfx2"))?.payload();
+    // `lmfx` / `lfx2` keep a 4-byte length in a PSB too.
+    let payload = block(b"lmfx")
+        .or_else(|| block(b"lfx2"))?
+        .payload(crate::Container::Psd);
     LayerStyle::parse(payload).ok()
 }
 

@@ -2605,7 +2605,6 @@
   "app.find.pageRange": "1–{count}",
   "app.find.go": "Gehe zu",
   "app.builtInPanels.findResults": "Suchergebnisse",
-  "templatePreflight.textHasNoStory": "„{field}“ ist ein Textfeld auf einem Objekt, das keinen Text enthält.",
   "app.artboardsPanel.loading": "Zeichenflächen werden geladen …",
   "app.artboardsPanel.empty": "Keine Zeichenflächen.",
   "app.artboardsPanel.defaultName": "Zeichenfläche {n}",
