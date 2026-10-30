@@ -116,9 +116,14 @@ pub fn b_lighten(cb: f32, cs: f32) -> f32 {
 /// W3C §"color-dodge": if Cb = 0 → 0; if Cs = 1 → 1; else
 /// `min(1, Cb / (1 − Cs))`. (Branch order matches the WGSL.)
 pub fn b_color_dodge(cb: f32, cs: f32) -> f32 {
-    if cb == 0.0 {
+    // The singular points as ranges, not equalities: an unpremultiplied
+    // colour is a division and may land an ulp past 1 (a source "at
+    // full" a hair over it on some GPUs), where `1 − Cs` turns negative
+    // and the quotient with it. Photoshop's dodge by full brightness is
+    // full brightness.
+    if cb <= 0.0 {
         0.0
-    } else if cs == 1.0 {
+    } else if cs >= 1.0 {
         1.0
     } else {
         1.0_f32.min(cb / (1.0 - cs))
@@ -130,9 +135,11 @@ pub fn b_color_dodge(cb: f32, cs: f32) -> f32 {
 /// Cs = 0 first (white over a black source is black), measured against
 /// Photoshop 2026 — the only point where the two orders differ.
 pub fn b_color_burn(cb: f32, cs: f32) -> f32 {
-    if cs == 0.0 {
+    // As the dodge: the singular points as ranges (a backdrop an ulp past
+    // full would make `1 − Cb` negative).
+    if cs <= 0.0 {
         0.0
-    } else if cb == 1.0 {
+    } else if cb >= 1.0 {
         1.0
     } else {
         1.0 - 1.0_f32.min((1.0 - cb) / cs)

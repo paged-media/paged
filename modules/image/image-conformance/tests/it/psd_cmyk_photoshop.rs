@@ -688,9 +688,11 @@ fn ink_stack(file: &PsdFile, keep: &dyn Fn(&str) -> bool) -> LayerStack {
 /// ΔE00 p95 per tile, measured 2026-10-29 (Photoshop 27.10's recording):
 /// the p95 is the two CMMs' own difference (0.6 everywhere, as the
 /// merged composite's conversion is); the largest single texels sit on
-/// singular points — Color Dodge where the source is full brightness
-/// (one texel class 205 levels: Photoshop's dodge by paper white is not
-/// the formula's limit), Overlay and Hard Light at the 50 % switch.
+/// Overlay's and Hard Light's 50 % switch. Color Dodge was 205 levels on
+/// one texel class (227 on a paravirtual Metal GPU) until its singular
+/// point became a range: a source a hair past full brightness after the
+/// unpremultiply made `1 − Cs` negative; it is full brightness, as
+/// Photoshop's (`s_color_dodge`, `compose_twin::b_color_dodge`).
 const INK_TILES: &[(&str, u8, f64)] = &[
     ("normal-100", 3, 0.75),
     ("normal-50", 2, 0.75),
@@ -700,7 +702,7 @@ const INK_TILES: &[(&str, u8, f64)] = &[
     ("darken", 4, 0.8),
     ("lighten", 2, 0.7),
     ("color-burn", 3, 0.8),
-    ("color-dodge", 205, 0.75),
+    ("color-dodge", 3, 0.75),
     ("soft-light", 3, 0.75),
     ("hard-light", 6, 0.7),
     ("difference", 5, 1.2),

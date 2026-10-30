@@ -753,6 +753,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — color_dodge"
+    - "the singular points as ranges (Cs ≥ 1 / Cb ≥ 1, Cb ≤ 0 / Cs ≤ 0): an unpremultiplied colour an ulp past full divided by a negative `1 − x` on a paravirtual Metal GPU; mirrored by compose_twin"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'div '"
   tests:
@@ -768,6 +769,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — color_burn"
+    - "the singular points as ranges (Cs ≥ 1 / Cb ≥ 1, Cb ≤ 0 / Cs ≤ 0): an unpremultiplied colour an ulp past full divided by a negative `1 − x` on a paravirtual Metal GPU; mirrored by compose_twin"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'idiv'"
   tests:
