@@ -57,6 +57,24 @@ const M = defineMessages("app.soloProfiles", {
   slideBlurb: "Slides, notes, comments",
 });
 
+/** Editor ADR 311 (plan WP10.7) — the host panels and tools that work on
+ *  any page item, so every solo application keeps them whatever else it
+ *  drops: Gradients, Picture adjustments and History; Free Transform. */
+const SHARED_HOST_PANELS: readonly string[] = [
+  "paged.gradients",
+  "paged.picture-adjustments",
+  "paged.history",
+];
+const SHARED_HOST_TOOLS: readonly string[] = ["paged.tool.freeTransform"];
+
+/** A profile's own list, then each shared id it does not name already. */
+function withShared(
+  shared: readonly string[],
+  own: readonly string[],
+): readonly string[] {
+  return [...own, ...shared.filter((id) => !own.includes(id))];
+}
+
 /** A plugin hosted as its own application. */
 export interface SoloProfile {
   /** The manifest id of the ONE bundle this profile loads. */
@@ -112,7 +130,7 @@ const DRAW_PROFILE: SoloProfile = {
   // Square, and large enough that the artboard reads as a canvas rather
   // than a page. Verified end-to-end at this exact size.
   documentSizePt: [2000, 2000],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.object-transform",
     "paged.align",
@@ -129,8 +147,8 @@ const DRAW_PROFILE: SoloProfile = {
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: [
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
     // Drawing primitives the HOST owns and draw builds on (the Pencil
     // among them: draw retired its own into it, draw ADR 359). draw's own
     // tools arrive with the bundle.
@@ -163,7 +181,7 @@ const DRAW_PROFILE: SoloProfile = {
     // brushes). NOT ONE creates geometry. Pen, rectangle, ellipse, line
     // and polygon are the HOST's. A profile of "draw's tools plus
     // navigation" would be an illustration program you cannot draw in.
-  ],
+  ]),
   // `Draw` itself is contributed by the bundle, not listed here.
   menuTopLevels: ["File", "Edit", "View", "Object", "Window", "Help"],
   slots: {
@@ -216,7 +234,7 @@ const IMAGE_PROFILE: SoloProfile = {
   bundleId: "media.paged.image",
   title: "paged.image",
   documentSizePt: [1600, 1200],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.object-transform",
     "paged.layers",
@@ -229,8 +247,11 @@ const IMAGE_PROFILE: SoloProfile = {
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.rectangle", "paged.tool.ellipse"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.rectangle",
+    "paged.tool.ellipse",
+  ]),
   menuTopLevels: ["File", "Edit", "View", "Object", "Window", "Help"],
   slots: {
     left: "media.paged.image.panel.adjustments",
@@ -268,7 +289,7 @@ const SHEET_PROFILE: SoloProfile = {
   bundleId: "media.paged.sheet",
   title: "paged.sheet",
   documentSizePt: [1400, 900],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.object-transform",
     "paged.table",
@@ -281,8 +302,11 @@ const SHEET_PROFILE: SoloProfile = {
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.rectangle", "paged.tool.type"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.rectangle",
+    "paged.tool.type",
+  ]),
   menuTopLevels: ["File", "Edit", "View", "Object", "Window", "Help"],
   slots: {
     left: "media.paged.sheet.panel.workbook",
@@ -332,7 +356,7 @@ const DOC_PROFILE: SoloProfile = {
   bundleId: "media.paged.doc",
   title: "paged.doc",
   documentSizePt: [612, 792],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.character",
     "paged.paragraph",
@@ -351,8 +375,11 @@ const DOC_PROFILE: SoloProfile = {
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.type", "paged.tool.rectangle"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.type",
+    "paged.tool.rectangle",
+  ]),
   // `Type` STAYS — it is the point of a word processor. `Layout` and
   // `Data` go: pagination is automatic here, not composed by hand.
   menuTopLevels: ["File", "Edit", "View", "Type", "Object", "Window", "Help"],
@@ -395,7 +422,7 @@ const WEB_PROFILE: SoloProfile = {
   bundleId: "media.paged.web",
   title: "paged.web",
   documentSizePt: [612, 792],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.pages",
     "paged.stories",
@@ -408,8 +435,11 @@ const WEB_PROFILE: SoloProfile = {
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.type", "paged.tool.rectangle"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.type",
+    "paged.tool.rectangle",
+  ]),
   menuTopLevels: ["File", "Edit", "View", "Layout", "Object", "Window", "Help"],
   slots: {
     left: "media.paged.web.panel.source",
@@ -449,7 +479,7 @@ const DATA_PROFILE: SoloProfile = {
   bundleId: "media.paged.data",
   title: "paged.data",
   documentSizePt: [612, 792],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.pages",
     "paged.stories",
@@ -461,8 +491,11 @@ const DATA_PROFILE: SoloProfile = {
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.type", "paged.tool.rectangle"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.type",
+    "paged.tool.rectangle",
+  ]),
   // `Data` stays — it is this application's own menu, and the host
   // already curates three panel-raising rows into it.
   menuTopLevels: [
@@ -530,7 +563,7 @@ const SLIDE_PROFILE: SoloProfile = {
   bundleId: "media.paged.slide",
   title: "paged.slide",
   documentSizePt: [960, 540],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.object-transform",
     "paged.align",
@@ -548,16 +581,16 @@ const SLIDE_PROFILE: SoloProfile = {
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
+  ]),
   // PowerPoint's Insert ▸ Text Box and Shapes: the host's type tool and its
   // shape primitives. The slide bundle contributes no tools of its own.
-  toolIds: [
+  toolIds: withShared(SHARED_HOST_TOOLS, [
     "paged.tool.type",
     "paged.tool.rectangle",
     "paged.tool.ellipse",
     "paged.tool.line",
     "paged.tool.polygon",
-  ],
+  ]),
   menuTopLevels: ["File", "Edit", "View", "Type", "Object", "Window", "Help"],
   slots: {
     left: "media.paged.slide.panel.slides",

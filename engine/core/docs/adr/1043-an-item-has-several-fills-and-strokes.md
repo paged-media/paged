@@ -115,9 +115,13 @@ appearance is plan WP6.3.
 - `crates/paged-store/tests/it/appearance.rs`: a layered item round-trips; an item without one
   writes no key and hashes alike.
 
-- The Illustrator probe `modules/draw/scripts/illustrator/probes/appearance.jsx` (several fills
-  and strokes through the Appearance panel's commands, PNG per case, Expand Appearance part by
-  part) is written; its recording and pixel replay are pending.
+- `crates/paged-renderer/tests/it/appearance_illustrator.rs`: Illustrator 30.1's recording of
+  `modules/draw/scripts/illustrator/probes/appearance.jsx` (seven objects with two or three fills
+  and strokes, over a backdrop where they blend), each rebuilt as a native appearance and drawn on
+  the CPU lane: every pixel away from an edge agrees with Illustrator's PNG (worst 0 levels). The
+  recording also shows that Illustrator stacks a new fill or stroke above the targeted one and
+  centres strokes, and that its scripting model sets opacity and blend mode on the object, not
+  the layer — so a layer's own transparency is covered by the engine's tests, not the oracle.
 
 Tests named `*__feat__frames_paths_native_appearance` are the evidence of the feature row
 `frames-paths.native-appearance`.
