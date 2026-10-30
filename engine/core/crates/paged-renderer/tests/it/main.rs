@@ -7,6 +7,7 @@ mod anchored_custom;
 mod anchored_effects;
 mod anchors_in_text;
 mod appearance;
+mod appearance_illustrator;
 mod applied_language;
 mod baseline_grid_pipeline;
 mod blank_paragraphs_pipeline;
