@@ -742,7 +742,9 @@ function EffectOptions(props: {
             />
             {t(ANIM.pathLocked)}
           </label>
-          <div style={{ opacity: 0.7, margin: "2px 0" }}>{t(ANIM.pathHint)}</div>
+          <div style={{ opacity: 0.7, margin: "2px 0" }}>
+            {t(ANIM.pathHint)}
+          </div>
         </>
       ) : null}
       {row(

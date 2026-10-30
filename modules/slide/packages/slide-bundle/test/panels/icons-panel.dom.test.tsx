@@ -58,11 +58,12 @@ describe("the Icons panel", () => {
       ),
     );
     await settle();
-    expect(view.container.querySelector("[data-icons-from-file]")).not.toBeNull();
+    expect(
+      view.container.querySelector("[data-icons-from-file]"),
+    ).not.toBeNull();
     const before = await pictures();
-    const star = view.container.querySelector<HTMLButtonElement>(
-      '[data-icon="Star"]',
-    )!;
+    const star =
+      view.container.querySelector<HTMLButtonElement>('[data-icon="Star"]')!;
     await drive(() => fireEvent.click(star));
     await waitFor(async () => expect(await pictures()).toBe(before + 1));
     expect(d.host.selection.get().length).toBe(1);

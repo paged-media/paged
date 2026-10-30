@@ -71,7 +71,14 @@ import {
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeMenu } from "./menu.js";
-import { COMMENTS, DECK, ICONS_MSG, NOTES, SHAPES, SLIDES } from "./messages.js";
+import {
+  COMMENTS,
+  DECK,
+  ICONS_MSG,
+  NOTES,
+  SHAPES,
+  SLIDES,
+} from "./messages.js";
 import {
   contributeSlideObjectModel,
   parseLabel,

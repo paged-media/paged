@@ -66,10 +66,16 @@ describe("motion path editing (slide ADR 714)", () => {
     expect(n.c1[1]).toBeCloseTo(0.35);
     expect(c.c1).toEqual([0.1, 0]);
     const bent = moveHandle(PATH, { seg: 2, which: "c1" }, [0, 0.5]);
-    expect((bent[2] as Extract<PathSeg, { kind: "curve" }>).c1).toEqual([0, 0.5]);
-    expect((bent[1] as Extract<PathSeg, { kind: "curve" }>).to).toEqual([0.25, 0.2]);
+    expect((bent[2] as Extract<PathSeg, { kind: "curve" }>).c1).toEqual([
+      0, 0.5,
+    ]);
+    expect((bent[1] as Extract<PathSeg, { kind: "curve" }>).to).toEqual([
+      0.25, 0.2,
+    ]);
     // The original is not changed.
-    expect((PATH[1] as Extract<PathSeg, { kind: "curve" }>).to).toEqual([0.25, 0.2]);
+    expect((PATH[1] as Extract<PathSeg, { kind: "curve" }>).to).toEqual([
+      0.25, 0.2,
+    ]);
   });
 
   it("maps between the slide and the path from where the shape stands", () => {

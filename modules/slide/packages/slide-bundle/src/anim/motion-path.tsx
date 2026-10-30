@@ -134,7 +134,10 @@ export function fromPage(st: MotionPathState, p: Pt): Pt {
 
 /** An SVG path of `segs`, page pt. */
 export function svgPath(st: MotionPathState, segs: readonly PathSeg[]): string {
-  const f = (p: Pt) => toPage(st, p).map((v) => v.toFixed(2)).join(" ");
+  const f = (p: Pt) =>
+    toPage(st, p)
+      .map((v) => v.toFixed(2))
+      .join(" ");
   return segs
     .map((s) => {
       switch (s.kind) {
@@ -229,8 +232,7 @@ export class MotionPathModel implements Disposable {
       index,
       path,
     });
-    if (!out.ok)
-      this.host.log.warn(`paged.slide motion path: ${out.reason}`);
+    if (!out.ok) this.host.log.warn(`paged.slide motion path: ${out.reason}`);
     return out.ok;
   }
 
@@ -322,7 +324,8 @@ export function motionPathOverlay(model: MotionPathModel): OverlayContribution {
         {s.segs.map((seg, i) => {
           if (seg.kind !== "curve") return null;
           const prev = s.segs[i - 1];
-          const from: Pt | null = prev && prev.kind !== "close" ? prev.to : null;
+          const from: Pt | null =
+            prev && prev.kind !== "close" ? prev.to : null;
           const a = from ? toPage(s, from) : null;
           const c1 = toPage(s, seg.c1);
           const c2 = toPage(s, seg.c2);
@@ -330,9 +333,25 @@ export function motionPathOverlay(model: MotionPathModel): OverlayContribution {
           return (
             <g key={`arms-${i}`} pointerEvents="none">
               {a ? (
-                <line x1={a[0]} y1={a[1]} x2={c1[0]} y2={c1[1]} stroke="#1a73e8" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                <line
+                  x1={a[0]}
+                  y1={a[1]}
+                  x2={c1[0]}
+                  y2={c1[1]}
+                  stroke="#1a73e8"
+                  strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
+                />
               ) : null}
-              <line x1={b[0]} y1={b[1]} x2={c2[0]} y2={c2[1]} stroke="#1a73e8" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+              <line
+                x1={b[0]}
+                y1={b[1]}
+                x2={c2[0]}
+                y2={c2[1]}
+                stroke="#1a73e8"
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
             </g>
           );
         })}

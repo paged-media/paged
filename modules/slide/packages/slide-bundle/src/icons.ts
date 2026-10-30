@@ -45,10 +45,15 @@ export const ICONS: readonly { name: string; svg: string }[] = [
       '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
     ),
   },
-  { name: "Home", svg: svg('<path d="M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5"/>') },
+  {
+    name: "Home",
+    svg: svg('<path d="M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5"/>'),
+  },
   {
     name: "Mail",
-    svg: svg('<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3.5 6l8.5 7 8.5-7"/>'),
+    svg: svg(
+      '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3.5 6l8.5 7 8.5-7"/>',
+    ),
   },
   {
     name: "Calendar",
@@ -56,10 +61,15 @@ export const ICONS: readonly { name: string; svg: string }[] = [
       '<rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
     ),
   },
-  { name: "Clock", svg: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/>') },
+  {
+    name: "Clock",
+    svg: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/>'),
+  },
   {
     name: "Person",
-    svg: svg('<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
+    svg: svg(
+      '<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
+    ),
   },
   {
     name: "Light bulb",
@@ -79,7 +89,9 @@ export const ICONS: readonly { name: string; svg: string }[] = [
   },
   {
     name: "Lock",
-    svg: svg('<rect x="5" y="11" width="14" height="9.5" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+    svg: svg(
+      '<rect x="5" y="11" width="14" height="9.5" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    ),
   },
   {
     name: "Chat",
