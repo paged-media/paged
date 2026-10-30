@@ -263,14 +263,24 @@ fn clip_color(mut c: [f32; 3]) -> [f32; 3] {
     let l = lum(c);
     let n = c[0].min(c[1]).min(c[2]);
     let x = c[0].max(c[1]).max(c[2]);
+    // A FLAT colour out of range has no spread to scale: it clips to the
+    // limit the formula tends to (0 or 1), not 0/0 (the WGSL lane alike).
     if n < 0.0 {
-        for ch in c.iter_mut() {
-            *ch = l + (*ch - l) * l / (l - n);
+        if l > n {
+            for ch in c.iter_mut() {
+                *ch = l + (*ch - l) * l / (l - n);
+            }
+        } else {
+            c = [0.0; 3];
         }
     }
     if x > 1.0 {
-        for ch in c.iter_mut() {
-            *ch = l + (*ch - l) * (1.0 - l) / (x - l);
+        if x > l {
+            for ch in c.iter_mut() {
+                *ch = l + (*ch - l) * (1.0 - l) / (x - l);
+            }
+        } else {
+            c = [1.0; 3];
         }
     }
     c

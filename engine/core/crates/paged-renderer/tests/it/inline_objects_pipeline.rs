@@ -364,7 +364,7 @@ fn a_picture_alone_in_its_paragraph_is_a_line_of_its_height() {
         image_link: None,
         image_item_transform: None,
         children: Vec::new(),
-        layout: Default::default(),
+        ..Default::default()
     };
     paras.push(paged_model::Paragraph {
         paragraph_style: last.paragraph_style.clone(),

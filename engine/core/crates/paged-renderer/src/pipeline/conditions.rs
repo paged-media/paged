@@ -269,7 +269,7 @@ mod tests {
             image_link: None,
             image_item_transform: None,
             children: Vec::new(),
-            layout: Default::default(),
+            ..Default::default()
         }
     }
 

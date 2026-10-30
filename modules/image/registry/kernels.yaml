@@ -843,6 +843,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — hue"
+    - "ClipColor of a flat colour out of range (every channel the luminance) clips to 0 or 1, the formula's limit, instead of 0/0 — a backdrop past 1 under a transparent texel was NaN; mirrored by compose_ref"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'hue '"
   tests:
@@ -858,6 +859,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — saturation"
+    - "ClipColor of a flat colour out of range (every channel the luminance) clips to 0 or 1, the formula's limit, instead of 0/0 — a backdrop past 1 under a transparent texel was NaN; mirrored by compose_ref"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'sat '"
   tests:
@@ -873,6 +875,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — color"
+    - "ClipColor of a flat colour out of range (every channel the luminance) clips to 0 or 1, the formula's limit, instead of 0/0 — a backdrop past 1 under a transparent texel was NaN; mirrored by compose_ref"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'colr'"
   tests:
@@ -888,6 +891,7 @@
   status: implemented
   provenance:
     - "W3C Compositing and Blending Level 1 (https://www.w3.org/TR/compositing-1/) — luminosity"
+    - "ClipColor of a flat colour out of range (every channel the luminance) clips to 0 or 1, the formula's limit, instead of 0/0 — a backdrop past 1 under a transparent texel was NaN; mirrored by compose_ref"
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'lum '"
   tests:

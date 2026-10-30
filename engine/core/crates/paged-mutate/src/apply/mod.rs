@@ -1306,6 +1306,7 @@ fn cell_paragraphs_mut<'a>(
 }
 
 mod anchored_frame;
+mod anchored_look;
 pub(crate) mod appearance;
 mod batch_page;
 mod character;

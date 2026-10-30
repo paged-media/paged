@@ -8,9 +8,9 @@
   },
   "metrics": {
     "weightedImport": {
-      "covered": 133681,
+      "covered": 133683,
       "total": 633952,
-      "value": 0.210869
+      "value": 0.210872
     },
     "impactImport": {
       "covered": 26646,
@@ -1084,6 +1084,8 @@
     "Stories|ParagraphStyleRange@SplitColumnInsideGutter|attr",
     "Stories|Rectangle@AppliedObjectStyle|attr",
     "Stories|Rectangle@GradientFillAngle|attr",
+    "Stories|Rectangle@GradientFillLength|attr",
+    "Stories|Rectangle@GradientFillStart|attr",
     "Stories|Rectangle@ItemTransform|attr",
     "Stories|Rectangle@Self|attr",
     "Stories|Row@AutoGrow|attr",

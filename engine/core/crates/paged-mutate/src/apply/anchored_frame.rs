@@ -267,6 +267,7 @@ pub(super) fn apply_insert_anchored_frame(
                 image_item_transform: None,
                 children: Vec::new(),
                 layout: layout.map(AnchoredLayoutSpec::to_model).unwrap_or_default(),
+                ..Default::default()
             }
         }
     };

@@ -53,6 +53,10 @@ pub(super) fn stack_target(path: PropertyPath) -> Option<EffectTarget> {
 }
 
 fn find_bearing_mut<'a>(doc: &'a mut Document, node: &NodeId) -> Option<&'a mut dyn EffectBearing> {
+    // Engine ADR 1045 — an anchored frame carries the free frames' stacks.
+    if super::anchored_look::names_anchored(doc, node) {
+        return super::anchored_look::frame_mut(doc, node).map(|f| f as &mut dyn EffectBearing);
+    }
     match node {
         NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| f as &mut dyn EffectBearing),
         NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|f| f as &mut dyn EffectBearing),
