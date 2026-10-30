@@ -621,15 +621,13 @@ fn blending_converted_cmyk_layers_in_rgb_is_measured_per_mode__feat__image_psd_l
         .iter()
         .map(|b| b.category)
         .collect();
-    // Normal and Multiply are admitted and judged per file against the
-    // composite (`CMYK_RGB_SAFE_BLENDS`); every other mode is a blocker.
+    // Since the ink fold (image ADR 483) only the modes it cannot fold —
+    // the four non-separable ones — are blockers; the separable ones fold
+    // in inks and are judged per file against the composite.
     assert_eq!(
         blocked.len(),
-        TILES
-            .iter()
-            .filter(|t| !t.3 && !t.0.starts_with("multiply"))
-            .count(),
-        "one cmyk-blend blocker per layer in a mode other than normal/multiply: {blocked:?}"
+        4,
+        "one cmyk-blend blocker per non-separable layer: {blocked:?}"
     );
     assert!(blocked.iter().all(|b| *b == "cmyk-blend"));
     println!("{}", report.join("\n"));
@@ -834,4 +832,39 @@ fn the_ink_fold_names_what_it_declines_and_an_edit_keeps_the_inks__feat__image_i
         }
     }
     assert!(changed_inside, "the damage takes the new pixels' inks");
+}
+
+/// The `cmyk-blend` gate after the ink fold (image ADR 483): only the
+/// layers the ink fold cannot composite (Hue, Saturation, Color,
+/// Luminosity) decline `blend-modes`, and the documents that mix —
+/// `normal-stack` at 8 and 16 bits, declined by the RGB fold's
+/// `cmyk-composite` check — pass that check once opened as the app opens
+/// them (mode adopted, inks kept), so they open as layers.
+#[test]
+#[allow(non_snake_case)]
+fn the_cmyk_gates_follow_the_ink_fold__feat__image_io_depth_color_modes() {
+    let file = psd("blend-modes");
+    let blocked: Vec<String> = file
+        .layer_import_blockers()
+        .iter()
+        .filter(|b| b.category == "cmyk-blend")
+        .map(|b| b.message.clone())
+        .collect();
+    assert_eq!(blocked.len(), 4, "{blocked:#?}");
+    for m in ["hue", "saturation", "color", "luminosity"] {
+        assert!(
+            blocked.iter().any(|b| b.contains(&format!("(\"{m}\")"))),
+            "{m}: {blocked:#?}"
+        );
+    }
+    let ctx = image_conformance::device::test_device();
+    for id in ["normal-stack", "normal-stack-16", "opaque-stack"] {
+        let file = psd(id);
+        assert!(file.layer_import_blockers().is_empty(), "{id}");
+        let stack = ink_stack(&file, &|_| true);
+        let ours = pollster::block_on(stack.composite(ctx, None)).expect("the ink fold");
+        let a = cmyk_flatten_agrees(&ours, &ours_converted_merged(&file))
+            .unwrap_or_else(|e| panic!("{id}: {e}"));
+        println!("{id}: {:.2}% off, max {}", a.pct_off, a.max);
+    }
 }

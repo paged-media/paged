@@ -278,15 +278,34 @@ fn image_psd_layer_channel_data_zip_prediction_handapplied_delta() {
 }
 
 #[test]
-fn image_psd_layer_channel_data_zip_prediction_32bit_unsupported() {
-    // 8- and 16-bit prediction decode; 32-bit -> Unsupported.
-    let zlib = miniz_oxide::deflate::compress_to_vec_zlib(&[0u8; 48], 6);
+fn image_psd_layer_channel_data_zip_prediction_32bit_reads_byte_planes() {
+    // 32-bit prediction (image ADR 483): a row's floats as four byte
+    // planes, delta-coded over the row's bytes. Two rows of three.
+    let floats = [0.5f32, 1.0, -2.25, 3.0e-3, 7.5, 0.0];
+    let mut deltaed = Vec::new();
+    for row in floats.chunks(3) {
+        let mut planar = vec![0u8; 12];
+        for (x, v) in row.iter().enumerate() {
+            for (b, byte) in v.to_be_bytes().iter().enumerate() {
+                planar[b * 3 + x] = *byte;
+            }
+        }
+        let mut prev = 0u8;
+        for (i, &v) in planar.iter().enumerate() {
+            deltaed.push(if i == 0 { v } else { v.wrapping_sub(prev) });
+            prev = v;
+        }
+    }
     let cd = ChannelData {
         compression: Compression::ZipPrediction,
-        bytes: zlib,
+        bytes: miniz_oxide::deflate::compress_to_vec_zlib(&deltaed, 6),
     };
-    let err = cd.decode(Container::Psd, 2, 6, 32).unwrap_err();
-    assert!(matches!(err, PsdError::Unsupported(_)));
+    assert_eq!(cd.decode_samples32(2, 3).unwrap(), floats);
+    // The 8-bit view clamps the value to a byte.
+    assert_eq!(
+        cd.decode(Container::Psd, 2, 3, 32).unwrap(),
+        vec![128, 255, 0, 1, 255, 0]
+    );
 }
 
 #[test]

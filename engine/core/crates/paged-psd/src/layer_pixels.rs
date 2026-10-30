@@ -511,6 +511,19 @@ const NOT_REPRODUCED: &[(&[u8; 4], &str)] = &[
 /// footprints), so the list stays this short.
 pub const CMYK_RGB_SAFE_BLENDS: &[&[u8; 4]] = &[b"norm", b"mul "];
 
+/// The blend modes that still decline a CMYK document's LAYER import
+/// (image ADR 483): those its consumer cannot composite in the inks. Since
+/// image ADR 481 a CMYK document with a profile folds every SEPARABLE mode
+/// in its inks as Photoshop does (`image-js`'s ink fold, within 7 levels
+/// of Photoshop's merged composite on `cmyk-stacks/blend-modes`), and the
+/// consumer's per-file check against the merged composite still judges
+/// each file; the non-separable modes would blend the converted colours
+/// in RGB, tens of levels off, so they keep the flattened open.
+/// ([`CMYK_RGB_SAFE_BLENDS`] still judges a Color Overlay: a style folds
+/// in RGB.)
+pub const CMYK_INK_FOLD_DECLINES: &[&[u8; 4]] =
+    &[b"hue ", b"sat ", b"colr", b"lum ", b"dkCl", b"lgCl"];
+
 /// A CMYK document's ink transform as the import takes it: packed 4-ink
 /// CMYK8 (0 = no ink) in, the same number of RGBA8 pixels out.
 pub type InkToRgba8<'a> = &'a dyn Fn(&[u8]) -> Vec<u8>;
@@ -1315,7 +1328,7 @@ impl PsdFile {
                     let group_blend = lsct_blend.unwrap_or(layer.blend_key);
                     if cmyk
                         && &group_blend != b"pass"
-                        && !CMYK_RGB_SAFE_BLENDS.contains(&&group_blend)
+                        && CMYK_INK_FOLD_DECLINES.contains(&&group_blend)
                     {
                         block(
                             "cmyk-blend",
@@ -1446,7 +1459,7 @@ impl PsdFile {
                 }
                 masked += 1;
             }
-            if cmyk && !CMYK_RGB_SAFE_BLENDS.contains(&&layer.blend_key) {
+            if cmyk && CMYK_INK_FOLD_DECLINES.contains(&&layer.blend_key) {
                 block(
                     "cmyk-blend",
                     format!(
