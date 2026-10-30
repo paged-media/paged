@@ -106,6 +106,11 @@ const STRUCTURED: &[(&str, &str)] = &[
         "frameContentEffectStack",
         "{ type: 'effectStack', value: { entries: [] } }",
     ),
+    // Engine ADR 1037 — an image frame's filter stack, whole.
+    (
+        "frameImageAdjustments",
+        "{ type: 'imageAdjustments', value: [{ op: 'exposure', ev: 0.5 }] }",
+    ),
     (
         "pluginMetadata",
         "{ type: 'pluginMetadata', value: { key: 'x-paged:probe', value: '1' } }",
