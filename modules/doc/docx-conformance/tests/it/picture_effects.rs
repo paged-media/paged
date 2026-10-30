@@ -145,16 +145,14 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
     ] {
         assert!(shown.contains(kind), "{kind}: {shown}");
     }
-    for what in ["a:grayscl"] {
-        assert_eq!(
-            messages
-                .iter()
-                .filter(|m| m.starts_with("picture look in 1 picture(s)") && m.contains(what))
-                .count(),
-            1,
-            "{what}: {messages:?}"
-        );
-    }
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|m| m.starts_with("picture look in 1 picture(s)") && m.contains("a:grayscl"))
+            .count(),
+        1,
+        "{messages:?}"
+    );
 }
 
 #[test]
