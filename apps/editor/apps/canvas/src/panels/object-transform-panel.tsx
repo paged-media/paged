@@ -39,6 +39,9 @@
 //     SmartDial micro Rotation          LIVE  (W2.3 decompose)
 //     [100 % | 100 %] scale 2-up        LIVE  (W2.3 decompose)
 //     [Flip H][Flip V] soft buttons     LIVE
+//   Shape (open disclosure; editor ADR 310, `object-shape-section.tsx`)
+//     a live polygon's sides + inset, an oval's pie angles, a
+//     rectangle's four corners
 //
 // W2.3 (2026-06-06) — protocol v28 lands the transform-decompose
 // primitive (engine gap 6/16). Read = decomposed components of the
@@ -76,6 +79,7 @@ import { LengthInput, NumberInput, SmartDialMicro } from "@paged-media/ui";
 import { useState } from "react";
 import type { Value } from "@paged-media/client";
 
+import { ObjectShapeSection } from "./object-shape-section";
 import { usePagePosition } from "./page-position";
 import { useAddressOfElement } from "../object-model";
 import { defineMessages, useStrings } from "@paged-media/strings";
@@ -466,6 +470,8 @@ export function ObjectTransformPanel() {
             </div>
           )}
         </div>
+        {/* Editor ADR 310 — the live shape's parameters. */}
+        <ObjectShapeSection />
       </div>
       <GroupTransformField />
     </div>

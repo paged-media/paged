@@ -315,6 +315,7 @@ import {
 } from "../insert-commands";
 import { COCKPIT_MODES, PANEL_RAIL } from "../cockpit-modes";
 import { COCKPIT_MENU_SEAMS } from "../cockpit-menus";
+import { buildEffectMenuCommands, buildEffectMenuItems } from "../effect-menu";
 import { appCatalogRegistry } from "../panels/catalog-registry";
 import { CanvasPanel } from "../panels/canvas-panel";
 import { problemsOf, type ProblemsStore } from "../panels/problems-store";
@@ -340,6 +341,7 @@ import {
 } from "../select-all";
 import { CorpusPicker } from "../ui/CorpusPicker";
 import { templateFieldsContribution } from "../overlays/template-fields";
+import { liveShapeHandlesContribution } from "../overlays/live-shape-handles";
 import {
   EditorInstanceProvider,
   createEditorServices,
@@ -382,6 +384,8 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   selectionChromeContribution,
   resizeHandlesContribution,
   rotateHandleContribution,
+  // Editor ADR 310 — the live-shape widgets (corners, sides, star, pie).
+  liveShapeHandlesContribution,
   // W2.9 — text-frame threading ports on the selection chrome.
   threadingPortsContribution,
   // B4 — the story's route across the spread (View ▸ Show text
@@ -1566,6 +1570,8 @@ function CanvasAppIntegration() {
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
+      // Editor ADR 309 — Object ▸ Effects ▸ <group> ▸ <effect>.
+      ...buildEffectMenuCommands(),
       ...transformEachDialogCommands,
       ...buildBatchCommands(),
       ...viewCommands,
@@ -1588,6 +1594,7 @@ function CanvasAppIntegration() {
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
+      ...buildEffectMenuItems(),
       ...TRANSFORM_EACH_MENU_ITEMS,
       ...BATCH_MENU_ITEMS,
       ...VIEW_MENU_ITEMS,

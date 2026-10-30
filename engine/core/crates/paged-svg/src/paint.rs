@@ -58,14 +58,9 @@ const COLORS: [&str; 4] = ["stop-color", "flood-color", "lighting-color", "color
 /// Every colour `svg` declares, in source order. Fails when the text is
 /// not well-formed XML.
 pub fn color_sites(svg: &str) -> Result<Vec<ColorSite>, String> {
-    let doc = roxmltree::Document::parse_with_options(
-        svg,
-        roxmltree::ParsingOptions {
-            allow_dtd: true,
-            ..Default::default()
-        },
-    )
-    .map_err(|e| format!("not a readable SVG: {e}"))?;
+    // The guarded parse: over the size and complexity limits
+    // (`crate::limits`) the source is refused with its reason.
+    let doc = crate::limits::read_xml(svg).map_err(|e| e.to_string())?;
     if doc.root_element().tag_name().name() != "svg" {
         return Err("not an SVG document: its root element is not <svg>".into());
     }

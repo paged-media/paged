@@ -148,6 +148,9 @@ fn probe_nodes() -> Vec<(Document, NodeId)> {
         load(paged_gen::samples::tables::build()),
         load(paged_gen::samples::geometry_groups::build()),
         load(paged_gen::samples::anchored::build()),
+        // Engine ADR 1047 — an oval, for the paths only an oval takes (its
+        // pie angles).
+        load(paged_gen::samples::strokes_fills::build()),
     ];
     let spread_id = docs[0].spreads[0]
         .spread

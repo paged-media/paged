@@ -545,7 +545,8 @@ pub(crate) fn apply_inner(
             mask,
             mask_type,
             invert,
-        } => apply_opacity_mask(doc, target, mask, mask_type.to_model(), *invert),
+            clip,
+        } => apply_opacity_mask(doc, target, mask, mask_type.to_model(), *invert, *clip),
         Operation::ReleaseOpacityMask {
             target,
             restore_slot,
@@ -1410,6 +1411,7 @@ mod hyperlink_edit;
 mod insert_node;
 mod layer;
 mod list_ops;
+mod live_shape;
 mod lock;
 mod note;
 pub mod permit;

@@ -126,6 +126,12 @@ pub struct ApiCatalog {
     /// `paged.schema(kind)` answer, verbatim. Operation rows are absent.
     pub object_schemas:
         std::collections::BTreeMap<String, Vec<crate::object_schema::ObjectSchemaRow>>,
+    /// Editor ADR 309 / plan C16 — the effect kinds of the ordered stack
+    /// (engine ADR 1008): menu group, targets and parameter form of each,
+    /// which the Effects and Appearance panels and the Effect menu list.
+    pub effect_kinds: Vec<crate::effect_kinds::EffectKindRow>,
+    /// The Effect menu's groups, in menu order.
+    pub effect_categories: &'static [&'static str],
 }
 
 /// One settable path that answers to two names.
@@ -153,6 +159,8 @@ pub fn api_catalog() -> ApiCatalog {
         path_aliases: path_aliases(),
         property_schemas: crate::virtual_paths::property_schemas(),
         object_schemas: crate::object_schema::object_schemas(),
+        effect_kinds: crate::effect_kinds::effect_kinds(),
+        effect_categories: crate::effect_kinds::EFFECT_CATEGORIES,
     }
 }
 
@@ -819,6 +827,11 @@ property_paths! {
         FrameMedia => "frameMedia" : structure("MediaItem", Wire::Media),
         // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
+        // Engine ADR 1047 — live shapes; IDML has none (the outline is written, the parameters ride a label).
+        FrameShapeSides => "frameShapeSides" : count().range(3.0, 100.0),
+        FrameShapeStarInset => "frameShapeStarInset" : pct().range(0.0, 99.0).default_num(0.0),
+        FrameShapePieStart => "frameShapePieStart" : deg().default_num(0.0),
+        FrameShapePieEnd => "frameShapePieEnd" : deg().default_num(360.0),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
         FrameStrokeMiterLimit => "frameStrokeMiterLimit" : number().range(1.0, 500.0).default_num(4.0).idml(idml![attr(Rectangle | GraphicLine | Polygon, MiterLimit)]),
@@ -1523,8 +1536,11 @@ mod tests {
         //
         // 266 -> 268: ADR 1043 — an item's appearance, and one layer of it.
         //
-        // 268 -> 269: ADR 1027 — a frame's medium (movie and sound items).
-        assert_eq!(cat.settable_paths.len(), 269, "settable path count drifted");
+        // 268 -> 272: ADR 1047 — live shapes (a polygon's sides and star
+        // inset, an oval's pie angles).
+        //
+        // 272 -> 273: ADR 1027 — a frame's medium (movie and sound items).
+        assert_eq!(cat.settable_paths.len(), 273, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings
