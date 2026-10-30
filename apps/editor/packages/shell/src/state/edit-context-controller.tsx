@@ -42,7 +42,11 @@ import { useEditorScope } from "./editor-scope";
 import { useCockpitActions } from "../cockpit/cockpit-state-context";
 import { useEditContextStack } from "./edit-context-stack";
 import { useSelection } from "./selection-context";
-import { SELECT_TOOL_ID, VIEW_TOOL_IDS, useOptionalTool } from "./tool-context";
+import {
+  SELECT_TOOL_ID,
+  toolStaysInContext,
+  useOptionalTool,
+} from "./tool-context";
 import type { ToolId } from "../registries/tool";
 import { canvasKeyYields } from "../focus/key-ownership";
 import { useEditorKeys } from "./editor-root";
@@ -342,11 +346,12 @@ export function EditContextController() {
     }
     // Unchanged since entry — the user has not reached for anything.
     if (activeTool === toolAtEntryRef.current) return;
-    if (active.toolIds.includes(activeTool)) return;
-    // Hand and Zoom are how you LOOK at what you are editing; picking
-    // one is not reaching for another editing tool. Leaving here sent
-    // the user out of the raster frame for zooming into its pixels.
-    if (VIEW_TOOL_IDS.includes(activeTool)) return;
+    // The context's own tools stay, and so do Hand and Zoom: they are
+    // how you LOOK at what you are editing, and picking one is not
+    // reaching for another editing tool (leaving here sent the user out
+    // of the raster frame for zooming into its pixels). Free Transform
+    // works on the frame being edited (ADR 311).
+    if (toolStaysInContext(activeTool, active.toolIds)) return;
     // COMMIT, not cancel: the user reached for another tool, they did
     // not press Esc. Discarding their in-flight edit because they
     // clicked the wrong thing would be its own defect.

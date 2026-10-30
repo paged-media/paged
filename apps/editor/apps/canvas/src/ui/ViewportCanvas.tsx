@@ -182,6 +182,10 @@ export interface ViewportCanvasProps {
     /** Per-position cursor refinement from the handler's `cursorAt`. */
     hoverCursor?: (e: CanvasPointerEvent) => string | undefined;
   } | null;
+  /** Editor ADR 311 — the tool in hand works on the frame an edit context
+   *  was entered on (Free Transform): a press over that frame goes to the
+   *  tool, not to the context's content pointer. */
+  toolSharedAcrossContexts?: boolean;
   /** Phase 3 — CSS cursor for the active tool. Overrides the default
    * pan affordance when set. */
   cursor?: string;
@@ -695,6 +699,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // handler skip this block entirely (unchanged tool behavior).
     if (
       e.button === 0 &&
+      !props.toolSharedAcrossContexts &&
       editContextStack?.active &&
       editContextStack.activeContribution?.onContentPointerDown
     ) {
@@ -1740,6 +1745,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         elementGeometry={props.elementGeometry}
         hostRef={wrapperRef}
         hostSize={hostSize}
+        passThrough={props.toolSharedAcrossContexts}
       />
       {/* F-36 — where typed and composed text arrives while a caret is
           in a story (ADR 234). */}
