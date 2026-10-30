@@ -183,8 +183,16 @@ fn clip_color(c0: vec3<f32>) -> vec3<f32> {
     let l = lum(c);
     let n = min(c.r, min(c.g, c.b));
     let x = max(c.r, max(c.g, c.b));
-    if (n < 0.0) { c = vec3<f32>(l) + (c - vec3<f32>(l)) * l / (l - n); }
-    if (x > 1.0) { c = vec3<f32>(l) + (c - vec3<f32>(l)) * (1.0 - l) / (x - l); }
+    // A FLAT colour out of range (every channel the luminance) has no
+    // spread to scale: it clips to the limit the formula tends to (0 or
+    // 1), not 0/0. Inside [0, 1] it never arises; past it — a backdrop an
+    // exposure lifted above 1 under a transparent texel — it was NaN.
+    if (n < 0.0) {
+        if (l > n) { c = vec3<f32>(l) + (c - vec3<f32>(l)) * l / (l - n); } else { c = vec3<f32>(0.0); }
+    }
+    if (x > 1.0) {
+        if (x > l) { c = vec3<f32>(l) + (c - vec3<f32>(l)) * (1.0 - l) / (x - l); } else { c = vec3<f32>(1.0); }
+    }
     return c;
 }
 fn set_lum(c: vec3<f32>, l: f32) -> vec3<f32> {
