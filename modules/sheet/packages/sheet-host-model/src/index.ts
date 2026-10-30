@@ -223,6 +223,7 @@ export {
   type ChartTextLabel,
   type LinePrim,
   type NativeFeather,
+  type NativeEffect,
   type NativeFx,
   type NativeGlow,
   type NativeGradient,

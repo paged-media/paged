@@ -77,7 +77,7 @@ fn shadow(tag: &str, s: &Shadow, color: ColorXml, outer: bool) -> String {
 /// `a:effectLst` for `fx`, its children in the schema's order (blur,
 /// fillOverlay, glow, innerShdw, outerShdw, prstShdw, reflection,
 /// softEdge); `None` when there is no effect. A fill overlay is written
-/// when its paint is a solid colour.
+/// when its paint is a solid colour or a linear gradient.
 pub fn effects(fx: &Effects, color: ColorXml) -> Option<String> {
     if fx.is_empty() {
         return None;
@@ -91,11 +91,29 @@ pub fn effects(fx: &Effects, color: ColorXml) -> Option<String> {
         ));
     }
     if let Some(o) = &fx.fill_overlay {
-        if let Paint::Solid { rgb, alpha, .. } = &o.paint {
-            out.push_str(&format!(
-                r#"<a:fillOverlay blend="{}"><a:solidFill>{}</a:solidFill></a:fillOverlay>"#,
-                escape_attr(&o.blend),
+        let fill = match &o.paint {
+            Paint::Solid { rgb, alpha, .. } => Some(format!(
+                "<a:solidFill>{}</a:solidFill>",
                 color(*rgb, *alpha)
+            )),
+            Paint::Linear { stops, angle } => Some(format!(
+                r#"<a:gradFill rotWithShape="1"><a:gsLst>{}</a:gsLst><a:lin ang="{}" scaled="0"/></a:gradFill>"#,
+                stops
+                    .iter()
+                    .map(|s| format!(
+                        r#"<a:gs pos="{}">{}</a:gs>"#,
+                        (s.pos * 1000.0).round() as i64,
+                        color(s.rgb, s.alpha)
+                    ))
+                    .collect::<String>(),
+                deg_to_angle(angle.rem_euclid(360.0))
+            )),
+            _ => None,
+        };
+        if let Some(fill) = fill {
+            out.push_str(&format!(
+                r#"<a:fillOverlay blend="{}">{fill}</a:fillOverlay>"#,
+                escape_attr(&o.blend),
             ));
         }
     }
@@ -233,6 +251,42 @@ mod tests {
         assert_eq!(back.blur, fx.blur);
         assert_eq!(back.reflection, fx.reflection);
         assert_eq!(effects(&Effects::default(), &srgb), None);
+    }
+
+    #[test]
+    fn a_gradient_fill_overlay_reads_back() {
+        use crate::drawingml::resolved::{FillOverlay, Stop};
+        let overlay = FillOverlay {
+            blend: "screen".into(),
+            paint: Paint::Linear {
+                stops: vec![
+                    Stop {
+                        pos: 0.0,
+                        rgb: [255, 0, 0],
+                        alpha: 1.0,
+                    },
+                    Stop {
+                        pos: 100.0,
+                        rgb: [0, 0, 255],
+                        alpha: 0.5,
+                    },
+                ],
+                angle: 90.0,
+            },
+        };
+        let fx = Effects {
+            fill_overlay: Some(overlay.clone()),
+            ..Effects::default()
+        };
+        let xml = effects(&fx, &srgb).unwrap();
+        let ns = r#" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main""#;
+        let el = parse(
+            xml.replacen("<a:effectLst", &format!("<a:effectLst{ns}"), 1)
+                .as_bytes(),
+        )
+        .unwrap();
+        let back = resolved::effects(&effect::effects(&el, &|_| None), &(), &mut |_| {});
+        assert_eq!(back.fill_overlay, Some(overlay));
     }
 
     #[test]

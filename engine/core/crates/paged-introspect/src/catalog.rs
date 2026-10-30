@@ -916,6 +916,10 @@ property_paths! {
         FrameFillEffectStack => "frameFillEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         FrameStrokeEffectStack => "frameStrokeEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         FrameContentEffectStack => "frameContentEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        // Engine ADR 1043 — native appearance: the whole layer list, and
+        // one layer by index.
+        FrameAppearance => "frameAppearance" : list_of("PaintLayerSpec", Wire::Appearance),
+        FrameAppearanceLayer => "frameAppearanceLayer" : operation("AppearanceLayerSpec", Wire::AppearanceLayer),
         CellFillColor => "cellFillColor" : color().idml(idml![attr(Cell | CellStyle, FillColor)]),
         CellFillTint => "cellFillTint" : pct().default_num(100.0).idml(idml![attr(Cell | CellStyle, FillTint)]),
         CellInsetTop => "cellInsetTop" : length_pos().idml(idml![attr(Cell, TextTopInset)]),
@@ -1494,7 +1498,9 @@ mod tests {
         // 264 -> 265: draw ADR 365 — the symbol an instance draws.
         //
         // 265 -> 266: ADR 1037 — an image frame's filter stack.
-        assert_eq!(cat.settable_paths.len(), 266, "settable path count drifted");
+        //
+        // 266 -> 268: ADR 1043 — an item's appearance, and one layer of it.
+        assert_eq!(cat.settable_paths.len(), 268, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

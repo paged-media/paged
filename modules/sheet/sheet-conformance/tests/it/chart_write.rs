@@ -487,7 +487,13 @@ fn chart_effects_reach_the_geometry_and_survive_an_edit__feat__sheet_chart_nativ
     assert_eq!(gr.angle, Some(-90.0));
     assert_eq!(gr.stops[0].1, "#4472C4");
     assert_eq!(bar.drop_shadow.as_ref().unwrap().opacity, 40.0);
-    assert_eq!(g.losses.len(), 1, "the reflection: {:?}", g.losses);
+    // The plot area's reflection rides its effect stack (engine ADR 1008).
+    assert!(g.losses.is_empty(), "{:?}", g.losses);
+    assert!(
+        fxs[0].effect_stack.iter().any(|e| e.kind == "reflection"),
+        "{:?}",
+        fxs[0]
+    );
     // A document swatch on the plot area: its fill is the swatch, its
     // effects stay in the file.
     swatch_on_the_plot_area(&mut s);
