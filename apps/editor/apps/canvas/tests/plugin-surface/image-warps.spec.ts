@@ -41,6 +41,7 @@ import {
 } from "../journey/plugins/image-helpers";
 
 const C = "media.paged.image.command";
+const GPU = (process.env.BACKEND ?? "").toLowerCase() === "gpu";
 const T = "media.paged.image.tool";
 
 // The 96 px image is fit into FRAME (270 × 200 pt): 200/96 pt a pixel,
@@ -70,6 +71,8 @@ const readout = (page: Page, key: string) =>
  *  the GPU, and Cancel leaves the image as it was. */
 async function okApplies(page: Page, label: RegExp): Promise<void> {
   const ok = page.locator("[data-filter-ok]").first();
+  // On the GPU backend (BACKEND=gpu) the dialog must be able to apply.
+  if (GPU) await expect(ok).toBeEnabled();
   if (await ok.isDisabled()) {
     await expect
       .poll(() => statusText(page), { timeout: 30_000 })
@@ -167,6 +170,6 @@ test.describe("paged.image · warps", () => {
         async () => `${await sourceReadout(page)} | ${await statusText(page)}`,
         { timeout: 30_000 },
       )
-      .toMatch(/(\b4\d×4\d\b|GPU-only|GPU)/);
+      .toMatch(GPU ? /\b4\d×4\d\b/ : /(\b4\d×4\d\b|GPU)/);
   });
 });
