@@ -44,6 +44,7 @@ import { t } from "@paged-media/strings";
 
 import type { DocEngine } from "./engine.js";
 import { DOC } from "./messages.js";
+import { pourPageItems } from "./page-items.js";
 import { applyStyleOpsReporting, pourSteps } from "./pour.js";
 
 /** What a standalone open produced: the section stories (save-back reads
@@ -229,6 +230,7 @@ export async function finishStandalone(
     await pourSteps(host, buildStoryBlocks(groups[k], storyIds[k], { notes }));
   }
   await pourHeadersFooters(host, ir);
+  await pourPageItems(host, ir);
   await setFootnoteOptions(host, ir);
 
   const frameId: ElementId = { kind: "textFrame", id: "docx_f0" };

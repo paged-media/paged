@@ -1,0 +1,998 @@
+{
+ "pages": [
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [
+    {
+     "top": 144.0,
+     "left": 288.0,
+     "width": 108.0,
+     "height": 72.0
+    }
+   ],
+   "lines": [
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 432.0,
+     "height": 13.0,
+     "text": "FA P0. The quick brown fox jumps over the lazy dog while the five boxing wizards jump "
+    },
+    {
+     "top": 86.0,
+     "left": 72.0,
+     "width": 464.0,
+     "height": 13.0,
+     "text": "quickly and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the "
+    },
+    {
+     "top": 100.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "lazy dog while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly "
+    },
+    {
+     "top": 114.0,
+     "left": 72.0,
+     "width": 34.0,
+     "height": 13.0,
+     "text": "in fog. "
+    },
+    {
+     "top": 128.0,
+     "left": 72.0,
+     "width": 432.0,
+     "height": 13.0,
+     "text": "FA P1. The quick brown fox jumps over the lazy dog while the five boxing wizards jump "
+    },
+    {
+     "top": 142.0,
+     "left": 72.0,
+     "width": 172.0,
+     "height": 13.0,
+     "text": "quickly and a wizard's job is to vex "
+    },
+    {
+     "top": 142.0,
+     "left": 405.0,
+     "width": 135.0,
+     "height": 13.0,
+     "text": "chumps quickly in fog. The "
+    },
+    {
+     "top": 155.0,
+     "left": 72.0,
+     "width": 200.0,
+     "height": 13.0,
+     "text": "quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 155.0,
+     "left": 405.0,
+     "width": 105.0,
+     "height": 13.0,
+     "text": "while the five boxing "
+    },
+    {
+     "top": 169.0,
+     "left": 72.0,
+     "width": 207.0,
+     "height": 13.0,
+     "text": "wizards jump quickly and a wizard's job is "
+    },
+    {
+     "top": 169.0,
+     "left": 405.0,
+     "width": 124.0,
+     "height": 13.0,
+     "text": "to vex chumps quickly in "
+    },
+    {
+     "top": 183.0,
+     "left": 72.0,
+     "width": 22.0,
+     "height": 13.0,
+     "text": "fog. "
+    },
+    {
+     "top": 197.0,
+     "left": 72.0,
+     "width": 197.0,
+     "height": 13.0,
+     "text": "FA P2. The quick brown fox jumps over "
+    },
+    {
+     "top": 197.0,
+     "left": 405.0,
+     "width": 130.0,
+     "height": 13.0,
+     "text": "the lazy dog while the five "
+    },
+    {
+     "top": 211.0,
+     "left": 72.0,
+     "width": 172.0,
+     "height": 13.0,
+     "text": "boxing wizards jump quickly and a "
+    },
+    {
+     "top": 211.0,
+     "left": 405.0,
+     "width": 104.0,
+     "height": 13.0,
+     "text": "wizard's job is to vex "
+    },
+    {
+     "top": 224.0,
+     "left": 72.0,
+     "width": 441.0,
+     "height": 13.0,
+     "text": "chumps quickly in fog. The quick brown fox jumps over the lazy dog while the five boxing "
+    },
+    {
+     "top": 238.0,
+     "left": 72.0,
+     "width": 354.0,
+     "height": 13.0,
+     "text": "wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 252.0,
+     "left": 72.0,
+     "width": 432.0,
+     "height": 13.0,
+     "text": "FA P3. The quick brown fox jumps over the lazy dog while the five boxing wizards jump "
+    },
+    {
+     "top": 266.0,
+     "left": 72.0,
+     "width": 464.0,
+     "height": 13.0,
+     "text": "quickly and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the "
+    },
+    {
+     "top": 280.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "lazy dog while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly "
+    },
+    {
+     "top": 293.0,
+     "left": 72.0,
+     "width": 34.0,
+     "height": 13.0,
+     "text": "in fog. "
+    },
+    {
+     "top": 307.0,
+     "left": 72.0,
+     "width": 432.0,
+     "height": 13.0,
+     "text": "FA P4. The quick brown fox jumps over the lazy dog while the five boxing wizards jump "
+    },
+    {
+     "top": 321.0,
+     "left": 72.0,
+     "width": 464.0,
+     "height": 13.0,
+     "text": "quickly and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the "
+    },
+    {
+     "top": 335.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "lazy dog while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly "
+    },
+    {
+     "top": 349.0,
+     "left": 72.0,
+     "width": 34.0,
+     "height": 13.0,
+     "text": "in fog. "
+    },
+    {
+     "top": 362.0,
+     "left": 72.0,
+     "width": 432.0,
+     "height": 13.0,
+     "text": "FA P5. The quick brown fox jumps over the lazy dog while the five boxing wizards jump "
+    },
+    {
+     "top": 376.0,
+     "left": 72.0,
+     "width": 464.0,
+     "height": 13.0,
+     "text": "quickly and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the "
+    },
+    {
+     "top": 390.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "lazy dog while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly "
+    },
+    {
+     "top": 404.0,
+     "left": 72.0,
+     "width": 31.0,
+     "height": 13.0,
+     "text": "in fog."
+    }
+   ]
+  },
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [
+    {
+     "top": 108.0,
+     "left": 432.0,
+     "width": 108.0,
+     "height": 72.0
+    }
+   ],
+   "lines": [
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FB P0. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 86.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 100.0,
+     "left": 72.0,
+     "width": 345.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex "
+    },
+    {
+     "top": 114.0,
+     "left": 72.0,
+     "width": 114.0,
+     "height": 13.0,
+     "text": "chumps quickly in fog. "
+    },
+    {
+     "top": 128.0,
+     "left": 72.0,
+     "width": 327.0,
+     "height": 13.0,
+     "text": "FB P1. The quick brown fox jumps over the lazy dog while the five "
+    },
+    {
+     "top": 142.0,
+     "left": 72.0,
+     "width": 316.0,
+     "height": 13.0,
+     "text": "boxing wizards jump quickly and a wizard's job is to vex chumps "
+    },
+    {
+     "top": 155.0,
+     "left": 72.0,
+     "width": 343.0,
+     "height": 13.0,
+     "text": "quickly in fog. The quick brown fox jumps over the lazy dog while the "
+    },
+    {
+     "top": 169.0,
+     "left": 72.0,
+     "width": 338.0,
+     "height": 13.0,
+     "text": "five boxing wizards jump quickly and a wizard's job is to vex chumps "
+    },
+    {
+     "top": 183.0,
+     "left": 72.0,
+     "width": 73.0,
+     "height": 13.0,
+     "text": "quickly in fog. "
+    },
+    {
+     "top": 197.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FB P2. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 211.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 224.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 238.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FB P3. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 252.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 266.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 280.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FB P4. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 293.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 307.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 321.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FB P5. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 335.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 349.0,
+     "left": 72.0,
+     "width": 456.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog."
+    }
+   ]
+  },
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [
+    {
+     "top": 155.0,
+     "left": 252.0,
+     "width": 108.0,
+     "height": 72.0
+    }
+   ],
+   "lines": [
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FC P0. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 86.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 100.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 114.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FC P1. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 128.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 142.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 227.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FC P2. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 241.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 255.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 269.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FC P3. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 283.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 296.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 310.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FC P4. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 324.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 338.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 352.0,
+     "left": 72.0,
+     "width": 471.0,
+     "height": 13.0,
+     "text": "FC P5. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 365.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 379.0,
+     "left": 72.0,
+     "width": 456.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog."
+    }
+   ]
+  },
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [
+    {
+     "top": 182.0,
+     "left": 72.0,
+     "width": 108.0,
+     "height": 72.0
+    }
+   ],
+   "lines": [
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 432.0,
+     "height": 13.0,
+     "text": "FD P0. The quick brown fox jumps over the lazy dog while the five boxing wizards jump "
+    },
+    {
+     "top": 86.0,
+     "left": 72.0,
+     "width": 464.0,
+     "height": 13.0,
+     "text": "quickly and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the "
+    },
+    {
+     "top": 100.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "lazy dog while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly "
+    },
+    {
+     "top": 114.0,
+     "left": 72.0,
+     "width": 34.0,
+     "height": 13.0,
+     "text": "in fog. "
+    },
+    {
+     "top": 128.0,
+     "left": 72.0,
+     "width": 432.0,
+     "height": 13.0,
+     "text": "FD P1. The quick brown fox jumps over the lazy dog while the five boxing wizards jump "
+    },
+    {
+     "top": 142.0,
+     "left": 72.0,
+     "width": 464.0,
+     "height": 13.0,
+     "text": "quickly and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the "
+    },
+    {
+     "top": 155.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "lazy dog while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly "
+    },
+    {
+     "top": 169.0,
+     "left": 72.0,
+     "width": 34.0,
+     "height": 13.0,
+     "text": "in fog. "
+    },
+    {
+     "top": 183.0,
+     "left": 189.0,
+     "width": 328.0,
+     "height": 13.0,
+     "text": "FD P2. The quick brown fox jumps over the lazy dog while the five "
+    },
+    {
+     "top": 197.0,
+     "left": 189.0,
+     "width": 316.0,
+     "height": 13.0,
+     "text": "boxing wizards jump quickly and a wizard's job is to vex chumps "
+    },
+    {
+     "top": 211.0,
+     "left": 189.0,
+     "width": 343.0,
+     "height": 13.0,
+     "text": "quickly in fog. The quick brown fox jumps over the lazy dog while the "
+    },
+    {
+     "top": 224.0,
+     "left": 189.0,
+     "width": 338.0,
+     "height": 13.0,
+     "text": "five boxing wizards jump quickly and a wizard's job is to vex chumps "
+    },
+    {
+     "top": 238.0,
+     "left": 189.0,
+     "width": 73.0,
+     "height": 13.0,
+     "text": "quickly in fog. "
+    },
+    {
+     "top": 252.0,
+     "left": 189.0,
+     "width": 328.0,
+     "height": 13.0,
+     "text": "FD P3. The quick brown fox jumps over the lazy dog while the five "
+    },
+    {
+     "top": 266.0,
+     "left": 72.0,
+     "width": 441.0,
+     "height": 13.0,
+     "text": "boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. The quick "
+    },
+    {
+     "top": 280.0,
+     "left": 72.0,
+     "width": 454.0,
+     "height": 13.0,
+     "text": "brown fox jumps over the lazy dog while the five boxing wizards jump quickly and a wizard's "
+    },
+    {
+     "top": 293.0,
+     "left": 72.0,
+     "width": 176.0,
+     "height": 13.0,
+     "text": "job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 307.0,
+     "left": 72.0,
+     "width": 432.0,
+     "height": 13.0,
+     "text": "FD P4. The quick brown fox jumps over the lazy dog while the five boxing wizards jump "
+    },
+    {
+     "top": 321.0,
+     "left": 72.0,
+     "width": 464.0,
+     "height": 13.0,
+     "text": "quickly and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the "
+    },
+    {
+     "top": 335.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "lazy dog while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly "
+    },
+    {
+     "top": 349.0,
+     "left": 72.0,
+     "width": 34.0,
+     "height": 13.0,
+     "text": "in fog. "
+    },
+    {
+     "top": 362.0,
+     "left": 72.0,
+     "width": 432.0,
+     "height": 13.0,
+     "text": "FD P5. The quick brown fox jumps over the lazy dog while the five boxing wizards jump "
+    },
+    {
+     "top": 376.0,
+     "left": 72.0,
+     "width": 464.0,
+     "height": 13.0,
+     "text": "quickly and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the "
+    },
+    {
+     "top": 390.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "lazy dog while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly "
+    },
+    {
+     "top": 404.0,
+     "left": 72.0,
+     "width": 31.0,
+     "height": 13.0,
+     "text": "in fog."
+    }
+   ]
+  },
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [
+    {
+     "top": 360.0,
+     "left": 144.0,
+     "width": 108.0,
+     "height": 72.0
+    }
+   ],
+   "lines": [
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 470.0,
+     "height": 13.0,
+     "text": "FE P0. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 86.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 100.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 114.0,
+     "left": 72.0,
+     "width": 470.0,
+     "height": 13.0,
+     "text": "FE P1. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 128.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 142.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 155.0,
+     "left": 72.0,
+     "width": 470.0,
+     "height": 13.0,
+     "text": "FE P2. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 169.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 183.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 197.0,
+     "left": 72.0,
+     "width": 470.0,
+     "height": 13.0,
+     "text": "FE P3. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 211.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 224.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 238.0,
+     "left": 72.0,
+     "width": 470.0,
+     "height": 13.0,
+     "text": "FE P4. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 252.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 266.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 280.0,
+     "left": 72.0,
+     "width": 470.0,
+     "height": 13.0,
+     "text": "FE P5. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 293.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 307.0,
+     "left": 72.0,
+     "width": 456.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog."
+    }
+   ]
+  },
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [
+    {
+     "top": 432.0,
+     "left": 216.0,
+     "width": 108.0,
+     "height": 72.0
+    }
+   ],
+   "lines": [
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "FF P0. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 86.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 100.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 114.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "FF P1. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 128.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 142.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 155.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "FF P2. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 169.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 183.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 197.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "FF P3. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 211.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 224.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 238.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "FF P4. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 252.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 266.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 280.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "FF P5. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 293.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 307.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    }
+   ]
+  }
+ ]
+}

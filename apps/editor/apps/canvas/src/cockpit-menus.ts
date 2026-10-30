@@ -53,6 +53,7 @@ defineMessages("menu", {
   Transform: "Transform",
   Effects: "Effects",
   "Effects…": "Effects…",
+  "Picture adjustments…": "Picture adjustments…",
 });
 
 const soon = (
