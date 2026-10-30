@@ -276,6 +276,8 @@ impl Palette {
                         stop_color: c.clone(),
                         location_pct: pt(*pos),
                         midpoint_pct: None,
+                        opacity_pct: None,
+                        inline_color: None,
                     })
                     .collect(),
             })

@@ -25,6 +25,13 @@ rows with a value: [
     }
   },
   {
+    "path": "frameGradientStrokeMode",
+    "value": {
+      "type": "text",
+      "value": "Within"
+    }
+  },
+  {
     "path": "frameTextWrapOffsets",
     "value": {
       "type": "bounds",
