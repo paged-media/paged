@@ -850,6 +850,22 @@
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.image.tool.ruler",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/workspace-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.count",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/workspace-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.note",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/workspace-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.slice",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/workspace-tools.spec.ts); matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.image.tool.eyedropper",
       "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/tool-gestures.spec.ts); matrix rows are the follow-up"
     },
