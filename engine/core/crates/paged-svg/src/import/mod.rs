@@ -890,6 +890,7 @@ impl<'a> Lower<'a> {
                         mask_id: one.id(),
                         mask_type: Some(kind.to_string()),
                         invert: None,
+                        clip: None,
                     });
                     // The mask artwork is no page item of its own any more.
                     self.items -= 1;
