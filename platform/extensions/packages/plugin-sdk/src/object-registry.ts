@@ -167,9 +167,9 @@ const refused = (code: ObjectErrorCode, reason: string): ObjectValue => ({
  *  escapes), as InDesign keeps label values (survey, 2026-10-06): still the
  *  same JSON, and an ASCII-only label comes back from InDesign byte-exact.
  *  U+007F (DEL) is escaped too, a control character XML discourages. The
- *  ONE label escape: `@paged-media/helpers` re-exports it as `asciiEscape`
- *  (extensions ADR 347; it escaped from U+007F there and from U+0080 here
- *  before). */
+ *  ONE label escape (extensions ADR 347): `@paged-media/helpers`'
+ *  `asciiEscape` is its twin, held equal to it by helpers' test (it escaped
+ *  from U+007F there and from U+0080 here before). */
 export function escapeLabelValue(text: string): string {
   return text.replace(
     /[\u007f-￿]/g,

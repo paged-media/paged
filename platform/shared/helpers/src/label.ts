@@ -25,8 +25,6 @@
 // written ASCII-only: every other character as a `\uXXXX` escape, which is
 // still the same JSON.
 
-import { escapeLabelValue } from "@paged-media/plugin-sdk";
-
 /** The namespace every plugin label key starts with. */
 export const LABEL_PREFIX = "x-paged:";
 
@@ -42,7 +40,17 @@ export function labelKey(pluginId: string, sub?: string): string {
  *  ASCII-only label comes back from InDesign byte-exact. The SDK's one
  *  label escape (`escapeLabelValue`, the lowering kit, extensions ADR 347),
  *  re-exported: a plugin and a built-in write the same bytes. */
-export const asciiEscape: (json: string) => string = escapeLabelValue;
+/** Every character from U+007F up as `\uXXXX` (a surrogate pair as two
+ *  escapes): plugin-sdk's `escapeLabelValue`, the one label escape
+ *  (extensions ADR 347), byte for byte — a test holds the two equal. A
+ *  twin, not a re-export: an import of the SDK's entry here would load its
+ *  catalog in every page and spec that reads a label. */
+export function asciiEscape(json: string): string {
+  return json.replace(
+    /[\u007f-\uffff]/g,
+    (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
+  );
+}
 
 /** `JSON.stringify(value)`, ASCII-only ([`asciiEscape`]). */
 export function asciiJson(value: unknown): string {

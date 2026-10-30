@@ -3,8 +3,8 @@
 - **Status:** Accepted 2026-10-29.
 - **Scope:** `packages/plugin-sdk/src/lowering.ts` (`NativeFx` and its parts, `nativeFxOps`,
   `nativeFxColors`, `nativeGradientId`, `nativeGradientMintOps`), `object-registry.ts`
-  (`escapeLabelValue` from U+007F), `index.ts`; `platform/shared/helpers` (`asciiEscape`
-  re-exported). Adopted by paged.sheet (sheet ADR 527: `chartFxOps`, `chartGradientId`,
+  (`escapeLabelValue` from U+007F), `index.ts`; `platform/shared/helpers` (`asciiEscape`,
+  its twin). Adopted by paged.sheet (sheet ADR 527: `chartFxOps`, `chartGradientId`,
   `gradientMintOps`, the table pictures) and paged.doc (doc ADR 619). Engine side: engine ADR
   1045. Plan Phase 11 C2, narrowed by the 2026-10-29 scope decision to the look translator and
   the label escape.
@@ -43,11 +43,13 @@ escaped from U+0080, `@paged-media/helpers` from U+007F.
   nothing).
 - **One label escape.** `escapeLabelValue` escapes every character from U+007F up (DEL is a
   control character XML discourages; a surrogate pair is two escapes); `@paged-media/helpers`'
-  `asciiEscape` is that function, re-exported, so a plugin and a built-in write a label's bytes
-  alike.
+  `asciiEscape` is its twin, held equal to it byte for byte by helpers' test, so a plugin and a
+  built-in write a label's bytes alike. A twin, not a re-export: helpers is read by every page and
+  spec that touches a label, and the SDK's entry would load its catalog there (a Playwright spec
+  cannot import the catalog's JSON without an import attribute).
 
 The additions are additive: no wire change, no protocol bump. The contract version moves
-(`0.74.3-canary.45`, contract-guard).
+(`0.74.3-canary.50` as landed, contract-guard).
 
 ## Consequences
 
@@ -58,5 +60,7 @@ The additions are additive: no wire change, no protocol bump. The contract versi
 - The rest of C2 — a batch builder, `$h:` handle and `minted` helpers, the page origin, the label
   envelope codec in the SDK — is not in this record (scope decision 2026-10-29); the envelope
   codec stays in helpers, on the one escape.
-- `NativeFx` carries what dml-native lowers; a DrawingML blur, reflection or fill overlay is
-  still the mapper's reported loss, though ADR 1008's stack could hold them (plan C10).
+- `NativeFx` carries what dml-native lowers, its effect stack included (plan C10, the shared
+  resolver): `nativeFxOps` writes the stack last as `frameEffectStack`, its InDesign entries taking
+  the parameters written before it, its colours as swatches; an unfilled item names no gradient
+  feather in it.
