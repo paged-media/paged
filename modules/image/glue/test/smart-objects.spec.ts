@@ -204,7 +204,7 @@ describe("[image.layers.smart-objects-full] contents and links", () => {
     const rows = () =>
       (
         links.readCollection!({ collection: "links" }) as {
-          rows: Array<{
+          rows: ReadonlyArray<{
             hostSelfId: string;
             status: string;
             actions: Record<string, string>;
