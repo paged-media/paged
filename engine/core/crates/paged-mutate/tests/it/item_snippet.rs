@@ -526,6 +526,7 @@ fn a_masked_named_item_pastes_with_its_mask_and_name__feat__editor_shell_import_
             mask_item: "mask-art".into(),
             mask_type: paged_model::OpacityMaskType::Alpha,
             invert: true,
+            clip: true,
         },
     );
     snippet

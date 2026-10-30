@@ -129,6 +129,7 @@ pub(super) fn apply_opacity_mask(
     mask: &NodeId,
     mask_type: OpacityMaskType,
     invert: bool,
+    clip: bool,
 ) -> Result<AppliedOperation, OperationError> {
     if !maskable(target) {
         return Err(reject_text_frame(target));
@@ -195,6 +196,7 @@ pub(super) fn apply_opacity_mask(
                 mask_item: mask.self_id().to_string(),
                 mask_type,
                 invert,
+                clip,
             },
         );
         return Ok(AppliedOperation {
@@ -203,6 +205,7 @@ pub(super) fn apply_opacity_mask(
                 mask: mask.clone(),
                 mask_type: OpacityMaskMode::from_model(mask_type),
                 invert,
+                clip,
             },
             inverse: Operation::ReleaseOpacityMask {
                 target: target.clone(),
@@ -290,6 +293,7 @@ pub(super) fn apply_release_opacity_mask(
                 mask: mask_node.clone(),
                 mask_type: OpacityMaskMode::from_model(entry.mask_type),
                 invert: entry.invert,
+                clip: entry.clip,
             },
             invalidation: InvalidationHint {
                 structural: true,

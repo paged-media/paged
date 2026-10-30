@@ -43,6 +43,10 @@
 //! **The walk** ([`walk`]) is the one traversal of a usvg tree the
 //! raster lane, the placed-SVG vector lane and the import share.
 //!
+//! **The limits** ([`limits`]) bound every SVG the engine reads — size,
+//! node count and nesting, before and after `<use>` expands — and refuse
+//! one past them with a typed error instead of exhausting the worker.
+//!
 //! Both halves are pure Rust and wasm-safe; neither reads a file or the
 //! system's fonts.
 
@@ -50,6 +54,7 @@
 pub mod export;
 #[cfg(feature = "import")]
 pub mod import;
+pub mod limits;
 pub mod paint;
 #[cfg(any(feature = "import", feature = "export"))]
 pub mod report;
