@@ -12,6 +12,7 @@ concurrency:
 # server one. A minimal lane: the workspace must resolve from the committed
 # Cargo.lock and check, and must not reach flo_curves (see the guard).
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
