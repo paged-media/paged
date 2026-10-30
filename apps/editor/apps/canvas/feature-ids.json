@@ -5,8 +5,8 @@
     "chrome": 4,
     "command": 847,
     "keybinding": 166,
-    "menu": 597,
-    "panel": 144,
+    "menu": 598,
+    "panel": 145,
     "tool": 126
   },
   "features": [
@@ -5801,6 +5801,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Edit/Settings/Models…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Edit/Undo",
       "kind": "menu",
       "owner": "editor"
@@ -8582,6 +8587,11 @@
     },
     {
       "id": "panel:paged.master-pages",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.models",
       "kind": "panel",
       "owner": "editor"
     },
