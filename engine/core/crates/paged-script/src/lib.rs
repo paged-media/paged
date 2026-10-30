@@ -1386,6 +1386,27 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("convertNoteToText"),
             1,
         )
+        // Engine ADRs 1040 and 1020 — Word's review.
+        .function(guarded(paged_record_change), js_string!("recordChange"), 5)
+        .function(guarded(paged_accept_change), js_string!("acceptChange"), 1)
+        .function(guarded(paged_reject_change), js_string!("rejectChange"), 1)
+        .function(
+            guarded(paged_insert_comment),
+            js_string!("insertComment"),
+            4,
+        )
+        .function(guarded(paged_reply_comment), js_string!("replyComment"), 2)
+        .function(
+            guarded(paged_resolve_comment),
+            js_string!("resolveComment"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_comment),
+            js_string!("deleteComment"),
+            1,
+        )
+        .function(guarded(paged_edit_comment), js_string!("editComment"), 3)
         // Engine ADRs 1018 and 1021.
         .function(guarded(paged_find), js_string!("find"), 2)
         .function(guarded(paged_find_replace), js_string!("findReplace"), 3)
@@ -3779,6 +3800,131 @@ fn paged_reject_tracked_change(
     Ok(apply_bool(&Mutation::RejectTrackedChange {
         story_id,
         offset,
+    }))
+}
+
+fn str_arg(args: &[JsValue], i: usize, ctx: &mut Context) -> JsResult<String> {
+    Ok(args
+        .get_or_undefined(i)
+        .to_string(ctx)?
+        .to_std_string_escaped())
+}
+
+/// `paged.recordChange(storyId, start, end, { kind, id?, author?, date?,
+/// beforeCharacterStyle?, beforeParagraphStyle? }, paragraph?)` — record a
+/// tracked change over story chars (engine ADR 1040).
+fn paged_record_change(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = str_arg(args, 0, ctx)?;
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let Some(change) = from_js::<paged_mutate::ChangeSpec>(args.get_or_undefined(3), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    let paragraph = match args.get_or_undefined(4) {
+        v if v.is_undefined() || v.is_null() => None,
+        v => Some(v.to_number(ctx)? as u32),
+    };
+    Ok(apply_bool(&Mutation::RecordChange {
+        story_id,
+        start,
+        end,
+        cell: None,
+        paragraph,
+        change,
+    }))
+}
+
+#[derive(Default, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct ChangeScope {
+    story_id: Option<String>,
+    id: Option<String>,
+    author: Option<String>,
+}
+
+/// `paged.acceptChange({ storyId?, id?, author? })` — accept one tracked
+/// change, an author's or all (engine ADR 1040).
+fn paged_accept_change(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let s = from_js::<ChangeScope>(args.get_or_undefined(0), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::AcceptChange {
+        story_id: s.story_id,
+        id: s.id,
+        author: s.author,
+    }))
+}
+
+/// `paged.rejectChange({ storyId?, id?, author? })` — reject them.
+fn paged_reject_change(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let s = from_js::<ChangeScope>(args.get_or_undefined(0), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::RejectChange {
+        story_id: s.story_id,
+        id: s.id,
+        author: s.author,
+    }))
+}
+
+/// `paged.insertComment(storyId, start, end, { text, id?, author?,
+/// initials?, date? })` — a comment on story chars (engine ADR 1020).
+fn paged_insert_comment(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = str_arg(args, 0, ctx)?;
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let Some(comment) = from_js::<paged_mutate::CommentSpec>(args.get_or_undefined(3), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::InsertComment {
+        story_id,
+        start,
+        end,
+        cell: None,
+        comment,
+    }))
+}
+
+/// `paged.replyComment(parentId, { text, id?, author?, initials?, date? })`.
+fn paged_reply_comment(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let parent_id = str_arg(args, 0, ctx)?;
+    let Some(comment) = from_js::<paged_mutate::CommentSpec>(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::ReplyComment { parent_id, comment }))
+}
+
+/// `paged.resolveComment(commentId, resolved = true)` — resolve a thread.
+fn paged_resolve_comment(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let comment_id = str_arg(args, 0, ctx)?;
+    let resolved = match args.get_or_undefined(1) {
+        v if v.is_undefined() => true,
+        v => v.to_boolean(),
+    };
+    Ok(apply_bool(&Mutation::ResolveComment {
+        comment_id,
+        resolved,
+    }))
+}
+
+/// `paged.deleteComment(commentId)` — a root takes its thread with it.
+fn paged_delete_comment(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let comment_id = str_arg(args, 0, ctx)?;
+    Ok(apply_bool(&Mutation::DeleteComment { comment_id }))
+}
+
+/// `paged.editComment(commentId, text, date?)` — rewrite a comment.
+fn paged_edit_comment(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let comment_id = str_arg(args, 0, ctx)?;
+    let text = str_arg(args, 1, ctx)?;
+    let date = match args.get_or_undefined(2) {
+        v if v.is_undefined() || v.is_null() => None,
+        v => Some(v.to_string(ctx)?.to_std_string_escaped()),
+    };
+    Ok(apply_bool(&Mutation::EditComment {
+        comment_id,
+        text,
+        date,
     }))
 }
 

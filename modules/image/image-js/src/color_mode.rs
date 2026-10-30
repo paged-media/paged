@@ -122,6 +122,24 @@ impl DocMode {
         DocMode::default()
     }
 
+    /// The mode of a PSD document (`None` for RGB and for the modes the
+    /// stack has no projection for); a CMYK document's profile is its own.
+    pub fn of_psd(file: &image_psd::model::PsdFile) -> Option<DocMode> {
+        use image_psd::model::ColorMode as P;
+        let mode = match file.header.color_mode {
+            P::Grayscale => ColorMode::Gray,
+            P::Cmyk => ColorMode::Cmyk,
+            P::Lab => ColorMode::Lab,
+            _ => return None,
+        };
+        Some(DocMode {
+            mode,
+            cmyk_profile: (mode == ColorMode::Cmyk)
+                .then(|| file.resources.icc_profile().map(Arc::from))
+                .flatten(),
+        })
+    }
+
     /// Whether pixels are projected at all (RGB, and CMYK without a
     /// profile, hold every sRGB colour).
     pub fn projects(&self) -> bool {
@@ -202,6 +220,14 @@ impl ModeTransform {
         let mut dev = vec![0f32; rgb.len() / 3 * self.space.channels()];
         self.to.apply_f32(rgb, &mut dev);
         dev
+    }
+
+    /// Straight RGB floats of the mode's device values — the transform
+    /// back ([`device_of`](Self::device_of)'s inverse).
+    pub fn rgb_of(&self, dev: &[f32]) -> Vec<f32> {
+        let mut rgb = vec![0f32; dev.len() / self.space.channels() * 3];
+        self.back.apply_f32(dev, &mut rgb);
+        rgb
     }
 
     /// `px` with every pixel of `region` (the whole buffer when `None`;

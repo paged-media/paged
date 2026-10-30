@@ -28,7 +28,8 @@
     "panels": [
       "media.paged.doc.panel.outline",
       "media.paged.doc.panel.properties",
-      "media.paged.doc.panel.references"
+      "media.paged.doc.panel.references",
+      "media.paged.doc.panel.review"
     ],
     "commands": [
       "media.paged.doc.command.placeDoc",
@@ -105,7 +106,25 @@
       "media.paged.doc.command.word.field",
       "media.paged.doc.command.word.bookmark",
       "media.paged.doc.command.word.indexEntry",
-      "media.paged.doc.command.word.pageSetup"
+      "media.paged.doc.command.word.pageSetup",
+      "media.paged.doc.command.review.toggleTrackChanges",
+      "media.paged.doc.command.review.newComment",
+      "media.paged.doc.command.review.acceptChange",
+      "media.paged.doc.command.review.rejectChange",
+      "media.paged.doc.command.review.acceptAll",
+      "media.paged.doc.command.review.rejectAll",
+      "media.paged.doc.command.review.nextChange",
+      "media.paged.doc.command.review.previousChange",
+      "media.paged.doc.command.review.nextComment",
+      "media.paged.doc.command.review.previousComment",
+      "media.paged.doc.command.review.markupSimple",
+      "media.paged.doc.command.review.markupAll",
+      "media.paged.doc.command.review.markupNone",
+      "media.paged.doc.command.review.markupOriginal",
+      "media.paged.doc.command.review.replyComment",
+      "media.paged.doc.command.review.resolveComment",
+      "media.paged.doc.command.review.deleteComment",
+      "media.paged.doc.command.review.showReview"
     ],
     "importers": [
       "media.paged.doc.importer.docx",
@@ -1561,6 +1580,412 @@
           "result": {
             "kind": "struct",
             "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.toggleTrackChanges",
+          "title": "Track Changes",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.newComment",
+          "title": "New Comment",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "text": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.acceptChange",
+          "title": "Accept",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.rejectChange",
+          "title": "Reject",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.acceptAll",
+          "title": "Accept All Changes",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "author": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.rejectAll",
+          "title": "Reject All Changes",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "author": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.nextChange",
+          "title": "Next Change",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.previousChange",
+          "title": "Previous Change",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.nextComment",
+          "title": "Next Comment",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.previousComment",
+          "title": "Previous Comment",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.markupSimple",
+          "title": "Simple Markup",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.markupAll",
+          "title": "All Markup",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.markupNone",
+          "title": "No Markup",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.markupOriginal",
+          "title": "Original",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.replyComment",
+          "title": "Reply",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "id": {
+                "kind": "text"
+              },
+              "text": {
+                "kind": "text"
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.resolveComment",
+          "title": "Resolve",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "id": {
+                "kind": "text",
+                "optional": true
+              },
+              "resolved": {
+                "kind": "bool",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.deleteComment",
+          "title": "Delete Comment",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.review.showReview",
+          "title": "Review",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "applied": {
+                "kind": "bool"
+              },
+              "id": {
+                "kind": "text",
+                "optional": true
+              }
+            }
           }
         }
       ],

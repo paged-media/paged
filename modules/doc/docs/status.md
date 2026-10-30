@@ -31,6 +31,62 @@ crate. That is the next lever if later waves outgrow the headroom.
 `opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
 fifth slower (see `Cargo.toml`).
 
+## W3 (files): tracked changes and comments read and saved back (2026-10-29)
+
+[Doc ADR 613](adr/613-tracked-changes-and-comments.md), over engine ADRs 1040 and 1020:
+
+- **Read.** `w:ins` / `w:moveTo` runs carry an insertion, `w:del` / `w:moveFrom` runs a
+  deletion (their `w:delText` shown), `w:rPrChange` a format change with the look before, a
+  mark's `w:ins` / `w:del` and `w:pPrChange` the paragraph's changes; a paragraph whose mark
+  is deleted stays a paragraph. `comments.xml`, `commentsExtended.xml` and `commentsIds.xml`
+  are read as threads (replies, resolved, durable ids) over the runs between
+  `w:commentRangeStart` and `w:commentRangeEnd`. `w:trackRevisions` is read. W0's "shown as
+  accepted" warning is now an info line counting the changes read.
+- **Pour.** After the text, one review step: `recordChange` per run, mark, property and cell
+  change (Word's ids as `docx-r<w:id>`, its authors and dates), `insertComment` /
+  `replyComment` per thread (`docx-c<w:id>`), then `documentTrackChanges` on when Word tracked.
+- **Save-back.** A body paragraph whose review markup changed in paged (accept, reject, a
+  change recorded, a thread added, answered or removed) is written whole from the read-back
+  runs with Word's markup (`docx-export/src/review.rs`); a tracked Enter splits it, an accepted
+  deleted mark or a rejected inserted one joins it to the next. The comment parts are rewritten
+  from the read-back threads (unchanged comments byte for byte) and made, with their
+  relationships and content types, when missing. A zero-edit save stays byte-identical.
+- **Word opens what paged saves**: `scripts/word-review-probe.sh` →
+  `docx-conformance/fixtures/review.word.json`.
+- Tests: `docx-conformance/tests/it/review.rs` (read, zero-edit identity, accept/reject,
+  format and property changes, recorded changes, split and join, reply/resolve/remove, a first
+  comment making the parts, a refused paragraph); the W0 tests restated in `w0_losses.rs`.
+- Not yet: a cell's accept or reject is not saved; moves, and paragraphs holding a field, note,
+  picture, link or content control, are refused on save (named in the save-back ledger);
+  `settings.xml` keeps Word's `w:trackRevisions`; comments in headers, footers and notes are
+  kept, not read.
+
+## W3 (UI): the Review panel and the markup margin band (2026-10-29)
+
+Doc ADR 613's chrome over engine ADRs 1040 (change tracking) and 1020 (range comments), contract
+C5 (extensions ADR 349 amendment 1) and editor ADR 300 (`src/word/review.tsx`,
+`src/word/review-model.ts`):
+
+- **Review panel** (`media.paged.doc.panel.review`): Track Changes on/off and the reviewer's
+  name, the markup view (Simple / All / No markup / Original), Previous / Next change, Accept
+  All / Reject All, accept or reject all by one author, each change with Accept / Reject, the
+  comment threads with reply, resolve / reopen and delete, New Comment.
+- **Margin band**: in All Markup a balloon per deletion, formatting change and comment thread
+  beside the page (insertions stay inline); in Simple Markup the threads only; none in No
+  markup and Original. Balloons carry their author's colour and the same buttons.
+- **Status bar**: "Track Changes: On/Off", a click toggles it.
+- **Keys** (scoped to `wordDocument`): Cmd+Shift+E toggles tracking, Cmd+Alt+M adds a comment
+  (a collapsed caret comments the word at the caret; an empty comment opens its balloon for
+  typing). Accepting or rejecting one change moves on to the next, as Word does.
+- **Commands**: 18 `media.paged.doc.command.review.*` commands, each with a typed twin in
+  `contributes.objectModel.commands` (ids, authors, text and `resolved` as typed arguments;
+  result `{ applied, id? }`).
+- Tests: `test/review.spec.ts` (the model, the band per view, every command's mutation),
+  `test/panels/review.dom.test.tsx` (the panel, the status item, a balloon's reply).
+- Not yet: a comment's text cannot be edited after its balloon closes (the engine's
+  `editComment` is wired for the new-comment balloon only); the author colours of the balloons
+  are the bundle's order of appearance and need not match the engine's text colours.
+
 ## W4a: floating objects, text boxes, nested tables, table look, language (2026-10-29)
 
 Doc ADR [614](adr/614-floating-objects-and-content-controls.md). Plugin only: Word mapped onto
@@ -255,7 +311,8 @@ of 2026-10-24):
   left is not shown; one that keeps content stays its own paragraph (accepting
   would join it to the next). Diagnostic (warning): "N tracked change(s) shown
   as accepted; review them in Word". The markup stays in the `.docx`.
-  Recording, accept and reject are W3.
+  Recording, accept and reject are W3. (Superseded by W3: tracked runs are
+  shown with their changes, see "W3 (files)".)
 - **Content controls keep their content.** Run-level (`w:sdt` in a
   paragraph), block-level (in the body and in table cells), row-level and
   cell-level controls show their content as plain paragraphs, runs, rows and
@@ -666,8 +723,8 @@ ops use.)
   images and internal `#anchor` links (a renderer door) → surfaced as honest
   ADR-007 diagnostics on open, not silently dropped. (Tracked changes were
   listed here, but until W0 nothing reported them: inserted text vanished
-  without a word. They are now shown as accepted with a diagnostic, see
-  "W0" at the top.)
+  without a word. They were shown as accepted with a diagnostic in W0 and are read as
+  changes since W3, see "W3 (files)".)
   (Page/column breaks, `w:pageBreakBefore` and odd/even sections now lower to
   the engine's break-before rule `paragraphStartParagraph`, core protocol 64,
   matched against Word's own page map `docx-conformance/fixtures/
