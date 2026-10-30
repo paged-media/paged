@@ -23,22 +23,7 @@
 // deflating them again). An entry is stored whenever deflating does not
 // make it smaller. No ZIP64: an archive over 4 GiB is refused.
 
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-
-/** The CRC-32 (IEEE) of `bytes`, as ZIP and PNG use it. */
-export function crc32(bytes: Uint8Array): number {
-  let c = 0xffffffff;
-  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff]! ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
+import { crc32 } from "./hash.ts";
 
 export interface ZipOptions {
   /** Raw DEFLATE (no zlib header) of an entry; absent: every entry is

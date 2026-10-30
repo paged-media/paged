@@ -134,6 +134,18 @@ const VOCAB: Record<string, Vocab> = {
   },
   clipboard: { values: ["none", "vector", "full"], cliSet: "CLIPBOARD" },
   scopes: { values: ["broad", "scoped"], cliSet: "SCOPES" },
+  ml: {
+    values: [
+      "segment",
+      "matting",
+      "inpaint",
+      "superres",
+      "landmarks",
+      "generate",
+      "edit",
+    ],
+    cliSet: "ML_CAPABILITIES",
+  },
   wasmPurposes: {
     values: ["layout", "codec", "compute", "engine"],
     cliSet: "WASM_PURPOSES",

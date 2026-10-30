@@ -388,6 +388,34 @@ export type {
 export type { MintedElement } from "./wire.js";
 
 export type {
+  MlCapability,
+  MlTier,
+  MlImage,
+  MlMask,
+  MlBox,
+  MlPoint,
+  MlProviderInfo,
+  MlProgress,
+  MlCallOptions,
+  MlAnswered,
+  MlSegmentRequest,
+  MlSegmentResult,
+  MlMattingRequest,
+  MlMattingResult,
+  MlInpaintRequest,
+  MlImageResult,
+  MlSuperresRequest,
+  MlLandmarksRequest,
+  MlFace,
+  MlLandmarksResult,
+  MlGenerateRequest,
+  MlEditRequest,
+  MlRequests,
+  MlResults,
+  MlSurface,
+} from "./ml.js";
+
+export type {
   ClipboardSurface,
   ClipboardPayload,
   TabularClipboard,

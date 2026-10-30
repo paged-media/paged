@@ -1,0 +1,13 @@
+$schema: "../../.moon/cache/schemas/project.json"
+
+# paged-ml-host: the Cargo workspace of the local generative-image host
+# (Tier B), a loopback HTTP sidecar over the user's stable-diffusion.cpp CLI.
+# Self-contained: no path dependency on the engine or another workspace.
+language: "rust"
+layer: "application"
+stack: "backend"
+tags: ["rust", "app"]
+
+project:
+  title: "apps/ml-host"
+  description: "paged-ml-host, the local generative-image host (a loopback sidecar over stable-diffusion.cpp)."

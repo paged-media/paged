@@ -1,0 +1,26 @@
+[package]
+name = "paged-ml-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged-ml-host: the local generative-image host (Tier B), a loopback HTTP API over the stable-diffusion.cpp CLI."
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "paged-ml-host"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[[test]]
+name = "it"
+path = "tests/it/main.rs"

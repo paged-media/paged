@@ -17,6 +17,7 @@ options:
   --no-default-font                  no fallback face: text no font answers for is not set (to see what a document is missing)
   --cmyk-profile <file.icc>          CMYK working space and PDF/X output intent (an ICC file)
   --engine-from <dir>                resolve the engine (@paged-media/paged) from this directory
+  --ml-host <url>                    the local image model host (paged-ml-host; default PAGED_ML_HOST_URL or http://127.0.0.1:7861)
   --text                             human-readable output instead of JSON
   -h, --help                         show help
 # stderr

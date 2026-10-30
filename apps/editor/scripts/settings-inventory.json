@@ -2,6 +2,20 @@
   "description": "Every configuration option the editor declares: persisted preferences and UI state, export options, feature flags, in-memory view options and URL flags. The source of truth for the setting: surface ids (setting:<id>). apps/canvas/test/unit/settings/storage-inventory.test.ts keeps it honest: every browser-storage call site in apps/editor (localStorage/sessionStorage getItem/setItem/removeItem/key/clear, indexedDB.open, navigator.storage.getDirectory) must be claimed by exactly one entry below (settings or excluded), and every entry's source must still hold its marker and its call sites. Tool options (<toolId>.<key>) are not listed: the gate enumerates them from the tool declarations. `sites` lists [method, first-argument expression] as written at the call site, comments ignored, whitespace collapsed.",
   "settings": [
     {
+      "id": "paged.ml.settings",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.ml.settings",
+      "default": { "variants": {}, "acknowledged": {} },
+      "effect": "Settings ▸ Models (editor ADR 290): the quantisation chosen per model and the licences acknowledged, by licence id (a changed licence asks again); read field by field (ADR 247)",
+      "source": "apps/editor/apps/canvas/src/ml/service.ts",
+      "marker": "\"paged.ml.settings\"",
+      "sites": [
+        ["getItem", "ML_SETTINGS_KEY"],
+        ["setItem", "ML_SETTINGS_KEY"]
+      ]
+    },
+    {
       "id": "paged.theme",
       "kind": "preference",
       "storage": "localStorage",
@@ -447,6 +461,14 @@
     }
   ],
   "excluded": [
+    {
+      "key": "OPFS paged-ml-models/<model id>",
+      "storage": "opfs",
+      "reason": "the Tier-A model cache of the ML service (editor ADR 290): model files the user installed with consent, hash-checked; user data, not configuration (Settings ▸ Models shows and removes them).",
+      "source": "apps/editor/apps/canvas/src/ml/model-store.ts",
+      "marker": "\"paged-ml-models\"",
+      "sites": [["getDirectory", ""]]
+    },
     {
       "key": "paged.server.<origin>.tokens, paged.server.<origin>.client:<redirectUri>",
       "storage": "localStorage",

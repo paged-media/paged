@@ -1,0 +1,30 @@
+$ paged-node ml --help
+# exit 0
+# stdout
+paged-node ml <health|generate|edit> [prompt]
+
+the local image model (paged-ml-host on this machine, extensions ADR 1100): its health, text to image, and an image edited by a prompt (mask, references); nothing leaves the machine
+
+options:
+  -o, --out <file.png>               write the image here (generate, edit)
+  --width <px>                       image width, a multiple of 8 (generate; default 1024)
+  --height <px>                      image height, a multiple of 8 (generate; default 1024)
+  --seed <n>                         the seed (-1: random)
+  --steps <n>                        denoising steps
+  --negative <text>                  what to keep out of the image (generate)
+  --image <in.png>                   the image to edit (edit)
+  --mask <mask.png>                  white where the edit may change the image (edit)
+  --ref <ref.png>                    a reference image, up to 10 (edit) (repeatable)
+  --strength <0..1>                  how far the masked region may move (edit)
+  --format <json|text>               output style (default json)
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  fallback face for text no registered font answers for (default: the bundled Inter)
+  --no-default-font                  no fallback face: text no font answers for is not set (to see what a document is missing)
+  --cmyk-profile <file.icc>          CMYK working space and PDF/X output intent (an ICC file)
+  --engine-from <dir>                resolve the engine (@paged-media/paged) from this directory
+  --ml-host <url>                    the local image model host (paged-ml-host; default PAGED_ML_HOST_URL or http://127.0.0.1:7861)
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+# stderr
+(empty)

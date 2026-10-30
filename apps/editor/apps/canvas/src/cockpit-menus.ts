@@ -54,6 +54,8 @@ defineMessages("menu", {
   Effects: "Effects",
   "Effects…": "Effects…",
   "Picture adjustments…": "Picture adjustments…",
+  Settings: "Settings",
+  "Models…": "Models…",
 });
 
 const soon = (
@@ -147,6 +149,8 @@ export const COCKPIT_MENU_SEAMS: MenuItemContribution[] = [
     32,
     "effects",
   ),
+  // ── Edit ▸ Settings ── editor ADR 290: the ML service's models.
+  panel("Edit/Settings/Models…", "paged.models", 90, "settings"),
   // ── Data (the data-publishing surface) ──
   //
   // D1 — these three were `soon(...)` seams whose labels duplicated

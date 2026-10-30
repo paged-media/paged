@@ -3189,3 +3189,36 @@ end }` in CONTENT offsets (an empty range anchors at a point); `kind` is free te
   (the editor's registry). The harness records bands (`marginBandsContributed()`).
 - **Additivity.** One `ContributeSurface` member, one `TextSurface` member, five types and an
   optional `ShellRegistries.marginBands`. An older host warns and registers nothing.
+
+## 31. The ML doors (ADR 1100 — `ml.<capability>@1`; editor ADR 290)
+
+**Seven doors, one surface.** `host.ml.segment | matting | inpaint | superres | landmarks |
+generate | edit`, each feature-flagged on its own (`ml.generate@1`, …), because a machine often
+has some capabilities and not others: a matting model installed and no local generative host, or
+the reverse. Images are RGBA and masks one byte per pixel: a bundle never sees a tensor, a model
+layout or a normalisation.
+
+**Live flags, not static ones.** Unlike most doors, whose flag says the backend is wired, an
+`ml.*@1` flag says a provider can answer NOW (installed and healthy). `supports()` asks the
+shared backend (`options.ml.supports(capability)`) at call time; `host.ml.onDidChange` tells a
+bundle to ask again. A bundle that offers Generative Fill shows it when the flag is true and,
+when it is false, says "local image model not running" rather than hiding it.
+
+**Providers, not models, are the unit.** The registry (`doors-ml.ts`) knows providers with a
+tier, capabilities and a status; it does not know ONNX, GGUF or HTTP. The editor's Tier-A
+providers run a worker, its Tier-B provider is `mlHostProvider` over `createMlHostClient`, and a
+test registers `fakeMlProvider`. Routing prefers Tier A for analysis and Tier B for generation;
+`options.tier` overrides. Every answer is stamped with `provider`, `tier` and `model` by the
+registry, so a provider cannot misreport the route.
+
+**Checks before routing.** `checkMlRequest` is the one validator (the surface, the typed commands
+and `paged-node ml` call it), so a malformed request fails the same way with or without a model.
+
+**Tier B over HTTP, one client.** The local host is a separate native process
+(`apps/ml-host`); the editor reaches it through its own origin (`/api/ml`, editor ADR 290) and
+`paged-node` directly. Both use the SDK's client: jobs are submitted, followed as server-sent
+events (progress, then a terminal event) and fetched as PNG; aborting cancels the job on the host
+before the caller hears of it.
+
+**Additivity.** New capabilities are new doors (`ml.<name>@1`), a changed request shape is `@2`.
+The capability vocabulary is gated like the others (`capability-vocabulary.spec.ts`).

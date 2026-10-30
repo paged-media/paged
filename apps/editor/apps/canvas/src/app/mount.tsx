@@ -117,7 +117,11 @@ import CanvasRenderWorker from "../worker/worker.ts?worker";
 import LibraryWorker from "../library-worker.ts?worker";
 import { connectLibrary } from "@paged-media/repository";
 import { BUILT_IN_TOOLS } from "@paged-media/tools";
-import { loadBundle } from "@paged-media/plugin-sdk";
+import { loadBundle, mlObjectModel } from "@paged-media/plugin-sdk";
+
+import { createEditorMlService } from "../ml/create-editor-ml";
+import { browserPngCodec } from "../ml/png-codec";
+import { setMlService } from "../ml/scope";
 import type { SchemaPanelRenderer as SchemaPanelRendererType } from "@paged-media/plugin-api";
 import { errorIdent, identOf } from "@paged-media/client";
 import {
@@ -658,6 +662,21 @@ function PluginBundles() {
     // bundle registers into the one shared registry.
     if (hostOptions.shared.actions)
       setRegisteredActionsSource(scope, hostOptions.shared.actions);
+    // Editor ADR 290: the ML service registers its providers into the ML
+    // backend every bundle shares (ml.*@1), Settings ▸ Models reads it, and
+    // scripts reach generation through paged.ml.generate / paged.ml.edit.
+    const mlBackend = hostOptions.shared.ml;
+    const mlService = mlBackend ? createEditorMlService(mlBackend) : null;
+    const mlCommands = mlBackend
+      ? objects.registry.register({
+          plugin: "paged.ml",
+          model: mlObjectModel(mlBackend, browserPngCodec),
+        })
+      : null;
+    if (mlService) {
+      setMlService(scope, mlService);
+      void mlService.start();
+    }
     const hostOptionsFor = (pluginId: string) =>
       hostOptionsForPlugin(hostOptions.shared, pluginId);
     // One bundle's activation failure must not take the seven after it down.
@@ -713,6 +732,9 @@ function PluginBundles() {
       detachDocuments();
       detachIdentity();
       if (dataBackend) scriptClient?.setScriptData(null);
+      setMlService(scope, null);
+      mlService?.dispose();
+      mlCommands?.dispose();
     };
     // Mount-once by design; the ref keeps the handle live. The services
     // are the instance's, fixed for the editor's lifetime.

@@ -16,7 +16,8 @@ next to the code you change. This file holds only what crosses components.
 - `platform/extensions` — the extension contract (`plugin-api`, private) and the
   public SDK (`plugin-sdk`, which ships the contract as its `./api` entry).
   Built-in-only code must not leak into it: community extensions consume it.
-- `apps/editor`, `apps/server`, `apps/cli` (`paged-node`) — applications.
+- `apps/editor`, `apps/server`, `apps/cli` (`paged-node`), `apps/ml-host` (the local
+  generative-image sidecar, its own Cargo workspace) — applications.
 - `packages/paged` — the published `@paged-media/paged`, assembled from the engine's
   `canvas-wasm` and the bundled CLI (its `paged` bin); see npm packages below.
 - `platform/shared/*` — internal code of the built-ins and the editor (PM-0002):
@@ -34,7 +35,7 @@ next to the code you change. This file holds only what crosses components.
 Moon (`.moon/`, version pinned in `.prototools`) runs every component's tasks
 from anywhere in the repository. One project per Cargo workspace and JS component root:
 `core`, `core-idml-viewer`, `publish`, `image`, `draw`, `sheet`, `data`, `doc`,
-`slide`, `web`, `web-render`, `extensions`, `editor`, `server`, `cli`, and the
+`slide`, `web`, `web-render`, `extensions`, `editor`, `server`, `ml-host`, `cli`, and the
 shared packages (`ai`, `dml-chart`, `dml-geom`, `dml-native`, `fmt`, `helpers`, `ooxml`, `panel-kit`,
 `react-live`, `test-kit`, `test-resources`, `wasm-boot`).
 
@@ -89,7 +90,7 @@ tools and asks before anything that writes.
 - `moon` (`moon mcp`): projects, tasks, changed files. Speaks the stateless MCP
   protocol `2026-07-28`, so it needs a client that does too.
 - `serena` (Serena 2.0.0, `.serena/project.yml`): symbol navigation and edits
-  for Rust (rust-analyzer, all ten Cargo workspaces via `linkedProjects`) and
+  for Rust (rust-analyzer, all eleven Cargo workspaces via `linkedProjects`) and
   TypeScript/JavaScript. Setup and caveats: `docs/development/code-intelligence.md`.
 
 ## npm packages

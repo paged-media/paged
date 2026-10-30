@@ -73,28 +73,28 @@ proto install                                 # node 24.22.0 (and npm) for the T
   if that is unwanted.
 - **First start.** Approve the `moon` and `serena` servers when Claude Code asks
   (or list them in `enabledMcpjsonServers` in your user settings). Serena's
-  first start installs the TypeScript server and lets rust-analyzer load ten
+  first start installs the TypeScript server and lets rust-analyzer load eleven
   workspaces; if Claude Code gives up waiting, start it with
   `MCP_TIMEOUT=60000` (for example `export MCP_TIMEOUT=60000` in the shell
   profile).
 
 ## rust-analyzer and the Cargo workspaces
 
-There is no root `Cargo.toml`. The repository has ten Cargo workspaces with
+There is no root `Cargo.toml`. The repository has eleven Cargo workspaces with
 members, plus two that are deliberately left out (`engine/core/spikes/blitz-wasm`,
 excluded from the engine workspace, and `modules/sheet/fuzz`, the cargo-fuzz
-workspace). Every other crate is a member of one of the ten; checked with
+workspace). Every other crate is a member of one of the eleven; checked with
 `cargo metadata --no-deps` against every tracked `Cargo.toml`.
 
 ```
 engine/core   modules/{publish,image,draw,sheet,data,doc,slide}
-modules/web/packages/web-render   apps/server/server
+modules/web/packages/web-render   apps/server/server   apps/ml-host
 ```
 
 rust-analyzer only auto-discovers a `Cargo.toml` in the workspace root and one
 level below, so it would find none of them. It has to be told:
 
-- **`linkedProjects`** lists the ten `Cargo.toml` files (relative to the
+- **`linkedProjects`** lists the eleven `Cargo.toml` files (relative to the
   repository root, so the same list works in every worktree).
 - **`cargo.targetDir: true`** makes rust-analyzer's own `cargo check` and
   build-script runs use `target/rust-analyzer` inside each workspace's target
@@ -118,7 +118,7 @@ Where those settings can live (from rust-analyzer's `config.rs`):
 which set `linkedProjects: []` and `rust.analyzerTargetDir: null`. Serena
 documents `ls_specific_settings.<language>.initializationOptions` as a
 top-level override of those options, so `.serena/project.yml` replaces both
-keys: `linkedProjects` with the ten manifests, and `rust: { analyzerTargetDir: true }`.
+keys: `linkedProjects` with the eleven manifests, and `rust: { analyzerTargetDir: true }`.
 `rust.analyzerTargetDir` is rust-analyzer's alias of `cargo.targetDir`; it is
 used because replacing Serena's top-level `cargo` key would drop its other
 cargo options. Verified: rust-analyzer loads all ten workspaces this way (see

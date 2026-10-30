@@ -1,0 +1,11 @@
+$ paged-node ml edit 'make it night' --image <TMP>/absent.png -o <TMP>/ml-edit.png
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "--image <TMP>/absent.png: no such file",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

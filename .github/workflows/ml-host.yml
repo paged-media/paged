@@ -1,0 +1,93 @@
+name: ml-host / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# paged-ml-host's Rust workspace (apps/ml-host): the local generative-image
+# sidecar. Self-contained (no path dependency on another workspace), so only
+# its own files and the root Cargo config trigger it. The tests drive a fake
+# `sd` shell script; no model, runtime or network is needed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/ml-host/**"
+      - ".github/workflows/ml-host.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      - "!apps/ml-host/**/*.md"
+  pull_request:
+    paths:
+      - "apps/ml-host/**"
+      - ".github/workflows/ml-host.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      - "!apps/ml-host/**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: apps/ml-host
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+          components: rustfmt, clippy
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/ml-host -> target
+          prefix-key: v0-rust-ml-host
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: apps/ml-host/Cargo.toml
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/ml-host -> target
+          prefix-key: v0-rust-ml-host
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@nextest
+      - name: nextest (junit)
+        run: cargo nextest run --workspace --locked --profile ci --no-fail-fast --no-tests=fail
+      - name: upload nextest results artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-junit
+          path: apps/ml-host/target/nextest/ci/junit.xml
+          if-no-files-found: error
+          retention-days: 14

@@ -42,6 +42,7 @@ projects:
   # Applications
   cli: "apps/cli"
   editor: "apps/editor"
+  ml-host: "apps/ml-host"
   server: "apps/server/server"
   tests: "tests"
 

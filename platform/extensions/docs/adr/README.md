@@ -6,7 +6,8 @@ When the code stops matching a record, the body is left as it is and a dated ame
 added at the end.
 
 ADR numbers are unique across the paged-media repositories, so a number names the same
-record wherever it is cited. New records in this repository use 300–349. Records 010, 012
+record wherever it is cited. Records 300–349 fill the extensions' first range; new records
+use 1100–1199 (docs/adr/PM-0016). Records 010, 012
 and 017 predate that scheme and keep their numbers. Records 300–319 were written on
 2026-10-02 from the code as it stood, for decisions made earlier; their status says so.
 Records 324 and 329 were written on 2026-10-15 from the code, for decisions made on
@@ -70,6 +71,7 @@ and each one names the plugins that follow it and those that do not.
 | [347](347-the-lowering-kit-translates-a-look.md) | The lowering kit translates a look, once: `nativeFxOps`, gradient swatches, the one label escape | Accepted 2026-10-29 |
 | [348](348-editing-doors.md) | The editing doors: control-bar groups, scoped keys, status items, the text selection | Accepted 2026-10-24 |
 | [349](349-review-and-structure-doors.md) | The structure doors: headers, footers and notes edited in place (C6); amendment 1: the markup margin band (C5) and `text.contentRange` | Accepted 2026-10-28, amended 2026-10-29 |
+| [1100](1100-the-ml-doors.md) | The ML doors: seven typed capabilities, two tiers, nothing off the machine | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).
