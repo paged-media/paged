@@ -262,5 +262,8 @@ fn a_looks_colours_are_document_swatches__feat__plugin_doc_native_effects() {
             checked += 1;
         }
     }
-    assert!(checked >= 5, "the fixture's looks paint with colours: {checked}");
+    assert!(
+        checked >= 5,
+        "the fixture's looks paint with colours: {checked}"
+    );
 }
