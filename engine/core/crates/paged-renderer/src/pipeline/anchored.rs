@@ -1060,6 +1060,7 @@ fn emit_anchored_rect_via_pipeline(
         em.color_ctx,
         None,
         &mut |_: &mut BuiltPage| {},
+        &mut |_: &mut BuiltPage| {},
     );
 }
 

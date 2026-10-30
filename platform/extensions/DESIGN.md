@@ -425,6 +425,17 @@ the reply cannot be what was asked (no `rgba`, no `region`), never the
 wrong image, and the flag stays static like @1. The worker's GPU snapshot
 path draws only v1 requests; any @2 option is drawn on the CPU rasterizer.
 
+**A story the document does not hold** [ADR 342 · `render.story@1`].
+`render.story(pageId, story, { dpi, format, marginPt, trim })` lays out a
+`RenderStory` — paragraphs of styled runs, a frame `bounds` (pt), an
+optional `firstBaseline` — with the engine's text stack and the document's
+fonts, and draws it alone on a transparent ground, cropped to what it
+draws: an engine-made copy of the document holds it, the document gets no
+item, no id and no undo step. paged.image's type layers are made of it
+(their text lives in the image; the engine lays it out). The reply's
+`story` flag is what tells it apart from an engine that ignored the field
+and drew the page: the door answers `null` then.
+
 ### 4.4 `host.selection`, `host.viewport`
 
 `selection.get()/set()/onDidChange` (the post-insert select pattern
@@ -1870,6 +1881,13 @@ footnote.
 - `readCollection` — the rows of a named `CollectionName`. Serves the Layers
   list and the swatch/gradient list. **Takes no target**: document-scoped by
   construction.
+  The `links` collection (image ADR 482) is served with `ProvidedLinkRow`s:
+  core's `LinkSummary` fields for a file the provider's content links or
+  embeds (paged.image's smart objects), plus `actions` — the provider's
+  commands for Relink / Update / Embed, which the host Links panel runs with
+  `{ link: hostSelfId }`. Core has no relink operation to intercept, so the
+  row names the verbs; the panel lists provider rows after the document's own
+  links and enables a button only when the row offers its action.
 - `applyMutation` — first refusal on a `MutationInput` the host panel would
   otherwise send straight to core. Serves the STRUCTURAL edits that are not
   property writes: `layerMove` / `layerInsert` / `layerRemove`,

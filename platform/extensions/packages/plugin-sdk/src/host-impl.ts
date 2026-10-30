@@ -91,7 +91,10 @@ import type {
   PresentationContribution,
   PresentationState,
   RenderedLayer,
+  RenderedElement,
   RenderRect,
+  RenderStory,
+  RenderStoryOptions,
   ViewContribution,
   SubContextProviderContribution,
   SubContextState,
@@ -482,6 +485,11 @@ export const HOST_FEATURES: readonly string[] = [
   // along its line geometry (`requestSelectionGeometry`). Static: built on
   // doors every engine at this protocol answers.
   "render.layers.paragraphs@1",
+  // Extensions ADR 342 — a story the document does not hold, laid out and
+  // drawn by the engine (`requestSnapshot.story`, additive on protocol
+  // 76). Static: an engine without the field draws the page instead, and
+  // its reply lacks `story`, so the door answers null — never the page.
+  "render.story@1",
   // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
   // reason as storage.parts@1: the pinned engine is the server, and the worker
   // handshake refuses a protocol older than the pin — so a running bundle is
@@ -1762,6 +1770,65 @@ export interface BundleHostHandle {
 }
 
 /** Refuse a malformed scene image before any lane sees it. */
+/** Extensions ADR 342 — a {@link RenderStory} as the wire's
+ *  `SnapshotStory`: only the fields the contract names, each checked, so
+ *  a bundle cannot smuggle anything else into the engine request. */
+function wireStory(story: RenderStory): Record<string, unknown> {
+  const num = (v: unknown) =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
+  const strip = (o: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+  const rgb = (v: unknown) =>
+    Array.isArray(v) &&
+    v.length === 3 &&
+    v.every((c) => typeof c === "number" && Number.isFinite(c))
+      ? (v as number[]).map((c) => Math.max(0, Math.min(255, Math.round(c))))
+      : undefined;
+  const paragraphs = Array.isArray(story.paragraphs) ? story.paragraphs : [];
+  return strip({
+    bounds: story.bounds.map(Number),
+    verticalJustification: str(story.verticalJustification),
+    firstBaseline: num(story.firstBaseline),
+    paragraphs: paragraphs.map((p) =>
+      strip({
+        runs: (Array.isArray(p?.runs) ? p.runs : []).map((r) =>
+          strip({
+            text: typeof r?.text === "string" ? r.text : "",
+            font: str(r?.font),
+            fontStyle: str(r?.fontStyle),
+            pointSize: num(r?.pointSize),
+            leading: num(r?.leading),
+            fillRgb: rgb(r?.fillRgb),
+            tracking: num(r?.tracking),
+            baselineShift: num(r?.baselineShift),
+            horizontalScale: num(r?.horizontalScale),
+            verticalScale: num(r?.verticalScale),
+            skew: num(r?.skew),
+            underline: bool(r?.underline),
+            strikethru: bool(r?.strikethru),
+            ligatures: bool(r?.ligatures),
+            capitalization: str(r?.capitalization),
+            position: str(r?.position),
+          }),
+        ),
+        justification: str(p?.justification),
+        firstLineIndent: num(p?.firstLineIndent),
+        leftIndent: num(p?.leftIndent),
+        rightIndent: num(p?.rightIndent),
+        spaceBefore: num(p?.spaceBefore),
+        spaceAfter: num(p?.spaceAfter),
+        hyphenation: bool(p?.hyphenation),
+        composer:
+          p?.composer === "paragraph" || p?.composer === "single"
+            ? p.composer
+            : undefined,
+      }),
+    ),
+  });
+}
+
 function checkImage(image: SceneImage): void {
   const { width, height, rgba } = image;
   if (
@@ -3839,6 +3906,7 @@ export function createBundleHost(
     }
   };
   const render: RenderSurface = {
+    story: (pageId, story, opts) => renderStory(pageId, story, opts),
     async snapshot(pageId, opts) {
       requireDocRead("render.snapshot");
       const dpi = opts?.dpi;
@@ -4086,6 +4154,78 @@ export function createBundleHost(
         },
       };
     });
+  }
+
+  // Extensions ADR 342 — the story door, on the snapshot request. The
+  // engine lays the story out in a copy of the document; this side only
+  // validates and maps the reply.
+  async function renderStory(
+    pageId: PageId,
+    story: RenderStory,
+    opts?: RenderStoryOptions,
+  ): Promise<RenderedElement | null> {
+    requireDocRead("render.story");
+    const dpi = opts?.dpi ?? 72;
+    checkDpi(dpi, "host.render.story");
+    const margin = opts?.marginPt ?? 0;
+    if (!(Number.isFinite(margin) && margin >= 0)) {
+      throw new Error("host.render.story: marginPt must be 0 or more");
+    }
+    const [top, left, bottom, right] = story?.bounds ?? [];
+    if (
+      ![top, left, bottom, right].every(
+        (v) => typeof v === "number" && Number.isFinite(v),
+      ) ||
+      !(bottom! > top! && right! > left!)
+    ) {
+      throw new Error("host.render.story: bounds must have an area");
+    }
+    const rgba = opts?.format !== "png";
+    const trim = opts?.trim !== false;
+    let reply: { kind: string; payload?: unknown };
+    try {
+      reply = (await getEditor().client.send({
+        kind: "requestSnapshot",
+        payload: {
+          pageId,
+          targetWidthPx: 0,
+          hideItems: [],
+          dpi,
+          clip: {
+            x: left! - margin,
+            y: top! - margin,
+            width: right! - left! + 2 * margin,
+            height: bottom! - top! + 2 * margin,
+          },
+          ...(rgba ? { format: "rgba" } : {}),
+          background: "transparent",
+          ...(trim ? { trim: true } : {}),
+          story: wireStory(story),
+        },
+      } as never)) as { kind: string; payload?: unknown };
+    } catch {
+      return null;
+    }
+    if (reply.kind !== "snapshotReady") return null;
+    const p = reply.payload as SnapshotPng & { story?: boolean };
+    // An engine without the field drew the PAGE in that region.
+    if (p.story !== true || !p.region) return null;
+    if (rgba && p.format !== "rgba") return null;
+    return {
+      pageId: p.pageId,
+      widthPx: p.widthPx,
+      heightPx: p.heightPx,
+      png: Uint8Array.from(p.pngBytes ?? []),
+      layoutGeneration: p.layoutGeneration,
+      format: p.format === "rgba" ? "rgba" : "png",
+      ...(p.rgba && p.rgba.length > 0 ? { rgba: Uint8Array.from(p.rgba) } : {}),
+      region: {
+        x: p.region.x,
+        y: p.region.y,
+        width: p.region.width,
+        height: p.region.height,
+      },
+    };
   }
 
   /** A snapshot reply as a layer in the asked format. */

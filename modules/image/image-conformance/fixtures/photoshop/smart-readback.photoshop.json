@@ -1,0 +1,526 @@
+{
+  "fixture": "smart-readback",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/smart-readback.jsx",
+    "script_sha256": "7bf1a0d3b5b709d6370f93343f51bedc50fb8f78003e3b0cc3bfd3b9037055ac",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-29T11:50:29.107Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "paged-transformed",
+      "params": {
+        "file": "paged-transformed.psd",
+        "hash": "c300e5b608ef767c"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "smart-readback/paged-transformed.png"
+      ],
+      "values": {
+        "layers": [
+          {
+            "name": "art",
+            "kind": "LayerKind.SMARTOBJECT",
+            "smart": {
+              "smart": true,
+              "placed": "rasterizeContent",
+              "file_reference": "art.psb",
+              "filters": [],
+              "transform": [
+                55.0192378864668,
+                10.0192378864668,
+                106.980762113533,
+                40.0192378864668,
+                76.9807621135332,
+                91.9807621135332,
+                25.0192378864668,
+                61.9807621135332
+              ],
+              "non_affine": [
+                55.0192378864668,
+                10.0192378864668,
+                106.980762113533,
+                40.0192378864668,
+                76.9807621135332,
+                91.9807621135332,
+                25.0192378864668,
+                61.9807621135332
+              ],
+              "size": {
+                "width": 80,
+                "height": 80
+              }
+            },
+            "contents": {
+              "name": "art.psb",
+              "width": 80,
+              "height": 80,
+              "layers": 1
+            },
+            "after": [
+              54.0192378864668,
+              10.0192378864668,
+              105.980762113533,
+              40.0192378864668,
+              75.9807621135332,
+              91.9807621135332,
+              24.0192378864668,
+              61.9807621135332
+            ],
+            "after_non_affine": [
+              54.0192378864668,
+              10.0192378864668,
+              105.980762113533,
+              40.0192378864668,
+              75.9807621135332,
+              91.9807621135332,
+              24.0192378864668,
+              61.9807621135332
+            ]
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "paged-perspective",
+      "params": {
+        "file": "paged-perspective.psd",
+        "hash": "a79d0400aaf88673"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "smart-readback/paged-perspective.png"
+      ],
+      "values": {
+        "layers": [
+          {
+            "name": "art",
+            "kind": "LayerKind.SMARTOBJECT",
+            "smart": {
+              "smart": true,
+              "placed": "rasterizeContent",
+              "file_reference": "art.psb",
+              "filters": [],
+              "transform": [
+                18,
+                20,
+                110,
+                20,
+                110,
+                100,
+                18,
+                100
+              ],
+              "non_affine": [
+                40,
+                20,
+                88,
+                20,
+                110,
+                100,
+                18,
+                100
+              ],
+              "size": {
+                "width": 80,
+                "height": 80
+              }
+            },
+            "contents": {
+              "name": "art.psb",
+              "width": 80,
+              "height": 80,
+              "layers": 1
+            },
+            "after": [
+              13,
+              20,
+              105,
+              20,
+              105,
+              100,
+              13,
+              100
+            ],
+            "after_non_affine": [
+              35,
+              20,
+              83,
+              20,
+              105,
+              100,
+              13,
+              100
+            ]
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "paged-filters",
+      "params": {
+        "file": "paged-filters.psd",
+        "hash": "3445c650adee9e92"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "smart-readback/paged-filters.png"
+      ],
+      "values": {
+        "layers": [
+          {
+            "name": "art",
+            "kind": "LayerKind.SMARTOBJECT",
+            "smart": {
+              "smart": true,
+              "placed": "rasterizeContent",
+              "file_reference": "art.psb",
+              "filters": [
+                {
+                  "name": "Gaussian Blur...",
+                  "blendOptions": {
+                    "opacity": 100,
+                    "mode": "normal"
+                  },
+                  "enabled": true,
+                  "hasoptions": true,
+                  "foregroundColor": {
+                    "red": 0,
+                    "grain": 0,
+                    "blue": 0
+                  },
+                  "backgroundColor": {
+                    "red": 255,
+                    "grain": 255,
+                    "blue": 255
+                  },
+                  "filter": {
+                    "radius": 3
+                  },
+                  "filterID": 1198747202
+                },
+                {
+                  "name": "Motion Blur...",
+                  "blendOptions": {
+                    "opacity": 100,
+                    "mode": "normal"
+                  },
+                  "enabled": false,
+                  "hasoptions": true,
+                  "foregroundColor": {
+                    "red": 0,
+                    "grain": 0,
+                    "blue": 0
+                  },
+                  "backgroundColor": {
+                    "red": 255,
+                    "grain": 255,
+                    "blue": 255
+                  },
+                  "filter": {
+                    "angle": 30,
+                    "distance": 10
+                  },
+                  "filterID": 1299476034
+                }
+              ],
+              "transform": [
+                16,
+                16,
+                96,
+                16,
+                96,
+                96,
+                16,
+                96
+              ],
+              "non_affine": [
+                16,
+                16,
+                96,
+                16,
+                96,
+                96,
+                16,
+                96
+              ],
+              "size": {
+                "width": 80,
+                "height": 80
+              }
+            },
+            "contents": {
+              "name": "art.psb",
+              "width": 80,
+              "height": 80,
+              "layers": 1
+            },
+            "after": [
+              12,
+              20,
+              92,
+              20,
+              92,
+              100,
+              12,
+              100
+            ],
+            "after_non_affine": [
+              12,
+              20,
+              92,
+              20,
+              92,
+              100,
+              12,
+              100
+            ]
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "paged-edit-contents",
+      "params": {
+        "file": "paged-edit-contents.psd",
+        "hash": "bb8547a6afb7463e"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "smart-readback/paged-edit-contents.png"
+      ],
+      "values": {
+        "layers": [
+          {
+            "name": "art",
+            "kind": "LayerKind.SMARTOBJECT",
+            "smart": {
+              "smart": true,
+              "placed": "rasterizeContent",
+              "file_reference": "art.psb",
+              "filters": [],
+              "transform": [
+                16,
+                16,
+                96,
+                16,
+                96,
+                96,
+                16,
+                96
+              ],
+              "non_affine": [
+                16,
+                16,
+                96,
+                16,
+                96,
+                96,
+                16,
+                96
+              ],
+              "size": {
+                "width": 80,
+                "height": 80
+              }
+            },
+            "contents": {
+              "name": "art.psb",
+              "width": 80,
+              "height": 80,
+              "layers": 1
+            },
+            "after": [
+              16,
+              16,
+              96,
+              16,
+              96,
+              96,
+              16,
+              96
+            ],
+            "after_non_affine": [
+              16,
+              16,
+              96,
+              16,
+              96,
+              96,
+              16,
+              96
+            ]
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "paged-new-smart",
+      "params": {
+        "file": "paged-new-smart.psd",
+        "hash": "87298b53d3733972"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "smart-readback/paged-new-smart.png"
+      ],
+      "values": {
+        "layers": [
+          {
+            "name": "made in paged",
+            "kind": "LayerKind.SMARTOBJECT",
+            "smart": {
+              "smart": true,
+              "placed": "rasterizeContent",
+              "file_reference": "made in paged.psb",
+              "filters": [],
+              "transform": [
+                10,
+                70,
+                70,
+                75,
+                65,
+                115,
+                5,
+                110
+              ],
+              "non_affine": [
+                10,
+                70,
+                70,
+                75,
+                65,
+                115,
+                5,
+                110
+              ],
+              "size": {
+                "width": 50,
+                "height": 40
+              }
+            },
+            "contents": {
+              "name": "made in paged.psb",
+              "width": 50,
+              "height": 40,
+              "layers": 1
+            },
+            "after": [
+              10,
+              70,
+              70,
+              75,
+              65,
+              115,
+              5,
+              110
+            ],
+            "after_non_affine": [
+              10,
+              70,
+              70,
+              75,
+              65,
+              115,
+              5,
+              110
+            ]
+          },
+          {
+            "name": "art",
+            "kind": "LayerKind.SMARTOBJECT",
+            "smart": {
+              "smart": true,
+              "placed": "rasterizeContent",
+              "file_reference": "art.psb",
+              "filters": [],
+              "transform": [
+                16,
+                16,
+                96,
+                16,
+                96,
+                96,
+                16,
+                96
+              ],
+              "non_affine": [
+                16,
+                16,
+                96,
+                16,
+                96,
+                96,
+                16,
+                96
+              ],
+              "size": {
+                "width": 80,
+                "height": 80
+              }
+            },
+            "contents": {
+              "name": "art.psb",
+              "width": 80,
+              "height": 80,
+              "layers": 1
+            },
+            "after": [
+              16,
+              16,
+              96,
+              16,
+              96,
+              96,
+              16,
+              96
+            ],
+            "after_non_affine": [
+              16,
+              16,
+              96,
+              16,
+              96,
+              96,
+              16,
+              96
+            ]
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL"
+          }
+        ]
+      }
+    }
+  ]
+}
