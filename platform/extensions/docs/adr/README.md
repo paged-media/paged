@@ -69,7 +69,7 @@ and each one names the plugins that follow it and those that do not.
 | [346](346-page-layers.md) | A page as layers: the background and each item alone, at one scale | Accepted 2026-10-25; amended 2026-10-28 (paragraph layers) |
 | [347](347-the-lowering-kit-translates-a-look.md) | The lowering kit translates a look, once: `nativeFxOps`, gradient swatches, the one label escape | Accepted 2026-10-29 |
 | [348](348-editing-doors.md) | The editing doors: control-bar groups, scoped keys, status items, the text selection | Accepted 2026-10-24 |
-| [349](349-review-and-structure-doors.md) | The structure doors: headers, footers and notes edited in place (C6) | Accepted 2026-10-28 |
+| [349](349-review-and-structure-doors.md) | The structure doors: headers, footers and notes edited in place (C6); amendment 1: the markup margin band (C5) and `text.contentRange` | Accepted 2026-10-28, amended 2026-10-29 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

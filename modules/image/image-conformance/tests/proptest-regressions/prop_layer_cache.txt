@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 8750f5fffc37102a523308db2002eec6add76765b4ca917136c8f3d8aa676125 # shrinks to dims = (20, 13), sixteen = true, gens = [Adjust { exposure: 0.0, saturation: 0.0 }], edits = [Opacity(0, 0.0)]
 cc 177ecff9be9f448d8c2c52a73ab7ff97506a97c22afc13bc262856da18811cb6 # shrinks to dims = (33, 17), sixteen = true, gens = [Adjust { exposure: -0.7923122, saturation: 0.9412804 }, Adjust { exposure: -0.17766096, saturation: 1.7742249 }], edits = [Opacity(0, 0.0)]
+cc bb34fbf9acf35ae38f9b7f239495d8e4713fac8b32b984eeef9a359a92ca1545 # shrinks to dims = (20, 13), sixteen = false, gens = [Pixel { seed: 0, alpha: 0, smart: false }, Adjust { exposure: 0.6048515, saturation: 0.0 }, Bounded { seed: 0, alpha: 0, x: 0, y: 0 }], edits = [Blend(3, 6), Paint(4, 493844931, 0), Paint(1, 2393063345, 0)]

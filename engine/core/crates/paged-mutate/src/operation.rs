@@ -1722,6 +1722,16 @@ pub enum PropertyPath {
     /// braces instead of its result (engine ADR 1022). A whole-document
     /// reflow.
     DocumentShowFieldCodes,
+    /// Word's Track Changes (engine ADR 1040), on `NodeId::Document`:
+    /// `Value::Bool`, default false. While on, text and formatting edits on
+    /// story ranges are recorded as tracked changes.
+    DocumentTrackChanges,
+    /// The author tracked changes are recorded under: `Value::Text`.
+    DocumentTrackChangesAuthor,
+    /// How tracked changes and comments show (engine ADR 1040):
+    /// `Value::Text` `simple` / `all` / `none` / `original`, default `all`.
+    /// A whole-document reflow.
+    DocumentMarkupView,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -2126,6 +2136,9 @@ impl PropertyPath {
             PropertyPath::DocumentShowHiddenText => "document.showHiddenText",
             PropertyPath::FrameGradientFillStart => "frame.gradientFillStart",
             PropertyPath::DocumentShowFieldCodes => "document.showFieldCodes",
+            PropertyPath::DocumentTrackChanges => "document.trackChanges",
+            PropertyPath::DocumentTrackChangesAuthor => "document.trackChangesAuthor",
+            PropertyPath::DocumentMarkupView => "document.markupView",
         }
     }
 }
@@ -5149,6 +5162,85 @@ pub enum Operation {
         remove: u32,
         change: String,
     },
+    /// Engine ADR 1040 — record tracked change `change` over story chars
+    /// `[start, end)` (of `cell`'s stream when set), or on paragraph
+    /// `paragraph` for the paragraph kinds. What an importer writes for
+    /// Word's `w:ins` / `w:del` / `w:rPrChange` / `w:pPrChange`, and what a
+    /// tracked edit lowers to. Inverse: `RestoreParagraphs`.
+    RecordChange {
+        story_id: String,
+        #[serde(default)]
+        cell: Option<CellAddr>,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        paragraph: Option<u32>,
+        change: ChangeSpec,
+    },
+    /// Engine ADR 1040 — accept tracked change `id` (all its runs and
+    /// marks), every change by `author`, or every change; in story
+    /// `story_id` only when set. An insertion's text stays, a deletion's
+    /// goes, a formatting change keeps the new formatting. Inverse: the
+    /// stories restored (`RestoreStoryReview`).
+    AcceptChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1040 — reject: an insertion's text goes, a deletion's
+    /// stays, a formatting change puts the formatting before it back.
+    /// Scoped as `AcceptChange`.
+    RejectChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1020 — a comment on story chars `[start, end)`; with
+    /// `comment.parentId` a reply (the range is the thread's). The id is
+    /// `comment.id` (the canvas mints one when absent). Inverse:
+    /// `RestoreStoryReview`.
+    InsertComment {
+        story_id: String,
+        #[serde(default)]
+        cell: Option<CellAddr>,
+        start: u32,
+        end: u32,
+        comment: CommentSpec,
+    },
+    /// Engine ADR 1020 — Resolve (or reopen) comment `comment_id`'s
+    /// thread. Inverse: `RestoreStoryReview`.
+    ResolveComment {
+        comment_id: String,
+        resolved: bool,
+    },
+    /// Engine ADR 1020 — delete comment `comment_id`: a root takes its
+    /// replies and its range. Inverse: `RestoreStoryReview`.
+    DeleteComment {
+        comment_id: String,
+    },
+    /// Engine ADR 1020 — rewrite comment `comment_id`'s text (and date).
+    /// Inverse: `RestoreStoryReview`.
+    EditComment {
+        comment_id: String,
+        text: String,
+        #[serde(default)]
+        date: Option<String>,
+    },
+    /// Inverse-only (engines ADR 1040 / 1020) — set story `story_id`'s
+    /// paragraphs (when `paragraphs_json` is set) and comment threads to
+    /// what they were. Its inverse carries what it replaced.
+    RestoreStoryReview {
+        story_id: String,
+        #[serde(default)]
+        paragraphs_json: Option<String>,
+        comments_json: String,
+    },
     /// v72 — create bookmark `bookmark_id` named `name` (ADR 173) under
     /// `parent` (the top level when `None`) at `index` among its children
     /// (the end when `None`), going to destination `destination` or else
@@ -5768,6 +5860,75 @@ pub struct CellAddr {
     pub table_id: String,
     pub row: u32,
     pub col: u32,
+}
+
+/// Engine ADR 1040 — what [`Operation::RecordChange`] records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum ChangeSpecKind {
+    /// The range's text was inserted (`w:ins`).
+    Insert,
+    /// The range's text was deleted (`w:del`); it stays in the story.
+    Delete,
+    /// The range's character formatting changed (`w:rPrChange`).
+    Format,
+    /// The paragraph's formatting changed (`w:pPrChange`).
+    ParaProps,
+    /// The paragraph's mark was inserted (`w:pPr/w:rPr/w:ins`).
+    InsertMark,
+    /// The paragraph's mark was deleted (`w:pPr/w:rPr/w:del`).
+    DeleteMark,
+}
+
+/// Engine ADR 1040 — one tracked change to record over a range or on a
+/// paragraph. `id` absent: the change joins an adjacent change of the same
+/// kind and author, else the engine mints one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeSpec {
+    pub kind: ChangeSpecKind,
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
+    /// ISO 8601, as Word's `w:date`.
+    #[serde(default)]
+    pub date: Option<String>,
+    /// `format`: the run's applied character style before the change (its
+    /// other properties are taken as they are now).
+    #[serde(default)]
+    pub before_character_style: Option<String>,
+    /// `paraProps`: the paragraph's applied style before the change.
+    #[serde(default)]
+    pub before_paragraph_style: Option<String>,
+}
+
+/// Engine ADR 1020 — one comment of a thread on the wire. `parentId` makes
+/// it a reply; `id` absent: the engine mints one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentSpec {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub initials: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    /// Paragraphs separated by `\n`.
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub resolved: bool,
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 /// W0.5 — character- vs paragraph-level style application for

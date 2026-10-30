@@ -163,6 +163,29 @@ describe("video and audio (slide ADR 718)", () => {
     expect(slides[1]!.hide).toEqual([]);
   });
 
+  it("Insert ▸ Audio places a sound with its icon, its medium the file's bytes", async () => {
+    covers("command:media.paged.slide.command.insertAudio");
+    const { host, pages } = await open();
+    const tone = zipParts(FIXTURE).get("ppt/media/media2.m4a")!;
+    const res = (await host.objects.invoke(CONTENT_CMD.insertAudio, {
+      data: bytesToBase64(new Uint8Array(tone)),
+      name: "tone.m4a",
+      slide: slideAddress(pages[0]!.selfId),
+    })) as { media: string };
+    expect(res.media).toMatch(/rectangle/);
+    const found = await pageMedia(host, await pageShapes(host));
+    const placed = found
+      .get(pages[0]!.selfId)!
+      .find((x) => x.media.kind === "sound")!;
+    expect(placed.media.mime).toBe("audio/mp4");
+    expect(placed.media.play).toBe("onClick");
+    expect((placed.media.source as { path: string }).path).toMatch(/\.m4a$/);
+    // A sound's icon: half an inch.
+    expect(placed.item.box.w).toBeCloseTo(36, 0);
+    const read = await host.media.read(placed.item.id as ElementId);
+    expect(Buffer.from(read!.bytes!).equals(tone)).toBe(true);
+  });
+
   it("Insert ▸ Video places a movie in one undo step, and the export writes it", async () => {
     covers("command:media.paged.slide.command.insertVideo");
     const { host, exporter, pages } = await open();

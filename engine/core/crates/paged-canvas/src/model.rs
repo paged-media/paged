@@ -2134,6 +2134,9 @@ pub struct CanvasModel {
     /// pour its text, style it, put it on a layer — used to pay that
     /// per child.
     rebuild_deferred: bool,
+    /// Engine ADR 1040 — set while a tracked text edit's lowered batch
+    /// applies, so its own untracked children are not lowered again.
+    tracked_lowering: bool,
     /// Set by a deferred `rebuild_after_mutation`; consumed by the one
     /// build the batch executor runs when its children are done. A batch
     /// whose children changed nothing owes nothing and builds nothing.
@@ -2979,6 +2982,7 @@ impl CanvasModel {
             },
             pending_op_apply_ms: 0.0,
             rebuild_deferred: false,
+            tracked_lowering: false,
             rebuild_owed: false,
             applied_log_cap_held: false,
             history_depth: MAX_APPLIED_LOG,
@@ -3171,6 +3175,13 @@ impl CanvasModel {
         Ok(outcome)
     }
 
+    /// Engine ADR 1040 — the date the tracked changes recorded from now on
+    /// carry (ISO 8601): the host's clock, stamped before each edit. The
+    /// engine reads no clock of its own.
+    pub fn set_review_clock(&mut self, date: Option<String>) {
+        self.scene.designmap.document_preference.review_clock = date;
+    }
+
     /// Engine ADR 1030 — [`Self::apply_mutation`], with the undo step named
     /// `label` (the caller's words; blank keeps the default).
     pub fn apply_mutation_labeled(
@@ -3193,6 +3204,19 @@ impl CanvasModel {
         // author (an unknown composer) is refused before anything runs.
         refuse_unauthorable(mutation)?;
         self.refuse_unpermitted(mutation)?;
+        // Engine ADR 1040 — while the document tracks changes, a text edit
+        // is recorded: lowered to one batch of the untracked edit and the
+        // changes it makes (`review::lower_tracked`).
+        if !self.tracked_lowering
+            && self.scene.designmap.document_preference.track_changes == Some(true)
+        {
+            if let Some(ops) = crate::review::lower_tracked(&self.scene, mutation) {
+                self.tracked_lowering = true;
+                let outcome = self.apply_mutation_unlabeled(&Mutation::Batch { ops });
+                self.tracked_lowering = false;
+                return outcome;
+            }
+        }
         // A colour written as a swatch ADDRESS is stored as the swatch's
         // `Self` id — the only form the renderer resolves.
         if let Some(normalized) = self.normalize_color_refs(mutation) {
@@ -5468,6 +5492,127 @@ impl CanvasModel {
                     offset: *offset,
                 })
             }
+            // Engine ADR 1040 — tracked changes recorded and resolved.
+            Mutation::RecordChange {
+                story_id,
+                start,
+                end,
+                cell,
+                paragraph,
+                change,
+            } => Some(Operation::RecordChange {
+                story_id: story_id.clone(),
+                cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                    table_id: c.table_id.clone(),
+                    row: c.row,
+                    col: c.col,
+                }),
+                start: *start,
+                end: *end,
+                paragraph: *paragraph,
+                change: paged_mutate::ChangeSpec {
+                    // The engine names a new change before it applies, so
+                    // the redo of an undone record lands on the same id.
+                    id: change.id.clone().or_else(|| {
+                        (!matches!(
+                            change.kind,
+                            paged_mutate::ChangeSpecKind::Insert
+                                | paged_mutate::ChangeSpecKind::Delete
+                        ))
+                        .then(|| paged_mutate::next_change_id(&self.scene))
+                    }),
+                    ..change.clone()
+                },
+            }),
+            Mutation::AcceptChange {
+                story_id,
+                id,
+                author,
+            } => Some(Operation::AcceptChange {
+                story_id: story_id.clone(),
+                id: id.clone(),
+                author: author.clone(),
+            }),
+            Mutation::RejectChange {
+                story_id,
+                id,
+                author,
+            } => Some(Operation::RejectChange {
+                story_id: story_id.clone(),
+                id: id.clone(),
+                author: author.clone(),
+            }),
+            // Engine ADR 1020 — comments.
+            Mutation::InsertComment {
+                story_id,
+                start,
+                end,
+                cell,
+                comment,
+            } => Some(Operation::InsertComment {
+                story_id: story_id.clone(),
+                cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                    table_id: c.table_id.clone(),
+                    row: c.row,
+                    col: c.col,
+                }),
+                start: *start,
+                end: *end,
+                comment: paged_mutate::CommentSpec {
+                    id: comment
+                        .id
+                        .clone()
+                        .or_else(|| Some(paged_mutate::next_comment_id(&self.scene))),
+                    // A comment inserted on a range is a thread's root.
+                    parent_id: None,
+                    ..comment.clone()
+                },
+            }),
+            Mutation::ReplyComment { parent_id, comment } => {
+                let story_id = paged_mutate::comment_story(&self.scene, parent_id)?;
+                // A reply to a reply joins its thread's root, as Word's do.
+                let root = self
+                    .scene
+                    .stories
+                    .iter()
+                    .flat_map(|s| s.story.comments.iter())
+                    .find(|c| &c.id == parent_id)
+                    .and_then(|c| c.parent.clone())
+                    .unwrap_or_else(|| parent_id.clone());
+                Some(Operation::InsertComment {
+                    story_id,
+                    cell: None,
+                    start: 0,
+                    end: 0,
+                    comment: paged_mutate::CommentSpec {
+                        id: comment
+                            .id
+                            .clone()
+                            .or_else(|| Some(paged_mutate::next_comment_id(&self.scene))),
+                        parent_id: Some(root),
+                        ..comment.clone()
+                    },
+                })
+            }
+            Mutation::ResolveComment {
+                comment_id,
+                resolved,
+            } => Some(Operation::ResolveComment {
+                comment_id: comment_id.clone(),
+                resolved: *resolved,
+            }),
+            Mutation::DeleteComment { comment_id } => Some(Operation::DeleteComment {
+                comment_id: comment_id.clone(),
+            }),
+            Mutation::EditComment {
+                comment_id,
+                text,
+                date,
+            } => Some(Operation::EditComment {
+                comment_id: comment_id.clone(),
+                text: text.clone(),
+                date: date.clone(),
+            }),
             Mutation::InsertEndnote {
                 story_id,
                 offset,
@@ -11491,6 +11636,10 @@ impl CanvasModel {
                         user_name: change.user_name.clone(),
                         date: change.date.clone(),
                         text: change.deleted_text.clone().unwrap_or_default(),
+                        id: None,
+                        kind: Some("delete".to_string()),
+                        end: None,
+                        paragraph: None,
                     });
                 }
                 start += para
@@ -11500,7 +11649,23 @@ impl CanvasModel {
                     .sum::<u32>();
             }
         }
+        // Engine ADR 1040 — Word's changes, one row per story and change id.
+        for story in &self.scene.stories {
+            out.extend(crate::review::change_rows(
+                &story.self_id,
+                &story.story.paragraphs,
+            ));
+        }
         out
+    }
+
+    /// Engine ADR 1020 — the document's comments, threads in story order.
+    pub fn comments(&self) -> Vec<crate::channel::CommentSummary> {
+        self.scene
+            .stories
+            .iter()
+            .flat_map(|s| crate::review::comment_rows(&s.self_id, &s.story))
+            .collect()
     }
 
     /// The story, paragraph and index in it of note `note_id`.
@@ -12229,6 +12394,7 @@ impl CanvasModel {
                     })
                 })
                 .collect(),
+            comments: crate::review::comment_rows(&s.self_id, &s.story),
         })
     }
 
@@ -12285,6 +12451,7 @@ impl CanvasModel {
             TemplateFindings => json(paged_template::preflight(&self.scene)),
             XmlElements => json(self.xml_elements()),
             TrackedChanges => json(self.tracked_changes()),
+            Comments => json(self.comments()),
             Endnotes => json(self.endnotes()),
             Inks => json(self.inks()),
             Sections => json(self.sections()),
@@ -16458,27 +16625,48 @@ fn indesign_index_paragraph_style(id: &str, based_on: &str) -> paged_model::Para
 pub(crate) fn paragraph_content(para: &paged_model::Paragraph) -> crate::channel::ParagraphContent {
     crate::channel::ParagraphContent {
         paragraph_style: para.paragraph_style.clone(),
-        runs: para
-            .runs
-            .iter()
-            .map(|run| crate::channel::RunContent {
-                text: run.text.clone(),
-                character_style: run.character_style.clone(),
-                font: run.font.clone(),
-                font_style: run.font_style.clone(),
-                point_size: run.point_size,
-                fill_color: run.fill_color.clone(),
-                underline: run.underline,
-                strikethru: run.strikethru,
-                capitalization: run.capitalization.clone(),
-                baseline_shift: run.baseline_shift,
-                position: run.position.clone(),
-                tracking: run.tracking,
-                text_variable: run.text_variable.clone(),
-                field_code: run.field.as_ref().map(|f| f.code.clone()),
-            })
-            .collect(),
+        runs: para.runs.iter().map(run_content).collect(),
         toc: para.toc.clone(),
+        mark_change: para
+            .mark_revision
+            .as_ref()
+            .map(crate::review::change_content),
+        props_change: para
+            .props_change
+            .as_ref()
+            .map(|pc| crate::channel::PropsChangeContent {
+                change: crate::review::change_content(&pc.change),
+                before_paragraph_style: pc.before.paragraph_style.clone(),
+            }),
+    }
+}
+
+/// DOC-03 — one run as the content read gives it.
+pub(crate) fn run_content(run: &paged_model::CharacterRun) -> crate::channel::RunContent {
+    crate::channel::RunContent {
+        text: run.text.clone(),
+        character_style: run.character_style.clone(),
+        font: run.font.clone(),
+        font_style: run.font_style.clone(),
+        point_size: run.point_size,
+        fill_color: run.fill_color.clone(),
+        underline: run.underline,
+        strikethru: run.strikethru,
+        capitalization: run.capitalization.clone(),
+        baseline_shift: run.baseline_shift,
+        position: run.position.clone(),
+        tracking: run.tracking,
+        text_variable: run.text_variable.clone(),
+        field_code: run.field.as_ref().map(|f| f.code.clone()),
+        change: run.revision.as_ref().map(crate::review::change_content),
+        format_change: run
+            .format_change
+            .as_ref()
+            .map(|fc| crate::channel::FormatChangeContent {
+                change: crate::review::change_content(&fc.change),
+                before: Box::new(run_content(&fc.before)),
+            }),
+        comments: run.comments.clone(),
     }
 }
 
