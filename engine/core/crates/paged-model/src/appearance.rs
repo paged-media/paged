@@ -401,6 +401,7 @@ macro_rules! clear_picture {
         $x.image_item_transform = None;
         $x.image_bytes = None;
         $x.image_clip = None;
+        $x.image_adjustments.clear();
     }};
 }
 

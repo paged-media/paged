@@ -96,7 +96,10 @@ import { RankLookupSection } from "./sections/rank-lookup-section";
 import { SelectModifySection } from "./sections/select-modify-section";
 import { MoveSection } from "./sections/move-section";
 import { PatternSection } from "./sections/pattern-section";
-import { SmartObjectSection } from "./sections/smart-object-section";
+import {
+  SmartObjectSection,
+  SmartTransformDialog,
+} from "./sections/smart-object-section";
 import {
   DISTORT_DEFAULTS,
   DistortSection,
@@ -2731,6 +2734,18 @@ export function makeImagePanel(session: ImageSession) {
             onCancel={() => void session.closeDialog()}
           />
         )}
+        {s.dialog?.kind === "smartTransform" && (
+          <SmartTransformDialog
+            busy={s.busy}
+            onApply={(f) =>
+              void session
+                .smart()
+                .transform(s.layers.active, f)
+                .then(() => session.closeDialog())
+            }
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
         {s.dialog?.kind === "trim" && (
           <TrimDialog
             busy={s.busy}
@@ -3510,6 +3525,8 @@ export function makeImagePanel(session: ImageSession) {
           disabled={disabled}
           scale={smartScale}
           onScale={setSmartScale}
+          info={s.smartInfo}
+          nested={s.smartNested}
         />
 
         <HueSatSection

@@ -115,6 +115,11 @@ const STRUCTURED: &[(&str, &str)] = &[
         "frameAppearanceLayer",
         "{ type: 'appearanceLayer', value: { index: 0, layer: { kind: 'fill', color: 'Color/Black' } } }",
     ),
+    // Engine ADR 1037 — an image frame's filter stack, whole.
+    (
+        "frameImageAdjustments",
+        "{ type: 'imageAdjustments', value: [{ op: 'exposure', ev: 0.5 }] }",
+    ),
     (
         "pluginMetadata",
         "{ type: 'pluginMetadata', value: { key: 'x-paged:probe', value: '1' } }",

@@ -793,6 +793,8 @@ export const CORE_PATHS: Record<
   // the per-layer edit, an operation.
   frameAppearance: V71,
   frameAppearanceLayer: OP,
+  // An image frame's filter stack is protocol 77 (engine ADR 1037).
+  frameImageAdjustments: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",

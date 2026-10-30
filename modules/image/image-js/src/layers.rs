@@ -165,6 +165,8 @@ mod parity_tests;
 mod masking_ops;
 // Vector masks, shape layers and the paths as geometry (ADR 476).
 mod vector_ops;
+// Smart objects: transform, smart filters, sources (ADR 482).
+mod smart_ops;
 // Snapshots, the journal's bounds and past states (ADR 477).
 pub mod history;
 pub use history::{set_default_history_budget, SnapshotInfo};
@@ -218,19 +220,96 @@ pub enum LayerKind {
     Type(Box<TypeLayer>),
 }
 
-/// The preserved original behind a smart object, plus the scale its
-/// cached pixels were rendered at.
+/// The preserved original behind a smart object, where it is placed, and
+/// its smart filters (image ADR 482; `crate::smart`).
 #[derive(Debug, Clone)]
 pub struct SmartSource {
     /// The ORIGINAL, at its own resolution. Never resampled in place —
-    /// every re-render reads this.
+    /// every re-render reads this. EMPTY when the source is a FILE that is
+    /// decoded on demand (`file`): a PSD's smart object opens without
+    /// decoding its source until something re-renders it.
     pub rgba: Arc<[u8]>,
     pub width: u32,
     pub height: u32,
-    /// The scale the layer's current `rgba` was rendered at (1.0 = the
-    /// source's own size). Kept so a re-render knows what changed and a
-    /// UI can show it.
+    /// The scale the placement draws the source at (1.0 = the source's
+    /// own size): what the panel shows. `placement` is the truth.
     pub scale: f32,
+    /// Where the source's rectangle lands: its four corners on the canvas
+    /// (ADR 482). `None` only in a stack stored before ADR 482, which
+    /// meant the top-left corner at `scale`.
+    pub placement: Option<crate::smart::Quad>,
+    /// The file the source is (embedded, or linked), when it is one.
+    pub file: Option<Arc<crate::smart::SmartFile>>,
+    /// The smart filters and their mask.
+    pub filters: Option<Arc<crate::smart::SmartFilterStack>>,
+    /// A vector smart object: the page items it draws.
+    pub vector: Option<Arc<crate::smart::VectorSource>>,
+    /// The PSD placed-layer record it was read from (kept for the save:
+    /// its warp, page, comp and every other item).
+    pub record: Option<Arc<image_psd::smart_object::PlacedLayer>>,
+    /// The record carries a warp paged does not draw: the render stays
+    /// Photoshop's until the object is re-placed.
+    pub warped: bool,
+    /// The layer's pixels are the unfiltered render: its live smart
+    /// filters still have to run (a GPU pass the bundle drives).
+    pub pending_filters: bool,
+}
+
+impl SmartSource {
+    /// A source of raw pixels placed at its own size at the origin.
+    pub fn from_pixels(rgba: Arc<[u8]>, width: u32, height: u32) -> Self {
+        Self {
+            rgba,
+            width,
+            height,
+            scale: 1.0,
+            placement: Some(crate::smart::rect_quad(
+                0.0,
+                0.0,
+                f64::from(width),
+                f64::from(height),
+            )),
+            file: None,
+            filters: None,
+            vector: None,
+            record: None,
+            warped: false,
+            pending_filters: false,
+        }
+    }
+
+    /// The placement, or what a pre-ADR-482 stack meant (the top-left
+    /// corner at `scale`).
+    pub fn quad(&self) -> crate::smart::Quad {
+        self.placement.unwrap_or_else(|| {
+            let s = f64::from(self.scale);
+            crate::smart::rect_quad(
+                0.0,
+                0.0,
+                f64::from(self.width) * s,
+                f64::from(self.height) * s,
+            )
+        })
+    }
+
+    /// The source, decoded: the pixels it holds, else its file's.
+    pub fn raster(&self) -> Result<Arc<crate::smart::SourceRaster>, IngestError> {
+        if !self.rgba.is_empty() || self.file.is_none() {
+            return Ok(Arc::new(crate::smart::SourceRaster {
+                width: self.width,
+                height: self.height,
+                rgba: Arc::clone(&self.rgba),
+            }));
+        }
+        self.file.as_ref().expect("checked above").raster()
+    }
+
+    /// The filters that draw something, when any do.
+    pub fn live_filters(&self) -> Option<&crate::smart::SmartFilterStack> {
+        self.filters
+            .as_deref()
+            .filter(|f| f.live().next().is_some())
+    }
 }
 
 /// A whole-canvas geometric change: every layer, every mask (layer and
@@ -1817,44 +1896,15 @@ impl LayerStack {
         let (ow, oh) = op.output_size(w, h);
         let mut layers = self.layers.clone();
         for layer in &mut layers {
-            let mut rerendered = false;
-            if let (LayerKind::Smart(src), CanvasOp::Resample { filter, .. }) =
-                (&mut layer.kind, op)
-            {
-                let f = ow as f32 / w as f32;
-                if (h as f32 * f).round() as u32 == oh {
-                    let scale = src.scale * f;
-                    let render = render_smart(ctx, src, scale, filter, ow, oh).await?;
-                    src.scale = scale;
-                    layer.rgba =
-                        crate::pixels::Pixels::from_rgba8(Arc::from(render.into_boxed_slice()))
-                            .into();
-                    rerendered = true;
-                } else {
-                    let (sw, sh) = (
-                        ((src.width as f32) * ow as f32 / w as f32).round().max(1.0) as u32,
-                        ((src.height as f32) * oh as f32 / h as f32)
-                            .round()
-                            .max(1.0) as u32,
-                    );
-                    let resample = CanvasOp::Resample {
-                        width: sw,
-                        height: sh,
-                        filter,
-                    };
-                    let out = gpu_canvas_op(
-                        ctx,
-                        resample,
-                        &rgba8_to_f16(&src.rgba),
-                        src.width,
-                        src.height,
-                    )
-                    .await?;
-                    src.rgba = Arc::from(f16_to_rgba8(&out).into_boxed_slice());
-                    src.width = sw;
-                    src.height = sh;
-                }
-            }
+            // A smart object is RE-RENDERED from its source into its
+            // placement mapped through the op (ADR 482): nothing is
+            // resampled twice, whatever the op does to the canvas.
+            let rerendered = crate::smart::follow_canvas_op(
+                layer,
+                |p| masking_ops::map_point(op, w, h, p),
+                ow,
+                oh,
+            )?;
             if !rerendered {
                 let canvas = layer.rgba.canvas();
                 let depth = canvas.depth();
@@ -1869,16 +1919,23 @@ impl LayerStack {
                 };
                 layer.rgba = f16_to_pixels(&out, depth).into();
             }
-            if let (
-                LayerKind::Smart(src),
-                CanvasOp::Straighten { .. } | CanvasOp::RotateArbitrary { .. },
-            ) = (&mut layer.kind, op)
-            {
-                // `check_canvas_op` admitted it only at 1:1 over the
-                // canvas, where the source IS the render: it turns with it.
-                src.rgba = layer.rgba.canvas().to_rgba8().into_owned().into();
-                src.width = ow;
-                src.height = oh;
+            if let LayerKind::Smart(src) = &mut layer.kind {
+                // The filter mask resamples like a layer mask.
+                if let Some(f) = src.filters.as_mut() {
+                    if let Some(m) = &f.mask {
+                        let out = gpu_canvas_op_mask(
+                            ctx,
+                            op,
+                            &coverage_to_f16(m.to_canvas().data()),
+                            w,
+                            h,
+                        )
+                        .await?;
+                        Arc::make_mut(f).mask =
+                            SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out))
+                                .map(|c| Arc::new(c).into());
+                    }
+                }
             }
             if let Some(mask) = &layer.mask {
                 let out = gpu_canvas_op_mask(ctx, op, &coverage_to_f16(mask.canvas().data()), w, h)
@@ -1936,38 +1993,8 @@ impl LayerStack {
                 ));
             }
         }
-        let smart = |pred: &dyn Fn(&SmartSource) -> bool| {
-            self.layers
-                .iter()
-                .filter_map(|l| l.smart_source())
-                .any(pred)
-        };
-        match op {
-            CanvasOp::Resize { .. } if smart(&|_| true) => Err(IngestError::Unsupported(
-                "Canvas Size with a smart object in the stack is not supported \
-                 (its render would no longer line up with its source)"
-                    .into(),
-            )),
-            CanvasOp::Crop { .. } | CanvasOp::Straighten { .. }
-                if smart(&|s| s.scale != 1.0 || s.width != w || s.height != h) =>
-            {
-                Err(IngestError::Unsupported(
-                    "cropping a smart object that is rendered at another scale is not \
-                     supported (its render would no longer line up with its source)"
-                        .into(),
-                ))
-            }
-            CanvasOp::RotateArbitrary { .. }
-                if smart(&|s| s.scale != 1.0 || s.width != w || s.height != h) =>
-            {
-                Err(IngestError::Unsupported(
-                    "rotating a smart object that is rendered at another scale is not \
-                     supported (its render would no longer line up with its source)"
-                        .into(),
-                ))
-            }
-            _ => Ok(()),
-        }
+        // A smart object follows every op from its source (ADR 482).
+        Ok(())
     }
 
     /// The exact ops' CPU remap of every buffer. `op` is checked.
@@ -1987,13 +2014,23 @@ impl LayerStack {
             }
             follow_vector_mask(layer, |p| masking_ops::map_point(op, w, h, p), ow, oh);
             if let LayerKind::Smart(src) = &mut layer.kind {
-                // Rotations and flips move the source in its own extent; a
-                // crop reaches here only at 1:1, where the extents agree.
-                let s = op.remap(&src.rgba, src.width, src.height, 4, 0);
-                let (sw, sh) = op.output_size(src.width, src.height);
-                src.rgba = Arc::from(s.into_boxed_slice());
-                src.width = sw;
-                src.height = sh;
+                // The render moved exactly; the placement and the filter
+                // mask move with it, and the source stays as it is.
+                let q = src.quad();
+                src.placement = Some(crate::smart::map_quad(&q, |(x, y)| {
+                    let p = masking_ops::map_point(op, w, h, [x as f32, y as f32]);
+                    (f64::from(p[0]), f64::from(p[1]))
+                }));
+                // A filter's direction is the canvas's: it runs again.
+                let live = src.live_filters().is_some();
+                if let Some(f) = src.filters.as_mut() {
+                    if let Some(m) = &f.mask {
+                        let mm = op.remap(m.to_canvas().data(), w, h, 1, 255);
+                        Arc::make_mut(f).mask =
+                            SelectionCoverage::from_data(ow, oh, mm).map(|c| Arc::new(c).into());
+                    }
+                }
+                src.pending_filters |= live;
             }
         }
         for g in &mut self.groups {
@@ -2013,6 +2050,12 @@ impl LayerStack {
         self.height = oh;
     }
 
+    /// CONVERT a pixel (or fill) layer into a smart object: its pixels,
+    /// cut to what they cover, become the SOURCE, placed where they are
+    /// (image ADR 482). From here every transform re-renders from it.
+    /// Idempotent on a smart object; refused on an adjustment layer and on
+    /// a layer with nothing in it. A 16-bit layer's source is its 8-bit
+    /// reduction (stated by the panel).
     pub fn make_smart(&mut self, index: usize) -> Result<(), IngestError> {
         let (w, h) = (self.width, self.height);
         let layer = self.layer_mut(index)?;
@@ -2024,22 +2067,35 @@ impl LayerStack {
         if layer.smart_source().is_some() {
             return Ok(()); // already smart — idempotent, not an error
         }
-        layer.kind = LayerKind::Smart(Box::new(SmartSource {
-            rgba: layer.rgba.raw_arc(),
-            width: w,
-            height: h,
-            scale: 1.0,
-        }));
+        // The pixels' own extent: the bounded rectangle, cut further to
+        // what is not transparent.
+        let (rect, px) = match layer.rgba.bounded() {
+            Some(b) => (b.rect, b.px.to_rgba8().into_owned()),
+            None => (Region::new(0, 0, w, h), layer.rgba.to_rgba8().into_owned()),
+        };
+        let Some(tight) = crate::smart::opaque_bounds(&px, rect.w, rect.h) else {
+            return Err(IngestError::Unsupported(format!(
+                "layer \"{}\" has no pixels to make a smart object of",
+                layer.name
+            )));
+        };
+        let src = crate::smart::crop_rgba8(&px, rect.w, tight);
+        let mut source =
+            SmartSource::from_pixels(Arc::from(src.into_boxed_slice()), tight.w, tight.h);
+        source.placement = Some(crate::smart::rect_quad(
+            f64::from(rect.x + tight.x),
+            f64::from(rect.y + tight.y),
+            f64::from(tight.w),
+            f64::from(tight.h),
+        ));
+        layer.kind = LayerKind::Smart(Box::new(source));
         Ok(())
     }
 
-    /// Record a re-render of a smart object at `scale`.
-    ///
-    /// The CALLER does the resampling (it is a GPU kernel dispatch and
-    /// this module holds no device), but the invariant lives here: the
-    /// source is never replaced, only the cached render is. That is what
-    /// makes scaling down and back up lossless, and it is asserted
-    /// directly in the tests.
+    /// Record a re-render of a smart object at `scale` (of its source's
+    /// size, from the placement's first corner) — the panel's scale.
+    /// The CALLER rendered it; the source is never replaced, only the
+    /// render, which is what makes scaling down and back up lossless.
     pub fn set_smart_render(
         &mut self,
         index: usize,
@@ -2056,6 +2112,13 @@ impl LayerStack {
         let layer = self.layer_mut(index)?;
         match &mut layer.kind {
             LayerKind::Smart(src) => {
+                let q = src.quad();
+                src.placement = Some(crate::smart::rect_quad(
+                    q[0],
+                    q[1],
+                    f64::from(src.width) * f64::from(scale),
+                    f64::from(src.height) * f64::from(scale),
+                ));
                 src.scale = scale;
                 layer.rgba = crate::pixels::Pixels::from_rgba8(rendered).into();
                 Ok(())
@@ -2924,6 +2987,15 @@ impl LayerStack {
         if active.type_layer().is_some() {
             return Err(IngestError::Unsupported(format!(
                 "\"{}\" is a type layer — rasterize it to paint on it (Layer ▸ Rasterize ▸ Type)",
+                active.name
+            )));
+        }
+        // A smart object's pixels are its render (ADR 482): Photoshop's
+        // "the smart object is not directly editable".
+        if active.smart_source().is_some() {
+            return Err(IngestError::Unsupported(format!(
+                "the smart object \"{}\" is not directly editable: edit its contents, add a smart \
+                 filter or rasterize it",
                 active.name
             )));
         }
@@ -5029,37 +5101,6 @@ fn f16_to_coverage(win: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-/// RENDER a smart object's SOURCE at `scale` with `filter`, letterboxed
-/// (top-left) into a `cw × ch` canvas as straight RGBA8 — the one
-/// re-render both the smart-scale door and Image Size use. GPU-only.
-pub async fn render_smart(
-    ctx: &GpuContext,
-    src: &SmartSource,
-    scale: f32,
-    filter: ResampleFilter,
-    cw: u32,
-    ch: u32,
-) -> Result<Vec<u8>, IngestError> {
-    let out_w = ((src.width as f32) * scale).round().max(1.0) as u32;
-    let out_h = ((src.height as f32) * scale).round().max(1.0) as u32;
-    let op = CanvasOp::Resample {
-        width: out_w,
-        height: out_h,
-        filter,
-    };
-    let small = f16_to_rgba8(
-        &gpu_canvas_op(ctx, op, &rgba8_to_f16(&src.rgba), src.width, src.height).await?,
-    );
-    let mut canvas = vec![0u8; (cw as usize) * (ch as usize) * 4];
-    for y in 0..out_h.min(ch) {
-        let srow = (y as usize) * (out_w as usize) * 4;
-        let drow = (y as usize) * (cw as usize) * 4;
-        let n = (out_w.min(cw) as usize) * 4;
-        canvas[drow..drow + n].copy_from_slice(&small[srow..srow + n]);
-    }
-    Ok(canvas)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5274,7 +5315,7 @@ mod tests {
 
     #[test]
     #[allow(non_snake_case)]
-    fn canvas_ops_are_undoable_and_refuse_resize_over_a_smart_object__feat__image_editor_layers() {
+    fn canvas_ops_are_undoable_and_move_a_smart_object__feat__image_editor_layers() {
         let mut s = numbered();
         s.edit_active("paint", Region::new(0, 0, 3, 2), px(3, 2, 9).into())
             .expect("edit");
@@ -5291,23 +5332,21 @@ mod tests {
         assert_eq!(s.redo().as_deref(), Some("Rotate 90° clockwise"));
         assert_eq!((s.width, s.height), (2, 3));
         s.make_smart(0).expect("smart");
-        let err = s
-            .transform_canvas(CanvasOp::Resize {
-                width: 4,
-                height: 4,
-                anchor_x: 0,
-                anchor_y: 0,
-            })
-            .expect_err("refused");
-        assert!(err.to_string().contains("smart object"));
-        assert_eq!(
-            s.undo_labels().last().copied(),
-            Some("Rotate 90° clockwise"),
-            "a refused op records nothing"
-        );
-        // Rotation is fine: the source rotates with the render.
+        let source = s.layers[0].smart_source().expect("src").rgba.to_vec();
+        // Canvas Size moves the placement (ADR 482): no longer refused.
+        s.transform_canvas(CanvasOp::Resize {
+            width: 4,
+            height: 4,
+            anchor_x: 2,
+            anchor_y: 0,
+        })
+        .expect("canvas size");
+        let src = s.layers[0].smart_source().expect("src");
+        assert_eq!(src.placement.map(|q| q[0]), Some(2.0));
+        assert_eq!(src.rgba.to_vec(), source, "the source does not move");
         s.transform_canvas(CanvasOp::Rotate180)
             .expect("rotate smart");
+        assert_eq!(s.undo_labels().last().copied(), Some("Rotate 180°"));
     }
 
     /// `numbered()` plus an empty top layer with a mask, both in a group
@@ -5411,8 +5450,7 @@ mod tests {
 
     #[test]
     #[allow(non_snake_case)]
-    fn crop_moves_a_smart_source_at_1_to_1_and_refuses_a_scaled_one__feat__image_editor_canvas_ops()
-    {
+    fn crop_moves_a_smart_placement_and_keeps_its_source__feat__image_editor_canvas_ops() {
         let mut s = numbered();
         s.make_smart(0).expect("smart");
         let crop = CanvasOp::Crop {
@@ -5423,21 +5461,14 @@ mod tests {
         };
         s.transform_canvas(crop).expect("crop smart");
         let src = s.layers[0].smart_source().expect("source");
-        assert_eq!((src.width, src.height), (3, 1));
-        assert_eq!(
-            src.rgba
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .map(|p| p[0])
-                .collect::<Vec<_>>(),
-            vec![10, 11, 12]
-        );
+        assert_eq!((src.width, src.height), (3, 2), "the source is whole");
+        assert_eq!(src.placement.map(|q| (q[0], q[1])), Some((0.0, -1.0)));
+        assert_eq!(reds(&s), vec![10, 11, 12]);
+        // A scaled one crops too: its placement just moves.
         let mut s = numbered();
         s.make_smart(0).expect("smart");
         s.set_smart_render(0, px(3, 2, 5), 0.5).expect("render");
-        let err = s.transform_canvas(crop).expect_err("scaled");
-        assert!(err.to_string().contains("smart object"), "{err}");
+        s.transform_canvas(crop).expect("scaled");
     }
 
     #[test]
@@ -5535,8 +5566,16 @@ mod tests {
         let src = s.layers[0].smart_source().expect("src");
         assert_eq!(src.scale, 2.0, "the scale follows the canvas");
         assert_eq!(src.rgba.to_vec(), source, "the source itself is untouched");
-        assert_eq!(&reds_of(&s, 0)[..6], &[0, 0, 1, 1, 2, 2]);
-        // A stretch cannot be one scale: the source is resampled with it.
+        // Drawn from the source at twice its size (ADR 482's render).
+        let want = crate::smart::render_placed(
+            &src.raster().expect("raster"),
+            &crate::smart::rect_quad(0.0, 0.0, 6.0, 4.0),
+            6,
+            4,
+        )
+        .expect("render");
+        assert_eq!(&*s.layers[0].rgba.to_rgba8(), &*want.to_rgba8());
+        // A stretch is a placement too: the source is not resampled.
         pollster::block_on(s.transform_canvas_gpu(
             Some(ctx),
             CanvasOp::Resample {
@@ -5547,7 +5586,7 @@ mod tests {
         ))
         .expect("stretch");
         let src = s.layers[0].smart_source().expect("src");
-        assert_eq!((src.width, src.height), (3, 1));
+        assert_eq!((src.width, src.height), (3, 2));
         assert_eq!((s.width, s.height), (6, 2));
     }
 

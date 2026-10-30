@@ -791,6 +791,15 @@ Additive at protocol 76 like the fill rule: an older engine makes a plain
 group of `clip: true` and refuses a group child. paged.draw's clipped
 repeat asks it before choosing a clip group over paste-into.
 
+`"document.imageAdjustments@1"` (engine ADR 1037) says the vendored wire
+and catalog carry `frameImageAdjustments`, an image frame's filter stack:
+a list of `RasterOp` (`{ op: "exposure", ev }`, `levels`, `curves`,
+`hueSaturation`, `recolor`, `duotone`, `blackWhite`, `sharpen`, `blur`,
+`posterize`, `threshold`, `invert`) written whole as the `imageAdjustments`
+value, on a rectangle, oval or polygon. The engine draws and exports the
+picture through it; IDML keeps it in a label. Additive at protocol 77:
+an older engine refuses the write as an unknown path and reads no row.
+
 `"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
 protocol 77) are SVG in and out through the engine's `paged-svg`.
 `importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the
@@ -1888,6 +1897,13 @@ footnote.
 - `readCollection` — the rows of a named `CollectionName`. Serves the Layers
   list and the swatch/gradient list. **Takes no target**: document-scoped by
   construction.
+  The `links` collection (image ADR 482) is served with `ProvidedLinkRow`s:
+  core's `LinkSummary` fields for a file the provider's content links or
+  embeds (paged.image's smart objects), plus `actions` — the provider's
+  commands for Relink / Update / Embed, which the host Links panel runs with
+  `{ link: hostSelfId }`. Core has no relink operation to intercept, so the
+  row names the verbs; the panel lists provider rows after the document's own
+  links and enables a button only when the row offers its action.
 - `applyMutation` — first refusal on a `MutationInput` the host panel would
   otherwise send straight to core. Serves the STRUCTURAL edits that are not
   property writes: `layerMove` / `layerInsert` / `layerRemove`,

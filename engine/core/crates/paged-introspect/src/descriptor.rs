@@ -134,6 +134,8 @@ impl From<Value> for AuthoredValue {
             | Value::EffectStack { .. }
             | Value::Appearance { .. }
             | Value::AppearanceLayer { .. }
+            // Engine ADR 1037 — the filter stack, a whole list.
+            | Value::ImageAdjustments(_)
             | Value::SwatchColor(_) => AuthoredValue::None,
         }
     }

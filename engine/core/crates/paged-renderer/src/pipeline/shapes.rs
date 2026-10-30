@@ -46,7 +46,17 @@ pub(super) const SUBSTITUTED_HIGHLIGHT_B: f32 = 0.604;
 /// with the rest (asked of InDesign, `transparency-targets` case 13).
 pub(super) type ContentPainter<'p> = &'p mut dyn FnMut(&mut BuiltPage);
 
+/// What a module paints into the frame — a claimed provider's tiles (C-6)
+/// and the plugin's scene layer (C-1) — painted over the stroke, as the
+/// frontmost content of the frame, but still inside the object's group,
+/// inside the run its effect stack applies to, and before its feathers:
+/// the frame's opacity, blend mode and effects take it with the rest of
+/// the object (engine ADR 1046). Callers with no module content pass a
+/// no-op.
+pub(super) type ModulePainter<'p> = &'p mut dyn FnMut(&mut BuiltPage);
+
 /// An oval, with its effect stack applied (engine ADR 1008).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_oval_into(
     page: &mut BuiltPage,
     oval: &Oval,
@@ -55,14 +65,17 @@ pub(super) fn emit_oval_into(
     fallback: Paint,
     color_ctx: ColorCtx<'_>,
     content: ContentPainter<'_>,
+    module: ModulePainter<'_>,
 ) {
     if !oval.appearance.is_empty() {
         return super::appearance::emit_oval(
-            page, oval, document, palette, fallback, color_ctx, content,
+            page, oval, document, palette, fallback, color_ctx, content, module,
         );
     }
     let Some(mode) = crate::module::effect_stack::stack_mode(&oval.effect_stack) else {
-        return emit_oval_body(page, oval, document, palette, fallback, color_ctx, content);
+        return emit_oval_body(
+            page, oval, document, palette, fallback, color_ctx, content, module,
+        );
     };
     let stripped;
     let base = if mode == crate::module::effect_stack::StackMode::Ordered {
@@ -76,7 +89,9 @@ pub(super) fn emit_oval_into(
         oval
     };
     let start = page.list.commands.len();
-    emit_oval_body(page, base, document, palette, fallback, color_ctx, content);
+    emit_oval_body(
+        page, base, document, palette, fallback, color_ctx, content, module,
+    );
     let mut resolved = ResolvedFrame::from_oval(oval);
     let style = crate::module::resolve_applied_style(&resolved, document);
     if let Some(s) = &style {
@@ -95,6 +110,7 @@ pub(super) fn emit_oval_into(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_oval_body(
     page: &mut BuiltPage,
     oval: &Oval,
@@ -103,6 +119,7 @@ pub(super) fn emit_oval_body(
     fallback: Paint,
     color_ctx: ColorCtx<'_>,
     content: ContentPainter<'_>,
+    module: ModulePainter<'_>,
 ) {
     let mut frame = ResolvedFrame::from_oval(oval);
     let style = crate::module::resolve_applied_style(&frame, document);
@@ -224,6 +241,7 @@ pub(super) fn emit_oval_body(
     if stroke_group {
         pop_blend_group(page);
     }
+    module(page);
     // The feathers come last, over the stroke as well (ADR 204).
     if let (Some(pid), Some(fpid), Some(effects)) =
         (effects_path, feather_path, oval.effects.as_ref())
@@ -596,6 +614,7 @@ pub(super) fn emit_line_into(
     document: &Document,
     palette: &Graphic,
     color_ctx: ColorCtx<'_>,
+    module: ModulePainter<'_>,
 ) {
     let resolved = ResolvedFrame::from_graphic_line(line);
     let outer = frame_outer_transform(page, resolved.item_transform);
@@ -615,6 +634,7 @@ pub(super) fn emit_line_into(
     if stroke_group {
         pop_blend_group(page);
     }
+    module(page);
     if object_group {
         pop_blend_group(page);
     }
@@ -831,6 +851,7 @@ fn emit_line_body(
 /// against the interned path. Skips the corner-radius and effects
 /// branches the rectangular path runs because those don't apply to a
 /// curved outline.
+#[allow(clippy::too_many_arguments)]
 fn emit_rectangle_polygon_path(
     page: &mut BuiltPage,
     resolved: &ResolvedFrame<'_>,
@@ -839,13 +860,17 @@ fn emit_rectangle_polygon_path(
     fallback: Paint,
     color_ctx: ColorCtx<'_>,
     content: ContentPainter<'_>,
+    module: ModulePainter<'_>,
 ) {
     page.stats.frames += 1;
     let outer = frame_outer_transform(page, resolved.item_transform);
     let needs_group = frame_needs_blend_group(resolved);
     let bbox = match &resolved.geometry {
         Geometry::Polygon { bbox, .. } => *bbox,
-        _ => return,
+        _ => {
+            module(page);
+            return;
+        }
     };
     if needs_group {
         push_blend_group(
@@ -976,6 +1001,7 @@ fn emit_rectangle_polygon_path(
     if stroke_group {
         pop_blend_group(page);
     }
+    module(page);
     if needs_group {
         pop_blend_group(page);
     }
@@ -993,10 +1019,11 @@ pub(super) fn emit_rectangle_into(
     color_ctx: ColorCtx<'_>,
     drop_shadow: Option<DropShadow>,
     content: ContentPainter<'_>,
+    module: ModulePainter<'_>,
 ) {
     if !rect.appearance.is_empty() {
         return super::appearance::emit_rectangle(
-            page, rect, document, palette, fallback, color_ctx, content,
+            page, rect, document, palette, fallback, color_ctx, content, module,
         );
     }
     let Some(mode) = crate::module::effect_stack::stack_mode(&rect.effect_stack) else {
@@ -1009,6 +1036,7 @@ pub(super) fn emit_rectangle_into(
             color_ctx,
             drop_shadow,
             content,
+            module,
         );
     };
     let stripped;
@@ -1032,6 +1060,7 @@ pub(super) fn emit_rectangle_into(
         color_ctx,
         drop_shadow,
         content,
+        module,
     );
     let mut resolved = ResolvedFrame::from_rectangle(rect);
     let style = crate::module::resolve_applied_style(&resolved, document);
@@ -1079,6 +1108,7 @@ pub(super) fn finish_effect_stack(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_rectangle_body(
     page: &mut BuiltPage,
     rect: &Rectangle,
@@ -1088,6 +1118,7 @@ pub(super) fn emit_rectangle_body(
     color_ctx: ColorCtx<'_>,
     drop_shadow: Option<DropShadow>,
     content: ContentPainter<'_>,
+    module: ModulePainter<'_>,
 ) {
     let mut resolved = ResolvedFrame::from_rectangle(rect);
     let style = crate::module::resolve_applied_style(&resolved, document);
@@ -1102,7 +1133,7 @@ pub(super) fn emit_rectangle_body(
     // `emit_polygon_into` uses, then return.
     if matches!(resolved.geometry, Geometry::Polygon { .. }) {
         emit_rectangle_polygon_path(
-            page, &resolved, document, palette, fallback, color_ctx, content,
+            page, &resolved, document, palette, fallback, color_ctx, content, module,
         );
         return;
     }
@@ -1283,6 +1314,7 @@ pub(super) fn emit_rectangle_body(
         if stroke_group {
             pop_blend_group(page);
         }
+        module(page);
         emit_feathers(page);
         if needs_group {
             pop_blend_group(page);
@@ -1364,6 +1396,7 @@ pub(super) fn emit_rectangle_body(
     if stroke_group {
         pop_blend_group(page);
     }
+    module(page);
     emit_feathers(page);
     if needs_group {
         pop_blend_group(page);

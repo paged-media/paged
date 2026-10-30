@@ -941,6 +941,43 @@ pub(crate) fn appearance_losses(scene: &Document) -> Vec<String> {
         .collect()
 }
 
+/// Engine ADR 1037 — the image filter stacks IDML cannot carry. InDesign
+/// has no adjustment on a placed picture, so it shows the picture as it
+/// is; the export keeps each stack in the frame's label, which paged reads
+/// back on reopen. Declared from the model, like the opacity masks: the
+/// twin reads the label back and so cannot tell the loss.
+pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut check = |kind: &str, id: Option<&str>, ops: &[paged_model::RasterOp]| {
+        if ops.is_empty() {
+            return;
+        }
+        let names: Vec<&str> = ops.iter().map(|op| op.name()).collect();
+        out.push(format!(
+            "image filter stack on {kind} `{}` ({}) is a paged-native construct — IDML has \
+             no adjustment on a placed picture, so InDesign shows it unadjusted; the stack \
+             rides the frame's `{}` label and comes back when paged reopens the file. \
+             Save as `.paged` to keep it.",
+            id.unwrap_or("?"),
+            names.join(", "),
+            paged_model::image_adjust::IMAGE_ADJUSTMENTS_LABEL,
+        ));
+    };
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        for r in &sp.rectangles {
+            check("rectangle", r.self_id.as_deref(), &r.image_adjustments);
+        }
+        for o in &sp.ovals {
+            check("oval", o.self_id.as_deref(), &o.image_adjustments);
+        }
+        for p in &sp.polygons {
+            check("polygon", p.self_id.as_deref(), &p.image_adjustments);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

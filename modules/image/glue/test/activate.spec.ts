@@ -89,6 +89,7 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.rotate180",
       "media.paged.image.command.flipHorizontal",
       "media.paged.image.command.flipVertical",
+      "media.paged.image.command.filterGaussianBlur",
       "media.paged.image.command.filterBoxBlur",
       "media.paged.image.command.filterSurfaceBlur",
       "media.paged.image.command.filterMotionBlur",
@@ -259,6 +260,18 @@ describe("imageBundle.activate", () => {
       // Built long before anything reached them: smart objects, pattern
       // fill (with Define pattern), shape blur.
       "media.paged.image.command.convertLayerToSmart",
+      // Smart objects in full (image ADR 482).
+      "media.paged.image.command.smartEditContents",
+      "media.paged.image.command.smartSaveContents",
+      "media.paged.image.command.smartCloseContents",
+      "media.paged.image.command.smartTransform",
+      "media.paged.image.command.smartReplaceContents",
+      "media.paged.image.command.smartRelink",
+      "media.paged.image.command.smartUpdateLinked",
+      "media.paged.image.command.smartEmbed",
+      "media.paged.image.command.smartExportContents",
+      "media.paged.image.command.smartPlacePageItems",
+      "media.paged.image.command.convertForSmartFilters",
       "media.paged.image.command.definePattern",
       "media.paged.image.command.fillPattern",
       "media.paged.image.command.shapeBlur",

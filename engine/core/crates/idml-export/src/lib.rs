@@ -400,6 +400,37 @@ pub fn story_is_placed(placed: &HashSet<String>, id: &str) -> bool {
     placed.contains(id) || placed.contains(&emit::sanitize_id(id))
 }
 
+/// Engine ADR 1037 — `doc` with every image frame's filter stack written
+/// into its spread's labels, or `None` when no frame carries one and no
+/// source label needs dropping (the document is written as it is).
+fn image_adjustment_labels(doc: &Document) -> Option<Document> {
+    use paged_model::image_adjust::{has_any, write_labels, IMAGE_ADJUSTMENTS_LABEL};
+    let stale = |sp: &paged_model::Spread| {
+        sp.labels
+            .values()
+            .any(|v| v.iter().any(|(k, _)| k == IMAGE_ADJUSTMENTS_LABEL))
+    };
+    let needed = doc
+        .spreads
+        .iter()
+        .any(|p| has_any(&p.spread) || stale(&p.spread))
+        || doc
+            .master_spreads
+            .values()
+            .any(|m| has_any(&m.spread) || stale(&m.spread));
+    if !needed {
+        return None;
+    }
+    let mut out = doc.clone();
+    for p in &mut out.spreads {
+        write_labels(&mut p.spread);
+    }
+    for m in out.master_spreads.values_mut() {
+        write_labels(&mut m.spread);
+    }
+    Some(out)
+}
+
 /// The one writer both [`write_idml`] and [`write_paged`] run. The only
 /// thing that differs between the two products is whether the CONTAINER
 /// parts of `original` — `manifest.json` and everything under `paged/`
@@ -431,6 +462,10 @@ pub(crate) fn write_package(
     // variable that does the same, or as its result.
     let fields_lowered = word_fields::lower(doc);
     let doc = fields_lowered.as_ref().unwrap_or(doc);
+    // Engine ADR 1037: IDML has no image filter stack; each rides a label
+    // the import reads back (and `idml_export_losses` reports).
+    let labelled = image_adjustment_labels(doc);
+    let doc = labelled.as_ref().unwrap_or(doc);
     let mut src = zip::ZipArchive::new(Cursor::new(original))?;
     // The files every placed image's `<Link>` will point at (empty
     // without a link base — see `images`).

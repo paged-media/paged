@@ -316,6 +316,7 @@ export type {
   BindingDecline,
   BindingWrite,
   BindingCollection,
+  ProvidedLinkRow,
   BindingOp,
   BindingProvider,
   BindingProviderScope,
@@ -365,6 +366,10 @@ export type {
   SnapSource,
   SnapSettings,
 } from "./wire.js";
+
+// Engine ADR 1037 — one step of an image frame's filter stack, the item of
+// the `imageAdjustments` value `frameImageAdjustments` carries.
+export type { RasterOp } from "./wire.js";
 
 // Engine ADR 1031 — `host.document.importSvg` / `exportSvg`'s options and
 // their report.

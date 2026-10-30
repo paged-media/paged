@@ -149,6 +149,7 @@ pub(super) fn emit_rectangle(
     fallback: Paint,
     color_ctx: ColorCtx<'_>,
     content: super::shapes::ContentPainter<'_>,
+    module: super::shapes::ModulePainter<'_>,
 ) {
     let mut resolved = ResolvedFrame::from_rectangle(rect);
     let style = crate::module::resolve_applied_style(&resolved, document);
@@ -166,9 +167,20 @@ pub(super) fn emit_rectangle(
             &mut none
         };
         super::shapes::emit_rectangle_into(
-            page, &part, document, palette, fallback, color_ctx, None, c,
+            page,
+            &part,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            None,
+            c,
+            &mut |_| {},
         );
     }
+    // A module's content (engine ADR 1046) over every layer, inside the
+    // object's group.
+    module(page);
     if group {
         pop_blend_group(page);
     }
@@ -194,6 +206,7 @@ pub(super) fn emit_oval(
     fallback: Paint,
     color_ctx: ColorCtx<'_>,
     content: super::shapes::ContentPainter<'_>,
+    module: super::shapes::ModulePainter<'_>,
 ) {
     let mut resolved = ResolvedFrame::from_oval(oval);
     let style = crate::module::resolve_applied_style(&resolved, document);
@@ -210,8 +223,20 @@ pub(super) fn emit_oval(
         } else {
             &mut none
         };
-        super::shapes::emit_oval_into(page, &part, document, palette, fallback, color_ctx, c);
+        super::shapes::emit_oval_into(
+            page,
+            &part,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            c,
+            &mut |_| {},
+        );
     }
+    // A module's content (engine ADR 1046) over every layer, inside the
+    // object's group.
+    module(page);
     if group {
         pop_blend_group(page);
     }
@@ -237,6 +262,7 @@ pub(super) fn emit_polygon(
     fallback: Paint,
     color_ctx: ColorCtx<'_>,
     content: super::shapes::ContentPainter<'_>,
+    module: super::shapes::ModulePainter<'_>,
 ) {
     let mut resolved = ResolvedFrame::from_polygon(poly);
     let style = crate::module::resolve_applied_style(&resolved, document);
@@ -253,8 +279,20 @@ pub(super) fn emit_polygon(
         } else {
             &mut none
         };
-        super::text_path::emit_polygon_into(page, &part, document, palette, fallback, color_ctx, c);
+        super::text_path::emit_polygon_into(
+            page,
+            &part,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            c,
+            &mut |_| {},
+        );
     }
+    // A module's content (engine ADR 1046) over every layer, inside the
+    // object's group.
+    module(page);
     if group {
         pop_blend_group(page);
     }

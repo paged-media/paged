@@ -313,7 +313,13 @@ impl NativeLowering {
         effects: &paged_ooxml::drawingml::Effects,
     ) -> Option<NativeFx> {
         let pic = resolved::picture(blip, &self.slots);
-        let opacity = self.mapper.picture(&pic);
+        // The filter stack (engine ADR 1037) is not carried here: the
+        // opacity is, and each adjustment is reported.
+        let mapped = self.mapper.picture(&pic);
+        for op in &mapped.adjustments {
+            self.mapper.lose(dml_native::picture_adjustment_loss(op));
+        }
+        let opacity = mapped.opacity;
         let mut notes: Vec<String> = Vec::new();
         let fx = resolved::effects(effects, &self.slots, &mut |n| notes.push(n));
         for n in notes {
@@ -582,7 +588,10 @@ mod tests {
         let out = out.unwrap();
         assert_eq!(out.opacity, Some(60.0));
         assert_eq!(out.drop_shadow.unwrap().opacity, 40.0);
-        assert!(losses[0].contains("a:grayscl"), "{losses:?}");
+        assert!(
+            losses.iter().any(|m| m.contains("adjustment blackWhite")),
+            "{losses:?}"
+        );
     }
 
     #[test]

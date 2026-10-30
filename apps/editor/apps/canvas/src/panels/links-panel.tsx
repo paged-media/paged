@@ -25,15 +25,28 @@
 // colourspace, and the effective PPI with a `lo-res` badge below the
 // 150-ppi preflight convention. The toolbar (relink/update/go-to)
 // stays a seam until the relocate/update/break Operations ship.
+//
+// Image ADR 482 — a bundle whose content links or embeds files (paged.image's
+// smart objects) serves its own `links` rows while its edit context is
+// active (`useProvidedCollection`, ADR 023): they are listed after the
+// document's links, and a selected one gets a second toolbar whose
+// Relink / Update / Embed run the commands the ROW names
+// (`ProvidedLinkRow.actions`) with `{ link }` — the panel branches on what
+// the row offers, never on who served it.
 
+import { useState } from "react";
 import {
   ListRows,
   PanelToolbar,
   ToolbarBtn,
   useCollection,
+  useProvidedCollection,
+  useRegistries,
   type ListRowBadge,
+  type ListRowSpec,
 } from "@paged-media/shell";
 import type { LinkSummary } from "@paged-media/client";
+import type { ProvidedLinkRow } from "@paged-media/plugin-api";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.linksPanel", {
@@ -46,6 +59,10 @@ const M = defineMessages("app.linksPanel", {
   missing: "missing",
   notDrawn: "not drawn",
   lowRes: "lo-res",
+  embedded: "embedded",
+  relinkProvided: "Relink…",
+  updateProvided: "Update from file…",
+  embedProvided: "Embed",
 });
 
 /** Low-res convention — placed images whose effective PPI falls below
@@ -56,6 +73,21 @@ const LOW_RES_PPI = 150;
 export function LinksPanel() {
   const strings = useStrings();
   const links = useCollection<LinkSummary>("links");
+  const provided = useProvidedCollection<ProvidedLinkRow>("links");
+  const registries = useRegistries();
+  const [selected, setSelected] = useState<string | null>(null);
+  // A provider's rows (a smart object's file), after the document's own.
+  const extra: ProvidedLinkRow[] =
+    provided.provider !== null ? (provided.rows ?? []) : [];
+  const picked = extra.find((r) => r.hostSelfId === selected) ?? null;
+  const run = (command: string | undefined) => {
+    if (!command || !picked) return;
+    void Promise.resolve(
+      registries.commands.invoke(command, { link: picked.hostSelfId }),
+    ).catch((err: unknown) =>
+      console.warn(`paged.links: ${command} refused`, err),
+    );
+  };
   if (links === null) {
     return (
       <div
@@ -73,7 +105,35 @@ export function LinksPanel() {
         <ToolbarBtn icon="ui-history" label={strings.t(M.relinkHistory)} />
         <ToolbarBtn icon="ui-target" label={strings.t(M.goToLink)} />
       </PanelToolbar>
-      {links.length === 0 ? (
+      {picked && (
+        <div data-provided-link-actions className="flex gap-2 px-3 py-1">
+          <button
+            type="button"
+            data-link-action="relink"
+            disabled={!picked.actions?.relink}
+            onClick={() => run(picked.actions?.relink)}
+          >
+            {strings.t(M.relinkProvided)}
+          </button>
+          <button
+            type="button"
+            data-link-action="update"
+            disabled={!picked.actions?.update}
+            onClick={() => run(picked.actions?.update)}
+          >
+            {strings.t(M.updateProvided)}
+          </button>
+          <button
+            type="button"
+            data-link-action="embed"
+            disabled={!picked.actions?.embed}
+            onClick={() => run(picked.actions?.embed)}
+          >
+            {strings.t(M.embedProvided)}
+          </button>
+        </div>
+      )}
+      {links.length === 0 && extra.length === 0 ? (
         <div className="p-3 text-xs text-muted-foreground" data-empty-links>
           {strings.t(M.empty)}
         </div>
@@ -82,54 +142,76 @@ export function LinksPanel() {
           <ListRows
             search={links.length > 8}
             searchPlaceholder={strings.t(M.filter)}
-            rows={links.map((link) => {
-              // The displayed name strips path prefixes for
-              // legibility — full URI lives in searchText.
-              const filename = link.uri.split("/").pop() ?? link.uri;
-              const missing = link.status === "missing";
-              // The file is there but this engine has no decoder for it
-              // (an EPS): not missing, and not drawn either (engine ADR 207).
-              const undecoded = link.status === "undecoded";
-              const lowRes =
-                link.effectivePpi != null && link.effectivePpi < LOW_RES_PPI;
-              // status dot: missing → error, undecoded → warn, resolved →
-              // ready, unknown (older wasm) → no dot.
-              const dot =
-                link.status === "missing"
-                  ? ("error" as const)
+            rows={links
+              .map((link): ListRowSpec => {
+                // The displayed name strips path prefixes for
+                // legibility — full URI lives in searchText.
+                const filename = link.uri.split("/").pop() ?? link.uri;
+                const missing = link.status === "missing";
+                // The file is there but this engine has no decoder for it
+                // (an EPS): not missing, and not drawn either (engine ADR 207).
+                const undecoded = link.status === "undecoded";
+                const lowRes =
+                  link.effectivePpi != null && link.effectivePpi < LOW_RES_PPI;
+                // status dot: missing → error, undecoded → warn, resolved →
+                // ready, unknown (older wasm) → no dot.
+                const dot =
+                  link.status === "missing"
+                    ? ("error" as const)
+                    : undecoded
+                      ? ("warn" as const)
+                      : link.status === "ok"
+                        ? ("ok" as const)
+                        : undefined;
+                // The mono secondary line carries colourspace + PPI when
+                // the IDML baked them (synthetic fixtures omit both).
+                const meta: string[] = [];
+                if (link.colorspace) meta.push(link.colorspace);
+                if (link.effectivePpi != null) {
+                  meta.push(`${Math.round(link.effectivePpi)} ppi`);
+                }
+                const secondary =
+                  meta.length > 0 ? meta.join(" · ") : `${link.hostKind}`;
+                // A single trailing badge — missing wins over not drawn,
+                // which wins over lo-res.
+                const badge: ListRowBadge | undefined = missing
+                  ? { label: strings.t(M.missing), tone: "error" }
                   : undecoded
-                    ? ("warn" as const)
-                    : link.status === "ok"
-                      ? ("ok" as const)
+                    ? { label: strings.t(M.notDrawn), tone: "warn" }
+                    : lowRes
+                      ? { label: strings.t(M.lowRes), tone: "warn" }
                       : undefined;
-              // The mono secondary line carries colourspace + PPI when
-              // the IDML baked them (synthetic fixtures omit both).
-              const meta: string[] = [];
-              if (link.colorspace) meta.push(link.colorspace);
-              if (link.effectivePpi != null) {
-                meta.push(`${Math.round(link.effectivePpi)} ppi`);
-              }
-              const secondary =
-                meta.length > 0 ? meta.join(" · ") : `${link.hostKind}`;
-              // A single trailing badge — missing wins over not drawn,
-              // which wins over lo-res.
-              const badge: ListRowBadge | undefined = missing
-                ? { label: strings.t(M.missing), tone: "error" }
-                : undecoded
-                  ? { label: strings.t(M.notDrawn), tone: "warn" }
-                  : lowRes
-                    ? { label: strings.t(M.lowRes), tone: "warn" }
-                    : undefined;
-              return {
-                key: link.hostSelfId,
-                dot,
-                icon: "panel-links",
-                primary: filename,
-                secondary,
-                badge,
-                searchText: `${filename} ${link.uri} ${link.colorspace ?? ""}`,
-              };
-            })}
+                return {
+                  key: link.hostSelfId,
+                  dot,
+                  icon: "panel-links",
+                  primary: filename,
+                  secondary,
+                  badge,
+                  searchText: `${filename} ${link.uri} ${link.colorspace ?? ""}`,
+                };
+              })
+              .concat(
+                extra.map((row): ListRowSpec => {
+                  const name = row.uri.split("/").pop() ?? row.uri;
+                  const missing = row.status === "missing";
+                  return {
+                    key: row.hostSelfId,
+                    dot: missing ? "error" : "ok",
+                    icon: "panel-links",
+                    primary: name,
+                    secondary: row.hostKind,
+                    badge: missing
+                      ? { label: strings.t(M.missing), tone: "error" }
+                      : row.status === "embedded"
+                        ? { label: strings.t(M.embedded), tone: "info" }
+                        : undefined,
+                    selected: row.hostSelfId === selected,
+                    onClick: () => setSelected(row.hostSelfId),
+                    searchText: `${name} ${row.uri}`,
+                  };
+                }),
+              )}
           />
         </div>
       )}

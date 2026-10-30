@@ -111,6 +111,10 @@ import {
   WORKSPACE_TOOL_IDS,
 } from "./workspace-contrib";
 import {
+  layerOfLink,
+  makeLinksBindingProvider,
+} from "./binding-provider/links-provider";
+import {
   contributeImageObjectModel,
   type UntypedCommand,
 } from "./object-model/contribute";
@@ -142,6 +146,17 @@ const CMD = defineMessages("image.command", {
   flipCanvasVertical: "Flip canvas vertical",
   commitImageEditsToTheDocument: "Commit image edits to the document",
   convertActiveLayerToSmartObject: "Convert active layer to smart object",
+  smartEditContents: "Edit smart object contents",
+  smartSaveContents: "Save and close smart object contents",
+  smartCloseContents: "Close smart object contents without saving",
+  smartTransform: "Transform smart object…",
+  smartReplaceContents: "Replace smart object contents…",
+  smartRelink: "Relink smart object to file…",
+  smartUpdateLinked: "Update linked smart object from file…",
+  smartEmbed: "Embed linked smart object",
+  smartExportContents: "Export smart object contents…",
+  smartPlacePageItems: "Place selected page items as a smart object",
+  convertForSmartFilters: "Convert for smart filters",
   definePatternFromSelectionImage: "Define pattern from selection (image)",
   fillSelectionWithTheDefinedPattern: "Fill selection with the defined pattern",
   shapeBlurDefinedPatternAsTheShape:
@@ -1165,6 +1180,7 @@ export function activate(host: BundleHost): BundleHandle {
   // (live preview on the canvas, OK one undo step, Cancel restores).
   // The table is literal so every command id is readable as written.
   for (const [suffix, id] of [
+    ["filterGaussianBlur", "gaussianBlur"],
     ["filterBoxBlur", "boxBlur"],
     ["filterSurfaceBlur", "surfaceBlur"],
     ["filterMotionBlur", "motionBlur"],
@@ -1554,6 +1570,81 @@ export function activate(host: BundleHost): BundleHandle {
       void session.makeLayerSmart(session.state().layers.active);
     },
   });
+  // SMART OBJECTS (image ADR 482): Layer ▸ Smart objects ▸ … and
+  // Filter ▸ Convert for smart filters. Each raises the Image panel,
+  // where the session says what is missing when no image is open.
+  /** A Links-panel row's layer (`{ link: "smart:<id>" }`), else the
+   *  active layer (a menu click carries no payload). */
+  const linkLayer = (p: unknown): number | undefined =>
+    layerOfLink(session, (p as { link?: unknown } | undefined)?.link) ??
+    undefined;
+  for (const [suffix, title, run] of [
+    [
+      "smartEditContents",
+      CMD.smartEditContents,
+      () => session.smart().openContents(),
+    ],
+    [
+      "smartSaveContents",
+      CMD.smartSaveContents,
+      () => session.smart().closeContents(true),
+    ],
+    [
+      "smartCloseContents",
+      CMD.smartCloseContents,
+      () => session.smart().closeContents(false),
+    ],
+    [
+      "smartTransform",
+      CMD.smartTransform,
+      async () => session.openDialog("smartTransform"),
+    ],
+    [
+      "smartReplaceContents",
+      CMD.smartReplaceContents,
+      () => session.smart().replaceContents(),
+    ],
+    [
+      "smartRelink",
+      CMD.smartRelink,
+      (p: unknown) => session.smart().relink(linkLayer(p)),
+    ],
+    [
+      "smartUpdateLinked",
+      CMD.smartUpdateLinked,
+      (p: unknown) => session.smart().updateLinked(linkLayer(p)),
+    ],
+    [
+      "smartEmbed",
+      CMD.smartEmbed,
+      (p: unknown) => session.smart().embed(linkLayer(p)),
+    ],
+    [
+      "smartExportContents",
+      CMD.smartExportContents,
+      () => session.smart().exportContents(),
+    ],
+    [
+      "smartPlacePageItems",
+      CMD.smartPlacePageItems,
+      () => session.smart().placePageItems(),
+    ],
+    [
+      "convertForSmartFilters",
+      CMD.convertForSmartFilters,
+      () => session.makeLayerSmart(session.state().layers.active),
+    ],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(title),
+      category: "Image",
+      handler: (_paged: unknown, payload?: unknown) => {
+        host.shell.openPanel(PANEL_ID);
+        void (run as (p: unknown) => Promise<unknown>)(payload);
+      },
+    });
+  }
   command({
     id: "media.paged.image.command.definePattern",
     title: t(CMD.definePatternFromSelectionImage),
@@ -2200,6 +2291,14 @@ export function activate(host: BundleHost): BundleHandle {
         host.contribute.bindingProvider(
           "rasterImage",
           makeWorkspaceBindingProvider(() => session.workspace()),
+        ),
+      );
+      // LINKS (image ADR 482) — the host Links panel lists the smart
+      // objects' files; its Relink / Update / Embed run our commands.
+      providerHandles.push(
+        host.contribute.bindingProvider(
+          "rasterImage",
+          makeLinksBindingProvider(session).provider,
         ),
       );
       // A provider's values change without an ENGINE mutation — a layer
