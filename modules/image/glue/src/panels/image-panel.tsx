@@ -36,6 +36,7 @@ import { styleOptionsFromBits } from "../layer-style";
 import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
+import { WARP_STYLES, type TypeWarp, type WarpStyle } from "../type-layer";
 import {
   createStrings,
   defineMessages,
@@ -95,7 +96,10 @@ import { RankLookupSection } from "./sections/rank-lookup-section";
 import { SelectModifySection } from "./sections/select-modify-section";
 import { MoveSection } from "./sections/move-section";
 import { PatternSection } from "./sections/pattern-section";
-import { SmartObjectSection } from "./sections/smart-object-section";
+import {
+  SmartObjectSection,
+  SmartTransformDialog,
+} from "./sections/smart-object-section";
 import {
   DISTORT_DEFAULTS,
   DistortSection,
@@ -804,8 +808,10 @@ const TYPE = defineMessages("image.type", {
   face: "Face",
   size: "Size (px)",
   note:
-    "Click the canvas to set the baseline and paint the text as pixels in " +
-    "the brush colour; the Character panel styles it.",
+    "Click the canvas for point type, drag for a text box: either makes an " +
+    "editable type layer in the foreground colour, laid out by the " +
+    "document's text engine. Click a type layer's text to edit it; the " +
+    "Character and Paragraph panels style it.",
   shaping:
     "Glyphs are shaped by the font's own tables — joining, reordering, " +
     "ligatures and kerning. Only fonts the document already embeds can be " +
@@ -813,13 +819,112 @@ const TYPE = defineMessages("image.type", {
     "glyph in the chosen face is reported and left undrawn rather than " +
     "replaced with a box.",
   pixels:
-    "This paints pixels, not a text object. The Character panel applies " +
-    "family, style, size, tracking, leading, case, scale, slant, baseline " +
-    "shift, super/subscript, underline, strikethrough, ligatures and line " +
-    "alignment. Anything that needs a text column — wrapping, indents, " +
-    "hyphenation — is absent: a line ends where you end it. For live, " +
-    "editable, wrapping text use a text frame.",
+    "A type layer keeps its text: it wraps in its box, justifies and " +
+    "hyphenates as a text frame does, and is drawn again after every edit. " +
+    "Type ▸ Rasterize type layer turns it into pixels; Type ▸ Paint text " +
+    "into layer paints the text straight into the active layer instead.",
+  warpTitle: "Warp text",
+  warpStyle: "Style",
+  bend: "Bend (%)",
+  horizontal: "Horizontal distortion (%)",
+  vertical: "Vertical distortion (%)",
+  verticalOrientation: "Vertical",
+  warpNote: "Warp text bends the active type layer; it stays editable.",
 });
+
+const WARP_NAMES = defineMessages("image.warpStyle", {
+  none: "None",
+  arc: "Arc",
+  arcLower: "Arc lower",
+  arcUpper: "Arc upper",
+  arch: "Arch",
+  bulge: "Bulge",
+  shellLower: "Shell lower",
+  shellUpper: "Shell upper",
+  flag: "Flag",
+  wave: "Wave",
+  fish: "Fish",
+  rise: "Rise",
+  fishEye: "Fish eye",
+  inflate: "Inflate",
+  squeeze: "Squeeze",
+  twist: "Twist",
+});
+
+/** Warp Text for the active TYPE layer (WP5.10). PURE. */
+export function WarpTextSection({
+  warp,
+  disabled,
+  onChange,
+}: {
+  warp: TypeWarp;
+  disabled: boolean;
+  onChange: (warp: TypeWarp) => void;
+}) {
+  const pct = (v: number) => Math.round(v * 100);
+  return (
+    <Section title={t(TYPE.warpTitle)} data-image-warp-section>
+      <div style={row}>
+        <label htmlFor="pg-image-warp-style">{t(TYPE.warpStyle)}</label>
+        <select
+          id="pg-image-warp-style"
+          data-image-warp-style
+          value={warp.style}
+          disabled={disabled}
+          onChange={(e) =>
+            onChange({ ...warp, style: e.target.value as WarpStyle })
+          }
+        >
+          {WARP_STYLES.map((w) => (
+            <option key={w} value={w}>
+              {t(WARP_NAMES[w])}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Slider
+        label={t(TYPE.bend)}
+        min={-100}
+        max={100}
+        step={1}
+        value={pct(warp.bend)}
+        disabled={disabled || warp.style === "none"}
+        onChange={(v) => onChange({ ...warp, bend: v / 100 })}
+      />
+      <Slider
+        label={t(TYPE.horizontal)}
+        min={-100}
+        max={100}
+        step={1}
+        value={pct(warp.horizontal)}
+        disabled={disabled}
+        onChange={(v) => onChange({ ...warp, horizontal: v / 100 })}
+      />
+      <Slider
+        label={t(TYPE.vertical)}
+        min={-100}
+        max={100}
+        step={1}
+        value={pct(warp.vertical)}
+        disabled={disabled}
+        onChange={(v) => onChange({ ...warp, vertical: v / 100 })}
+      />
+      <label style={row}>
+        <input
+          type="checkbox"
+          data-image-warp-vertical
+          checked={warp.rotateVertical === true}
+          disabled={disabled}
+          onChange={(e) =>
+            onChange({ ...warp, rotateVertical: e.target.checked })
+          }
+        />
+        {t(TYPE.verticalOrientation)}
+      </label>
+      <div style={note}>{t(TYPE.warpNote)}</div>
+    </Section>
+  );
+}
 
 /** The TYPE section — the string, face and size the type tool paints on
  *  its next click. PURE, like the sections around it.
@@ -2629,6 +2734,18 @@ export function makeImagePanel(session: ImageSession) {
             onCancel={() => void session.closeDialog()}
           />
         )}
+        {s.dialog?.kind === "smartTransform" && (
+          <SmartTransformDialog
+            busy={s.busy}
+            onApply={(f) =>
+              void session
+                .smart()
+                .transform(s.layers.active, f)
+                .then(() => session.closeDialog())
+            }
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
         {s.dialog?.kind === "trim" && (
           <TrimDialog
             busy={s.busy}
@@ -3408,6 +3525,8 @@ export function makeImagePanel(session: ImageSession) {
           disabled={disabled}
           scale={smartScale}
           onScale={setSmartScale}
+          info={s.smartInfo}
+          nested={s.smartNested}
         />
 
         <HueSatSection
@@ -3720,6 +3839,22 @@ export function makeImagePanel(session: ImageSession) {
           disabled={disabled}
           onChange={(patch) => session.setType(patch)}
         />
+
+        {/* WARP TEXT — the active type layer's (WP5.10). */}
+        {s.layers.layers[s.layers.active]?.kind === "type" ? (
+          <WarpTextSection
+            warp={
+              live.typeLayerSource(s.layers.active)?.warp ?? {
+                style: "none",
+                bend: 0,
+                horizontal: 0,
+                vertical: 0,
+              }
+            }
+            disabled={disabled}
+            onChange={(w) => void session.setTypeWarp(w)}
+          />
+        ) : null}
 
         {/* RETOUCH — the clone/heal source and the healing brush's
             honest limit. */}

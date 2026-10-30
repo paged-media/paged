@@ -834,7 +834,7 @@ fn model_geometry(
             .iter()
             .find(|o| o.self_id.as_deref() == Some(self_id))
             .map(|o| match paged_model::live_shape::oval_outline(o) {
-                // Engine ADR 10XX — a pie's path IS its wedge (InDesign
+                // Engine ADR 1047 — a pie's path IS its wedge (InDesign
                 // draws an `<Oval>` by its path); the angles ride the
                 // item's label.
                 Some(anchors) => ModelGeometry {
@@ -1846,7 +1846,7 @@ fn write_new_box_item(
     writer.write_event(Event::Start(BytesStart::new("Properties")))?;
     write_item_label(writer, spread, self_id)?;
     if let Some(outline) = outline {
-        // Engine ADR 10XX — a pie oval's wedge.
+        // Engine ADR 1047 — a pie oval's wedge.
         write_closed_path_geometry(writer, &outline)?;
     } else if kind == "Oval" {
         write_oval_path_geometry(writer, bounds)?;

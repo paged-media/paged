@@ -233,11 +233,26 @@ pub(super) fn emit_rectangle_image(
         }
     };
 
-    if let Some(image_t) = rect
+    let image_t = rect
         .image_item_transform
         .or_else(|| named_fit_transform(rect, img_w, img_h))
-        .or_else(|| crop_box_transform(rect, img_w, img_h))
-    {
+        .or_else(|| crop_box_transform(rect, img_w, img_h));
+    let id = adjusted_placement(
+        page,
+        id,
+        &rect.image_adjustments,
+        &picture_key(
+            rect.self_id.as_deref(),
+            rect.image_bytes.as_deref(),
+            rect.image_link.as_deref(),
+            rendering,
+        ),
+        pt_per_source_px(outer, image_t, rect.bounds, img_w, img_h),
+        options,
+        page_image_cache,
+        decoded_cache,
+    );
+    if let Some(image_t) = image_t {
         // Path 1: honour the inner Image[ItemTransform] — or, for a
         // frame that names a fit but carries no transform yet (a
         // picture placed through the authoring doors), the transform
@@ -496,6 +511,21 @@ pub(super) fn emit_polygon_image(
             return;
         }
     };
+    let id = adjusted_placement(
+        page,
+        id,
+        &poly.image_adjustments,
+        &picture_key(
+            poly.self_id.as_deref(),
+            poly.image_bytes.as_deref(),
+            poly.image_link.as_deref(),
+            rendering,
+        ),
+        pt_per_source_px(outer, poly.image_item_transform, poly.bounds, img_w, img_h),
+        options,
+        page_image_cache,
+        decoded_cache,
+    );
 
     // Build (or reuse) the polygon's clip path. Falls back to the
     // bounds AABB when the polygon carries no Bezier anchors. Honours
@@ -634,7 +664,7 @@ pub(super) fn emit_oval_image(
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
     rendering: paged_color::cms::Rendering,
 ) {
-    // Engine ADR 10XX — a pie's picture is clipped to the wedge.
+    // Engine ADR 1047 — a pie's picture is clipped to the wedge.
     if let Some(twin) = paged_model::live_shape::pie_polygon(oval) {
         return emit_polygon_image(
             page,
@@ -696,6 +726,21 @@ pub(super) fn emit_oval_image(
             return;
         }
     };
+    let id = adjusted_placement(
+        page,
+        id,
+        &oval.image_adjustments,
+        &picture_key(
+            oval.self_id.as_deref(),
+            oval.image_bytes.as_deref(),
+            oval.image_link.as_deref(),
+            rendering,
+        ),
+        pt_per_source_px(outer, oval.image_item_transform, oval.bounds, img_w, img_h),
+        options,
+        page_image_cache,
+        decoded_cache,
+    );
 
     // Clip to the oval's parametric ellipse (unit-rect-scaled to the
     // frame's bounds via the outer affine). UNIT_ELLIPSE_KEY is the
@@ -855,6 +900,104 @@ fn emit_image_under_clip(
         list.push(DisplayCommand::PopClip(Transform::IDENTITY));
     }
     list.push(DisplayCommand::PopClip(Transform::IDENTITY));
+}
+
+/// Engine ADR 1037 — the key a frame's picture is cached under: its link,
+/// or the inline bytes' key, with the rendering it was decoded under.
+fn picture_key(
+    self_id: Option<&str>,
+    bytes: Option<&[u8]>,
+    link: Option<&str>,
+    rendering: paged_color::cms::Rendering,
+) -> String {
+    let base = match bytes {
+        Some(b) => inline_image_cache_key(self_id, b),
+        None => link.unwrap_or_default().to_string(),
+    };
+    rendering_key(&base, rendering).into_owned()
+}
+
+/// The points one source pixel spans on the page (the square root of the
+/// placement's area scale): `outer` the frame's transform to the page,
+/// `image_t` the picture's own transform into the frame, or, without one,
+/// the stretch of `img_w × img_h` over `bounds`.
+fn pt_per_source_px(
+    outer: Transform,
+    image_t: Option<[f32; 6]>,
+    bounds: paged_model::Bounds,
+    img_w: f32,
+    img_h: f32,
+) -> f32 {
+    let area = |m: [f32; 6]| (m[0] * m[3] - m[1] * m[2]).abs().sqrt();
+    let inner = match image_t {
+        Some(t) => area(t),
+        None if img_w > 0.0 && img_h > 0.0 => (bounds.width() / img_w)
+            .abs()
+            .max((bounds.height() / img_h).abs()),
+        None => 1.0,
+    };
+    area(outer.0) * inner
+}
+
+/// Engine ADR 1037 — a raster placed through a filter stack is drawn from
+/// its adjusted twin: the source reduced to its display size when the
+/// build asks for one (`PipelineOptions::image_adjust_px_per_pt`), else
+/// at its own resolution (an export, so a PDF embeds the picture at its
+/// effective ppi), then run through the stack. The twin is cached under
+/// (picture, stack, scale) in the build's decoded-image cache, which the
+/// canvas keeps across builds, so an edit elsewhere on the page does not
+/// re-run the stack. Placed PDF, SVG and EPS art is vector and is drawn
+/// as it is.
+#[allow(clippy::too_many_arguments)]
+fn adjusted_placement(
+    page: &mut BuiltPage,
+    placed: Placed,
+    ops: &[paged_model::RasterOp],
+    picture: &str,
+    pt_per_px: f32,
+    options: &PipelineOptions,
+    page_image_cache: &mut HashMap<String, paged_compose::ImageId>,
+    decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+) -> Placed {
+    let Placed::Raster(id) = placed else {
+        return placed;
+    };
+    if ops.is_empty() {
+        return placed;
+    }
+    let scale = super::image_adjust::display_scale(options.image_adjust_px_per_pt, pt_per_px);
+    let key = super::image_adjust::cache_key(picture, ops, scale);
+    if let Some(&cached) = page_image_cache.get(&key) {
+        return Placed::Raster(cached);
+    }
+    let decoded = if let Some(d) = decoded_cache.get(&key) {
+        d.clone()
+    } else {
+        let Some(src) = page.list.image(id) else {
+            return placed;
+        };
+        let Some(d) = super::image_adjust::adjust_decoded(src, ops, scale) else {
+            return placed;
+        };
+        // A slider drag writes a new stack per step: keep a picture's
+        // twins bounded, dropping its old ones once there are eight.
+        let prefix = format!("{picture}#adjust:");
+        let twins: Vec<String> = decoded_cache
+            .keys()
+            .filter(|k| k.starts_with(&prefix))
+            .cloned()
+            .collect();
+        if twins.len() >= 8 {
+            for k in twins {
+                decoded_cache.remove(&k);
+            }
+        }
+        decoded_cache.insert(key.clone(), d.clone());
+        d
+    };
+    let adjusted = page.list.push_image(decoded);
+    page_image_cache.insert(key, adjusted);
+    Placed::Raster(adjusted)
 }
 
 /// Resolve a `LinkResourceURI` to a renderer `ImageId` plus its

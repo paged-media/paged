@@ -180,11 +180,11 @@ export function starTableFor(p: StarParams): AnchorTable {
   return starPath(p);
 }
 
-/** The engine's star-inset ceiling (engine ADR 10XX, percent). */
+/** The engine's star-inset ceiling (engine ADR 1047, percent). */
 const MAX_LIVE_STAR_INSET = 99;
 
 /**
- * Engine ADR 10XX — the star as a LIVE shape, or null when the engine's
+ * Engine ADR 1047 — the star as a LIVE shape, or null when the engine's
  * live star cannot be this one: the insert is the plain polygon on
  * Radius 1, and the engine draws the star from its points and inset
  * (`frameShapeSides`, `frameShapeStarInset`, written to `$created`), so

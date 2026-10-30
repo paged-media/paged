@@ -873,9 +873,11 @@ dependencies = [
  "paged-psd",
  "paged-resample",
  "paged-test-resources",
+ "paged-warp",
  "png",
  "pollster",
  "proptest",
+ "serde_json",
  "zune-core",
  "zune-png",
 ]
@@ -929,7 +931,9 @@ dependencies = [
  "paged-raster",
  "paged-resample",
  "paged-test-resources",
+ "paged-warp",
  "pollster",
+ "serde",
  "serde_json",
  "skrifa",
  "thiserror",
@@ -945,6 +949,7 @@ version = "0.0.0"
 dependencies = [
  "bytemuck",
  "naga",
+ "paged-kernels",
  "paged-pixel",
  "paged-warp",
 ]
@@ -1617,6 +1622,13 @@ dependencies = [
  "qcms",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "paged-kernels"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
 ]
 
 [[package]]

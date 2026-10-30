@@ -24,7 +24,7 @@
 //     packages/draw-bundle/test/fixtures/oracle/live-shapes.illustrator.json
 //
 // The thing under test on our side is the live polygon and star of
-// engine ADR 10XX (`paged_model::live_shape`), which the Star tool makes
+// engine ADR 1047 (`paged_model::live_shape`), which the Star tool makes
 // from draw-geometry's `regularPolygonPath` + the star's points and inset
 // (`starPath` is the same outline): the first point and the direction
 // the points run in, and the inner radius a star's inset gives. Replayed

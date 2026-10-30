@@ -1,4 +1,4 @@
-# ADR 10XX — A polygon, a star and a pie stay live shapes
+# ADR 1047 — A polygon, a star and a pie stay live shapes
 
 - **Status:** Accepted 2026-10-30.
 - **Scope:** protocol v78 (additive: four property paths, two `serde(default)` model fields; no

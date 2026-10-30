@@ -23,7 +23,7 @@
 // drag bounds, previewed as a closed polyline → ONE batch on pointer-up:
 // `insertPath { pageId, anchors, open: false, smooth: false }` of the
 // plain N-gon, then its `frameShapeSides` and `frameShapeStarInset`
-// (engine ADR 10XX, editor ADR 310), so the polygon stays a LIVE shape —
+// (engine ADR 1047, editor ADR 310), so the polygon stays a LIVE shape —
 // the Transform panel's Shape section and the on-canvas widgets change
 // its sides and inset later — and the engine draws the star itself, its
 // outer points where the preview put them. The corner vertices are
@@ -115,7 +115,7 @@ function cornerAnchor([x, y]: [number, number]): PathAnchorSpec {
 }
 
 /**
- * Engine ADR 10XX — the polygon a drag makes, LIVE: the plain polygon
+ * Engine ADR 1047 — the polygon a drag makes, LIVE: the plain polygon
  * inscribed in the drag box, then its side count and star inset written
  * to it (`$created`), so the engine keeps the parameters and draws the
  * star itself, its outer points where the preview put them. One batch,

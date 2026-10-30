@@ -428,7 +428,7 @@ describe("Object/Transform panel: findings", () => {
 });
 
 // Editor ADR 310 — the Shape section: the live-shape parameters of the
-// one selected item (engine ADR 10XX).
+// one selected item (engine ADR 1047).
 describe("Object/Transform panel: the Shape section", () => {
   const shapeOf = (h: H) => h.root.querySelector("[data-section='Shape']");
   const select = (h: H, name: string) =>

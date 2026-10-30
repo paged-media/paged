@@ -512,7 +512,7 @@ describe("Polygon tool", () => {
         9,
       );
     }
-    // Engine ADR 10XX: the sides ride the same batch, on the insert.
+    // Engine ADR 1047: the sides ride the same batch, on the insert.
     expect(writesOf(fake)).toEqual([["$created", "frameShapeSides", 6]]);
   });
 

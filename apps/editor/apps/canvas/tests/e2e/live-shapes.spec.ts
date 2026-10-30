@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// E2E — live shapes (engine ADR 10XX, editor ADR 310) in the running
+// E2E — live shapes (engine ADR 1047, editor ADR 310) in the running
 // editor: the Polygon tool draws a LIVE polygon, and the on-canvas
 // widgets of the selected shape change its sides, its star inset, an
 // oval's pie and a rectangle's corners, each in ONE undo step, through

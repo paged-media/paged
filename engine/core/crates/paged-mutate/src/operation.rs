@@ -1638,6 +1638,14 @@ pub enum PropertyPath {
     /// rest as lost. Paint-only (`frame_style`).
     FrameFillRule,
 
+    // ---- engine ADR 1037 — the image filter stack ----------------------
+    /// The placed picture's filter stack, in order: `Value::ImageAdjustments`
+    /// (the whole list; the empty list clears it). On a Rectangle, Oval or
+    /// Polygon (the kinds that place a picture). IDML has no such construct:
+    /// the export keeps the stack in a label and reports it as lost.
+    /// Paint-only (`frame_style`).
+    FrameImageAdjustments,
+
     // ---- engine ADR 1018 — Word's character and paragraph additions --
     /// A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a
     /// swatch. `ColorRef(None)` clears the run's own value (inherit);
@@ -1691,7 +1699,7 @@ pub enum PropertyPath {
     /// braces instead of its result (engine ADR 1022). A whole-document
     /// reflow.
     DocumentShowFieldCodes,
-    // ---- engine ADR 10XX — live shapes ------------------------------
+    // ---- engine ADR 1047 — live shapes ------------------------------
     /// A live polygon's side count (a star's points): `Value::Length` of a
     /// whole number in 3..=100, on a Polygon that is one closed contour.
     /// Setting it makes the polygon live and redraws its anchors in their
@@ -2101,6 +2109,7 @@ impl PropertyPath {
             PropertyPath::DocumentFootnoteContinuingRuleOn => "document.footnoteContinuingRuleOn",
             PropertyPath::FramePdfPage => "frame.pdfPage",
             PropertyPath::FrameFillRule => "frame.fillRule",
+            PropertyPath::FrameImageAdjustments => "frame.imageAdjustments",
             PropertyPath::CharacterHighlightColor => "character.highlightColor",
             PropertyPath::CharacterHidden => "character.hidden",
             PropertyPath::CharacterUnderlineType => "character.underlineType",
@@ -3202,6 +3211,12 @@ pub enum Value {
     /// half-written colour behind), with the colour model and tint kept
     /// unless given.
     SwatchColor(SwatchColorSpec),
+    /// Engine ADR 1037 — an image frame's whole filter stack, the value of
+    /// `frame.imageAdjustments`. Serialises as `{ type:
+    /// "imageAdjustments", value: [{ op: "exposure", ev: 0.5 }, …] }`. The
+    /// inverse carries the prior stack, so undo restores it exactly.
+    /// Additive new variant (the `TabStops` / `Lengths` precedent).
+    ImageAdjustments(Vec<paged_model::RasterOp>),
 }
 
 /// v71 polish — a `text` / `enum` / `ref` payload of `null` is the empty

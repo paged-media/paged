@@ -18,7 +18,7 @@
  */
 
 // Editor ADR 310 — the live-shape widgets over the real engine (engine
-// ADR 10XX): which widgets a selected shape shows and where, and the ONE
+// ADR 1047): which widgets a selected shape shows and where, and the ONE
 // mutation a drag or an Alt-click commits, read back from the model.
 // The overlay is mounted at camera scale 1 with the page at the origin,
 // so a client pixel is a page point.

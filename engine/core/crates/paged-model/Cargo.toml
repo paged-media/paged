@@ -10,10 +10,20 @@ description = "The Paged document model — Paged-owned data types + their pure 
 [lints]
 workspace = true
 
+[features]
+# Engine ADR 1037 — the `Tsify` and `JsonSchema` derives of the model types
+# the wire carries as they are (`RasterOp`); paged-mutate turns them on.
+wire = ["dep:tsify-next", "dep:wasm-bindgen"]
+schema = ["dep:schemars"]
+
 [dependencies]
 serde = { workspace = true }
 base64 = { workspace = true }
 # The effect stack's IDML label (engine ADR 1008).
 serde_json = "1"
+# The wire derives of RasterOp (engine ADR 1037).
+tsify-next = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
 
 [dev-dependencies]

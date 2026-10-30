@@ -1623,7 +1623,8 @@ pub(super) fn frame_outer_transform(
 }
 
 /// C-1 — splice a plugin [`paged_compose::SceneLayer`] into a frame, right
-/// after the frame's own content. Looks the frame's `Self` id up in the
+/// after the frame's own content and, through [`emit_frame_module_content`],
+/// inside its object group and effect stack (engine ADR 1046). Looks the frame's `Self` id up in the
 /// registry; on a hit, builds the content-origin → page transform (the
 /// frame's `frame_outer_transform` composed with the content-box offset)
 /// and lowers the layer clipped to the content box. A no-op when no
@@ -1898,6 +1899,42 @@ impl SceneBuiltFaces<'_> {
             .find(|(k, w, _)| *k == key && *w == wght)
             .map(|(_, _, f)| f)
     }
+}
+
+/// What modules paint into a frame: a claimed provider's tiles (C-6),
+/// then the plugin's scene layer (C-1) over them. Both are the frame's own
+/// content, so the shape emitters call this inside the frame's object
+/// group and effect-stack run (their `ModulePainter`), and the text-frame
+/// arm splices it into the body's slot: a frame's opacity, blend mode and
+/// effects apply to its module content as to its picture (engine ADR 1046).
+pub(super) fn emit_frame_module_content(
+    page: &mut BuiltPage,
+    self_id: Option<&str>,
+    bounds: paged_model::Bounds,
+    inset: Option<[f32; 4]>,
+    item_transform: Option<[f32; 6]>,
+    options: &PipelineOptions<'_>,
+) {
+    emit_frame_resource_tiles(
+        page,
+        self_id,
+        bounds,
+        inset,
+        item_transform,
+        options.resource_providers,
+        options.render_scale,
+    );
+    emit_frame_scene_layer(
+        page,
+        self_id,
+        bounds,
+        inset,
+        item_transform,
+        options.scene_layers,
+        options.font,
+        options.assets,
+        options.scene_fonts,
+    );
 }
 
 /// C-6 (I-06) — assemble a claimed image resource's pyramid tiles into a

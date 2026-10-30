@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 10XX — live shapes: the parameters a polygon, a star and a
+//! Engine ADR 1047 — live shapes: the parameters a polygon, a star and a
 //! pie are made from, kept on the item so they stay editable.
 //!
 //! - A **polygon or star** is a [`Polygon`] whose anchors were made by
@@ -435,6 +435,7 @@ pub fn pie_polygon(oval: &Oval) -> Option<Polygon> {
         image_item_transform: o.image_item_transform,
         image_bytes: o.image_bytes,
         image_clip: o.image_clip,
+        image_adjustments: o.image_adjustments,
         overprint_fill: o.overprint_fill,
         overprint_stroke: o.overprint_stroke,
         nonprinting: o.nonprinting,

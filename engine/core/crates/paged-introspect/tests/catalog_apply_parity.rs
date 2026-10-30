@@ -315,7 +315,7 @@ fn every_advertised_schema_names_the_wire_apply_takes() {
         fixture("tables.idml"),
         fixture("geometry-groups.idml"),
         fixture("anchored.idml"),
-        // Engine ADR 10XX — an oval, for the paths only an oval takes
+        // Engine ADR 1047 — an oval, for the paths only an oval takes
         // (its pie angles).
         fixture("strokes-fills.idml"),
     ];

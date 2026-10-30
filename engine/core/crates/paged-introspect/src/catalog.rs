@@ -795,9 +795,12 @@ property_paths! {
         FramePdfPage => "framePdfPage" : count().min(1.0).default_num(1.0).idml(idml![attr(PDFAttribute, PageNumber)]),
         // Engine ADR 1006 — the outline's fill rule; IDML has no attribute.
         FrameFillRule => "frameFillRule" : enum_(FILL_RULES).default_text("NonZero"),
+        // Engine ADR 1037 — the placed picture's filter stack; IDML has none
+        // (the export keeps it in a label and reports it).
+        FrameImageAdjustments => "frameImageAdjustments" : list_of("RasterOp", Wire::ImageAdjustments),
         // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
-        // Engine ADR 10XX — live shapes; IDML has none (the outline is written, the parameters ride a label).
+        // Engine ADR 1047 — live shapes; IDML has none (the outline is written, the parameters ride a label).
         FrameShapeSides => "frameShapeSides" : count().range(3.0, 100.0),
         FrameShapeStarInset => "frameShapeStarInset" : pct().range(0.0, 99.0).default_num(0.0),
         FrameShapePieStart => "frameShapePieStart" : deg().default_num(0.0),
@@ -1495,9 +1498,11 @@ mod tests {
         //
         // 264 -> 265: draw ADR 365 — the symbol an instance draws.
         //
-        // 265 -> 269: ADR 10XX — live shapes (a polygon's sides and star
+        // 265 -> 266: ADR 1037 — an image frame's filter stack.
+        //
+        // 266 -> 270: ADR 1047 — live shapes (a polygon's sides and star
         // inset, an oval's pie angles).
-        assert_eq!(cat.settable_paths.len(), 269, "settable path count drifted");
+        assert_eq!(cat.settable_paths.len(), 270, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

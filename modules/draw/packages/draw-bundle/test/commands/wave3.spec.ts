@@ -164,7 +164,7 @@ describe("paged.draw commands, no engine — WP6.1 part 2 [plugin-draw.tool-wave
       points: 6,
     });
     expect(r.sent()).toHaveLength(1);
-    // Engine ADR 10XX: an upright star is a LIVE star — the hexagon on
+    // Engine ADR 1047: an upright star is a LIVE star — the hexagon on
     // Radius 1, then its points and its inset (1 − 10 ÷ 40 = 75 %), in
     // the same batch; the engine draws the 12 points.
     const insert = r.leaves().find((m) => m.op === "insertPath") as {

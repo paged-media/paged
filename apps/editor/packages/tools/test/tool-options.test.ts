@@ -78,7 +78,7 @@ async function polygonAnchors(
     .tool(() => createPolygonHandler())
     .drag({ from: [100, 100], to: [300, 300] })
     .settle();
-  // Engine ADR 10XX: the insert is the plain polygon and the engine draws
+  // Engine ADR 1047: the insert is the plain polygon and the engine draws
   // the star from the sides and inset written with it; the shape the
   // tool makes is the one it previewed, which these tests read.
   const insert = leaves(fake).find((m) => m.op === "insertPath");

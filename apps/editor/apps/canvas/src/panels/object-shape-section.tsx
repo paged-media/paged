@@ -18,7 +18,7 @@
  */
 
 // Editor ADR 310 — the Transform panel's SHAPE section: the live-shape
-// parameters of the selected item (engine ADR 10XX), Illustrator's
+// parameters of the selected item (engine ADR 1047), Illustrator's
 // Transform-panel Shape Properties.
 //
 //   polygon (live)  Sides (Points for a star) · Star inset %

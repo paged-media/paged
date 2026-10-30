@@ -18,7 +18,7 @@
  */
 
 // Editor ADR 310 — the live-shape geometry the widgets and the Polygon
-// tool draw with, held to the engine's definitions (engine ADR 10XX,
+// tool draw with, held to the engine's definitions (engine ADR 1047,
 // `paged_model::live_shape`): the same first point and direction, the
 // same fit to a box, the same circle kept across a change of sides, the
 // same pie convention.

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Editor ADR 310 — LIVE-SHAPE WIDGETS on the canvas (engine ADR 10XX):
+// Editor ADR 310 — LIVE-SHAPE WIDGETS on the canvas (engine ADR 1047):
 // Illustrator's on-object controls for the one selected shape.
 //
 //   rectangle  a widget inside each corner, on its diagonal at the

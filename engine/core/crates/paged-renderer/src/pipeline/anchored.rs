@@ -1046,6 +1046,7 @@ fn emit_anchored_rect_via_pipeline(
         subpath_starts: Vec::new(),
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
+        image_adjustments: Vec::new(),
     };
     // `emit_rectangle_into` increments `page.stats.frames` internally.
     // An anchored frame's picture paints in its own pass (see
@@ -1058,6 +1059,7 @@ fn emit_anchored_rect_via_pipeline(
         em.options.fallback_frame_fill,
         em.color_ctx,
         None,
+        &mut |_: &mut BuiltPage| {},
         &mut |_: &mut BuiltPage| {},
     );
 }
@@ -1151,6 +1153,7 @@ pub(super) fn emit_anchored_rect_image(
         subpath_starts: Vec::new(),
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
+        image_adjustments: Vec::new(),
     };
     emit_rectangle_image(
         page,

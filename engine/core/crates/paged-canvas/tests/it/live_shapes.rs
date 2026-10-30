@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 10XX — live shapes through the canvas model: a polygon's
+//! Engine ADR 1047 — live shapes through the canvas model: a polygon's
 //! sides and star inset and an oval's pie angles read, write, redraw and
 //! undo exactly; a point edit ends a live polygon; an IDML export keeps
 //! the outline and the parameters (in a label) and its re-import lifts

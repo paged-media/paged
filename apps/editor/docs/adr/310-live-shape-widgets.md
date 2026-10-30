@@ -4,12 +4,12 @@
 - **Scope:** `apps/canvas/src/overlays/live-shape-handles.tsx` (registered in `app/mount.tsx`),
   `apps/canvas/src/panels/object-shape-section.tsx` (in `object-transform-panel.tsx`),
   `packages/tools/src/live-shapes/geometry.ts`, `packages/tools/src/handlers/polygon-tool.ts`.
-  The engine half is engine ADR 10XX (live shapes); paged.draw's Star tool makes live stars
+  The engine half is engine ADR 1047 (live shapes); paged.draw's Star tool makes live stars
   through the `document.liveShapes@1` flag. Gap D-2.
 
 ## Context
 
-Engine ADR 10XX keeps a polygon's sides and star inset and an oval's pie angles on the item, and
+Engine ADR 1047 keeps a polygon's sides and star inset and an oval's pie angles on the item, and
 the engine redraws the shape when they change. A rectangle's per-corner type and radius were
 already the engine's (`frameCornerOption*`, `frameCornerRadius*`). What the editor lacked was
 Illustrator's way of editing them: the Transform panel's Shape Properties and the widgets on the
@@ -74,4 +74,4 @@ nothing edited sides or pies at all.
   tool in every context; the Transform panel shows and edits the same parameters.
 - paged.draw's Corner Radius tool stays (it rounds a polygon's corners too, which these widgets do
   not); the rectangle widgets overlap its rectangle case.
-- A polygon edited point by point stops being live (engine ADR 10XX), and its widgets go away.
+- A polygon edited point by point stops being live (engine ADR 1047), and its widgets go away.

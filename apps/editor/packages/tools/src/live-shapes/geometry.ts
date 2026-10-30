@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Live shapes (engine ADR 10XX, editor ADR 310) — the geometry the
+// Live shapes (engine ADR 1047, editor ADR 310) — the geometry the
 // on-canvas widgets and the Polygon tool draw with. The ENGINE owns the
 // shape (`paged_model::live_shape`): it redraws a polygon's anchors from
 // its sides and inset and an oval's wedge from its pie angles. This file

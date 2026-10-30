@@ -72,12 +72,14 @@ pub mod psd_layer_ext;
 pub mod psd_source;
 pub mod psd_vector_mask;
 pub mod psd_write;
+pub mod psd_write_smart;
 pub mod readouts;
 pub mod refine;
 pub mod region_filter;
 pub mod retouch;
 pub mod saveback;
 pub mod selection;
+pub mod smart;
 pub mod stroke;
 pub mod text;
 pub mod vectors;
@@ -133,6 +135,8 @@ mod wasm {
     mod filters_chain;
     mod filters_distort;
     mod filters_stylize;
+    // Smart objects (ADR 482): transform, filters, contents, links.
+    mod smart_doors;
 
     thread_local! {
         /// The bundle-realm GPU device (I-07: created HERE, where
@@ -5032,7 +5036,7 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&image_handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {image_handle}")))?;
-        let (import, stack) = PSDS.with(|m| {
+        let (import, mut stack) = PSDS.with(|m| {
             let map = m.borrow();
             let file = map
                 .get(&psd_handle)
@@ -5056,8 +5060,13 @@ mod wasm {
             }
             // The records too: blending ranges, fill opacity, locks and
             // fill content live there, not on the plates.
-            let stack = LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
-                .map_err(ingest_err)?;
+            let mut stack =
+                LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
+                    .map_err(ingest_err)?;
+            // Smart objects keep their sources, placements and filters
+            // (ADR 482); the notes say which keep their stored render.
+            let notes = stack.adopt_psd_smart_objects(file);
+            SMART_NOTES.with(|n| *n.borrow_mut() = notes);
             Ok::<_, JsValue>((import, stack))
         })?;
         let smart = import.layers.iter().any(|p| p.smart);
@@ -5069,7 +5078,20 @@ mod wasm {
                 .map_err(ingest_err)?;
             let theirs = img.rgba.to_rgba8();
             if smart {
-                crate::layers::smart_renders_agree(&import, &ours, &theirs).map_err(ingest_err)?;
+                if let Err(stale) = crate::layers::smart_renders_agree(&import, &ours, &theirs) {
+                    // A stored render can be stale (a mock-up whose
+                    // contents changed): draw each smart object from its
+                    // source instead, and judge again (ADR 482).
+                    if stack.rerender_smart_objects() == 0 {
+                        return Err(ingest_err(stale));
+                    }
+                    let again = stack
+                        .composite(ctx.as_deref(), None)
+                        .await
+                        .map_err(ingest_err)?;
+                    crate::layers::smart_renders_agree(&import, &again, &theirs)
+                        .map_err(|_| ingest_err(stale))?;
+                }
             }
             // A CMYK document blended in RGB must still look like the
             // file: `theirs` is its merged composite through the same
@@ -5097,6 +5119,18 @@ mod wasm {
             })
         });
         Ok(n)
+    }
+
+    thread_local! {
+        /// What the last layered PSD open said about its smart objects.
+        static SMART_NOTES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// The notes of the last layered PSD open about its smart objects
+    /// (one per object that keeps Photoshop's render), one per line.
+    #[wasm_bindgen]
+    pub fn layers_smart_notes() -> String {
+        SMART_NOTES.with(|n| n.borrow().join("\n"))
     }
 
     /// Drop the bound stack (and its undo history).
@@ -5795,10 +5829,88 @@ mod wasm {
         .await
     }
 
-    /// Rasterize a fill layer or smart object (its render becomes pixels).
+    /// Rasterize a fill layer, smart object or type layer (its render
+    /// becomes pixels).
     #[wasm_bindgen]
     pub fn layers_rasterize(index: usize) -> Result<(), JsValue> {
         recorded_edit("Rasterize Layer", None, |st| st.rasterize(index))
+    }
+
+    /// Layer ▸ New ▸ Type Layer (WP5.10): a type layer of `source` (the
+    /// `TypeSource` JSON) whose pixels are the engine's render `rgba`
+    /// (`w × h`, its top-left at canvas `(x, y)`), bent by the source's
+    /// warp on the GPU. One undo step. An empty `name` names it after the
+    /// text.
+    #[wasm_bindgen]
+    pub async fn layers_add_type(
+        source: &str,
+        rgba: Vec<u8>,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        name: &str,
+    ) -> Result<usize, JsValue> {
+        let source =
+            crate::layers::TypeSource::from_json(source).map_err(|e| JsValue::from_str(&e))?;
+        let render = crate::layers::type_layer::TypeRender { rgba, x, y, w, h };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        let (cw, ch) = with_stack(|d| Ok((d.stack.width(), d.stack.height())))?;
+        let px = render
+            .warped(ctx.as_deref(), &source.warp, cw, ch)
+            .await
+            .map_err(ingest_err)?;
+        recorded_edit("New Type Layer", None, |st| {
+            st.add_type_layer(name, source, px)
+        })
+    }
+
+    /// A type layer's new source and render (an edit of its text, styles,
+    /// frame or warp). Writes sharing a non-empty `session` merge into one
+    /// undo step: one per editing session on the canvas.
+    #[wasm_bindgen]
+    pub async fn layers_set_type(
+        index: usize,
+        source: &str,
+        rgba: Vec<u8>,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        session: &str,
+    ) -> Result<(), JsValue> {
+        let source =
+            crate::layers::TypeSource::from_json(source).map_err(|e| JsValue::from_str(&e))?;
+        let render = crate::layers::type_layer::TypeRender { rgba, x, y, w, h };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        let (cw, ch) = with_stack(|d| Ok((d.stack.width(), d.stack.height())))?;
+        let px = render
+            .warped(ctx.as_deref(), &source.warp, cw, ch)
+            .await
+            .map_err(ingest_err)?;
+        let merge = (!session.is_empty()).then(|| format!("type:{index}:{session}"));
+        recorded_edit("Edit Type", merge, |st| st.set_type(index, source, px))
+    }
+
+    /// A type layer's source as JSON, with `"stale"` (its pixels need a
+    /// new render); `""` for any other layer.
+    #[wasm_bindgen]
+    pub fn layers_type_source(index: usize) -> Result<String, JsValue> {
+        with_stack(|d| {
+            Ok(d.stack
+                .layers()
+                .get(index)
+                .and_then(|l| l.type_layer())
+                .map(|t| {
+                    format!(
+                        "{{\"stale\":{},\"fromPsd\":{},\"source\":{}}}",
+                        t.stale,
+                        t.psd.is_some(),
+                        t.source.to_json()
+                    )
+                })
+                .unwrap_or_default())
+        })
     }
 
     /// Fill opacity 0–1 (a drag is one undo step).
@@ -6717,51 +6829,36 @@ mod wasm {
         recorded_edit("Convert to smart object", None, |st| st.make_smart(index))
     }
 
-    /// RE-RENDER a smart object at `scale` — from its preserved SOURCE,
-    /// never from the current cache, which is the whole point: scaling
-    /// down and back up loses nothing.
-    ///
-    /// GPU-only (the resample is a kernel dispatch). The rendered result
-    /// is letterboxed into the canvas extent, so the layer keeps its
-    /// place in a stack whose layers are all canvas-sized.
+    /// RE-RENDER a smart object at `scale` of its source's size — from
+    /// its preserved SOURCE, never from the current render, so scaling
+    /// down and back up loses nothing. The placement keeps its first
+    /// corner and its turn (ADR 482); the render is the CPU placement
+    /// draw, so this needs no device. One undo step.
     #[wasm_bindgen]
-    pub async fn layers_render_smart(index: usize, scale: f32) -> Result<(), JsValue> {
-        // `is_finite` first, so NaN is refused by NAME rather than by the
-        // side effect of failing `> 0.0`. Same verdict, but a reader no
-        // longer has to reconstruct why the comparison was negated.
+    pub fn layers_render_smart(index: usize, scale: f32) -> Result<(), JsValue> {
         if !scale.is_finite() || scale <= 0.0 || scale > 16.0 {
             return Err(JsValue::from_str(
                 "smart re-render scale must be in (0, 16]",
             ));
         }
-        let ctx = GPU.with(|g| g.borrow().clone()).ok_or_else(|| {
-            JsValue::from_str("smart re-render is GPU-only — call init_gpu first")
-        })?;
-
-        // Read the SOURCE (not the cached render) and the canvas extent.
-        let (src, cw, ch) = LAYERS
+        let quad = LAYERS
             .with(|l| {
                 let b = l.borrow();
-                let d = b.as_ref()?;
-                let layer = d.stack.layers().get(index)?;
-                let s = layer.smart_source()?;
-                Some((s.clone(), d.stack.width(), d.stack.height()))
+                let s = b
+                    .as_ref()?
+                    .stack
+                    .layers()
+                    .get(index)?
+                    .smart_source()?
+                    .clone();
+                Some(crate::smart::scaled_quad(&s, f64::from(scale)))
             })
             .ok_or_else(|| JsValue::from_str(&format!("layer {index} is not a smart object")))?;
-
-        let canvas = crate::layers::render_smart(
-            &ctx,
-            &src,
-            scale,
-            crate::layers::ResampleFilter::Mitchell,
-            cw,
-            ch,
-        )
-        .await
-        .map_err(ingest_err)?;
-
-        recorded_edit("Scale smart object", None, |st| {
-            st.set_smart_render(index, Arc::from(canvas.into_boxed_slice()), scale)
+        with_stack(|d| {
+            d.stack
+                .smart_place(index, quad)
+                .map(|_| ())
+                .map_err(ingest_err)
         })
     }
 
@@ -8289,7 +8386,7 @@ mod wasm {
             },
         );
         format!(
-            ",\"style\":[{}],\"styleOn\":{},\"styleOptions\":{},\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{}}}",
+            ",\"style\":[{}],\"styleOn\":{},\"styleOptions\":{},\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{},\"typeStale\":{}}}",
             l.ext
                 .style
                 .as_ref()
@@ -8313,6 +8410,8 @@ mod wasm {
                 .map_or_else(|| "null".to_string(), |a| format!("\"{}\"", a.kind_name())),
             l.fill()
                 .map_or_else(|| "null".to_string(), |f| format!("\"{}\"", f.source.kind_name())),
+            l.type_layer()
+                .map_or_else(|| "null".to_string(), |t| t.stale.to_string()),
         )
         .trim_end_matches('}')
         .to_string()

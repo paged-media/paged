@@ -789,7 +789,9 @@ export const CORE_PATHS: Record<
   frameFillEffectStack: V71,
   frameStrokeEffectStack: V71,
   frameContentEffectStack: V71,
-  // The live shapes are protocol 78 (engine ADR 10XX).
+  // An image frame's filter stack is protocol 77 (engine ADR 1037).
+  frameImageAdjustments: V71,
+  // The live shapes are protocol 78 (engine ADR 1047).
   frameShapeSides: V71,
   frameShapeStarInset: V71,
   frameShapePieStart: V71,

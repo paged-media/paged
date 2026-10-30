@@ -114,11 +114,14 @@ export async function layeredPsdBytes(names: string[]): Promise<Uint8Array> {
 }
 
 export function makeFakeEditor() {
+  /** Scripted replies to a `client.send` kind (`onSend`). */
+  const sendHandlers = new Map<string, (payload: unknown) => unknown>();
   const panels = fakeRegistry();
   const commands = fakeRegistry();
   const importers = fakeRegistry();
   const exporters = fakeRegistry();
   const tools = fakeRegistry();
+  const overlays = fakeRegistry();
   // The overlay signal sink (host.overlay.setToolPreview forwards here);
   // records the last published shape so a test can assert the crop frame.
   const overlayShapes: unknown[] = [];
@@ -201,6 +204,8 @@ export function makeFakeEditor() {
    *  path→selection read). Absent ⇒ the door answers null, which is the
    *  contract's own "this element has no path geometry". */
   const pathAnchors = new Map<string, unknown>();
+  /** Every story `host.render.story` sent (WP5.10). */
+  const stories: unknown[] = [];
   /** Every mutation the bundle sent, in order. */
   const mutations: unknown[] = [];
   /** The document's parts (full paths, `paged/<plugin>/…`). */
@@ -232,7 +237,7 @@ export function makeFakeEditor() {
     }
   };
   const editor = {
-    registries: { panels, commands, importers, exporters, tools },
+    registries: { panels, commands, importers, exporters, tools, overlays },
     overlaySignals,
     selection: {
       elementSelection: [] as unknown[],
@@ -264,6 +269,67 @@ export function makeFakeEditor() {
       // C-5 — the requestPlacedAssetBytes wire pair, answered from the
       // fake placed store (found:false otherwise, the honest miss).
       send: async (msg: { kind: string; payload?: { elementId?: string } }) => {
+        // WP5.10 — `host.render.story`: a stand-in for the engine's
+        // layout — every run's text as a solid block of its colour, one
+        // line per paragraph, at the asked dpi — so a spec can assert
+        // where the bundle puts the render and what it sent.
+        const snap = msg.payload as {
+          dpi?: number;
+          clip?: { x: number; y: number; width: number; height: number };
+          story?: {
+            bounds: [number, number, number, number];
+            paragraphs: Array<{
+              runs: Array<{
+                text: string;
+                pointSize?: number;
+                fillRgb?: [number, number, number];
+              }>;
+            }>;
+          };
+        };
+        if (msg.kind === "requestSnapshot" && snap?.story) {
+          stories.push(snap.story);
+          const k = (snap.dpi ?? 72) / 72;
+          const runs = snap.story.paragraphs.flatMap((p) => p.runs);
+          const size = Math.max(1, ...runs.map((r) => r.pointSize ?? 12));
+          const chars = Math.max(
+            0,
+            ...snap.story.paragraphs.map((p) =>
+              p.runs.reduce((n, r) => n + r.text.length, 0),
+            ),
+          );
+          if (chars === 0) {
+            return {
+              kind: "snapshotFailed",
+              payload: { error: { kind: "nothingDrawn" } },
+            };
+          }
+          const wPt = chars * size * 0.5;
+          const hPt = snap.story.paragraphs.length * size;
+          const widthPx = Math.ceil(wPt * k);
+          const heightPx = Math.ceil(hPt * k);
+          const [r, g, b] = runs[0]?.fillRgb ?? [0, 0, 0];
+          const rgba: number[] = [];
+          for (let i = 0; i < widthPx * heightPx; i++) rgba.push(r, g, b, 255);
+          const [top, left] = snap.story.bounds;
+          return {
+            kind: "snapshotReady",
+            payload: {
+              pageId: "pg1",
+              widthPx,
+              heightPx,
+              layoutGeneration: 0,
+              numberingGeneration: 0,
+              pngBytes: [],
+              format: "rgba",
+              rgba,
+              region: { x: left, y: top, width: wPt, height: hPt },
+              story: true,
+            },
+          };
+        }
+        const scripted = sendHandlers.get(msg.kind);
+        if (scripted) return scripted(msg.payload);
         if (msg.kind === "requestPlacedAssetBytes") {
           const id = msg.payload?.elementId ?? "";
           const bytes = placed.get(id);
@@ -383,6 +449,12 @@ export function makeFakeEditor() {
     await new Promise((r) => setTimeout(r, 0));
   };
   return {
+    stories,
+    /** Script the reply to one `client.send` kind (`null` removes it). */
+    onSend(kind: string, handler: ((payload: unknown) => unknown) | null) {
+      if (handler) sendHandlers.set(kind, handler);
+      else sendHandlers.delete(kind);
+    },
     parts,
     metadata,
     editor: editor as unknown as PagedEditor,

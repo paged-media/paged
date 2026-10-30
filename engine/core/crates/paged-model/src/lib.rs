@@ -32,6 +32,7 @@
 
 pub mod effect_stack;
 pub mod fitting;
+pub mod image_adjust;
 pub mod image_bytes;
 pub mod live_shape;
 pub mod winding;
@@ -41,6 +42,8 @@ pub use word_field::{WordField, WordFieldKind};
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+
+pub use image_adjust::RasterOp;
 
 /// An axis-aligned bounding box in points: `top`, `left`, `bottom`, `right`.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -2277,6 +2280,12 @@ pub struct Rectangle {
     /// and re-wound or reported as lost on IDML export.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1037 — the picture's filter stack, applied in order when
+    /// it is drawn and exported. Empty (the default, and every imported
+    /// frame without the label) draws the picture as it is; an empty stack
+    /// writes no key, so the `.paged` bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
 }
 
 impl Rectangle {
@@ -2367,6 +2376,7 @@ impl Rectangle {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
+            image_adjustments: Vec::new(),
         }
     }
 }
@@ -2772,13 +2782,19 @@ pub struct Oval {
     /// field is here so every frame kind takes the same write.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
-    /// Engine ADR 10XX — the live pie: the wedge of the ellipse the oval
+    /// Engine ADR 1047 — the live pie: the wedge of the ellipse the oval
     /// draws, as Illustrator's pie start and end angles. `None` is the
     /// whole ellipse (and the only value IDML spells natively; the IDML
     /// export writes a pie's outline and keeps the angles in the item's
     /// label, [`crate::live_shape::label`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pie: Option<crate::live_shape::PieAngles>,
+    /// Engine ADR 1037 — the picture's filter stack, applied in order when
+    /// it is drawn and exported. Empty (the default, and every imported
+    /// frame without the label) draws the picture as it is; an empty stack
+    /// writes no key, so the `.paged` bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
 }
 
 impl Oval {
@@ -2838,6 +2854,7 @@ impl Oval {
             end_cap: None,
             fill_rule: FillRule::NonZero,
             pie: None,
+            image_adjustments: Vec::new(),
         }
     }
 }
@@ -3359,6 +3376,12 @@ pub struct Polygon {
     /// and re-wound or reported as lost on IDML export.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1037 — the picture's filter stack, applied in order when
+    /// it is drawn and exported. Empty (the default, and every imported
+    /// frame without the label) draws the picture as it is; an empty stack
+    /// writes no key, so the `.paged` bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
     /// `<TextWrapPreference>` parsed off the polygon, if any.
     /// `None` ⇒ the polygon does not exclude text.
     pub text_wrap: Option<TextWrap>,
@@ -3505,7 +3528,7 @@ pub struct Polygon {
     /// C-62 — `RightArrowHeadScale` (percent, default 100).
     #[serde(default = "default_arrowhead_scale")]
     pub end_arrow_scale: f32,
-    /// Engine ADR 10XX — the live polygon or star the anchors were made
+    /// Engine ADR 1047 — the live polygon or star the anchors were made
     /// from: its side count and star inset. It is LIVE while the anchors
     /// are still what these parameters make in their own bounding box
     /// ([`crate::live_shape::live_polygon`]); an edit of the points ends
@@ -3541,6 +3564,7 @@ impl Polygon {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
+            image_adjustments: Vec::new(),
             text_wrap: None,
             item_layer: None,
             effects: None,

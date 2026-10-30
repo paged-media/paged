@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 10XX — the live-shape writes: a polygon's side count and
+//! Engine ADR 1047 — the live-shape writes: a polygon's side count and
 //! star inset, an oval's pie angles.
 //!
 //! A polygon write redraws the anchors (and the frame box follows them),
