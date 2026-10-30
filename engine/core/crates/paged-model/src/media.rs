@@ -353,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn a_medium_round_trips_through_its_json__feat__slide_media() {
+    fn a_medium_round_trips_through_its_json__feat__plugin_slide_media() {
         let m = movie();
         let json = m.to_json();
         assert!(json.contains(r#""loop":true"#), "{json}");
@@ -370,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn a_medium_out_of_range_is_refused__feat__slide_media() {
+    fn a_medium_out_of_range_is_refused__feat__plugin_slide_media() {
         let bad = |f: &dyn Fn(&mut MediaItem)| {
             let mut m = movie();
             f(&mut m);
@@ -390,7 +390,7 @@ mod tests {
     }
 
     #[test]
-    fn the_label_carries_the_medium_through_idml__feat__slide_media() {
+    fn the_label_carries_the_medium_through_idml__feat__plugin_slide_media() {
         let mut spread = Spread::default();
         let mut r = Rectangle::new("r1", Bounds::ZERO);
         r.media = Some(movie());
@@ -419,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn a_part_is_named_by_its_type__feat__slide_media() {
+    fn a_part_is_named_by_its_type__feat__plugin_slide_media() {
         assert_eq!(extension_for("video/mp4", MediaKind::Movie), "mp4");
         assert_eq!(extension_for("audio/mpeg", MediaKind::Sound), "mp3");
         assert_eq!(extension_for("application/x-what", MediaKind::Sound), "m4a");

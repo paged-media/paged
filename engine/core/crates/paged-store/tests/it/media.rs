@@ -52,7 +52,7 @@ fn doc(media: Option<MediaItem>) -> Document {
 
 #[test]
 #[allow(non_snake_case)]
-fn a_medium_rides_the_model_and_its_part_the_container__feat__slide_media() {
+fn a_medium_rides_the_model_and_its_part_the_container__feat__plugin_slide_media() {
     let clip = b"\0\0\0\x18ftypmp42 a small clip".to_vec();
     let path = paged_store::media_part_path(&clip, "MP4");
     assert!(

@@ -106,7 +106,7 @@ fn draws_poster(m: &CanvasModel) -> bool {
 
 #[test]
 #[allow(non_snake_case)]
-fn a_frame_becomes_a_movie_and_back__feat__slide_media() {
+fn a_frame_becomes_a_movie_and_back__feat__plugin_slide_media() {
     let (mut m, id) = model();
     assert_eq!(read(&m, &id), Some(Value::Media(None)));
     set(&mut m, &id, Some(movie())).expect("set");
@@ -125,7 +125,7 @@ fn a_frame_becomes_a_movie_and_back__feat__slide_media() {
 
 #[test]
 #[allow(non_snake_case)]
-fn a_medium_out_of_range_is_refused__feat__slide_media() {
+fn a_medium_out_of_range_is_refused__feat__plugin_slide_media() {
     let (mut m, id) = model();
     let bad = MediaItem {
         source: MediaSource::Part {
@@ -140,7 +140,7 @@ fn a_medium_out_of_range_is_refused__feat__slide_media() {
 
 #[test]
 #[allow(non_snake_case)]
-fn the_idml_export_keeps_the_medium_in_a_label_and_reports_it__feat__slide_media() {
+fn the_idml_export_keeps_the_medium_in_a_label_and_reports_it__feat__plugin_slide_media() {
     let (mut m, id) = model();
     let clean = m.idml_export_losses();
     set(&mut m, &id, Some(movie())).expect("set");
@@ -183,7 +183,7 @@ fn the_idml_export_keeps_the_medium_in_a_label_and_reports_it__feat__slide_media
 
 #[test]
 #[allow(non_snake_case)]
-fn the_medium_and_its_part_survive_paged__feat__slide_media() {
+fn the_medium_and_its_part_survive_paged__feat__plugin_slide_media() {
     let (mut m, id) = model();
     let clip = b"\x00\x00\x00\x18ftypmp42 not really a movie".to_vec();
     m.set_paged_part_as(Some("media.paged.slide"), PART.into(), clip.clone())
@@ -201,7 +201,7 @@ fn the_medium_and_its_part_survive_paged__feat__slide_media() {
 
 #[test]
 #[allow(non_snake_case)]
-fn a_media_part_is_never_changed__feat__slide_media() {
+fn a_media_part_is_never_changed__feat__plugin_slide_media() {
     let (mut m, _) = model();
     m.set_paged_part_as(Some("a.plugin"), PART.into(), b"one".to_vec())
         .expect("added");

@@ -99,7 +99,7 @@ fn media_rects(doc: &Document, slide: usize) -> Vec<&Rectangle> {
 
 #[test]
 #[allow(non_snake_case)]
-fn video_and_audio_import_as_movie_and_sound_frames__feat__slide_media() {
+fn video_and_audio_import_as_movie_and_sound_frames__feat__plugin_slide_media() {
     let bytes = fixture("media");
     let ir = pptx_import::import_pptx(&bytes).unwrap();
     let pic = ir.slides[0]
@@ -161,7 +161,7 @@ fn video_and_audio_import_as_movie_and_sound_frames__feat__slide_media() {
 
 #[test]
 #[allow(non_snake_case)]
-fn an_unedited_media_deck_exports_its_own_bytes__feat__slide_media() {
+fn an_unedited_media_deck_exports_its_own_bytes__feat__plugin_slide_media() {
     let bytes = fixture("media");
     let (doc, media) = imported(&bytes);
     let out = export(&bytes, &doc, &media);
@@ -174,7 +174,7 @@ fn an_unedited_media_deck_exports_its_own_bytes__feat__slide_media() {
 
 #[test]
 #[allow(non_snake_case)]
-fn an_edited_medium_is_written_with_its_trim_and_timing__feat__slide_media() {
+fn an_edited_medium_is_written_with_its_trim_and_timing__feat__plugin_slide_media() {
     let bytes = fixture("media");
     let (mut doc, media) = imported(&bytes);
     {
@@ -259,7 +259,7 @@ fn place_movie(
 
 #[test]
 #[allow(non_snake_case)]
-fn a_medium_made_in_the_editor_is_written_as_powerpoint_writes_one__feat__slide_media() {
+fn a_medium_made_in_the_editor_is_written_as_powerpoint_writes_one__feat__plugin_slide_media() {
     let bytes = fixture("media");
     let clip = part(&bytes, "ppt/media/media1.mp4").unwrap();
     // A clip of its own, so it gets a part of its own.
@@ -308,7 +308,7 @@ fn a_medium_made_in_the_editor_is_written_as_powerpoint_writes_one__feat__slide_
 
 #[test]
 #[allow(non_snake_case)]
-fn a_new_movie_on_a_slide_without_timing_starts_as_it_says__feat__slide_media() {
+fn a_new_movie_on_a_slide_without_timing_starts_as_it_says__feat__plugin_slide_media() {
     let bytes = fixture("effects");
     let clip = part(&fixture("media"), "ppt/media/media1.mp4").unwrap();
     let ir = pptx_import::import_pptx(&bytes).unwrap();

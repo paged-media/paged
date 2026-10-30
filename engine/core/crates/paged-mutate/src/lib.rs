@@ -7026,7 +7026,7 @@ mod tests {
     /// and refuses a medium out of range or another kind.
     #[test]
     #[allow(non_snake_case)]
-    fn frame_media_round_trip__feat__slide_media() {
+    fn frame_media_round_trip__feat__plugin_slide_media() {
         use paged_model::{MediaItem, MediaKind, MediaPlay, MediaSource};
         let mut p = Project::new(document_with_one_rectangle("Rectangle/r1"));
         let node = NodeId::Rectangle("Rectangle/r1".to_string());
