@@ -406,6 +406,15 @@ fn painted_extent(
             mapped.is_finite().then_some(mapped)
         }
 
+        // Engine ADR 1040: the shading's own box.
+        C::MeshShade {
+            bounds, transform, ..
+        } => {
+            let src = Extent::from_rect(*bounds);
+            let mapped = transform_extent(src, transform);
+            mapped.is_finite().then_some(mapped)
+        }
+
         // Halo outside the path: `3σ + |spread| + 1` (render_outer_glow).
         C::OuterGlow {
             path_id,

@@ -1093,6 +1093,27 @@ impl Raster<'_> {
                         PenikoBlendMode::default(),
                     );
                 }
+                DisplayCommand::MeshShade {
+                    mesh_id, transform, ..
+                } => {
+                    let xform = self.active().xform;
+                    let Some((raster, to_px)) =
+                        vello_map::mesh_image(list, *mesh_id, transform, xform)
+                    else {
+                        continue;
+                    };
+                    let Some(pixmap) = mesh_pixmap(&raster) else {
+                        continue;
+                    };
+                    let (surface, res, _) = self.split();
+                    surface.draw_image(
+                        res,
+                        pixmap,
+                        to_px,
+                        image_sampler(),
+                        PenikoBlendMode::default(),
+                    );
+                }
                 DisplayCommand::PushClip { path_id, transform } => {
                     let rule = vello_map::path_fill(list, *path_id);
                     let path = list
@@ -1919,6 +1940,44 @@ enum FeatherKind<'a> {
 /// unscaled image is copied exactly (`vello_cpu` drops to nearest).
 fn image_sampler() -> ImageSampler {
     ImageSampler::new().with_extend(Extend::Pad)
+}
+
+/// A mesh raster's cache key and its pixmap.
+type MeshPixmap = ((u64, i32), Arc<Pixmap>);
+
+thread_local! {
+    /// Engine ADR 1040 — the last mesh rasters as pixmaps, so a redraw at
+    /// the same scale copies nothing.
+    static MESH_PIXMAPS: std::cell::RefCell<Vec<MeshPixmap>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A mesh raster as a `vello_cpu` pixmap (straight alpha, as the
+/// GPU lane's image brush reads it).
+fn mesh_pixmap(raster: &paged_compose::MeshRaster) -> Option<Arc<Pixmap>> {
+    if raster.width > u32::from(u16::MAX) || raster.height > u32::from(u16::MAX) {
+        return None;
+    }
+    MESH_PIXMAPS.with(|c| {
+        let mut c = c.borrow_mut();
+        if let Some(at) = c.iter().position(|(k, _)| *k == raster.key) {
+            let hit = c.remove(at);
+            let pixmap = hit.1.clone();
+            c.push(hit);
+            return Some(pixmap);
+        }
+        let pixmap = Arc::new(Pixmap::from_parts(
+            raster.rgba.as_ref().clone(),
+            raster.width as u16,
+            raster.height as u16,
+            PixelMetadata::new(ImageAlphaType::Alpha, true),
+        ));
+        if c.len() >= 8 {
+            c.remove(0);
+        }
+        c.push((raster.key, pixmap.clone()));
+        Some(pixmap)
+    })
 }
 
 /// Effect stamps are rasters on a grid at the render's own resolution;

@@ -57,6 +57,29 @@ flavours are recorded by type and size only: Illustrator embeds the
 account's user name in their private data. The probe replaces the
 clipboard; the runner puts its previous plain text back.
 
+**Render probes.** `probes/mesh-render.jsx` answers in FILES, not paths:
+it opens the engine's PDF patch shadings (`PAGED_PROBE_INPUTS`), exports
+Illustrator's rendering as a PNG (1 px = 1 pt) and its own PDF into the
+stage (`PROBE_STAGE`), and `lib/write-render-fixture.mjs` copies both beside
+the fixture with their sha256. It is replayed by the ENGINE (engine ADR
+1040), not by draw-bundle:
+
+```bash
+(cd ../../engine/core && cargo test -p paged-export-pdf --test it \
+  write_illustrator_oracle_inputs -- --ignored)       # the input PDFs
+PAGED_PROBE_INPUTS=../../engine/core/crates/paged-export-pdf/tests/fixtures/mesh-oracle \
+PAGED_PROBE_WRITER=write-render-fixture.mjs \
+  bash scripts/illustrator/run-probe.sh scripts/illustrator/probes/mesh-render.jsx \
+  ../../engine/core/crates/paged-export-pdf/tests/fixtures/mesh-oracle/mesh-render.illustrator.json
+```
+
+Recorded 2026-10-29: the engine's raster agrees with Illustrator's within
+2–4 levels on a curved grid and a tensor patch, and within 8 on a bilinear
+patch near a corner (Illustrator's coarser tessellation; the exact value
+is the engine's). Illustrator writes the meshes back as shading types 6
+and 7, as the engine does. A freeform gradient cannot be created by
+script, so it has no probe.
+
 Each fixture's `script_sha256` identifies the exact text (library + probe)
 that produced it. The library has grown since the first recording (stroke,
 paint and fill-rule fields), so older fixtures carry fewer fields; re-record

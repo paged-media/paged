@@ -810,6 +810,9 @@ property_paths! {
         FrameGradientStrokeMode => "frameGradientStrokeMode" : enum_(STROKE_GRADIENT_MODES).default_text("Within"),
         // Engine ADRs 1007 and 1031 — the gradient fill's start, `[x, y]` in inner coordinates ([] = default).
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
+        // Engine ADR 1040 — the native mesh fill (no IDML attribute: a
+        // label carries it through an IDML round trip).
+        FrameFillMesh => "frameFillMesh" : structure("MeshFillSpec", Wire::FillMesh),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
         FrameStrokeMiterLimit => "frameStrokeMiterLimit" : number().range(1.0, 500.0).default_num(4.0).idml(idml![attr(Rectangle | GraphicLine | Polygon, MiterLimit)]),
@@ -1507,7 +1510,10 @@ mod tests {
         //
         // 266 -> 267: ADR 1007 — a frame's stroke gradient mode (its
         // gradient's start point is ADR 1031's path).
-        assert_eq!(cat.settable_paths.len(), 267, "settable path count drifted");
+        //
+        // 267 -> 268: ADR 1040 — a frame's gradient mesh or freeform
+        // gradient.
+        assert_eq!(cat.settable_paths.len(), 268, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

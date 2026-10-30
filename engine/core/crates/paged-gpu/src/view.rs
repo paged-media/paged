@@ -192,6 +192,7 @@ fn outline(list: &DisplayList, px_per_pt: f32) -> DisplayList {
         gradients: list.gradients.clone(),
         radial_gradients: list.radial_gradients.clone(),
         sweep_gradients: list.sweep_gradients.clone(),
+        meshes: list.meshes.clone(),
         images: Vec::new(),
         spot_inks: list.spot_inks.clone(),
         glyph_runs: None,
@@ -268,9 +269,12 @@ fn outline(list: &DisplayList, px_per_pt: f32) -> DisplayList {
             DisplayCommand::PushClip { .. } | DisplayCommand::PopClip(_) => {
                 out.commands.push(cmd.clone());
             }
-            // Effects, shadows, feathers, blend groups and transparency
-            // layers are appearance, not geometry: Outline draws none.
-            DisplayCommand::DropShadow { .. }
+            // Effects, shadows, feathers, blend groups, transparency
+            // layers and mesh shadings (engine ADR 1040; the frame's own
+            // outline is its path) are appearance, not geometry: Outline
+            // draws none.
+            DisplayCommand::MeshShade { .. }
+            | DisplayCommand::DropShadow { .. }
             | DisplayCommand::PathShadow { .. }
             | DisplayCommand::BeginBlendGroup { .. }
             | DisplayCommand::EndBlendGroup(_)

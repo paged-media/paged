@@ -128,6 +128,7 @@ pub enum Wire {
     ImageAdjustments,
     ParagraphRule,
     GradientFeather,
+    FillMesh,
     GradientStops,
     SwatchColor,
     FramePath,
@@ -863,6 +864,7 @@ pub fn coerce(schema: &PropertySchema, input: Input<'_>) -> Result<Value, String
                     entries: Vec::new(),
                     prev: None,
                 },
+                Wire::FillMesh => Value::FillMesh(None),
                 // A tri-state bool clears with `Text("")`.
                 Wire::Bool => Value::Text(String::new()),
                 other => return Err(format!("null has no {other:?} form")),
@@ -1016,6 +1018,14 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
                 .map_err(|e| format!("a colour is {{ space, value, model?, tint? }}: {e}"))?;
             validate(schema, &Value::SwatchColor(spec))
         }
+        // Engine ADR 1040 — a mesh fill as its own object.
+        J::Object(_) if schema.wire == Wire::FillMesh => {
+            let spec: paged_mutate::MeshFillSpec =
+                serde_json::from_value(json.clone()).map_err(|e| {
+                    format!("a mesh fill is {{ kind: \"mesh\" | \"freeform\", … }}: {e}")
+                })?;
+            validate(schema, &Value::FillMesh(Some(spec)))
+        }
         J::Object(_) => Err("an object must be a { type, value } wire value".to_string()),
     }
 }
@@ -1074,6 +1084,7 @@ pub fn wire_of(value: &Value) -> Option<Wire> {
         Value::ParagraphRule(_) => Wire::ParagraphRule,
         Value::GradientFeather(_) => Wire::GradientFeather,
         Value::EffectStack { .. } => Wire::EffectStack,
+        Value::FillMesh(_) => Wire::FillMesh,
         Value::GradientStops(_) => Wire::GradientStops,
         Value::SwatchColor(_) => Wire::SwatchColor,
         Value::FramePath { .. } => Wire::FramePath,

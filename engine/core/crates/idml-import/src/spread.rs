@@ -2987,6 +2987,7 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
     paged_model::effect_stack::label::lift(&mut out);
     // Engine ADR 1037 — an image frame's filter stack rides a label.
     paged_model::image_adjust::adopt_labels(&mut out);
+    restore_mesh_fills(&mut out);
     Ok((out, provenance))
 }
 
@@ -3464,6 +3465,56 @@ fn effective_item_transform(
         (None, x) => x,
         (Some(a), None) => Some(a),
         (Some(a), Some(o)) => Some(compose_matrix(&a, &o)),
+    }
+}
+
+/// Engine ADR 1040 — a frame's gradient mesh or freeform gradient comes
+/// back from the label the IDML export kept it in
+/// ([`paged_model::MESH_FILL_LABEL_KEY`]); the entry is dropped, so a
+/// round trip leaves the labels as they were. A label that does not
+/// parse stays a label (it is somebody's data).
+fn restore_mesh_fills(out: &mut Spread) {
+    let key = paged_model::MESH_FILL_LABEL_KEY;
+    let mut restored: Vec<(String, paged_model::MeshFill)> = Vec::new();
+    for (id, entries) in &out.labels {
+        if let Some((_, json)) = entries.iter().find(|(k, _)| k == key) {
+            if let Ok(fill) = serde_json::from_str::<paged_model::MeshFill>(json) {
+                restored.push((id.clone(), fill));
+            }
+        }
+    }
+    for (id, fill) in restored {
+        let slot = out
+            .text_frames
+            .iter_mut()
+            .find(|f| f.self_id.as_deref() == Some(id.as_str()))
+            .map(|f| &mut f.fill_mesh)
+            .or_else(|| {
+                out.rectangles
+                    .iter_mut()
+                    .find(|f| f.self_id.as_deref() == Some(id.as_str()))
+                    .map(|f| &mut f.fill_mesh)
+            })
+            .or_else(|| {
+                out.ovals
+                    .iter_mut()
+                    .find(|f| f.self_id.as_deref() == Some(id.as_str()))
+                    .map(|f| &mut f.fill_mesh)
+            })
+            .or_else(|| {
+                out.polygons
+                    .iter_mut()
+                    .find(|f| f.self_id.as_deref() == Some(id.as_str()))
+                    .map(|f| &mut f.fill_mesh)
+            });
+        let Some(slot) = slot else { continue };
+        *slot = Some(Box::new(fill));
+        if let Some(entries) = out.labels.get_mut(&id) {
+            entries.retain(|(k, _)| k != key);
+            if entries.is_empty() {
+                out.labels.remove(&id);
+            }
+        }
     }
 }
 

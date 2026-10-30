@@ -122,7 +122,7 @@ pub(crate) use blend_shadow::{
 };
 use build_engine::*;
 pub use build_engine::{index_paragraphs, toc_paragraphs};
-pub(crate) use color_paint::{apply_fill_tint_ctx, object_tint, stroke_for};
+pub(crate) use color_paint::{apply_fill_tint_ctx, color_entry_to_paint, object_tint, stroke_for};
 use color_paint::{build_cmyk_transform, CmykTransformRef};
 use color_paint::{
     build_footnote_paint_picker, build_run_paint_picker_resolved, build_run_stroke_picker,
@@ -160,6 +160,7 @@ use numbering::{bullet_marker_character_style, list_prefix_with_levels, marker_r
 #[cfg(test)]
 use numbering::{format_number, substitute_numbering_expression};
 pub use resume::{EditSpan, StoryResume, StoryResumeStore};
+pub(crate) use text_frame::paint_as_solid_with_icc;
 use text_frame::*;
 #[cfg(test)]
 use text_path::polygon_path_from_anchors;
