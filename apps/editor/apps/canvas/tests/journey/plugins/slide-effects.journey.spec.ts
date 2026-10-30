@@ -27,9 +27,11 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { covers } from "@paged-media/test-kit";
 
+import { clickEntry, installMenuProbe } from "../../plugin-surface/menu-driver";
 import { Designer } from "../driver/designer";
 import {
   exportedPart,
+  focusEditor,
   goToSlide,
   openDeckFile,
   shapesOn,
@@ -166,5 +168,67 @@ test.describe("journey · paged.slide effects", () => {
     // Slide 1's bevels export as PowerPoint wrote them.
     const s1 = await exportedPart(page, "ppt/slides/slide1.xml");
     expect(s1.match(/<a:bevelT/g)?.length).toBeGreaterThanOrEqual(12);
+  });
+
+  test("Slide ▸ Format Painter; twice quickly it keeps painting until Esc @feat:plugin-slide.native-effects @level:happy", async ({
+    page,
+  }) => {
+    covers(
+      "menu:Slide/Format Painter",
+      "command:media.paged.slide.command.formatPainter",
+      "command:media.paged.slide.command.formatPainterOff",
+      "keybinding:escape→media.paged.slide.command.formatPainterOff",
+    );
+    const designer = new Designer(page);
+    const ids = await openDeckFile(
+      page,
+      `${FIXTURES}/bevels.pptx`,
+      "bevels.pptx",
+      2,
+    );
+    await installMenuProbe(page);
+    await goToSlide(page, ids[1]!);
+    const shapes = await shapesOn(page, ids[1]!);
+    const byId = (n: number) => shapes.find((s) => s.key.endsWith(`#${n}`))!;
+    const slide2 = () => exportedPart(page, "ppt/slides/slide2.xml");
+    const shadowed = async (n: number) =>
+      spPr(await slide2(), n).includes("<a:outerShdw");
+
+    // From the menu: the next shape clicked takes the shadow.
+    await click(page, designer, byId(104));
+    await clickEntry(
+      page,
+      "Slide/Format Painter",
+      "media.paged.slide.command.formatPainter",
+    );
+    await click(page, designer, byId(105));
+    await expect.poll(() => shadowed(105), { timeout: 15_000 }).toBe(true);
+
+    // Twice quickly (the brush double-clicked): it keeps painting.
+    await click(page, designer, byId(104));
+    await page.evaluate(async () => {
+      const cmd = (
+        globalThis as unknown as {
+          __canvas: {
+            registries: {
+              commands: { invoke(id: string): Promise<unknown> };
+            };
+          };
+        }
+      ).__canvas.registries.commands;
+      const id = "media.paged.slide.command.formatPainter";
+      await Promise.all([cmd.invoke(id), cmd.invoke(id)]);
+    });
+    await click(page, designer, byId(106));
+    await expect.poll(() => shadowed(106), { timeout: 15_000 }).toBe(true);
+    await click(page, designer, byId(107));
+    await expect.poll(() => shadowed(107), { timeout: 15_000 }).toBe(true);
+
+    // Esc puts it down: the next shape keeps its look.
+    await focusEditor(page);
+    await page.keyboard.press("Escape");
+    await click(page, designer, byId(108));
+    await page.waitForTimeout(1_500);
+    expect(await shadowed(108)).toBe(false);
   });
 });

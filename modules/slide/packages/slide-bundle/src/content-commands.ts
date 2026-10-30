@@ -400,18 +400,26 @@ export function contributeContentCommands(
   // The copy is read asynchronously; a click that comes before it is done
   // waits for it.
   let arming: Promise<void> = Promise.resolve();
+  let pending: Promise<void> | null = null;
   add(
     CONTENT_CMD.formatPainter,
     t(CONTENT.formatPainter),
     () => gates.deckOpen() && (painter.armed || hasSelection()),
     async () => {
       const now = Date.now();
+      // A second invoke while the first copy is still being read is the
+      // double-click: it waits for the painter to be armed, then locks it.
+      if (pending) {
+        await pending;
+        if (painter.armed) painter.invoke(null, null, now);
+        return;
+      }
       if (painter.armed) {
         painter.invoke(null, null, now);
         return;
       }
       const source = host.selection.get()[0];
-      arming = (async () => {
+      const arm = (async () => {
         const copied = await copyFormat(host, source);
         const mode = painter.invoke(
           copied,
@@ -422,7 +430,13 @@ export function contributeContentCommands(
           host.log.info("paged.slide formatPainter: nothing is selected");
         else host.log.info(t(CONTENT.formatPainterArmed));
       })();
-      await arming;
+      pending = arm;
+      arming = arm;
+      try {
+        await arm;
+      } finally {
+        pending = null;
+      }
     },
   );
   add(

@@ -152,6 +152,9 @@ describe("slide W4 content commands", () => {
         (k) => (k.scope as { editContext: string }).editContext === "slideDeck",
       ),
     ).toBe(true);
+    // Esc's command applies only while the Format Painter is armed.
+    covers("command:media.paged.slide.command.formatPainterOff");
+    expect(f.commands.get(CONTENT_CMD.formatPainterOff)!.when!()).toBe(false);
     expect(f.commands.get(CONTENT_CMD.copyFormat)!.when!()).toBe(true);
     expect(f.commands.get(CONTENT_CMD.pasteFormat)!.when!()).toBe(false);
     clip.copied = { shape: [], text: [] };
