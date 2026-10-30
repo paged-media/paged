@@ -27,6 +27,7 @@
 // realm, browser or Node; until it is built the dynamic import rejects and
 // boot says so.
 
+import { bytesToBase64 } from "@paged-media/helpers";
 import {
   wasmBindgenModule,
   type WasmBindgenGlue,
@@ -44,6 +45,33 @@ import type {
 
 const ENGINE_NOT_BUILT =
   "paged.slide engine wasm not built: run scripts/build-wasm.sh";
+
+/** A theme as data (slide-resolve `ThemeIr`, slide ADR 713): its name, the
+ *  twelve slots as `RRGGBB` (`dk1`, `lt1`, `dk2`, `lt2`, `accent1`–`6`,
+ *  `hlink`, `folHlink`), the major and minor Latin fonts. */
+export interface ThemeIr {
+  name: string;
+  colors: [string, string][];
+  major: string;
+  minor: string;
+  /** The variant applied, by name. */
+  variant?: string;
+}
+
+/** One theme of the Design gallery, with its variants. */
+export interface GalleryTheme {
+  id: string;
+  name: string;
+  theme: ThemeIr;
+  variants: ThemeIr[];
+}
+
+/** A theme swatch's colour under a theme (0–255 channels). */
+export interface ThemeSwatch {
+  id: string;
+  name: string | null;
+  rgb: [number, number, number];
+}
 
 /** A DrawingML transition as the deck wrote it (pptx-core `Transition`). */
 export interface Transition {
@@ -230,7 +258,28 @@ interface WasmExported {
   readonly bytes: Uint8Array;
   readonly diagnostics: string;
   readonly notExported: string;
+  readonly rastersNeeded?: string;
   free(): void;
+}
+
+/** A picture the export needs a PNG of (an SVG's fallback, a format
+ *  PowerPoint does not open): the element and the resolution to render it
+ *  at. */
+export interface RasterNeed {
+  id: string;
+  dpi: number;
+}
+
+/** What a picture file is (pptx-core `media`). */
+export interface PictureInfo {
+  /** The format's extension (`png`, `jpeg`, `svg`, `webp`, …). */
+  format: string;
+  mime: string;
+  /** PowerPoint holds it as it is (PNG, JPEG, GIF, BMP, TIFF). */
+  inDeck: boolean;
+  /** Pixels (an SVG's in CSS pixels); null when the header does not say. */
+  width: number | null;
+  height: number | null;
 }
 
 /** A written deck and what it could not carry (slide-js `ExportedDeck`). */
@@ -240,6 +289,9 @@ export interface ExportedDeck {
   diagnostics: string[];
   /** What is on the slides that could not round-trip, one line each. */
   notExported: string[];
+  /** Pictures written without the PNG they need; render them and export
+   *  again with them in `DeckPlan.rasters`. */
+  rastersNeeded: RasterNeed[];
 }
 
 /** A chart whose workbook the document edited (pptx-export `ChartPlan`). */
@@ -334,6 +386,9 @@ export interface DeckPlan {
   customShows?: { id?: number; name: string; pages: string[] }[];
   /** The charts whose data the document changed (slide ADR 715). */
   charts?: readonly ChartPlan[];
+  /** PNGs of pictures PowerPoint cannot hold as they are, by element id,
+   *  base64 (what `ExportedDeck.rastersNeeded` asked for). */
+  rasters?: Readonly<Record<string, string>>;
 }
 
 /** What a PDF is asked to be (slide-output `pdf::Options`). */
@@ -396,6 +451,7 @@ export interface SlideWasmModule extends WasmBindgenGlue {
   LiveCharts: new (pptx: Uint8Array) => LiveCharts;
   importPptx(bytes: Uint8Array, name: string): WasmImported;
   live(request: string): string;
+  theme(request: string): string;
   anim(request: string): string;
   AnimPlayer: new (input: string) => WasmAnimPlayer;
   embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
@@ -455,6 +511,32 @@ export class SlideEngine {
     } finally {
       out.free();
     }
+  }
+
+  /** The live theme (slide ADR 713): one JSON request to the Rust side,
+   *  which knows the theme keys and the gallery. */
+  private theme<T>(request: object): T {
+    return JSON.parse(this.mod.theme(JSON.stringify(request))) as T;
+  }
+
+  /** The Design gallery's themes, each with its four variants. */
+  themeGallery(): GalleryTheme[] {
+    return this.theme({ op: "gallery" });
+  }
+
+  /** A theme's four variants (as it is, dark, shifted accents, muted). */
+  themeVariants(theme: ThemeIr): ThemeIr[] {
+    return this.theme({ op: "variants", theme });
+  }
+
+  /** The colour each theme swatch among `ids` takes under `theme`. */
+  themeSwatches(theme: ThemeIr, ids: readonly string[]): ThemeSwatch[] {
+    return this.theme({ op: "swatches", theme, ids });
+  }
+
+  /** The themes of a `.thmx`, `.potx` or `.pptx` (Browse for Themes). */
+  readThemes(bytes: Uint8Array): GalleryTheme[] {
+    return this.theme({ op: "read", data: bytesToBase64(bytes) });
   }
 
   /** Live presets and connectors (slide ADR 717): one JSON request to the
@@ -522,6 +604,18 @@ export class SlideEngine {
     return new AnimPlayer(new this.mod.AnimPlayer(JSON.stringify(input)));
   }
 
+  /** What a picture file is, from its first bytes; null for a format the
+   *  engine does not read. */
+  picture(bytes: Uint8Array): PictureInfo | null {
+    const head = bytes.subarray(0, 64 * 1024);
+    return this.live({ op: "picture", head: bytesToBase64(head) });
+  }
+
+  /** Every picture format the engine reads (the picker's types). */
+  pictureFormats(): { format: string; mime: string }[] {
+    return this.live({ op: "pictureFormats" });
+  }
+
   /** Write a `.pptx` from the deck the document was imported from and its
    *  slides in page order. With the document's `.paged` serialization,
    *  what is on the slides is written from it (edited and new slides
@@ -545,6 +639,7 @@ export class SlideEngine {
         bytes: out.bytes,
         diagnostics: JSON.parse(out.diagnostics) as string[],
         notExported: JSON.parse(out.notExported) as string[],
+        rastersNeeded: JSON.parse(out.rastersNeeded ?? "[]") as RasterNeed[],
       };
     } finally {
       out.free();

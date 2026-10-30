@@ -148,6 +148,10 @@ export type {
   RenderLayersOptions,
   RenderedLayer,
   RenderedLayers,
+  RenderStory,
+  RenderStoryParagraph,
+  RenderStoryRun,
+  RenderStoryOptions,
   TextSurface,
   TextMetrics,
   TextCaret,
@@ -172,6 +176,18 @@ export type {
   OverlaySurface,
   // W-20 — a retained, data-only overlay layer.
   OverlayLayer,
+  // Extensions ADR 339 — handle sets and the host-drawn transform box.
+  OverlayHandleSet,
+  OverlayHandleSpace,
+  OverlayHandleSpec,
+  ProjectiveMatrix,
+  TransformQuad,
+  TransformBoxMode,
+  TransformBoxOperation,
+  TransformBoxUpdate,
+  TransformBoxOptions,
+  TransformBoxSession,
+  TransformBoxSurface,
   ShellSurface,
   OpenPanelOptions,
   FilePickerOptions,
@@ -300,6 +316,7 @@ export type {
   BindingDecline,
   BindingWrite,
   BindingCollection,
+  ProvidedLinkRow,
   BindingOp,
   BindingProvider,
   BindingProviderScope,
@@ -309,6 +326,21 @@ export type {
   BindingWriteResult,
   BindingCollectionResult,
   ActiveBindingProvider,
+  // Extensions ADR 340 — the workspace (rulers, guides, grid) and
+  // readout lanes.
+  BindingReadoutSurface,
+  BindingRulerUnit,
+  BindingWorkspace,
+  BindingWorkspaceGuide,
+  BindingWorkspaceRead,
+  BindingGuideEdit,
+  BindingWorkspaceView,
+  BindingReadoutRow,
+  BindingReadoutSection,
+  BindingReadoutRequest,
+  BindingReadoutsRead,
+  BindingWorkspaceResult,
+  BindingReadoutsResult,
 } from "./binding-provider.js";
 
 export type {
@@ -334,6 +366,10 @@ export type {
   SnapSource,
   SnapSettings,
 } from "./wire.js";
+
+// Engine ADR 1037 — one step of an image frame's filter stack, the item of
+// the `imageAdjustments` value `frameImageAdjustments` carries.
+export type { RasterOp } from "./wire.js";
 
 // Engine ADR 1031 — `host.document.importSvg` / `exportSvg`'s options and
 // their report.

@@ -264,6 +264,9 @@ defineMessages("menu", {
   "Save as template…": "Save as template…",
   "Custom Shows…": "Custom Shows…",
   "Add Section": "Add Section",
+  Design: "Design",
+  Themes: "Themes",
+  "Browse for Themes…": "Browse for Themes…",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled
@@ -396,6 +399,52 @@ export const TEMPLATE = defineMessages("slide.template", {
   yesOrNo: "Whether a slide is shown is yes or no.",
   cannotHide:
     "The template does not let a filler show or hide slides: it must grant document.metadata to the whole document.",
+});
+
+/** Slide W4's content verbs: pictures and icons, the format painter, the
+ *  SmartArt text pane (content-commands.ts). */
+export const CONTENT = defineMessages("slide.content", {
+  insertPicture: "Insert picture…",
+  insertIcon: "Insert icon…",
+  copyFormat: "Copy formatting",
+  pasteFormat: "Paste formatting",
+  smartArtText: "SmartArt text pane",
+  smartArtPoints: "Read a SmartArt diagram's text",
+  setSmartArtText: "Set a SmartArt point's text",
+});
+
+/** The SmartArt text pane (panels/smartart-panel.tsx). */
+export const SMARTART = defineMessages("slide.smartart", {
+  title: "Text Pane",
+  empty: "Select a SmartArt graphic to edit its text.",
+  heading: "Type your text here",
+  point: "Point {number}",
+  hint: "Enter writes the text; Shift+Enter starts a new paragraph. Points are edited, not added: the diagram keeps its layout.",
+});
+
+/** Design ▸ Themes and the deck's document styles (slide ADRs 713, 719;
+ *  panels/design-panel.tsx). */
+export const DESIGN = defineMessages("slide.design", {
+  title: "Design",
+  openDesign: "Design",
+  themes: "Themes",
+  variants: "Variants",
+  thisPresentation: "This presentation",
+  browse: "Browse for Themes…",
+  listThemes: "List the themes",
+  applyTheme: "Apply a theme",
+  apply: "Apply {name}",
+  variant: "Variant: {name}",
+  current: "{name}",
+  fonts: "{major} / {minor}",
+  empty: "Open a PowerPoint deck to change its theme.",
+  missing: "{count} references missing",
+  remap: "Remap",
+  remapReference: "Remap a theme reference",
+  remapTo: "Replace {id} with",
+  none: "(none)",
+  refused: "The theme could not be applied.",
+  note: "A theme recolours every theme colour of the deck and sets its heading and body fonts, in one undo step.",
 });
 
 defineTranslations("de", de);

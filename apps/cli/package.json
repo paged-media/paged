@@ -32,6 +32,7 @@
   "devDependencies": {
     "@paged-media/ai": "workspace:*",
     "@paged-media/data": "workspace:*",
+    "@paged-media/helpers": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
     "@types/node": "catalog:",

@@ -36,7 +36,11 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, expect, type Page } from "@playwright/test";
 
-import { openCanvas, openPanel } from "./fidelity/canvas-driver";
+import {
+  openCanvas,
+  openPanel,
+  loadViaFileInput,
+} from "./fidelity/canvas-driver";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -49,16 +53,7 @@ const BROKEN_LINKS = `${REPO_ROOT}/corpus/idml/generated/links-broken.idml`;
 // is populated — the export actions read `useDocument().handle` for
 // the page list, and the PDF dialog gates on it.
 async function loadDoc(page: Page, path = CLEAN) {
-  await page.setInputFiles('input[type="file"]', path);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
-            .ready,
-      ),
-    )
-    .toBe(true);
+  await loadViaFileInput(page, path);
 }
 
 async function setMode(page: Page, mode: string) {

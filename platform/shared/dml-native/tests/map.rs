@@ -23,7 +23,7 @@
 #![allow(non_snake_case)]
 
 use dml_native::*;
-use paged_model::{ArrowheadType, GradientKind};
+use paged_model::{ArrowheadType, GradientKind, RasterOp};
 use paged_ooxml::drawingml::{self, resolved, Rgba};
 use paged_ooxml::tree::{parse, El};
 
@@ -239,15 +239,15 @@ fn shadows_glow_and_soft_edge_become_the_engine_effects__feat__plugin_slide_nati
 fn what_the_engine_cannot_hold_is_reported_never_dropped__feat__plugin_slide_native_effects() {
     let mut m = Mapper::default();
     let fx = effects_of_xml(
-        r#"<a:blur rad="12700"/><a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:fillOverlay><a:outerShdw dist="12700" sy="-50000"><a:srgbClr val="000000"/></a:outerShdw><a:prstShdw prst="shdw3" dist="12700"><a:srgbClr val="000000"/></a:prstShdw><a:reflection/>"#,
+        r#"<a:blur rad="12700" grow="0"/><a:fillOverlay blend="mult"><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="FF0000"><a:alpha val="0"/></a:srgbClr></a:gs></a:gsLst><a:path path="circle"/></a:gradFill></a:fillOverlay><a:outerShdw dist="12700" sy="-50000"><a:srgbClr val="000000"/></a:outerShdw><a:prstShdw prst="shdw3" dist="12700"><a:srgbClr val="000000"/></a:prstShdw><a:reflection dir="0" sy="100000"/>"#,
     );
     let t = m.transparency(1.0, &fx, None);
     assert!(t.shadow.is_some());
     let l = m.take_losses();
     for what in [
-        "a:blur",
-        "a:reflection",
-        "a:fillOverlay",
+        "grow=\"0\"",
+        "gradient fill overlay",
+        "reflection's direction",
         "scale and skew",
         "preset shadow beside",
     ] {
@@ -264,14 +264,247 @@ fn what_the_engine_cannot_hold_is_reported_never_dropped__feat__plugin_slide_nat
 }
 
 #[test]
+fn blur_reflection_and_overlay_ride_the_effect_stack__feat__plugin_slide_native_effects() {
+    use paged_model::effect_stack::Effect;
+    let mut m = Mapper::default();
+    let fx = effects_of_xml(
+        r#"<a:blur rad="127000"/><a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="FF0000"><a:alpha val="50000"/></a:srgbClr></a:solidFill></a:fillOverlay><a:outerShdw blurRad="50800" dist="38100" dir="2700000"><a:srgbClr val="000000"/></a:outerShdw><a:reflection blurRad="6350" stA="52000" endA="300" endPos="35000" dist="12700" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/><a:softEdge rad="63500"/>"#,
+    );
+    let t = m.transparency(1.0, &fx, None);
+    assert!(m.losses().is_empty(), "{:?}", m.losses());
+    let kinds: Vec<&str> = t.stack.iter().map(|e| e.effect.kind_name()).collect();
+    // InDesign's effects first, in InDesign's order (the body draws them),
+    // then the overlay on the shape, the blur of it and its reflection.
+    assert_eq!(
+        kinds,
+        [
+            "dropShadow",
+            "feather",
+            "colorOverlay",
+            "gaussianBlur",
+            "reflection"
+        ]
+    );
+    assert!(t.shadow.is_some() && t.effects.as_ref().unwrap().feather.is_some());
+    let overlay = &t.stack[2];
+    assert_eq!(
+        (overlay.blend_mode.as_deref(), overlay.opacity_pct),
+        (Some("Multiply"), Some(50.0))
+    );
+    let Effect::ColorOverlay(o) = &overlay.effect else {
+        panic!()
+    };
+    assert_eq!(o.color.as_deref(), Some("Color/RFF0000"));
+    // PowerPoint's blur reaches its radius either side of the edge: σ is a
+    // third of it.
+    let Effect::GaussianBlur(b) = &t.stack[3].effect else {
+        panic!()
+    };
+    assert!((b.radius_pt - 10.0 / 3.0).abs() < 1e-3, "{}", b.radius_pt);
+    let Effect::Reflection(r) = &t.stack[4].effect else {
+        panic!()
+    };
+    assert_eq!(
+        (
+            r.distance_pt,
+            r.size_pct,
+            r.start_opacity_pct,
+            r.end_opacity_pct
+        ),
+        (1.0, 35.0, 52.0, 0.3)
+    );
+    assert!(paged_model::effect_stack::is_canonical(&t.stack[..2]));
+    // InDesign's effects alone keep the canonical (empty) stack.
+    let only = effects_of_xml(r#"<a:softEdge rad="63500"/>"#);
+    assert!(m.transparency(1.0, &only, None).stack.is_empty());
+    // PowerPoint draws no gradient overlay; neither does the stack, and
+    // the loss says so.
+    let fx = effects_of_xml(
+        r#"<a:fillOverlay blend="screen"><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="100000"><a:srgbClr val="000000"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill></a:fillOverlay>"#,
+    );
+    assert!(m.transparency(1.0, &fx, None).stack.is_empty());
+    assert!(
+        m.losses()[0].contains("gradient fill overlay"),
+        "{:?}",
+        m.losses()
+    );
+}
+
+#[test]
+fn the_effect_stack_comes_back_as_drawingml__feat__plugin_slide_native_effects() {
+    let mut m = Mapper::default();
+    let fx = effects_of_xml(
+        r#"<a:blur rad="114300"/><a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:fillOverlay><a:reflection blurRad="38100" stA="52000" endA="300" endPos="35000" dist="12700" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>"#,
+    );
+    let t = m.transparency(1.0, &fx, None);
+    let colours: Vec<(Rgb, String)> = m.palette.colors().map(|(c, id)| (*c, id.clone())).collect();
+    let rgb_of = |id: &str| colours.iter().find(|(_, i)| i == id).map(|(c, _)| *c);
+    let back = effects_with_stack(
+        t.shadow.as_ref(),
+        t.effects.as_ref(),
+        &t.stack,
+        &rgb_of,
+        &|_| None,
+    );
+    let near = |a: f64, b: f64| (a - b).abs() < 2e-3;
+    assert!(near(back.blur.as_ref().unwrap().radius, 9.0));
+    let (r, r2) = (
+        fx.reflection.as_ref().unwrap(),
+        back.reflection.as_ref().unwrap(),
+    );
+    assert!(near(r.blur, r2.blur) && near(r.end_pos, r2.end_pos) && near(r.distance, r2.distance));
+    assert!(near(r.start_alpha, r2.start_alpha) && near(r.end_alpha, r2.end_alpha));
+    assert_eq!(
+        back.fill_overlay,
+        fx.fill_overlay.clone().map(|mut o| {
+            if let Paint::Solid { theme, .. } = &mut o.paint {
+                *theme = None;
+            }
+            o
+        })
+    );
+    let xml = drawingml::write::effects(&back, &drawingml::write::srgb).unwrap();
+    assert!(
+        xml.starts_with(
+            r#"<a:effectLst><a:blur rad="114300" grow="1"/><a:fillOverlay blend="mult">"#
+        ),
+        "{xml}"
+    );
+    assert!(xml.contains(r#"<a:reflection blurRad="38100""#), "{xml}");
+}
+
+#[test]
+fn powerpoint_fills_a_path_even_odd__feat__frames_paths_fill_rule_even_odd() {
+    use paged_model::{FillRule, PathAnchor};
+    let square = |x0: f32, y0: f32, x1: f32, y1: f32| -> Vec<PathAnchor> {
+        [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+            .into_iter()
+            .map(|p| PathAnchor {
+                anchor: p,
+                left: p,
+                right: p,
+            })
+            .collect()
+    };
+    let mut m = Mapper::default();
+    // Two squares turning the same way, one path: PowerPoint shows a hole.
+    let mut a = square(0.0, 0.0, 100.0, 100.0);
+    a.extend(square(25.0, 25.0, 75.0, 75.0));
+    assert_eq!(
+        m.fill_rule(&a, &[0, 4], &[false, false], &[0, 0]),
+        FillRule::EvenOdd
+    );
+    // Turning against each other the rules agree: non-zero, unchanged.
+    let mut b = square(0.0, 0.0, 100.0, 100.0);
+    let mut hole = square(25.0, 25.0, 75.0, 75.0);
+    hole.reverse();
+    b.extend(hole);
+    assert_eq!(
+        m.fill_rule(&b, &[0, 4], &[false, false], &[0, 0]),
+        FillRule::NonZero
+    );
+    // One contour: non-zero.
+    assert_eq!(
+        m.fill_rule(&square(0.0, 0.0, 1.0, 1.0), &[0], &[false], &[0]),
+        FillRule::NonZero
+    );
+    assert!(m.losses().is_empty());
+    // Several paths, each filled on its own: one rule cannot say it.
+    let mut c = a.clone();
+    c.extend(square(200.0, 0.0, 300.0, 100.0));
+    assert_eq!(
+        m.fill_rule(&c, &[0, 4, 8], &[false; 3], &[0, 0, 1]),
+        FillRule::NonZero
+    );
+    assert!(m.losses()[0].contains("several paths"), "{:?}", m.losses());
+}
+
+#[test]
 fn picture_opacity_is_kept_and_other_picture_effects_reported__feat__plugin_slide_native_effects() {
-    let el = parse(format!(r#"<a:blipFill {NS}><a:blip r:embed="r1"><a:alphaModFix amt="70000"/><a:grayscl/><a:duotone><a:srgbClr val="000000"/><a:srgbClr val="FFFFFF"/></a:duotone><a:extLst><a:ext uri="x"><a14:imgProps xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><a14:imgLayer><a14:imgEffect><a14:artisticBlur radius="20"/></a14:imgEffect></a14:imgLayer></a14:imgProps></a:ext></a:extLst></a:blip></a:blipFill>"#).as_bytes()).unwrap();
+    let el = parse(format!(r#"<a:blipFill {NS}><a:blip r:embed="r1"><a:alphaModFix amt="70000"/><a:clrChange><a:clrFrom><a:srgbClr val="FFFFFF"/></a:clrFrom><a:clrTo><a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr></a:clrTo></a:clrChange><a:extLst><a:ext uri="x"><a14:imgProps xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><a14:imgLayer><a14:imgEffect><a14:artisticBlur radius="20"/></a14:imgEffect></a14:imgLayer></a14:imgProps></a:ext></a:extLst></a:blip></a:blipFill>"#).as_bytes()).unwrap();
     let pic = resolved::picture(&drawingml::blip(&el, &|_| None), &());
     let mut m = Mapper::default();
-    assert_eq!(m.picture(&pic), 0.7);
+    let mapped = m.picture(&pic);
+    assert_eq!(mapped.opacity, 0.7);
+    assert!(mapped.adjustments.is_empty());
     let l = m.losses();
-    assert_eq!(l.len(), 2, "{l:?}");
-    assert!(l[0].contains("a:grayscl") && l[1].contains("a:duotone"));
+    assert_eq!(l.len(), 1, "{l:?}");
+    assert!(l[0].contains("a:clrChange"), "{l:?}");
+}
+
+#[test]
+fn colour_replacement_and_picture_blur_join_the_filter_stack__feat__images_graphics_image_filter_stack(
+) {
+    let el = parse(format!(r#"<a:blipFill {NS}><a:blip r:embed="r1"><a:clrRepl><a:srgbClr val="FF8000"/></a:clrRepl><a:blur rad="38100"/><a:tint hue="1200000" amt="50000"/></a:blip></a:blipFill>"#).as_bytes()).unwrap();
+    let pic = resolved::picture(&drawingml::blip(&el, &|_| None), &());
+    let mut m = Mapper::default();
+    // 2 pixels per point: a 3 pt blur radius is σ 1 pt, 2 px.
+    let mapped = m.picture_at(&pic, Some(2.0));
+    assert_eq!(mapped.elements, ["a:clrRepl", "a:blur"]);
+    let orange = [1.0, 128.0 / 255.0, 0.0];
+    assert_eq!(
+        mapped.adjustments[0],
+        RasterOp::Duotone {
+            shadow: orange,
+            highlight: orange
+        }
+    );
+    let RasterOp::Blur { radius } = mapped.adjustments[1] else {
+        panic!()
+    };
+    assert!((radius - 2.0).abs() < 1e-4, "{radius}");
+    assert!(mapped.adjustments.iter().all(RasterOp::is_valid));
+    let l = m.take_losses();
+    assert_eq!(l.len(), 1, "{l:?}");
+    assert!(l[0].contains("a:tint"), "{l:?}");
+    // Without the picture's pixel size the blur cannot be stated.
+    let mapped = m.picture(&pic);
+    assert_eq!(mapped.elements, ["a:clrRepl"]);
+    assert!(
+        m.losses().iter().any(|x| x.contains("a:blur")),
+        "{:?}",
+        m.losses()
+    );
+    assert_eq!(
+        mapped.native_lane_losses(),
+        ["a:clrRepl (picture adjustment duotone) is not carried on the native lane"]
+    );
+}
+
+#[test]
+fn picture_effects_become_the_filter_stack__feat__images_graphics_image_filter_stack() {
+    let el = parse(format!(r#"<a:blipFill {NS}><a:blip r:embed="r1"><a:grayscl/><a:lum bright="20000" contrast="-50000"/><a:duotone><a:srgbClr val="000000"/><a:srgbClr val="FFFFFF"/></a:duotone><a:biLevel thresh="40000"/><a:hsl hue="1200000" sat="-25000" lum="10000"/></a:blip></a:blipFill>"#).as_bytes()).unwrap();
+    let pic = resolved::picture(&drawingml::blip(&el, &|_| None), &());
+    let mut m = Mapper::default();
+    let mapped = m.picture(&pic);
+    assert!(m.losses().is_empty(), "{:?}", m.losses());
+    let names: Vec<&str> = mapped.adjustments.iter().map(|op| op.name()).collect();
+    assert_eq!(
+        names,
+        [
+            "blackWhite",
+            "brightnessContrast",
+            "duotone",
+            "threshold",
+            "hueSaturation"
+        ]
+    );
+    assert_eq!(
+        mapped.adjustments[1],
+        RasterOp::BrightnessContrast {
+            brightness: 0.2,
+            contrast: 0.5
+        }
+    );
+    assert_eq!(
+        mapped.adjustments[2],
+        RasterOp::Duotone {
+            shadow: [0.0; 3],
+            highlight: [1.0; 3]
+        }
+    );
+    assert_eq!(mapped.adjustments[3], RasterOp::Threshold { level: 0.4 });
+    assert!(mapped.adjustments.iter().all(RasterOp::is_valid));
 }
 
 #[test]
@@ -309,4 +542,31 @@ fn the_engine_effects_come_back_as_drawingml__feat__plugin_slide_native_effects(
         "{xml}"
     );
     assert!(xml.contains(r#"<a:softEdge rad="63500"/>"#));
+}
+
+#[test]
+fn a_linear_axis_starts_where_office_centres_it__feat__sheet_chart_native_effects() {
+    let lin = |ang: &str| {
+        paint_of(&format!(
+            r#"<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="{ang}"/></a:gradFill>"#
+        ))
+    };
+    // 0°: left to right across the box, from the middle of its left edge.
+    let p = placement(&lin("0"), 200.0, 100.0);
+    assert_eq!(axis_start(&p, 200.0, 100.0), Some([0.0, 50.0]));
+    // 90° in DrawingML (clockwise): top to bottom, from the top edge.
+    let p = placement(&lin("5400000"), 200.0, 100.0);
+    assert_eq!(p.angle, Some(-90.0));
+    assert_eq!(axis_start(&p, 200.0, 100.0), Some([100.0, 0.0]));
+    // 45°: top-left to bottom-right, from the top-left corner's projection.
+    let p = placement(&lin("2700000"), 100.0, 100.0);
+    let [x, y] = axis_start(&p, 100.0, 100.0).unwrap();
+    assert!((x - 0.0).abs() < 1e-3 && (y - 0.0).abs() < 1e-3, "{x} {y}");
+    // A radial gradient keeps the centre placement states.
+    let rad = paint_of(
+        r#"<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="100000"><a:srgbClr val="000000"/></a:gs></a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path></a:gradFill>"#,
+    );
+    let p = placement(&rad, 30.0, 40.0);
+    assert_eq!(axis_start(&p, 30.0, 40.0), Some([15.0, 20.0]));
+    assert_eq!(axis_start(&Placement::default(), 30.0, 40.0), None);
 }

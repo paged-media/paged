@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.99"
 license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
-description = "The one DrawingML-to-engine mapper of paged.slide and paged.doc: paged-ooxml's neutral resolved paint (fills, gradients with alpha stops, patterns, lines, effect lists, picture effects) lowered onto paged-model (swatches, gradient swatches and placement, strokes, drop shadow and FrameEffects), with a loss report for what the engine cannot hold yet, and the inverse for the save paths."
+description = "The one DrawingML-to-engine mapper of paged.slide, paged.doc and paged.sheet: paged-ooxml's neutral resolved paint (fills, gradients with alpha stops, patterns, lines, effect lists, picture effects) lowered onto paged-model (swatches, gradient swatches and placement, strokes, drop shadow, FrameEffects and the ordered effect stack, image filter stacks, the fill rule), with a loss report for what the engine cannot hold yet, and the inverse for the save paths."
 
 # A workspace of its own, as platform/shared/ooxml and dml-chart are: the
 # modules take it as a path dependency (docs/adr/PM-0005). It builds on the
@@ -22,9 +22,13 @@ standalone = ["paged-ooxml/deflate"]
 [dependencies]
 paged-ooxml = { path = "../ooxml" }
 paged-model = { path = "../../../engine/core/crates/paged-model" }
+# The wire form of the mapper's result (`native`), which a module's IR
+# carries to its TypeScript host model.
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 paged-ooxml = { path = "../ooxml", features = ["deflate"] }
+serde_json = "1"
 
 [lints.clippy]
 all = "warn"

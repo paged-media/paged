@@ -494,6 +494,7 @@ pub(super) fn node_for_frame_ref(
         }
         FrameRef::Polygon(i) => NodeId::Polygon(spread.polygons.get(i)?.self_id.clone()?),
         FrameRef::Group(i) => NodeId::Group(spread.groups.get(i)?.self_id.clone()?),
+        FrameRef::Instance(i) => NodeId::Instance(spread.instances.get(i)?.self_id.clone()?),
     })
 }
 
@@ -1504,6 +1505,22 @@ pub(super) fn apply_set_group_transform(
     let restore = restore_leaves.filter(|r| r.len() == leaves.len());
     let mut captured_leaves: Vec<Option<[f32; 6]>> = Vec::with_capacity(leaves.len());
     for (k, leaf) in leaves.iter().enumerate() {
+        // Engine ADR 1039 — an instance always has a transform.
+        if let FrameRef::Instance(i) = *leaf {
+            match spread.instances.get_mut(i) {
+                Some(inst) => {
+                    let cur = Some(inst.item_transform);
+                    captured_leaves.push(cur);
+                    let next = match restore {
+                        Some(r) => r[k],
+                        None => rebase(cur),
+                    };
+                    inst.item_transform = next.unwrap_or(AFFINE_IDENTITY);
+                }
+                None => captured_leaves.push(None),
+            }
+            continue;
+        }
         let slot = match *leaf {
             FrameRef::TextFrame(i) => spread.text_frames.get_mut(i).map(|f| &mut f.item_transform),
             FrameRef::Rectangle(i) => spread.rectangles.get_mut(i).map(|f| &mut f.item_transform),
@@ -1513,7 +1530,9 @@ pub(super) fn apply_set_group_transform(
                 .get_mut(i)
                 .map(|f| &mut f.item_transform),
             FrameRef::Polygon(i) => spread.polygons.get_mut(i).map(|f| &mut f.item_transform),
-            FrameRef::Group(_) => unreachable!("walk descends into groups"),
+            FrameRef::Group(_) | FrameRef::Instance(_) => {
+                unreachable!("walk descends into groups; instances are handled above")
+            }
         };
         let Some(slot) = slot else {
             captured_leaves.push(None);

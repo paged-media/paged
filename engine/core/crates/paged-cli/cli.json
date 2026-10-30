@@ -4707,6 +4707,11 @@
             "duplicatePage",
             "movePage",
             "placePage",
+            "createSymbol",
+            "redefineSymbol",
+            "placeSymbolInstance",
+            "breakSymbolLink",
+            "deleteSymbol",
             "onMaster",
             "createMaster",
             "deleteMaster",
@@ -6865,5 +6870,5 @@
       ]
     }
   ],
-  "protocol": 77
+  "protocol": 78
 }

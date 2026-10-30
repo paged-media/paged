@@ -29,7 +29,11 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, expect, type Page } from "@playwright/test";
 
-import { openCanvas, openPanel } from "./fidelity/canvas-driver";
+import {
+  openCanvas,
+  openPanel,
+  loadViaFileInput,
+} from "./fidelity/canvas-driver";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -37,16 +41,7 @@ const REPO_ROOT = pathResolve(__dirname, "..", "..", "..");
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/geometry-groups.idml`;
 
 async function loadFixture(page: Page) {
-  await page.setInputFiles('input[type="file"]', FIXTURE);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
-            .ready,
-      ),
-    )
-    .toBe(true);
+  await loadViaFileInput(page, FIXTURE);
 }
 
 async function swatchCount(page: Page): Promise<number> {

@@ -287,6 +287,86 @@ pub fn parse(bytes: &[u8]) -> Result<El, String> {
     }
 }
 
+/// Every element of a part that `want` picks, with its subtree, in
+/// document order, without building the rest of the part: `want` sees each
+/// element's namespace URI (empty when it has none) and local name. An
+/// element inside a picked one is part of that subtree and is not offered
+/// again. For a reader that needs a few deep elements of a large part
+/// another parser already walked (paged.doc's drawings in `document.xml`,
+/// doc ADR 618).
+pub fn subtrees(
+    bytes: &[u8],
+    mut want: impl FnMut(&[u8], &str) -> bool,
+) -> Result<Vec<El>, String> {
+    let mut reader = NsReader::from_reader(bytes);
+    reader.config_mut().trim_text(false);
+    let mut out = Vec::new();
+    // The picked subtree being built; empty between picks.
+    let mut stack: Vec<El> = Vec::new();
+    let mut buf = Vec::new();
+    let picked = |reader: &NsReader<&[u8]>,
+                  start: &BytesStart,
+                  want: &mut dyn FnMut(&[u8], &str) -> bool| {
+        let (res, local) = reader.resolver().resolve_element(start.name());
+        let uri: &[u8] = match &res {
+            ResolveResult::Bound(n) => n.as_ref(),
+            _ => b"",
+        };
+        want(uri, &String::from_utf8_lossy(local.as_ref()))
+    };
+    loop {
+        let event = match reader.read_event_into(&mut buf) {
+            Ok(e) => e,
+            Err(e) => return Err(format!("xml at byte {}: {e}", reader.buffer_position())),
+        };
+        match event {
+            Event::Start(start) => {
+                if !stack.is_empty() || picked(&reader, &start, &mut want) {
+                    stack.push(element(&reader, &start)?);
+                }
+            }
+            Event::Empty(start) => {
+                if !stack.is_empty() || picked(&reader, &start, &mut want) {
+                    let el = element(&reader, &start)?;
+                    match stack.last_mut() {
+                        Some(parent) => parent.children.push(el),
+                        None => out.push(el),
+                    }
+                }
+            }
+            Event::End(_) => {
+                if let Some(done) = stack.pop() {
+                    match stack.last_mut() {
+                        Some(parent) => parent.children.push(done),
+                        None => out.push(done),
+                    }
+                }
+            }
+            Event::Text(t) => {
+                if let Some(top) = stack.last_mut() {
+                    let s = t.xml10_content().map_err(|e| e.to_string())?;
+                    top.text.push_str(&s);
+                }
+            }
+            Event::GeneralRef(r) => {
+                if let Some(top) = stack.last_mut() {
+                    if let Ok(Some(ch)) = r.resolve_char_ref() {
+                        top.text.push(ch);
+                    } else {
+                        let name = r.decode().map_err(|e| e.to_string())?;
+                        if let Some(v) = quick_xml::escape::resolve_predefined_entity(&name) {
+                            top.text.push_str(v);
+                        }
+                    }
+                }
+            }
+            Event::Eof => return Ok(out),
+            _ => {}
+        }
+        buf.clear();
+    }
+}
+
 fn element(reader: &NsReader<&[u8]>, start: &BytesStart) -> Result<El, String> {
     let (res, _) = reader.resolver().resolve_element(start.name());
     let ns = match res {
@@ -357,6 +437,20 @@ mod tests {
     fn text_line_ends_are_normalised_but_character_references_kept() {
         let xml = b"<t>a\r\nb\rc&#13;&#10;d</t>";
         assert_eq!(parse(xml).unwrap().text, "a\nb\nc\r\nd");
+    }
+
+    #[test]
+    fn subtrees_picks_deep_elements_in_document_order() {
+        let xml = br#"<w:document xmlns:w="urn:w" xmlns:wp="urn:wp" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><w:body><w:p><wp:inline><wp:docPr id="1"/><a:blip><wp:inline/></a:blip></wp:inline></w:p><w:p><wp:anchor a="&amp;"><wp:docPr id="2"/></wp:anchor></w:p></w:body></w:document>"#;
+        let found = subtrees(xml, |uri, local| {
+            uri == b"urn:wp" && (local == "inline" || local == "anchor")
+        })
+        .unwrap();
+        assert_eq!(found.len(), 2, "a pick inside a pick is part of it");
+        assert_eq!(found[0].local, "inline");
+        assert!(found[0].child(Ns::A, "blip").is_some());
+        assert_eq!(found[1].attr("a"), Some("&"));
+        assert_eq!(found[1].children[0].attr("id"), Some("2"));
     }
 
     #[test]

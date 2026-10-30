@@ -19,10 +19,10 @@
 //   1. That the tool is REACHABLE — registered on the rail and
 //      activatable. A tool that a bundle spec can see but a designer
 //      cannot reach is exactly the failure a bundle spec cannot see.
-//   2. That the tool's SCOPE is stated where a designer is standing.
-//      This one paints pixels and is not the host's text frame, and a
-//      designer who learns that by discovering their type is not
-//      editable has learned it the expensive way.
+//   2. That the tool's SCOPE is stated where a designer is standing:
+//      it makes an editable TYPE LAYER (WP5.10), laid out by the
+//      document's text engine, and a click opens it for typing on the
+//      canvas.
 
 import { expect, test } from "@playwright/test";
 
@@ -41,8 +41,8 @@ async function sourceReadout(page: Page): Promise<string> {
   });
 }
 
-test.describe("journey · paged.image raster type", () => {
-  test("the type tool registers, and the panel states that it paints pixels @feat:image.editor.raster-type @feat:editor-shell.plugin-bundles @level:smoke", async ({
+test.describe("journey · paged.image type layers", () => {
+  test("the type tool registers, and the panel states what a type layer is @feat:image.layers.type @feat:editor-shell.plugin-bundles @level:smoke", async ({
     page,
   }) => {
     const designer = new Designer(page);
@@ -79,7 +79,7 @@ test.describe("journey · paged.image raster type", () => {
     //    statement lives in the section's collapsed "About" block, which
     //    the designer opens to read it (2026-10-11 panel pass).
     const note = page.locator("[data-image-type-note]");
-    await expect(note).toContainText("baseline");
+    await expect(note).toContainText("point type");
     await expect(note).toBeVisible();
     const typeSection = page.locator("[data-image-type-section]");
     const about = typeSection.locator("details", {
@@ -89,9 +89,11 @@ test.describe("journey · paged.image raster type", () => {
     await expect(about.getByText("shaped by the font")).toBeVisible();
 
     await expect(
-      about.getByText("paints pixels, not a text object"),
+      about.getByText("A type layer keeps its text", { exact: false }),
     ).toBeVisible();
-    await expect(about.getByText("use a text frame")).toBeVisible();
+    await expect(
+      about.getByText("Rasterize type layer", { exact: false }),
+    ).toBeVisible();
 
     // ── 4. WHERE FACES COME FROM. The offline-by-construction promise,
     //    said on screen and not only in a commit message. ──
@@ -100,7 +102,7 @@ test.describe("journey · paged.image raster type", () => {
     ).toBeVisible();
   });
 
-  test("typing a string and clicking the canvas does not throw @feat:image.editor.raster-type @level:gesture", async ({
+  test("a click makes a type layer and opens it for typing on the canvas @feat:image.layers.type @level:gesture", async ({
     page,
   }) => {
     // The GESTURE half. What is asserted is deliberately modest and
@@ -150,16 +152,19 @@ test.describe("journey · paged.image raster type", () => {
     expect(box, "the canvas is on screen").not.toBeNull();
     await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
-    // Every path through `paintText` writes its own sentence, so the
-    // status must land in the TYPE lane's vocabulary — a result, or one
-    // of the three stated reasons there is none. This fails if the click
-    // never reaches the tool, which is the whole point of the test.
-    await expect
-      .poll(status, { timeout: 15_000 })
-      .toMatch(/Type set in|Type failed|serves no fonts|carries no bytes for/);
+    // The click made a type layer of the Type section's text, laid out
+    // by the engine (`host.render.story`), and opened it: the text field
+    // sits over it on the canvas with the text in it.
+    const editor = page.locator("[data-image-type-editor]");
+    await expect(editor).toBeVisible({ timeout: 15_000 });
+    await expect(editor).toHaveValue("Paged");
     expect(await status(), "the click changed the status line").not.toBe(
       before,
     );
+    // Typing edits the layer's text; Escape ends the session.
+    await editor.fill("Paged type");
+    await editor.press("Escape");
+    await expect(editor).toHaveCount(0);
 
     expect(errors, "the type gesture raised no page error").toEqual([]);
   });

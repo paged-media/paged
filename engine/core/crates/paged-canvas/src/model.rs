@@ -65,6 +65,10 @@ pub const INK_COVERAGE_DPI: f32 = 72.0;
 /// costs nothing.
 pub const INK_COVERAGE_LIMIT_PCT: f32 = 300.0;
 
+/// Engine ADR 1037 — the least display density (device px per pt) a live
+/// build evaluates an image filter stack for: a 2× (retina) screen at 100 %.
+const LIVE_IMAGE_ADJUST_PX_PER_PT: f32 = 2.0;
+
 /// The type size a run takes when nothing in its cascade names one: the
 /// renderer's own default (`PipelineOptions::default_point_size`), so a
 /// read reports the size the text is set at (ADR 206).
@@ -422,8 +426,43 @@ fn page_item_element_id(
         NodeId::GraphicLine(id) => ElementId::GraphicLine(id.clone()),
         NodeId::Polygon(id) => ElementId::Polygon(id.clone()),
         NodeId::Group(id) => ElementId::Group(id.clone()),
+        NodeId::Instance(id) => ElementId::Instance(id.clone()),
         _ => return None,
     })
+}
+
+/// Engine ADR 1039 — the page item `id` names, by its kind.
+fn element_of_id(
+    doc: &paged_scene::Document,
+    id: &str,
+) -> Option<crate::element_selection::ElementId> {
+    use crate::element_selection::ElementId;
+    let is = |s: &Option<String>| s.as_deref() == Some(id);
+    for p in &doc.spreads {
+        let s = &p.spread;
+        if s.text_frames.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::TextFrame(id.to_string()));
+        }
+        if s.rectangles.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Rectangle(id.to_string()));
+        }
+        if s.ovals.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Oval(id.to_string()));
+        }
+        if s.graphic_lines.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::GraphicLine(id.to_string()));
+        }
+        if s.polygons.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Polygon(id.to_string()));
+        }
+        if s.groups.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Group(id.to_string()));
+        }
+        if s.instances.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Instance(id.to_string()));
+        }
+    }
+    None
 }
 
 /// The element an operation created, or the LAST of them. `doc` is the
@@ -621,6 +660,19 @@ fn created_element_id(
     if let paged_mutate::Operation::CreateGroup { spec } = op {
         return spec.self_id.clone().map(ElementId::Group);
     }
+    // Engine ADR 1039 — the instance a symbol op placed, or the root a
+    // broken link left.
+    match op {
+        paged_mutate::Operation::CreateSymbol { instance_id, .. }
+        | paged_mutate::Operation::RedefineSymbol { instance_id, .. }
+        | paged_mutate::Operation::PlaceSymbolInstance { instance_id, .. } => {
+            return instance_id.clone().map(ElementId::Instance);
+        }
+        paged_mutate::Operation::BreakSymbolLink { .. } => {
+            return paged_mutate::symbol_break_root(op).and_then(|id| element_of_id(doc, id));
+        }
+        _ => {}
+    }
     // v52 — an inserted anchored frame is a Rectangle; report its minted id so
     // the caller can address it (e.g. offset the anchor after placement).
     if let paged_mutate::Operation::InsertAnchoredFrame { self_id, .. } = op {
@@ -747,6 +799,7 @@ fn path_node_id_for(id: &crate::element_selection::ElementId) -> Option<paged_mu
         // gestures never target them.
         ElementId::Oval(_)
         | ElementId::Group(_)
+        | ElementId::Instance(_)
         | ElementId::StoryRange { .. }
         | ElementId::Table { .. }
         | ElementId::TableCell { .. } => None,
@@ -864,6 +917,7 @@ fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate:
         ElementId::Polygon(s) => NodeId::Polygon(s.clone()),
         ElementId::GraphicLine(s) => NodeId::GraphicLine(s.clone()),
         ElementId::Group(s) => NodeId::Group(s.clone()),
+        ElementId::Instance(s) => NodeId::Instance(s.clone()),
         ElementId::StoryRange {
             story_id,
             start,
@@ -979,6 +1033,14 @@ fn frame_to_tree_node_at(
             let id = f.self_id.clone()?;
             Some(leaf(id.clone(), "GraphicLine", ElementId::GraphicLine(id)))
         }),
+        // Engine ADR 1039 — an instance is a leaf; the symbol it draws
+        // rides its label.
+        FrameRef::Instance(i) => spread.instances.get(i).and_then(|f| {
+            let id = f.self_id.clone()?;
+            let mut node = leaf(id.clone(), "Instance", ElementId::Instance(id.clone()));
+            node.label = format!("Instance {id} ({})", f.symbol);
+            Some(node)
+        }),
         FrameRef::Group(i) => spread.groups.get(i).map(|g| {
             let id = g.self_id.clone().unwrap_or_else(|| format!("group#{i}"));
             let children = g
@@ -1022,6 +1084,10 @@ fn group_union_aabb(spread: &paged_model::Spread, group_idx: usize) -> Option<pa
                 .get(i)
                 .map(|f| (f.bounds, f.item_transform)),
             FrameRef::Polygon(i) => spread.polygons.get(i).map(|f| (f.bounds, f.item_transform)),
+            FrameRef::Instance(i) => spread
+                .instances
+                .get(i)
+                .map(|f| (f.bounds, Some(f.item_transform))),
             FrameRef::Group(_) => None,
         }?;
         // `transform_bbox` returns the axis-aligned bbox of the
@@ -1440,6 +1506,27 @@ fn gradient_feather_entry(
                 .map(paged_mutate::operation::GradientFeatherSpec::from_parse),
         )),
     }
+}
+
+/// Engine ADR 1008 — the four effect-stack rows of an effect-bearing
+/// item: each target's stack as the user sees it.
+fn effect_stack_entries(
+    item: &dyn paged_model::effect_stack::EffectBearing,
+) -> Vec<crate::channel::PropertyEntry> {
+    use paged_model::effect_stack::EffectTarget as T;
+    use paged_mutate::PropertyPath as P;
+    [
+        (P::FrameEffectStack, T::Object),
+        (P::FrameFillEffectStack, T::Fill),
+        (P::FrameStrokeEffectStack, T::Stroke),
+        (P::FrameContentEffectStack, T::Content),
+    ]
+    .into_iter()
+    .map(|(path, target)| crate::channel::PropertyEntry {
+        path,
+        value: Some(paged_mutate::operation::effect_stack_value(item, target)),
+    })
+    .collect()
 }
 
 /// W0.4 — read-side mirror of the transparency-effect per-field paths
@@ -1978,6 +2065,9 @@ pub struct CanvasModel {
     /// in the current test harness; this stays as forward-looking
     /// infra for when asset resolvers wire up.
     image_decode_cache: std::cell::RefCell<HashMap<String, paged_compose::DecodedImage>>,
+    /// Engine ADR 1039 — built symbol definitions, per revision, kept
+    /// across rebuilds.
+    symbol_cache: paged_renderer::pipeline::SymbolCache,
     /// ADR 026 — generated-page counts per growing story, carried
     /// from one build to the next so an edit starts from the pages it had
     /// (usually one build) instead of growing from zero.
@@ -2682,6 +2772,11 @@ impl CanvasModel {
             let opened =
                 paged_renderer::container::open_document(bytes).map_err(LoadError::Parse)?;
             let mut doc = opened.document;
+            // Engine ADR 1039 — an IDML this engine wrote carries its
+            // symbols as labelled artwork; bring the instances back.
+            if !opened.from_model_part {
+                paged_mutate::restore_symbols_from_labels(&mut doc);
+            }
             if opened.from_model_part {
                 // The IDML parts beside the model keep each next /
                 // previous page number in a range of its own; cut the
@@ -2774,6 +2869,8 @@ impl CanvasModel {
                 // EPS/PDF ghost-cross); export builds keep the default
                 // `false` so output stays pixel-faithful.
                 degraded_asset_markers: true,
+                // Engine ADR 1037 — the first build is a live one too.
+                image_adjust_px_per_pt: Some(LIVE_IMAGE_ADJUST_PX_PER_PT),
                 ..PipelineOptions::default()
             };
             // Phase 4 Step 1 — install an empty cache for the initial
@@ -2856,6 +2953,7 @@ impl CanvasModel {
             // above; subsequent rebuild_after_mutation calls share
             // this RefCell so decode cost amortises.
             image_decode_cache,
+            symbol_cache: paged_renderer::pipeline::SymbolCache::default(),
             grow_hint,
             // Perf-FontTable — built once above and reused by every
             // rebuild_after_mutation.
@@ -5641,6 +5739,89 @@ impl CanvasModel {
             } => self
                 .lower_paste(snippet, page_id, *center, mint_offset)
                 .ok(),
+            // Engine ADR 1039 — symbols. The ids are minted here, on the
+            // inserts' number lines; the kernel validates.
+            Mutation::CreateSymbol {
+                name,
+                element_ids,
+                symbol_id,
+                replace,
+                nine_slice,
+            } => {
+                let replace = replace.unwrap_or(true);
+                Some(Operation::CreateSymbol {
+                    symbol_id: symbol_id
+                        .clone()
+                        .unwrap_or_else(|| self.mint_symbol_id(*mint_offset)),
+                    name: name.clone(),
+                    sources: element_ids.iter().map(element_to_node_id).collect(),
+                    replace,
+                    instance_id: replace.then(|| self.mint_page_item_id_with_offset(mint_offset)),
+                    nine_slice: *nine_slice,
+                })
+            }
+            Mutation::RedefineSymbol {
+                symbol_id,
+                element_ids,
+                name,
+                nine_slice,
+                replace,
+            } => {
+                let replace = !element_ids.is_empty() && replace.unwrap_or(true);
+                Some(Operation::RedefineSymbol {
+                    symbol_id: symbol_id.clone(),
+                    sources: element_ids.iter().map(element_to_node_id).collect(),
+                    name: name.clone(),
+                    nine_slice: nine_slice.clone(),
+                    replace,
+                    instance_id: replace.then(|| self.mint_page_item_id_with_offset(mint_offset)),
+                })
+            }
+            Mutation::PlaceSymbolInstance {
+                symbol_id,
+                page_id,
+                at,
+                linear,
+                nine_slice,
+            } => {
+                let (spread_id, (ox, oy), _) = self.page_insert_context(page_id)?;
+                let (x, y) = match at {
+                    Some(p) => *p,
+                    None => {
+                        let page = self
+                            .scene
+                            .spreads
+                            .iter()
+                            .flat_map(|s| s.spread.pages.iter())
+                            .find(|p| p.self_id.as_deref() == Some(page_id.as_str()))?;
+                        (page.bounds.width() / 2.0, page.bounds.height() / 2.0)
+                    }
+                };
+                let [a, b, c, d] = linear.unwrap_or([1.0, 0.0, 0.0, 1.0]);
+                Some(Operation::PlaceSymbolInstance {
+                    symbol_id: symbol_id.clone(),
+                    spread: spread_id,
+                    transform: [a, b, c, d, x + ox, y + oy],
+                    instance_id: Some(self.mint_page_item_id_with_offset(mint_offset)),
+                    nine_slice: *nine_slice,
+                })
+            }
+            Mutation::BreakSymbolLink { element_id } => {
+                let instance = element_id.raw_id().to_string();
+                let demand = paged_mutate::symbol_break_demand(&self.scene, &instance)?;
+                let ids = (0..demand.items)
+                    .map(|_| self.mint_page_item_id_with_offset(mint_offset))
+                    .collect();
+                let story_ids = self.mint_story_ids(demand.stories, *mint_offset);
+                Some(Operation::BreakSymbolLink {
+                    instance,
+                    ids,
+                    story_ids,
+                })
+            }
+            Mutation::DeleteSymbol { symbol_id } => Some(Operation::DeleteSymbol {
+                symbol_id: symbol_id.clone(),
+            }),
             Mutation::SetFlowGrowRule {
                 story_id,
                 grow,
@@ -6006,6 +6187,18 @@ impl CanvasModel {
         }
     }
 
+    /// Engine ADR 1039 — a fresh symbol id, `Symbol/u<n>`.
+    fn mint_symbol_id(&self, offset: u64) -> String {
+        let mut n = self.scene.symbols.len() + 1 + offset as usize;
+        loop {
+            let id = format!("Symbol/u{n}");
+            if self.scene.symbol(&id).is_none() {
+                return id;
+            }
+            n += 1;
+        }
+    }
+
     pub(crate) fn mint_page_item_id_with_offset(&self, offset: &mut u64) -> String {
         let max = paged_mutate::ids::highest_u_hex_id(&self.scene).max(self.source_id_floor);
         let id = format!("u{:x}", max + 1 + *offset);
@@ -6099,6 +6292,7 @@ impl CanvasModel {
                     | (K::Oval, paged_mutate::NodeId::Oval(_))
                     | (K::Polygon, paged_mutate::NodeId::Polygon(_))
                     | (K::GraphicLine, paged_mutate::NodeId::GraphicLine(_))
+                    | (K::Instance, paged_mutate::NodeId::Instance(_))
                     | (K::Frame, _)
             );
             return matches.then_some(node);
@@ -6143,6 +6337,14 @@ impl CanvasModel {
                 .any(|o| o.self_id.as_deref() == Some(frame_id))
             {
                 return Some(paged_mutate::NodeId::Oval(frame_id.to_string()));
+            }
+            // Draw ADR 365 — a symbol instance deletes like a frame (the
+            // Symbol Sprayer's Alt-drag, a script's `deleteFrame`).
+            if s.instances
+                .iter()
+                .any(|i| i.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(paged_mutate::NodeId::Instance(frame_id.to_string()));
             }
         }
         None
@@ -7125,8 +7327,13 @@ impl CanvasModel {
         &self,
         link_base: Option<&str>,
     ) -> Result<(Vec<u8>, Vec<ExportedLink>), idml_export::WriteError> {
+        // Engine ADR 1039 — IDML has no symbols: the export writes each
+        // instance as its artwork, labelled, with the store in a document
+        // label (`restore_symbols_from_labels` undoes it on reopen).
+        let mut scene = self.export_scene();
+        paged_mutate::expand_symbols_for_interchange(&mut scene);
         let out = idml_export::write_idml_with(
-            &self.export_scene(),
+            &scene,
             &self.source_idml,
             &self.idml_export_options(link_base),
         )?;
@@ -7248,7 +7455,14 @@ impl CanvasModel {
     /// drop is loud rather than silent.
     pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<String> {
         let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
+        // Engine ADR 1039 — every symbol instance is written as artwork.
+        out.extend(paged_mutate::expand_symbols_for_interchange(
+            &mut self.scene.clone(),
+        ));
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
+        out.extend(crate::export_losses::effect_stack_losses(&self.scene));
+        out.extend(crate::export_losses::appearance_losses(&self.scene));
+        out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -8186,6 +8400,13 @@ impl CanvasModel {
                             f.effects.as_ref(),
                             f.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(f));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(f)),
+                        });
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -8237,6 +8458,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(f.fill_rule.as_str().into())),
+                            },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(f.image_adjustments.clone())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
@@ -8561,6 +8787,13 @@ impl CanvasModel {
                             f.effects.as_ref(),
                             f.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(f));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(f)),
+                        });
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -8650,6 +8883,64 @@ impl CanvasModel {
                         entries.push(item_name_entry(spread, raw));
                         entries
                     }),
+                // Engine ADR 1039 — a symbol instance: its box (the
+                // definition's), its transform and the overrides it carries.
+                ElementId::Instance(_) => spread
+                    .instances
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        let b = f.bounds;
+                        let o = &f.overrides;
+                        let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameBounds,
+                                value: Some(Value::Bounds([b.top, b.left, b.bottom, b.right])),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTransform,
+                                value: Some(Value::Transform(Some(f.item_transform))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOpacity,
+                                value: Some(Value::Length(o.opacity)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameBlendMode,
+                                value: Some(Value::Text(o.blend_mode.clone().unwrap_or_default())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ElementVisible,
+                                value: Some(Value::Bool(f.visible)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ElementLocked,
+                                value: Some(Value::Bool(f.locked)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceTint,
+                                value: Some(Value::Lengths(
+                                    o.tint
+                                        .map(|t| vec![t.color[0], t.color[1], t.color[2], t.amount])
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceNineSlice,
+                                value: Some(Value::Lengths(
+                                    f.nine_slice
+                                        .map(|n| vec![n.left, n.top, n.right, n.bottom])
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceSymbol,
+                                value: Some(Value::Text(f.symbol.clone())),
+                            },
+                        ];
+                        entries.extend(transform_decompose_entries(Some(f.item_transform)));
+                        entries
+                    }),
                 // Punch-list (rides v35) — Polygon / GraphicLine surface
                 // the stroke property set so the closed-path
                 // join/miter/alignment mutations (now apply-wired for all
@@ -8693,6 +8984,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(p.fill_rule.as_str().into())),
+                            },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(p.image_adjustments.clone())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
@@ -8809,6 +9105,13 @@ impl CanvasModel {
                             p.effects.as_ref(),
                             p.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(p));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(p)),
+                        });
                         entries.extend(target_property_entries(
                             Some(p.fill_transparency.as_ref()),
                             p.stroke_transparency.as_ref(),
@@ -9060,6 +9363,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(o.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(o.image_adjustments.clone())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
                                 value: Some(Value::Text(
@@ -9151,6 +9459,13 @@ impl CanvasModel {
                             o.effects.as_ref(),
                             o.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(o));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(o)),
+                        });
                         entries.extend(target_property_entries(
                             Some(o.fill_transparency.as_ref()),
                             o.stroke_transparency.as_ref(),
@@ -10374,6 +10689,14 @@ impl CanvasModel {
                         let (bounds, transform) = crate::group_box::group_box(spread, i)?;
                         (ElementId::Group(id(&g.self_id)?), bounds, transform)
                     }
+                    FrameRef::Instance(i) => {
+                        let f = spread.instances.get(i)?;
+                        (
+                            ElementId::Instance(id(&f.self_id)?),
+                            f.bounds,
+                            Some(f.item_transform),
+                        )
+                    }
                 };
                 Some(crate::channel::SpreadMemberSummary {
                     id: element,
@@ -11381,6 +11704,30 @@ impl CanvasModel {
     /// The editor's list-definitions surface renders this;
     /// `continue_across_stories` drives cross-story numbering
     /// continuity in the renderer.
+    /// Engine ADR 1039 — the `symbols` collection.
+    pub fn symbols(&self) -> Vec<crate::channel::SymbolSummary> {
+        self.scene
+            .symbols
+            .iter()
+            .map(|d| crate::channel::SymbolSummary {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                revision: d.revision,
+                bounds: [d.bounds.top, d.bounds.left, d.bounds.bottom, d.bounds.right],
+                nine_slice: d.nine_slice.map(|n| [n.left, n.top, n.right, n.bottom]),
+                item_count: d.items.frames_in_order.len() as u32,
+                instances: self
+                    .scene
+                    .spreads
+                    .iter()
+                    .flat_map(|p| p.spread.instances.iter())
+                    .filter(|i| i.symbol == d.id)
+                    .filter_map(|i| i.self_id.as_ref().map(|id| format!("instance:{id}")))
+                    .collect(),
+            })
+            .collect()
+    }
+
     pub fn numbering_lists(&self) -> Vec<crate::channel::NumberingListSummary> {
         use crate::channel::NumberingListSummary;
         self.scene
@@ -11912,6 +12259,7 @@ impl CanvasModel {
             Sections => json(self.sections()),
             Stories => json(self.stories()),
             NumberingLists => json(self.numbering_lists()),
+            Symbols => json(self.symbols()),
             InkCoverage => json(self.ink_coverage()),
         }
     }
@@ -12215,6 +12563,13 @@ impl CanvasModel {
                                 stack.push(nested);
                             }
                         }
+                        paged_model::FrameRef::Instance(i) => {
+                            if let Some(f) = spread.instances.get(i) {
+                                if let Some(id) = f.self_id.as_deref() {
+                                    out.push(ElementId::Instance(id.to_string()));
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -12503,6 +12858,13 @@ impl CanvasModel {
                         .position(|g| g.self_id.as_deref() == Some(raw))
                         .and_then(|gi| crate::group_box::group_box(spread, gi))
                         .map(|(bounds, transform)| (bounds, transform, false)),
+                    // Engine ADR 1039 — an instance's box is its
+                    // definition's, oriented by its transform.
+                    ElementId::Instance(_) => spread
+                        .instances
+                        .iter()
+                        .find(|f| f.self_id.as_deref() == Some(raw))
+                        .map(|f| (f.bounds, Some(f.item_transform), false)),
                     // StoryRange is a property-address, not a
                     // geometric element — its bounds are the host
                     // frame's. The caret/selection-rect surface
@@ -12820,7 +13182,7 @@ impl CanvasModel {
                             f.subpath_open.as_slice(),
                         )
                     }),
-                ElementId::Group(_) => None,
+                ElementId::Group(_) | ElementId::Instance(_) => None,
                 // StoryRange doesn't carry path anchors.
                 ElementId::StoryRange { .. } => None,
                 // W3.A1 — tables / cells have no path-anchor array.
@@ -13006,6 +13368,7 @@ impl CanvasModel {
             // Perf-S — the decode cache is content-addressed (URI →
             // DecodedImage), not positional, so every build may share it.
             image_decode_cache: Some(&self.image_decode_cache),
+            symbol_cache: Some(&self.symbol_cache),
             grow_hint: Some(&self.grow_hint),
             // Perf-FontTable — reuse the shaping table built at load
             // (saves the ~225ms harvest+resolve walk).
@@ -13060,6 +13423,13 @@ impl CanvasModel {
                 build_generation: self.build_generation,
                 emission_prints: Some(&self.emission_prints),
                 render_scale: self.resource_render_scale,
+                // Engine ADR 1037 — an image filter stack is evaluated for
+                // the screen: at the camera's scale, at least a 2× (retina)
+                // display's 2 px per pt. The export evaluates at the
+                // picture's own pixels (the option's `None`).
+                image_adjust_px_per_pt: Some(
+                    self.resource_render_scale.max(LIVE_IMAGE_ADJUST_PX_PER_PT),
+                ),
                 // A5 — live rebuilds keep the degraded-asset markers on
                 // (mirrors the initial load); an export stays faithful.
                 degraded_asset_markers: true,
@@ -13183,9 +13553,21 @@ impl CanvasModel {
         hide: &[crate::element_selection::ElementId],
         only: &[crate::element_selection::ElementId],
     ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
+        self.build_page_filtered_in(self.scene.clone(), page_id, hide, only)
+    }
+
+    /// [`build_page_filtered`](Self::build_page_filtered) over `scene`, a
+    /// copy of the model's scene a caller may have added to (engine ADR
+    /// 10XX's snapshot story).
+    pub(crate) fn build_page_filtered_in(
+        &self,
+        mut scene: Document,
+        page_id: &PageId,
+        hide: &[crate::element_selection::ElementId],
+        only: &[crate::element_selection::ElementId],
+    ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
         use crate::element_selection::ElementId;
         use std::collections::HashSet;
-        let mut scene = self.scene.clone();
         let spreads = || {
             scene
                 .spreads
@@ -15260,6 +15642,12 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameDirectionalFeatherNoise
             | P::FrameDirectionalFeatherChoke
             | P::FrameGradientFeather
+            | P::FrameEffectStack
+            | P::FrameFillEffectStack
+            | P::FrameStrokeEffectStack
+            | P::FrameContentEffectStack
+            | P::FrameAppearance
+            | P::FrameAppearanceLayer
     )
 }
 
@@ -15853,6 +16241,7 @@ fn frame_self_id(spread: &paged_model::Spread, fr: paged_model::FrameRef) -> Opt
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.clone(),
         FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.clone(),
         FrameRef::Group(i) => spread.groups.get(i)?.self_id.clone(),
+        FrameRef::Instance(i) => spread.instances.get(i)?.self_id.clone(),
     }
 }
 

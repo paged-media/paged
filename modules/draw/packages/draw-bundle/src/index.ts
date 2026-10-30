@@ -837,6 +837,13 @@ export {
   type BakeLayer,
   type BakeRefusal,
 } from "./commands/appearance-bake";
+// Engine ADR 1043 — the metadata stack's migration to the engine's native
+// appearance (the switch of the commands and panel is plan WP6.3).
+export {
+  nativeAppearanceOf,
+  migrateAppearanceMutations,
+  type NativePaintLayer,
+} from "./commands/appearance-native";
 // The APPEARANCE panel (React, the Layers-panel idiom) — the view over
 // that stack, with the one-fill/one-stroke engine limit stated inline.
 export {
@@ -973,6 +980,11 @@ export {
   applyBreakSymbolLink,
   applyRenameSymbol,
   applyDeleteSymbol,
+  applyReplaceSymbol,
+  applySymbolOptions,
+  REPLACE_SYMBOL_COMMAND_ID,
+  SYMBOL_OPTIONS_COMMAND_ID,
+  BIND_SYMBOL_OPTIONS_FOCUS,
   contributeSymbolCommands,
   type SymbolRegistration,
   type SymbolPiece,
@@ -994,6 +1006,31 @@ export {
   SYMBOLS_PANEL_ID,
   SYMBOLS_NOTE,
 } from "./panels/symbols-panel";
+// WP6.8 (draw ADR 365) — live symbols on the engine node: the Symbolism
+// tools' document lane, the instance reads, Replace Symbol, Symbol
+// Options, and the migration of a v0 library onto engine symbols.
+export {
+  symbolismScope,
+  symbolismBatchFor,
+  writeSymbolism,
+  symbolBox,
+  type SymbolismScope,
+} from "./commands/symbolism";
+export {
+  ENGINE_SYMBOLS_FEATURE,
+  engineSymbols,
+  readEngineSymbols,
+  readInstanceStates,
+  engineInstanceIds,
+  chooseSymbol,
+  currentSymbol,
+  engineReplaceSymbol,
+  engineSymbolOptions,
+  type EngineSymbol,
+  type InstanceState,
+} from "./commands/symbols-engine";
+export { createSymbolismHandler } from "./handlers/symbolism";
+export { createNineSliceHandler } from "./handlers/nine-slice";
 // Phase 9 (Tier B) — Select-same: the pure matcher + tree flattener,
 // exported for the conformance spec.
 export {
@@ -1037,23 +1074,45 @@ export {
   BIND_ARROWHEAD_CONTROLS_VISIBLE,
   ARROWHEAD_OPTIONS,
 } from "./panels/stroke-panel";
-// Phase 8 — SVG interchange (K-2): the importer/exporter registration +
-// the pure planning helpers (insert/style mutation builders), exported
-// for the conformance specs (the no-second-copy rule).
+// Interchange (draw ADR 364): SVG, DXF, Illustrator and EPS through the
+// engine's SVG doors and paged.pdf's placement — registration and the
+// import/export functions, exported for the conformance specs.
 export {
   contributeSvgIo,
   importSvg,
+  importSvgFile,
   exportSvg,
-  shapesFromSvgBytes,
-  svgImportUnitsFor,
-  insertPathMutationsForShape,
-  styleDefaultsForShape,
-  resolveTargetPage,
   SVG_IMPORTER_ID,
   SVG_EXPORTER_ID,
   SVG_MIME,
-  type ShapeDefaults,
+  MAX_SVG_BYTES,
+  type SvgFileImport,
 } from "./io/svg";
+export {
+  contributeDxfIo,
+  importDxf,
+  exportDxf,
+  DXF_IMPORTER_ID,
+  DXF_EXPORTER_ID,
+} from "./io/dxf";
+export {
+  contributeVectorFileImporters,
+  importAi,
+  importEps,
+  epsBoundingBox,
+  epsPlacementFor,
+  AI_IMPORTER_ID,
+  EPS_IMPORTER_ID,
+  PDF_PLACE_VECTORS,
+} from "./io/vector-files";
+export {
+  bootInterchange,
+  type InterchangeEngine,
+  type InterchangeReport,
+  type DxfImport,
+  type DxfExport,
+} from "./interchange-wasm";
+export { insertPathMutationsForShape, resolveTargetPage } from "./target-page";
 // Wave 2 — Eyedropper: the sample/apply pure halves + the module
 // sample state, exported for the conformance spec (the no-second-copy
 // rule).
@@ -1637,7 +1696,11 @@ export { RESHAPE_OPTIONS, STAR_OPTIONS } from "./tool-options";
 // WP6.7 — the distortion tools: the Liquify family, Puppet Warp, the
 // Perspective Grid and Perspective Selection; their commands, the grid
 // store and its overlay layer.
-export { DISTORTION_TOOL_IDS, LIQUIFY_TOOL_IDS } from "./tools";
+export {
+  DISTORTION_TOOL_IDS,
+  LIQUIFY_TOOL_IDS,
+  SYMBOLISM_TOOL_IDS,
+} from "./tools";
 export {
   distortTargetsOn,
   readDistortTargets,
@@ -1708,6 +1771,8 @@ export {
 } from "./handlers/preview-shapes";
 export {
   LIQUIFY_OPTIONS,
+  SYMBOLISM_OPTIONS,
+  SYMBOL_SPRAYER_OPTIONS,
   WARP_OPTIONS,
   TWIRL_OPTIONS,
   PUCKER_OPTIONS,
@@ -1718,3 +1783,9 @@ export {
   PUPPET_WARP_OPTIONS,
   PERSPECTIVE_SELECT_OPTIONS,
 } from "./tool-options";
+export {
+  migrateSymbolLibrary,
+  installSymbolMigration,
+  fitInstanceTransform,
+  type SymbolMigration,
+} from "./commands/symbols-migrate";

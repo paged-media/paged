@@ -101,6 +101,12 @@ pub fn render_web_flow_equalwidth(
                     // Translate into this frame's local content space.
                     dl.push(shift_cmd_y(cmd, -top_pt));
                 }
+            } else if matches!(
+                cmd,
+                WebDrawCmd::PushGroup(_) | WebDrawCmd::PopGroup | WebDrawCmd::EffectLoss { .. }
+            ) {
+                // Effect-group brackets (ADR 415): kept, shifted with the band.
+                dl.push(shift_cmd_y(cmd, -top_pt));
             }
         }
         frames.push(dl);
@@ -259,6 +265,14 @@ pub fn render_web_flow_variable_rooted(
                 if y1 > 0.0 && y0 < cut_pt {
                     dl.push(cmd.clone());
                 }
+            } else if matches!(
+                cmd,
+                WebDrawCmd::PushGroup(_) | WebDrawCmd::PopGroup | WebDrawCmd::EffectLoss { .. }
+            ) {
+                // Effect-group brackets (ADR 415) carry no geometry: every
+                // frame keeps them, and a group no item of the band falls in
+                // is dropped at lowering.
+                dl.push(cmd.clone());
             }
         }
         out_frames.push(dl);
@@ -946,12 +960,14 @@ pub fn render_web_flow_rooted(
 
 fn flow_result_to_wire(result: FlowResult) -> FlowWire {
     let mut advances = Vec::with_capacity(result.frames.len());
+    let mut effects = Vec::with_capacity(result.frames.len());
     let frames = result
         .frames
         .iter()
         .map(|dl| {
             let low = crate::lower::lower(dl);
             advances.push(low.text_advances);
+            effects.push(low.effects);
             FlowFrameWire {
                 layer: low.layer,
                 emitted: low.report.emitted,
@@ -959,6 +975,7 @@ fn flow_result_to_wire(result: FlowResult) -> FlowWire {
         })
         .collect();
     crate::boundary::set_text_advances(advances);
+    crate::boundary::set_effects(effects);
     FlowWire {
         frames,
         overset: result.overset,
@@ -1034,7 +1051,11 @@ fn cmd_y_band(cmd: &WebDrawCmd) -> Option<(f32, f32)> {
         | WebDrawCmd::FillGradientBlend { path, .. }
         | WebDrawCmd::DrawShadow { path, .. }
         | WebDrawCmd::DrawInsetShadow { path, .. } => path_y_band(path),
-        WebDrawCmd::NonSolidPaint { .. } | WebDrawCmd::BoxShadow => None,
+        WebDrawCmd::NonSolidPaint { .. }
+        | WebDrawCmd::BoxShadow
+        | WebDrawCmd::PushGroup(_)
+        | WebDrawCmd::PopGroup
+        | WebDrawCmd::EffectLoss { .. } => None,
     }
 }
 
@@ -1191,6 +1212,16 @@ fn shift_cmd_y(cmd: &WebDrawCmd, dy: f32) -> WebDrawCmd {
         },
         WebDrawCmd::NonSolidPaint { what } => WebDrawCmd::NonSolidPaint { what: *what },
         WebDrawCmd::BoxShadow => WebDrawCmd::BoxShadow,
+        WebDrawCmd::PushGroup(fx) => {
+            let mut fx = fx.clone();
+            if let Some(clip) = &fx.clip {
+                fx.clip = Some(shift_path_y(clip, dy));
+            }
+            fx.mask = fx.mask.iter().map(|c| shift_cmd_y(c, dy)).collect();
+            WebDrawCmd::PushGroup(fx)
+        }
+        WebDrawCmd::PopGroup => WebDrawCmd::PopGroup,
+        WebDrawCmd::EffectLoss { key } => WebDrawCmd::EffectLoss { key: key.clone() },
     }
 }
 
@@ -1765,6 +1796,23 @@ mod tests {
             f0_text.contains("MARK00"),
             "frame 0 must hold the top: {f0_text:?}"
         );
+    }
+
+    #[test]
+    fn a_flow_keeps_each_frames_effect_groups() {
+        let html = "<html><body style=\"margin:0\">\
+            <div style=\"height:100px;background:#cccccc\"></div>\
+            <div style=\"height:100px;opacity:0.5;background:#ff0000\"></div>\
+            </body></html>";
+        let wire = render_web_flow(html, &[(200, 120), (200, 120)]);
+        assert_eq!(wire.frames.len(), 2);
+        let json = crate::boundary::take_effects_json();
+        let effects: Vec<crate::effects::LayerEffects> =
+            serde_json::from_str(&json).expect("effects json");
+        assert_eq!(effects.len(), 2, "one entry per frame");
+        assert!(effects[0].groups.is_empty(), "{:?}", effects[0]);
+        assert_eq!(effects[1].groups.len(), 1, "{:?}", effects[1]);
+        assert!((effects[1].groups[0].opacity - 0.5).abs() < 1e-3);
     }
 
     #[test]

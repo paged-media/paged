@@ -498,6 +498,8 @@ fn painted_extent(
         | C::BeginSoftMask { .. }
         | C::BeginMaskedContent(_)
         | C::EndSoftMask(_)
+        | C::BeginSymbol { .. }
+        | C::EndSymbol(_)
         | C::BeginFeatheredObject { .. } => None,
     }
 }

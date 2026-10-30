@@ -784,6 +784,17 @@ export const CORE_PATHS: Record<
   frameFillRule: V71,
   // The gradient fill's start is protocol 77 (engine ADR 1031).
   frameGradientFillStart: V71,
+  // The effect stacks are protocol 76 (engine ADR 1008).
+  frameEffectStack: V71,
+  frameFillEffectStack: V71,
+  frameStrokeEffectStack: V71,
+  frameContentEffectStack: V71,
+  // The appearance is protocol 78 (engine ADR 1043): the layer list, and
+  // the per-layer edit, an operation.
+  frameAppearance: V71,
+  frameAppearanceLayer: OP,
+  // An image frame's filter stack is protocol 77 (engine ADR 1037).
+  frameImageAdjustments: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",
@@ -951,6 +962,24 @@ export const CORE_PATHS: Record<
   groupKnockout: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   // A clip group is protocol 76 (engine ADR 1010); a pre-71 engine has none.
   groupClip: V71,
+  // Engine ADR 1039 (protocol 78) — a symbol instance's tint
+  // `[r, g, b, amount]` and 9-slice guides `[left, top, right, bottom]`.
+  symbolInstanceTint: {
+    scope: "frame",
+    wire: "lengths",
+    type: { kind: "list", of: { kind: "number" } },
+  },
+  symbolInstanceNineSlice: {
+    scope: "frame",
+    wire: "lengths",
+    type: { kind: "list", of: { kind: "length" } },
+  },
+  // Draw ADR 365 — the symbol an instance draws (Replace Symbol).
+  symbolInstanceSymbol: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   // Word's character and paragraph additions are protocol 76 (engine ADR
   // 1018); a pre-71 engine has none.
   characterHighlightColor: V71,

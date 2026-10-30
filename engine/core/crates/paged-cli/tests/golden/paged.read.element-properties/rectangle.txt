@@ -220,6 +220,56 @@ rows with a value: [
     }
   },
   {
+    "path": "frameEffectStack",
+    "value": {
+      "type": "effectStack",
+      "value": {
+        "entries": [],
+        "prev": null
+      }
+    }
+  },
+  {
+    "path": "frameFillEffectStack",
+    "value": {
+      "type": "effectStack",
+      "value": {
+        "entries": [],
+        "prev": null
+      }
+    }
+  },
+  {
+    "path": "frameStrokeEffectStack",
+    "value": {
+      "type": "effectStack",
+      "value": {
+        "entries": [],
+        "prev": null
+      }
+    }
+  },
+  {
+    "path": "frameContentEffectStack",
+    "value": {
+      "type": "effectStack",
+      "value": {
+        "entries": [],
+        "prev": null
+      }
+    }
+  },
+  {
+    "path": "frameAppearance",
+    "value": {
+      "type": "appearance",
+      "value": {
+        "layers": [],
+        "prev": null
+      }
+    }
+  },
+  {
     "path": "frameDropShadowKnockedOut",
     "value": {
       "type": "bool",

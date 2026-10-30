@@ -19,52 +19,75 @@
 
 // The showcase's Ch.14 opener imports `annual-crest.svg` through
 // paged.draw and counts the Polygons it lands. That count is the
-// importer's plan of the file, so it is held here to the importer's own
-// pure planner: when the importer changes how it lowers a shape, this
-// fails in milliseconds instead of the nightly book failing two hours in
-// (and every later chapter with it, since each starts from the one
-// before's checkpoint).
+// importer's plan of the file — since draw ADR 364 the engine's own
+// (`document.importSvg`, paged-svg) — so it is held here to a headless
+// engine: when the import changes how it lowers a shape, this fails in
+// seconds instead of the nightly book failing two hours in (and every
+// later chapter with it, since each starts from the one before's
+// checkpoint).
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { shapesFromSvgBytes, svgImportUnitsFor } from "@paged-media/draw";
+import { importSvg } from "@paged-media/draw";
+import type { ElementId } from "@paged-media/plugin-api";
+import {
+  createHeadlessHost,
+  silentConsole,
+  type HeadlessHost,
+} from "@paged-media/plugin-sdk";
 
+import { minimalIdml } from "../../../../../../platform/extensions/packages/plugin-sdk/test/fixtures/minimal-idml";
 import {
   CREST_NAME,
   CREST_POLYGON_CONTOURS,
   CREST_SHAPES,
 } from "../../tests/showcase/pages/200-drawing-office/crest";
 
+const HERE = dirname(fileURLToPath(import.meta.url));
 const CREST = readFileSync(
-  join(import.meta.dir, "../../tests/showcase/assets", CREST_NAME),
+  join(HERE, "../../tests/showcase/assets", CREST_NAME),
 );
 
 describe("the showcase crest import", () => {
-  const shapes = shapesFromSvgBytes(new Uint8Array(CREST));
-  // The editor's engine reports every page's origin and carries the
-  // element fill rule (document.fillRule@1).
-  const units = svgImportUnitsFor(
-    { pageId: "p77", pageOrigin: [0, 0], nativeFillRule: true },
-    shapes,
-  );
-  const polygonsOf = (unit: (typeof units)[number]): number =>
-    unit.pageOrigin !== null ? 1 : unit.contours.length;
+  let h: HeadlessHost;
+  let ids: ElementId[] = [];
+
+  beforeAll(async () => {
+    h = await createHeadlessHost({
+      console: silentConsole,
+      resolveFrom: join(HERE, "../.."),
+    });
+    await h.load(minimalIdml());
+    ids = await importSvg(h.host, {
+      name: CREST_NAME,
+      bytes: new Uint8Array(CREST),
+      mimeType: "image/svg+xml",
+    });
+  });
+  afterAll(() => h?.dispose());
 
   test("lands the Polygons the opener counts", () => {
-    expect(units.reduce((n, u) => n + polygonsOf(u), 0)).toBe(CREST_SHAPES);
+    expect(ids.filter((id) => id.kind === "polygon")).toHaveLength(
+      CREST_SHAPES,
+    );
   });
 
-  test("each Polygon carries the contours the opener checks, holes as even-odd", () => {
-    expect(units.map((u) => u.contours.length)).toEqual([
-      ...CREST_POLYGON_CONTOURS,
-    ]);
-    for (const unit of units) {
-      if (unit.contours.length > 1) {
-        expect(unit.pageOrigin).not.toBeNull();
-        expect(unit.fillRule).toBe("EvenOdd");
+  test("each Polygon carries the contours the opener checks, holes as even-odd", async () => {
+    const polygons = ids.filter((id) => id.kind === "polygon");
+    const contours = [];
+    for (const id of polygons) {
+      const table = await h.host.document.pathAnchors(id);
+      contours.push(Math.max(1, table!.subpathStarts.length));
+      if (table!.subpathStarts.length > 1) {
+        const props = await h.host.document.elementProperties(id);
+        expect(
+          props!.entries.find((e) => e.path === "frameFillRule")?.value,
+        ).toMatchObject({ value: "EvenOdd" });
       }
     }
+    expect(contours).toEqual([...CREST_POLYGON_CONTOURS]);
   });
 });

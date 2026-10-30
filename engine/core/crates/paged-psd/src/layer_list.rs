@@ -28,6 +28,10 @@
 //!   read without copying a channel (what a raster probe needs).
 //!
 //! All three are pure READS; the preservation model is not touched.
+//! [`image_source_data`] is the inverse of the second: it writes a
+//! document's layers as a TIFF's ImageSourceData, and
+//! [`image_resource_blocks`] its resources as a TIFF's Photoshop tag
+//! (34377), so a TIFF writer can carry the layers Photoshop reopens.
 //!
 //! ImageSourceData is the signature `Adobe Photoshop Document Data
 //! Block\0` followed by the layer & mask section's document-level blocks
@@ -48,9 +52,11 @@
 //! `Lr32`, `Layr`); Adobe Photoshop TIFF Technical Notes (tag 37724).
 
 use crate::container::{Container, LenWidth};
-use crate::model::layers::parse_layer_info_body;
+use crate::model::addl::AddlPad;
+use crate::model::layers::{emit_layer_info_body, parse_layer_info_body};
 use crate::model::{ColorModeData, FileHeader, ImageResources, LayerRecord, PsdFile};
 use crate::reader::ByteReader;
+use crate::writer::ByteWriter;
 use crate::{PsdError, Result};
 
 /// What a TIFF's ImageSourceData (tag 37724) starts with.
@@ -177,6 +183,79 @@ fn source_data_layers(data: &[u8], channels: bool) -> Result<LayerList> {
         }
     }
     Ok(LayerList::default())
+}
+
+/// A document's layers as a TIFF's ImageSourceData (tag 37724), the
+/// inverse of [`image_source_data_layers`]: the signature, then the
+/// document-level blocks of the layer and mask section, big-endian, each
+/// `8BIM` + key + u32 length + data padded to 4:
+///
+/// - the layer info (`Layr` for an 8-bit document, `Lr16` / `Lr32` for
+///   16 and 32 bits): the signed layer count, the records and the channel
+///   image data, as the layer info sub-block of a PSD holds them;
+/// - `LMsk`, the global layer mask, when the document has one;
+/// - every other document-level block (patterns, text engine data, linked
+///   files, ...), as stored.
+///
+/// The payload is the big-endian one Photoshop writes into a big-endian
+/// (`MM`) TIFF. A PSB, whose records use 8-byte lengths, is refused, as
+/// is a document without layers (a TIFF without the tag says that).
+pub fn image_source_data(file: &PsdFile) -> Result<Vec<u8>> {
+    if file.container != Container::Psd {
+        return Err(PsdError::Unsupported(
+            "a PSB's layers in a TIFF (ImageSourceData holds PSD-sized records)".into(),
+        ));
+    }
+    let list = file.layer_list()?;
+    if list.layers.is_empty() {
+        return Err(PsdError::Unsupported(
+            "ImageSourceData for a document without layers".into(),
+        ));
+    }
+    let key: [u8; 4] = match file.header.depth {
+        16 => *b"Lr16",
+        32 => *b"Lr32",
+        _ => *b"Layr",
+    };
+    let mut w = ByteWriter::new();
+    w.bytes(IMAGE_SOURCE_DATA_SIGNATURE);
+    let block = |w: &mut ByteWriter, key: [u8; 4], body: &dyn Fn(&mut ByteWriter)| {
+        w.fourcc(*b"8BIM");
+        w.fourcc(key);
+        let anchor = w.len() + 4;
+        w.framed(LenWidth::U32, |w| {
+            body(w);
+            // The length counts the pad: every reader steps by it.
+            w.pad_to(4, anchor);
+        });
+    };
+    block(&mut w, key, &|w| {
+        emit_layer_info_body(&list.layers, list.transparency_in_merged, w, Container::Psd)
+    });
+    if let Some(mask) = file
+        .layer_mask
+        .global_mask
+        .as_ref()
+        .filter(|m| !m.raw.is_empty())
+    {
+        block(&mut w, *b"LMsk", &|w| w.bytes(&mask.raw));
+    }
+    for a in &file.layer_mask.addl_global {
+        if LAYER_KEYS.contains(&&a.key) || &a.key == b"LMsk" {
+            continue;
+        }
+        a.emit(&mut w, Container::Psd, AddlPad::Four);
+    }
+    Ok(w.into_bytes())
+}
+
+/// A document's image resources as a TIFF's Photoshop tag (34377) holds
+/// them: the resource blocks of the PSD's image resources section,
+/// without the section's length.
+pub fn image_resource_blocks(file: &PsdFile) -> Vec<u8> {
+    let mut w = ByteWriter::new();
+    file.resources.emit(&mut w);
+    w.into_bytes().split_off(4)
 }
 
 /// A PSD/PSB's header facts, read without copying a channel.

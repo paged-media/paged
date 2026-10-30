@@ -52,7 +52,7 @@ import {
   pickBinding,
 } from "../../src/panels/properties-panel";
 import { F6_RING_PAIR } from "../fixtures/corpus";
-import { openHost } from "../headless/host";
+import { openHost, withoutEngineSymbols } from "../headless/host";
 import { slowRecipeWrites } from "./harness";
 
 const INNER = { kind: "polygon", id: "uinner" } as const;
@@ -143,6 +143,8 @@ describe("the Draw settings panel (media.paged.draw.panel.properties), mounted",
     h = await openHost();
     await h.load(F6_RING_PAIR.bytes());
     h.loadBundle(drawBundle);
+    // The re-emitted symbols lane (draw ADR 356) is what these rows pin.
+    withoutEngineSymbols(h);
     contribution = h
       .schemaPanelsContributed()
       .find((c) => c.schema.id === DRAW_PROPERTIES_PANEL_ID)!;

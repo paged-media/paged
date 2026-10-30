@@ -425,6 +425,17 @@ the reply cannot be what was asked (no `rgba`, no `region`), never the
 wrong image, and the flag stays static like @1. The worker's GPU snapshot
 path draws only v1 requests; any @2 option is drawn on the CPU rasterizer.
 
+**A story the document does not hold** [ADR 342 · `render.story@1`].
+`render.story(pageId, story, { dpi, format, marginPt, trim })` lays out a
+`RenderStory` — paragraphs of styled runs, a frame `bounds` (pt), an
+optional `firstBaseline` — with the engine's text stack and the document's
+fonts, and draws it alone on a transparent ground, cropped to what it
+draws: an engine-made copy of the document holds it, the document gets no
+item, no id and no undo step. paged.image's type layers are made of it
+(their text lives in the image; the engine lays it out). The reply's
+`story` flag is what tells it apart from an engine that ignored the field
+and drew the page: the door answers `null` then.
+
 ### 4.4 `host.selection`, `host.viewport`
 
 `selection.get()/set()/onDidChange` (the post-insert select pattern
@@ -556,6 +567,51 @@ bound) bundle.
   handle is inert: never a throw, and never a fallback onto the
   tool-preview slot, which would erase the active tool's preview.
 - Same `capabilities.rendering ∋ "overlay"` gate as `setToolPreview`.
+
+### 4.5e `host.overlay.handles` and `host.transformBox` — handles the host hits [ADR 339]
+
+Two doors that answer the POINTER for a bundle, so its handles behave like
+the host's chrome without each bundle re-deriving screen metrics from the
+camera (extensions ADR 339; the host tool is editor ADR 295).
+
+- **The primitive.** `ToolPreviewHandle` (`kind: "handle"`, `shape` square /
+  round / centre / rotateZone, `sizePx`, `active`) is a marker drawn at a
+  constant SCREEN size at a page-local point — in the tool-preview slot and
+  in layers. `rotateZone` draws nothing: it is a hit area.
+- **Handle sets.** `host.overlay.handles(id?)` → `{ set(space, handles),
+clear(), hitTest(pageId, pagePoint), dispose() }`. `space` is
+  `{ pageId }` (page-local pt) or `{ element }` (the frame's content space:
+  its box top-left, through its item transform, resolved at `set`). Radii are
+  screen px (6, a rotate zone 28); earlier handles win an overlap; sets stack
+  with the bundle's layers in creation order. Every pointer event of the
+  bundle's own tools carries `hitHandle: { set, id }` over a handle, and a
+  handle's `cursor` is the tool's cursor there unless the tool's `cursorAt`
+  answers.
+- **The transform box.** `host.transformBox.open({ pageId, quad, mode?,
+reference?, toolId?, onChange?, onCommit, onCancel? })` draws a box (eight
+  handles, the reference point; the rotate zones just outside the corners)
+  over a quad the bundle owns, takes the pointer and keys of the bundle's
+  tools while open (an open box makes the bundle's edit context dirty, so Esc and
+  Enter end the box, not the context), and reports `{ matrix, quad, reference, mode, operation }`:
+  `matrix` is a row-major 3×3 projective matrix from the box as opened to the
+  box now (affine until a distort or perspective drag). Enter commits, Escape
+  cancels; a press outside the box beyond the rotate zones reaches the tool;
+  opening a second box cancels the first; `toolId` makes one of the bundle's
+  tools the active one while the box is open. The modifiers and modes are the
+  host Free Transform tool's (`freeTransform`, `constrain`, `freeDistort`,
+  `perspective`). The host never touches the content: the bundle applies the
+  matrix (paged.image resamples a layer through `geom.warp_projective`).
+- **One geometry.** The box's hit order, metrics and drag arms are
+  `transform-box.ts`, exported from the SDK root (`hitTestBox`,
+  `operationFor`, `dragBox`, `homographyFromQuads`, `quadMap`, …); the host
+  tool runs the same code.
+- **Routing.** `contribute.tool` wraps each gesture handler the bundle's
+  factory makes: the box first, then `hitHandle` stamping. A handler that
+  never reads the field sees no change.
+- **Flags.** `overlay.handles@1` and `host.transformBox@1` are DYNAMIC: true
+  when the host renders overlay layers (the handle primitive ships with this
+  SDK's host). Without them both doors still hit, route and report, and draw
+  nothing. Gate: `capabilities.rendering ∋ "overlay"`.
 
 ### 4.5b `host.text` — measurement + the caret read door [S-13 · C-9]
 
@@ -735,6 +791,15 @@ Additive at protocol 76 like the fill rule: an older engine makes a plain
 group of `clip: true` and refuses a group child. paged.draw's clipped
 repeat asks it before choosing a clip group over paste-into.
 
+`"document.imageAdjustments@1"` (engine ADR 1037) says the vendored wire
+and catalog carry `frameImageAdjustments`, an image frame's filter stack:
+a list of `RasterOp` (`{ op: "exposure", ev }`, `levels`, `curves`,
+`hueSaturation`, `recolor`, `duotone`, `blackWhite`, `sharpen`, `blur`,
+`posterize`, `threshold`, `invert`) written whole as the `imageAdjustments`
+value, on a rectangle, oval or polygon. The engine draws and exports the
+picture through it; IDML keeps it in a label. Additive at protocol 77:
+an older engine refuses the write as an unknown path and reads no row.
+
 `"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
 protocol 77) are SVG in and out through the engine's `paged-svg`.
 `importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the
@@ -756,6 +821,55 @@ returns it to the default vertical stack; the page order stays
 and the pages collection's `canvasOriginPt` / `canvasPlaced` / `boundsPt` —
 and the catalog the `pageCanvasOrigin` page path. An artboard's name is the
 page metadata entry `x-paged:paged.artboard` (`{"v":1,"data":{"name"}}`).
+
+`"document.effectStack@1"` (engine ADR 1008) says the vendored wire and
+catalog carry the ordered effect stack: `frameEffectStack` and its fill,
+stroke and content twins, written whole as `{ type: "effectStack", value:
+{ entries } }` (an `EffectEntrySpec` per effect: `kind`, `enabled`, and for
+a stack-only effect `blendMode`, `opacityPct` and its parameters), one
+write and one undo step per gesture. InDesign's nine effects keep their
+parameters on their per-field paths; the stack-only ones (Gaussian blur,
+outline stroke, colour and gradient overlays, reflection, soft edge,
+noise, colour adjustment) apply to the object target, and a target stack
+refuses them. Additive at protocol 76: an older engine refuses the path.
+A bundle that would otherwise bake an effect into its pixels (paged.draw's
+appearance, paged.image's layer styles placed on a page) asks it first.
+
+`"document.appearance@1"` (engine ADR 1043) says the vendored wire and
+catalog carry native appearance: an item's extra fills and strokes, bottom
+to top, in order with its own fill and stroke. `frameAppearance` is the
+whole list, written as `{ type: "appearance", value: { layers } }` (a
+`PaintLayerSpec` per layer: `kind` — `fill`, `stroke`, or the placeholders
+`frameFill` / `frameStroke` that place the item's own paint — `enabled`,
+`color`, `tint`, the gradient geometry, `opacityPct`, `blendMode`,
+`effects` (stack-only `EffectEntrySpec`s) and, for a stroke, `weight`,
+`alignment`, `endCap`, `endJoin`, `miterLimit`, `strokeType`, `dash`);
+`frameAppearanceLayer` replaces one layer, `{ index, layer }` (one past the
+end appends). Each write is one undo step; the empty list is the item as it
+always was. `host.objects` reads and writes `frameAppearance` as its list of
+layers. IDML gets a group of single-paint items with the source in the
+item's `paged:appearance` label (and a loss line); a paged reader restores
+it. Additive at protocol 78: an older engine refuses the paths.
+
+`"document.symbols@1"` (engine ADR 1039, protocol 78) is the engine's
+symbol: a definition kept once in the document and instances that draw it
+(`FrameRef::Instance`, addressed `instance:<id>`). The doors are five wire
+ops — `createSymbol { name, elementIds, symbolId?, replace?, nineSlice? }`
+(the items become one instance unless `replace: false`; `createdId` is
+it), `redefineSymbol { symbolId, elementIds?, name?, nineSlice?, replace? }`
+(every instance follows), `placeSymbolInstance { symbolId, pageId, at?,
+linear?, nineSlice? }`, `breakSymbolLink { elementId }` and
+`deleteSymbol { symbolId }` — each one undo step, and the `symbols`
+collection lists the definitions with their instances. An instance's
+opacity, blend mode, transform, visibility and lock are the ordinary
+element paths; its tint and 9-slice guides are `symbolInstanceTint`
+(`[r, g, b, amount]`) and `symbolInstanceNineSlice` (`[left, top, right,
+bottom]`), and the symbol it draws is `symbolInstanceSymbol` (a symbol id:
+Replace Symbol, keeping the instance's id, transform and overrides; draw
+ADR 365). `deleteFrame` removes an instance by its id or address. STATIC:
+protocol 78's handshake proves the engine has them.
+paged.draw's Symbols panel uses them when the flag is up and keeps its
+re-emitted artwork (draw ADR 356) as the fallback for a host without it.
 
 ### 4.9 `host.editor` — the marked escape hatch
 
@@ -1493,7 +1607,7 @@ clears its missing flag.
 
 The sheets-mode grid's range copy/paste (cells + values) had nowhere to
 land (RFI §6 K-6). `host.clipboard` is the door: a read/write surface over
-the SYSTEM clipboard with a rich `{ text?, tabular? }` payload. The
+the SYSTEM clipboard with a rich `{ text?, tabular?, svg? }` payload. The
 manifest already declared a `clipboard` enum (`none | vector | full`) ahead
 of any surface; this change gives it teeth.
 
@@ -1554,6 +1668,20 @@ Wholly additive: a new `host.clipboard` member + `ClipboardSurface` /
 `capabilities.clipboard` manifest field (the enum itself is unchanged). No
 existing member changed; the gate / namespace rule / every other door are
 untouched.
+
+### 14.6 The svg half (extensions ADR 341 — `clipboard.svg@1`)
+
+`ClipboardPayload.svg` is an SVG document (UTF-8 text), the platform's
+vector interchange. On write the host puts it on the clipboard as
+`image/svg+xml` where the platform takes that type; on read it fills `svg`
+from plain text that IS an SVG document (Illustrator writes its source
+there; the browser's `image/svg+xml` is sanitised and loses `<style>`),
+else from the `image/svg+xml` flavour, and an SVG text is never read as a
+TSV grid. `"vector"` and `"full"` both carry it. A backend declares the
+half with `ClipboardBackend.svg: true`; without it the door strips `svg`
+both ways and `supports("clipboard.svg@1")` is false. The editor's backend
+and the harness's `inMemoryClipboard` declare it. What browsers can and
+cannot reach (no PDF anywhere) is recorded in editor ADR 289.
 
 ## 15. The capability-gated worker door (K-3 / S-07 / I-02 — `host.workers`)
 
@@ -1769,6 +1897,13 @@ footnote.
 - `readCollection` — the rows of a named `CollectionName`. Serves the Layers
   list and the swatch/gradient list. **Takes no target**: document-scoped by
   construction.
+  The `links` collection (image ADR 482) is served with `ProvidedLinkRow`s:
+  core's `LinkSummary` fields for a file the provider's content links or
+  embeds (paged.image's smart objects), plus `actions` — the provider's
+  commands for Relink / Update / Embed, which the host Links panel runs with
+  `{ link: hostSelfId }`. Core has no relink operation to intercept, so the
+  row names the verbs; the panel lists provider rows after the document's own
+  links and enables a button only when the row offers its action.
 - `applyMutation` — first refusal on a `MutationInput` the host panel would
   otherwise send straight to core. Serves the STRUCTURAL edits that are not
   property writes: `layerMove` / `layerInsert` / `layerRemove`,
@@ -2108,6 +2243,32 @@ it names, so a tab reading "Layers" while a provider is active carries no hint
 that its content has retargeted; the "provided by" affordance lives INSIDE the
 panel and is therefore invisible until you open it. That is a legitimate
 residual (a provenance mark on the tab), not part of this rule.
+
+### 18.13 The workspace and readout lanes (extensions ADR 340, 2026-10-27)
+
+Two more optional lanes, for host CHROME rather than panel values, both
+borrowing the provider's lifetime like the others:
+
+- **Workspace** (`provides.workspace`, `readWorkspace`, `editGuide`,
+  optional `workspaceView`). The active context names the frame the host
+  rulers measure in: a page, an origin on it, page pt per base unit (an
+  image pixel), the extent, the ruler unit and base units per physical
+  point, plus its own guides and whether they show and are locked. The
+  host draws those guides and drives them with its one guide machinery
+  (drag out of a ruler, move, drop on a ruler to delete, Escape), sending
+  each result to `editGuide`; the host grid covers the workspace in its
+  units; `workspaceView` hands the provider the host's grid and snap state
+  so the context's own tools snap to the lines the host draws.
+- **Readouts** (`provides.readouts: ["info"]`, `readReadouts`). Labelled
+  rows the Info panel shows while the context is active (a raster image's
+  pixel colour under the cursor, its selection and Ruler measurements).
+
+Neither is a `PropertyPath`: rulers, guides and a readout are not
+document values and nothing is written to core, so the vocabulary rule
+(§18.6) is not widened. The host asks one question per lane whose answer
+has the same shape for every content type. Both are probed as dynamic
+flags, `bindings.workspace@1` and `bindings.readouts@1`, true when a
+shared registry is wired.
 
 ## 19. One entry gesture for canvas content (K-13 — `entry: "doubleClick"`)
 

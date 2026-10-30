@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/viewer",
-  "version": "0.77.0-dev",
+  "version": "0.78.0-dev",
   "description": "Standalone IDML viewer for the browser: camera, pages, input and events over the engine's WebGPU ViewerSession, which ships in the package (./session).",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "repository": {

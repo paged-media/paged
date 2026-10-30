@@ -76,10 +76,14 @@ Rules for every code change in this repo:
   on CPU is inherently CPU work: codec entropy coding, PSD structural
   parse/write, CMS transform _compilation_, orchestration.
   ONE EXCEPTION (ADR 465): the CPU twins of the adjustment chain's
-  nineteen kernels (`image-kernels` feature `cpu`, `src/cpu.rs`) ship
-  for the region filter, used only where no GPU device exists; each is
-  held to its kernel's tolerance (`image-conformance/tests/it/cpu_twins.rs`).
-  A covered kernel's WGSL change changes its twin too.
+  nineteen kernels, and `adjust.gradient_map`'s (`image-kernels` feature
+  `cpu`, `src/cpu.rs`) ship for the region filter, used only where no
+  GPU device exists; each is held to its kernel's tolerance
+  (`image-conformance/tests/it/cpu_twins.rs`). Their bodies, the param
+  blocks and the pixel type live in the engine's `paged-kernels` (engine
+  ADR 1037, the first step of ADR 1013), which the engine's image filter
+  stack evaluates too; `image-kernels` re-exports them under the old
+  paths. A covered kernel's WGSL change changes its twin too.
   A SECOND (ADR 469): `geom.patch_vote`'s twin (`image-js` `patchmatch::vote_packed`)
   ships as the vote of the content-aware retouching verbs where no device exists; the
   PatchMatch search itself is CPU input preparation.
@@ -87,6 +91,8 @@ Rules for every code change in this repo:
   stack without a device through the compose family's twins (`image-kernels`
   `compose_twin`, which `image-conformance`'s `compose_ref` re-exports — one body), the
   `cast.*`/`band.*`/`math.*` twins and the chain's; a layer style still needs a device.
+  The CPU resample of `paged-resample` (ADR 467) is a supported backend, not a twin: it
+  serves headless and batch actions and draws a smart object's placement (ADR 482).
 - **PRESERVATION INVARIANT (§10.4).** "Paged never destroys a PSD."
   Every unmodeled block is retained as opaque bytes attached to its
   owner node and re-emitted verbatim; zero-edit round-trip is

@@ -1,0 +1,19 @@
+[package]
+name = "draw-dxf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.draw DXF interchange — a DXF drawing read into an SVG document the engine's paged-svg import lowers, and an SVG the engine exported written out as DXF entities, each with a report of what was not carried."
+
+[lints]
+workspace = true
+
+[dependencies]
+dxf = { workspace = true }
+paged-svg = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

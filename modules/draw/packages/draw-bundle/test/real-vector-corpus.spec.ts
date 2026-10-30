@@ -26,42 +26,25 @@
  * Three properties, and the second is the one that would actually hurt
  * if it broke:
  *
- * 1. **A real SVG never throws.** `shapesFromSvgBytes` is the importer's
- *    whole front door. A file that crashes it takes the editor with it.
- *    The shape YIELD is reported rather than gated, because "how many
- *    shapes should this logo lower to" has no right answer and pinning
- *    one would just be pinning today's parser.
+ * 1. **A real SVG never throws.** The importer's front door is the
+ *    engine's `document.importSvg` (draw ADR 364: the module's own reader
+ *    is gone). A file that crashes it takes the editor with it. The YIELD
+ *    is reported rather than gated, because "how many items should this
+ *    logo lower to" has no right answer.
  *
- * 2. **AI and EPS are refused, not half-read.** The packs ship 285 `.ai`
- *    and 282 `.eps` files alongside the SVGs, and plugin-draw has no
- *    reader for either — the catalogue lists both as intended and
- *    unbuilt. That makes them the most valuable fixtures here, because
- *    the danger is not that we fail to read them, it is that we
- *    PARTIALLY do. Both formats can carry XML-ish payloads: an `.ai` is
- *    a PDF container (`%PDF-1.5`) which can embed XMP, and an `.eps` is
- *    PostScript, often with a binary DOS-EPS header. Hand either to an
- *    XML parser and it may well find *something* and hand back shapes
- *    that are not the artwork.
+ * 2. **AI and EPS are refused by the SVG importer, not half-read.** The
+ *    packs ship `.ai` and `.eps` files alongside the SVGs. They have their
+ *    own importers now (paged.pdf's placement and the engine's PostScript
+ *    interpreter, draw ADR 364), but handed to the SVG door they must be
+ *    refused: an `.ai` is a PDF container that can embed XMP, and an XML
+ *    reader may well find *something* in it that is not the artwork.
  *
- *    Same property the rest of the corpus already gates for foreign
- *    formats — `legacy_xls_is_refused_rather_than_half_read` in
- *    plugin-sheets, `every_legacy_doc_is_refused_by_name` in plugin-doc.
- *    `shapesFromSvgBytes` signals refusal by returning no shapes rather
- *    than by throwing, so "refused" here means an empty result.
- *
- * 3. **A real SVG is ONE undo step.** Parsing is half an import; the
- *    other half is the document it lands in. Every file that yields
- *    shapes is committed to a real engine through the File ▸ Open lane
- *    and must arrive as one batch — nothing refused, one element per
- *    contour — and leave again on ONE undo. The importer used to be a
- *    loop of single mutations: these 457 files cost 14 057 of them and
- *    9 107 presses of undo. A file that needs a second batch means the
- *    engine refused something real artwork contains, and that is worth
- *    knowing about by name.
+ * 3. **A real SVG is ONE undo step.** Every file the engine imports must
+ *    leave again on ONE undo.
  *
  * OPT-IN — the assets live in the private corpus checkout:
  *
- *     PAGED_SVG_CORPUS=1 pnpm --filter @paged-media/draw test
+ *     PAGED_SVG_CORPUS=1 bun run test (in modules/draw/packages/draw-bundle)
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -69,7 +52,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 
 import { leafIdsOf } from "../src";
-import { commitSvgImport, shapesFromSvgBytes } from "../src/io/svg";
+import { importSvgFile, SVG_IMPORTER_ID } from "../src/io/svg";
 import { openHost } from "./headless/host";
 import { F4_OVERLAP } from "./fixtures/corpus";
 
@@ -139,49 +122,8 @@ const svgs = vectorFiles([".svg"]);
 const foreign = vectorFiles([".ai", ".eps"]);
 const gated = svgs.length > 0;
 
-describe.skipIf(!gated)("real SVG corpus", () => {
-  it("parses every real SVG without throwing", () => {
-    const failures: string[] = [];
-    let withShapes = 0;
-    let totalShapes = 0;
-
-    for (const path of svgs) {
-      const bytes = new Uint8Array(readFileSync(path));
-      let shapes;
-      try {
-        shapes = shapesFromSvgBytes(bytes);
-      } catch (e) {
-        failures.push(`${path.split("/").pop()}: ${(e as Error).message}`);
-        continue;
-      }
-      totalShapes += shapes.length;
-      if (shapes.length > 0) withShapes += 1;
-    }
-
-    console.log(
-      `real SVG corpus: ${svgs.length} file(s), ${withShapes} yielded shapes, ` +
-        `${totalShapes} shapes total`,
-    );
-
-    expect(
-      failures,
-      `SVG files that THREW out of the importer:\n  ${failures.join("\n  ")}`,
-    ).toEqual([]);
-
-    // The one hard floor on yield. Zero would mean the importer only ever
-    // handled the shapes our own spec strings describe — which is the
-    // whole reason this lane exists.
-    expect(
-      withShapes,
-      `not one of ${svgs.length} real SVGs produced a shape — the importer has only ` +
-        `ever been fed hand-written spec strings, so this means it cannot read ` +
-        `what real design tools emit`,
-    ).toBeGreaterThan(0);
-  });
-});
-
 describe.skipIf(!gated)("real SVG corpus — the import", () => {
-  it("commits every real SVG as one batch, and one undo takes it back", async () => {
+  it("imports every real SVG without throwing, and one undo takes each back", async () => {
     const h = await openHost();
     try {
       await h.load(F4_OVERLAP.bytes());
@@ -189,40 +131,26 @@ describe.skipIf(!gated)("real SVG corpus — the import", () => {
         leafIdsOf(await h.host.document.tree()).length;
       const base = await leafCount();
       const wrong: string[] = [];
+      const threw: string[] = [];
       let files = 0;
-      let elements = 0;
-      let swatches = 0;
+      let items = 0;
 
       for (const path of svgs) {
         const bytes = new Uint8Array(readFileSync(path));
-        const shapes = shapesFromSvgBytes(bytes);
-        if (shapes.length === 0) continue;
-        const contours = shapes.reduce(
-          (n, s) => n + Math.max(1, s.anchors.subpathStarts.length),
-          0,
-        );
         const name = path.split("/").slice(-4).join("/");
-        const done = await commitSvgImport(h.host, {
-          name,
-          bytes,
-          mimeType: "image/svg+xml",
-        });
+        let done;
+        try {
+          done = await importSvgFile(h.host, SVG_IMPORTER_ID, name, bytes, {
+            origin: [0, 0],
+            group: false,
+          });
+        } catch (e) {
+          threw.push(`${name}: ${(e as Error).message}`);
+          continue;
+        }
+        if (!done.result?.applied) continue;
         files += 1;
-        elements += done.elements;
-        swatches += done.swatches;
-        if (done.batches !== 1 || done.refused !== 0) {
-          wrong.push(
-            `${name}: ${done.batches} batches, ${done.refused} refused`,
-          );
-        }
-        if (
-          (await leafCount()) - base !== done.elements ||
-          done.elements > contours
-        ) {
-          wrong.push(
-            `${name}: ${done.elements} elements for ${contours} contours`,
-          );
-        }
+        items += done.result.report.items;
         await h.host.document.undo();
         if ((await leafCount()) !== base) {
           wrong.push(
@@ -233,12 +161,15 @@ describe.skipIf(!gated)("real SVG corpus — the import", () => {
       }
 
       console.log(
-        `real SVG corpus, imported: ${files} file(s), ${elements} elements, ` +
-          `${swatches} swatches — one batch and one undo step each`,
+        `real SVG corpus, imported: ${files} of ${svgs.length} file(s), ` +
+          `${items} items — one undo step each`,
+      );
+      expect(threw, `SVG files that THREW:\n  ${threw.join("\n  ")}`).toEqual(
+        [],
       );
       expect(
         wrong,
-        `real SVGs that did NOT import as one batch / one undo step:\n  ${wrong.join("\n  ")}`,
+        `real SVGs that did NOT leave in one undo step:\n  ${wrong.join("\n  ")}`,
       ).toEqual([]);
       expect(files).toBeGreaterThan(0);
     } finally {
@@ -248,49 +179,34 @@ describe.skipIf(!gated)("real SVG corpus — the import", () => {
 });
 
 describe.skipIf(foreign.length === 0)(
-  "foreign vector formats are refused, not half-read",
+  "foreign vector formats are refused by the SVG importer, not half-read",
   () => {
-    it("yields no shapes for .ai and .eps", () => {
-      const halfRead: string[] = [];
-      const threw: string[] = [];
-      const byExt: Record<string, number> = {};
-
-      for (const path of foreign) {
-        const ext = path.slice(path.lastIndexOf(".")).toLowerCase();
-        byExt[ext] = (byExt[ext] ?? 0) + 1;
-        const bytes = new Uint8Array(readFileSync(path));
-        try {
-          const shapes = shapesFromSvgBytes(bytes);
-          if (shapes.length > 0) {
-            halfRead.push(
-              `${path.split("/").pop()} -> ${shapes.length} shape(s)`,
-            );
+    it("the engine's SVG reader applies nothing for .ai and .eps", async () => {
+      const h = await openHost();
+      try {
+        await h.load(F4_OVERLAP.bytes());
+        const halfRead: string[] = [];
+        for (const path of foreign) {
+          const bytes = new Uint8Array(readFileSync(path));
+          const done = await importSvgFile(
+            h.host,
+            SVG_IMPORTER_ID,
+            path.split("/").pop()!,
+            bytes,
+          );
+          if (done.result?.applied) {
+            halfRead.push(`${path.split("/").pop()}`);
+            await h.host.document.undo();
           }
-        } catch (e) {
-          // Throwing is not acceptable either: the importer is a front
-          // door and a foreign file is an ordinary thing to be handed.
-          threw.push(`${path.split("/").pop()}: ${(e as Error).message}`);
         }
+        console.log(`foreign vector formats: ${foreign.length} file(s)`);
+        expect(
+          halfRead,
+          `${halfRead.length} foreign file(s) were read as SVG:\n  ${halfRead.join("\n  ")}`,
+        ).toEqual([]);
+      } finally {
+        h.dispose();
       }
-
-      console.log(
-        `foreign vector formats: ${foreign.length} file(s) ` +
-          `(${Object.entries(byExt)
-            .map(([e, n]) => `${n} ${e}`)
-            .join(", ")})`,
-      );
-
-      expect(
-        threw,
-        `foreign files that THREW instead of being refused:\n  ${threw.join("\n  ")}`,
-      ).toEqual([]);
-      expect(
-        halfRead,
-        `${halfRead.length} foreign file(s) were PARTIALLY parsed as SVG:\n  ` +
-          `${halfRead.join("\n  ")}\n` +
-          `A half-read import is worse than a refused one — the caller gets shapes ` +
-          `that are not the artwork they opened.`,
-      ).toEqual([]);
-    });
+    }, 600_000);
   },
 );

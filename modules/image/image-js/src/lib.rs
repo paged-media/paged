@@ -73,15 +73,18 @@ pub mod psd_layer_ext;
 pub mod psd_source;
 pub mod psd_vector_mask;
 pub mod psd_write;
+pub mod psd_write_smart;
 pub mod readouts;
 pub mod refine;
 pub mod region_filter;
 pub mod retouch;
 pub mod saveback;
 pub mod selection;
+pub mod smart;
 pub mod stroke;
 pub mod text;
 pub mod vectors;
+pub mod workspace;
 
 /// The frozen kernel ABI version this artifact was built against.
 pub fn abi_version() -> u32 {
@@ -133,6 +136,8 @@ mod wasm {
     mod filters_chain;
     mod filters_distort;
     mod filters_stylize;
+    // Smart objects (ADR 482): transform, filters, contents, links.
+    mod smart_doors;
 
     thread_local! {
         /// The bundle-realm GPU device (I-07: created HERE, where
@@ -3712,6 +3717,47 @@ mod wasm {
         apply_point_kernel(handle, &GEOM_WARP_BACKWARD, params.as_bytes()).await
     }
 
+    /// FREE TRANSFORM of the active layer (`geom.warp_projective`; WP5.6,
+    /// editor ADR 295). `matrix` is the FORWARD 3×3 map in image px
+    /// (row-major: where each source pixel goes), as the host's transform
+    /// box reports it seen through the frame's fit; it is inverted here in
+    /// f64. `interp` 0 bilinear, 1 bicubic. What the layer no longer covers
+    /// is transparent. With a selection only the selected pixels move (the
+    /// rest stay), as one journaled edit — one undo step either way. The
+    /// kernel reads ASSOCIATED alpha, so the upload associates even an
+    /// opaque layer: its new edges are interpolated against transparent
+    /// black, which is exact only premultiplied.
+    #[wasm_bindgen]
+    pub async fn apply_projective(
+        handle: u32,
+        matrix: Vec<f32>,
+        interp: u32,
+    ) -> Result<DecodedHandle, JsValue> {
+        use image_kernels::families::geom::{
+            WarpInterp, WarpProjectiveParams, GEOM_WARP_PROJECTIVE,
+        };
+        if matrix.len() != 9 {
+            return Err(JsValue::from_str(
+                "a projective matrix is 9 numbers (3×3, row-major)",
+            ));
+        }
+        let interp = match interp {
+            0 => WarpInterp::Bilinear,
+            1 => WarpInterp::Bicubic,
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown interpolation {other} (0 bilinear | 1 bicubic)"
+                )))
+            }
+        };
+        let m: [f64; 9] = std::array::from_fn(|i| f64::from(matrix[i]));
+        let masked = SELECTION.with(|s| s.borrow().mask_for(handle)).is_some();
+        let params = WarpProjectiveParams::from_forward(m, interp, masked).ok_or_else(|| {
+            JsValue::from_str("the transform is singular (it folds the layer flat)")
+        })?;
+        apply_point_kernel_inner(handle, &GEOM_WARP_PROJECTIVE, params.as_bytes(), None, true).await
+    }
+
     /// STYLIZE — emboss. `angle_deg` is the light direction, `height`
     /// the relief strength; height 0 is the identity (flat mid-grey
     /// plus nothing).
@@ -4567,6 +4613,21 @@ mod wasm {
         params: &[u8],
         mask_override: Option<Arc<SelectionCoverage>>,
     ) -> Result<DecodedHandle, JsValue> {
+        apply_point_kernel_inner(handle, def, params, mask_override, false).await
+    }
+
+    /// [`apply_point_kernel_masked`], optionally ASSOCIATING alpha even
+    /// for an opaque image (`force_associate`): a kernel that reads outside
+    /// the image as transparent (the projective warp) makes new partial
+    /// alpha at the edges, which only premultiplied interpolation keeps
+    /// free of a dark fringe, and whose result must then be unassociated.
+    async fn apply_point_kernel_inner(
+        handle: u32,
+        def: &'static image_kernels::KernelDef,
+        params: &[u8],
+        mask_override: Option<Arc<SelectionCoverage>>,
+        force_associate: bool,
+    ) -> Result<DecodedHandle, JsValue> {
         use half::f16;
         let (img, ctx, sel, layered) = fill_prelude(handle)?;
         let sel = mask_override.or(sel);
@@ -4599,7 +4660,7 @@ mod wasm {
         // Alpha association is a question about the ALPHA, so ask the
         // buffer at its own depth rather than a narrowed copy.
         let n_px = img.rgba.pixel_count();
-        let associate = (0..n_px).any(|i| img.rgba.sample16(i, 3) != u16::MAX);
+        let associate = force_associate || (0..n_px).any(|i| img.rgba.sample16(i, 3) != u16::MAX);
         // DEPTH-AGNOSTIC upload. `sample16` widens an 8-bit sample as
         // `(v << 8) | v`, which maps 255 to 65535 exactly, so an 8-bit
         // image produces byte-identical f16 to the old `/ 255.0` path
@@ -4976,7 +5037,7 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&image_handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {image_handle}")))?;
-        let (import, stack) = PSDS.with(|m| {
+        let (import, mut stack) = PSDS.with(|m| {
             let map = m.borrow();
             let file = map
                 .get(&psd_handle)
@@ -5029,6 +5090,10 @@ mod wasm {
                     stack.attach_inks(&cmy, &k);
                 }
             }
+            // Smart objects keep their sources, placements and filters
+            // (ADR 482); the notes say which keep their stored render.
+            let notes = stack.adopt_psd_smart_objects(file);
+            SMART_NOTES.with(|n| *n.borrow_mut() = notes);
             Ok::<_, JsValue>((import, stack))
         })?;
         let smart = import.layers.iter().any(|p| p.smart);
@@ -5040,7 +5105,20 @@ mod wasm {
                 .map_err(ingest_err)?;
             let theirs = img.rgba.to_rgba8();
             if smart {
-                crate::layers::smart_renders_agree(&import, &ours, &theirs).map_err(ingest_err)?;
+                if let Err(stale) = crate::layers::smart_renders_agree(&import, &ours, &theirs) {
+                    // A stored render can be stale (a mock-up whose
+                    // contents changed): draw each smart object from its
+                    // source instead, and judge again (ADR 482).
+                    if stack.rerender_smart_objects() == 0 {
+                        return Err(ingest_err(stale));
+                    }
+                    let again = stack
+                        .composite(ctx.as_deref(), None)
+                        .await
+                        .map_err(ingest_err)?;
+                    crate::layers::smart_renders_agree(&import, &again, &theirs)
+                        .map_err(|_| ingest_err(stale))?;
+                }
             }
             // A CMYK document blended in RGB must still look like the
             // file: `theirs` is its merged composite through the same
@@ -5068,6 +5146,18 @@ mod wasm {
             })
         });
         Ok(n)
+    }
+
+    thread_local! {
+        /// What the last layered PSD open said about its smart objects.
+        static SMART_NOTES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// The notes of the last layered PSD open about its smart objects
+    /// (one per object that keeps Photoshop's render), one per line.
+    #[wasm_bindgen]
+    pub fn layers_smart_notes() -> String {
+        SMART_NOTES.with(|n| n.borrow().join("\n"))
     }
 
     /// Drop the bound stack (and its undo history).
@@ -5766,10 +5856,88 @@ mod wasm {
         .await
     }
 
-    /// Rasterize a fill layer or smart object (its render becomes pixels).
+    /// Rasterize a fill layer, smart object or type layer (its render
+    /// becomes pixels).
     #[wasm_bindgen]
     pub fn layers_rasterize(index: usize) -> Result<(), JsValue> {
         recorded_edit("Rasterize Layer", None, |st| st.rasterize(index))
+    }
+
+    /// Layer ▸ New ▸ Type Layer (WP5.10): a type layer of `source` (the
+    /// `TypeSource` JSON) whose pixels are the engine's render `rgba`
+    /// (`w × h`, its top-left at canvas `(x, y)`), bent by the source's
+    /// warp on the GPU. One undo step. An empty `name` names it after the
+    /// text.
+    #[wasm_bindgen]
+    pub async fn layers_add_type(
+        source: &str,
+        rgba: Vec<u8>,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        name: &str,
+    ) -> Result<usize, JsValue> {
+        let source =
+            crate::layers::TypeSource::from_json(source).map_err(|e| JsValue::from_str(&e))?;
+        let render = crate::layers::type_layer::TypeRender { rgba, x, y, w, h };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        let (cw, ch) = with_stack(|d| Ok((d.stack.width(), d.stack.height())))?;
+        let px = render
+            .warped(ctx.as_deref(), &source.warp, cw, ch)
+            .await
+            .map_err(ingest_err)?;
+        recorded_edit("New Type Layer", None, |st| {
+            st.add_type_layer(name, source, px)
+        })
+    }
+
+    /// A type layer's new source and render (an edit of its text, styles,
+    /// frame or warp). Writes sharing a non-empty `session` merge into one
+    /// undo step: one per editing session on the canvas.
+    #[wasm_bindgen]
+    pub async fn layers_set_type(
+        index: usize,
+        source: &str,
+        rgba: Vec<u8>,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        session: &str,
+    ) -> Result<(), JsValue> {
+        let source =
+            crate::layers::TypeSource::from_json(source).map_err(|e| JsValue::from_str(&e))?;
+        let render = crate::layers::type_layer::TypeRender { rgba, x, y, w, h };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        let (cw, ch) = with_stack(|d| Ok((d.stack.width(), d.stack.height())))?;
+        let px = render
+            .warped(ctx.as_deref(), &source.warp, cw, ch)
+            .await
+            .map_err(ingest_err)?;
+        let merge = (!session.is_empty()).then(|| format!("type:{index}:{session}"));
+        recorded_edit("Edit Type", merge, |st| st.set_type(index, source, px))
+    }
+
+    /// A type layer's source as JSON, with `"stale"` (its pixels need a
+    /// new render); `""` for any other layer.
+    #[wasm_bindgen]
+    pub fn layers_type_source(index: usize) -> Result<String, JsValue> {
+        with_stack(|d| {
+            Ok(d.stack
+                .layers()
+                .get(index)
+                .and_then(|l| l.type_layer())
+                .map(|t| {
+                    format!(
+                        "{{\"stale\":{},\"fromPsd\":{},\"source\":{}}}",
+                        t.stale,
+                        t.psd.is_some(),
+                        t.source.to_json()
+                    )
+                })
+                .unwrap_or_default())
+        })
     }
 
     /// Fill opacity 0–1 (a drag is one undo step).
@@ -6086,6 +6254,284 @@ mod wasm {
     pub fn layers_comp_rename(id: u32, name: &str) -> Result<(), JsValue> {
         recorded_edit("Rename Layer Comp", Some(format!("comp-name:{id}")), |st| {
             st.rename_comp(id, name)
+        })
+    }
+
+    // ───────────────────── workspace (image ADR 475) ─────────────────────
+    //
+    // Guides, count marks, notes and slices. Each verb is one undo step
+    // on the image's list (a verb that changes nothing records nothing);
+    // indices address the lists `layers_workspace` reads.
+
+    fn ws_edit<T>(
+        label: &str,
+        f: impl FnOnce(&mut crate::workspace::Workspace, u32, u32) -> Result<(T, bool), IngestError>,
+    ) -> Result<T, JsValue> {
+        with_stack(|d| d.stack.edit_workspace(label, f).map_err(ingest_err))
+    }
+
+    /// The workspace as JSON: `{guides: [{orientation, position}],
+    /// counts: [{name, color, visible, marks}], activeCount, notes: [{at,
+    /// author, text}], slices: [{x, y, w, h, name}]}` (image px).
+    #[wasm_bindgen]
+    pub fn layers_workspace() -> String {
+        LAYERS.with(|l| {
+            l.borrow().as_ref().map_or_else(
+                || crate::workspace::Workspace::default().to_json(),
+                |d| d.stack.workspace().to_json(),
+            )
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guide_add(vertical: bool, position: f32) -> Result<u32, JsValue> {
+        ws_edit("New Guide", |ws, _, _| {
+            Ok((ws.add_guide(vertical, position)? as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guide_move(index: u32, position: f32) -> Result<bool, JsValue> {
+        ws_edit("Move Guide", |ws, _, _| {
+            let c = ws.move_guide(index as usize, position)?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guide_delete(index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Guide", |ws, _, _| {
+            Ok((ws.delete_guide(index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guides_clear() -> Result<bool, JsValue> {
+        ws_edit("Clear Guides", |ws, _, _| {
+            let c = ws.clear_guides();
+            Ok((c, c))
+        })
+    }
+
+    /// COUNT: mark `(x, y)` in the active group; answers the mark's
+    /// number in its group (from 1).
+    #[wasm_bindgen]
+    pub fn layers_count_add(x: f32, y: f32) -> Result<u32, JsValue> {
+        ws_edit("Count", |ws, _, _| {
+            Ok((ws.add_count([x, y])?.1 as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_move(group: u32, index: u32, x: f32, y: f32) -> Result<bool, JsValue> {
+        ws_edit("Move Count", |ws, _, _| {
+            let c = ws.move_count(group as usize, index as usize, [x, y])?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_remove(group: u32, index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Count", |ws, _, _| {
+            Ok((ws.remove_count(group as usize, index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_clear(group: u32) -> Result<bool, JsValue> {
+        ws_edit("Clear Count", |ws, _, _| {
+            let c = ws.clear_counts(group as usize)?;
+            Ok((c, c))
+        })
+    }
+
+    /// A new count group (`name` empty: "Count Group n"), made active.
+    #[wasm_bindgen]
+    pub fn layers_count_group_new(name: &str) -> Result<u32, JsValue> {
+        ws_edit("New Count Group", |ws, _, _| {
+            let name = Some(name.trim()).filter(|n| !n.is_empty());
+            Ok((ws.new_count_group(name)? as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_group_active(group: u32) -> Result<bool, JsValue> {
+        ws_edit("Count Group", |ws, _, _| {
+            let c = ws.set_active_count(group as usize)?;
+            Ok((c, c))
+        })
+    }
+
+    /// Rename / recolour / show or hide a count group. `name` empty keeps
+    /// the name; a negative `r` keeps the colour; `visible` −1 keeps it.
+    #[wasm_bindgen]
+    pub fn layers_count_group_set(
+        group: u32,
+        name: &str,
+        r: i32,
+        g: i32,
+        b: i32,
+        visible: i32,
+    ) -> Result<bool, JsValue> {
+        ws_edit("Count Group", |ws, _, _| {
+            let name = Some(name.trim()).filter(|n| !n.is_empty());
+            let color = (r >= 0).then(|| {
+                [
+                    r.clamp(0, 255) as u8,
+                    g.clamp(0, 255) as u8,
+                    b.clamp(0, 255) as u8,
+                ]
+            });
+            let visible = (visible >= 0).then_some(visible > 0);
+            let c = ws.set_count_group(group as usize, name, color, visible)?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_group_delete(group: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Count Group", |ws, _, _| {
+            Ok((ws.delete_count_group(group as usize)?, true))
+        })
+    }
+
+    /// NOTE at `(x, y)`; answers its index.
+    #[wasm_bindgen]
+    pub fn layers_note_add(x: f32, y: f32, author: &str, text: &str) -> Result<u32, JsValue> {
+        ws_edit("New Note", |ws, _, _| {
+            Ok((ws.add_note([x, y], author, text)? as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_note_edit(index: u32, author: &str, text: &str) -> Result<bool, JsValue> {
+        ws_edit("Edit Note", |ws, _, _| {
+            let c = ws.edit_note(index as usize, author, text)?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_note_move(index: u32, x: f32, y: f32) -> Result<bool, JsValue> {
+        ws_edit("Move Note", |ws, _, _| {
+            let c = ws.move_note(index as usize, [x, y])?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_note_delete(index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Note", |ws, _, _| {
+            Ok((ws.delete_note(index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_notes_clear() -> Result<bool, JsValue> {
+        ws_edit("Delete All Notes", |ws, _, _| {
+            let c = ws.clear_notes();
+            Ok((c, c))
+        })
+    }
+
+    /// SLICE: a rectangle of whole pixels (clipped to the canvas; `name`
+    /// empty: "slice_nn"); answers its index.
+    #[wasm_bindgen]
+    pub fn layers_slice_add(x: i32, y: i32, w: i32, h: i32, name: &str) -> Result<u32, JsValue> {
+        ws_edit("Slice", |ws, cw, ch| {
+            let i = ws.add_slice(
+                i64::from(x),
+                i64::from(y),
+                i64::from(w),
+                i64::from(h),
+                name,
+                cw,
+                ch,
+            )?;
+            Ok((i as u32, true))
+        })
+    }
+
+    /// Move / resize / rename a slice (`name` empty keeps it).
+    #[wasm_bindgen]
+    pub fn layers_slice_set(
+        index: u32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        name: &str,
+    ) -> Result<bool, JsValue> {
+        ws_edit("Edit Slice", |ws, cw, ch| {
+            let c = ws.set_slice(
+                index as usize,
+                i64::from(x),
+                i64::from(y),
+                i64::from(w),
+                i64::from(h),
+                Some(name),
+                cw,
+                ch,
+            )?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_slice_delete(index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Slice", |ws, _, _| {
+            Ok((ws.delete_slice(index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_slices_clear() -> Result<bool, JsValue> {
+        ws_edit("Delete All Slices", |ws, _, _| {
+            let c = ws.clear_slices();
+            Ok((c, c))
+        })
+    }
+
+    /// SLICES FROM GUIDES: the guides cut the canvas into cells, one
+    /// slice each (replacing the slices); answers how many.
+    #[wasm_bindgen]
+    pub fn layers_slices_from_guides() -> Result<u32, JsValue> {
+        ws_edit("Slices From Guides", |ws, cw, ch| {
+            Ok((ws.slices_from_guides(cw, ch)? as u32, true))
+        })
+    }
+
+    /// Take the ruler guides of the retained PSD behind `psd_handle`
+    /// (Photoshop's grid-and-guides resource, id 1032) as the open
+    /// stack's — at open, so NOT an undo step. Answers how many.
+    #[wasm_bindgen]
+    pub fn layers_adopt_psd_guides(psd_handle: u32) -> Result<u32, JsValue> {
+        let guides = PSDS.with(|m| {
+            m.borrow()
+                .get(&psd_handle)
+                .map(|f| crate::workspace::Workspace::guides_from_psd(f.resources.guides()))
+                .ok_or_else(|| JsValue::from_str(&format!("unknown psd handle {psd_handle}")))
+        })?;
+        let n = guides.len() as u32;
+        with_stack(|d| {
+            d.stack.adopt_guides(guides);
+            Ok(n)
+        })
+    }
+
+    /// Write the open stack's guides into the retained PSD behind
+    /// `psd_handle` as its grid-and-guides resource (id 1032). Unchanged
+    /// guides leave the file's bytes alone (the preservation rule);
+    /// answers whether the record changed.
+    #[wasm_bindgen]
+    pub fn psd_write_guides(psd_handle: u32) -> Result<bool, JsValue> {
+        let guides = with_stack(|d| Ok(d.stack.workspace().psd_guides()))?;
+        PSDS.with(|m| {
+            let mut map = m.borrow_mut();
+            let file = map
+                .get_mut(&psd_handle)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown psd handle {psd_handle}")))?;
+            Ok(file.resources.set_guides(&guides))
         })
     }
 
@@ -6411,51 +6857,36 @@ mod wasm {
         recorded_edit("Convert to smart object", None, |st| st.make_smart(index))
     }
 
-    /// RE-RENDER a smart object at `scale` — from its preserved SOURCE,
-    /// never from the current cache, which is the whole point: scaling
-    /// down and back up loses nothing.
-    ///
-    /// GPU-only (the resample is a kernel dispatch). The rendered result
-    /// is letterboxed into the canvas extent, so the layer keeps its
-    /// place in a stack whose layers are all canvas-sized.
+    /// RE-RENDER a smart object at `scale` of its source's size — from
+    /// its preserved SOURCE, never from the current render, so scaling
+    /// down and back up loses nothing. The placement keeps its first
+    /// corner and its turn (ADR 482); the render is the CPU placement
+    /// draw, so this needs no device. One undo step.
     #[wasm_bindgen]
-    pub async fn layers_render_smart(index: usize, scale: f32) -> Result<(), JsValue> {
-        // `is_finite` first, so NaN is refused by NAME rather than by the
-        // side effect of failing `> 0.0`. Same verdict, but a reader no
-        // longer has to reconstruct why the comparison was negated.
+    pub fn layers_render_smart(index: usize, scale: f32) -> Result<(), JsValue> {
         if !scale.is_finite() || scale <= 0.0 || scale > 16.0 {
             return Err(JsValue::from_str(
                 "smart re-render scale must be in (0, 16]",
             ));
         }
-        let ctx = GPU.with(|g| g.borrow().clone()).ok_or_else(|| {
-            JsValue::from_str("smart re-render is GPU-only — call init_gpu first")
-        })?;
-
-        // Read the SOURCE (not the cached render) and the canvas extent.
-        let (src, cw, ch) = LAYERS
+        let quad = LAYERS
             .with(|l| {
                 let b = l.borrow();
-                let d = b.as_ref()?;
-                let layer = d.stack.layers().get(index)?;
-                let s = layer.smart_source()?;
-                Some((s.clone(), d.stack.width(), d.stack.height()))
+                let s = b
+                    .as_ref()?
+                    .stack
+                    .layers()
+                    .get(index)?
+                    .smart_source()?
+                    .clone();
+                Some(crate::smart::scaled_quad(&s, f64::from(scale)))
             })
             .ok_or_else(|| JsValue::from_str(&format!("layer {index} is not a smart object")))?;
-
-        let canvas = crate::layers::render_smart(
-            &ctx,
-            &src,
-            scale,
-            crate::layers::ResampleFilter::Mitchell,
-            cw,
-            ch,
-        )
-        .await
-        .map_err(ingest_err)?;
-
-        recorded_edit("Scale smart object", None, |st| {
-            st.set_smart_render(index, Arc::from(canvas.into_boxed_slice()), scale)
+        with_stack(|d| {
+            d.stack
+                .smart_place(index, quad)
+                .map(|_| ())
+                .map_err(ingest_err)
         })
     }
 
@@ -7677,9 +8108,37 @@ mod wasm {
         run_export(pixels, w, h, spec, source, cmyk_profile)
     }
 
+    /// A layered PSD as a layered TIFF (engine ADR 1038): the composite as
+    /// the TIFF's image, the layers in tag 37724 (ImageSourceData), which
+    /// Photoshop reopens. `compression` is `none`, `lzw` or `deflate`.
+    /// 8-bit documents with layers; anything else is refused by name.
+    #[wasm_bindgen]
+    pub fn psd_to_layered_tiff(psd: &[u8], compression: &str) -> Result<Vec<u8>, JsValue> {
+        let compression = match compression {
+            "none" => paged_raster::TiffCompression::None,
+            "lzw" => paged_raster::TiffCompression::Lzw,
+            "deflate" | "zip" => paged_raster::TiffCompression::Deflate,
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown compression \"{other}\""
+                )))
+            }
+        };
+        paged_raster::psd_to_layered_tiff(
+            psd,
+            paged_raster::TiffEncodeOptions {
+                compression,
+                predictor: false,
+                rows_per_strip: None,
+            },
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     /// The notes of the last export, newline-separated wire names
     /// (`webp-lossless`, `cmyk-profile`, `cmyk-naive`, `widened`,
-    /// `narrowed`, `alpha-dropped`, `gray-untagged`).
+    /// `narrowed`, `alpha-dropped`, `gray-untagged`, `gif-palette`,
+    /// `jxl-lossless`, `no-metadata`).
     #[wasm_bindgen]
     pub fn export_last_notes() -> String {
         EXPORT_NOTES.with(|n| n.borrow().join("\n"))
@@ -7955,7 +8414,7 @@ mod wasm {
             },
         );
         format!(
-            ",\"style\":[{}],\"styleOn\":{},\"styleOptions\":{},\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{}}}",
+            ",\"style\":[{}],\"styleOn\":{},\"styleOptions\":{},\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{},\"typeStale\":{}}}",
             l.ext
                 .style
                 .as_ref()
@@ -7979,6 +8438,8 @@ mod wasm {
                 .map_or_else(|| "null".to_string(), |a| format!("\"{}\"", a.kind_name())),
             l.fill()
                 .map_or_else(|| "null".to_string(), |f| format!("\"{}\"", f.source.kind_name())),
+            l.type_layer()
+                .map_or_else(|| "null".to_string(), |t| t.stale.to_string()),
         )
         .trim_end_matches('}')
         .to_string()

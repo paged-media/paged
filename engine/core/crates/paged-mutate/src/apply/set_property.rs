@@ -302,6 +302,172 @@ pub(super) fn apply_set_property(
         // composition; this arm just stores the Group's own
         // transform so reserialization preserves the grouped
         // structure.
+        // ---- Engine ADR 1039 — a symbol instance's own properties -----
+        (
+            NodeId::Instance(id),
+            PropertyPath::FrameTransform
+            | PropertyPath::FrameOpacity
+            | PropertyPath::FrameBlendMode
+            | PropertyPath::ElementVisible
+            | PropertyPath::ElementLocked
+            | PropertyPath::ItemLayer
+            | PropertyPath::SymbolInstanceTint
+            | PropertyPath::SymbolInstanceNineSlice
+            | PropertyPath::SymbolInstanceSymbol,
+        ) => {
+            // Replace Symbol (draw ADR 365): the target must be in the store.
+            let replacement = if path == PropertyPath::SymbolInstanceSymbol {
+                let next = expect_text(path, value)?;
+                if !doc.symbols.iter().any(|d| d.id == next) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason: format!("no symbol {next:?} in the document"),
+                    });
+                }
+                Some(next)
+            } else {
+                None
+            };
+            let inst = doc
+                .spreads
+                .iter_mut()
+                .flat_map(|p| p.spread.instances.iter_mut())
+                .find(|i| i.self_id.as_deref() == Some(id.as_str()))
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let lengths = |v: &Value| match v {
+                Value::Lengths(l) => Ok(l.clone()),
+                _ => Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Lengths".to_string(),
+                }),
+            };
+            let bad = |reason: &str| OperationError::InvalidValue {
+                node: node.clone(),
+                path,
+                reason: reason.to_string(),
+            };
+            match path {
+                PropertyPath::FrameTransform => {
+                    let next =
+                        expect_transform(path, value)?.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+                    let prev = std::mem::replace(&mut inst.item_transform, next);
+                    (
+                        Value::Transform(Some(prev)),
+                        InvalidationHint {
+                            frame_geometry: vec![node.clone()],
+                            ..Default::default()
+                        },
+                    )
+                }
+                PropertyPath::FrameOpacity => {
+                    let next = expect_length(path, value)?;
+                    let prev = std::mem::replace(&mut inst.overrides.opacity, next);
+                    (Value::Length(prev), frame_style_hint(node))
+                }
+                PropertyPath::FrameBlendMode => {
+                    let next = expect_text(path, value)?;
+                    let next = (!next.is_empty()).then_some(next);
+                    let prev = std::mem::replace(&mut inst.overrides.blend_mode, next);
+                    (
+                        Value::Text(prev.unwrap_or_default()),
+                        frame_style_hint(node),
+                    )
+                }
+                PropertyPath::ElementVisible => {
+                    let prev = std::mem::replace(&mut inst.visible, expect_bool(path, value)?);
+                    (
+                        Value::Bool(prev),
+                        InvalidationHint {
+                            structural: true,
+                            ..Default::default()
+                        },
+                    )
+                }
+                PropertyPath::ElementLocked => {
+                    let prev = std::mem::replace(&mut inst.locked, expect_bool(path, value)?);
+                    (Value::Bool(prev), InvalidationHint::default())
+                }
+                PropertyPath::ItemLayer => {
+                    let next = expect_text(path, value)?;
+                    let next = (!next.is_empty()).then_some(next);
+                    let prev = std::mem::replace(&mut inst.item_layer, next);
+                    (
+                        Value::Text(prev.unwrap_or_default()),
+                        InvalidationHint {
+                            structural: true,
+                            ..Default::default()
+                        },
+                    )
+                }
+                PropertyPath::SymbolInstanceTint => {
+                    let next = match lengths(value)?.as_slice() {
+                        [] => None,
+                        &[r, g, b, amount] => {
+                            if [r, g, b, amount]
+                                .iter()
+                                .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
+                            {
+                                return Err(bad("a tint is [r, g, b, amount], each 0..1"));
+                            }
+                            Some(paged_model::SymbolTint {
+                                color: [r, g, b],
+                                amount,
+                            })
+                        }
+                        _ => return Err(bad("a tint is [r, g, b, amount], each 0..1")),
+                    };
+                    let prev = std::mem::replace(&mut inst.overrides.tint, next);
+                    (
+                        Value::Lengths(
+                            prev.map(|t| vec![t.color[0], t.color[1], t.color[2], t.amount])
+                                .unwrap_or_default(),
+                        ),
+                        frame_style_hint(node),
+                    )
+                }
+                PropertyPath::SymbolInstanceNineSlice => {
+                    let next = match lengths(value)?.as_slice() {
+                        [] => None,
+                        &[left, top, right, bottom] => {
+                            if [left, top, right, bottom]
+                                .iter()
+                                .any(|v| !v.is_finite() || *v < 0.0)
+                            {
+                                return Err(bad("9-slice guides are four insets ≥ 0"));
+                            }
+                            Some(paged_model::NineSlice {
+                                left,
+                                top,
+                                right,
+                                bottom,
+                            })
+                        }
+                        _ => return Err(bad("9-slice guides are [left, top, right, bottom]")),
+                    };
+                    let prev = std::mem::replace(&mut inst.nine_slice, next);
+                    (
+                        Value::Lengths(
+                            prev.map(|n| vec![n.left, n.top, n.right, n.bottom])
+                                .unwrap_or_default(),
+                        ),
+                        frame_style_hint(node),
+                    )
+                }
+                PropertyPath::SymbolInstanceSymbol => {
+                    let next = replacement.expect("validated above");
+                    let prev = std::mem::replace(&mut inst.symbol, next);
+                    (
+                        Value::Text(prev),
+                        InvalidationHint {
+                            frame_geometry: vec![node.clone()],
+                            ..Default::default()
+                        },
+                    )
+                }
+                _ => unreachable!("the arm lists the instance paths"),
+            }
+        }
         (NodeId::Group(id), PropertyPath::FrameTransform) => {
             let new_transform = expect_transform(path, value)?;
             let group = find_group_mut(doc, id)
@@ -3237,6 +3403,36 @@ pub(super) fn apply_set_property(
             *slot = rule;
             (
                 Value::Text(prev.as_str().into()),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
+        // Engine ADR 1037 — the picture's filter stack, replaced whole. Every
+        // op is range-checked; the inverse carries the stack it replaced.
+        (
+            NodeId::Rectangle(_) | NodeId::Oval(_) | NodeId::Polygon(_),
+            PropertyPath::FrameImageAdjustments,
+        ) => {
+            let Value::ImageAdjustments(ops) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "ImageAdjustments".to_string(),
+                });
+            };
+            if let Some(bad) = ops.iter().find(|op| !op.is_valid()) {
+                return Err(OperationError::InvalidValue {
+                    node: node.clone(),
+                    path,
+                    reason: format!("the {} op has a value out of its range", bad.name()),
+                });
+            }
+            let slot = find_image_adjustments_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = std::mem::replace(slot, ops.clone());
+            (
+                Value::ImageAdjustments(prev),
                 InvalidationHint {
                     frame_style: vec![node.clone()],
                     ..Default::default()

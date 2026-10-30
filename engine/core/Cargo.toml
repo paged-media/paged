@@ -9,6 +9,8 @@ members = [
     "crates/paged-text",
     "crates/paged-color",
     "crates/paged-pixel",
+    "crates/paged-warp",
+    "crates/paged-kernels",
     "crates/paged-psd",
     "crates/paged-resample",
     "crates/paged-raster",
@@ -134,6 +136,14 @@ rav1d = { package = "sqzer-rav1d", version = "0.1", default-features = false, fe
 avif-parse = "2.1"
 # JPEG XL (MIT OR Apache-2.0); without rayon (wasm32 has no threads).
 jxl-oxide = { version = "0.12", default-features = false }
+# paged-raster's encoders of WP9.4 (engine ADR 1038). JPEG XL, lossless
+# (modular): zune-jpegxl (MIT OR Apache-2.0 OR Zlib), pure Rust, on the
+# zune-core already in the tree, without its thread feature (wasm32).
+zune-jpegxl = { version = "0.5", default-features = false, features = ["std"] }
+# AVIF encode (feature `avif-encode` of paged-raster, off by default):
+# ravif (BSD-3-Clause) over rav1e (BSD-2-Clause), without assembly (no
+# nasm) and without rayon.
+ravif = { version = "0.13", default-features = false }
 tsify-next = { version = "0.5", default-features = false, features = ["js"] }
 # ADR 187 — the wire's JSON Schema, derived next to the `Tsify` derives behind
 # each crate's optional `schema` feature. Never on in a wasm build.

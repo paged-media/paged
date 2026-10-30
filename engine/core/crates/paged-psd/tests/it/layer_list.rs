@@ -21,7 +21,10 @@
 //! fixture's three layers moved into each place.
 
 use paged_psd::model::PsdFile;
-use paged_psd::{image_source_data_layers, image_source_data_records, summary, PsdError};
+use paged_psd::{
+    image_resource_blocks, image_source_data, image_source_data_layers, image_source_data_records,
+    summary, Container, PsdError,
+};
 
 const ANNUAL: &[u8] = include_bytes!("../fixtures/annual-layers.psd");
 
@@ -181,4 +184,63 @@ fn little_endian_image_source_data_is_refused_by_name() {
         image_source_data_layers(b"not layer data"),
         Err(PsdError::BadSignature(_))
     ));
+}
+
+#[test]
+fn a_documents_layers_written_as_image_source_data_read_back_unchanged() {
+    let file = PsdFile::parse(ANNUAL).unwrap();
+    let data = image_source_data(&file).unwrap();
+    assert!(data.starts_with(paged_psd::IMAGE_SOURCE_DATA_SIGNATURE));
+    // `8BIM` `Layr`, a length that counts the pad to 4.
+    let at = paged_psd::IMAGE_SOURCE_DATA_SIGNATURE.len();
+    assert_eq!(&data[at..at + 8], b"8BIMLayr");
+    let len = u32_at(&data, at + 8);
+    assert_eq!(len % 4, 0);
+    let list = image_source_data_layers(&data).unwrap();
+    assert_eq!(list.key, Some(*b"Layr"));
+    assert_eq!(list.layers, file.layer_mask.layers);
+    assert_eq!(
+        list.transparency_in_merged,
+        file.layer_mask.transparency_in_merged
+    );
+}
+
+#[test]
+fn a_sixteen_bit_documents_layers_go_into_an_lr16_block() {
+    let mut file = PsdFile::parse(&lr16_document()).unwrap();
+    file.header.depth = 16;
+    let data = image_source_data(&file).unwrap();
+    let list = image_source_data_layers(&data).unwrap();
+    assert_eq!(list.key, Some(*b"Lr16"));
+    assert_eq!(names(&list), ["Backdrop", "Plate", "Signal"]);
+    assert_eq!(list.layers, file.layer_list().unwrap().layers);
+}
+
+#[test]
+fn a_psb_or_a_document_without_layers_is_refused_by_name() {
+    let mut psb = PsdFile::parse(ANNUAL).unwrap();
+    psb.container = Container::Psb;
+    match image_source_data(&psb) {
+        Err(PsdError::Unsupported(what)) => assert!(what.contains("PSB"), "{what}"),
+        other => panic!("{other:?}"),
+    }
+    let mut flat = PsdFile::parse(ANNUAL).unwrap();
+    flat.layer_mask.layers.clear();
+    flat.layer_mask.section_raw = None;
+    match image_source_data(&flat) {
+        Err(PsdError::Unsupported(what)) => assert!(what.contains("without layers"), "{what}"),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn the_image_resources_are_the_resource_blocks_without_their_length() {
+    let file = PsdFile::parse(ANNUAL).unwrap();
+    let blocks = image_resource_blocks(&file);
+    // After the header (26 bytes) and the empty colour mode data.
+    assert_eq!(u32_at(ANNUAL, 26), 0);
+    let section = &ANNUAL[26 + 4..];
+    let total = u32_at(section, 0);
+    assert_eq!(blocks, section[4..4 + total]);
+    assert!(blocks.starts_with(b"8BIM"));
 }

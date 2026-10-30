@@ -873,9 +873,11 @@ dependencies = [
  "paged-psd",
  "paged-resample",
  "paged-test-resources",
+ "paged-warp",
  "png",
  "pollster",
  "proptest",
+ "serde_json",
  "zune-core",
  "zune-png",
 ]
@@ -929,7 +931,9 @@ dependencies = [
  "paged-raster",
  "paged-resample",
  "paged-test-resources",
+ "paged-warp",
  "pollster",
+ "serde",
  "serde_json",
  "skrifa",
  "thiserror",
@@ -945,7 +949,9 @@ version = "0.0.0"
 dependencies = [
  "bytemuck",
  "naga",
+ "paged-kernels",
  "paged-pixel",
+ "paged-warp",
 ]
 
 [[package]]
@@ -1619,6 +1625,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-kernels"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "paged-pixel"
 version = "0.0.0"
 
@@ -1653,6 +1666,7 @@ dependencies = [
  "weezl",
  "zune-core",
  "zune-jpeg",
+ "zune-jpegxl",
 ]
 
 [[package]]
@@ -1665,6 +1679,10 @@ version = "0.0.0"
 
 [[package]]
 name = "paged-test-resources"
+version = "0.0.0"
+
+[[package]]
+name = "paged-warp"
 version = "0.0.0"
 
 [[package]]
@@ -2964,6 +2982,15 @@ name = "zune-jpeg"
 version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296"
+dependencies = [
+ "zune-core",
+]
+
+[[package]]
+name = "zune-jpegxl"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cba11ecd07cc23351500e840ae03841b7e4997923ec8e4832ee3ae199ea0b6b4"
 dependencies = [
  "zune-core",
 ]

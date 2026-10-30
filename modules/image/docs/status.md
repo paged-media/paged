@@ -92,7 +92,17 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   a mask from the selection, Add layer mask (reveal all or hide all) and painting on a mask
   (a Pixels/Mask edit target: the brush and pencil paint the foreground's grey, the eraser
   reveals; each mask stroke is one undo step); groups; clipping; editable adjustment layers; smart objects
-  (convert, re-render at a scale); bake the chain into a layer. One undo list covers pixel
+  in full ([ADR 482](adr/482-smart-objects-in-full.md)): a smart object is its source (the
+  pixels it was converted from, an embedded or linked file, or page items), its placement (four
+  corners: scale, rotate, skew, flip, perspective — Layer ▸ Smart objects ▸ Transform…, the move
+  tool, every canvas op) and its smart filters with a filter mask, and its pixels are re-rendered
+  from the three whenever one changes (the placement drawn on the CPU, Lanczos-reduced then
+  bicubic; the filters on the GPU through the Filter dialog's catalogue); Edit Contents opens the
+  source as a nested document and saving it is one step in the parent; Replace Contents, Relink,
+  Update from file, Embed linked and Export contents; Place selected page items makes a vector
+  smart object drawn again at a higher resolution when it grows; the host Links panel lists the
+  smart objects' files while the image is open. Painting on a smart object is refused, as in
+  Photoshop; bake the chain into a layer. One undo list covers pixel
   edits and every change to the stack ([ADR 463](adr/463-one-undo-list.md)); in the
   `rasterImage` context, entered by double-clicking an ingested frame, the host's undo
   reaches it and the host's Layers panel shows this stack. The Image panel's history list
@@ -164,7 +174,8 @@ frame keeps its previous image until a GPU realm re-composites it.
   layer and mask at once, in one undo step (`object-model/canvas-ops.ts`; pixels move,
   none is computed). The typed `rotateCw`, `rotateCcw`, `rotate180`, `flipHorizontal` and
   `flipVertical` take an optional `image`; `cropImage` and `canvasSize` are new. A stack
-  holding a smart object is refused (its source re-renders on the GPU).
+  holding a smart object is refused (its placement moves with the op, which the headless
+  manifest edit does not draw; the editor's canvas ops do, ADR 482).
 - **A typed `replaceLayerPixels`** `{ layer, source }` replaces a pixel layer's pixels from
   an asset (a data: URL, or the address of a page item whose placed image supplies them),
   placed as is and centred, in one undo step; it is the layer kind's `pixelSource` row
@@ -327,9 +338,10 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   17×15 sample grid per pixel, per-component combine / subtract / intersect / exclude, even-odd
   or non-zero, invert — and multiplied with the user mask; on a fill/shape layer the stored
   pixels already are the shape; `engine/core/crates/paged-psd/src/vector_mask.rs`), mask density and feather (a
-  Gaussian of that sigma), fill opacity; smart objects as their stored render, accepted only
-  where the file's merged composite agrees inside each one's footprint (a stale render, as on a
-  corpus mock-up, opens flattened); text layers blended in a gamma space as Photoshop's are
+  Gaussian of that sigma), fill opacity; smart objects as their stored render with their source, placement, smart
+  filters and filter mask kept live (ADR 482), accepted where the file's merged composite agrees
+  inside each one's footprint — a stale render (a corpus mock-up) is drawn from its source and
+  judged again before the file opens flattened; text layers blended in a gamma space as Photoshop's are
   (`compose.normal_gamma`, 1.55: anti-aliased edges within 1–7 levels, where a plain blend was
   19–40 off; RGB documents, Normal mode); Curves, Levels, Exposure, Invert and Hue/Saturation
   adjustment layers (curves exact, the others within 1–4 levels of Photoshop-written layers),
@@ -360,8 +372,10 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   composite does not vouch for (26, most of them Multiply smart objects in CMYK documents, which
   need ink-space blending), effects (16), CMYK blending (12) and fill opacity on special blend
   modes (8). The layered save writes 8- and 16-bit RGB and CMYK PSDs and PSBs: an unedited
-  layer as the record it was read from, an edited one with only its edits replaced (smart
-  objects, text and vector masks stay live until their pixels change), every adjustment kind
+  layer as the record it was read from, an edited one with only its edits replaced (text
+  and vector masks stay live until their pixels change; a smart object stays live whatever is done
+  to it — transformed, re-filtered or with new contents it is written with its corners, filters,
+  filter mask and source, and Photoshop reopens it live, ADR 482), every adjustment kind
   Photoshop has a layer for (not Color Lookup or Develop), fill layers and styles — Photoshop
   reopens them as live layers ([ADR 478](adr/478-psd-write-depth.md)). "Apply to file" and
   the PNG and JPEG exporters encode the composite. The PSD exporter returns the retained file
@@ -372,8 +386,7 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   layer is ignored; a clipping base's blending options apply only to the base; a gradient fill
   is aligned with the canvas (Photoshop's "Align with layer") and has no transparency stops; a
   layer comp's position is the layer's pixels, so applying it puts back the pixels as recorded,
-  and a canvas operation drops the recorded positions; moving a smart object by whole pixels is
-  refused. The layered PSD save writes colour and gradient fills, Curves, Levels, Exposure,
+  and a canvas operation drops the recorded positions. The layered PSD save writes colour and gradient fills, Curves, Levels, Exposure,
   Invert and Hue/Saturation adjustment layers and the blending properties; a pattern fill is
   written as its render, and any other adjustment kind makes the save flatten, naming the layer.
 - **Layers and undo.** A layer is canvas-sized once edited (an imported layer keeps its bounds
@@ -422,6 +435,9 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
 - Image formats other than PNG, JPEG and PSD/PSB. `registry/codecs.yaml` records AVIF and
   JPEG XL as planned, camera RAW and HEIC as out of scope ([ADR 456](adr/456-codecs.md)).
 - A runner for the GEGL oracle the registry names for some rows.
-- Rendering a smart object from its embedded source, drawing the PSD adjustment kinds the import
-  declines (above) as Photoshop does, and writing Color Lookup layers, text (`TySh`, WP5.10), vector
-  masks and shapes (WP5.11) and a transformed smart object's placement (WP5.14).
+- Drawing the PSD adjustment kinds the import declines (above) as Photoshop does, and writing Color
+  Lookup layers, text (`TySh`, WP5.10), vector masks and shapes (WP5.11).
+- Smart objects (ADR 482): a warp (`customEnvelopeWarp`) is read and kept, not drawn; smart
+  filters blend in Normal mode only and run at 8 bits; the filter mask is set from the selection,
+  inverted, cleared or switched, not painted; a linked file is read again only through a picker;
+  multi-page (PDF/AI) sources and the contents' layer comps are not offered.

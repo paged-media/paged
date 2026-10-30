@@ -41,6 +41,14 @@
 // copied spreadsheet range is the lossless-enough floor; richer HTML-table
 // ingest is a forward refinement.)
 //
+// SVG (extensions ADR 341, editor ADR 289): the backend carries the `svg`
+// half (`clipboard.svg@1`). WRITE adds `image/svg+xml` where the browser
+// takes it (`ClipboardItem.supports`), and the plain-text form is the SVG
+// code when the payload brings no text. READ goes through
+// `navigator.clipboard.read()` where it exists and fills `svg` from plain
+// text that IS an SVG document (Illustrator's), else from the
+// `image/svg+xml` flavour (sanitised by the browser: no `<style>`).
+//
 // Both directions are behind a feature/availability check with an honest
 // fallback: when there is no `navigator.clipboard` at all, read answers
 // `null` and write is a no-op. The browser also REFUSES clipboard access
@@ -53,6 +61,8 @@ import type {
   ClipboardPayload,
   TabularClipboard,
 } from "@paged-media/plugin-api";
+
+import { clipboardTakes, svgDocumentOf, SVG_MIME } from "./clipboard-commands";
 
 /** Does the realm expose a system clipboard at all? (Insecure contexts /
  *  older engines have no `navigator.clipboard`.) */
@@ -113,23 +123,36 @@ function rowsToHtmlTable(rows: readonly (readonly string[])[]): string {
  *  a denied platform access degrades honestly per call). */
 export function createEditorClipboardBackend(): ClipboardBackend {
   return {
+    svg: true,
     async read(): Promise<ClipboardPayload | null> {
-      if (
-        !hasClipboard() ||
-        typeof navigator.clipboard.readText !== "function"
-      ) {
+      if (!hasClipboard()) return null;
+      // Either read may reject (no gesture / permission) — let it
+      // propagate; the SDK door turns a thrown read into `null`.
+      let text = "";
+      let svgFlavour = "";
+      if (typeof navigator.clipboard.read === "function") {
+        for (const item of await navigator.clipboard.read()) {
+          if (!text && item.types.includes("text/plain"))
+            text = await (await item.getType("text/plain")).text();
+          if (!svgFlavour && item.types.includes(SVG_MIME))
+            svgFlavour = await (await item.getType(SVG_MIME)).text();
+        }
+      } else if (typeof navigator.clipboard.readText === "function") {
+        text = await navigator.clipboard.readText();
+      } else {
         return null;
       }
-      // `readText` may reject (no gesture / permission) — let it propagate;
-      // the SDK door turns a thrown read into `null`.
-      const text = await navigator.clipboard.readText();
-      if (text === "") return null;
-      const rows = tsvToRows(text);
+      const svgText = svgDocumentOf(text);
+      const svg = svgText ?? svgDocumentOf(svgFlavour);
+      if (text === "" && !svg) return null;
+      // SVG code is not a grid.
+      const rows = svgText ? [] : tsvToRows(text);
       const tabular: TabularClipboard | undefined =
         rows.length > 0 ? { rows } : undefined;
       return {
-        text,
+        ...(text !== "" ? { text } : {}),
         ...(tabular ? { tabular } : {}),
+        ...(svg ? { svg } : {}),
       };
     },
 
@@ -140,7 +163,9 @@ export function createEditorClipboardBackend(): ClipboardBackend {
       // tabular grid (a grid copy always wants a TSV fallback).
       const text =
         payload.text ??
-        (payload.tabular ? rowsToTsv(payload.tabular.rows) : "");
+        (payload.tabular ? rowsToTsv(payload.tabular.rows) : payload.svg) ??
+        "";
+      const svg = payload.svg && clipboardTakes(SVG_MIME) ? payload.svg : null;
 
       // Rich path: lay down BOTH text/plain AND a text/html <table> so a
       // paste into a spreadsheet lands a real grid. Only when there is a
@@ -150,10 +175,22 @@ export function createEditorClipboardBackend(): ClipboardBackend {
         const item = new ClipboardItem({
           "text/plain": new Blob([text], { type: "text/plain" }),
           "text/html": new Blob([html], { type: "text/html" }),
+          ...(svg ? { [SVG_MIME]: new Blob([svg], { type: SVG_MIME }) } : {}),
         });
         // May reject (no gesture / permission) — propagate; the SDK door
         // swallows it (logged no-op).
         await navigator.clipboard.write([item]);
+        return;
+      }
+
+      // The vector path (ADR 341): text/plain beside image/svg+xml.
+      if (svg && hasRichWrite()) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": new Blob([text], { type: "text/plain" }),
+            [SVG_MIME]: new Blob([svg], { type: SVG_MIME }),
+          }),
+        ]);
         return;
       }
 

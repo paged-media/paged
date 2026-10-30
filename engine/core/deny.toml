@@ -64,7 +64,13 @@ allow = [
 ]
 # Per-crate clarifications for crates whose SPDX can't be auto-detected
 # (e.g. ring, some font/ICC bindings). Add entries here as needed.
-exceptions = []
+exceptions = [
+    # rav1e (paged-raster's off-by-default `avif-encode`, ADR 1038) names
+    # libfuzzer-sys as a `cfg(fuzzing)` dependency, which no build here
+    # compiles; NCSA is a permissive BSD-style licence. Listed so a check
+    # with every feature on stays clean.
+    { crate = "libfuzzer-sys", allow = ["NCSA"] },
+]
 
 # This workspace's own crates are AGPL-3.0-only OR LicenseRef-PMEL
 # (ADR PM-0001). The policy above is for dependencies, so the unpublished

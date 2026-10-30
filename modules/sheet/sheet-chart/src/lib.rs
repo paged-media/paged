@@ -55,6 +55,7 @@ mod extras;
 mod frame;
 pub mod geometry;
 pub mod model;
+pub mod native;
 mod radial;
 pub mod scale;
 pub mod sparkline;

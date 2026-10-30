@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 767,
-    "keybinding": 160,
-    "menu": 541,
-    "panel": 140,
-    "tool": 113
+    "command": 829,
+    "keybinding": 164,
+    "menu": 597,
+    "panel": 143,
+    "tool": 126
   },
   "features": [
     {
@@ -1141,6 +1141,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.replaceSymbol",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.resetSymbolTransform",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1301,6 +1306,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.symbolOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.transformAgain",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1426,7 +1436,32 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.clearCount",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.clearGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.clearLayerStyle",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.clearNotes",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.clearRuler",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.clearSlices",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1452,6 +1487,11 @@
     },
     {
       "id": "command:media.paged.image.command.contentAwareFillWorkspace",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.convertForSmartFilters",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1522,6 +1562,11 @@
     },
     {
       "id": "command:media.paged.image.command.exportBrushPresetsJson",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.exportSlices",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1717,6 +1762,11 @@
     },
     {
       "id": "command:media.paged.image.command.filterGallery",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.filterGaussianBlur",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2066,6 +2116,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.freeTransform",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.gamutWarning",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.globalLight",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2206,6 +2266,36 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.modeBits16",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeBits8",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeCmyk",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeGray",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeLab",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeRgb",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.newAdjustmentBlackWhite",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2291,6 +2381,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.newCountGroup",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.newFillGradient",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2302,6 +2397,11 @@
     },
     {
       "id": "command:media.paged.image.command.newFillSolid",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newGuide",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2336,6 +2436,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.paintTextIntoLayer",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.pasteLayerStyle",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2351,12 +2456,32 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.proofColors",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.proofSetupCmyk",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.proofSetupGray",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.quickMask",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.rasterizeLayer",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rasterizeType",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2387,6 +2512,26 @@
     },
     {
       "id": "command:media.paged.image.command.rotateCw",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rulerUnitCm",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rulerUnitIn",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rulerUnitMm",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rulerUnitPx",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2441,12 +2586,72 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.slicesFromGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartCloseContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartEditContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartEmbed",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartExportContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartPlacePageItems",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartRelink",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartReplaceContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartSaveContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartTransform",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartUpdateLinked",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.solarize",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.stampVisible",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.straightenToRuler",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2461,7 +2666,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.toggleGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.toggleLockGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.toggleLockTransparent",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.toggleSnapGuides",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2512,6 +2732,11 @@
     },
     {
       "id": "command:media.paged.image.command.vectorMaskToggle",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.warpText",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2811,6 +3036,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.applyTheme",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.addComment",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2831,6 +3061,16 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.browseThemes",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.copyFormat",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.customShows",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -2842,6 +3082,11 @@
     },
     {
       "id": "command:media.paged.slide.command.deleteSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.design",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2862,6 +3107,16 @@
     },
     {
       "id": "command:media.paged.slide.command.importPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.insertIcon",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.insertPicture",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2887,6 +3142,11 @@
     },
     {
       "id": "command:media.paged.slide.command.nextSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.pasteFormat",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2937,6 +3197,11 @@
     },
     {
       "id": "command:media.paged.slide.command.slideSorter",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.smartArtText",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3016,6 +3281,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.remapThemeReference",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.removeAnimation",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -3037,6 +3307,21 @@
     },
     {
       "id": "command:media.paged.slide.setCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setSmartArtText",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.smartArtPoints",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.themes",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3112,6 +3397,26 @@
     },
     {
       "id": "command:paged.align.objects",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectMultiple",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectPages",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.collectSingle",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.assetExport.exportAll",
       "kind": "command",
       "owner": "editor"
     },
@@ -3377,6 +3682,11 @@
     },
     {
       "id": "command:paged.effects.globalLight",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.assetExport",
       "kind": "command",
       "owner": "editor"
     },
@@ -4236,6 +4546,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+shift+c→media.paged.slide.command.copyFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:cmd+shift+d→media.paged.doc.command.word.doubleUnderline",
       "kind": "keybinding",
       "owner": "media.paged.doc"
@@ -4274,6 +4589,11 @@
       "id": "keybinding:cmd+shift+s→paged.file.saveAsIdml",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+shift+v→media.paged.slide.command.pasteFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:cmd+shift+{→paged.object.sendToBack",
@@ -4471,6 +4791,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:ctrl+shift+c→media.paged.slide.command.copyFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:ctrl+shift+g→paged.object.ungroup",
       "kind": "keybinding",
       "owner": "editor"
@@ -4484,6 +4809,11 @@
       "id": "keybinding:ctrl+shift+s→paged.file.saveAsIdml",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+shift+v→media.paged.slide.command.pasteFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:ctrl+shift+{→paged.object.sendToBack",
@@ -4821,6 +5151,16 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "menu:Design/Browse for Themes…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Design/Themes",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Draw/Appearance/Add fill",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -5156,7 +5496,17 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Symbol/Replace symbol",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Symbol/Reset transform",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Symbol/Symbol options…",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -5244,6 +5594,11 @@
       "id": "menu:Edit/Find…",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Free transform",
+      "kind": "menu",
+      "owner": "media.paged.image"
     },
     {
       "id": "menu:Edit/Go to page…",
@@ -5369,6 +5724,11 @@
       "id": "menu:File/Export PowerPoint deck…",
       "kind": "menu",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:File/Export/Asset Export…",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:File/Export/SVG (page)…",
@@ -5566,6 +5926,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/File/Export slices…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/File/Save the adjusted file",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -5681,6 +6046,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Filter/Blur/Gaussian blur…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Filter/Blur/Lens blur…",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -5697,6 +6067,11 @@
     },
     {
       "id": "menu:Image/Filter/Blur/Surface blur…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Filter/Convert for smart filters",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6431,6 +6806,56 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Layer/Smart objects/Close contents without saving",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Edit contents",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Embed linked",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Export contents…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Place selected page items",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Relink to file…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Replace contents…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Save and close contents",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Transform…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Update from file…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Layer/Stamp visible",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -6481,6 +6906,36 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Mode/16 bits per channel",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/8 bits per channel",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/CMYK colour",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/Greyscale",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/Lab colour",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/RGB colour",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Open image panel",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -6502,6 +6957,26 @@
     },
     {
       "id": "menu:Image/Presets/Preset manager…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Proof/Gamut warning",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Proof/Proof colours",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Proof/Working CMYK",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Proof/Working grey",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6596,9 +7071,39 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Straighten to ruler",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Trim…",
       "kind": "menu",
       "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Type/Paint text into layer",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Type/Rasterize type layer",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Type/Warp text…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Insert/Icons…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Insert/Pictures…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:Insert/Shapes…",
@@ -6691,6 +7196,16 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Collect for Export/As Multiple Assets",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Collect for Export/As Single Asset",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Convert Placed PDF to Vectors",
       "kind": "menu",
       "owner": "media.paged.pdf"
@@ -6707,6 +7222,11 @@
     },
     {
       "id": "menu:Object/Effects/Global light…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Effects/Picture adjustments…",
       "kind": "menu",
       "owner": "editor"
     },
@@ -7091,6 +7611,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Copy formatting",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Delete slide",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -7126,7 +7651,17 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Paste formatting",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Previous slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/SmartArt text pane",
       "kind": "menu",
       "owner": "media.paged.slide"
     },
@@ -7181,6 +7716,31 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Clear count",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Clear guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Clear ruler",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Delete all notes",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Delete all slices",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:View/Fit document",
       "kind": "menu",
       "owner": "editor"
@@ -7204,6 +7764,21 @@
       "id": "menu:View/Guides & grid preferences…",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Lock guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/New count group",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/New guide…",
+      "kind": "menu",
+      "owner": "media.paged.image"
     },
     {
       "id": "menu:View/Outline view",
@@ -7271,6 +7846,26 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Rulers/Centimetres",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Rulers/Inches",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Rulers/Millimetres",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Rulers/Pixels",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:View/Show data markers",
       "kind": "menu",
       "owner": "editor"
@@ -7279,6 +7874,11 @@
       "id": "menu:View/Show grid",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Show guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
     },
     {
       "id": "menu:View/Show heading anchors",
@@ -7296,6 +7896,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Slices from guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:View/Slide Sorter",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -7309,6 +7914,11 @@
       "id": "menu:View/Snap to grid",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Snap to guides",
+      "kind": "menu",
+      "owner": "media.paged.image"
     },
     {
       "id": "menu:View/Snap to pixel",
@@ -7551,6 +8161,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "panel:media.paged.slide.panel.design",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "panel:media.paged.slide.panel.notes",
       "kind": "panel",
       "owner": "media.paged.slide"
@@ -7572,6 +8187,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.slides",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.smartart",
       "kind": "panel",
       "owner": "media.paged.slide"
     },
@@ -7931,6 +8551,11 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.picture-adjustments",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.preflight",
       "kind": "panel",
       "owner": "editor"
@@ -8231,6 +8856,46 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.symbolNineSlice",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolScreener",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolScruncher",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolShifter",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolSizer",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolSpinner",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolSprayer",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.symbolStainer",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.twirl",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -8307,6 +8972,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.contentAwareMove",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.count",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -8411,6 +9081,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.note",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.patch",
       "kind": "tool",
       "owner": "media.paged.image"
@@ -8466,7 +9141,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "tool:media.paged.image.tool.ruler",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "tool:media.paged.image.tool.sharpen",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.slice",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -8482,6 +9167,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.spotHeal",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.transform",
       "kind": "tool",
       "owner": "media.paged.image"
     },
@@ -8636,18 +9326,5 @@
       "owner": "editor"
     }
   ],
-  "deprecated": [
-    {
-      "id": "menu:Object/Make clipping mask",
-      "replacement": "menu:Object/Clipping mask/Make",
-      "deprecatedIn": "0.76.0",
-      "removeIn": "0.78.0"
-    },
-    {
-      "id": "menu:Object/Release clipping mask",
-      "replacement": "menu:Object/Clipping mask/Release",
-      "deprecatedIn": "0.76.0",
-      "removeIn": "0.78.0"
-    }
-  ]
+  "deprecated": []
 }

@@ -22,6 +22,10 @@ dependsOn:
   # paged-ooxml, a path dependency of the Cargo workspace.
   - id: "ooxml"
     scope: "production"
+  # dml-native, the shared DrawingML paint and effect mapper onto the
+  # engine model (slide ADR 722, doc ADR 618).
+  - id: "dml-native"
+    scope: "production"
 
 # Path dependencies into the engine (docx-skeleton / slide-native build on
 # paged-model, paged-scene, paged-store; ADR 606 / ADR 708) and into
@@ -41,6 +45,8 @@ fileGroups:
     - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-native/src/**/*.rs"
+    - "/platform/shared/dml-native/Cargo.toml"
   rust-tests:
     - "**/*"
     - "!docs/**"
@@ -51,6 +57,8 @@ fileGroups:
     - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-native/src/**/*.rs"
+    - "/platform/shared/dml-native/Cargo.toml"
 
 tasks:
   wasm:

@@ -382,18 +382,19 @@ describe("retouching tools", () => {
   });
 });
 
-describe("raster type", () => {
-  it("type: a click sets a run at the clicked baseline with the session's text, family and size", async () => {
+describe("type", () => {
+  it("type: a click makes point type at the clicked baseline, a drag a text box", async () => {
     covers("tool:media.paged.image.tool.type");
     const k = await ingested();
-    const calls = spyOn(k.session, { paintText: true });
+    const calls = spyOn(k.session, { addTypeLayer: null });
     const g = gestures(k.toolTarget).tool(`${T}.type`).settle();
-    // No text yet: the click sets nothing.
+    // The frame holds 4×2 px at 50 pt each: (50, 50) pt is image (1, 1).
     await g.click([50, 50]).settle();
-    expect(calls).toEqual([]);
-    k.session.setType({ text: "Hi", family: "Test", sizePx: 20 });
-    await g.click([50, 50]).settle();
-    expect(calls).toEqual(['paintText([1,1],"Hi","Test",20)']);
+    expect(calls).toEqual(['addTypeLayer({"kind":"point","x":1,"y":1})']);
+    await g.down([0, 0]).move([100, 50]).up([200, 100]).settle();
+    expect(calls.at(-1)).toBe(
+      'addTypeLayer({"kind":"box","x":0,"y":0,"width":4,"height":2})',
+    );
     expect(k.docOps()).toEqual([]);
     k.dispose();
   });
@@ -553,6 +554,49 @@ describe("colour tools [editor-shell.raster-color-binding]", () => {
     await g.click([125, 25], { mods: ["alt"] }).settle();
     expect(read()).toEqual([[2, [3, 1], [0, 0, 200]]]);
     expect(k.docOps()).toEqual([]);
+    k.dispose();
+  });
+});
+
+describe("free transform", () => {
+  it("free transform: the tool opens the host box over the layer; a corner drag and Enter resample once with the image-px matrix @level:gesture [image.editor.transform-warp]", async () => {
+    covers("tool:media.paged.image.tool.transform");
+    const k = await ingested();
+    const calls = spyOn(k.session, { transformLayer: true });
+    // The frame is 200×100 pt holding the 4×2 image (50 pt a pixel).
+    await gestures(k.toolTarget)
+      .tool(`${T}.transform`)
+      .settle()
+      .drag({ from: [200, 100], to: [300, 150] })
+      .key("Enter")
+      .settle();
+    expect(calls).toHaveLength(1);
+    const m = JSON.parse(
+      calls[0]!.slice("transformLayer(".length, -1),
+    ) as number[];
+    // ×1.5 about the top-left: image px (4, 2) lands on (6, 3).
+    const w = m[6]! * 4 + m[7]! * 2 + m[8]!;
+    expect((m[0]! * 4 + m[1]! * 2 + m[2]!) / w).toBeCloseTo(6);
+    expect((m[3]! * 4 + m[4]! * 2 + m[5]!) / w).toBeCloseTo(3);
+    expect(k.docOps()).toEqual([]);
+    k.dispose();
+  });
+
+  it("Edit ▸ Free transform opens the box and, run again, applies it @level:gesture", async () => {
+    covers("command:media.paged.image.command.freeTransform");
+    const k = await ingested();
+    const calls = spyOn(k.session, { transformLayer: true });
+    await k.run(`${C}.freeTransform`);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls, "opening applies nothing").toEqual([]);
+    await k.run(`${C}.freeTransform`);
+    // The box was open: the second run applied it — an unchanged box is
+    // the identity map.
+    expect(calls).toHaveLength(1);
+    const m = JSON.parse(
+      calls[0]!.slice("transformLayer(".length, -1),
+    ) as number[];
+    [1, 0, 0, 0, 1, 0, 0, 0, 1].forEach((v, i) => expect(m[i]).toBeCloseTo(v));
     k.dispose();
   });
 });

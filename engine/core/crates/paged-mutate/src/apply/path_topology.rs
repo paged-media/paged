@@ -1482,6 +1482,8 @@ pub(crate) fn new_text_frame(
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
         effects: None,
+        effect_stack: Vec::new(),
+        appearance: Vec::new(),
         fill_transparency: None,
         stroke_transparency: None,
         content_transparency: None,
@@ -1607,6 +1609,8 @@ pub(crate) fn new_rectangle(
         opacity: None,
         blend_mode: None,
         effects: None,
+        effect_stack: Vec::new(),
+        appearance: Vec::new(),
         fill_transparency: None,
         stroke_transparency: None,
         content_transparency: None,
@@ -1627,6 +1631,7 @@ pub(crate) fn new_rectangle(
         subpath_starts: Vec::new(),
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
+        image_adjustments: Vec::new(),
     }
 }
 

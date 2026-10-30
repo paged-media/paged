@@ -10,6 +10,7 @@ concurrency:
 # Every `run:` step executes in engine/core (defaults below); `uses:` steps do
 # not honour that default, so their path inputs carry the prefix explicitly.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -123,13 +124,14 @@ jobs:
       # plain data, reaching no other engine crate and no module crate
       # (paged-psd depends on paged-pixel only). paged-resample, the CPU
       # resample paged.image's actions run on (image ADR 467), is held to
-      # the same rule. Each guard asserts an EMPTY match, so a hit fails
-      # the step.
-      - name: guard — paged-pixel, paged-psd and paged-resample stay leaf crates
+      # the same rule, and so is paged-kernels (the kernel twins moved from
+      # image-kernels, engine ADR 1037; image-ci's kernel-layering guard).
+      # Each guard asserts an EMPTY match, so a hit fails the step.
+      - name: guard — paged-pixel, paged-psd, paged-resample and paged-kernels stay leaf crates
         run: |
-          if cargo tree -p paged-pixel -p paged-psd -p paged-resample --edges normal --prefix none \
-               | grep -E '^(paged-|image-|idml-)' | grep -vE '^paged-(pixel|psd|resample) '; then
-            echo "::error::paged-pixel / paged-psd / paged-resample reached another engine or module crate"
+          if cargo tree -p paged-pixel -p paged-psd -p paged-resample -p paged-kernels --edges normal --prefix none \
+               | grep -E '^(paged-|image-|idml-)' | grep -vE '^paged-(pixel|psd|resample|kernels) '; then
+            echo "::error::paged-pixel / paged-psd / paged-resample / paged-kernels reached another engine or module crate"
             exit 1
           fi
       # The shipped wasm carries no conformance code: paged.image's
@@ -270,6 +272,16 @@ jobs:
         run: |
           cargo clippy -p paged-wire --features schema --all-targets -- -D warnings
           cargo nextest run -p paged-wire --features schema --no-fail-fast
+
+      # paged-raster's AVIF encoder (ADR 1038) sits behind the
+      # `avif-encode` feature, which no workspace build turns on (rav1e
+      # would add 1.6 MiB to a wasm), so the steps above never compile it.
+      # Its round trip runs here, once, on Linux.
+      - name: AVIF encode (paged-raster --features avif-encode)
+        if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}
+        run: |
+          cargo clippy -p paged-raster --features avif-encode --all-targets -- -D warnings
+          cargo nextest run -p paged-raster --features avif-encode --no-fail-fast
 
       # After a red nextest too, so a run reports both; not after a red lint.
       - name: doctests

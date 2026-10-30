@@ -408,7 +408,12 @@ fn decode_planes(file: &PsdFile) -> Result<Vec<Vec<u8>>> {
             }
             let packed_total: usize = counts.iter().sum();
             let packed = &data[table_len..];
-            if packed.len() != packed_total {
+            // A file may end in ZERO padding past the packed rows: the
+            // PSB Photoshop embeds in a new smart object is padded to
+            // 1 MiB (image ADR 482) [OBS]. Anything else is a mismatch.
+            let padded =
+                packed.len() > packed_total && packed[packed_total..].iter().all(|&b| b == 0);
+            if packed.len() != packed_total && !padded {
                 return Err(malformed(format!(
                     "RLE packed rows total {} byte(s), count table claims {packed_total}",
                     packed.len()

@@ -74,6 +74,37 @@ pub struct SheetPicture {
     /// The media part holding the image bytes.
     pub media: String,
     pub content_type: String,
+    /// A drawing picture's `a:blip` and its shape's `a:effectLst`, as
+    /// authored (sheet ADR 527): the page lowers them through the shared
+    /// DrawingML mapper. `None` for an image in a cell, or a picture with
+    /// neither an alpha, a picture effect nor an effect list.
+    pub dml: Option<Box<PictureDml>>,
+}
+
+/// What a drawing picture paints beyond its image (sheet ADR 527).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct PictureDml {
+    pub blip: paged_ooxml::drawingml::Blip,
+    pub effects: paged_ooxml::drawingml::Effects,
+}
+
+/// The DrawingML look of an `xdr:pic` (its `xdr:blipFill` and `xdr:spPr`).
+fn picture_dml(pic: &paged_ooxml::tree::El) -> Option<Box<PictureDml>> {
+    let rels = |_: &str| None;
+    let blip = pic
+        .children
+        .iter()
+        .find(|c| c.local == "blipFill")
+        .map(|b| paged_ooxml::drawingml::blip(b, &rels))
+        .unwrap_or_default();
+    let effects = pic
+        .children
+        .iter()
+        .find(|c| c.local == "spPr")
+        .map(|sp| paged_ooxml::drawingml::effects_in(sp, &rels))
+        .unwrap_or_default();
+    let plain = blip.alpha.is_none() && blip.effects.is_empty() && effects.is_empty();
+    (!plain).then(|| Box::new(PictureDml { blip, effects }))
 }
 
 fn offset(n: Option<&XNode>) -> Option<CellOffset> {
@@ -128,12 +159,15 @@ impl XlsxDocument {
         };
         for rel in rels.all_of_type(REL_DRAWING) {
             let drawing = resolve_target(part_dir(ws), &rel.target);
-            let Some(root) = self
-                .part_bytes(&drawing)
-                .and_then(|b| XNode::parse(&b).ok())
-            else {
+            let Some(bytes) = self.part_bytes(&drawing) else {
                 continue;
             };
+            let Some(root) = XNode::parse(&bytes).ok() else {
+                continue;
+            };
+            // The same part through the shared DrawingML reader, for the
+            // pictures' look (anchor `i` is the same element in both).
+            let dml_root = paged_ooxml::tree::parse(&bytes).ok();
             let Some(drels) = self.rels_of_part(&drawing) else {
                 continue;
             };
@@ -176,6 +210,12 @@ impl XlsxDocument {
                     continue; // a linked picture: nothing in the package
                 }
                 let media = resolve_target(part_dir(&drawing), &target.target);
+                let dml = dml_root
+                    .as_ref()
+                    .and_then(|r| r.children.get(i))
+                    .filter(|el| el.local == a.local())
+                    .and_then(|el| el.children.iter().find(|c| c.local == "pic"))
+                    .and_then(picture_dml);
                 out.push(SheetPicture {
                     id: format!("{drawing}#{i}"),
                     name: c_nv.and_then(|c| c.attr("name")).unwrap_or_default(),
@@ -183,6 +223,7 @@ impl XlsxDocument {
                     anchor,
                     content_type: self.content_type_of_part(&media),
                     media,
+                    dml,
                 });
             }
         }
@@ -253,6 +294,7 @@ impl XlsxDocument {
                     anchor: PictureAnchor::InCell { row, col },
                     content_type: self.content_type_of_part(&media),
                     media,
+                    dml: None,
                 })
             })
             .collect()

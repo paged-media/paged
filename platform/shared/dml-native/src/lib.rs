@@ -39,15 +39,31 @@
 //!   opacity; a gradient whose stops differ in alpha as a gradient feather
 //!   (gradient swatches carry no alpha); the outer shadow as the drop
 //!   shadow; the inner shadow, glow and soft edge as `FrameEffects`; a
-//!   preset shadow as a plain drop shadow; blur, reflection, fill overlay
-//!   and shadow distortion reported, because the engine cannot hold them
-//!   yet.
-//! - **Pictures** ([`Mapper::picture`]): `a:alphaModFix` as opacity; the
-//!   Office 2010 corrections and artistic effects are already in the image
-//!   Office stored; every other picture effect is reported.
-//! - **The inverse** ([`effects_of`], [`dash_of`]): the engine's drop
-//!   shadow, effects and dash pattern back as the neutral IR, which
+//!   preset shadow as a plain drop shadow; the fill overlay, blur and
+//!   reflection as the item's ordered effect stack (engine ADR 1008:
+//!   colour overlay, Gaussian blur, reflection). A shadow's distortion, a
+//!   reflection other than a mirror image below, and a gradient or
+//!   picture overlay (which PowerPoint does not draw) are reported.
+//! - **Pictures** ([`Mapper::picture_at`]): `a:alphaModFix` as opacity;
+//!   `a:lum`, `a:duotone`, `a:grayscl`, `a:biLevel`, `a:hsl`, `a:clrRepl`
+//!   and (given the picture's pixel density) `a:blur` as the image
+//!   frame's filter stack (engine ADR 1037); the Office 2010 corrections
+//!   and artistic effects are already in the image Office stored; a
+//!   colour change and a tint, which have no equivalent op, are
+//!   reported.
+//! - **Fill rule** ([`Mapper::fill_rule`]): PowerPoint fills each
+//!   `a:path` even-odd; an outline where that differs from non-zero takes
+//!   the even-odd rule (engine ADR 1006).
+//! - **The inverse** ([`effects_of`], [`effects_with_stack`],
+//!   [`dash_of`]): the engine's drop shadow, effects, effect stack and
+//!   dash pattern back as the neutral IR, which
 //!   `paged_ooxml::drawingml::write` writes as DrawingML.
+//!
+//! - **For a module that places items through mutations** ([`native`]):
+//!   [`native::Lowering`] runs the whole chain for a shape's or a
+//!   picture's authored DrawingML and restates the result as
+//!   [`native::NativeFx`], serialisable, colours as `#RRGGBB` (doc ADR
+//!   618).
 //!
 //! What the engine cannot hold is never dropped silently: it goes to
 //! [`Mapper::losses`], one line per kind of loss, for the module's
@@ -55,10 +71,15 @@
 
 use std::collections::BTreeMap;
 
+pub mod native;
+
+use paged_model::effect_stack::{
+    ColorOverlayParams, Effect, EffectEntry, GaussianBlurParams, IndesignEffect, ReflectionParams,
+};
 use paged_model::{
-    ArrowheadType, ColorEntry, ColorModel, ColorSpace, DropShadowSetting, FeatherParams,
+    ArrowheadType, ColorEntry, ColorModel, ColorSpace, DropShadowSetting, FeatherParams, FillRule,
     FrameEffects, GradientEntry, GradientFeatherParams, GradientFeatherStop, GradientKind,
-    GradientStopRef, InnerShadowParams, OuterGlowParams,
+    GradientStopRef, InnerShadowParams, OuterGlowParams, PathAnchor, RasterOp,
 };
 pub use paged_ooxml::drawingml::resolved::{
     radial_reach, Blur, Effects, FillOverlay, Glow, ImageEffect, Paint, PatternPaint, Picture,
@@ -67,6 +88,12 @@ pub use paged_ooxml::drawingml::resolved::{
 
 /// The None swatch: no paint.
 pub const NONE_SWATCH: &str = "Swatch/None";
+
+/// A DrawingML blur radius (`a:blur rad`, a reflection's `blurRad`) as the
+/// Gaussian's σ: PowerPoint's blur reaches about the radius on either side
+/// of the edge, three σ (measured on PowerPoint's own PDF of a 10 pt blur:
+/// the edge ramps from 16 % to 84 % over 6.6 pt, 2σ).
+pub const BLUR_SIGMA_PER_RADIUS: f64 = 1.0 / 3.0;
 
 /// A length or coordinate as the model keeps it: to the thousandth of a
 /// point (and never `-0`).
@@ -116,14 +143,41 @@ pub fn span(angle: f64, w: f64, h: f64) -> Placement {
     }
 }
 
+/// Where a fill gradient's axis starts on a `w` × `h` box, relative to the
+/// box's top-left: a radial one's centre ([`placement`] already says it);
+/// for a linear one, the start of the axis PowerPoint and Excel run
+/// through the box's centre, `length` long at the engine's (counter-
+/// clockwise) angle. The engine starts an unplaced linear gradient at
+/// the box's bottom-left corner, which is that start only for an axis
+/// running up or right (0°–90°); a module that knows the item's inner
+/// coordinates states the start instead (sheet ADR 527).
+pub fn axis_start(p: &Placement, w: f64, h: f64) -> Option<[f32; 2]> {
+    if p.start.is_some() {
+        return p.start;
+    }
+    let (sn, cs) = (p.angle? as f64).to_radians().sin_cos();
+    let half = p.length? as f64 / 2.0;
+    // The engine's axis direction on the y-down page is (cos θ, −sin θ).
+    Some([pt(w / 2.0 - half * cs), pt(h / 2.0 + half * sn)])
+}
+
 /// A gradient swatch: id, kind, (location %, colour id) stops.
 type GradientSwatch = (String, GradientKind, Vec<(f64, String)>);
+
+/// How a document names the theme colour a solid paint keeps
+/// (`Paint::Solid::theme`): its swatch id and name, or `None` for a key it
+/// does not keep live.
+pub type ThemeNamer = fn(&str) -> Option<(String, String)>;
 
 /// The swatches a document's paints need.
 #[derive(Debug, Clone, Default)]
 pub struct Palette {
     colors: BTreeMap<Rgb, String>,
     theme_names: BTreeMap<Rgb, String>,
+    /// Swatches a paint names by id rather than by value: a live theme
+    /// colour (`Color/accent1`, with its transforms) and, in a palette with
+    /// a [`ThemeNamer`], a plain colour (`Color/RRRGGBB`). Id → (name, rgb).
+    named: BTreeMap<String, (String, Rgb)>,
     /// In minting order.
     gradients: Vec<GradientSwatch>,
 }
@@ -152,6 +206,30 @@ impl Palette {
         id
     }
 
+    /// The swatch `id` named `name` holding `rgb`: a theme colour a paint
+    /// refers to by id, so that recolouring the swatch recolours the paint.
+    pub fn themed(&mut self, id: &str, name: &str, rgb: Rgb) -> String {
+        self.named
+            .entry(id.to_string())
+            .or_insert_with(|| (name.to_string(), rgb));
+        id.to_string()
+    }
+
+    /// The swatch of `rgb` as a plain colour (`Color/RRRGGBB`), never a
+    /// theme colour's, whatever its value.
+    pub fn literal(&mut self, rgb: Rgb) -> String {
+        let id = format!("Color/R{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+        let name = id.trim_start_matches("Color/").to_string();
+        self.named.entry(id.clone()).or_insert((name, rgb));
+        id
+    }
+
+    /// The swatches minted by id ([`Palette::themed`], [`Palette::literal`]):
+    /// id, name and colour.
+    pub fn named(&self) -> impl Iterator<Item = (&String, &(String, Rgb))> {
+        self.named.iter()
+    }
+
     /// The gradient swatch of `kind` through `stops` (alpha aside: the
     /// engine's gradient swatches carry none).
     pub fn gradient(&mut self, kind: GradientKind, stops: &[Stop]) -> String {
@@ -173,22 +251,32 @@ impl Palette {
         self.colors.iter()
     }
 
-    /// The RGB colour entries of every colour minted.
+    /// The RGB colour entries of every colour minted, once per id (a
+    /// swatch minted by id names it).
     pub fn color_entries(&self) -> Vec<ColorEntry> {
-        self.colors
+        let entry = |id: &String, name: String, rgb: &Rgb| ColorEntry {
+            self_id: id.clone(),
+            name: Some(name),
+            space: ColorSpace::Rgb,
+            value: rgb.iter().map(|&c| c as f32).collect(),
+            model: ColorModel::Process,
+            alternate_space: None,
+            alternate_value: Vec::new(),
+            tint: None,
+            alpha: None,
+        };
+        let mut out: Vec<ColorEntry> = self
+            .colors
             .iter()
-            .map(|(rgb, id)| ColorEntry {
-                self_id: id.clone(),
-                name: Some(id.trim_start_matches("Color/").to_string()),
-                space: ColorSpace::Rgb,
-                value: rgb.iter().map(|&c| c as f32).collect(),
-                model: ColorModel::Process,
-                alternate_space: None,
-                alternate_value: Vec::new(),
-                tint: None,
-                alpha: None,
-            })
-            .collect()
+            .filter(|(_, id)| !self.named.contains_key(*id))
+            .map(|(rgb, id)| entry(id, id.trim_start_matches("Color/").to_string(), rgb))
+            .collect();
+        out.extend(
+            self.named
+                .iter()
+                .map(|(id, (name, rgb))| entry(id, name.clone(), rgb)),
+        );
+        out
     }
 
     /// The gradient entries of every gradient minted.
@@ -236,6 +324,35 @@ pub struct Transparency {
     pub opacity: Option<f32>,
     pub shadow: Option<DropShadowSetting>,
     pub effects: Option<FrameEffects>,
+    /// The object's effect stack (engine ADR 1008) when it holds an effect
+    /// InDesign has none of: every effect in the order it is drawn,
+    /// InDesign's naming their slots (`shadow`, `effects`) first.
+    /// Empty when InDesign's effects say all of it (the canonical form).
+    pub stack: Vec<EffectEntry>,
+}
+
+/// The engine's blend mode (an IDML `BlendMode` name) for a DrawingML
+/// `a:fillOverlay blend` (`ST_BlendMode`).
+pub fn overlay_blend(blend: &str) -> &'static str {
+    match blend {
+        "mult" => "Multiply",
+        "screen" => "Screen",
+        "darken" => "Darken",
+        "lighten" => "Lighten",
+        _ => "Normal",
+    }
+}
+
+/// The DrawingML `ST_BlendMode` for an engine blend mode, `over` for any
+/// other ([`overlay_blend`]'s inverse).
+pub fn overlay_blend_of(mode: Option<&str>) -> &'static str {
+    match mode {
+        Some("Multiply") => "mult",
+        Some("Screen") => "screen",
+        Some("Darken") => "darken",
+        Some("Lighten") => "lighten",
+        _ => "over",
+    }
 }
 
 /// The engine stroke style for a compound line: DrawingML's `dbl` is two
@@ -287,6 +404,11 @@ pub fn arrowhead(kind: &str) -> ArrowheadType {
 pub struct Mapper {
     pub palette: Palette,
     losses: Vec<String>,
+    /// Live theme colours (slide ADR 713): a solid paint that names a
+    /// theme colour fills with that colour's swatch, and one that names
+    /// none with a plain colour's, even where its value equals a theme
+    /// colour.
+    theme_namer: Option<ThemeNamer>,
 }
 
 impl Mapper {
@@ -294,6 +416,18 @@ impl Mapper {
         Mapper {
             palette: Palette::new(theme_colors),
             losses: Vec::new(),
+            theme_namer: None,
+        }
+    }
+
+    /// A mapper whose solid paints keep their theme colour by reference:
+    /// `namer` gives the swatch of each `Paint::Solid::theme` key. Colours
+    /// without one (gradient stops, effects) still take a theme colour's
+    /// swatch when their value is one.
+    pub fn with_theme_keys(theme_colors: &[(String, Rgb)], namer: ThemeNamer) -> Self {
+        Mapper {
+            theme_namer: Some(namer),
+            ..Mapper::new(theme_colors)
         }
     }
 
@@ -325,7 +459,13 @@ impl Mapper {
     pub fn paint(&mut self, p: &Paint) -> String {
         match p {
             Paint::None | Paint::Image { .. } => NONE_SWATCH.into(),
-            Paint::Solid { rgb, .. } => self.palette.color(*rgb),
+            Paint::Solid { rgb, theme, .. } => match self.theme_namer {
+                Some(namer) => match theme.as_deref().and_then(namer) {
+                    Some((id, name)) => self.palette.themed(&id, &name, *rgb),
+                    None => self.palette.literal(*rgb),
+                },
+                None => self.palette.color(*rgb),
+            },
             Paint::Linear { stops, .. } => self.palette.gradient(GradientKind::Linear, stops),
             Paint::Radial { stops, .. } => self.palette.gradient(GradientKind::Radial, stops),
             Paint::Pattern(pp) => {
@@ -459,23 +599,118 @@ impl Mapper {
             });
             any = true;
         }
-        if fx.blur.is_some() {
-            self.lose("a:blur is not carried (no blur effect yet)");
-        }
-        if fx.reflection.is_some() {
-            self.lose("a:reflection is not carried (no reflection effect yet)");
-        }
-        if fx.fill_overlay.is_some() {
-            self.lose("a:fillOverlay is not carried");
-        }
         if let Some(gf) = fade.and_then(feather_of) {
             effects.gradient_feather = Some(gf);
             any = true;
+        }
+        // The effects InDesign has none of, in the order PowerPoint draws
+        // them: the overlay on the shape, the blur of it, its reflection.
+        let mut extra: Vec<EffectEntry> = Vec::new();
+        if let Some(o) = &fx.fill_overlay {
+            extra.extend(self.overlay(o));
+        }
+        if let Some(b) = &fx.blur {
+            if !b.grow {
+                self.lose(
+                    "a:blur grow=\"0\" is drawn past the shape's edge (the engine's blur grows)",
+                );
+            }
+            if b.radius > 0.0 {
+                extra.push(EffectEntry::new(Effect::GaussianBlur(GaussianBlurParams {
+                    radius_pt: pt(b.radius * BLUR_SIGMA_PER_RADIUS),
+                })));
+            }
+        }
+        if let Some(r) = &fx.reflection {
+            extra.push(EffectEntry::new(Effect::Reflection(self.reflection(r))));
+        }
+        if !extra.is_empty() {
+            let present = |k: &IndesignEffect| match k {
+                IndesignEffect::DropShadow => t.shadow.is_some(),
+                IndesignEffect::InnerShadow => effects.inner_shadow.is_some(),
+                IndesignEffect::OuterGlow => effects.outer_glow.is_some(),
+                IndesignEffect::Feather => effects.feather.is_some(),
+                IndesignEffect::GradientFeather => effects.gradient_feather.is_some(),
+                _ => false,
+            };
+            t.stack = IndesignEffect::ORDER
+                .iter()
+                .filter(|k| present(k))
+                .map(|k| EffectEntry::new(Effect::slot(*k)))
+                .chain(extra)
+                .collect();
         }
         if any {
             t.effects = Some(effects);
         }
         t
+    }
+
+    /// `a:fillOverlay` as a colour overlay under its blend mode; `None`
+    /// (reported) for a paint the stack does not overlay.
+    fn overlay(&mut self, o: &FillOverlay) -> Option<EffectEntry> {
+        let opacity = |a: f64| (a < 0.999).then(|| pt(a * 100.0));
+        let (effect, alpha) = match &o.paint {
+            Paint::Solid { rgb, alpha, .. } => (
+                Effect::ColorOverlay(ColorOverlayParams {
+                    color: Some(self.palette.color(*rgb)),
+                }),
+                *alpha,
+            ),
+            // PowerPoint draws no gradient overlay (its own PDF of one
+            // shows the shape unchanged; slide-conformance fixture
+            // `effect-stack`): neither does the engine.
+            Paint::Linear { .. } | Paint::Radial { .. } => {
+                self.lose("a gradient fill overlay is not carried (PowerPoint does not draw it)");
+                return None;
+            }
+            Paint::Pattern(pp) => {
+                self.lose("a pattern fill overlay is drawn as the mix of its two colours (no pattern paint yet)");
+                let (rgb, alpha) = pp.mix();
+                (
+                    Effect::ColorOverlay(ColorOverlayParams {
+                        color: Some(self.palette.color(rgb)),
+                    }),
+                    alpha,
+                )
+            }
+            Paint::None => return None,
+            Paint::Image { .. } => {
+                self.lose("a picture fill overlay is not carried");
+                return None;
+            }
+        };
+        let blend = overlay_blend(&o.blend);
+        Some(EffectEntry {
+            blend_mode: (blend != "Normal").then(|| blend.to_string()),
+            opacity_pct: opacity(alpha),
+            ..EffectEntry::new(effect)
+        })
+    }
+
+    /// `a:reflection` as the engine's reflection: a mirror image below
+    /// the shape, fading from its start to its end alpha over `endPos` of
+    /// the shape's height. Any other direction, scale, skew or fade start
+    /// is reported.
+    fn reflection(&mut self, r: &Reflection) -> ReflectionParams {
+        let near = |a: f64, b: f64| (a - b).abs() < 1e-3;
+        let mirrored = near(r.direction.rem_euclid(360.0), 90.0)
+            && near(r.fade_direction.rem_euclid(360.0), 90.0)
+            && near(r.sx, 1.0)
+            && near(r.sy, -1.0)
+            && near(r.kx, 0.0)
+            && near(r.ky, 0.0)
+            && near(r.start_pos, 0.0);
+        if !mirrored {
+            self.lose("a reflection's direction, scale, skew or fade start are not carried: drawn as a mirror image below");
+        }
+        ReflectionParams {
+            distance_pt: pt(r.distance.max(0.0)),
+            size_pct: pt((r.end_pos * 100.0).clamp(0.0, 100.0)),
+            start_opacity_pct: pt((r.start_alpha * 100.0).clamp(0.0, 100.0)),
+            end_opacity_pct: pt((r.end_alpha * 100.0).clamp(0.0, 100.0)),
+            blur_pt: pt(r.blur.max(0.0) * BLUR_SIGMA_PER_RADIUS),
+        }
     }
 
     fn drop_shadow(
@@ -497,36 +732,245 @@ impl Mapper {
         }
     }
 
-    /// A picture's opacity factor (0–1) from its blip, reporting the
-    /// picture effects the engine cannot apply yet.
-    pub fn picture(&mut self, pic: &Picture) -> f64 {
+    /// [`Mapper::picture_at`] without the picture's pixel density: a
+    /// picture blur is reported.
+    pub fn picture(&mut self, pic: &Picture) -> MappedPicture {
+        self.picture_at(pic, None)
+    }
+
+    /// A picture's opacity factor (0–1) and its filter stack (engine ADR
+    /// 1037) from its blip, reporting the picture effects the engine
+    /// cannot apply. `px_per_pt` is the image's pixels per point as placed
+    /// (a blur radius is in the picture's own pixels).
+    ///
+    /// `a:lum` becomes brightness/contrast, `a:duotone` a duotone,
+    /// `a:grayscl` a black & white mixed with the luma weights Office
+    /// greys by (0.3, 0.59, 0.11), `a:biLevel` a threshold, `a:hsl` a
+    /// hue/saturation, `a:clrRepl` a duotone of one colour (every pixel
+    /// that colour, its alpha kept) and `a:blur` a blur, in the blip's
+    /// order. A colour change and a tint have no equivalent op and are
+    /// reported.
+    pub fn picture_at(&mut self, pic: &Picture, px_per_pt: Option<f64>) -> MappedPicture {
+        let unit = |c: Rgb| c.map(|v| f32::from(v) / 255.0);
+        let mut out = MappedPicture {
+            opacity: pic.opacity,
+            adjustments: Vec::new(),
+            elements: Vec::new(),
+        };
         for e in &pic.effects {
-            let what = match e {
+            let (element, op) = match e {
                 // Office stores the image these produce as the blip: the
                 // picture as placed already shows them.
                 ImageEffect::Office2010 { .. } => continue,
-                ImageEffect::Luminance { .. } => "a:lum (brightness/contrast)",
-                ImageEffect::ColorChange { .. } => "a:clrChange",
-                ImageEffect::Duotone { .. } => "a:duotone",
-                ImageEffect::Grayscale => "a:grayscl",
-                ImageEffect::BiLevel { .. } => "a:biLevel",
-                ImageEffect::ColorReplace { .. } => "a:clrRepl",
-                ImageEffect::Hsl { .. } => "a:hsl",
-                ImageEffect::Tint { .. } => "a:tint",
-                ImageEffect::Blur { .. } => "a:blur on a picture",
+                ImageEffect::Luminance { bright, contrast } => {
+                    // Contrast in Office is a percentage of the full
+                    // slope: +50 % doubles it, −50 % halves it.
+                    let c = contrast.clamp(-1.0, 0.99);
+                    let slope = if c >= 0.0 { 1.0 / (1.0 - c) } else { 1.0 + c };
+                    (
+                        "a:lum",
+                        RasterOp::BrightnessContrast {
+                            brightness: bright.clamp(-1.0, 1.0) as f32,
+                            contrast: (slope as f32).min(10.0),
+                        },
+                    )
+                }
+                ImageEffect::Duotone { dark, light } => (
+                    "a:duotone",
+                    RasterOp::Duotone {
+                        shadow: unit(*dark),
+                        highlight: unit(*light),
+                    },
+                ),
+                ImageEffect::Grayscale => (
+                    "a:grayscl",
+                    RasterOp::BlackWhite {
+                        reds: 0.3,
+                        yellows: 0.89,
+                        greens: 0.59,
+                        cyans: 0.7,
+                        blues: 0.11,
+                        magentas: 0.41,
+                    },
+                ),
+                ImageEffect::BiLevel { threshold } => (
+                    "a:biLevel",
+                    RasterOp::Threshold {
+                        level: threshold.clamp(0.0, 1.0) as f32,
+                    },
+                ),
+                ImageEffect::Hsl { hue, sat, lum } => (
+                    "a:hsl",
+                    RasterOp::HueSaturation {
+                        hue: (hue.rem_euclid(360.0)) as f32,
+                        saturation: sat.clamp(-1.0, 1.0) as f32,
+                        lightness: lum.clamp(-1.0, 1.0) as f32,
+                    },
+                ),
+                ImageEffect::ColorReplace { rgb, alpha } => {
+                    if *alpha < 0.999 {
+                        self.lose("a:clrRepl's transparency is not carried (the colour replaces opaquely, the picture's alpha kept)");
+                    }
+                    (
+                        "a:clrRepl",
+                        RasterOp::Duotone {
+                            shadow: unit(*rgb),
+                            highlight: unit(*rgb),
+                        },
+                    )
+                }
+                ImageEffect::Blur { radius, .. } => {
+                    let Some(scale) = px_per_pt.filter(|s| s.is_finite() && *s > 0.0) else {
+                        self.lose("picture effect a:blur is not carried (the picture's pixel size is not known here)");
+                        continue;
+                    };
+                    let sigma = radius * BLUR_SIGMA_PER_RADIUS * scale;
+                    if sigma > 64.0 {
+                        self.lose("a picture blur wider than 64 pixels (σ) is drawn at 64");
+                    }
+                    (
+                        "a:blur",
+                        RasterOp::Blur {
+                            radius: sigma.clamp(0.0, 64.0) as f32,
+                        },
+                    )
+                }
+                ImageEffect::ColorChange { .. } => {
+                    self.lose("picture effect a:clrChange is not carried (no equivalent image adjustment)");
+                    continue;
+                }
+                ImageEffect::Tint { .. } => {
+                    self.lose(
+                        "picture effect a:tint is not carried (no equivalent image adjustment)",
+                    );
+                    continue;
+                }
                 ImageEffect::Alpha(n) | ImageEffect::Other(n) => {
                     self.lose(format!(
-                        "picture effect a:{n} is not carried (no image adjustments yet)"
+                        "picture effect a:{n} is not carried (no image adjustment for it)"
                     ));
                     continue;
                 }
             };
-            self.lose(format!(
-                "picture effect {what} is not carried (no image adjustments yet)"
-            ));
+            out.adjustments.push(op);
+            out.elements.push(element);
         }
-        pic.opacity
+        out
     }
+
+    /// The fill rule of an outline PowerPoint fills: `contour_paths` names
+    /// each contour's `a:path`. PowerPoint fills every path on its own,
+    /// even-odd (a contour inside another of the same path is a hole,
+    /// whichever way it turns); the engine fills one rule per item. One
+    /// path whose contours fill differently under the two rules is
+    /// even-odd; otherwise the item stays non-zero, and several paths of
+    /// which one would need even-odd are reported.
+    pub fn fill_rule(
+        &mut self,
+        anchors: &[PathAnchor],
+        subpath_starts: &[usize],
+        subpath_open: &[bool],
+        contour_paths: &[usize],
+    ) -> FillRule {
+        let ranges = |len: usize| -> Vec<std::ops::Range<usize>> {
+            if subpath_starts.is_empty() {
+                return std::iter::once(0..len).collect();
+            }
+            subpath_starts
+                .iter()
+                .enumerate()
+                .map(|(i, &s)| s..subpath_starts.get(i + 1).copied().unwrap_or(len))
+                .collect()
+        };
+        let contours = ranges(anchors.len());
+        let differs = |sel: &[usize]| -> bool {
+            // The path's contours alone, as one outline.
+            let mut a = Vec::new();
+            let mut starts = Vec::new();
+            let mut open = Vec::new();
+            for &i in sel {
+                let Some(r) = contours.get(i) else { continue };
+                starts.push(a.len());
+                a.extend_from_slice(&anchors[r.clone()]);
+                open.push(subpath_open.get(i).copied().unwrap_or(false));
+            }
+            match paged_model::winding::even_odd_as_non_zero(&a, &starts, &open) {
+                Some(rewound) => rewound
+                    .iter()
+                    .zip(&a)
+                    .any(|(r, o)| r.anchor != o.anchor || r.left != o.left),
+                None => true,
+            }
+        };
+        let by_path = |p: usize| -> Vec<usize> {
+            (0..contours.len())
+                .filter(|&i| contour_paths.get(i).copied().unwrap_or(0) == p)
+                .collect()
+        };
+        let mut distinct: Vec<usize> = contour_paths.to_vec();
+        distinct.sort_unstable();
+        distinct.dedup();
+        if distinct.len() <= 1 {
+            let all: Vec<usize> = (0..contours.len()).collect();
+            return if differs(&all) {
+                FillRule::EvenOdd
+            } else {
+                FillRule::NonZero
+            };
+        }
+        if distinct.iter().any(|&p| differs(&by_path(p))) {
+            self.lose(
+                "a geometry of several paths, one of which fills even-odd, is filled non-zero",
+            );
+        }
+        FillRule::NonZero
+    }
+}
+
+/// A picture as [`Mapper::picture_at`] maps it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MappedPicture {
+    /// The opacity factor, 0–1 (`a:alphaModFix`).
+    pub opacity: f64,
+    /// The image frame's filter stack (engine ADR 1037), in blip order.
+    pub adjustments: Vec<RasterOp>,
+    /// The DrawingML element each adjustment came from (`a:lum`, …).
+    pub elements: Vec<&'static str>,
+}
+
+impl MappedPicture {
+    /// The losses of a lane that cannot hold an image filter stack: one
+    /// line per adjustment ([`picture_adjustment_loss`]).
+    pub fn native_lane_losses(&self) -> Vec<String> {
+        self.adjustments
+            .iter()
+            .zip(&self.elements)
+            .map(|(op, el)| adjustment_loss(el, op))
+            .collect()
+    }
+}
+
+fn adjustment_loss(element: &str, op: &RasterOp) -> String {
+    format!(
+        "{element} (picture adjustment {}) is not carried on the native lane",
+        op.name()
+    )
+}
+
+/// The loss a lane that cannot hold an image filter stack (engine ADR
+/// 1037) reports for one of its ops: the DrawingML element it came from,
+/// and the op it became on the mutation lane.
+pub fn picture_adjustment_loss(op: &RasterOp) -> String {
+    let element = match op {
+        RasterOp::BrightnessContrast { .. } => "a:lum",
+        RasterOp::Duotone { .. } => "a:duotone",
+        RasterOp::BlackWhite { .. } => "a:grayscl",
+        RasterOp::Threshold { .. } => "a:biLevel",
+        RasterOp::HueSaturation { .. } => "a:hsl",
+        RasterOp::Blur { .. } => "a:blur",
+        _ => "a picture effect",
+    };
+    adjustment_loss(element, op)
 }
 
 /// A gradient feather for a gradient whose stops differ in alpha: the
@@ -558,6 +1002,106 @@ pub fn feather_of(p: &Paint) -> Option<GradientFeatherParams> {
         hilite_angle: None,
         hilite_length: None,
     })
+}
+
+/// A gradient swatch's stops for [`effects_with_stack`] (`None` for an id
+/// that names none).
+pub type GradientOf<'a> = &'a dyn Fn(&str) -> Option<Vec<Stop>>;
+
+/// [`effects_of`] with the object's effect stack (engine ADR 1008): its
+/// enabled colour or gradient overlay as `a:fillOverlay`, its Gaussian
+/// blur as `a:blur` and its reflection as `a:reflection`, the inverse of
+/// [`Mapper::transparency`]. `gradient_of` gives a gradient swatch's
+/// stops. DrawingML holds one of each; a second is left out, as are the
+/// stack's effects DrawingML has none of (outline stroke, noise, colour
+/// adjustment) and a soft edge kept on the stack (the slot's feather is
+/// written).
+pub fn effects_with_stack(
+    drop: Option<&DropShadowSetting>,
+    fx: Option<&FrameEffects>,
+    stack: &[EffectEntry],
+    rgb_of: &dyn Fn(&str) -> Option<Rgb>,
+    gradient_of: GradientOf<'_>,
+) -> Effects {
+    let mut out = effects_of(drop, fx, rgb_of);
+    for e in stack.iter().filter(|e| e.enabled) {
+        let alpha = e.opacity() as f64;
+        let blend = || overlay_blend_of(e.blend_mode.as_deref()).to_string();
+        match &e.effect {
+            Effect::ColorOverlay(p) if out.fill_overlay.is_none() => {
+                out.fill_overlay = Some(FillOverlay {
+                    blend: blend(),
+                    paint: Paint::Solid {
+                        rgb: p.color.as_deref().and_then(rgb_of).unwrap_or([0, 0, 0]),
+                        alpha,
+                        theme: None,
+                    },
+                });
+            }
+            Effect::GradientOverlay(p) if out.fill_overlay.is_none() => {
+                let mut stops = p
+                    .gradient
+                    .as_deref()
+                    .and_then(gradient_of)
+                    .unwrap_or_else(|| {
+                        vec![
+                            Stop {
+                                pos: 0.0,
+                                rgb: [0, 0, 0],
+                                alpha: 1.0,
+                            },
+                            Stop {
+                                pos: 100.0,
+                                rgb: [255, 255, 255],
+                                alpha: 1.0,
+                            },
+                        ]
+                    });
+                if p.reverse {
+                    stops.reverse();
+                    for s in &mut stops {
+                        s.pos = 100.0 - s.pos;
+                    }
+                }
+                for s in &mut stops {
+                    s.alpha *= alpha;
+                }
+                out.fill_overlay = Some(FillOverlay {
+                    blend: blend(),
+                    paint: Paint::Linear {
+                        stops,
+                        angle: -(p.angle_deg.unwrap_or(0.0) as f64),
+                    },
+                });
+            }
+            Effect::GaussianBlur(p) if out.blur.is_none() => {
+                out.blur = Some(Blur {
+                    radius: p.radius_pt as f64 / BLUR_SIGMA_PER_RADIUS,
+                    grow: true,
+                });
+            }
+            Effect::Reflection(p) if out.reflection.is_none() => {
+                out.reflection = Some(Reflection {
+                    blur: p.blur_pt as f64 / BLUR_SIGMA_PER_RADIUS,
+                    start_alpha: p.start_opacity_pct as f64 / 100.0,
+                    start_pos: 0.0,
+                    end_alpha: p.end_opacity_pct as f64 / 100.0,
+                    end_pos: p.size_pct as f64 / 100.0,
+                    distance: p.distance_pt as f64,
+                    direction: 90.0,
+                    fade_direction: 90.0,
+                    sx: 1.0,
+                    sy: -1.0,
+                    kx: 0.0,
+                    ky: 0.0,
+                    align: "bl".into(),
+                    rotate_with_shape: false,
+                });
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 /// The engine's drop shadow and effects back as the neutral IR, with

@@ -377,6 +377,7 @@ pub struct ExportedDeck {
     bytes: Vec<u8>,
     diagnostics: Vec<String>,
     not_exported: Vec<String>,
+    rasters_needed: Vec<(String, f64)>,
 }
 
 #[wasm_bindgen]
@@ -398,6 +399,19 @@ impl ExportedDeck {
     pub fn not_exported(&self) -> String {
         serde_json::to_string(&self.not_exported).unwrap_or_else(|_| "[]".into())
     }
+
+    /// The pictures that need a PNG the host renders (an SVG's fallback, a
+    /// format PowerPoint does not open), as JSON `[{id, dpi}]`. Export again
+    /// with them in the plan's `rasters`.
+    #[wasm_bindgen(getter, js_name = rastersNeeded)]
+    pub fn rasters_needed(&self) -> String {
+        let v: Vec<serde_json::Value> = self
+            .rasters_needed
+            .iter()
+            .map(|(id, dpi)| serde_json::json!({ "id": id, "dpi": dpi }))
+            .collect();
+        serde_json::to_string(&v).unwrap_or_else(|_| "[]".into())
+    }
 }
 
 /// Write a `.pptx` from the deck the document was imported from, the
@@ -418,6 +432,7 @@ pub fn export_pptx(
         bytes: out.bytes,
         diagnostics: out.diagnostics,
         not_exported: out.not_exported,
+        rasters_needed: out.rasters_needed,
     })
 }
 
@@ -709,7 +724,9 @@ impl PdfOut {
 /// - `adjust` (`elements`, `target`, `index`, `point`): the writes a drag of
 ///   that handle to that page point makes,
 /// - `newShape` (`prst`, `w`, `h`, `key`): a preset drawn as new elements,
-/// - `gallery`: every preset by Insert ▸ Shapes category with a thumbnail.
+/// - `gallery`: every preset by Insert ▸ Shapes category with a thumbnail,
+/// - `picture` (`head`, base64): a picture's format and pixel size,
+/// - `pictureFormats`: every picture format the engine reads.
 #[wasm_bindgen(js_name = live)]
 pub fn live(request: &str) -> Result<String, JsError> {
     live_json(request).map_err(|e| JsError::new(&e))
@@ -745,15 +762,171 @@ pub fn live_json(request: &str) -> Result<String, String> {
             serde_json::to_value(l::new_shape(prst, num("w"), num("h"), key))
         }
         "gallery" => serde_json::to_value(l::gallery()),
+        "picture" => {
+            // A picture's format and pixel size from its first bytes
+            // (base64; the header is enough, an SVG's root tag included).
+            use base64::Engine;
+            let head = v.get("head").and_then(|h| h.as_str()).unwrap_or("");
+            let b = base64::engine::general_purpose::STANDARD
+                .decode(head)
+                .map_err(|e| format!("head: {e}"))?;
+            Ok(match pptx_core::media::sniff(&b) {
+                Some(f) => {
+                    let size = pptx_core::media::pixel_size(&b);
+                    serde_json::json!({
+                        "format": f.extension(),
+                        "mime": f.mime(),
+                        "inDeck": f.in_deck(),
+                        "width": size.map(|s| s.0),
+                        "height": size.map(|s| s.1),
+                    })
+                }
+                None => serde_json::Value::Null,
+            })
+        }
+        "pictureFormats" => Ok(serde_json::json!(pptx_core::media::PicFormat::ALL
+            .iter()
+            .map(|f| serde_json::json!({ "format": f.extension(), "mime": f.mime() }))
+            .collect::<Vec<_>>())),
         other => return Err(format!("unknown live op {other:?}")),
     }
     .map_err(|e| e.to_string())?;
     Ok(out.to_string())
 }
 
+/// The live theme (slide ADR 713): one JSON request, one JSON answer.
+/// `op` is
+/// - `gallery`: the Design gallery's themes, each with its four variants,
+/// - `variants` (`theme`): a theme's variants,
+/// - `swatches` (`theme`, `ids`): the colour each theme swatch among `ids`
+///   takes under `theme`, with its name (`[{id, name, rgb}]`),
+/// - `read` (`data`, base64): the themes of a `.thmx`, `.potx` or `.pptx`,
+///   as gallery themes (a `.thmx`'s own variants as its variants).
+#[wasm_bindgen(js_name = theme)]
+pub fn theme(request: &str) -> Result<String, JsError> {
+    theme_json(request).map_err(|e| JsError::new(&e))
+}
+
+/// [`theme`] without the wasm boundary.
+pub fn theme_json(request: &str) -> Result<String, String> {
+    use slide_resolve::theme as th;
+    let v: serde_json::Value = serde_json::from_str(request).map_err(|e| e.to_string())?;
+    let op = v.get("op").and_then(|o| o.as_str()).unwrap_or("");
+    let theme_arg = || -> Result<th::ThemeIr, String> {
+        serde_json::from_value(v.get("theme").cloned().unwrap_or_default())
+            .map_err(|e| format!("theme: {e}"))
+    };
+    let out = match op {
+        "gallery" => serde_json::to_value(th::gallery()),
+        "variants" => serde_json::to_value(th::variants(&theme_arg()?)),
+        "swatches" => {
+            let ids: Vec<String> =
+                serde_json::from_value(v.get("ids").cloned().unwrap_or_default())
+                    .map_err(|e| format!("ids: {e}"))?;
+            Ok(serde_json::Value::Array(
+                th::swatch_values(&theme_arg()?, &ids)
+                    .into_iter()
+                    .map(|(id, rgb)| {
+                        let name = th::Key::of_swatch(&id).map(|k| k.name());
+                        serde_json::json!({ "id": id, "name": name, "rgb": rgb })
+                    })
+                    .collect(),
+            ))
+        }
+        "read" => {
+            use base64::Engine;
+            let data = v.get("data").and_then(|d| d.as_str()).unwrap_or("");
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(|e| format!("data: {e}"))?;
+            let themes = pptx_import::themes_in(&bytes).map_err(|e| e.to_string())?;
+            serde_json::to_value(read_gallery(&themes))
+        }
+        other => return Err(format!("unknown theme op {other:?}")),
+    }
+    .map_err(|e| e.to_string())?;
+    Ok(out.to_string())
+}
+
+/// A package's themes as gallery themes: a theme under `themeVariants/` is
+/// a variant of the main theme before it (a `.thmx`); every other theme is
+/// a gallery theme of its own with the derived variants.
+fn read_gallery(themes: &[pptx_core::Theme]) -> Vec<slide_resolve::theme::GalleryTheme> {
+    use slide_resolve::theme as th;
+    let mut out: Vec<th::GalleryTheme> = Vec::new();
+    let mut own_variants: Vec<Vec<th::ThemeIr>> = Vec::new();
+    for t in themes {
+        let ir = th::ThemeIr::of(t);
+        if t.part.contains("themeVariants/") {
+            if let Some(v) = own_variants.last_mut() {
+                let name = format!("Variant {}", v.len() + 1);
+                v.push(th::ThemeIr {
+                    variant: Some(name),
+                    ..ir
+                });
+                continue;
+            }
+        }
+        if out.iter().any(|g| g.theme == ir) {
+            continue;
+        }
+        out.push(th::GalleryTheme {
+            id: format!("file:{}", out.len() + 1),
+            name: ir.name.clone(),
+            variants: th::variants(&ir),
+            theme: ir.clone(),
+        });
+        own_variants.push(vec![th::ThemeIr {
+            variant: Some("Original".into()),
+            ..ir
+        }]);
+    }
+    for (g, own) in out.iter_mut().zip(own_variants) {
+        if own.len() > 1 {
+            g.variants = own;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::live_json;
+
+    #[test]
+    fn the_theme_door_lists_the_gallery_recolours_and_reads_a_decks_themes() {
+        use super::theme_json;
+        let g: serde_json::Value =
+            serde_json::from_str(&theme_json(r#"{"op":"gallery"}"#).unwrap()).unwrap();
+        assert!(g.as_array().unwrap().len() >= 6);
+        let dark = g[2]["variants"][1].clone();
+        let req = serde_json::json!({
+            "op": "swatches",
+            "theme": dark,
+            "ids": ["Color/lt1", "Color/accent1 lumMod75000", "Color/R000000"],
+        });
+        let s: serde_json::Value =
+            serde_json::from_str(&theme_json(&req.to_string()).unwrap()).unwrap();
+        assert_eq!(s.as_array().unwrap().len(), 2);
+        assert_eq!(s[1]["name"], "Accent 1, Darker 25%");
+        let deck = std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../slide-conformance/fixtures/text.pptx"),
+        )
+        .unwrap();
+        use base64::Engine;
+        let req = serde_json::json!({
+            "op": "read",
+            "data": base64::engine::general_purpose::STANDARD.encode(deck),
+        });
+        let r: serde_json::Value =
+            serde_json::from_str(&theme_json(&req.to_string()).unwrap()).unwrap();
+        // The deck's two masters share one theme.
+        assert_eq!(r.as_array().unwrap().len(), 1);
+        assert_eq!(r[0]["theme"]["major"], "Aptos Display");
+        assert_eq!(r[0]["variants"].as_array().unwrap().len(), 4);
+        assert!(theme_json(r#"{"op":"nope"}"#).unwrap_err().contains("nope"));
+    }
 
     #[test]
     fn the_live_door_answers_json_and_names_an_unknown_op() {

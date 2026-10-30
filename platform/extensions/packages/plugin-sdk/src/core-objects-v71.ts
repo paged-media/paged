@@ -413,7 +413,17 @@ export function createCoreObjectsV71(
       // Final protocol 71: a range whose runs disagree is `mixed: true` (no
       // value, no error) — distinct from a path that reads null.
       if (p.mixed) return { kind: "mixed" };
-      const v = p.value ? p.value.value : null;
+      // Engine ADR 1008 — an effect stack reads as its list of entries,
+      // the shape its `list` row declares (the wire wraps it with the
+      // undo snapshot an inverse carries).
+      // Engine ADR 1043 — an appearance reads as its list of layers.
+      const v = p.value
+        ? p.value.type === "effectStack"
+          ? ((p.value.value as { entries?: unknown } | null)?.entries ?? [])
+          : p.value.type === "appearance"
+            ? ((p.value.value as { layers?: unknown } | null)?.layers ?? [])
+            : p.value.value
+        : null;
       // Core reads a cleared content / link row as "" (no content, no
       // thread, no mask): the SDK answers the null that cleared it.
       if (
@@ -444,7 +454,7 @@ export function createCoreObjectsV71(
       else if (row)
         wire = {
           type: keywordOf(row.schema.type, value) ? "enum" : row.wire,
-          value: onTextWire(row.wire, value),
+          value: onStackWire(row.wire, onTextWire(row.wire, value)),
         };
       else if (CORE_OPERATION_PATHS.has(path))
         return no(
@@ -778,6 +788,17 @@ export function createCoreObjectsV71(
     dispose: () => v70.dispose(),
   };
   return self;
+}
+
+/** Engine ADR 1008 — an effect stack written as its list of entries
+ *  travels as the wire's `{ entries }` (the engine's undo snapshot field
+ *  stays the engine's); engine ADR 1043 — an appearance written as its
+ *  list of layers travels as `{ layers }`. */
+function onStackWire(wire: string, value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  if (wire === "effectStack") return { entries: value };
+  if (wire === "appearance") return { layers: value };
+  return value;
 }
 
 /** A list of ids written to a TEXT wire is IDML's space-separated list

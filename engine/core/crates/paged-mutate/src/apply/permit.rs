@@ -109,7 +109,8 @@ fn page_item(node: &NodeId) -> Option<&str> {
         | NodeId::Oval(s)
         | NodeId::Polygon(s)
         | NodeId::GraphicLine(s)
-        | NodeId::Group(s) => Some(s),
+        | NodeId::Group(s)
+        | NodeId::Instance(s) => Some(s),
         _ => None,
     }
 }
@@ -323,6 +324,20 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         O::RemoveDuplicates { .. } | O::InsertSnippet { .. } | O::RemoveSnippet { .. } => {
             vec![doc(P::DocumentAddItem)]
         }
+        // Engine ADR 1039 — a symbol definition is document vocabulary,
+        // like a style; making one from items (or breaking an instance)
+        // adds and removes page items.
+        O::CreateSymbol { sources, .. } | O::RedefineSymbol { sources, .. } => {
+            std::iter::once(doc(P::DocumentStyles))
+                .chain(sources.iter().map(|s| item(P::ItemDelete, s)))
+                .collect()
+        }
+        O::DeleteSymbol { .. } | O::RestoreSymbolState { .. } => vec![doc(P::DocumentStyles)],
+        O::PlaceSymbolInstance { .. } => vec![doc(P::DocumentAddItem)],
+        O::BreakSymbolLink { instance, .. } => vec![
+            doc(P::DocumentAddItem),
+            item(P::ItemDelete, &NodeId::Instance(instance.clone())),
+        ],
         O::SetGroupTransform { group, .. } => vec![req(P::ItemMove, Target::Item(group.clone()))],
         O::PathfinderBoolean { kept, others, .. } => std::iter::once(item(P::ItemResize, kept))
             .chain(others.iter().map(|o| item(P::ItemDelete, o)))

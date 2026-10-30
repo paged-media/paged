@@ -17,19 +17,18 @@
  */
 
 // paged.draw's SVG importer and exporter on the ENGINE lane (engine ADR
-// 1016, `document.importSvg@1` / `document.exportSvg@1`): through the
-// real engine, the registered importer brings in what the module's own
-// reader never could — a gradient, `<use>`, a CSS class, a clip path — as
-// ONE undo step, logs the engine's report, and the registered exporter
-// writes what the selection draws. `svg-io.spec.ts` and
-// `svg-compound.spec.ts` pin the fallback lane (`tsLane`).
+// 1031, `document.importSvg@1` / `document.exportSvg@1`) — since draw ADR
+// 364 the only lane: through the real engine, the registered importer
+// brings in what the module's old reader never could — a gradient,
+// `<use>`, a CSS class, a clip path — as ONE undo step, logs the engine's
+// report, and the registered exporter writes what the selection draws.
+// `interchange.spec.ts` pins the compound shape, DXF, EPS and AI.
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { parseSvgDocument } from "@paged-media/draw-geometry";
 
 import { drawBundle, importSvg, leafIdsOf, SVG_EXPORTER_ID } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
@@ -108,10 +107,10 @@ describe("draw SVG on the engine lane [plugin-draw.interchange-v2]", () => {
     const out = await exporter.export();
     const text = new TextDecoder().decode(out!.bytes);
     expect(text).toContain('viewBox="19 19 102 52"');
-    const shapes = parseSvgDocument(text)!.shapes;
-    expect(shapes).toHaveLength(1);
-    expect(shapes[0]!.style.fill).toBe("#ff8800");
-    expect(shapes[0]!.style.stroke).toBe("#222222");
+    const paths = [...text.matchAll(/<path\b[^>]*>/g)].map((m) => m[0]);
+    expect(paths).toHaveLength(1);
+    expect(paths[0]).toContain('fill="#ff8800"');
+    expect(paths[0]).toContain('stroke="#222222"');
     await h.host.selection.set([]);
     await h.host.document.undo();
   });

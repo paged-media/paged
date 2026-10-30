@@ -225,3 +225,10 @@ longer qcms). The renderer passes the frame's `ImageRenderingIntent`, or the doc
 Settings, to the build-time decode and, on wasm32, on the lazy image to paged-gpu's
 raster-time decode (`decode_rgba8_at_with`, the merged form of `decode_rgba8_at`). The default (relative colorimetric with BPC) is
 bit-identical to the transform above on native.
+
+## Note — 2026-10-28: the remaining codecs ([ADR 1038](1038-the-remaining-codecs-and-the-layered-tiff.md))
+
+`encode` also writes GIF, BMP, TGA, lossless JPEG XL (feature `jxl-encode`) and AVIF (feature
+`avif-encode`, off by default), and `encode_layered_tiff` / `psd_to_layered_tiff` a TIFF with
+Photoshop's layers in tag 37724. An OpenEXR alpha is associated, and a deep or non-RGB OpenEXR
+is refused by name.

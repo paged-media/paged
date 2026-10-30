@@ -37,7 +37,8 @@ import { useRegistries } from "../state/registries-context";
 // handler's in-flight gesture is kept, not cancelled (AC 5).
 //
 //   Space        → momentary Hand (pan)
-//   Cmd / Meta   → momentary Direct Selection
+//   Cmd / Meta   → momentary Direct Selection (not while a tool that
+//                  reads Cmd as a gesture modifier is in hand)
 //   Cmd + Space  → momentary Zoom (Alt at click time zooms out)
 //
 // Guards: inert while the focused control owns the key (a field, a
@@ -48,7 +49,8 @@ import { useRegistries } from "../state/registries-context";
 
 export function useSpringLoadedTools(): void {
   const keys = useEditorKeys();
-  const { pushOverride, popOverride, clearOverrides } = useTool();
+  const { pushOverride, popOverride, clearOverrides, toolStateRef } = useTool();
+  const { tools } = useRegistries();
   const { contentSelectionRef } = useContentSelection();
   const { keybindings } = useRegistries();
 
@@ -81,6 +83,10 @@ export function useSpringLoadedTools(): void {
         // Keep Space from scrolling the page while spring-loaded.
         e.preventDefault();
       } else {
+        // A tool that reads Cmd as a gesture modifier keeps it (Free
+        // Transform's distort and shear, extensions ADR 339).
+        const base = tools.get(toolStateRef.current.base);
+        if (!pushedByKey.current.has("space") && base?.cmdIsModifier) return;
         id = pushedByKey.current.has("space")
           ? ZOOM_TOOL_ID
           : DIRECT_SELECT_TOOL_ID;
@@ -121,5 +127,7 @@ export function useSpringLoadedTools(): void {
     clearOverrides,
     contentSelectionRef,
     keybindings,
+    toolStateRef,
+    tools,
   ]);
 }

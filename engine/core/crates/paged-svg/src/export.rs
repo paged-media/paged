@@ -178,6 +178,10 @@ struct Writer<'a> {
     /// a stroke of the same path joins it as one `<path>`.
     last_fill: Option<(paged_compose::PathId, [f32; 6], usize)>,
     minify: bool,
+    /// Engine ADR 1039 (draw ADR 365) — the `<symbol>` written for each
+    /// definition form, by `SymbolForm::key`: one per definition (and
+    /// tint), however many instances `<use>` it.
+    symbols: HashMap<u64, String>,
 }
 
 fn srgb(v: f32) -> u8 {
@@ -752,6 +756,44 @@ impl<'a> Writer<'a> {
         true
     }
 
+    /// The id of `sf`'s `<symbol>`, writing it into `<defs>` the first
+    /// time: the definition's own list walked by a writer of its own (in
+    /// the definition's space, so its gradients and clips are too), its
+    /// ids drawn from this writer's counter.
+    fn symbol_def(&mut self, sf: &paged_compose::SymbolForm) -> String {
+        if let Some(id) = self.symbols.get(&sf.key) {
+            return id.clone();
+        }
+        let id = self.id("sym");
+        self.symbols.insert(sf.key, id.clone());
+        let sub_input = ExportInput {
+            list: &sf.list,
+            width: sf.bbox[2],
+            height: sf.bbox[3],
+            fonts: self.input.fonts,
+            fit_to_content: false,
+        };
+        let mut sub = Writer::new(&sub_input, self.text_mode, self.prec, self.minify);
+        sub.next_id = self.next_id;
+        sub.symbols = std::mem::take(&mut self.symbols);
+        sub.walk();
+        self.next_id = sub.next_id;
+        self.symbols = std::mem::take(&mut sub.symbols);
+        let root = sub.stack.pop().expect("root");
+        let body = sub.join(&root.children);
+        self.defs.append(&mut sub.defs);
+        for n in sub.report.notes {
+            for _ in 0..n.count {
+                self.report.note(&n.code, n.severity, &n.message);
+            }
+        }
+        let nl = if self.minify { "" } else { "\n" };
+        self.defs.push(format!(
+            "<symbol id=\"{id}\" overflow=\"visible\">{nl}{body}{nl}</symbol>"
+        ));
+        id
+    }
+
     fn walk(&mut self) {
         let list = self.input.list;
         let mut i = 0usize;
@@ -992,6 +1034,33 @@ impl<'a> Writer<'a> {
                         self.emit_group(i, f);
                     }
                 }
+                // Engine ADR 1039 (draw ADR 365) — an instance is a `<use>` of
+                // its definition's `<symbol>`, written once; the copy between
+                // the markers (what the rasterizers draw) is skipped. A form
+                // the list does not hold leaves the copy to be drawn inline.
+                DisplayCommand::BeginSymbol { form, transform } => {
+                    if let Some(sf) = list.symbol_forms.get(*form as usize) {
+                        let id = self.symbol_def(sf);
+                        let [x, y, w, h] = sf.bbox;
+                        for (px, py) in [(x, y), (x + w, y), (x, y + h), (x + w, y + h)] {
+                            let (qx, qy) = apply(transform, px, py);
+                            self.grow(qx, qy, 0.0);
+                        }
+                        let [a, b, c, d, e, f] = transform.0;
+                        let m = format!(
+                            "matrix({} {} {} {} {} {})",
+                            self.num_m(a),
+                            self.num_m(b),
+                            self.num_m(c),
+                            self.num_m(d),
+                            self.num(e),
+                            self.num(f)
+                        );
+                        self.push(i, format!("<use xlink:href=\"#{id}\" transform=\"{m}\"/>"));
+                        i = symbol_end(&list.commands, i);
+                    }
+                }
+                DisplayCommand::EndSymbol(_) => {}
                 DisplayCommand::DropShadow {
                     path_id,
                     transform,
@@ -1136,6 +1205,25 @@ impl<'a> Writer<'a> {
     }
 }
 
+/// The index of the `EndSymbol` that closes the `BeginSymbol` at `start`
+/// (the list's last command when it is not closed).
+fn symbol_end(commands: &[DisplayCommand], start: usize) -> usize {
+    let mut depth = 0usize;
+    for (k, c) in commands.iter().enumerate().skip(start) {
+        match c {
+            DisplayCommand::BeginSymbol { .. } => depth += 1,
+            DisplayCommand::EndSymbol(_) => {
+                depth -= 1;
+                if depth == 0 {
+                    return k;
+                }
+            }
+            _ => {}
+        }
+    }
+    commands.len().saturating_sub(1)
+}
+
 /// The page-space box of a clip path's points (control points included).
 fn clip_box(list: &DisplayList, path_id: paged_compose::PathId, t: &Transform) -> Option<[f32; 4]> {
     let data = list.paths.get(path_id)?;
@@ -1196,6 +1284,60 @@ fn merge_text(last: &mut String, next: &str) -> bool {
     true
 }
 
+impl<'a> Writer<'a> {
+    fn new(input: &'a ExportInput<'a>, text_mode: SvgTextMode, prec: usize, minify: bool) -> Self {
+        let glyphs = input
+            .list
+            .glyph_runs
+            .as_ref()
+            .map(|t| t.entries.iter().map(|e| (e.command_index, e)).collect())
+            .unwrap_or_default();
+        let feather_end = {
+            let starts = paged_compose::mask::feather_run_starts(input.list);
+            let mut out = HashMap::new();
+            for (start, first) in starts {
+                let mut end = first;
+                let pair = paged_compose::mask::cmd_path_and_transform(&input.list.commands[first])
+                    .map(|(p, t)| (p, *t));
+                while end + 1 < input.list.commands.len() {
+                    let next = &input.list.commands[end + 1];
+                    if paged_compose::mask::feather_pad_pt(next).is_some()
+                        && paged_compose::mask::cmd_path_and_transform(next).map(|(p, t)| (p, *t))
+                            == pair
+                    {
+                        end += 1;
+                    } else {
+                        break;
+                    }
+                }
+                out.insert(start, end);
+            }
+            out
+        };
+        Writer {
+            input,
+            text_mode,
+            prec,
+            defs: Vec::new(),
+            stack: vec![Frame {
+                attrs: String::new(),
+                children: Vec::new(),
+                kind: FrameKind::Root,
+            }],
+            report: SvgReport::default(),
+            next_id: 0,
+            items: 0,
+            glyphs,
+            feather_end,
+            bounds: None,
+            clip_boxes: Vec::new(),
+            last_fill: None,
+            minify,
+            symbols: HashMap::new(),
+        }
+    }
+}
+
 /// Write `input` as an SVG document.
 pub fn export_display_list(
     input: &ExportInput<'_>,
@@ -1206,54 +1348,7 @@ pub fn export_display_list(
         .precision
         .map(|p| p.min(6) as usize)
         .unwrap_or(if minify { 2 } else { 3 });
-    let glyphs = input
-        .list
-        .glyph_runs
-        .as_ref()
-        .map(|t| t.entries.iter().map(|e| (e.command_index, e)).collect())
-        .unwrap_or_default();
-    let feather_end = {
-        let starts = paged_compose::mask::feather_run_starts(input.list);
-        let mut out = HashMap::new();
-        for (start, first) in starts {
-            let mut end = first;
-            let pair = paged_compose::mask::cmd_path_and_transform(&input.list.commands[first])
-                .map(|(p, t)| (p, *t));
-            while end + 1 < input.list.commands.len() {
-                let next = &input.list.commands[end + 1];
-                if paged_compose::mask::feather_pad_pt(next).is_some()
-                    && paged_compose::mask::cmd_path_and_transform(next).map(|(p, t)| (p, *t))
-                        == pair
-                {
-                    end += 1;
-                } else {
-                    break;
-                }
-            }
-            out.insert(start, end);
-        }
-        out
-    };
-    let mut w = Writer {
-        input,
-        text_mode: options.text.unwrap_or_default(),
-        prec,
-        defs: Vec::new(),
-        stack: vec![Frame {
-            attrs: String::new(),
-            children: Vec::new(),
-            kind: FrameKind::Root,
-        }],
-        report: SvgReport::default(),
-        next_id: 0,
-        items: 0,
-        glyphs,
-        feather_end,
-        bounds: None,
-        clip_boxes: Vec::new(),
-        last_fill: None,
-        minify,
-    };
+    let mut w = Writer::new(input, options.text.unwrap_or_default(), prec, minify);
     w.walk();
     let [x, y, vw, vh] = match options.region {
         Some(r) if r[2] > 0.0 && r[3] > 0.0 => r,
@@ -1267,7 +1362,12 @@ pub fn export_display_list(
     let mut out = String::new();
     let _ = write!(
         out,
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}pt\" height=\"{}pt\" viewBox=\"{} {} {} {}\">{nl}",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"{} width=\"{}pt\" height=\"{}pt\" viewBox=\"{} {} {} {}\">{nl}",
+        if w.symbols.is_empty() {
+            ""
+        } else {
+            " xmlns:xlink=\"http://www.w3.org/1999/xlink\""
+        },
         w.num(vw),
         w.num(vh),
         w.num(x),

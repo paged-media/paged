@@ -1411,6 +1411,21 @@
   tests:
     rust: ["image-conformance/tests/it/family_geom.rs"]
 
+- id: geom.warp_projective
+  rust_path: families::geom::GEOM_WARP_PROJECTIVE
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Backward-mapped projective warp (a 3x3 homography): inverse mapping per output texel with the homogeneous divide; Wolberg, Digital Image Warping (IEEE CS Press, 1990), section 3; Heckbert, Fundamentals of Texture Mapping and Image Warping (UC Berkeley, 1989), section 2.2; no reference reading"
+    - "Bicubic reconstruction: Catmull-Rom cubic convolution (a = -0.5), Keys, Cubic convolution interpolation for digital image processing, IEEE TASSP 29(6), 1981; bilinear as geom.rotate_bilinear"
+    - "Transparent outside the source on associated alpha (no fringe); selection mode floats the masked pixels over what stays (Free Transform of a selection, WP5.6)"
+  tests:
+    rust: ["image-conformance/tests/it/family_geom.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+
 # ── gen family (T2; procedural generators, unary-dummy lane) ─
 
 - id: gen.solid
@@ -2077,6 +2092,9 @@
 - id: style.shift
   rust_path: families::style::STYLE_SHIFT
   state_row: image.kernel.family-t3
+- id: geom.warp_mesh
+  rust_path: families::warp::GEOM_WARP_MESH
+  state_row: image.kernel.family-t2
   class: resample
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 4 }
@@ -2688,3 +2706,8 @@
     - "identity: texture, clarity, dehaze, sharpen amount and both noise reductions 0"
   tests:
     rust: ["image-conformance/tests/it/filters_develop.rs"]
+    - "ENVELOPE warp: a bicubic Bezier patch (4x4 control mesh, cubic Bernstein basis) inverted per output texel — seed at the nearest 9x9 grid node, ten Newton steps on the 2x2 Jacobian, transparent where the residual exceeds half a pixel. Inverse mapping and bilinear reconstruction after Heckbert, Fundamentals of Texture Mapping and Image Warping (UC Berkeley, 1989); Newton inversion of a parametric patch is textbook numerical analysis; no reference reading"
+    - "the mesh comes from paged-warp's envelope module (one definition with the vector lane: draw's envelopes map points forward through the same patch); Photoshop's fifteen Warp Text styles are that module's closed forms, recorded against Photoshop by scripts/photoshop/probes/warp-text.jsx"
+    - "(u, v) is clamped to [-0.25, 1.25], not [0, 1], so a texel just outside an edge still converges and reads the transparent outside of the source: the warped edge is antialiased instead of cut, and the result is continuous across it (no branch flips between the two lanes there)"
+  tests:
+    rust: ["image-conformance/tests/it/family_warp.rs"]

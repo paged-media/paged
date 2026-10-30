@@ -93,6 +93,16 @@ import { adjustHandlesOverlay, HandlesModel } from "./adjust-handles.js";
 import { LiveFollower } from "./live-presets.js";
 import { makeShapesPanel } from "./panels/shapes-panel.js";
 import { insertShape, SHAPES_PANEL_ID } from "./shapes.js";
+import { renderRasters } from "./pictures.js";
+import {
+  contentTypedCommands,
+  contributeContentCommands,
+  FormatClipboard,
+  type ContentDeps,
+} from "./content-commands.js";
+import { SMARTART_PANEL_ID, SmartArtStore } from "./smartart.js";
+import { makeSmartArtPanel } from "./panels/smartart-panel.js";
+import { SMARTART } from "./messages.js";
 import {
   contributeOutputCommands,
   CUSTOM_SHOWS_PANEL,
@@ -104,6 +114,16 @@ import { makeExportView } from "./output/export-view.js";
 import { Output } from "./output/output.js";
 import { makeCustomShowsPanel } from "./panels/custom-shows-panel.js";
 import { OUTPUT } from "./messages.js";
+import {
+  contributeDesignCommands,
+  DESIGN_PANEL_ID,
+  DesignStore,
+  designTypedCommands,
+  pickTheme,
+  type DesignDeps,
+} from "./design.js";
+import { makeDesignPanel } from "./panels/design-panel.js";
+import { DESIGN } from "./messages.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
 export const SLIDES_PANEL_ID = "media.paged.slide.panel.slides";
@@ -364,20 +384,53 @@ export function activate(host: BundleHost): BundleHandle {
   // custom shows and sections; made once the store exists.
   let output: Output | null = null;
   let outputUi: OutputUi | null = null;
+  // Slide W4's content verbs: pictures and icons, the format painter, the
+  // SmartArt text pane (content-commands.ts).
+  const clipboard = new FormatClipboard();
+  const smartArt = new SmartArtStore(host);
+  disposers.push(() => smartArt.dispose());
+  let textPane = false;
+  // Design ▸ Themes (slide ADR 713): the gallery, applying a theme in one
+  // undo step, and the theme's missing references (slide ADR 719).
+  const design = new DesignStore(host, slideEngine);
+  disposers.push(() => design.dispose());
+  let designPanel = false;
+  const designDeps: DesignDeps = {
+    store: design,
+    openPanel: () => {
+      if (!designPanel || !host.supports("shell.openPanel@1")) return false;
+      host.shell.openPanel(DESIGN_PANEL_ID);
+      return true;
+    },
+  };
+  const content: ContentDeps = {
+    engine: slideEngine,
+    activePage: () => store?.activePage() ?? null,
+    openTextPane: () => {
+      if (!textPane || !host.supports("shell.openPanel@1")) return false;
+      host.shell.openPanel(SMARTART_PANEL_ID);
+      return true;
+    },
+  };
   const model = contributeSlideObjectModel(host, {
     openDeck,
     exportDeck,
     extraCommands: showTypedCommands((id) =>
       runShow ? runShow(id) : Promise.resolve(false),
     ),
-    // The output's typed commands, then the animations' twins (slide ADR
-    // 714, bound below), in the manifest's order.
+    // The output's typed commands, the animations' twins (slide ADR 714,
+    // bound below) and the content verbs', in the manifest's order.
     outputCommands: [
       ...outputTypedCommands(
         () => output,
         () => outputUi,
       ),
       ...animationTypedCommands(() => animBinding),
+      // Pictures, icons, the format painter and SmartArt text (slide ADR
+      // 717 amendment), last in the manifest.
+      ...contentTypedCommands(host, content, clipboard),
+      // Design ▸ Themes (slide ADR 713), last in the manifest.
+      ...designTypedCommands(host, () => designDeps),
     ],
     comments: () => comments,
     step,
@@ -455,10 +508,18 @@ export function activate(host: BundleHost): BundleHandle {
     const plan = await exportPlan(host, prints, comments?.current() ?? null);
     const document = await documentBytes(host);
     const engine = await slideEngine();
-    const out = engine.exportPptx(original, plan, document, {
+    const deck = {
       ...(await deckPlan(host, format)),
       charts: await chartPlans(host),
-    });
+    };
+    let out = engine.exportPptx(original, plan, document, deck);
+    // Pictures PowerPoint cannot hold as they are (an SVG's fallback, a
+    // WebP, …): the host renders them, and the deck is written again.
+    if (out.rastersNeeded.length > 0) {
+      const rasters = await renderRasters(host, out.rastersNeeded);
+      if (Object.keys(rasters).length > 0)
+        out = engine.exportPptx(original, plan, document, { ...deck, rasters });
+    }
     host.diagnostics.set(EXPORT_DIAGNOSTICS, exportDiagnostics(out));
     const meta = await host.document.meta();
     const name =
@@ -595,9 +656,24 @@ export function activate(host: BundleHost): BundleHandle {
       shapesPanel: richPanels ? SHAPES_PANEL_ID : undefined,
     });
     const menu = contributeMenu(host, (id) => commands.ids.has(id));
+    const contentCommands = contributeContentCommands(
+      host,
+      content,
+      clipboard,
+      {
+        deckOpen: () => (store ? store.isDeck() : false),
+        scopedKeys: deckContext,
+        deckContext: DECK_CONTEXT,
+      },
+    );
+    const designCommands = contributeDesignCommands(host, designDeps, () =>
+      store ? store.isDeck() : false,
+    );
     disposers.push(
       () => commands.dispose(),
       () => menu.dispose(),
+      () => contentCommands.dispose(),
+      () => designCommands.dispose(),
     );
   }
 
@@ -721,6 +797,36 @@ export function activate(host: BundleHost): BundleHandle {
             '<path d="M12 20.5l4.5-7 4.5 7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
         }).dispose,
         host.contribute.panel({
+          id: SMARTART_PANEL_ID,
+          title: t(SMARTART.title),
+          component: makeSmartArtPanel(host, smartArt),
+          defaultDock: "right",
+          rail: false,
+          // Three lines of an outline beside a diagram's boxes.
+          iconSvg:
+            '<path d="M3.5 6h6M5.5 10h4M5.5 14h4M3.5 18h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' +
+            '<rect x="13" y="4" width="7.5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<rect x="13" y="15" width="7.5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<path d="M16.75 9v6" fill="none" stroke="currentColor" stroke-width="1.6"/>',
+        }).dispose,
+        host.contribute.panel({
+          id: DESIGN_PANEL_ID,
+          title: t(DESIGN.title),
+          component: makeDesignPanel(host, design, () =>
+            pickTheme(host, design).catch((e: unknown) =>
+              host.log.warn(`paged.slide browse for themes: ${String(e)}`),
+            ),
+          ),
+          defaultDock: "right",
+          // Design ▸ Themes opens it, as the ribbon's Design tab does.
+          rail: false,
+          // A slide with a palette of swatches.
+          iconSvg:
+            '<rect x="3.5" y="4.5" width="17" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<path d="M6 19.5h3M10.5 19.5h3M15 19.5h3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>' +
+            '<path d="M7 8.5h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+        }).dispose,
+        host.contribute.panel({
           id: NOTES_PANEL_ID,
           title: t(NOTES.title),
           component: makeNotesPanel(host, s),
@@ -748,6 +854,8 @@ export function activate(host: BundleHost): BundleHandle {
       }
     };
     registerPanels(s.isDeck());
+    textPane = true;
+    designPanel = true;
     disposers.push(
       s.subscribe(() => {
         if (s.isDeck() !== railed) registerPanels(s.isDeck());

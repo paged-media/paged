@@ -67,6 +67,7 @@ import { ObjectStylesPanel } from "./object-styles-panel";
 import { ObjectTransformPanel } from "./object-transform-panel";
 import { AlignPanel } from "./align-panel";
 import { AttributesPanel } from "./attributes-panel";
+import { PictureAdjustmentsPanel } from "./picture-adjustments-panel";
 import { ControlPanel } from "./control-panel";
 import { PropertiesPanel } from "./properties-panel";
 import { PathfinderPanel } from "./pathfinder-panel";
@@ -79,7 +80,7 @@ import { TabsPanel } from "./concept/tabs-panel";
 import { GlyphsPanel } from "./concept/glyphs-panel";
 import { BulletsPanel } from "./concept/bullets-panel";
 import { AnchoredPanel } from "./concept/anchored-panel";
-import { ObjectExportPanel } from "./concept/object-export-panel";
+import { AssetExportPanel } from "./asset-export-panel";
 import { ExportTaggingPanel } from "./concept/export-tagging-panel";
 import { MasterPagesPanel } from "./master-pages-panel";
 import { ArtboardsPanel } from "./artboards-panel";
@@ -204,6 +205,7 @@ const M = defineMessages("app.builtInPanels", {
   navigator: "Navigator",
   findResults: "Find results",
   attributes: "Attributes",
+  pictureAdjustments: "Picture adjustments",
   properties: "Properties",
   aiAssistant: "AI Assistant",
   control: "Control",
@@ -221,7 +223,7 @@ const M = defineMessages("app.builtInPanels", {
   glyphs: "Glyphs",
   bulletsNumbering: "Bullets & Numbering",
   anchored: "Anchored Object",
-  objectExport: "Object Export Options",
+  assetExport: "Asset Export",
   exportTagging: "Export Tagging",
 });
 
@@ -1089,6 +1091,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultGroup: "inspector",
   },
   {
+    // Engine ADR 1037 — quick picture fixes on a placed image (the image
+    // frame's filter stack), in every module's context.
+    id: "paged.picture-adjustments",
+    get title() {
+      return t(M.pictureAdjustments);
+    },
+    component: PictureAdjustmentsPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+  },
+  {
     // SDK Phase 5 (v1 sweep) — Properties context router. Per
     // `docs/design/panel-catalog.md` §6 Tier 6 — the
     // "Properties" idiom. Composes Object Transform + Stroke
@@ -1288,16 +1301,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     icon: "ui-pin",
   },
   {
-    // Per-object alt text / tagged-PDF role / EPUB conversion —
-    // the accessible-output surface (in scope per the parity doc).
+    // Editor ADR 288 — Asset Export: page items, artboards and pages
+    // at several scales as PNG, JPEG, WebP, TIFF, SVG and PDF. The id is
+    // the dock slot of the former Object Export Options concept.
     id: "paged.object-export",
     get title() {
-      return t(M.objectExport);
+      return t(M.assetExport);
     },
-    component: ObjectExportPanel,
+    component: AssetExportPanel,
     defaultDock: "right",
     defaultGroup: "output",
-    icon: "ui-accessibility",
+    icon: "ui-export",
   },
   {
     // Style → HTML tag/CSS class/PDF tag mapping for EPUB + tagged

@@ -872,6 +872,112 @@ pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<String> {
     out
 }
 
+/// Engine ADR 1008 — what an item's effect stack says that IDML cannot:
+/// an effect InDesign does not have (it rides the item's
+/// `paged:effectStack` label, which InDesign keeps and does not draw, so a
+/// paged reader restores it), and an order of InDesign's own effects that
+/// differs from the fixed one InDesign draws them in. Declared from the
+/// model: the twin reads the label back, so it cannot see the loss.
+pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
+    use paged_model::effect_stack::{EffectBearing, EffectTarget};
+    let mut out = Vec::new();
+    let mut check = |kind: &str, id: Option<&str>, item: &dyn EffectBearing| {
+        let id = id.unwrap_or("?");
+        for target in EffectTarget::ALL {
+            let slots = item.effect_slots(target);
+            let on = match target {
+                EffectTarget::Object => "",
+                EffectTarget::Fill => " (fill)",
+                EffectTarget::Stroke => " (stroke)",
+                EffectTarget::Content => " (content)",
+            };
+            for e in slots.stack.iter().filter(|e| e.enabled) {
+                if e.effect.indesign().is_none() {
+                    out.push(format!(
+                        "effect `{}` on {kind} `{id}`{on} has no IDML form — InDesign has its \
+                         nine effects only; it is kept in the item's `paged:effectStack` label, \
+                         which InDesign preserves and does not draw. Save as `.paged` to keep \
+                         it visible everywhere.",
+                        e.effect.kind_name()
+                    ));
+                }
+            }
+            if slots.indesign_order_differs() {
+                out.push(format!(
+                    "the order of the InDesign effects on {kind} `{id}`{on} differs from \
+                     InDesign's fixed order — InDesign draws them in its own; the order is \
+                     kept in the item's `paged:effectStack` label."
+                ));
+            }
+        }
+    };
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        for f in &sp.text_frames {
+            check("text frame", f.self_id.as_deref(), f);
+        }
+        for f in &sp.rectangles {
+            check("rectangle", f.self_id.as_deref(), f);
+        }
+        for f in &sp.ovals {
+            check("oval", f.self_id.as_deref(), f);
+        }
+        for f in &sp.polygons {
+            check("polygon", f.self_id.as_deref(), f);
+        }
+    }
+    out
+}
+
+/// Engine ADR 1043 — an item's appearance has no IDML form: the writer
+/// bakes it to a group of single-paint items and keeps the source in the
+/// carrier's `paged:appearance` label. Declared from the model: the twin
+/// reads the label back, so it cannot see the loss.
+pub(crate) fn appearance_losses(scene: &Document) -> Vec<String> {
+    scene
+        .spreads
+        .iter()
+        .flat_map(|p| paged_model::appearance::interchange::losses(&p.spread))
+        .collect()
+}
+
+/// Engine ADR 1037 — the image filter stacks IDML cannot carry. InDesign
+/// has no adjustment on a placed picture, so it shows the picture as it
+/// is; the export keeps each stack in the frame's label, which paged reads
+/// back on reopen. Declared from the model, like the opacity masks: the
+/// twin reads the label back and so cannot tell the loss.
+pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut check = |kind: &str, id: Option<&str>, ops: &[paged_model::RasterOp]| {
+        if ops.is_empty() {
+            return;
+        }
+        let names: Vec<&str> = ops.iter().map(|op| op.name()).collect();
+        out.push(format!(
+            "image filter stack on {kind} `{}` ({}) is a paged-native construct — IDML has \
+             no adjustment on a placed picture, so InDesign shows it unadjusted; the stack \
+             rides the frame's `{}` label and comes back when paged reopens the file. \
+             Save as `.paged` to keep it.",
+            id.unwrap_or("?"),
+            names.join(", "),
+            paged_model::image_adjust::IMAGE_ADJUSTMENTS_LABEL,
+        ));
+    };
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        for r in &sp.rectangles {
+            check("rectangle", r.self_id.as_deref(), &r.image_adjustments);
+        }
+        for o in &sp.ovals {
+            check("oval", o.self_id.as_deref(), &o.image_adjustments);
+        }
+        for p in &sp.polygons {
+            check("polygon", p.self_id.as_deref(), &p.image_adjustments);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

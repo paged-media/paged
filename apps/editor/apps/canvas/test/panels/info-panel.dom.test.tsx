@@ -26,6 +26,7 @@ import { covers } from "@paged-media/test-kit";
 
 import { CANVAS_POINTER } from "@paged-media/shell";
 import { setDocumentUnit } from "@paged-media/ui";
+import { createBindingProviderRegistry } from "@paged-media/plugin-sdk";
 
 import { InfoPanel } from "../../src/panels/info-panel";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
@@ -202,5 +203,68 @@ describe("Info panel", () => {
       h.root.querySelector('[data-info-note="unavailable"]'),
     ).not.toBeNull();
     expect(rows(h).CMYK).toBeUndefined();
+  });
+});
+
+describe("Info panel over an edit context with readouts (extensions ADR 340)", () => {
+  test("the context's rows lead the panel, and leave with the context", async () => {
+    covers("panel:paged.info");
+    const registry = createBindingProviderRegistry();
+    let value = "200 0 0";
+    const handle = registry.register({
+      plugin: "test.raster",
+      contextType: "rasterImage",
+      provider: {
+        provides: { readouts: ["info"] },
+        readReadouts: () => ({
+          kind: "readouts",
+          sections: [
+            {
+              id: "image",
+              title: "Image",
+              rows: [
+                { id: "Image X", label: "X", value: "12 px" },
+                { id: "Image RGB", label: "RGB", value, swatch: "#c80000" },
+              ],
+            },
+          ],
+        }),
+      },
+    });
+    registry.setContextActive("test.raster", "rasterImage", null, true);
+    const h = await mountPanel(InfoPanel, {
+      id: "paged.info",
+      document: "blank",
+      bindingProviders: registry,
+    });
+    await h.settle();
+    const section = h.root.querySelector(
+      '[data-info-section="provided:image"]',
+    );
+    expect(section?.querySelector("h3")?.textContent).toBe("Image");
+    expect(rows(h)).toMatchObject({
+      "Image X": "12 px",
+      "Image RGB": "200 0 0",
+    });
+    expect(
+      section
+        ?.querySelector("[data-info-swatch]")
+        ?.getAttribute("data-info-swatch"),
+    ).toBe("#c80000");
+    // The provider's rows move when it invalidates.
+    value = "0 0 200";
+    await h.act(() => registry.notifyChanged("test.raster", "rasterImage"));
+    await h.settle();
+    expect(rows(h)["Image RGB"]).toBe("0 0 200");
+    // Leaving the context takes the rows away; the host's own stay.
+    await h.act(() =>
+      registry.setContextActive("test.raster", "rasterImage", null, false),
+    );
+    await h.settle();
+    expect(
+      h.root.querySelector('[data-info-section="provided:image"]'),
+    ).toBeNull();
+    expect(rows(h)["Cursor X"]).toBe("—");
+    handle.dispose();
   });
 });

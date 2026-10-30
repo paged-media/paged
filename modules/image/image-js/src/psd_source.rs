@@ -65,9 +65,17 @@ pub struct Imported {
 #[derive(Debug, Clone, PartialEq)]
 pub enum KindState {
     Pixels,
-    Smart,
+    /// A smart object: its placement, its source file (by identity) and
+    /// its filters (ADR 482).
+    Smart {
+        quad: [f64; 8],
+        file: usize,
+        filters: Option<crate::smart::SmartFilterStack>,
+    },
     Adjustment(Box<crate::layers::Adjustment>),
     Fill(crate::layers::FillSource),
+    /// A type layer (image ADR 474): its source as JSON.
+    Type(String),
 }
 
 /// Two sources are the same source only by identity.
@@ -124,9 +132,14 @@ pub fn mask_hash(m: &LayerMask) -> u64 {
 fn kind_state(l: &Layer) -> KindState {
     match &l.kind {
         LayerKind::Pixels => KindState::Pixels,
-        LayerKind::Smart(_) => KindState::Smart,
+        LayerKind::Smart(s) => KindState::Smart {
+            quad: s.quad(),
+            file: s.file.as_ref().map_or(0, |f| Arc::as_ptr(f) as usize),
+            filters: s.filters.as_deref().cloned(),
+        },
         LayerKind::Adjustment(a) => KindState::Adjustment(a.clone()),
         LayerKind::Fill(f) => KindState::Fill(f.source.clone()),
+        LayerKind::Type(t) => KindState::Type(t.source.to_json()),
     }
 }
 

@@ -34,6 +34,7 @@ mod hyperlink_in_source_story;
 mod hyperlink_roundtrip;
 mod image_placement_precision;
 mod indesign_canonical;
+mod indesign_effect_stack;
 mod indesign_object_model;
 mod indesign_styles_untouched;
 mod ink_roundtrip;

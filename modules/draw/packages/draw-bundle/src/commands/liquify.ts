@@ -46,7 +46,7 @@ import {
   type DistortTarget,
   type Pt,
 } from "./distort-shared";
-import { resolveTargetPage } from "../io/svg";
+import { resolveTargetPage } from "../target-page";
 
 const M = defineMessages("draw.liquify", {
   stroke: "Liquify along a path",

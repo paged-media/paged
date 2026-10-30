@@ -23,7 +23,9 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  paletteSwatchId,
   tablePictureBox,
+  tablePictureLosses,
   tablePictureOps,
   type LoweredContent,
   type LoweredPicture,
@@ -92,5 +94,63 @@ describe("pictures over a page table [sheet.xlsx.pictures]", () => {
         fit: "ContentToFrame",
       },
     });
+  });
+});
+
+describe("a picture's DrawingML look [sheet.chart.native-effects]", () => {
+  const styled: LoweredPicture = {
+    ...pic,
+    fx: {
+      opacity: 60,
+      dropShadow: {
+        xOffset: 2,
+        yOffset: 2,
+        size: 2,
+        opacity: 40,
+        color: "#000000",
+      },
+    },
+    losses: [
+      "picture effect a:grayscl is not carried (no image adjustments yet)",
+    ],
+  };
+  const withPics = { ...content, pictures: [styled, { ...styled, row: 1 }] };
+
+  it("sets the frame's opacity and shadow and mints the shadow colour once", () => {
+    const ops = tablePictureOps(withPics, [40, 60], "p1" as never, [0, 0]) as {
+      op: string;
+      args: Record<string, unknown>;
+    }[];
+    const mints = ops.filter((o) => o.op === "createSwatch");
+    expect(mints).toHaveLength(1);
+    expect(ops[0]!.op).toBe("createSwatch");
+    const sets = ops.filter((o) => o.op === "setElementProperty");
+    expect(sets[0]!.args.elementId).toEqual({
+      kind: "rectangle",
+      id: "$h:pic0",
+    });
+    const paths = sets.map((o) => [
+      o.args.path,
+      (o.args.value as { value: unknown }).value,
+    ]);
+    expect(paths).toContainEqual(["frameOpacity", 60]);
+    expect(paths).toContainEqual(["frameDropShadow", true]);
+    expect(paths).toContainEqual([
+      "frameDropShadowColor",
+      paletteSwatchId("chart", "000000"),
+    ]);
+    // A colour the document has is referenced; a failed read mints none.
+    const known = new Set([paletteSwatchId("chart", "000000")]);
+    expect(
+      tablePictureOps(withPics, [40, 60], "p1" as never, [0, 0], known).some(
+        (o) => o.op === "createSwatch",
+      ),
+    ).toBe(false);
+    expect(
+      tablePictureOps(withPics, [40, 60], "p1" as never, [0, 0], null).some(
+        (o) => o.op === "createSwatch",
+      ),
+    ).toBe(false);
+    expect(tablePictureLosses(withPics)).toHaveLength(1);
   });
 });

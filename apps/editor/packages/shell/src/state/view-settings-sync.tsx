@@ -31,6 +31,8 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import type { SnapSettings } from "@paged-media/client";
 
+import { useBindingProviderHost } from "../catalog/binding-providers";
+import type { ShellWorkspaceView } from "../catalog/binding-providers";
 import { useCanvasClient } from "./canvas-client-context";
 import { useEditorScope, type EditorScope } from "./editor-scope";
 import {
@@ -74,6 +76,22 @@ export function snapSettingsOf(
   };
 }
 
+/** Extensions ADR 340 — the grid and snap state an edit context's own
+ *  tools snap by (a raster image's marquee, crop and Ruler): the same
+ *  grid the host draws over its workspace. */
+export function workspaceViewOf(
+  scope: EditorScope,
+  prefs: ViewPreferences,
+): ShellWorkspaceView {
+  return {
+    showGrid: getViewToggle(scope, "showGrid"),
+    snapToGrid: getViewToggle(scope, "snapToGrid"),
+    gridEveryPt: prefs.gridEvery,
+    gridSubdivisions: Math.max(1, Math.round(prefs.gridSubdivisions)),
+    snapTolerancePx: prefs.tolerancePx,
+  };
+}
+
 /** The snap step the engine uses, pt (tests and the Info read it). */
 export function snapGridStep(prefs: ViewPreferences): number {
   return gridStep(prefs);
@@ -95,6 +113,16 @@ export function ViewSettingsSync() {
     () => JSON.stringify(snapSettingsOf(scope, prefs)),
     () => "",
   );
+  const bindings = useBindingProviderHost();
+  const workspaceKey = useSyncExternalStore(
+    (l) => subscribeViewToggles(scope, l),
+    () => JSON.stringify(workspaceViewOf(scope, prefs)),
+    () => "",
+  );
+  useEffect(() => {
+    if (!workspaceKey || !bindings?.setWorkspaceView) return;
+    bindings.setWorkspaceView(JSON.parse(workspaceKey) as ShellWorkspaceView);
+  }, [bindings, workspaceKey]);
   useEffect(() => {
     void client.setViewSettings({ mode }).catch(() => {});
   }, [client, mode]);

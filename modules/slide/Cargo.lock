@@ -216,6 +216,7 @@ version = "0.0.0"
 dependencies = [
  "paged-model",
  "paged-ooxml",
+ "serde",
 ]
 
 [[package]]
@@ -462,6 +463,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -744,6 +746,7 @@ name = "sheet-chart"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "dml-native",
  "paged-ooxml",
  "plotters",
  "plotters-backend",
@@ -882,6 +885,7 @@ dependencies = [
 name = "slide-js"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "paged-ooxml",
  "pptx-core",
  "pptx-export",

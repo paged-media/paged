@@ -32,6 +32,11 @@ pub struct Deck {
     /// Named theme colours (`accent1` …) of the first master's theme, in
     /// scheme order — written as a colour group.
     pub theme_colors: Vec<(String, Rgb)>,
+    /// That theme as data (slide ADR 713), and its part.
+    #[serde(default)]
+    pub theme: Option<crate::theme::ThemeIr>,
+    #[serde(default)]
+    pub theme_part: Option<String>,
     /// One per used layout: the slide master's and the layout's own art.
     pub masters: Vec<MasterPage>,
     pub slides: Vec<SlidePage>,
@@ -173,6 +178,32 @@ pub struct ItemMeta {
     /// A connector's glued ends (slide ADR 717).
     #[serde(default)]
     pub connector: Option<Connector>,
+    /// A SmartArt drawing shape's `modelId` (its presentation point).
+    #[serde(default)]
+    pub model_id: Option<String>,
+    /// A SmartArt drawing shape: the data points whose text it shows, in
+    /// order, and how many paragraphs of its text each one is.
+    #[serde(default)]
+    pub dgm: Option<Vec<(String, u32)>>,
+    /// A SmartArt frame: its data model's text outline (the text pane).
+    #[serde(default)]
+    pub smartart: Option<pptx_core::DiagramModel>,
+    /// The shape's `p:style` (slide ADR 719): its references and the look
+    /// they give, for the object style it maps to.
+    #[serde(default)]
+    pub shape_style: Option<ShapeStyleLook>,
+}
+
+/// A shape style (`p:style`) as a document object style: the theme
+/// references (their text identifies the style), its name, and the fill and
+/// line they give a shape of its own.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShapeStyleLook {
+    /// `line2:accent1 shade50000 fill1:accent1 effect0:accent1 font:minor:lt1`.
+    pub refs: String,
+    pub name: String,
+    pub fill: Paint,
+    pub stroke: Option<Stroke>,
 }
 
 /// A connector's glued ends.
@@ -265,6 +296,12 @@ pub struct TextRun {
     pub baseline: f64,
     pub rgb: Rgb,
     pub alpha: f64,
+    /// The theme colour the run's colour is (its key, slide ADR 713).
+    #[serde(default)]
+    pub theme: Option<String>,
+    /// The theme font the run's typeface is (`major`, `minor`).
+    #[serde(default)]
+    pub theme_font: Option<String>,
     /// The run's `a:hlinkClick`: a URL, a slide or a show action.
     pub link: Option<pptx_core::Hyperlink>,
     /// `a:fld type` (`slidenum`, `datetime1`, …); `text` holds the value
@@ -350,7 +387,20 @@ pub struct Cell {
     pub text: Option<TextFrame>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A paragraph style a placeholder's text maps to (slide ADR 719): `Title`,
+/// `Body`, `Body L1`–`L9`, `Other L1`–`L9`, as the first master's text
+/// styles give them.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ParagraphStyle {
     pub name: String,
+    /// The style it is based on (`Body` for the list levels).
+    #[serde(default)]
+    pub based_on: Option<String>,
+    /// The theme font it takes (`major`, `minor`): the root styles'.
+    #[serde(default)]
+    pub theme_font: Option<String>,
+    /// The level's own look, from the master's text style; `None` for the
+    /// root styles.
+    #[serde(default)]
+    pub level: Option<Para>,
 }

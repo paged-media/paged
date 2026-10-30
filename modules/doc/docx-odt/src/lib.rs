@@ -869,6 +869,7 @@ impl Odt<'_> {
             height_emu: i64::from(h.max(1)) * 635,
             float: None,
             band_offset_emu: None,
+            look: None,
         })
     }
 
@@ -1079,6 +1080,7 @@ impl Odt<'_> {
                 .clone()
                 .unwrap_or_else(|| name.replace("_20_", " "));
             styles.push(Style {
+                table: None,
                 is_default: id == "Normal",
                 style_id: id,
                 name: Some(word_name(&display)),

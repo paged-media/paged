@@ -613,6 +613,8 @@ export interface HeadlessEditor {
 export interface FakeSystemClipboard extends SystemClipboard {
   text: string;
   html: string;
+  /** The `image/svg+xml` flavour (ADR 289); "" when absent. */
+  svg: string;
   denied: boolean;
 }
 
@@ -919,15 +921,20 @@ export async function createHeadlessEditor(
   const systemClipboard: FakeSystemClipboard = {
     text: "",
     html: "",
+    svg: "",
     denied: false,
-    async write(text, html) {
+    async write({ text, html, svg }) {
       if (this.denied) return false;
       this.text = text;
       this.html = html;
+      this.svg = svg ?? "";
       return true;
     },
     async read() {
-      return this.denied ? null : { text: this.text, html: this.html };
+      if (this.denied) return null;
+      return this.svg
+        ? { text: this.text, html: this.html, svg: this.svg }
+        : { text: this.text, html: this.html };
     },
   };
   const clipboardCommands = buildClipboardCommands({

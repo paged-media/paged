@@ -44,6 +44,7 @@ use crate::module::{Geometry, ResolvedFrame};
 use crate::AssetResolver;
 
 mod anchored;
+mod appearance;
 mod auto_size;
 mod baseline_grid;
 mod blend_shadow;
@@ -57,6 +58,7 @@ mod deltas;
 mod font_table;
 mod footnotes;
 mod geom;
+pub mod image_adjust;
 mod image_convert;
 mod image_decode;
 mod images;
@@ -81,6 +83,8 @@ mod numbering;
 mod shapes;
 mod span_columns;
 mod stroke_geom;
+mod symbols;
+pub use symbols::{BuiltSymbol, SymbolCache};
 mod tables;
 mod text_frame;
 mod text_path;
@@ -364,6 +368,13 @@ pub struct PipelineOptions<'a> {
     /// behaviour: a fresh local cache per call.
     pub image_decode_cache:
         Option<&'a std::cell::RefCell<HashMap<String, paged_compose::DecodedImage>>>,
+    /// Engine ADR 1037 — the display density, in device pixels per point,
+    /// an image frame's filter stack is evaluated for: a picture larger
+    /// than that is reduced first (to a power-of-two share, so zooming
+    /// does not re-run the stack). `None`, the default and what an export
+    /// wants, evaluates at the picture's own pixels, so a PDF embeds the
+    /// adjusted picture at its effective ppi.
+    pub image_adjust_px_per_pt: Option<f32>,
     /// Perf-FontTable — pre-built shaping table. When `Some`,
     /// `build_document` skips its internal `FontTable::build` call
     /// (which walks every paragraph + resolver-fetches every font
@@ -486,6 +497,10 @@ pub struct PipelineOptions<'a> {
     /// resolution-independent: this is a *hint* for which level of detail
     /// to assemble, not a geometry scale.
     pub render_scale: f32,
+    /// Engine ADR 1039 — the caller's cache of built symbol definitions,
+    /// kept across builds (`None`: each build compiles the definitions its
+    /// instances name).
+    pub symbol_cache: Option<&'a SymbolCache>,
 }
 
 /// C-6 — one frame's claimed image-resource entry on [`PipelineOptions`]:
@@ -656,6 +671,7 @@ impl Default for PipelineOptions<'_> {
             break_story_filter: None,
             break_page_range: None,
             image_decode_cache: None,
+            image_adjust_px_per_pt: None,
             pre_built_font_table: None,
             cmyk_transform_cache: None,
             master_text_emit_cache: None,
@@ -673,6 +689,7 @@ impl Default for PipelineOptions<'_> {
             scene_fonts: None,
             resource_providers: None,
             render_scale: 1.0,
+            symbol_cache: None,
         }
     }
 }

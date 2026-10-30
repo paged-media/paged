@@ -18,8 +18,9 @@
  */
 
 // Panel-gallery pass — the CONCEPT / PARTIAL panels (INDESIGN_PARITY.md:
-// Table / Glyphs / Bullets & Numbering + Object Export Options /
-// Export Tagging). Each opens from the registry, renders its
+// Table / Glyphs / Bullets & Numbering + Export Tagging; the Object
+// Export Options concept became the live Asset Export panel, editor
+// ADR 288, e2e/asset-export.spec.ts). Each opens from the registry, renders its
 // kit-shaped seam structure with the Concept (or Partial) badge + the
 // Target footnote, and keeps every unbacked control disabled. Glyphs'
 // live insertion is covered separately (glyphs-panel.spec.ts).
@@ -55,11 +56,6 @@ const CONCEPTS = [
     id: "paged.bullets-numbering",
     ready: "bullets-panel",
     badge: "partial",
-  },
-  {
-    id: "paged.object-export",
-    ready: "object-export-panel",
-    badge: "concept",
   },
   {
     id: "paged.export-tagging",
@@ -99,23 +95,7 @@ test.describe("Panel gallery — concept panels", () => {
     });
   }
 
-  test("AC-CONCEPT-TABS — Object Export tab switcher is live local state @feat:editor-shell.panels.bullets-numbering @feat:editor-shell.panels.export-tagging @feat:editor-shell.panels.object-export @feat:editor-shell.panels.table @feat:editor-shell.panels.tabs @level:happy", async ({
-    page,
-  }) => {
-    await openPanel(page, "paged.object-export");
-    const root = page.locator('[data-object-export-panel="ready"]');
-    await expect(
-      root.locator('[data-export-tab="Alt Text"][data-active="true"]'),
-    ).toBeVisible();
-    await root.locator('[data-export-tab="Tagged PDF"]').click();
-    await expect(
-      root.locator('[data-export-tab="Tagged PDF"][data-active="true"]'),
-    ).toBeVisible();
-    // The Tagged PDF fields render (Role select seam).
-    await expect(root.locator("[data-seam]").first()).toBeVisible();
-  });
-
-  test("AC-CONCEPT-SCOPE — Export Tagging scope toggle swaps the mapping @feat:editor-shell.panels.bullets-numbering @feat:editor-shell.panels.export-tagging @feat:editor-shell.panels.object-export @feat:editor-shell.panels.table @feat:editor-shell.panels.tabs @level:happy", async ({
+  test("AC-CONCEPT-SCOPE — Export Tagging scope toggle swaps the mapping @feat:editor-shell.panels.bullets-numbering @feat:editor-shell.panels.export-tagging @feat:editor-shell.panels.table @feat:editor-shell.panels.tabs @level:happy", async ({
     page,
   }) => {
     await openPanel(page, "paged.export-tagging");
