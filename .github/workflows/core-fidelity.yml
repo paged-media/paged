@@ -8,6 +8,7 @@ concurrency:
 
 # Ported from paged-media/core .github/workflows/fidelity.yml (step A3).
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
