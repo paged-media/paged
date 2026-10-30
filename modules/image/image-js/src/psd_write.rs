@@ -64,6 +64,7 @@ use crate::ingest::IngestError;
 use crate::layers::{Layer, LayerKind, LayerMask, LayerStack};
 use crate::psd_layer_ext::raw_block;
 use crate::psd_source::{state_of, KindState, PsdSource};
+use crate::psd_write_smart::{is_smart, SmartDoc, SMART_KEYS};
 use crate::saveback::PsdSaveBackShape;
 
 fn err(e: image_psd::PsdError) -> IngestError {
@@ -549,7 +550,11 @@ fn type_block(store: &Store, l: &Layer) -> Option<AdditionalLayerInfo> {
 }
 
 /// A layer MADE in paged, as a new record.
-fn built_record(store: &Store, l: &Layer) -> Result<LayerRecord, IngestError> {
+fn built_record(
+    store: &Store,
+    l: &Layer,
+    smart: &mut SmartDoc,
+) -> Result<LayerRecord, IngestError> {
     // A new SHAPE layer's stored pixels are its fill cut by its path
     // (ADR 476), so its fill must be rendered. A plain fill layer's content
     // block is what Photoshop draws (it renders the fill again), so it is
@@ -612,6 +617,10 @@ fn built_record(store: &Store, l: &Layer) -> Result<LayerRecord, IngestError> {
     }
     addl.extend(vector_mask_blocks(store, l));
     addl.extend(type_block(store, l));
+    // A smart object made in paged, as a live placed layer (ADR 482).
+    if let Some(b) = smart.blocks_for(l)? {
+        addl.extend(b);
+    }
     let adjustment = matches!(l.kind, LayerKind::Adjustment(_));
     Ok(LayerRecord {
         top: rect.y,
@@ -658,10 +667,12 @@ fn source_record(
     l: &Layer,
     src: &PsdSource,
     first: bool,
+    smart: &mut SmartDoc,
 ) -> Result<LayerRecord, IngestError> {
     let now = state_of(l);
     let was = &src.imported;
     if now == *was && first {
+        smart.keep(l);
         return Ok(src.record.clone());
     }
     let mut rec = src.record.clone();
@@ -754,7 +765,7 @@ fn source_record(
             (LayerKind::Adjustment(_), _) | (_, KindState::Adjustment(_)) => {
                 // A layer that became (or stopped being) an adjustment is
                 // a different layer: build it, keeping its id.
-                let mut built = built_record(store, l)?;
+                let mut built = built_record(store, l, smart)?;
                 if first {
                     built
                         .addl
@@ -802,10 +813,13 @@ fn source_record(
             let keep_fill = matches!(l.kind, LayerKind::Fill(_));
             // A type layer's new pixels are its text's render: its TySh stays.
             let keep_type = matches!(l.kind, LayerKind::Type(_));
+            // A smart object keeps its blocks: they are patched below.
+            let keep_smart = is_smart(l);
             rec.addl.retain(|a| {
                 !CONTENT_KEYS.contains(&&a.key)
                     || (keep_fill && FILL_KEYS.contains(&&a.key))
                     || (keep_type && matches!(&a.key, b"TySh" | b"tySh"))
+                    || (keep_smart && SMART_KEYS.contains(&&a.key))
             });
             if !keep_fill {
                 rec.addl.retain(|a| !FILL_KEYS.contains(&&a.key));
@@ -834,6 +848,18 @@ fn source_record(
             }
         }
     }
+    // A smart object whose placement, source or filters changed is
+    // written LIVE with them (ADR 482); an unchanged one keeps its blocks.
+    if is_smart(l) {
+        if now.kind != was.kind {
+            match smart.blocks_for(l)? {
+                Some(b) => replace_blocks(&mut rec, &SMART_KEYS, b),
+                None => rec.addl.retain(|a| !SMART_KEYS.contains(&&a.key)),
+            }
+        } else {
+            smart.keep(l);
+        }
+    }
     Ok(rec)
 }
 
@@ -859,6 +885,7 @@ pub fn psd_write_stack(
     if stack.layers().iter().any(|l| l.ext.style.is_some()) {
         stack.style_doc().global_light.store(file);
     }
+    let mut smart = SmartDoc::of(file, width, height);
     let group = |id: u32| stack.groups().iter().find(|g| g.id == id);
     let mut records: Vec<LayerRecord> = Vec::new();
     let mut seen: HashSet<*const PsdSource> = HashSet::new();
@@ -917,9 +944,9 @@ pub fn psd_write_stack(
         records.push(match &layer.ext.source {
             Some(src) => {
                 let first = seen.insert(Arc::as_ptr(src));
-                source_record(&store, layer, src, first)?
+                source_record(&store, layer, src, first, &mut smart)?
             }
-            None => built_record(&store, layer)?,
+            None => built_record(&store, layer, &mut smart)?,
         });
     }
     while let Some(top) = open.pop() {
@@ -937,5 +964,19 @@ pub fn psd_write_stack(
     file.layer_mask.section_raw = None;
     // The document's paths: the saved ones and the work path (ADR 476).
     crate::vectors::paths_into_psd(file, stack.masking()).map_err(IngestError::Unsupported)?;
+    // The smart objects' sources and filter caches (ADR 482).
+    let notes = std::mem::take(&mut smart.notes);
+    smart.finish(file);
+    SAVE_NOTES.with(|n| *n.borrow_mut() = notes);
     Ok(PsdSaveBackShape::Layered)
+}
+
+thread_local! {
+    static SAVE_NOTES: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// What the last layered save could not write as it was (a smart object
+/// saved as pixels, a link saved embedded), one sentence each.
+pub fn last_save_notes() -> Vec<String> {
+    SAVE_NOTES.with(|n| n.borrow().clone())
 }

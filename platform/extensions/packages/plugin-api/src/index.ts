@@ -316,6 +316,7 @@ export type {
   BindingDecline,
   BindingWrite,
   BindingCollection,
+  ProvidedLinkRow,
   BindingOp,
   BindingProvider,
   BindingProviderScope,

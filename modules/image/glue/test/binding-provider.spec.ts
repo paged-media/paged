@@ -103,6 +103,7 @@ describe("the ADR-023 providers reach the registry at all", () => {
 
     registry.setContextActive(PLUGIN, CTX, "u1", true);
     const active = registry.activeProviders();
+    // Layers, character, colour and links (image ADR 482).
     expect(active).toHaveLength(4);
 
     // Exiting takes them away again — a stale provider answering for a

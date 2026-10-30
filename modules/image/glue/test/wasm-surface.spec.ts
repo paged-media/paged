@@ -49,6 +49,9 @@ const VECTOR_TS = fileURLToPath(
 const WORKSPACE_TS = fileURLToPath(
   new URL("../src/workspace-engine.ts", import.meta.url),
 );
+const SMART_TS = fileURLToPath(
+  new URL("../src/smart-engine.ts", import.meta.url),
+);
 
 /**
  * wasm-bindgen's `--target web` glue also exports its init machinery,
@@ -106,6 +109,7 @@ function declaredInTs(): string[] {
     ...declaredIn(FILTERS_TS, "FilterWasm"),
     ...declaredIn(VECTOR_TS, "VectorWasm"),
     ...declaredIn(WORKSPACE_TS, "WorkspaceWasm"),
+    ...declaredIn(SMART_TS, "SmartWasm"),
   ];
 }
 
