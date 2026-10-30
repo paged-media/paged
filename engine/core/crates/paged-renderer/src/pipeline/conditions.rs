@@ -269,6 +269,7 @@ mod tests {
             image_link: None,
             image_item_transform: None,
             children: Vec::new(),
+            ..Default::default()
         }
     }
 

@@ -1,0 +1,611 @@
+{
+  "fixture": "appearance",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/appearance.jsx",
+    "script_sha256": "53455c3baaca22fe173950dada097393893a1189428fc8a0e07f687779d1f944",
+    "runner": "scripts/illustrator/run-probe.sh",
+    "recorded_at": "2026-10-30T10:02:58.022Z",
+    "host_os": "macOS 26.4",
+    "ruler_units": "RulerUnits.Points",
+    "artboard_rect_app": [
+      0,
+      792,
+      612,
+      0
+    ]
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down (mapped in and out of Illustrator's Y-up document coordinates through the scratch artboard's top-left corner)",
+  "operation": "an object's several fills and strokes (Appearance > Add New Fill / Add New Stroke), exported as PNG-24 at 72 ppi, then Object > Expand Appearance (expandStyle)",
+  "cases": [
+    {
+      "id": "two-fills",
+      "parameters": {"steps":[{"add":"fill","color":[0,0,255]}],"png":"two-fills.png","parts":[{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"group":true,"opacity":100,"blend":"Normal"},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false}]},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [255,255,0],
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,255],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,255,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "fill-multiply",
+      "parameters": {"steps":[{"add":"fill","color":[255,0,0],"blend":"Multiply"}],"png":"fill-multiply.png","parts":[{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"group":true,"opacity":100,"blend":"Multiply"},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false}]},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [128,128,128],
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[350,150],"left":[350,150],"right":[350,150]},
+              {"anchor":[350,250],"left":[350,250],"right":[350,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          },
+          {
+            "closed": true,
+            "fill": [255,255,0],
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,255,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 20000,
+            "bounds": [150,150,350,250],
+            "winding": "cw",
+            "areaSignedApp": 20000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [128,128,128],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[350,150],"left":[350,150],"right":[350,150]},
+              {"anchor":[350,250],"left":[350,250],"right":[350,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "fill-opacity",
+      "parameters": {"steps":[{"add":"fill","color":[255,0,0],"opacity":50}],"png":"fill-opacity.png","parts":[{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"group":true,"opacity":50,"blend":"Normal"},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false}]},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [255,255,0],
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,255,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "three-fills",
+      "parameters": {"steps":[{"add":"fill","color":[255,0,0],"opacity":50},{"add":"fill","color":[0,0,255],"blend":"Screen"}],"png":"three-fills.png","parts":[{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"group":true,"opacity":50,"blend":"Screen"},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false}]},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [128,128,128],
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[350,150],"left":[350,150],"right":[350,150]},
+              {"anchor":[350,250],"left":[350,250],"right":[350,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          },
+          {
+            "closed": true,
+            "fill": [255,255,0],
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,255],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,255,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 20000,
+            "bounds": [150,150,350,250],
+            "winding": "cw",
+            "areaSignedApp": 20000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [128,128,128],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[350,150],"left":[350,150],"right":[350,150]},
+              {"anchor":[350,250],"left":[350,250],"right":[350,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "two-strokes",
+      "parameters": {"steps":[{"add":"stroke","color":[0,0,0],"width":16},{"add":"stroke","color":[0,0,255],"width":6}],"png":"two-strokes.png","parts":[{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":16},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":6},{"group":true,"opacity":100,"blend":"Normal"},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":16},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":6}]},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [255,255,0],
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": false,
+            "stroked": true,
+            "strokeWidth": 6,
+            "stroke": [0,0,255],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": false,
+            "stroked": true,
+            "strokeWidth": 16,
+            "stroke": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,255,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "strokes-blend",
+      "parameters": {"steps":[{"add":"stroke","color":[255,0,0],"width":20},{"add":"stroke","color":[0,0,255],"width":8,"blend":"Multiply"},{"add":"fill","color":[0,255,0],"opacity":40}],"png":"strokes-blend.png","parts":[{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":20},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":8},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"group":true,"opacity":40,"blend":"Multiply"},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":20},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":8},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false}]},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [128,128,128],
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[350,150],"left":[350,150],"right":[350,150]},
+              {"anchor":[350,250],"left":[350,250],"right":[350,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          },
+          {
+            "closed": true,
+            "fill": [255,255,0],
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,255,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": false,
+            "stroked": true,
+            "strokeWidth": 8,
+            "stroke": [0,0,255],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": false,
+            "stroked": true,
+            "strokeWidth": 20,
+            "stroke": [255,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,255,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 20000,
+            "bounds": [150,150,350,250],
+            "winding": "cw",
+            "areaSignedApp": 20000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [128,128,128],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[350,150],"left":[350,150],"right":[350,150]},
+              {"anchor":[350,250],"left":[350,250],"right":[350,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "object-opacity",
+      "parameters": {"steps":[{"add":"fill","color":[0,0,255]},{"add":"stroke","color":[255,0,0],"width":10},{"object":true,"opacity":50,"blend":"Multiply"}],"png":"object-opacity.png","parts":[{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":10},{"group":true,"opacity":50,"blend":"Multiply"},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":true,"stroked":false},{"type":"PathItem","opacity":100,"blend":"Normal","filled":false,"stroked":true,"strokeWidth":10}]},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "fill": [128,128,128],
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[350,150],"left":[350,150],"right":[350,150]},
+              {"anchor":[350,250],"left":[350,250],"right":[350,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          },
+          {
+            "closed": true,
+            "fill": [255,255,0],
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": false,
+            "stroked": true,
+            "strokeWidth": 10,
+            "stroke": [255,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,255],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 10000,
+            "bounds": [200,200,300,300],
+            "winding": "cw",
+            "areaSignedApp": 10000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [255,255,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 20000,
+            "bounds": [150,150,350,250],
+            "winding": "cw",
+            "areaSignedApp": 20000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [128,128,128],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[150,150],"left":[150,150],"right":[150,150]},
+              {"anchor":[350,150],"left":[350,150],"right":[350,150]},
+              {"anchor":[350,250],"left":[350,250],"right":[350,250]},
+              {"anchor":[150,250],"left":[150,250],"right":[150,250]}
+            ]
+          }
+      ] }
+    }
+  ]
+}
