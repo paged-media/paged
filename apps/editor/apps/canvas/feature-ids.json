@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 817,
+    "command": 829,
     "keybinding": 164,
-    "menu": 584,
+    "menu": 596,
     "panel": 142,
     "tool": 126
   },
@@ -1491,6 +1491,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.convertForSmartFilters",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.convertLayerToSmart",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1757,6 +1762,11 @@
     },
     {
       "id": "command:media.paged.image.command.filterGallery",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.filterGaussianBlur",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2577,6 +2587,56 @@
     },
     {
       "id": "command:media.paged.image.command.slicesFromGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartCloseContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartEditContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartEmbed",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartExportContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartPlacePageItems",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartRelink",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartReplaceContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartSaveContents",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartTransform",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.smartUpdateLinked",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -5986,6 +6046,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Filter/Blur/Gaussian blur…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Filter/Blur/Lens blur…",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -6002,6 +6067,11 @@
     },
     {
       "id": "menu:Image/Filter/Blur/Surface blur…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Filter/Convert for smart filters",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6732,6 +6802,56 @@
     },
     {
       "id": "menu:Image/Layer/Rasterize",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Close contents without saving",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Edit contents",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Embed linked",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Export contents…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Place selected page items",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Relink to file…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Replace contents…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Save and close contents",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Transform…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Smart objects/Update from file…",
       "kind": "menu",
       "owner": "media.paged.image"
     },

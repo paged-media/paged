@@ -47,6 +47,7 @@ import {
   type VectorEngine,
   type VectorWasm,
 } from "./vector-engine";
+import { type SmartEngine, type SmartWasm, wrapSmart } from "./smart-engine";
 import type { HistorySource } from "./brush-dynamics";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
@@ -1359,7 +1360,8 @@ export interface FilterMask {
 
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
  *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`;
- *  the workspace (image ADR 475) in `workspace-engine.ts`. */
+ *  the workspace (image ADR 475) in `workspace-engine.ts`; the
+ *  smart objects (ADR 482) in `smart-engine.ts`. */
 export interface ImageEngine
   extends
     MaskingEngine,
@@ -1367,7 +1369,8 @@ export interface ImageEngine
     RetouchEngine<DecodedInfo>,
     FilterEngine,
     VectorEngine<DecodedInfo>,
-    WorkspaceEngine {
+    WorkspaceEngine,
+    SmartEngine<DecodedInfo> {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2473,7 +2476,8 @@ export interface ImageWasmModule
     RetouchWasm,
     FilterWasm,
     VectorWasm,
-    WorkspaceWasm {
+    WorkspaceWasm,
+    SmartWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -3312,6 +3316,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     ...filterEngineOf(wasm, decodedInfoOf),
     ...wrapVectors(wasm, decodedInfoOf),
     ...workspaceEngine(wasm),
+    ...wrapSmart(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,

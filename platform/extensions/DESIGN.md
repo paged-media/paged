@@ -1872,6 +1872,13 @@ footnote.
 - `readCollection` — the rows of a named `CollectionName`. Serves the Layers
   list and the swatch/gradient list. **Takes no target**: document-scoped by
   construction.
+  The `links` collection (image ADR 482) is served with `ProvidedLinkRow`s:
+  core's `LinkSummary` fields for a file the provider's content links or
+  embeds (paged.image's smart objects), plus `actions` — the provider's
+  commands for Relink / Update / Embed, which the host Links panel runs with
+  `{ link: hostSelfId }`. Core has no relink operation to intercept, so the
+  row names the verbs; the panel lists provider rows after the document's own
+  links and enables a button only when the row offers its action.
 - `applyMutation` — first refusal on a `MutationInput` the host panel would
   otherwise send straight to core. Serves the STRUCTURAL edits that are not
   property writes: `layerMove` / `layerInsert` / `layerRemove`,

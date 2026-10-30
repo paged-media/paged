@@ -72,12 +72,14 @@ pub mod psd_layer_ext;
 pub mod psd_source;
 pub mod psd_vector_mask;
 pub mod psd_write;
+pub mod psd_write_smart;
 pub mod readouts;
 pub mod refine;
 pub mod region_filter;
 pub mod retouch;
 pub mod saveback;
 pub mod selection;
+pub mod smart;
 pub mod stroke;
 pub mod text;
 pub mod vectors;
@@ -133,6 +135,8 @@ mod wasm {
     mod filters_chain;
     mod filters_distort;
     mod filters_stylize;
+    // Smart objects (ADR 482): transform, filters, contents, links.
+    mod smart_doors;
 
     thread_local! {
         /// The bundle-realm GPU device (I-07: created HERE, where
@@ -5032,7 +5036,7 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&image_handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {image_handle}")))?;
-        let (import, stack) = PSDS.with(|m| {
+        let (import, mut stack) = PSDS.with(|m| {
             let map = m.borrow();
             let file = map
                 .get(&psd_handle)
@@ -5056,8 +5060,13 @@ mod wasm {
             }
             // The records too: blending ranges, fill opacity, locks and
             // fill content live there, not on the plates.
-            let stack = LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
-                .map_err(ingest_err)?;
+            let mut stack =
+                LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
+                    .map_err(ingest_err)?;
+            // Smart objects keep their sources, placements and filters
+            // (ADR 482); the notes say which keep their stored render.
+            let notes = stack.adopt_psd_smart_objects(file);
+            SMART_NOTES.with(|n| *n.borrow_mut() = notes);
             Ok::<_, JsValue>((import, stack))
         })?;
         let smart = import.layers.iter().any(|p| p.smart);
@@ -5069,7 +5078,20 @@ mod wasm {
                 .map_err(ingest_err)?;
             let theirs = img.rgba.to_rgba8();
             if smart {
-                crate::layers::smart_renders_agree(&import, &ours, &theirs).map_err(ingest_err)?;
+                if let Err(stale) = crate::layers::smart_renders_agree(&import, &ours, &theirs) {
+                    // A stored render can be stale (a mock-up whose
+                    // contents changed): draw each smart object from its
+                    // source instead, and judge again (ADR 482).
+                    if stack.rerender_smart_objects() == 0 {
+                        return Err(ingest_err(stale));
+                    }
+                    let again = stack
+                        .composite(ctx.as_deref(), None)
+                        .await
+                        .map_err(ingest_err)?;
+                    crate::layers::smart_renders_agree(&import, &again, &theirs)
+                        .map_err(|_| ingest_err(stale))?;
+                }
             }
             // A CMYK document blended in RGB must still look like the
             // file: `theirs` is its merged composite through the same
@@ -5097,6 +5119,18 @@ mod wasm {
             })
         });
         Ok(n)
+    }
+
+    thread_local! {
+        /// What the last layered PSD open said about its smart objects.
+        static SMART_NOTES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// The notes of the last layered PSD open about its smart objects
+    /// (one per object that keeps Photoshop's render), one per line.
+    #[wasm_bindgen]
+    pub fn layers_smart_notes() -> String {
+        SMART_NOTES.with(|n| n.borrow().join("\n"))
     }
 
     /// Drop the bound stack (and its undo history).
@@ -6795,51 +6829,36 @@ mod wasm {
         recorded_edit("Convert to smart object", None, |st| st.make_smart(index))
     }
 
-    /// RE-RENDER a smart object at `scale` — from its preserved SOURCE,
-    /// never from the current cache, which is the whole point: scaling
-    /// down and back up loses nothing.
-    ///
-    /// GPU-only (the resample is a kernel dispatch). The rendered result
-    /// is letterboxed into the canvas extent, so the layer keeps its
-    /// place in a stack whose layers are all canvas-sized.
+    /// RE-RENDER a smart object at `scale` of its source's size — from
+    /// its preserved SOURCE, never from the current render, so scaling
+    /// down and back up loses nothing. The placement keeps its first
+    /// corner and its turn (ADR 482); the render is the CPU placement
+    /// draw, so this needs no device. One undo step.
     #[wasm_bindgen]
-    pub async fn layers_render_smart(index: usize, scale: f32) -> Result<(), JsValue> {
-        // `is_finite` first, so NaN is refused by NAME rather than by the
-        // side effect of failing `> 0.0`. Same verdict, but a reader no
-        // longer has to reconstruct why the comparison was negated.
+    pub fn layers_render_smart(index: usize, scale: f32) -> Result<(), JsValue> {
         if !scale.is_finite() || scale <= 0.0 || scale > 16.0 {
             return Err(JsValue::from_str(
                 "smart re-render scale must be in (0, 16]",
             ));
         }
-        let ctx = GPU.with(|g| g.borrow().clone()).ok_or_else(|| {
-            JsValue::from_str("smart re-render is GPU-only — call init_gpu first")
-        })?;
-
-        // Read the SOURCE (not the cached render) and the canvas extent.
-        let (src, cw, ch) = LAYERS
+        let quad = LAYERS
             .with(|l| {
                 let b = l.borrow();
-                let d = b.as_ref()?;
-                let layer = d.stack.layers().get(index)?;
-                let s = layer.smart_source()?;
-                Some((s.clone(), d.stack.width(), d.stack.height()))
+                let s = b
+                    .as_ref()?
+                    .stack
+                    .layers()
+                    .get(index)?
+                    .smart_source()?
+                    .clone();
+                Some(crate::smart::scaled_quad(&s, f64::from(scale)))
             })
             .ok_or_else(|| JsValue::from_str(&format!("layer {index} is not a smart object")))?;
-
-        let canvas = crate::layers::render_smart(
-            &ctx,
-            &src,
-            scale,
-            crate::layers::ResampleFilter::Mitchell,
-            cw,
-            ch,
-        )
-        .await
-        .map_err(ingest_err)?;
-
-        recorded_edit("Scale smart object", None, |st| {
-            st.set_smart_render(index, Arc::from(canvas.into_boxed_slice()), scale)
+        with_stack(|d| {
+            d.stack
+                .smart_place(index, quad)
+                .map(|_| ())
+                .map_err(ingest_err)
         })
     }
 
