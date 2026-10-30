@@ -3482,6 +3482,12 @@ pub enum NodeSpec {
         /// table); `None`: the story's end, as before.
         #[serde(default)]
         cell: Option<CellAddr>,
+        /// Engine ADR 1050 — with `cell`: the cell paragraph the table
+        /// takes when it is empty, else a new paragraph inserted there.
+        /// `None`: the cell's last paragraph when empty, else a new one at
+        /// its end.
+        #[serde(default)]
+        cell_paragraph: Option<u32>,
         /// Engine ADR 1025 — lay the table out by Word's rules.
         #[serde(default)]
         word: Option<WordTableSpec>,

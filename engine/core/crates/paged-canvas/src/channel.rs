@@ -6010,6 +6010,7 @@ mod tests {
             row_heights: vec![],
             cell: None,
             word: None,
+            paragraph: None,
         };
         assert_eq!(m.discriminant(), "InsertTable");
         let env = MainToWorker {

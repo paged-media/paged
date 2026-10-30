@@ -268,6 +268,7 @@ fn pour_text_into_a_freshly_inserted_empty_table_cell_does_not_panic() {
             row_heights: vec![],
             cell: None,
             word: None,
+            paragraph: None,
         })
         .expect("insert a 2x2 table into the story");
     let table_id = match out.created_id {

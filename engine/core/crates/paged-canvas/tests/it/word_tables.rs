@@ -89,6 +89,7 @@ fn table(
             row_heights: Vec::new(),
             cell: None,
             word,
+            paragraph: None,
         })
         .expect("table");
     match out.created_id {
@@ -266,6 +267,7 @@ fn a_split_row_continues_under_the_repeated_header() {
             row_heights: Vec::new(),
             cell: None,
             word: Some(WordTableSpec::default()),
+            paragraph: None,
         })
         .expect("table");
     let Some(ElementId::Table { table_id: t, .. }) = out.created_id else {

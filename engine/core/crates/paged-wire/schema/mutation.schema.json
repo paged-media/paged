@@ -6271,6 +6271,16 @@
                   ],
                   "default": null
                 },
+                "paragraph": {
+                  "description": "Engine ADR 1050 (additive) — with `cell`: the cell paragraph\n(0-based) the table takes when it is empty, else a new paragraph\ninserted at that index.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
                 "word": {
                   "description": "Engine ADR 1025 (additive) — lay the table out by Word's rules:\nrows split across frames, autofit columns, an indent.",
                   "anyOf": [

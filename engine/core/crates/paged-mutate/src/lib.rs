@@ -9476,6 +9476,7 @@ mod tests {
                 row_heights: vec![20.0, 20.0],
                 cell: None,
                 word: None,
+                cell_paragraph: None,
             };
             let table = spec.to_parse_table();
             assert_eq!(table.cells.len(), 4);

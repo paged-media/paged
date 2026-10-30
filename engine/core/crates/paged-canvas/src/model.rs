@@ -5357,6 +5357,7 @@ impl CanvasModel {
                 column_widths,
                 row_heights,
                 cell,
+                paragraph,
                 word,
             } => Some(Operation::InsertNode {
                 parent: NodeId::Story(story_id.clone()),
@@ -5374,6 +5375,7 @@ impl CanvasModel {
                         row: c.row,
                         col: c.col,
                     }),
+                    cell_paragraph: *paragraph,
                     word: word.clone(),
                 },
                 z_slot: None,

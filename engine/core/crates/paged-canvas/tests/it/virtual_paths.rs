@@ -234,6 +234,7 @@ fn build() -> (CanvasModel, Targets) {
             row_heights: vec![],
             cell: None,
             word: None,
+            paragraph: None,
         },
     );
     let table_id = m

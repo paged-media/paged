@@ -2935,6 +2935,11 @@ pub enum Mutation {
         /// as every cell address may.
         #[serde(default)]
         cell: Option<TextCellAddr>,
+        /// Engine ADR 1050 (additive) — with `cell`: the cell paragraph
+        /// (0-based) the table takes when it is empty, else a new paragraph
+        /// inserted at that index.
+        #[serde(default)]
+        paragraph: Option<u32>,
         /// Engine ADR 1025 (additive) — lay the table out by Word's rules:
         /// rows split across frames, autofit columns, an indent.
         #[serde(default)]

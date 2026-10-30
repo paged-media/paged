@@ -57,6 +57,7 @@ fn insert_table(story_id: &str) -> Mutation {
         row_heights: vec![],
         cell: None,
         word: None,
+        paragraph: None,
     }
 }
 

@@ -333,6 +333,7 @@ fn table() -> Mutation {
         row_heights: Vec::new(),
         cell: None,
         word: None,
+        paragraph: None,
     }
 }
 

@@ -3996,6 +3996,7 @@ fn paged_insert_table(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> J
         row_heights: spec.row_heights,
         cell: None,
         word: None,
+        paragraph: None,
     }))
 }
 

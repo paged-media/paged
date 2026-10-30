@@ -3886,6 +3886,7 @@ fn table_cases(c: &mut Vec<Case>) {
             row_heights: vec![20.0, 20.0, 20.0],
             cell: None,
             word: None,
+            paragraph: None,
         }
     }));
     c.push(paints("SetRowHeight", "tables", |m| {

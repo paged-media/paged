@@ -1737,7 +1737,13 @@ pub(super) fn apply_insert_table(
             child_kind: "Table".to_string(),
         });
     };
-    let NodeSpec::Table { self_id, cell, .. } = spec else {
+    let NodeSpec::Table {
+        self_id,
+        cell,
+        cell_paragraph,
+        ..
+    } = spec
+    else {
         unreachable!("apply_insert_table dispatched on a non-Table NodeSpec");
     };
     let table_id = self_id.clone();
@@ -1783,12 +1789,22 @@ pub(super) fn apply_insert_table(
                 table_id: addr.table_id.clone(),
             })
         })?;
-        match paragraphs.last_mut().filter(|p| is_empty_paragraph(p)) {
-            Some(last) => last.table = Some(table),
-            None => paragraphs.push(paged_model::Paragraph {
-                table: Some(table),
-                ..Default::default()
-            }),
+        let fresh = |table| paged_model::Paragraph {
+            table: Some(table),
+            ..Default::default()
+        };
+        match cell_paragraph {
+            Some(i) => {
+                let i = (*i as usize).min(paragraphs.len());
+                match paragraphs.get_mut(i).filter(|p| is_empty_paragraph(p)) {
+                    Some(p) => p.table = Some(table),
+                    None => paragraphs.insert(i, fresh(table)),
+                }
+            }
+            None => match paragraphs.last_mut().filter(|p| is_empty_paragraph(p)) {
+                Some(last) => last.table = Some(table),
+                None => paragraphs.push(fresh(table)),
+            },
         }
         let invalidation = reflow_hint_for_story(doc, story_id);
         return Ok(AppliedOperation {

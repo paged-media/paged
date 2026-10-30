@@ -669,6 +669,7 @@ fn insert_table_op(self_id: &str, rows: u32, cols: u32) -> Operation {
             row_heights: vec![],
             cell: None,
             word: None,
+            cell_paragraph: None,
         },
         z_slot: None,
     }
@@ -777,6 +778,7 @@ fn insert_table_unknown_story_is_noop_error() {
                 row_heights: vec![],
                 cell: None,
                 word: None,
+                cell_paragraph: None,
             },
             z_slot: None,
         },

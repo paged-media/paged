@@ -312,6 +312,7 @@ fn table(m: &mut CanvasModel, story: &str, cell: Option<TextCellAddr>, widths: V
             row_heights: Vec::new(),
             cell,
             word: None,
+            paragraph: None,
         })
         .expect("insert table");
     match out.created_id {
@@ -422,4 +423,54 @@ fn a_picture_in_a_cell_grows_its_row_and_is_drawn() {
     // Removing it (undo) shrinks the row back.
     m.undo().expect("undo");
     assert!((row_height(&m, &t) - empty).abs() < 0.01);
+}
+
+#[test]
+fn a_nested_table_takes_the_cell_paragraph_it_names() {
+    let (mut m, story) = model_with("");
+    let outer = table(&mut m, &story, None, vec![300.0]);
+    let at = TextCellAddr {
+        table_id: outer.clone(),
+        row: 0,
+        col: 0,
+    };
+    m.apply_mutation(&Mutation::InsertText {
+        story_id: story.clone(),
+        offset: 0,
+        text: "before\n\nafter".into(),
+        cell: Some(at.clone()),
+    })
+    .expect("cell text");
+    let out = m
+        .apply_mutation(&Mutation::InsertTable {
+            story_id: story.clone(),
+            rows: 1,
+            cols: 1,
+            header_rows: 0,
+            footer_rows: 0,
+            column_widths: vec![100.0],
+            row_heights: Vec::new(),
+            cell: Some(at),
+            paragraph: Some(1),
+            word: None,
+        })
+        .expect("nested table on the empty middle paragraph");
+    let Some(ElementId::Table {
+        table_id: inner, ..
+    }) = out.created_id
+    else {
+        panic!("a table");
+    };
+    let host = m
+        .scene()
+        .stories
+        .iter()
+        .find(|s| s.self_id == story)
+        .expect("story");
+    let cell = paged_model::cell_paragraphs_in(&host.story.paragraphs, &outer, 0, 0).expect("cell");
+    assert_eq!(cell.len(), 3);
+    assert_eq!(
+        cell[1].table.as_ref().and_then(|t| t.self_id.as_deref()),
+        Some(inner.as_str())
+    );
 }
