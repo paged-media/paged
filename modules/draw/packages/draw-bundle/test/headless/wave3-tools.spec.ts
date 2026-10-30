@@ -475,6 +475,17 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       expect(t.anchors).toHaveLength(12);
       expect(t.subpathOpen ?? [false]).toEqual([false]);
       expect(t.anchors[0]!.anchor[1]).toBeCloseTo(450, 2);
+      // Engine ADR 10XX: an upright star is a LIVE star — the engine
+      // keeps its points and inset (1 − Radius 2 ÷ Radius 1).
+      const props = await h.host.document.elementProperties(star);
+      const read = (path: string) =>
+        (
+          props?.entries.find((e) => e.path === path)?.value as {
+            value: number | null;
+          } | null
+        )?.value;
+      expect(read("frameShapeSides")).toBe(6);
+      expect(read("frameShapeStarInset")).toBeGreaterThan(0);
       await h.host.document.undo();
       expect(await leafIds(h)).toHaveLength(before);
     });
