@@ -36,6 +36,7 @@ mod rpr;
 mod splice;
 pub mod structure;
 mod styles;
+pub mod textbox;
 mod write;
 
 pub use bindings::{build_bindings, BlockBinding, DocxBindings, ParaUse, RunBinding, RunLock};
