@@ -231,9 +231,7 @@ impl ScriptClass {
             // Samaritan, Mandaic, Syriac supplement, Arabic extended.
             0x0590..=0x08FF => ScriptClass::Complex,
             // Devanagari … Malayalam, Sinhala, Thai, Lao, Tibetan, Myanmar.
-            0x0900..=0x0DFF | 0x0E00..=0x0EFF | 0x0F00..=0x0FFF | 0x1000..=0x109F => {
-                ScriptClass::Complex
-            }
+            0x0900..=0x109F => ScriptClass::Complex,
             // Hangul Jamo.
             0x1100..=0x11FF => ScriptClass::EastAsian,
             // Khmer, Mongolian, Tai Le, New Tai Lue, Khmer symbols, Buginese,
