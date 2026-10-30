@@ -115,7 +115,7 @@ cmd_publish() {
     echo
     echo "commit:  $sha"
     echo "profile: $profile ($( [ "$profile" = dev ] && echo 'wasm-dev Cargo profile, no wasm-opt; not for shipping' || echo 'wasm-release, wasm-opt -Oz, as CI ships it'))"
-    echo "built:   $(date -u '+%Y-%m-%dT%H:%M:%SZ') with $(rustc --version 2>/dev/null || echo rustc), $(wasm-bindgen --version 2>/dev/null || echo wasm-bindgen)"
+    echo "built:   $(date -u '+%Y-%m-%dT%H:%M:%SZ') with $(cd "$ROOT/$CORE" && rustc --version 2>/dev/null || echo rustc), $(wasm-bindgen --version 2>/dev/null || echo wasm-bindgen)"
     echo "parts:   canvas, introspect, repo, session"
     echo
     echo "Use: tooling/dev/shared-wasm.sh use $sha"

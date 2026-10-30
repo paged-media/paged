@@ -132,6 +132,22 @@ them once (`moon run core:wasm-dev -- introspect session`) or copy a shared
 build (below). After a dev build, `moon run core:wasm-pkg --force` goes back to
 release wasm.
 
+Measured on the 16-core Apple M3 Max below, `CARGO_BUILD_JOBS=6`, sccache
+warm for dependencies, with other builds sharing the machine:
+
+| Build                                 | Release (`wasm-release`, `wasm-opt -Oz`) | Dev (`wasm-dev`, no `wasm-opt`) |
+| ------------------------------------- | ---------------------------------------- | ------------------------------- |
+| engine canvas + repo, clean target    | 936 s (all four parts: 1,425 s)          | 370 s (all four: about 535 s)   |
+| engine canvas + repo, after an edit   | 660 s (all four: 872 s)                  | 77 s                            |
+| doc (`docx-js`), clean target         | 332 s                                    | 308 s                           |
+| doc, after an edit in `docx-js`       | —                                        | 32 s                            |
+| canvas / repo / introspect / session  | 39.5 / 0.7 / 19.5 / 16.3 MB              | 61.6 / 1.1 / 28.2 / 23.0 MB     |
+| `docx_js_bg.wasm`                     | 7.6 MB                                   | 17.1 MB (over its `maxBytes`)   |
+| doc bundle headless suite (161 tests) | 4.1 s                                    | 4.4 s                           |
+
+`opt-level = 1` built only a little faster and made the doc suite ten times
+slower (44 s), so the profile uses 2.
+
 ### One shared build for several worktrees
 
 Worktrees whose engine sources match the same commit would all build the same
