@@ -2018,7 +2018,7 @@ impl LayerStack {
                             .dispatch(
                                 pixel_kernel(blend, *gamma),
                                 &[&sub, &plate],
-                                &pixel_params(*opacity, *gamma),
+                                &pixel_params(blend, *opacity, *gamma, (hr.0, hr.1)),
                                 mask.as_ref(),
                                 &blended,
                             )
