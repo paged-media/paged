@@ -4,8 +4,8 @@
   "counts": {
     "chrome": 4,
     "command": 829,
-    "keybinding": 164,
-    "menu": 597,
+    "keybinding": 165,
+    "menu": 598,
     "panel": 143,
     "tool": 126
   },
@@ -4871,6 +4871,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:escape→media.paged.slide.command.formatPainterOff",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:f5→media.paged.slide.command.slideShowFromBeginning",
       "kind": "keybinding",
       "owner": "media.paged.slide"
@@ -7622,6 +7627,11 @@
     },
     {
       "id": "menu:Slide/Duplicate slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/Format Painter",
       "kind": "menu",
       "owner": "media.paged.slide"
     },

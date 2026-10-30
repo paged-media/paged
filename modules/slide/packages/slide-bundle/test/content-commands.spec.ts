@@ -140,9 +140,12 @@ describe("slide W4 content commands", () => {
       Object.values(CONTENT_CMD).sort(),
     );
     expect(f.menus.map((m) => m.path)).toEqual(CONTENT_MENU.map(([p]) => p));
-    expect(f.keys.map((k) => `${k.key}→${k.command}`)).toEqual(
-      FORMAT_KEYS.map(([k, c]) => `${k}→${c}`),
-    );
+    // Esc puts the Format Painter down (ADR 723), then the copy and paste
+    // keys.
+    expect(f.keys.map((k) => `${k.key}→${k.command}`)).toEqual([
+      `escape→${CONTENT_CMD.formatPainterOff}`,
+      ...FORMAT_KEYS.map(([k, c]) => `${k}→${c}`),
+    ]);
     // The keys live in the deck's context; paste waits for a copy.
     expect(
       f.keys.every(
@@ -174,8 +177,16 @@ describe("slide W4 content commands", () => {
         c,
       ]),
     );
+    // The Format Painter is the palette's alone: it waits for a click.
+    const paletteOnly = new Set<string>([
+      CONTENT_CMD.formatPainter,
+      CONTENT_CMD.formatPainterOff,
+    ]);
     expect([...cmds.keys()].sort()).toEqual(
-      [...Object.values(CONTENT_CMD), ...Object.values(CONTENT_TYPED)].sort(),
+      [
+        ...Object.values(CONTENT_CMD).filter((c) => !paletteOnly.has(c)),
+        ...Object.values(CONTENT_TYPED),
+      ].sort(),
     );
     const run = (id: string, a: unknown) =>
       (cmds.get(id)!.handler as (c: unknown, a: unknown) => Promise<unknown>)(

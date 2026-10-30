@@ -314,3 +314,81 @@ export async function pasteFormat(
     );
   return out.applied;
 }
+
+/** Two invokes of the Format Painter this close together are a
+ *  double-click on PowerPoint's brush: the painter stays on. */
+export const PAINTER_DOUBLE_MS = 500;
+
+/** The Format Painter's mode (Home ▸ Format Painter in PowerPoint): armed
+ *  with a shape's formatting, the next shape clicked takes it and the
+ *  painter is off again; locked (a double-click), every shape clicked
+ *  takes it until Esc or the painter again. */
+export class PainterMode {
+  copied: CopiedFormat | null = null;
+  locked = false;
+  private source: string | null = null;
+  private armedAt = -Infinity;
+  private readonly listeners = new Set<() => void>();
+
+  get armed(): boolean {
+    return this.copied !== null;
+  }
+
+  onChange(l: () => void): () => void {
+    this.listeners.add(l);
+    return () => this.listeners.delete(l);
+  }
+
+  private changed() {
+    for (const l of this.listeners) l();
+  }
+
+  /** The painter invoked with `copied` from `source` at `now` (ms): arms
+   *  it; again within {@link PAINTER_DOUBLE_MS} locks it; again later, or
+   *  while locked, turns it off. What it is now. */
+  invoke(
+    copied: CopiedFormat | null,
+    source: string | null,
+    now: number,
+  ): "armed" | "locked" | "off" {
+    if (this.armed) {
+      if (!this.locked && now - this.armedAt <= PAINTER_DOUBLE_MS) {
+        this.locked = true;
+        this.changed();
+        return "locked";
+      }
+      this.off();
+      return "off";
+    }
+    if (!copied) return "off";
+    this.copied = copied;
+    this.source = source;
+    this.locked = false;
+    this.armedAt = now;
+    this.changed();
+    return "armed";
+  }
+
+  off() {
+    if (!this.armed) return;
+    this.copied = null;
+    this.source = null;
+    this.locked = false;
+    this.changed();
+  }
+
+  /** A selection change: the shapes to paint (none for an empty selection
+   *  on the way to the next one, or the source itself). Unlocked, painting
+   *  turns the painter off. */
+  take(selected: readonly string[]): {
+    copied: CopiedFormat;
+    targets: string[];
+  } | null {
+    const copied = this.copied;
+    if (!copied) return null;
+    const targets = selected.filter((id) => id !== this.source);
+    if (targets.length === 0) return null;
+    if (!this.locked) this.off();
+    return { copied, targets };
+  }
+}

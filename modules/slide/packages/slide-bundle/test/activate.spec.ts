@@ -22,6 +22,7 @@
 // real slide wasm; the host is a recording fake (the open itself is the
 // conformance spec's business).
 
+import { ICONS_PANEL_ID } from "../src/icons";
 import { ANIMATIONS_PANEL_ID } from "../src/anim/pane";
 import { readFileSync } from "node:fs";
 
@@ -218,12 +219,14 @@ describe("paged.slide importer", () => {
       },
     } as unknown as BundleHost;
     const handle = activate(host);
-    // The Shapes panel (Insert ▸ Shapes, ADR 717), the SmartArt text pane
+    // The Shapes panel (Insert ▸ Shapes, ADR 717), the Icons panel
+    // (Insert ▸ Icons, ADR 723), the SmartArt text pane
     // (slide W4) and the Animations pane (ADR 714) beside them.
     // The Design panel (Design ▸ Themes, ADR 713) too, never in the rail.
     expect(panels.map((p) => p.id)).toEqual([
       SLIDES_PANEL_ID,
       SHAPES_PANEL_ID,
+      ICONS_PANEL_ID,
       SMARTART_PANEL_ID,
       DESIGN_PANEL_ID,
       NOTES_PANEL_ID,
@@ -233,6 +236,7 @@ describe("paged.slide importer", () => {
     expect(panels.map((p) => (p as { rail?: boolean }).rail)).toEqual([
       false,
       undefined,
+      false,
       false,
       false,
       false,

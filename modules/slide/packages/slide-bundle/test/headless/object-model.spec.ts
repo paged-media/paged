@@ -141,7 +141,10 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
         ...Object.values(OUTPUT_CMD),
         ...Object.values(OUTPUT_TYPED),
         // Pictures, the format painter, SmartArt text (slide W4).
-        ...Object.values(CONTENT_CMD),
+        // The Format Painter waits for a click: no typed twin (ADR 723).
+        ...Object.values(CONTENT_CMD).filter(
+          (c) => !c.includes(".formatPainter"),
+        ),
         ...Object.values(CONTENT_TYPED),
         // Design ▸ Themes and the live theme (slide ADR 713).
         ...Object.values(DESIGN_CMD),

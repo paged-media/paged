@@ -71,7 +71,7 @@ import {
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeMenu } from "./menu.js";
-import { COMMENTS, DECK, NOTES, SHAPES, SLIDES } from "./messages.js";
+import { COMMENTS, DECK, ICONS_MSG, NOTES, SHAPES, SLIDES } from "./messages.js";
 import {
   contributeSlideObjectModel,
   parseLabel,
@@ -92,6 +92,8 @@ import { makeSlideSorter } from "./views/slide-sorter.js";
 import { adjustHandlesOverlay, HandlesModel } from "./adjust-handles.js";
 import { LiveFollower } from "./live-presets.js";
 import { makeShapesPanel } from "./panels/shapes-panel.js";
+import { makeIconsPanel } from "./panels/icons-panel.js";
+import { ICONS_PANEL_ID } from "./icons.js";
 import { insertShape, SHAPES_PANEL_ID } from "./shapes.js";
 import { renderRasters } from "./pictures.js";
 import {
@@ -99,6 +101,7 @@ import {
   contributeContentCommands,
   FormatClipboard,
   type ContentDeps,
+  pickAndPlace,
 } from "./content-commands.js";
 import { SMARTART_PANEL_ID, SmartArtStore } from "./smartart.js";
 import { makeSmartArtPanel } from "./panels/smartart-panel.js";
@@ -409,6 +412,11 @@ export function activate(host: BundleHost): BundleHandle {
     openTextPane: () => {
       if (!textPane || !host.supports("shell.openPanel@1")) return false;
       host.shell.openPanel(SMARTART_PANEL_ID);
+      return true;
+    },
+    openIconsPanel: () => {
+      if (!textPane || !host.supports("shell.openPanel@1")) return false;
+      host.shell.openPanel(ICONS_PANEL_ID);
       return true;
     },
   };
@@ -795,6 +803,21 @@ export function activate(host: BundleHost): BundleHandle {
             '<rect x="3.5" y="3.5" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
             '<circle cx="17" cy="7.5" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
             '<path d="M12 20.5l4.5-7 4.5 7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+        }).dispose,
+        host.contribute.panel({
+          id: ICONS_PANEL_ID,
+          title: t(ICONS_MSG.title),
+          component: makeIconsPanel(host, store, slideEngine, () =>
+            pickAndPlace(host, content, true).catch((e: unknown) =>
+              host.log.warn(`paged.slide icons: ${String(e)}`),
+            ),
+          ),
+          defaultDock: "right",
+          rail: false,
+          // A star in a rounded square.
+          iconSvg:
+            '<rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+            '<path d="M12 7l1.5 3.1 3.4.5-2.5 2.4.6 3.4-3-1.6-3 1.6.6-3.4-2.5-2.4 3.4-.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>',
         }).dispose,
         host.contribute.panel({
           id: SMARTART_PANEL_ID,

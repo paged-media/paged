@@ -24,6 +24,7 @@
 // (`<selected item> > kind`), a set lands through host.objects and undoes
 // in ONE step.
 
+import { ICONS_PANEL_ID } from "../src/icons";
 import { CUSTOM_SHOWS_PANEL } from "../src/output/commands";
 import { readFileSync } from "node:fs";
 
@@ -118,6 +119,7 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
         SLIDES_PANEL_ID,
         COMMENTS_PANEL_ID,
         SHAPES_PANEL_ID,
+        ICONS_PANEL_ID,
         ANIMATIONS_PANEL_ID,
         CUSTOM_SHOWS_PANEL,
         SMARTART_PANEL_ID,

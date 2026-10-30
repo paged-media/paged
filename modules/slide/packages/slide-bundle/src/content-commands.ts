@@ -43,6 +43,7 @@ import type { SlideEngine } from "./engine.js";
 import {
   copyFormat,
   pasteFormat,
+  PainterMode,
   type CopiedFormat,
 } from "./format-painter.js";
 import { CONTENT } from "./messages.js";
@@ -68,6 +69,8 @@ export const CONTENT_CMD = {
   insertIcon: `${C}.insertIcon`,
   copyFormat: `${C}.copyFormat`,
   pasteFormat: `${C}.pasteFormat`,
+  formatPainter: `${C}.formatPainter`,
+  formatPainterOff: `${C}.formatPainterOff`,
   smartArtText: `${C}.smartArtText`,
 } as const;
 
@@ -82,6 +85,7 @@ export const CONTENT_TYPED = {
 export const CONTENT_MENU: [string, string, string, number][] = [
   ["Insert/Pictures…", CONTENT_CMD.insertPicture, "objects", 41],
   ["Insert/Icons…", CONTENT_CMD.insertIcon, "objects", 42],
+  ["Slide/Format Painter", CONTENT_CMD.formatPainter, "format", 5],
   ["Slide/Copy formatting", CONTENT_CMD.copyFormat, "format", 10],
   ["Slide/Paste formatting", CONTENT_CMD.pasteFormat, "format", 20],
   ["Slide/SmartArt text pane", CONTENT_CMD.smartArtText, "format", 30],
@@ -105,6 +109,8 @@ export interface ContentDeps {
   activePage(): string | null;
   /** Raise the SmartArt text pane; false where there is no panel door. */
   openTextPane(): boolean;
+  /** Raise the Icons panel; false where there is none (the picker then). */
+  openIconsPanel?(): boolean;
 }
 
 /** The format painter's clipboard: what Copy formatting took. */
@@ -192,7 +198,7 @@ async function placePicture(
 }
 
 /** Pick a file and insert it (the palette's Insert ▸ Pictures / Icons). */
-async function pickAndPlace(
+export async function pickAndPlace(
   host: BundleHost,
   deps: ContentDeps,
   icon: boolean,
@@ -364,8 +370,10 @@ export function contributeContentCommands(
   add(CONTENT_CMD.insertPicture, t(CONTENT.insertPicture), slideActive, () =>
     pickAndPlace(host, deps, false),
   );
+  // Insert ▸ Icons… opens the Icons panel (the bundled icons and a file),
+  // or, without one, the file picker (ADR 723).
   add(CONTENT_CMD.insertIcon, t(CONTENT.insertIcon), slideActive, () =>
-    pickAndPlace(host, deps, true),
+    deps.openIconsPanel?.() ? null : pickAndPlace(host, deps, true),
   );
   add(
     CONTENT_CMD.copyFormat,
@@ -385,6 +393,46 @@ export function contributeContentCommands(
       if (clipboard.copied) await pasteFormat(host, clipboard.copied);
     },
   );
+  // The Format Painter (ADR 723): armed by the command, the next shape
+  // clicked takes the formatting; the command twice in quick succession
+  // (PowerPoint's double-click on the brush) keeps it on until Esc.
+  const painter = new PainterMode();
+  add(
+    CONTENT_CMD.formatPainter,
+    t(CONTENT.formatPainter),
+    () => gates.deckOpen() && (painter.armed || hasSelection()),
+    async () => {
+      const now = Date.now();
+      if (painter.armed) {
+        painter.invoke(null, null, now);
+        return;
+      }
+      const copied = await copyFormat(host);
+      const source = host.selection.get()[0];
+      const mode = painter.invoke(copied, source ? String(source.id) : null, now);
+      if (mode === "off")
+        host.log.info("paged.slide formatPainter: nothing is selected");
+      else host.log.info(t(CONTENT.formatPainterArmed));
+    },
+  );
+  add(
+    CONTENT_CMD.formatPainterOff,
+    t(CONTENT.formatPainterOff),
+    () => painter.armed,
+    () => painter.off(),
+  );
+  if (typeof host.selection?.onDidChange === "function")
+    handles.push(
+      host.selection.onDidChange((sel) => {
+        const go = painter.take(sel.map((e) => String(e.id)));
+        if (!go) return;
+        const targets = sel.filter((e) => go.targets.includes(String(e.id)));
+        void pasteFormat(host, go.copied, targets).catch((err: unknown) =>
+          host.log.warn(`paged.slide formatPainter: ${String(err)}`),
+        );
+      }),
+    );
+  handles.push({ dispose: () => painter.off() });
   add(CONTENT_CMD.smartArtText, t(CONTENT.smartArtText), gates.deckOpen, () => {
     if (!deps.openTextPane())
       host.log.info("paged.slide smartArtText: this host cannot raise a panel");
@@ -394,6 +442,15 @@ export function contributeContentCommands(
       handles.push(host.contribute.menu({ path, command, group, order }));
   }
   if (gates.scopedKeys && host.supports("contribute.keybinding.scope@1")) {
+    // Esc puts a locked (or armed) painter down.
+    handles.push(
+      host.contribute.keybinding({
+        key: "escape",
+        command: CONTENT_CMD.formatPainterOff,
+        scope: { editContext: gates.deckContext },
+        when: () => painter.armed,
+      }),
+    );
     for (const [key, command] of FORMAT_KEYS) {
       const when = whens.get(command);
       if (!when) continue;

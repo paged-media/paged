@@ -119,6 +119,7 @@ const PLACEHOLDER_PANEL = "media.paged.slide.panel.placeholder";
 const DECK_PANEL = "media.paged.slide.panel.deck";
 const COMMENTS_PANEL = "media.paged.slide.panel.comments";
 const SHAPES_PANEL = "media.paged.slide.panel.shapes";
+const ICONS_PANEL = "media.paged.slide.panel.icons";
 const CUSTOM_SHOWS_PANEL = "media.paged.slide.panel.customShows";
 const ANIMATIONS_PANEL = "media.paged.slide.panel.animations";
 const SMARTART_PANEL = "media.paged.slide.panel.smartart";
@@ -184,6 +185,7 @@ const PALETTE = {
   // Slide W4: pictures and icons, the format painter, the SmartArt text pane.
   "media.paged.slide.command.insertPicture": "Insert/Pictures…",
   "media.paged.slide.command.insertIcon": "Insert/Icons…",
+  "media.paged.slide.command.formatPainter": "Slide/Format Painter",
   "media.paged.slide.command.copyFormat": "Slide/Copy formatting",
   "media.paged.slide.command.pasteFormat": "Slide/Paste formatting",
   "media.paged.slide.command.smartArtText": "Slide/SmartArt text pane",
@@ -270,6 +272,7 @@ const DECLARED = {
     DECK_PANEL,
     COMMENTS_PANEL,
     SHAPES_PANEL,
+    ICONS_PANEL,
     CUSTOM_SHOWS_PANEL,
     ANIMATIONS_PANEL,
     SMARTART_PANEL,
@@ -356,6 +359,7 @@ const PANEL_TITLES: Record<string, string> = {
   [DECK_PANEL]: "Deck",
   [COMMENTS_PANEL]: "Comments",
   [SHAPES_PANEL]: "Shapes",
+  [ICONS_PANEL]: "Icons",
   [CUSTOM_SHOWS_PANEL]: "Custom shows",
   [ANIMATIONS_PANEL]: "Animations",
   [SMARTART_PANEL]: "Text Pane",
@@ -707,6 +711,10 @@ test.describe("plugin surface · paged.slide", () => {
     expect(byId[DESIGN_PANEL].iconSvg).toBe(true);
     // The Shapes panel never joins the rail: Insert ▸ Shapes… opens it.
     expect(byId[SHAPES_PANEL].rail).toBe(false);
+    // Nor does Icons: Insert ▸ Icons… opens it (ADR 723).
+    expect(byId[ICONS_PANEL].defaultDock).toBe("right");
+    expect(byId[ICONS_PANEL].iconSvg).toBe(true);
+    expect(byId[ICONS_PANEL].rail).toBe(false);
     // Nor does Custom shows: Slide Show ▸ Custom Shows… opens it (ADR 720).
     expect(byId[CUSTOM_SHOWS_PANEL].rail).toBe(false);
     // Nor does Animations: Animations ▸ Animation Pane opens it (ADR 714).
@@ -1426,6 +1434,9 @@ test.describe("plugin surface · paged.slide", () => {
       "media.paged.slide.command.insertShapes": "Insert shape…",
       "media.paged.slide.command.insertPicture": "Insert picture…",
       "media.paged.slide.command.insertIcon": "Insert icon…",
+      "media.paged.slide.command.formatPainter": "Format Painter",
+      "media.paged.slide.command.formatPainterOff":
+        "Put the Format Painter down",
       "media.paged.slide.command.copyFormat": "Copy formatting",
       "media.paged.slide.command.pasteFormat": "Paste formatting",
       "media.paged.slide.command.smartArtText": "SmartArt text pane",
@@ -1506,7 +1517,8 @@ test.describe("plugin surface · paged.slide", () => {
         "ctrl+d@slideDeck→media.paged.slide.command.duplicateSlide",
         "pageup@slideDeck→media.paged.slide.command.previousSlide",
         "pagedown@slideDeck→media.paged.slide.command.nextSlide",
-        // The format painter (slide W4).
+        // The format painter (slide W4); Esc puts it down (ADR 723).
+        "escape@slideDeck→media.paged.slide.command.formatPainterOff",
         "cmd+shift+c@slideDeck→media.paged.slide.command.copyFormat",
         "ctrl+shift+c@slideDeck→media.paged.slide.command.copyFormat",
         "cmd+shift+v@slideDeck→media.paged.slide.command.pasteFormat",
