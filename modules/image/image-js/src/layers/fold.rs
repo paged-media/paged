@@ -535,6 +535,9 @@ pub(super) struct FoldCache {
     tile: Option<u32>,
     /// The ink planes derived for the last ink fold (ADR 481).
     inks: ink::InkCache,
+    /// Plates to premultiply even where they are opaque: a tile's cut of a
+    /// plate that is not (the whole fold decides on the whole plate).
+    premultiply: Vec<Pixels>,
 }
 
 impl FoldCache {
@@ -582,7 +585,8 @@ impl FoldCache {
             )));
         }
         let straight = px.to_f16();
-        let tex = if window_is_opaque(&straight) {
+        let forced = self.premultiply.iter().any(|p| p.same(px));
+        let tex = if window_is_opaque(&straight) && !forced {
             batch.upload(w, h, TexFormat::Rgba16Float, &straight)
         } else {
             let src = batch.upload(w, h, TexFormat::Rgba16Float, &straight);

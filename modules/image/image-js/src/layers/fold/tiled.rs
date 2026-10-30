@@ -53,6 +53,7 @@
 
 use image_core::Region;
 use image_gpu::coverage::SelectionCoverage;
+use image_gpu::stroke::window_is_opaque;
 use image_gpu::{GpuBatch, GpuContext};
 use image_kernels::families::cast::{CastUnpremultiplyParams, CAST_UNPREMULTIPLY};
 
@@ -101,6 +102,17 @@ fn fx_reach(e: &EffectStep) -> u32 {
 }
 
 impl Step {
+    /// The plate this step uploads, if any.
+    fn plate(&self) -> Option<&Pixels> {
+        match self {
+            Step::Pixel { px, .. }
+            | Step::ClipOpen { px, .. }
+            | Step::Effect { px, .. }
+            | Step::BodyClose { px, .. } => Some(px),
+            _ => None,
+        }
+    }
+
     /// How far this step reads around a texel of the accumulator or its
     /// plates.
     fn reach(&self) -> u32 {
@@ -532,6 +544,9 @@ impl LayerStack {
             _ => (blank(cw, ch, depth), None),
         };
         let mut folded = 0u64;
+        // Each plate's opacity, decided once on the whole plate.
+        let mut whole_opaque: std::collections::HashMap<usize, bool> =
+            std::collections::HashMap::new();
         for ty in (0..ch).step_by(side as usize) {
             for tx in (0..cw).step_by(side as usize) {
                 let tile = Region::new(tx as i32, ty as i32, side.min(cw - tx), side.min(ch - ty));
@@ -556,10 +571,35 @@ impl LayerStack {
                     cw,
                     ch,
                 };
-                let wsteps: Vec<Step> = steps.iter().filter_map(|s| s.window(win, cw)).collect();
+                // The plates the whole fold premultiplies: the fold skips the
+                // premultiply of an OPAQUE plate (the identity), and decides
+                // on the whole plate — a window cut from a plate that is not
+                // opaque is premultiplied too, even where it is, so a tile
+                // runs the dispatches the whole fold runs (a GPU whose mask
+                // epilogue is not exact at 1 would tell the two apart).
+                let mut wsteps = Vec::with_capacity(steps.len());
+                let mut premultiply = Vec::new();
+                for s in &steps {
+                    let Some(ws) = s.window(win, cw) else {
+                        continue;
+                    };
+                    if let (Some(orig), Some(cut)) = (s.plate(), ws.plate()) {
+                        let ptr = orig.raw().as_ptr() as usize;
+                        let opaque = *whole_opaque
+                            .entry(ptr)
+                            .or_insert_with(|| window_is_opaque(&orig.to_f16()));
+                        if !opaque {
+                            premultiply.push(cut.clone());
+                        }
+                    }
+                    wsteps.push(ws);
+                }
                 let inner = Region::new(tx as i32 - win.x, ty as i32 - win.y, tile.w, tile.h);
                 let px = match ctx {
-                    Some(ctx) => self.fold_window(ctx, &wsteps, frame, inner, depth).await?,
+                    Some(ctx) => {
+                        self.fold_window(ctx, &wsteps, frame, inner, depth, premultiply)
+                            .await?
+                    }
                     None => super::cpu::fold_window(&wsteps, frame, inner, depth)?,
                 };
                 paste(&mut out, cw, &px, tile);
@@ -584,11 +624,13 @@ impl LayerStack {
         frame: Frame,
         inner: Region,
         depth: image_core::SampleDepth,
+        premultiply: Vec<Pixels>,
     ) -> Result<Pixels, IngestError> {
         // Each window its own plates and masks: they are cut anew, so
         // nothing would be found in a shared cache.
         let mut local = FoldCache::default();
         local.bind(ctx);
+        local.premultiply = premultiply;
         let mut batch = GpuBatch::new(ctx);
         let (st, _) = self
             .run_steps(
