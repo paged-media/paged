@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "paged.image kernel definitions: WGSL source of truth + typed param blocks + metadata (spec §6). Depends ONLY on image-core and the leaf paged-warp (dep rule 1; ADR 466)."
+description = "paged.image kernel definitions: WGSL source of truth + typed param blocks + metadata (spec §6). Depends ONLY on image-core and the leaf engine crates paged-warp and paged-kernels (dep rule 1; ADR 466, engine ADR 1013)."
 build = "build.rs"
 
 [lints]
@@ -24,6 +24,7 @@ cpu = []
 [dependencies]
 image-core = { workspace = true }
 paged-warp = { workspace = true }
+paged-kernels = { workspace = true }
 bytemuck = { workspace = true }
 
 [dev-dependencies]

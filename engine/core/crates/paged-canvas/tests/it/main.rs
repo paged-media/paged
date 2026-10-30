@@ -60,6 +60,7 @@ mod idml_export_losses;
 mod idml_export_object_model_state;
 mod idml_export_pure;
 mod idml_export_saveback;
+mod image_adjustments;
 mod image_content_transform_kinds;
 mod indesign_lane;
 mod index_ops;

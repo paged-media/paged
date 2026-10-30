@@ -535,6 +535,16 @@ export const HOST_FEATURES: readonly string[] = [
   // refuses the path (an outcome) and reads no row. A bundle that would
   // otherwise bake an effect into pixels asks this flag first.
   "document.effectStack@1",
+  // Engine ADR 1037 — an image frame's filter stack: `frameImageAdjustments`
+  // (a list of `RasterOp`: exposure, levels, curves, hue/saturation,
+  // recolor, duotone, black & white, sharpen, blur, posterize, threshold,
+  // invert) reads and writes through the ordinary property doors on a
+  // rectangle, oval or polygon. STATIC, like `document.fillRule@1`: the
+  // path and its `imageAdjustments` value are additive at protocol 77, so
+  // an older engine refuses the write as an unknown path (an outcome) and
+  // reads no row. A bundle that would otherwise bake a picture fix into
+  // the pixels (paged.slide's DrawingML picture effects) asks it first.
+  "document.imageAdjustments@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never

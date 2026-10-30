@@ -5,8 +5,8 @@
     "chrome": 4,
     "command": 829,
     "keybinding": 164,
-    "menu": 596,
-    "panel": 142,
+    "menu": 597,
+    "panel": 143,
     "tool": 126
   },
   "features": [
@@ -7226,6 +7226,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Effects/Picture adjustments…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Group",
       "kind": "menu",
       "owner": "editor"
@@ -8542,6 +8547,11 @@
     },
     {
       "id": "panel:paged.pathfinder",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.picture-adjustments",
       "kind": "panel",
       "owner": "editor"
     },

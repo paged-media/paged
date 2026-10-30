@@ -42,9 +42,11 @@
 //!   preset shadow as a plain drop shadow; blur, reflection, fill overlay
 //!   and shadow distortion reported, because the engine cannot hold them
 //!   yet.
-//! - **Pictures** ([`Mapper::picture`]): `a:alphaModFix` as opacity; the
-//!   Office 2010 corrections and artistic effects are already in the image
-//!   Office stored; every other picture effect is reported.
+//! - **Pictures** ([`Mapper::picture`]): `a:alphaModFix` as opacity;
+//!   `a:lum`, `a:duotone`, `a:grayscl`, `a:biLevel` and `a:hsl` as the
+//!   image frame's filter stack (engine ADR 1037); the Office 2010
+//!   corrections and artistic effects are already in the image Office
+//!   stored; every other picture effect is reported.
 //! - **The inverse** ([`effects_of`], [`dash_of`]): the engine's drop
 //!   shadow, effects and dash pattern back as the neutral IR, which
 //!   `paged_ooxml::drawingml::write` writes as DrawingML.
@@ -66,7 +68,7 @@ pub mod native;
 use paged_model::{
     ArrowheadType, ColorEntry, ColorModel, ColorSpace, DropShadowSetting, FeatherParams,
     FrameEffects, GradientEntry, GradientFeatherParams, GradientFeatherStop, GradientKind,
-    GradientStopRef, InnerShadowParams, OuterGlowParams,
+    GradientStopRef, InnerShadowParams, OuterGlowParams, RasterOp,
 };
 pub use paged_ooxml::drawingml::resolved::{
     radial_reach, Blur, Effects, FillOverlay, Glow, ImageEffect, Paint, PatternPaint, Picture,
@@ -589,36 +591,113 @@ impl Mapper {
         }
     }
 
-    /// A picture's opacity factor (0–1) from its blip, reporting the
-    /// picture effects the engine cannot apply yet.
-    pub fn picture(&mut self, pic: &Picture) -> f64 {
+    /// A picture's opacity factor (0–1) and its filter stack (engine ADR
+    /// 1037) from its blip, reporting the picture effects the engine
+    /// cannot apply.
+    ///
+    /// `a:lum` becomes brightness/contrast, `a:duotone` a duotone,
+    /// `a:grayscl` a black & white mixed with the luma weights Office
+    /// greys by (0.3, 0.59, 0.11), `a:biLevel` a threshold and `a:hsl` a
+    /// hue/saturation, in the blip's order. A colour change, a colour
+    /// replacement, a tint and a picture blur have no op and are reported.
+    pub fn picture(&mut self, pic: &Picture) -> MappedPicture {
+        let unit = |c: Rgb| c.map(|v| f32::from(v) / 255.0);
+        let mut adjustments = Vec::new();
         for e in &pic.effects {
             let what = match e {
                 // Office stores the image these produce as the blip: the
                 // picture as placed already shows them.
                 ImageEffect::Office2010 { .. } => continue,
-                ImageEffect::Luminance { .. } => "a:lum (brightness/contrast)",
+                ImageEffect::Luminance { bright, contrast } => {
+                    // Contrast in Office is a percentage of the full
+                    // slope: +50 % doubles it, −50 % halves it.
+                    let c = contrast.clamp(-1.0, 0.99);
+                    let slope = if c >= 0.0 { 1.0 / (1.0 - c) } else { 1.0 + c };
+                    adjustments.push(RasterOp::BrightnessContrast {
+                        brightness: bright.clamp(-1.0, 1.0) as f32,
+                        contrast: (slope as f32).min(10.0),
+                    });
+                    continue;
+                }
+                ImageEffect::Duotone { dark, light } => {
+                    adjustments.push(RasterOp::Duotone {
+                        shadow: unit(*dark),
+                        highlight: unit(*light),
+                    });
+                    continue;
+                }
+                ImageEffect::Grayscale => {
+                    adjustments.push(RasterOp::BlackWhite {
+                        reds: 0.3,
+                        yellows: 0.89,
+                        greens: 0.59,
+                        cyans: 0.7,
+                        blues: 0.11,
+                        magentas: 0.41,
+                    });
+                    continue;
+                }
+                ImageEffect::BiLevel { threshold } => {
+                    adjustments.push(RasterOp::Threshold {
+                        level: threshold.clamp(0.0, 1.0) as f32,
+                    });
+                    continue;
+                }
+                ImageEffect::Hsl { hue, sat, lum } => {
+                    adjustments.push(RasterOp::HueSaturation {
+                        hue: (hue.rem_euclid(360.0)) as f32,
+                        saturation: sat.clamp(-1.0, 1.0) as f32,
+                        lightness: lum.clamp(-1.0, 1.0) as f32,
+                    });
+                    continue;
+                }
                 ImageEffect::ColorChange { .. } => "a:clrChange",
-                ImageEffect::Duotone { .. } => "a:duotone",
-                ImageEffect::Grayscale => "a:grayscl",
-                ImageEffect::BiLevel { .. } => "a:biLevel",
                 ImageEffect::ColorReplace { .. } => "a:clrRepl",
-                ImageEffect::Hsl { .. } => "a:hsl",
                 ImageEffect::Tint { .. } => "a:tint",
                 ImageEffect::Blur { .. } => "a:blur on a picture",
                 ImageEffect::Alpha(n) | ImageEffect::Other(n) => {
                     self.lose(format!(
-                        "picture effect a:{n} is not carried (no image adjustments yet)"
+                        "picture effect a:{n} is not carried (no image adjustment for it)"
                     ));
                     continue;
                 }
             };
             self.lose(format!(
-                "picture effect {what} is not carried (no image adjustments yet)"
+                "picture effect {what} is not carried (no image adjustment for it)"
             ));
         }
-        pic.opacity
+        MappedPicture {
+            opacity: pic.opacity,
+            adjustments,
+        }
     }
+}
+
+/// A picture as [`Mapper::picture`] maps it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MappedPicture {
+    /// The opacity factor, 0–1 (`a:alphaModFix`).
+    pub opacity: f64,
+    /// The image frame's filter stack (engine ADR 1037), in blip order.
+    pub adjustments: Vec<RasterOp>,
+}
+
+/// The loss a lane that cannot hold an image filter stack (engine ADR
+/// 1037) reports for one of its ops: the DrawingML element it came from,
+/// and the op it became on the mutation lane.
+pub fn picture_adjustment_loss(op: &RasterOp) -> String {
+    let element = match op {
+        RasterOp::BrightnessContrast { .. } => "a:lum",
+        RasterOp::Duotone { .. } => "a:duotone",
+        RasterOp::BlackWhite { .. } => "a:grayscl",
+        RasterOp::Threshold { .. } => "a:biLevel",
+        RasterOp::HueSaturation { .. } => "a:hsl",
+        _ => "a picture effect",
+    };
+    format!(
+        "{element} (picture adjustment {}) is not carried on the native lane",
+        op.name()
+    )
 }
 
 /// A gradient feather for a gradient whose stops differ in alpha: the
