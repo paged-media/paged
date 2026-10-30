@@ -978,6 +978,40 @@ pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
     out
 }
 
+/// Engine ADR 1027 — the movie and sound items IDML is not given. The
+/// export writes each such frame as the picture frame of its poster and
+/// keeps the medium in the frame's label, which paged reads back on reopen;
+/// InDesign shows the poster. A medium in a container part travels only in
+/// a `.paged` file. Declared from the model, like the filter stacks.
+pub(crate) fn media_losses(scene: &Document) -> Vec<String> {
+    let mut out = Vec::new();
+    for parsed in &scene.spreads {
+        for r in &parsed.spread.rectangles {
+            let Some(m) = &r.media else { continue };
+            let kind = match m.kind {
+                paged_model::MediaKind::Movie => "movie",
+                paged_model::MediaKind::Sound => "sound",
+            };
+            let carried = match &m.source {
+                paged_model::MediaSource::Part { path } => format!(
+                    "its medium is the container part `{path}`, which only a `.paged` file carries"
+                ),
+                paged_model::MediaSource::Link { uri } => {
+                    format!("its medium is linked at `{uri}`")
+                }
+            };
+            out.push(format!(
+                "{kind} `{}` is a paged-native construct here — InDesign is given the picture \
+                 frame of its poster, with the medium in the frame's `{}` label, which paged \
+                 reads back on reopen; {carried}. Save as `.paged` to keep it.",
+                r.self_id.as_deref().unwrap_or("?"),
+                paged_model::media::MEDIA_LABEL,
+            ));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

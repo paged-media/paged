@@ -136,6 +136,8 @@ impl From<Value> for AuthoredValue {
             | Value::AppearanceLayer { .. }
             // Engine ADR 1037 — the filter stack, a whole list.
             | Value::ImageAdjustments(_)
+            // Engine ADR 1027 — a frame's medium, a structure.
+            | Value::Media(_)
             | Value::SwatchColor(_) => AuthoredValue::None,
         }
     }

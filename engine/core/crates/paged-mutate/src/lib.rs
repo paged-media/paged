@@ -7021,6 +7021,84 @@ mod tests {
             .is_err());
     }
 
+    /// Engine ADR 1027 — `frame.media` sets a rectangle's medium whole,
+    /// repaints without reflow, undoes to the medium it replaced (none),
+    /// and refuses a medium out of range or another kind.
+    #[test]
+    #[allow(non_snake_case)]
+    fn frame_media_round_trip__feat__slide_media() {
+        use paged_model::{MediaItem, MediaKind, MediaPlay, MediaSource};
+        let mut p = Project::new(document_with_one_rectangle("Rectangle/r1"));
+        let node = NodeId::Rectangle("Rectangle/r1".to_string());
+        let movie = MediaItem {
+            play: MediaPlay::Auto,
+            looped: true,
+            volume: 0.25,
+            trim_start_ms: 500,
+            ..MediaItem::new(
+                MediaKind::Movie,
+                MediaSource::Part {
+                    path: "paged/core/media/0123.mp4".into(),
+                },
+            )
+        };
+        let applied = p
+            .apply(set_op(
+                node.clone(),
+                PropertyPath::FrameMedia,
+                Value::Media(Some(movie.clone())),
+            ))
+            .unwrap();
+        assert_eq!(
+            p.document().spreads[0].spread.rectangles[0].media,
+            Some(movie.clone())
+        );
+        assert_eq!(applied.invalidation.frame_style, vec![node.clone()]);
+        assert!(applied.invalidation.text_reflow.is_empty());
+        assert!(matches!(
+            &applied.inverse,
+            Operation::SetProperty {
+                value: Value::Media(None),
+                ..
+            }
+        ));
+        crate::apply(p.document_mut(), &applied.inverse).unwrap();
+        assert!(p.document().spreads[0].spread.rectangles[0].media.is_none());
+        assert_round_trips(
+            &mut p,
+            set_op(
+                node.clone(),
+                PropertyPath::FrameMedia,
+                Value::Media(Some(movie.clone())),
+            ),
+            |d| assert_eq!(d.spreads[0].spread.rectangles[0].media, Some(movie.clone())),
+        );
+        let loud = MediaItem {
+            volume: 2.0,
+            ..movie.clone()
+        };
+        let err = p.apply(set_op(
+            node.clone(),
+            PropertyPath::FrameMedia,
+            Value::Media(Some(loud)),
+        ));
+        assert!(matches!(err, Err(OperationError::InvalidValue { .. })));
+        let err = p.apply(set_op(
+            node,
+            PropertyPath::FrameMedia,
+            Value::Text("movie".into()),
+        ));
+        assert!(matches!(err, Err(OperationError::TypeMismatch { .. })));
+        let mut t = Project::new(document_with_one_textframe("TextFrame/u1"));
+        assert!(t
+            .apply(set_op(
+                NodeId::TextFrame("TextFrame/u1".to_string()),
+                PropertyPath::FrameMedia,
+                Value::Media(Some(movie)),
+            ))
+            .is_err());
+    }
+
     #[test]
     fn w03_stroke_family_round_trips_paint_only() {
         let mut p = Project::new(document_with_one_rectangle("Rectangle/r1"));

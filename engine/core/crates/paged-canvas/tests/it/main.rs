@@ -75,6 +75,7 @@ mod layout_cache;
 mod line_setting_paths;
 mod load_sniff;
 mod master_crud;
+mod media;
 mod minted_page_names;
 mod model_part;
 mod native_skeleton_growth;

@@ -35,6 +35,7 @@ pub mod effect_stack;
 pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
+pub mod media;
 pub mod winding;
 pub mod word_field;
 pub use word_field::{WordField, WordFieldKind};
@@ -44,6 +45,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 pub use image_adjust::RasterOp;
+pub use media::{MediaItem, MediaKind, MediaPlay, MediaSource};
 
 /// An axis-aligned bounding box in points: `top`, `left`, `bottom`, `right`.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -2297,6 +2299,13 @@ pub struct Rectangle {
     /// writes no key, so the `.paged` bytes and the state hash are unchanged.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_adjustments: Vec<RasterOp>,
+    /// Engine ADR 1027 — the medium this frame is a movie or a sound of.
+    /// The frame's placed picture is its poster, which is all the engine
+    /// draws; a presentation plays the medium over the frame. `None` (the
+    /// default) is an ordinary frame, and writes no key, so the `.paged`
+    /// bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media: Option<MediaItem>,
 }
 
 impl Rectangle {
@@ -2389,6 +2398,7 @@ impl Rectangle {
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
+            media: None,
         }
     }
 }

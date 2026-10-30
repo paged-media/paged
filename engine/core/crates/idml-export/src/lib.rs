@@ -405,28 +405,44 @@ pub fn story_is_placed(placed: &HashSet<String>, id: &str) -> bool {
 /// source label needs dropping (the document is written as it is).
 fn image_adjustment_labels(doc: &Document) -> Option<Document> {
     use paged_model::image_adjust::{has_any, write_labels, IMAGE_ADJUSTMENTS_LABEL};
-    let stale = |sp: &paged_model::Spread| {
-        sp.labels
-            .values()
-            .any(|v| v.iter().any(|(k, _)| k == IMAGE_ADJUSTMENTS_LABEL))
-    };
+    side_labels(doc, IMAGE_ADJUSTMENTS_LABEL, has_any, write_labels)
+}
+
+/// Engine ADR 1027 — `doc` with every movie and sound frame's medium
+/// written into its spread's labels, or `None` when nothing needs it.
+fn media_labels(doc: &Document) -> Option<Document> {
+    use paged_model::media::{has_any, write_labels, MEDIA_LABEL};
+    side_labels(doc, MEDIA_LABEL, has_any, write_labels)
+}
+
+/// `doc` with a native construct written into its spreads' labels under
+/// `key` (`write` per spread), or `None` when no spread carries one
+/// (`has`) and no source label under `key` needs dropping.
+fn side_labels(
+    doc: &Document,
+    key: &str,
+    has: fn(&paged_model::Spread) -> bool,
+    write: fn(&mut paged_model::Spread) -> bool,
+) -> Option<Document> {
+    let stale =
+        |sp: &paged_model::Spread| sp.labels.values().any(|v| v.iter().any(|(k, _)| k == key));
     let needed = doc
         .spreads
         .iter()
-        .any(|p| has_any(&p.spread) || stale(&p.spread))
+        .any(|p| has(&p.spread) || stale(&p.spread))
         || doc
             .master_spreads
             .values()
-            .any(|m| has_any(&m.spread) || stale(&m.spread));
+            .any(|m| has(&m.spread) || stale(&m.spread));
     if !needed {
         return None;
     }
     let mut out = doc.clone();
     for p in &mut out.spreads {
-        write_labels(&mut p.spread);
+        write(&mut p.spread);
     }
     for m in out.master_spreads.values_mut() {
-        write_labels(&mut m.spread);
+        write(&mut m.spread);
     }
     Some(out)
 }
@@ -466,6 +482,10 @@ pub(crate) fn write_package(
     // the import reads back (and `idml_export_losses` reports).
     let labelled = image_adjustment_labels(doc);
     let doc = labelled.as_ref().unwrap_or(doc);
+    // Engine ADR 1027: a movie or sound frame is written as its poster's
+    // picture frame; the medium rides a label the import reads back.
+    let with_media = media_labels(doc);
+    let doc = with_media.as_ref().unwrap_or(doc);
     let mut src = zip::ZipArchive::new(Cursor::new(original))?;
     // The files every placed image's `<Link>` will point at (empty
     // without a link base — see `images`).

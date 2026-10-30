@@ -8325,6 +8325,11 @@
           "const": "frameImageAdjustments"
         },
         {
+          "description": "The medium a Rectangle is a movie or a sound of: `Value::Media`\n(`Some` sets it whole, `None` makes the frame an ordinary one again).\nThe frame's placed picture is the poster, all the engine draws; the\nmedium is a container part (`paged/…`) or a link, never bytes in the\nmodel. IDML has no such construct here: the export keeps it in a\nlabel and reports it. Paint-only (`frame_style`).",
+          "type": "string",
+          "const": "frameMedia"
+        },
+        {
           "description": "A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a\nswatch. `ColorRef(None)` clears the run's own value (inherit);\n`ColorRef(Some(\"Swatch/None\"))` says \"no highlight\" over a style\nthat sets one. On a `StoryRange`, or a character / paragraph style\nthrough `SetStyleProperty`. Paint-only.",
           "type": "string",
           "const": "characterHighlightColor"
@@ -9467,6 +9472,30 @@
             "type",
             "value"
           ]
+        },
+        {
+          "description": "Engine ADR 1027 — a frame's medium, the value of `frame.media`:\n`{ type: \"media\", value: { kind, source, play, … } }`, or `value:\nnull` for none. The inverse carries the medium it replaced, so undo\nrestores it exactly. Additive new variant.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "media"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MediaItem"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
         }
       ]
     },
@@ -10407,6 +10436,170 @@
           "required": [
             "op"
           ]
+        }
+      ]
+    },
+    "MediaItem": {
+      "description": "A frame's medium and how it plays (engine ADR 1027). Times are in\nmilliseconds of the medium's own timeline.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Movie or sound.",
+          "$ref": "#/$defs/MediaKind",
+          "default": "movie"
+        },
+        "source": {
+          "description": "Where the bytes are.",
+          "$ref": "#/$defs/MediaSource"
+        },
+        "mime": {
+          "description": "The medium's type (`video/mp4`, `audio/mpeg`, …), when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The medium's file name, as the user or the source document named it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "durationMs": {
+          "description": "The medium's length, when known.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "trimStartMs": {
+          "description": "Trimmed off the start: playing starts here.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "trimEndMs": {
+          "description": "Trimmed off the end: playing stops this long before the end.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "fadeInMs": {
+          "description": "Fade in from silence over this long (PowerPoint's `p14:fade`).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "fadeOutMs": {
+          "description": "Fade out to silence over this long.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "play": {
+          "description": "When it starts.",
+          "$ref": "#/$defs/MediaPlay",
+          "default": "onClick"
+        },
+        "loop": {
+          "description": "Plays again from the start until it is stopped.",
+          "type": "boolean"
+        },
+        "volume": {
+          "description": "Its volume, 0 (muted) to 1 (as recorded).",
+          "type": "number",
+          "format": "float"
+        },
+        "hideWhileNotPlaying": {
+          "description": "The frame is not shown in a presentation while the medium is not\nplaying (PowerPoint's \"Hide While Not Playing\"). Print and PDF show\nthe poster all the same.",
+          "type": "boolean"
+        },
+        "rewind": {
+          "description": "Goes back to its first frame once it has played.",
+          "type": "boolean"
+        },
+        "fullScreen": {
+          "description": "Plays filling the screen.",
+          "type": "boolean"
+        },
+        "showControls": {
+          "description": "Shows the player's controls while it plays.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "source"
+      ]
+    },
+    "MediaKind": {
+      "description": "Whether the medium has pictures.",
+      "oneOf": [
+        {
+          "description": "A video (InDesign's `<Movie>`, PowerPoint's `a:videoFile`).",
+          "type": "string",
+          "const": "movie"
+        },
+        {
+          "description": "Audio only (InDesign's `<Sound>`, PowerPoint's `a:audioFile`).",
+          "type": "string",
+          "const": "sound"
+        }
+      ]
+    },
+    "MediaSource": {
+      "description": "Where the medium's bytes are.",
+      "oneOf": [
+        {
+          "description": "A part of the document's container, by its full path (`paged/…`):\nit travels with the `.paged` file.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "part"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ]
+        },
+        {
+          "description": "A URL outside the document (PowerPoint's linked media, InDesign's\nmovie link).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "link"
+            },
+            "uri": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "uri"
+          ]
+        }
+      ]
+    },
+    "MediaPlay": {
+      "description": "When the medium starts in a presentation.",
+      "oneOf": [
+        {
+          "description": "When it is clicked, or on the click of the slide's sequence that\nplays it (PowerPoint's \"On Click\", InDesign's default).",
+          "type": "string",
+          "const": "onClick"
+        },
+        {
+          "description": "As soon as its page is shown (PowerPoint's \"Automatically\",\nInDesign's `PlayOnPageTurn`).",
+          "type": "string",
+          "const": "auto"
         }
       ]
     },

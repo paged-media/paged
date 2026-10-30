@@ -429,6 +429,17 @@ pub(super) fn find_fill_rule_mut<'a>(
     }
 }
 
+/// Engine ADR 1027 — locate a rectangle's medium slot.
+pub(super) fn find_media_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut Option<paged_model::MediaItem>> {
+    match node {
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.media),
+        _ => None,
+    }
+}
+
 /// Engine ADR 1037 — locate the `image_adjustments` stack on a kind that
 /// places a picture.
 pub(super) fn find_image_adjustments_mut<'a>(

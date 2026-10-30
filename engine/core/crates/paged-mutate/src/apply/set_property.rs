@@ -3439,6 +3439,35 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // Engine ADR 1027 — a rectangle's medium, replaced whole. A medium
+        // out of range is refused; the inverse carries the one it replaced.
+        (NodeId::Rectangle(_), PropertyPath::FrameMedia) => {
+            let Value::Media(media) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Media".to_string(),
+                });
+            };
+            if media.as_ref().is_some_and(|m| !m.is_valid()) {
+                return Err(OperationError::InvalidValue {
+                    node: node.clone(),
+                    path,
+                    reason: "the medium has a value out of its range (a part path under \
+                             `paged/`, a link, a volume 0..=1, trims up to a day)"
+                        .to_string(),
+                });
+            }
+            let slot = find_media_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = std::mem::replace(slot, media.clone());
+            (
+                Value::Media(prev),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
         (
             NodeId::Rectangle(_) | NodeId::Polygon(_) | NodeId::GraphicLine(_),
             PropertyPath::FrameStrokeMiterLimit,

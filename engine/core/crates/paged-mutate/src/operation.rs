@@ -1660,6 +1660,15 @@ pub enum PropertyPath {
     /// Paint-only (`frame_style`).
     FrameImageAdjustments,
 
+    // ---- engine ADR 1027 — movie and sound items ------------------------
+    /// The medium a Rectangle is a movie or a sound of: `Value::Media`
+    /// (`Some` sets it whole, `None` makes the frame an ordinary one again).
+    /// The frame's placed picture is the poster, all the engine draws; the
+    /// medium is a container part (`paged/…`) or a link, never bytes in the
+    /// model. IDML has no such construct here: the export keeps it in a
+    /// label and reports it. Paint-only (`frame_style`).
+    FrameMedia,
+
     // ---- engine ADR 1018 — Word's character and paragraph additions --
     /// A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a
     /// swatch. `ColorRef(None)` clears the run's own value (inherit);
@@ -2102,6 +2111,7 @@ impl PropertyPath {
             PropertyPath::FramePdfPage => "frame.pdfPage",
             PropertyPath::FrameFillRule => "frame.fillRule",
             PropertyPath::FrameImageAdjustments => "frame.imageAdjustments",
+            PropertyPath::FrameMedia => "frame.media",
             PropertyPath::CharacterHighlightColor => "character.highlightColor",
             PropertyPath::CharacterHidden => "character.hidden",
             PropertyPath::CharacterUnderlineType => "character.underlineType",
@@ -3219,6 +3229,11 @@ pub enum Value {
     /// inverse carries the prior stack, so undo restores it exactly.
     /// Additive new variant (the `TabStops` / `Lengths` precedent).
     ImageAdjustments(Vec<paged_model::RasterOp>),
+    /// Engine ADR 1027 — a frame's medium, the value of `frame.media`:
+    /// `{ type: "media", value: { kind, source, play, … } }`, or `value:
+    /// null` for none. The inverse carries the medium it replaced, so undo
+    /// restores it exactly. Additive new variant.
+    Media(Option<paged_model::MediaItem>),
 }
 
 /// v71 polish — a `text` / `enum` / `ref` payload of `null` is the empty

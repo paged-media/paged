@@ -7463,6 +7463,7 @@ impl CanvasModel {
         out.extend(crate::export_losses::effect_stack_losses(&self.scene));
         out.extend(crate::export_losses::appearance_losses(&self.scene));
         out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
+        out.extend(crate::export_losses::media_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -7549,6 +7550,29 @@ impl CanvasModel {
                 "paged part path must start with `{}` (got {path:?})",
                 idml_export::PAGED_PREFIX
             ));
+        }
+        // Engine ADR 1027 — the engine's media folder is shared and
+        // write-once: any caller may add a medium there (a movie inserted
+        // by one module plays in another's presentation), none may change
+        // the bytes of one that is there.
+        if let Some(name) = path.strip_prefix(paged_model::media::MEDIA_PART_PREFIX) {
+            if name.is_empty() || name.contains('/') || name.split('.').any(|s| s.is_empty()) {
+                return Err(format!(
+                    "a media part is named `{}<name>.<ext>`, not {path:?}",
+                    paged_model::media::MEDIA_PART_PREFIX
+                ));
+            }
+            if let Some(held) = self.get_paged_part(&path) {
+                if held != bytes {
+                    return Err(format!(
+                        "the media part {path:?} is there with other bytes; a media part is never changed"
+                    ));
+                }
+                return Ok(());
+            }
+            self.paged_part_tombstones.remove(&path);
+            self.paged_parts.insert(path, bytes);
+            return Ok(());
         }
         if let Some(caller) = caller {
             let own = format!("{}{caller}/", idml_export::PAGED_PREFIX);
@@ -8463,6 +8487,12 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameImageAdjustments,
                                 value: Some(Value::ImageAdjustments(f.image_adjustments.clone())),
+                            },
+                            // Engine ADR 1027 — the medium a movie or sound
+                            // frame names (`null` for an ordinary frame).
+                            PropertyEntry {
+                                path: PropertyPath::FrameMedia,
+                                value: Some(Value::Media(f.media.clone())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,

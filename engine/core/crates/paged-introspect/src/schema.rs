@@ -126,6 +126,8 @@ pub enum Wire {
     TabStops,
     /// Engine ADR 1037 — an image frame's filter stack.
     ImageAdjustments,
+    /// Engine ADR 1027 — a frame's medium (`Value::Media`).
+    Media,
     ParagraphRule,
     GradientFeather,
     GradientStops,
@@ -859,6 +861,7 @@ pub fn coerce(schema: &PropertySchema, input: Input<'_>) -> Result<Value, String
                 Wire::Lengths => Value::Lengths(Vec::new()),
                 Wire::TabStops => Value::TabStops(Vec::new()),
                 Wire::ImageAdjustments => Value::ImageAdjustments(Vec::new()),
+                Wire::Media => Value::Media(None),
                 Wire::ParagraphRule => Value::ParagraphRule(None),
                 Wire::GradientFeather => Value::GradientFeather(None),
                 Wire::EffectStack => Value::EffectStack {
@@ -1021,6 +1024,11 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
             };
             validate(schema, &wire)
         }
+        J::Object(_) if schema.wire == Wire::Media => {
+            let media: paged_model::MediaItem = serde_json::from_value(json.clone())
+                .map_err(|e| format!("a medium is {{ kind, source, play, … }}: {e}"))?;
+            validate(schema, &Value::Media(Some(media)))
+        }
         J::Object(_) if schema.wire == Wire::SwatchColor => {
             let spec: paged_mutate::SwatchColorSpec = serde_json::from_value(json.clone())
                 .map_err(|e| format!("a colour is {{ space, value, model?, tint? }}: {e}"))?;
@@ -1097,6 +1105,7 @@ pub fn wire_of(value: &Value) -> Option<Wire> {
         Value::Lengths(_) => Wire::Lengths,
         Value::TabStops(_) => Wire::TabStops,
         Value::ImageAdjustments(_) => Wire::ImageAdjustments,
+        Value::Media(_) => Wire::Media,
         Value::ParagraphRule(_) => Wire::ParagraphRule,
         Value::GradientFeather(_) => Wire::GradientFeather,
         Value::EffectStack { .. } => Wire::EffectStack,
