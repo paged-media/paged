@@ -59,6 +59,8 @@
       "media.paged.slide.command.animationPainter",
       "media.paged.slide.command.insertPicture",
       "media.paged.slide.command.insertIcon",
+      "media.paged.slide.command.insertVideo",
+      "media.paged.slide.command.insertAudio",
       "media.paged.slide.command.copyFormat",
       "media.paged.slide.command.pasteFormat",
       "media.paged.slide.command.smartArtText",
@@ -422,6 +424,18 @@
           "title": "Insert icon…",
           "args": "schema/insert-picture.args.json",
           "result": "schema/insert-picture.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.insertVideo",
+          "title": "Insert video…",
+          "args": "schema/insert-media.args.json",
+          "result": "schema/insert-media.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.insertAudio",
+          "title": "Insert audio…",
+          "args": "schema/insert-media.args.json",
+          "result": "schema/insert-media.result.json"
         },
         {
           "id": "media.paged.slide.command.copyFormat",

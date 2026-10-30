@@ -105,6 +105,8 @@
   "slide.comments.yourName": "Ihr Name",
   "slide.content.copyFormat": "Format kopieren",
   "slide.content.insertIcon": "Piktogramm einfügen …",
+  "slide.content.insertVideo": "Video einfügen …",
+  "slide.content.insertAudio": "Audio einfügen …",
   "slide.content.insertPicture": "Bild einfügen …",
   "slide.content.pasteFormat": "Format einfügen",
   "slide.content.setSmartArtText": "Text eines SmartArt-Punkts festlegen",

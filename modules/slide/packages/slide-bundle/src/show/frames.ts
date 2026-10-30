@@ -27,7 +27,7 @@
 // Frames are cached per page and scale and prefetched one slide ahead, so
 // an advance shows a frame that is already decoded.
 
-import type { BundleHost } from "@paged-media/plugin-api";
+import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 
 import type { ShowSlide } from "./show-model.js";
 import { closeScene, drawScene, type SlideScene } from "./scene-source.js";
@@ -38,9 +38,9 @@ export type Frame = ImageBitmap;
 export interface FrameSource {
   /** The page as a frame at `scale` pixels per pt; null when the page is
    *  unknown or nothing could be drawn. */
-  frame(pageId: string, scale: number): Promise<Frame | null>;
+  frame(pageId: string, scale: number, hide?: readonly string[]): Promise<Frame | null>;
   /** Start drawing a frame that will be needed soon. */
-  prefetch(pageId: string, scale: number): void;
+  prefetch(pageId: string, scale: number, hide?: readonly string[]): void;
   /** Drop every cached frame (the document changed). */
   clear(): void;
   dispose(): void;
@@ -67,12 +67,24 @@ export function createFrameSource(host: BundleHost): FrameSource {
   const cache = new Map<string, Promise<Frame | null>>();
   const settled = new Map<string, Frame>();
 
-  const draw = async (pageId: string, scale: number): Promise<Frame | null> => {
+  const draw = async (
+    pageId: string,
+    scale: number,
+    hide: readonly string[],
+  ): Promise<Frame | null> => {
     if (typeof createImageBitmap !== "function") return null;
     if (host.supports("render.layers@1")) {
       const out = await host.render.layers(pageId, {
         scale,
         format: "bitmap",
+        // Media hidden while they do not play (slide ADR 718).
+        ...(hide.length > 0
+          ? {
+              hideItems: hide.map(
+                (id) => ({ kind: "rectangle", id }) as unknown as ElementId,
+              ),
+            }
+          : {}),
       });
       return out?.background.bitmap ?? null;
     }
@@ -93,8 +105,12 @@ export function createFrameSource(host: BundleHost): FrameSource {
     }
   };
 
-  const frame = (pageId: string, scale: number): Promise<Frame | null> => {
-    const key = `${pageId}@${scale}`;
+  const frame = (
+    pageId: string,
+    scale: number,
+    hide: readonly string[] = [],
+  ): Promise<Frame | null> => {
+    const key = `${pageId}@${scale}${hide.length > 0 ? `-${hide.join(",")}` : ""}`;
     const hit = cache.get(key);
     if (hit) {
       // Most recently used goes last.
@@ -102,7 +118,7 @@ export function createFrameSource(host: BundleHost): FrameSource {
       cache.set(key, hit);
       return hit;
     }
-    const job = draw(pageId, scale)
+    const job = draw(pageId, scale, hide)
       .then((f) => {
         if (f && cache.get(key) === job) settled.set(key, f);
         return f;
@@ -115,8 +131,8 @@ export function createFrameSource(host: BundleHost): FrameSource {
 
   return {
     frame,
-    prefetch(pageId, scale) {
-      void frame(pageId, scale);
+    prefetch(pageId, scale, hide) {
+      void frame(pageId, scale, hide);
     },
     clear() {
       for (const f of settled.values()) f.close();

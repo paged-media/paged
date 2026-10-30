@@ -47,10 +47,13 @@ import {
 } from "./format-painter.js";
 import { CONTENT } from "./messages.js";
 import { insertPicture, PICTURE_ACCEPT } from "./pictures.js";
+import { AUDIO_ACCEPT, insertMedia, VIDEO_ACCEPT } from "./media.js";
 import { setPointText, smartArtAt } from "./smartart.js";
 
 import insertPictureArgs from "../schema/insert-picture.args.json" with { type: "json" };
 import insertPictureResult from "../schema/insert-picture.result.json" with { type: "json" };
+import insertMediaArgs from "../schema/insert-media.args.json" with { type: "json" };
+import insertMediaResult from "../schema/insert-media.result.json" with { type: "json" };
 import formatArgs from "../schema/format.args.json" with { type: "json" };
 import appliedResult from "../schema/applied.result.json" with { type: "json" };
 import presentedResult from "../schema/presented.result.json" with { type: "json" };
@@ -66,6 +69,8 @@ const C = `${P}.command`;
 export const CONTENT_CMD = {
   insertPicture: `${C}.insertPicture`,
   insertIcon: `${C}.insertIcon`,
+  insertVideo: `${C}.insertVideo`,
+  insertAudio: `${C}.insertAudio`,
   copyFormat: `${C}.copyFormat`,
   pasteFormat: `${C}.pasteFormat`,
   smartArtText: `${C}.smartArtText`,
@@ -82,6 +87,8 @@ export const CONTENT_TYPED = {
 export const CONTENT_MENU: [string, string, string, number][] = [
   ["Insert/Pictures…", CONTENT_CMD.insertPicture, "objects", 41],
   ["Insert/Icons…", CONTENT_CMD.insertIcon, "objects", 42],
+  ["Insert/Video…", CONTENT_CMD.insertVideo, "objects", 43],
+  ["Insert/Audio…", CONTENT_CMD.insertAudio, "objects", 44],
   ["Slide/Copy formatting", CONTENT_CMD.copyFormat, "format", 10],
   ["Slide/Paste formatting", CONTENT_CMD.pasteFormat, "format", 20],
   ["Slide/SmartArt text pane", CONTENT_CMD.smartArtText, "format", 30],
@@ -207,6 +214,57 @@ async function pickAndPlace(
   return placePicture(host, deps, file.bytes, {}, icon);
 }
 
+/** Insert the medium `bytes` (named `name`) on the slide `slide`
+ *  (default: the active one), slide ADR 718. */
+async function placeMedia(
+  host: BundleHost,
+  deps: ContentDeps,
+  bytes: Uint8Array,
+  name: string,
+  a: {
+    slide?: string;
+    x?: number;
+    y?: number;
+    w?: number;
+    h?: number;
+    play?: "onClick" | "auto";
+  },
+): Promise<string> {
+  const pageId = a.slide ? pageIdOf(a.slide) : deps.activePage();
+  if (!pageId) throw new Error("failed: no slide is active");
+  const size = await pageSize(host, pageId);
+  const center: [number, number] | undefined =
+    a.x !== undefined && a.y !== undefined ? [a.x, a.y] : undefined;
+  const id = await insertMedia(host, {
+    bytes,
+    name,
+    pageId,
+    pageSize: size,
+    center,
+    w: a.w,
+    h: a.h,
+    play: a.play,
+  });
+  if (!id) throw new Error("failed: the medium could not be inserted");
+  return fromElementId(id);
+}
+
+/** Pick a video or audio file and insert it (Insert ▸ Video / Audio). */
+async function pickAndPlaceMedia(
+  host: BundleHost,
+  deps: ContentDeps,
+  kind: "video" | "audio",
+): Promise<string | null> {
+  if (!host.supports("shell.pickFile@1"))
+    throw new Error("unavailable: this host has no file picker");
+  const [file] = await host.shell.pickFile({
+    accept: [...(kind === "video" ? VIDEO_ACCEPT : AUDIO_ACCEPT)],
+    multiple: false,
+  });
+  if (!file) return null; // cancelled
+  return placeMedia(host, deps, file.bytes, file.name, {});
+}
+
 /** The typed commands of slide W4's content verbs. */
 export function contentTypedCommands(
   host: BundleHost,
@@ -228,6 +286,20 @@ export function contentTypedCommands(
     if (!address) throw new Error("cancelled: no file was chosen");
     return { picture: address };
   };
+  type MediaArgs = PictureArgs & { name?: string; play?: "onClick" | "auto" };
+  const medium = (kind: "video" | "audio") => async (a: MediaArgs) => {
+    const address = a.data
+      ? await placeMedia(
+          host,
+          deps,
+          base64ToBytes(a.data),
+          a.name ?? (kind === "video" ? "video.mp4" : "audio.m4a"),
+          a,
+        )
+      : await pickAndPlaceMedia(host, deps, kind);
+    if (!address) throw new Error("cancelled: no file was chosen");
+    return { media: address };
+  };
   const diagram = async (ref: string) => {
     const id = elementOf(ref);
     const art = id ? await smartArtAt(host, id) : null;
@@ -248,6 +320,20 @@ export function contentTypedCommands(
       insertPictureArgs,
       insertPictureResult,
       picture(true),
+    ),
+    typed(
+      CONTENT_CMD.insertVideo,
+      t(CONTENT.insertVideo),
+      insertMediaArgs,
+      insertMediaResult,
+      medium("video"),
+    ),
+    typed(
+      CONTENT_CMD.insertAudio,
+      t(CONTENT.insertAudio),
+      insertMediaArgs,
+      insertMediaResult,
+      medium("audio"),
     ),
     typed(
       CONTENT_CMD.copyFormat,
@@ -366,6 +452,14 @@ export function contributeContentCommands(
   );
   add(CONTENT_CMD.insertIcon, t(CONTENT.insertIcon), slideActive, () =>
     pickAndPlace(host, deps, true),
+  );
+  const mediaActive = () =>
+    slideActive() && host.supports("document.media@1");
+  add(CONTENT_CMD.insertVideo, t(CONTENT.insertVideo), mediaActive, () =>
+    pickAndPlaceMedia(host, deps, "video"),
+  );
+  add(CONTENT_CMD.insertAudio, t(CONTENT.insertAudio), mediaActive, () =>
+    pickAndPlaceMedia(host, deps, "audio"),
   );
   add(
     CONTENT_CMD.copyFormat,

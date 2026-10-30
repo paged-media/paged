@@ -406,6 +406,8 @@ export const TEMPLATE = defineMessages("slide.template", {
 export const CONTENT = defineMessages("slide.content", {
   insertPicture: "Insert picture…",
   insertIcon: "Insert icon…",
+  insertVideo: "Insert video…",
+  insertAudio: "Insert audio…",
   copyFormat: "Copy formatting",
   pasteFormat: "Paste formatting",
   smartArtText: "SmartArt text pane",

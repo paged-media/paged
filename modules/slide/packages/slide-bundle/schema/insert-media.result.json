@@ -1,0 +1,6 @@
+{
+  "kind": "struct",
+  "fields": {
+    "media": { "kind": "text" }
+  }
+}

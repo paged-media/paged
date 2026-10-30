@@ -69,6 +69,12 @@ function fakeHost(opts: { selection?: ElementId[] } = {}) {
         return { dispose: () => keys.splice(keys.indexOf(k), 1) };
       },
     },
+    media: {
+      store: async (_b: Uint8Array, o: { mime: string }) => ({
+        type: "part",
+        path: `paged/core/media/abc.${o.mime.startsWith("audio") ? "m4a" : "mp4"}`,
+      }),
+    },
     document: {
       collection: async () => [{ selfId: "p1", sizePt: [960, 540] }],
       mutateWithBytes: async (m: unknown) => {
@@ -155,6 +161,61 @@ describe("slide W4 content commands", () => {
     expect(f.commands.get(CONTENT_CMD.pasteFormat)!.when!()).toBe(true);
     h.dispose();
     expect(f.commands.size + f.menus.length + f.keys.length).toBe(0);
+  });
+
+  it("the typed twins insert a video and a sound: the medium stored, poster and medium in one batch", async () => {
+    covers(
+      "command:media.paged.slide.command.insertVideo",
+      "command:media.paged.slide.command.insertAudio",
+    );
+    const f = fakeHost();
+    const cmds = new Map(
+      contentTypedCommands(f.host, deps(), new FormatClipboard()).map((c) => [
+        c.id,
+        c,
+      ]),
+    );
+    const run = (id: string, a: unknown) =>
+      (cmds.get(id)!.handler as (c: unknown, a: unknown) => Promise<unknown>)(
+        null,
+        a,
+      );
+    const data = Buffer.from([0, 0, 0, 0x18]).toString("base64");
+    expect(
+      await run(CONTENT_CMD.insertVideo, { data, name: "clip.mp4", play: "auto" }),
+    ).toEqual({ media: expect.stringContaining("r1") });
+    const batch = f.mutations[0] as {
+      args: { ops: { op: string; args: Record<string, unknown> }[] };
+    };
+    expect(batch.args.ops.map((o) => o.op)).toEqual([
+      "insertFrame",
+      "bindCreated",
+      "replaceImageBytes",
+      "setElementProperty",
+    ]);
+    const set = batch.args.ops[3]!.args as {
+      path: string;
+      value: { type: string; value: Record<string, unknown> };
+    };
+    expect(set.path).toBe("frameMedia");
+    expect(set.value.value).toMatchObject({
+      kind: "movie",
+      mime: "video/mp4",
+      play: "auto",
+      source: { type: "part", path: "paged/core/media/abc.mp4" },
+    });
+    expect(await run(CONTENT_CMD.insertAudio, { data, name: "tone.m4a" })).toHaveProperty(
+      "media",
+    );
+    const sound = (
+      f.mutations[1] as {
+        args: { ops: { args: { value?: { value: { kind: string } } } }[] };
+      }
+    ).args.ops[3]!.args.value!.value;
+    expect(sound.kind).toBe("sound");
+    await expect(
+      run(CONTENT_CMD.insertVideo, { data, name: "notes.txt" }),
+    ).rejects.toThrow(/could not be inserted/);
   });
 
   it("the typed twins insert a picture, refuse a raster icon and answer the pane", async () => {

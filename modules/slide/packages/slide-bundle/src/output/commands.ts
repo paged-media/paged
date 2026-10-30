@@ -225,6 +225,7 @@ export function outputTypedCommands(
           frames: v.frames,
           durationMs: v.durationMs,
           gpu: v.gpu,
+          ...(v.audio ? { audio: v.audio } : {}),
         };
       },
     ),

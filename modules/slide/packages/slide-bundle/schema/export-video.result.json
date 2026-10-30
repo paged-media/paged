@@ -3,7 +3,9 @@
   "fields": {
     "bytes": {
       "kind": "bytes",
-      "mime": ["video/mp4"]
+      "mime": [
+        "video/mp4"
+      ]
     },
     "fileName": {
       "kind": "text"
@@ -33,6 +35,11 @@
     "gpu": {
       "kind": "bool",
       "summary": "Transitions ran on WebGPU (false: they cut)."
+    },
+    "audio": {
+      "kind": "text",
+      "optional": true,
+      "summary": "The sound track's codec (aac or opus); absent for a silent video (slide ADR 718)."
     }
   }
 }

@@ -1,6 +1,6 @@
 # paged.slide — status
 
-Read from the code on 2026-10-29.
+Read from the code on 2026-10-30.
 
 ## Built
 
@@ -222,6 +222,21 @@ Read from the code on 2026-10-29.
   edits direction, start, duration, delay, repeat, rewind and trigger; Preview plays the slide
   over the canvas; the Animation Painter copies a shape's effects. Typed commands add, remove,
   retime, move, list and preview animations.
+- **Video and audio** (ADR 718, engine ADR 1027, extensions ADR 345, amendment 1). A picture with
+  `a:videoFile` / `a:audioFile` opens as a movie or sound frame: the poster is its picture,
+  the medium (`p14:media`'s part, or a link) a `paged/core/media/` part of the document, trim
+  and fades from `p14:media`, volume, loop, hide while not playing and how it starts from the
+  slide's timing (`p:video` / `p:audio`, the `mediacall` effect). The show and the audience
+  window play each medium in a `<video>` / `<audio>` over its frame: at its build step or
+  with the slide, else when it is clicked (a click plays and pauses), trimmed, looped, at its
+  volume with its fades; leaving the slide stops it; a frame hidden while not playing is left
+  out of the slide image. Insert ▸ Video… / Audio… (typed commands `insertVideo`,
+  `insertAudio`) store the file in the document and place it with the video's first frame as
+  its poster (a sound gets an icon), one undo step. Export keeps an unedited deck's bytes,
+  writes an edited medium's trim, fades, volume, loop and hide, and writes a medium made in the
+  editor as PowerPoint does (the media part byte for byte, its timing node, the main sequence
+  that starts it on a slide without a timing). The video export draws a playing movie's
+  pictures over its frame and mixes every playing medium's sound into an AAC (else Opus) track.
 - **Files and output** (ADR 720, editor ADR 308). File ▸ Export… is a view in place of the
   canvas: PDF slides, handouts (1, 2, 3, 4, 6 or 9 a page; three with lines for notes) and notes
   pages, laid out by `slide-output` over the renderer's slide images (150 dpi; notes in
@@ -268,6 +283,7 @@ Read from the code on 2026-10-29.
 | Comments, export                                                   | Rust fixtures and the importer→editor→exporter path headless and in the editor (journey): unchanged; added, replied, resolved, deleted; duplicate; legacy; new slide                                                                                             | unchanged: the original bytes; changed: only that slide's comment part and relationships, re-imported equal to what the document held                                                                                                                                                                            |
 | Comment decks open in PowerPoint                                   | PowerPoint 16.113.3 opening and re-saving the six comment decks the Rust tests write                                                                                                                                                                             | no repair prompt; the re-saved decks read back with the same comments (PowerPoint drops the milliseconds of the date)                                                                                                                                                                                            |
 | Sections, custom shows, `.potx` (ADR 720)                          | PowerPoint 16 opening and saving as PDF the decks `pptx-export/tests/output.rs` writes; re-saving two as `.pptx`                                                                                                                                                 | no repair prompt, every slide; the re-saved decks keep both custom shows and both sections by name; the `.potx` opens as a new untitled presentation                                                                                                                                                             |
+| Video and audio (ADR 718)                                          | `media` fixture (PowerPoint-saved, self-made clip and tone), Rust and headless on the real engine; PowerPoint 16.114.1 opening and re-saving the exported decks                                                                                               | imported with trim, volume, loop, hide and start; an unedited deck exports its bytes; an edited medium and media made in the editor (on slides with and without timing) open without a repair prompt and re-save with their media byte for byte                       |
 | MP4 video (ADR 720, editor ADR 308)                                | Chromium's `<video>` (journey), bundled Chromium and Chrome with WebGPU                                                                                                                                                                                          | H.264 720p24, 89 frames: the duration the element reports within 0.1 s of the runner's, a frame decodes; the fade drawn on WebGPU in Chrome                                                                                                                                                                      |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
@@ -337,5 +353,8 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
   drawing); a chart's formatting is not editable; the data sheet edits values and formulas, not
   rows, columns or the series' ranges.
 - Vector handouts and notes pages (they are 150 dpi images until the host offers a door for
-  imposed PDF pages); notes text outside Windows-1252 in the PDF (printed as `?`); audio in
-  videos (media items, wave 4); a video runner in a worker.
+  imposed PDF pages); notes text outside Windows-1252 in the PDF (printed as `?`); a video runner in a worker.
+- Media (ADR 718): bookmarks, play across slides, a medium in a group, a replaced medium on
+  export, an automatic start for a medium made in the editor on a slide that has animations
+  (it plays when clicked); media that play only when clicked are not in the video export; an
+  imported medium is kept twice (in the source deck and as its part).

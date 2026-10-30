@@ -16,7 +16,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// A minimal ISO-BMFF (MP4) muxer for one video track (slide ADR 720,
+// A minimal ISO-BMFF (MP4) muxer for one video track and an optional
+// audio track (slide ADR 720, ADR 718: the media items' sound; AAC as
+// `mp4a`/`esds`, or Opus as `Opus`/`dOps`),
 // editor ADR 308): the WebCodecs encoder's chunks, at a constant frame
 // rate, written as `ftyp`, `moov` (one `trak`: `avc1` with the encoder's
 // `avcC`, or `vp09` with a `vpcC` built here) and one `mdat` holding every
@@ -43,6 +45,19 @@ export interface Mp4Track {
   /** `vp9`: profile, level (×10), bit depth. */
   vp9?: { profile: number; level: number; bitDepth: number };
   samples: readonly Sample[];
+  /** The sound (slide ADR 718), written after the video in `mdat`. */
+  audio?: Mp4Audio;
+}
+
+/** An audio track: the encoder's chunks. */
+export interface Mp4Audio {
+  codec: "aac" | "opus";
+  sampleRate: number;
+  channels: number;
+  /** `aac`: the AudioSpecificConfig (the encoder's description); built from
+   *  the rate and channels when absent. */
+  description?: Uint8Array;
+  samples: readonly { data: Uint8Array; duration: number }[];
 }
 
 class Writer {
@@ -149,6 +164,188 @@ function sampleEntry(t: Mp4Track): Uint8Array {
   return visual("vp09", vpcC);
 }
 
+/** An MPEG-4 descriptor: tag, a one-byte-per-7-bits length, payload. */
+function descriptor(tag: number, payload: Uint8Array): Uint8Array {
+  const len: number[] = [];
+  let n = payload.length;
+  len.unshift(n & 0x7f);
+  n >>>= 7;
+  while (n > 0) {
+    len.unshift((n & 0x7f) | 0x80);
+    n >>>= 7;
+  }
+  return new Writer().u8(tag).bytes(len).bytes(payload).done();
+}
+
+const AAC_RATES = [
+  96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025,
+  8000, 7350,
+];
+
+/** An AAC-LC AudioSpecificConfig for `rate` and `channels`. */
+export function audioSpecificConfig(rate: number, channels: number): Uint8Array {
+  const f = Math.max(0, AAC_RATES.indexOf(rate));
+  const v = (2 << 11) | (f << 7) | ((channels & 0x0f) << 3);
+  return Uint8Array.from([v >>> 8, v & 0xff]);
+}
+
+function audioEntry(a: Mp4Audio): Uint8Array {
+  const head = (w: Writer) => {
+    w.zeros(6).u16(1); // reserved, data_reference_index
+    w.zeros(8); // reserved
+    w.u16(a.channels).u16(16).u16(0).u16(0);
+    w.u32((a.sampleRate & 0xffff) * 0x10000);
+  };
+  if (a.codec === "opus") {
+    return box("Opus", (w) => {
+      head(w);
+      w.bytes(
+        box("dOps", (d) => {
+          d.u8(0).u8(a.channels).u16(312).u32(a.sampleRate).u16(0).u8(0);
+        }),
+      );
+    });
+  }
+  const asc = a.description?.length
+    ? a.description
+    : audioSpecificConfig(a.sampleRate, a.channels);
+  const dcd = descriptor(
+    0x04,
+    new Writer()
+      .u8(0x40) // MPEG-4 audio
+      .u8((0x05 << 2) | 1) // audio stream
+      .bytes([0, 0, 0]) // buffer size
+      .u32(0)
+      .u32(0)
+      .bytes(descriptor(0x05, asc))
+      .done(),
+  );
+  const es = descriptor(
+    0x03,
+    new Writer()
+      .u16(2)
+      .u8(0)
+      .bytes(dcd)
+      .bytes(descriptor(0x06, Uint8Array.from([2])))
+      .done(),
+  );
+  return box("mp4a", (w) => {
+    head(w);
+    w.bytes(box("esds", (e) => e.bytes(es), { version: 0, flags: 0 }));
+  });
+}
+
+/** The audio `trak`, its samples one chunk at `chunkOffset`. */
+function audioTrak(
+  a: Mp4Audio,
+  movieDuration: number,
+  chunkOffset: number,
+  wide: boolean,
+): Uint8Array {
+  const count = a.samples.length;
+  const total = a.samples.reduce((n, x) => n + x.duration, 0);
+  // stts: runs of equal durations.
+  const runs: [number, number][] = [];
+  for (const x of a.samples) {
+    const last = runs[runs.length - 1];
+    if (last && last[1] === x.duration) last[0]++;
+    else runs.push([1, x.duration]);
+  }
+  const full = { version: 0, flags: 0 };
+  return box("trak", (tr) => {
+    tr.bytes(
+      box(
+        "tkhd",
+        (w) => {
+          w.u32(0).u32(0).u32(2).u32(0).u32(movieDuration);
+          w.zeros(8).u16(0).u16(1).u16(0x0100).u16(0);
+          for (const x of MATRIX) w.u32(x);
+          w.u32(0).u32(0);
+        },
+        { version: 0, flags: 3 },
+      ),
+    );
+    tr.bytes(
+      box("mdia", (md) => {
+        md.bytes(
+          box(
+            "mdhd",
+            (w) => {
+              w.u32(0).u32(0).u32(a.sampleRate).u32(total);
+              w.u16(0x55c4).u16(0);
+            },
+            full,
+          ),
+        );
+        md.bytes(
+          box(
+            "hdlr",
+            (w) => {
+              w.u32(0).ascii("soun").zeros(12).ascii("SoundHandler").u8(0);
+            },
+            full,
+          ),
+        );
+        md.bytes(
+          box("minf", (mi) => {
+            mi.bytes(box("smhd", (w) => w.zeros(4), full));
+            mi.bytes(
+              box("dinf", (di) =>
+                di.bytes(
+                  box(
+                    "dref",
+                    (w) => {
+                      w.u32(1).bytes(
+                        box("url ", () => {}, { version: 0, flags: 1 }),
+                      );
+                    },
+                    full,
+                  ),
+                ),
+              ),
+            );
+            mi.bytes(
+              box("stbl", (st) => {
+                st.bytes(
+                  box("stsd", (w) => w.u32(1).bytes(audioEntry(a)), full),
+                );
+                st.bytes(
+                  box(
+                    "stts",
+                    (w) => {
+                      w.u32(runs.length);
+                      for (const [n, d] of runs) w.u32(n).u32(d);
+                    },
+                    full,
+                  ),
+                );
+                st.bytes(
+                  box("stsc", (w) => w.u32(1).u32(1).u32(count).u32(1), full),
+                );
+                st.bytes(
+                  box(
+                    "stsz",
+                    (w) => {
+                      w.u32(0).u32(count);
+                      for (const x of a.samples) w.u32(x.data.length);
+                    },
+                    full,
+                  ),
+                );
+                st.bytes(
+                  wide
+                    ? box("co64", (w) => w.u32(1).u64(chunkOffset), full)
+                    : box("stco", (w) => w.u32(1).u32(chunkOffset), full),
+                );
+              }),
+            );
+          }),
+        );
+      }),
+    );
+  });
+}
+
 /** The MP4 file of `t`. */
 export function muxMp4(t: Mp4Track): Uint8Array {
   if (t.samples.length === 0)
@@ -160,7 +357,12 @@ export function muxMp4(t: Mp4Track): Uint8Array {
   const count = t.samples.length;
   const mediaDuration = count * delta;
   const movieDuration = Math.round((count * 1000) / t.fps); // ms
-  const dataSize = t.samples.reduce((a, s) => a + s.data.length, 0);
+  const videoSize = t.samples.reduce((a, s) => a + s.data.length, 0);
+  const audio = t.audio && t.audio.samples.length > 0 ? t.audio : null;
+  const audioSize = audio
+    ? audio.samples.reduce((a, s) => a + s.data.length, 0)
+    : 0;
+  const dataSize = videoSize + audioSize;
   const keys = t.samples.flatMap((s, i) => (s.key ? [i + 1] : []));
 
   const ftyp = box("ftyp", (w) => {
@@ -183,7 +385,7 @@ export function muxMp4(t: Mp4Track): Uint8Array {
             w.u32(0).u32(0).u32(1000).u32(movieDuration);
             w.u32(0x00010000).u16(0x0100).zeros(10);
             for (const x of MATRIX) w.u32(x);
-            w.zeros(24).u32(2);
+            w.zeros(24).u32(audio ? 3 : 2);
           },
           { version: 0, flags: 0 },
         ),
@@ -308,6 +510,8 @@ export function muxMp4(t: Mp4Track): Uint8Array {
           );
         }),
       );
+      if (audio)
+        m.bytes(audioTrak(audio, movieDuration, chunkOffset + videoSize, wide));
     });
 
   // The mdat header: 8 bytes, or 16 with a 64-bit size.
@@ -328,6 +532,7 @@ export function muxMp4(t: Mp4Track): Uint8Array {
       .u64(dataSize + 16);
   else out.u32(dataSize + 8).ascii("mdat");
   for (const s of t.samples) out.bytes(s.data);
+  if (audio) for (const s of audio.samples) out.bytes(s.data);
   return out.done();
 }
 
@@ -369,6 +574,8 @@ export function parseBoxes(
     if (type === "stsd") b.children = parseBoxes(buf, body + 8, at + size);
     if (type === "avc1" || type === "vp09")
       b.children = parseBoxes(buf, body + 78, at + size);
+    if (type === "mp4a" || type === "Opus")
+      b.children = parseBoxes(buf, body + 28, at + size);
     out.push(b);
     at += size;
   }

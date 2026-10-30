@@ -26,6 +26,7 @@
 import type {
   BundleHost,
   Disposable,
+  ElementId,
   MutationInput,
   PresentationContext,
   TypedCommandContribution,
@@ -34,6 +35,7 @@ import type {
 import { t } from "@paged-media/strings";
 
 import { hasAnimations } from "../anim/model.js";
+import { pageMedia, showMediaOf } from "../media.js";
 import { pageShapes } from "../anim/shapes.js";
 import type { ImportReport, SlideEngine } from "../engine.js";
 import { SHOW } from "../messages.js";
@@ -202,6 +204,33 @@ export async function attachAnimations(
   }
 }
 
+/** Give each slide its video and audio (slide ADR 718): the movie and
+ *  sound frames on its page, when each starts (after attachAnimations, so
+ *  a slide's `mediacall` effects decide), and the frames hidden while they
+ *  do not play, left out of the slide image (and an animated slide's
+ *  background). */
+export async function attachMedia(
+  host: BundleHost,
+  slides: ShowSlide[],
+): Promise<void> {
+  if (!host.supports("document.media@1")) return;
+  const found = await pageMedia(host, await pageShapes(host));
+  for (const s of slides) {
+    const list = found.get(s.pageId);
+    if (!list || list.length === 0) continue;
+    s.media = showMediaOf(list, s.anim?.effects);
+    s.hide = s.media
+      .filter((m) => m.media.hideWhileNotPlaying)
+      .map((m) => String(m.element.id));
+    if (s.anim && s.hide.length > 0) {
+      const ids = s.media
+        .filter((m) => m.media.hideWhileNotPlaying)
+        .map((m) => m.element);
+      s.anim.plan.hide = [...s.anim.plan.hide, ...ids];
+    }
+  }
+}
+
 /** The player of an animated slide's timing, for its drawn layers. */
 export function playerFor(
   engine: () => Promise<SlideEngine>,
@@ -315,10 +344,16 @@ export function contributeShow(
     const frames = createFrameSource(host);
     const scenes = createSceneSource(host);
     const player = deps.engine ? playerFor(deps.engine) : undefined;
+    // Slide ADR 718: the show and the audience play the media; the
+    // presenter console does not (one sound, from the audience).
+    const media = host.supports("document.media@1")
+      ? (id: ElementId) => host.media.read(id)
+      : undefined;
     if (ctx.role === "audience") {
       const off = mountAudience(el, ctx.window, ctx.channel, frames, {
         scenes,
         player,
+        media,
       });
       return () => {
         off();
@@ -336,6 +371,7 @@ export function contributeShow(
       frames,
       scenes,
       player,
+      media,
       thumbnail: (pageId: string) => store.thumbnail(pageId),
       exit: () => ctx.exit(),
     };
@@ -405,6 +441,15 @@ export function contributeShow(
           `animations do not play (${err instanceof Error ? err.message : String(err)})`,
         );
       }
+    }
+    // Video and audio (slide ADR 718): each slide's media, when they start,
+    // and the frames hidden while they do not play.
+    try {
+      await attachMedia(host, slides);
+    } catch (err) {
+      log(
+        `video and audio do not play (${err instanceof Error ? err.message : String(err)})`,
+      );
     }
     const out = await host.shell.present({
       id: SHOW_PRESENTATION,
