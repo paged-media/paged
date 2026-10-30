@@ -56,6 +56,7 @@ import type {
   CommandContribution,
   ControlBarGroupContribution,
   StatusItemContribution,
+  MarginBandContribution,
   CursorSpec,
   ExporterContribution,
   FrameSurfaceContribution,
@@ -572,6 +573,18 @@ export interface ContributionSurface {
    * and `supports("statusBar.items@1")`.
    */
   statusItem(contribution: StatusItemContribution): Disposable;
+  /**
+   * Register a MARKUP MARGIN BAND (extensions ADR 349 amendment 1, C5): a
+   * column of balloons beside each page, each anchored to a range of a
+   * story's text (tracked changes, comment threads), shown while the edit
+   * context `scope` names is active (editor ADR 300). The host places the
+   * balloons level with their anchors and keeps them there; the bundle
+   * renders each one. Same gates as {@link controlBarGroup}; probe
+   * `supports("contribute.marginBand@1")` for the door and
+   * `supports("shell.marginBand@1")` for a host that shows it (without
+   * one the door warns and registers nothing).
+   */
+  marginBand(contribution: MarginBandContribution): Disposable;
   /**
    * Register an OBJECT TYPE (W3.2, closes W-03): a plugin-defined object
    * (a webFrame is a rectangle with attached source metadata). A
@@ -2215,6 +2228,16 @@ export interface TextSurface {
    * `capabilities.document.read`.
    */
   characterRange(): Promise<TextSelection | null>;
+  /**
+   * Extensions ADR 349 amendment 1 — the other way round: a range of
+   * story CHARACTERS (what the engine's `trackedChanges` and `comments`
+   * collections, `storyRange` addresses and find hits' `charStart` count)
+   * as CONTENT offsets (what `viewport.revealText`, `selection` and a
+   * margin-band anchor take). `null` when the story is not readable.
+   * Gated on `capabilities.document.read`; probe
+   * `supports("text.contentRange@1")`.
+   */
+  contentRange(range: TextSelection): Promise<TextSelection | null>;
   /**
    * Extensions ADR 348 amendment 1 (engine ADR 1021) — find text: every
    * hit of `spec` in story order (document story order across stories),

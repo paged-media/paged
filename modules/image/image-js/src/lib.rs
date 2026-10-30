@@ -67,6 +67,7 @@ pub mod mip;
 pub mod patchmatch;
 pub mod paths;
 pub mod pixels;
+pub mod planes;
 pub mod preset_files;
 pub mod psd_layer_ext;
 pub mod psd_source;
@@ -5066,6 +5067,32 @@ mod wasm {
             let mut stack =
                 LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
                     .map_err(ingest_err)?;
+            // The document keeps the file's mode, so an edit lands in its
+            // colours and the layered save writes the mode back.
+            if let Some(mode) = crate::color_mode::DocMode::of_psd(file) {
+                stack.adopt_mode(mode);
+            }
+            // A CMYK file's layers keep its own inks, which the ink fold
+            // composites and the layered save writes (image ADR 481).
+            if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
+                let through = |f: fn(&[u8; 4]) -> [u8; 3]| {
+                    move |ink: &[u8]| -> Vec<u8> {
+                        ink.as_chunks::<4>()
+                            .0
+                            .iter()
+                            .flat_map(|p| {
+                                let c = f(p);
+                                [c[0], c[1], c[2], 255]
+                            })
+                            .collect()
+                    }
+                };
+                let cmy = file.layer_plates_rgba8_via(&through(|p| [p[0], p[1], p[2]]));
+                let k = file.layer_plates_rgba8_via(&through(|p| [p[3]; 3]));
+                if let (Ok(cmy), Ok(k)) = (cmy, k) {
+                    stack.attach_inks(&cmy, &k);
+                }
+            }
             // Smart objects keep their sources, placements and filters
             // (ADR 482); the notes say which keep their stored render.
             let notes = stack.adopt_psd_smart_objects(file);
@@ -6743,10 +6770,11 @@ mod wasm {
                 // Refuse BEFORE changing anything when the new composite
                 // could not be computed: a transformed stack over an
                 // untransformed image is the state this must never leave.
-                if ctx.is_none() && !doc.stack.composite_is_trivial() {
+                if ctx.is_none() && !doc.stack.composite_runs_without_gpu() {
                     return Err(JsValue::from_str(
-                        "a canvas operation on a layered image is GPU-only \
-                         (the composite is a kernel dispatch) — call init_gpu first",
+                        "a canvas operation on this layered image needs a GPU (a layer \
+                         style or a direct adjustment composites only there) — call \
+                         init_gpu first",
                     ));
                 }
                 doc.stack
@@ -6814,8 +6842,8 @@ mod wasm {
     }
 
     /// Replace the open stack with one stored by `layers_export`, then
-    /// composite it into the bound image (GPU-only unless the stored stack
-    /// is a single plain layer). The stored extent must equal the bound
+    /// composite it into the bound image (on the CPU fold without a device,
+    /// unless a style or a direct adjustment needs one — ADR 480). The stored extent must equal the bound
     /// image's; the history starts empty.
     #[wasm_bindgen]
     pub async fn layers_import(manifest: &[u8], buffers: js_sys::Array) -> Result<(), JsValue> {
@@ -6836,10 +6864,10 @@ mod wasm {
                         doc.stack.height()
                     )));
                 }
-                if ctx.is_none() && !stack.composite_is_trivial() {
+                if ctx.is_none() && !stack.composite_runs_without_gpu() {
                     return Err(JsValue::from_str(
-                        "reopening a layered image is GPU-only (the composite is a \
-                         kernel dispatch) — call init_gpu first",
+                        "reopening this layered image needs a GPU (a layer style or a \
+                         direct adjustment composites only there) — call init_gpu first",
                     ));
                 }
                 let rgba = stack

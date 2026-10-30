@@ -337,6 +337,11 @@ struct Rec<'a, 'c> {
     batch: &'a mut GpuBatch<'c>,
     w: u32,
     h: u32,
+    /// Where these textures lie on the canvas, and the canvas's size: a
+    /// tile of the tiled fold (ADR 480) draws its gradients, patterns and
+    /// noise in canvas coordinates, so a tile shows what the whole fold
+    /// shows there.
+    frame: super::fold::Frame,
 }
 
 impl<'a, 'c> Rec<'a, 'c> {
@@ -435,7 +440,8 @@ impl<'a, 'c> Rec<'a, 'c> {
         )?;
         let reach = reach.clamp(1.0, 1024.0).ceil() as i32;
         let mut step = (reach as u32).next_power_of_two() as i32;
-        let longest = self.w.max(self.h) as i32;
+        // The canvas's, not the tile's: a tile runs the same passes.
+        let longest = self.frame.cw.max(self.frame.ch) as i32;
         while step > longest && step > 1 {
             step /= 2;
         }
@@ -498,6 +504,7 @@ impl<'a, 'c> Rec<'a, 'c> {
         cov: &Resident,
         p: StyleColorizeParams,
     ) -> Result<Resident, IngestError> {
+        let p = p.at(self.frame.ox, self.frame.oy);
         self.run(&STYLE_COLORIZE, &[cov], p.as_bytes())
     }
 
@@ -533,6 +540,7 @@ impl<'a, 'c> Rec<'a, 'c> {
     /// The `t` ramp (black → white) of a gradient fill over `area`.
     fn gradient_t(&mut self, g: &GradientFill, area: Region) -> Result<Resident, IngestError> {
         let zeros = self.ctx.zeros(self.w, self.h);
+        let (ox, oy) = (self.frame.ox, self.frame.oy);
         let (black, white) = ([0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]);
         let (rw, rh) = (area.w as f32, area.h as f32);
         let c = (
@@ -549,8 +557,8 @@ impl<'a, 'c> Rec<'a, 'c> {
                 &GEN_LINEAR_GRADIENT,
                 &[&zeros],
                 GenLinearGradientParams::new(
-                    0,
-                    0,
+                    ox,
+                    oy,
                     c.0 - d.0 * half,
                     c.1 - d.1 * half,
                     c.0 + d.0 * half,
@@ -565,7 +573,7 @@ impl<'a, 'c> Rec<'a, 'c> {
                 self.run(
                     &GEN_RADIAL_GRADIENT,
                     &[&zeros],
-                    GenRadialGradientParams::new(0, 0, c.0, c.1, radius, black, white).as_bytes(),
+                    GenRadialGradientParams::new(ox, oy, c.0, c.1, radius, black, white).as_bytes(),
                 )
             }
             GradientStyle::Angle => self.run(
@@ -573,8 +581,8 @@ impl<'a, 'c> Rec<'a, 'c> {
                 &[&zeros],
                 // The kernel's sweep starts opposite Photoshop's seam.
                 GenAngularGradientParams::new(
-                    0,
-                    0,
+                    ox,
+                    oy,
                     c.0,
                     c.1,
                     angle + std::f32::consts::PI,
@@ -587,8 +595,8 @@ impl<'a, 'c> Rec<'a, 'c> {
                 &GEN_REFLECTED_GRADIENT,
                 &[&zeros],
                 GenReflectedGradientParams::new(
-                    0,
-                    0,
+                    ox,
+                    oy,
                     c.0,
                     c.1,
                     c.0 + d.0 * half,
@@ -601,7 +609,8 @@ impl<'a, 'c> Rec<'a, 'c> {
             GradientStyle::Diamond => self.run(
                 &GEN_DIAMOND_GRADIENT,
                 &[&zeros],
-                GenDiamondGradientParams::new(0, 0, c.0, c.1, angle, half, black, white).as_bytes(),
+                GenDiamondGradientParams::new(ox, oy, c.0, c.1, angle, half, black, white)
+                    .as_bytes(),
             ),
         }
     }
@@ -623,12 +632,18 @@ impl<'a, 'c> Rec<'a, 'c> {
         origin: (f32, f32),
     ) -> Result<Resident, IngestError> {
         let (w, h) = (self.w, self.h);
-        let (tw, th) = (tile.width.min(w), tile.height.min(h));
-        let mut bytes = vec![0u8; w as usize * h as usize * 8];
-        for y in 0..th as usize {
-            for x in 0..tw as usize {
+        // The tile's extent as the canvas cuts it, uploaded at that size
+        // (the kernel reads `in1` only inside it, so this is the texture
+        // the canvas-sized upload was, without its padding).
+        let (tw, th) = (
+            tile.width.min(self.frame.cw).max(1),
+            tile.height.min(self.frame.ch).max(1),
+        );
+        let mut bytes = vec![0u8; tw as usize * th as usize * 8];
+        for y in 0..th.min(tile.height) as usize {
+            for x in 0..tw.min(tile.width) as usize {
                 let s = (y * tile.width as usize + x) * 4;
-                let d = (y * w as usize + x) * 8;
+                let d = (y * tw as usize + x) * 8;
                 let a = f32::from(tile.tile[s + 3]) / 255.0;
                 for c in 0..4 {
                     let v = f32::from(tile.tile[s + c]) / 255.0;
@@ -638,14 +653,14 @@ impl<'a, 'c> Rec<'a, 'c> {
                 }
             }
         }
-        let tex = self.batch.upload(w, h, TexFormat::Rgba16Float, &bytes);
+        let tex = self.batch.upload(tw, th, TexFormat::Rgba16Float, &bytes);
         let zeros = self.ctx.zeros(w, h);
         self.run(
             &GEN_PATTERN,
             &[&zeros, &tex],
             GenPatternParams::new(
-                0,
-                0,
+                self.frame.ox,
+                self.frame.oy,
                 (fill.scale / 100.0).max(0.01),
                 0.0,
                 origin.0 + fill.phase.0,
@@ -666,10 +681,18 @@ pub(super) fn draw<'c>(
     acc: &Resident,
     src: &mut Source,
     e: &EffectStep,
-    w: u32,
-    h: u32,
+    frame: super::fold::Frame,
 ) -> Result<Resident, IngestError> {
-    let mut r = Rec { ctx, batch, w, h };
+    let mut r = Rec {
+        ctx,
+        batch,
+        w: frame.w,
+        h: frame.h,
+        frame,
+    };
+    // The whole canvas, in canvas coordinates (the tile's origin moves
+    // the gradient kernels onto it).
+    let (cw, ch) = (frame.cw, frame.ch);
     let k = (e.scale / 100.0).max(0.0);
     let a = src.alpha.clone();
     match &e.fx {
@@ -817,7 +840,7 @@ pub(super) fn draw<'c>(
             let area = if o.fill.align {
                 e.bounds
             } else {
-                Region::new(0, 0, w, h)
+                Region::new(0, 0, cw, ch)
             };
             let plate = r.gradient_plate(&o.fill, area)?;
             r.blend(acc, &plate, o.blend, o.opacity / 100.0, None)
@@ -887,7 +910,7 @@ pub(super) fn draw<'c>(
                     let area = if g.align {
                         e.bounds
                     } else {
-                        Region::new(0, 0, w, h)
+                        Region::new(0, 0, cw, ch)
                     };
                     r.gradient_plate(g, area)?
                 }

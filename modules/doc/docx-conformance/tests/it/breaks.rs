@@ -411,6 +411,7 @@ fn a_split_paragraph_saves_back_as_one_word_paragraph() {
     // What the host reads back: one paragraph per native paragraph, a run
     // split in two where a break cut it.
     let read_back = || StoryContentIn {
+        comments: Vec::new(),
         self_id: "docx_s0".into(),
         paragraphs: ir
             .story
@@ -422,6 +423,8 @@ fn a_split_paragraph_saves_back_as_one_word_paragraph() {
                 };
                 let cuts: Vec<usize> = p.segments.iter().map(|s| s.at as usize).collect();
                 let mut parts = vec![ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: Vec::new(),
                 }];
@@ -438,6 +441,8 @@ fn a_split_paragraph_saves_back_as_one_word_paragraph() {
                                 });
                             }
                             parts.push(ParagraphContentIn {
+                                mark_change: None,
+                                props_change: None,
                                 paragraph_style: None,
                                 runs: Vec::new(),
                             });

@@ -1445,6 +1445,21 @@ pub struct LayerExt {
     /// The PSD record this layer was read from and the state the import
     /// left it in (`crate::psd_source`); `None` for a layer made here.
     pub source: Option<Arc<crate::psd_source::PsdSource>>,
+    /// A CMYK layer's own inks (image ADR 481), while it holds the pixels
+    /// they were read with.
+    pub inks: InkCell,
+}
+
+/// A layer's retained inks. Derived data: two layers are the same layer
+/// whatever their cells hold (the pixels decide), so it always compares
+/// equal and is never persisted.
+#[derive(Debug, Clone, Default)]
+pub struct InkCell(pub Option<Arc<crate::planes::InkPlanes>>);
+
+impl PartialEq for InkCell {
+    fn eq(&self, _: &InkCell) -> bool {
+        true
+    }
 }
 
 /// Blending Options ▸ Advanced Blending: the switches that change how a
@@ -1521,6 +1536,7 @@ impl Default for LayerExt {
             style_options: StyleOptions::default(),
             vector_mask: None,
             source: None,
+            inks: InkCell::default(),
         }
     }
 }

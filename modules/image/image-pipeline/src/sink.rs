@@ -315,7 +315,11 @@ fn write_u8_pixel(dst: &mut [u8], rgba: [f32; 4], channels: ChannelLayout, out_c
         // CMYK has no working-space round-trip here (the cast/CMS lane is
         // M1); fall back to copying the leading channels so the buffer is
         // never left uninitialized.
-        ChannelLayout::Cmyk | ChannelLayout::Cmyka => {
+        ChannelLayout::Cmyk
+        | ChannelLayout::Cmyka
+        | ChannelLayout::Lab
+        | ChannelLayout::LabA
+        | ChannelLayout::Planes { .. } => {
             for (i, slot) in dst.iter_mut().enumerate().take(out_channels.min(4)) {
                 *slot = q(rgba[i.min(3)]);
             }

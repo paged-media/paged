@@ -81,7 +81,10 @@ byte for byte: `psd_adjustment_blocks_photoshop.rs`; Color Lookup is not recorde
 document, an embedded smart object; a linked one is not recorded, its `lnkE` holds an absolute temporary path) and `psd-readback`, which has Photoshop OPEN the
 files the layered save writes and report each layer's kind, adjustment descriptor, effects and a
 render (`psd_write_photoshop.rs`; the files are rebuilt by the test and held to the recording by
-content hash, so they are not committed). A probe file that Photoshop cannot open is an error
+content hash, so they are not committed). Its `converted-*` cases (image ADR 481) are documents
+paged converted with Image ▸ Mode: Photoshop reports their mode and depth, then MERGES each in
+its own mode before converting it to sRGB for the render — converting a layered document would
+convert every layer and blend them again in RGB, which is not how a CMYK document composites. A probe file that Photoshop cannot open is an error
 the runner refuses — that is how the Curves block's missing `Crv ` extension was found.
 
 Replays: `image-conformance/tests/it/oracle_photoshop.rs` (blend modes,

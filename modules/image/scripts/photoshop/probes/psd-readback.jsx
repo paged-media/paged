@@ -8,7 +8,9 @@
 //     opacity, blend mode, visibility, clipping, the adjustment's
 //     parameters (the layer's `adjustment` descriptor through the
 //     ActionManager) and the style's effects (`layerEffects`);
-//   * a PNG of its render (RGB documents), saved beside it.
+//   * a PNG of its render (RGB documents, and the documents paged
+//     converted to another mode: merged in that mode, then through
+//     Photoshop's conversion to sRGB), saved beside it.
 // The replay compares the report with what was written and Photoshop's
 // render of a paged-written adjustment layer with its render of its own.
 //
@@ -139,14 +141,25 @@
         layers: ls
       };
       c.files = [];
+      c.profile = P.profileOf(d);
+      c.bits = d.bitsPerChannel == BitsPerChannelType.SIXTEEN ? 16 : 8;
+      // A document paged CONVERTED (image ADR 481): Photoshop's render of
+      // it in sRGB, through Photoshop's own conversion (relative
+      // colorimetric, black-point compensation -- the Color Settings
+      // default), on the open copy, which is closed unsaved.
+      // Merged FIRST: converting a layered document converts each layer
+      // and blends them again in RGB, which is not how the document
+      // composites in its own mode (a CMYK document blends its inks).
+      if (d.mode != DocumentMode.RGB && /^converted-/.test(id)) {
+        d.flatten();
+        d.convertProfile("sRGB IEC61966-2.1", Intent.RELATIVECOLORIMETRIC, true, false);
+      }
       if (d.mode == DocumentMode.RGB) {
         var png = new PNGSaveOptions();
         png.compression = 9;
         d.saveAs(new File(DIR + id + ".png"), png, true, Extension.LOWERCASE);
         c.files.push("psd-readback/" + id + ".png");
       }
-      c.profile = P.profileOf(d);
-      c.bits = d.bitsPerChannel == BitsPerChannelType.SIXTEEN ? 16 : 8;
     } catch (e) {
       c.error = String(e) + (e.line ? " (line " + e.line + ")" : "");
     }
