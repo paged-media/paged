@@ -995,6 +995,18 @@ export const CORE_PATHS: Record<
   paragraphBorderWeight: V71,
   documentShowHiddenText: V71,
   documentShowFieldCodes: V71,
+  // Engine ADRs 1051 / 1052 — direction, script slots and content
+  // controls ride protocol 78; a pre-71 engine has none.
+  paragraphDirection: V71,
+  characterDirection: V71,
+  characterEastAsianFont: V71,
+  characterComplexFont: V71,
+  characterComplexFontSize: V71,
+  characterComplexBold: V71,
+  characterComplexItalic: V71,
+  characterComplexScript: V71,
+  characterFontHint: V71,
+  characterContentControl: V71,
   frameDropShadowBlendMode: {
     scope: "frame",
     wire: "text",

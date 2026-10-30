@@ -1,6 +1,7 @@
 # ADR 614 — Floating objects and content controls
 
-- **Status:** Floating objects accepted 2026-10-29 (wave W4a). Content controls: pending.
+- **Status:** Floating objects accepted 2026-10-29 (wave W4a). Content controls accepted
+  2026-10-30 (wave W4b, on engine ADR 1052).
 - **Scope:** `docx-core` (`objects.rs`: `TextBox`, `Language`, `Borders`, `TableLook`,
   `CellLook`, `NestedTable`, `HeightRule`; `Float::wrap_polygon`), `docx-import`
   (`objects.rs`), `docx-lower` (`objects.rs`, `ir_objects.rs`: `LoweredAnchor`,
@@ -163,5 +164,52 @@ name so it is not hyphenated as English; `x-none` → `[No Language]`). `rFonts`
 
 ## Content controls
 
-Pending (wave W4b): a light inline control run kind (checkbox glyph, dropdown and date value,
-plain-text range) with `w:sdtPr` read and written back, edited through a popover.
+Wave W4b, on the engine's content controls (engine ADR 1052). Scope: `docx-core`
+(`controls.rs`: `ContentControl`, `ContentControlKind`, `ListItem`; `Run.control`),
+`docx-import` (`controls.rs`), `docx-lower` (`LoweredRun.control`), `docx-export`
+(`controls.rs`), `docx-js` (the save path), `doc-host-model` (the pour), `doc-bundle`
+(`word/controls.ts`, `panels/control-panel.tsx`).
+
+**Read.** An inline `w:sdt` (one inside a paragraph) is read from its `w:sdtPr`: `w:id`, `w:tag`,
+`w:alias`, `w:lock`, `w:showingPlcHdr` and the type element — `w:text` (plain text,
+`w:multiLine`), `w:richText` or none (rich text), `w14:checkbox` (checked, each state's glyph
+and font), `w:dropDownList` and `w:comboBox` (items, `w:lastValue`), `w:date` (`w:fullDate`,
+`w:dateFormat`). Every run of the control's content carries it (`Run.control`), the innermost
+control winning in a nested one. Its id is `w<w:id>` (`sdt<n>` in document order without one).
+A building-block gallery (a table of contents), a picture, a citation, a bibliography, an
+equation, a group or a repeating section is not an engine control: its content is shown as
+before and stays in the source. Block-level controls (around paragraphs, rows or cells) keep
+their content as W0 placed it, the `w:sdt` held in the source.
+
+**Lowered and poured.** The control rides `LoweredRun.control` in the engine's JSON shape
+(the same serde form as `paged_model::ContentControl`); a placeholder's character style is the
+run's lowered style. The pour writes it on the control's runs' range with
+`characterContentControl` (a control's runs make one range). The runs stay locked for the text
+patcher, as before.
+
+**Edited.** In the `wordDocument` context a caret inside a control opens the Content control
+panel (`media.paged.doc.panel.contentControl`): a checkbox toggles, a drop-down or combo box
+chooses an item, a date takes a date (an `<input type="date">`), a plain or rich text (and a
+combo box) a text; each is one engine mutation and one undo step (`toggleContentControl`,
+`chooseContentControlItem`, `setContentControlValue`). A locked control shows its state and
+offers nothing. The host has no anchored popover door, so the "popover" is this small docked
+panel the caret opens, as the References dialogs are (doc ADR 612).
+
+**Saved back.** A control whose text, state, value or placeholder changed is taken out of the
+read-back before the diff (its runs put back as the baseline's, so the text patcher sees no
+change) and written into its `w:sdt` found by `w:id` (`controls::save_controls`): the
+`w:sdtPr` keeps every byte but the state that changed (`w14:checked/@w14:val`,
+`w:lastValue`, `w:fullDate`, the `w:showingPlcHdr` that a first value removes), and the
+`w:sdtContent` becomes one run in its first run's `w:rPr` (the placeholder's `w:rStyle`
+dropped) holding the value's text. A control Word wrote without `w:id` is not written back
+(said as a refusal). An unedited save stays byte-identical.
+
+**Evidence.** `docx-conformance/tests/it/w4b.rs` (`w4b_controls_docx`: one control of each
+kind; every kind lowered as the engine's JSON; a checkbox, drop-down, date and placeholder text
+saved into their `w:sdt` and read back; the untouched controls byte for byte; zero-edit
+byte-identical), `docx-export/src/controls.rs` tests, `doc-host-model/test/controls.spec.ts`,
+`doc-bundle/test/content-controls.spec.ts`.
+
+**Not yet:** PDF AcroForm fields; data-bound controls (`w:dataBinding`) do not update their
+custom XML part; a control in a header, footer, note or text box is shown but not edited; a
+combo box's free text is saved as text with its `w:lastValue` unchanged.

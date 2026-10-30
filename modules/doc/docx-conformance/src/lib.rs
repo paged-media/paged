@@ -3090,6 +3090,9 @@ fn tiny_png() -> Vec<u8> {
 /// - p1 a Hebrew right-to-left paragraph with a Latin word and digits.
 /// - p2 a left-to-right paragraph mixing Latin and Japanese, the Japanese
 ///   in an East Asian font (`w:eastAsia` MS Mincho, `w:hint="eastAsia"`).
+/// - p3 a Latin right-to-left paragraph, `w:jc="left"`, a left indent of
+///   1 in; p4 one with `w:jc="right"`: where Word puts them says whether
+///   its alignment and indents are logical in a right-to-left paragraph.
 pub fn w4b_scripts_docx() -> Vec<u8> {
     let document = format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -3098,6 +3101,8 @@ pub fn w4b_scripts_docx() -> Vec<u8> {
     <w:p><w:pPr><w:bidi/><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:rFonts w:cs="Arial"/><w:bCs/><w:rtl/><w:szCs w:val="28"/></w:rPr><w:t>مرحبا بالعالم</w:t></w:r></w:p>
     <w:p><w:pPr><w:bidi/></w:pPr><w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space="preserve">שלום </w:t></w:r><w:r><w:t>Word</w:t></w:r><w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space="preserve"> 2026</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">Hello </w:t></w:r><w:r><w:rPr><w:rFonts w:hint="eastAsia" w:eastAsia="MS Mincho"/></w:rPr><w:t>日本語</w:t></w:r><w:r><w:t xml:space="preserve"> world.</w:t></w:r></w:p>
+    <w:p><w:pPr><w:bidi/><w:ind w:left="1440"/><w:jc w:val="left"/></w:pPr><w:r><w:t>Bidi left indented</w:t></w:r></w:p>
+    <w:p><w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr><w:r><w:t>Bidi right</w:t></w:r></w:p>
     <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
   </w:body>
 </w:document>"#

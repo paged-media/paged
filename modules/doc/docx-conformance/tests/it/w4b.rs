@@ -40,6 +40,14 @@ fn part(bytes: &[u8], name: &str) -> String {
     String::from_utf8_lossy(OpcPackage::read(bytes).unwrap().part(name).unwrap()).into_owned()
 }
 
+/// With `W4B_DUMP` set, the saved file lands there (the Word probe opens
+/// it: `scripts/word-pagination-probe.sh`).
+fn dump(name: &str, bytes: &[u8]) {
+    if let Ok(dir) = std::env::var("W4B_DUMP") {
+        std::fs::write(format!("{dir}/{name}.docx"), bytes).unwrap();
+    }
+}
+
 fn style<'a>(ir: &'a LoweredDoc, id: &str) -> &'a LoweredStyle {
     ir.styles.iter().find(|s| s.id == id).unwrap()
 }
@@ -161,6 +169,7 @@ fn a_script_edit_is_written_back_as_words_run_properties__feat__doc_script_font_
         ..Default::default()
     });
     let (saved, _) = session.save_edited_from_content(&content).unwrap();
+    dump("w4b-scripts-saved", &saved);
     let re = import_docx(&saved).unwrap();
     let docx_core::Block::Paragraph(p) = &re.body[2] else {
         panic!("a paragraph")
@@ -231,6 +240,7 @@ fn control_values_are_saved_into_their_sdt__feat__doc_content_controls() {
     set("w14", "Ada", &|c| c.showing_placeholder = false);
     let (saved, skips) = session.save_edited_from_content(&content).unwrap();
     assert!(skips.is_empty(), "{skips:?}");
+    dump("w4b-controls-saved", &saved);
     let xml = part(&saved, "word/document.xml");
     assert!(xml.contains(r#"<w14:checked w14:val="1"/>"#), "{xml}");
     assert!(xml.contains(r#"<w:dropDownList w:lastValue="b">"#), "{xml}");
