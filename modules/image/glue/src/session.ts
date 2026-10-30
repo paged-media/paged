@@ -162,6 +162,19 @@ import {
 } from "./type-layer";
 import { claimImageTiles } from "./tile-provider";
 import { gradientKindLabel, warpKindLabel } from "./words";
+import {
+  CANVAS_WARPS,
+  puppetOptions,
+  puppetPins,
+  warpMesh,
+  warpPreset,
+} from "./filters-warp";
+import {
+  warpCanvasHit,
+  warpCanvasShapes,
+  type WarpCanvasEnv,
+  type WarpDrag,
+} from "./warp-canvas";
 import { readPgil } from "./object-model/pgil";
 import { coverageAt } from "./object-model/image-objects";
 import {
@@ -883,6 +896,21 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
    *  Blur Gallery workspace with that blur switched on (its last settings
    *  kept), the geometry on the canvas. */
   openBlurGallery(kind: BlurKind): Promise<boolean>;
+  /** WP5.6 — Edit ▸ Transform ▸ Warp…, Edit ▸ Puppet warp…, Image ▸
+   *  Filter ▸ Liquify… and Edit ▸ Content-aware scale…: the dialog opens
+   *  over what it works on (Warp: the selection's bounds, else what the
+   *  active layer covers) with no pins, strokes or custom mesh yet. */
+  openWarpDialog(
+    id: "warp" | "puppetWarp" | "liquify" | "contentAwareScale",
+  ): Promise<boolean>;
+  /** WP5.6 — the Perspective Crop tool's commit: the quadrilateral `quad`
+   *  (NW, NE, SE, SW, image px) drawn upright onto `width`×`height`, over
+   *  every layer, as ONE undo step. */
+  commitPerspectiveCrop(
+    quad: ReadonlyArray<readonly [number, number]>,
+    width: number,
+    height: number,
+  ): Promise<boolean>;
   /** An `image` parameter's source: 0 this image's composite, 1 a file
    *  the host's picker returns (decoded engine-side; refused when the
    *  host has no picker or the user cancels). The preview follows. */
@@ -3807,6 +3835,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     freeFilterProxy();
     freeFilterFiles();
     blurDrag = null;
+    warpDrag = null;
+    warpBrushAt = null;
     drawBlurGallery(null);
     appliedKey = null;
   };
@@ -3817,6 +3847,7 @@ export function createImageSession(host: BundleHost): ImageSession {
   /** Draw (or clear) the open Blur Gallery's pins over the image. */
   const drawBlurGallery = (d: FilterDialogState | null) => {
     const src = state.source;
+    drawWarpCanvas(d);
     if (!d || d.id !== "blurGallery" || !src?.elementId) {
       blurLayer?.clear();
       return;
@@ -3827,6 +3858,61 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (!fit) blurLayer.clear();
       else
         blurLayer.set(blurGalleryShapes(d.values, src.width, src.height, fit));
+    });
+  };
+
+  // ── the pixel warps' geometry on the canvas (WP5.6) ───────────────
+  let warpDrag: WarpDrag | null = null;
+  let warpBrushAt: [number, number] | null = null;
+  let warpLayer: ReturnType<typeof host.overlay.layer> | null = null;
+  /** What the warp canvas reads from the engine for the open dialog. */
+  const warpEnv = (d: FilterDialogState): WarpCanvasEnv | null => {
+    const src = state.source;
+    const eng = engine;
+    if (!src || !eng) return null;
+    const ctx = filterCtx(src.width, src.height, d.values);
+    const opts = puppetOptions(d.values);
+    const pins = () => puppetPins(d.values, src.width, src.height);
+    return {
+      width: src.width,
+      height: src.height,
+      mesh: () => {
+        try {
+          return warpMesh(eng, d.values, ctx);
+        } catch {
+          return [];
+        }
+      },
+      edges: () => {
+        try {
+          return eng.puppetMeshEdges(src.handle, pins(), opts);
+        } catch {
+          return [];
+        }
+      },
+      restPoint: (at) => {
+        try {
+          return eng.puppetRestPoint(src.handle, pins(), opts, at);
+        } catch {
+          return at;
+        }
+      },
+      brushAt: warpBrushAt,
+    };
+  };
+  /** Draw (or clear) the open warp dialog's geometry over the image. */
+  const drawWarpCanvas = (d: FilterDialogState | null) => {
+    const src = state.source;
+    if (!d || !CANVAS_WARPS.has(d.id) || !src?.elementId) {
+      warpLayer?.clear();
+      return;
+    }
+    void resolveFrameFit(host, src, "warp").then((fit) => {
+      if (openFilter() !== d) return;
+      warpLayer ??= host.overlay.layer("warp");
+      const env = warpEnv(d);
+      if (!fit || !env) warpLayer.clear();
+      else warpLayer.set(warpCanvasShapes(d.id, d.values, env, fit));
     });
   };
 
@@ -3852,9 +3938,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     const values = { ...d.values };
     const eng = engine;
     const ctx = filterCtx(state.source.width, state.source.height, values);
-    const ok = smart.isSmart()
-      ? await smart.addFilter(state.layers.active, d.id, values)
-      : await api.applyEffect(def.label, (h) => def.run(eng, h, values, ctx));
+    const ok =
+      smart.isSmart() && !def.transform
+        ? await smart.addFilter(state.layers.active, d.id, values)
+        : await api.applyEffect(def.label, (h) => def.run(eng, h, values, ctx));
     // The dialog may have closed (or moved on) while the pass ran.
     if (openFilter() !== d) {
       if (ok) await historyStep(true);
@@ -4549,6 +4636,52 @@ export function createImageSession(host: BundleHost): ImageSession {
       scheduleFilterPreview();
     },
 
+    async openWarpDialog(id) {
+      const src = state.source;
+      const eng = engine;
+      if (!src || !eng) {
+        setStatus(t(S.filterNeedsAnImage, { label: t(filterDef(id).label) }));
+        return false;
+      }
+      let preset: Record<string, FilterValue> = {};
+      if (id === "warp") {
+        let bounds = { x: 0, y: 0, w: src.width, h: src.height };
+        try {
+          bounds = eng.warpBounds(src.handle);
+        } catch (err) {
+          host.log.debug("warp bounds failed", err);
+        }
+        preset = warpPreset(bounds, src.width, src.height);
+      } else if (id === "puppetWarp") preset = { pins: [] };
+      else if (id === "liquify") preset = { strokes: [] };
+      return api.openFilterDialog(id, preset);
+    },
+
+    async commitPerspectiveCrop(quad, width, height) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingToCropIngestAPlaced));
+        return false;
+      }
+      discardStroke();
+      const w = Math.round(width);
+      const h = Math.round(height);
+      let wh: { width: number; height: number };
+      try {
+        engine.layersOpen(src.handle);
+        wh = await engine.layersPerspectiveCrop(quad, w, h);
+      } catch (err) {
+        setStatus(t(S.cropFailed, { error: errText(err) }));
+        emit();
+        return false;
+      }
+      adoptCanvasExtent(src, wh);
+      if (src.elementId) await api.apply();
+      setStatus(t(S.cropped, { width: wh.width, height: wh.height }));
+      emit();
+      return true;
+    },
+
     openBlurGallery(kind) {
       const last = lastFilterValues.get("blurGallery") ?? {};
       return api.openFilterDialog(
@@ -4622,14 +4755,37 @@ export function createImageSession(host: BundleHost): ImageSession {
       // A drag cut off (the tool deactivated, the pointer left the frame)
       // ends where it last was.
       if (!Number.isFinite(at[0]) || !Number.isFinite(at[1])) {
-        const had = blurDrag !== null || curvesTarget.drag !== null;
+        const had =
+          blurDrag !== null || curvesTarget.drag !== null || warpDrag !== null;
         blurDrag = null;
+        warpDrag = null;
+        warpBrushAt = null;
         curvesTarget.drag = null;
         return had;
       }
       const d = openFilter();
       const src = state.source;
       if (curvesTarget.armed && src) return curvesTargetPointer(phase, at);
+      if (d && src && CANVAS_WARPS.has(d.id)) {
+        if (phase === "down") {
+          const env = warpEnv(d);
+          warpDrag = env
+            ? warpCanvasHit(d.id, d.values, env, at, modifiers.alt === true)
+            : null;
+          if (!warpDrag) return false;
+        }
+        if (!warpDrag) return false;
+        if (d.id === "liquify") warpBrushAt = phase === "up" ? null : at;
+        const patch = warpDrag.move(at);
+        if (patch) api.setFilterValues(patch);
+        else drawWarpCanvas(d);
+        if (phase === "up") {
+          warpDrag = null;
+          warpBrushAt = null;
+          drawWarpCanvas(openFilter());
+        }
+        return true;
+      }
       if (!d || d.id !== "blurGallery" || !src) return false;
       if (phase === "down") {
         blurDrag = blurGalleryHit(

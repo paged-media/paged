@@ -80,6 +80,15 @@ defineMessages("menu", {
   "Shape blur": "Shape blur",
   "Apply crop": "Apply crop",
   "Free transform": "Free transform",
+  // WP5.6 — Edit ▸ Transform, the warps and the Perspective Crop.
+  Transform: "Transform",
+  "Free distort": "Free distort",
+  Perspective: "Perspective",
+  "Warp…": "Warp…",
+  "Puppet warp…": "Puppet warp…",
+  "Content-aware scale…": "Content-aware scale…",
+  "Liquify…": "Liquify…",
+  "Apply perspective crop": "Apply perspective crop",
   "Set type": "Set type",
   "Warp text…": "Warp text…",
   "Rasterize type layer": "Rasterize type layer",
@@ -998,6 +1007,9 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ],
 
   ["Image/Apply crop", "commitCrop", "crop"],
+  ["Image/Apply perspective crop", "commitPerspectiveCrop", "crop"],
+  // WP5.6 — Photoshop's Filter ▸ Liquify….
+  ["Image/Filter/Liquify…", "filterLiquify", "filter-liquify"],
   ["Image/Set type", "setType", "type"],
   // WP5.10 — type layers.
   ["Image/Type/Warp text…", "warpText", "type-layer"],
@@ -1039,6 +1051,13 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // selection, so they belong beside the host's selection verbs rather
   // than buried three levels into a plugin menu.
   ["Edit/Free transform", "freeTransform", "img-transform"],
+  // WP5.6 — Photoshop's Edit ▸ Transform ▸ Distort / Perspective / Warp,
+  // Edit ▸ Puppet Warp and Edit ▸ Content-Aware Scale.
+  ["Edit/Transform/Free distort", "transformDistort", "img-transform"],
+  ["Edit/Transform/Perspective", "transformPerspective", "img-transform"],
+  ["Edit/Transform/Warp…", "transformWarp", "img-transform"],
+  ["Edit/Puppet warp…", "puppetWarp", "img-warp"],
+  ["Edit/Content-aware scale…", "contentAwareScale", "img-warp"],
   ["Edit/Selection to path", "selectionToPath", "img-sel-conv"],
   ["Edit/Path to selection", "pathToSelection", "img-sel-conv"],
 

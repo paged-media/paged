@@ -67,6 +67,11 @@ import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { adjustmentKindLabel } from "./panels/sections/layer-parity";
 import { makeCropGesture } from "./crop-tool";
+import {
+  commitPerspectiveCropOf,
+  createPerspectiveCropMachine,
+  makePerspectiveCropGesture,
+} from "./perspective-crop-tool";
 import { beginLayerTransform, makeTransformGesture } from "./transform-tool";
 import { makeMoveGesture } from "./move-tool";
 import { makeBucketGesture } from "./bucket-tool";
@@ -127,6 +132,13 @@ const CMD = defineMessages("image.command", {
   serveImageTilesToTheRenderer: "Serve image tiles to the renderer",
   applyCrop: "Apply crop",
   freeTransform: "Free transform",
+  transformDistort: "Transform: distort",
+  transformPerspective: "Transform: perspective",
+  transformWarp: "Transform: warp…",
+  puppetWarp: "Puppet warp…",
+  contentAwareScale: "Content-aware scale…",
+  liquify: "Liquify…",
+  applyPerspectiveCrop: "Apply perspective crop",
   fillSelectionWithAGradient: "Fill selection with a gradient",
   fillSelectionWithNoise: "Fill selection with noise",
   addImageLayer: "Add image layer",
@@ -259,6 +271,7 @@ const ONE_SHOT_LABELS = defineMessages("image.effect", {
 
 const TOOL = defineMessages("image.tool", {
   crop: "Crop",
+  perspectiveCrop: "Perspective crop",
   freeTransform: "Free transform",
   movePixels: "Move pixels",
   paintBucket: "Paint bucket",
@@ -358,6 +371,7 @@ defineTranslations("de", de);
 const PANEL_ID = "media.paged.image.panel.adjustments";
 const CROP_TOOL_ID = "media.paged.image.tool.crop";
 const TRANSFORM_TOOL_ID = "media.paged.image.tool.transform";
+const PERSPECTIVE_CROP_TOOL_ID = "media.paged.image.tool.perspectiveCrop";
 const MOVE_TOOL_ID = "media.paged.image.tool.move";
 const BUCKET_TOOL_ID = "media.paged.image.tool.bucket";
 const GRADIENT_TOOL_ID = "media.paged.image.tool.gradient";
@@ -678,6 +692,71 @@ export function activate(host: BundleHost): BundleHandle {
         return;
       }
       void beginLayerTransform(host, session, TRANSFORM_TOOL_ID);
+    },
+  });
+
+  // WP5.6 — Edit ▸ Transform ▸ Distort / Perspective: the same box in the
+  // mode where a corner drag distorts or keeps the perspective (Photoshop
+  // opens Free Transform in that mode).
+  for (const [suffix, mode, title] of [
+    ["transformDistort", "freeDistort", CMD.transformDistort],
+    ["transformPerspective", "perspective", CMD.transformPerspective],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(title),
+      category: "Image",
+      handler: () => {
+        const open = host.transformBox.active();
+        if (open) {
+          open.setMode(mode);
+          return;
+        }
+        if (!session.state().source) {
+          host.shell.openPanel(PANEL_ID);
+          return;
+        }
+        void beginLayerTransform(host, session, TRANSFORM_TOOL_ID, mode);
+      },
+    });
+  }
+  // WP5.6 — the pixel warps, each a dialog with its geometry on the
+  // canvas (Warp's mesh, Puppet Warp's pins, Liquify's strokes) and a
+  // live preview; OK is one undo step.
+  for (const [suffix, id, title] of [
+    ["transformWarp", "warp", CMD.transformWarp],
+    ["puppetWarp", "puppetWarp", CMD.puppetWarp],
+    ["contentAwareScale", "contentAwareScale", CMD.contentAwareScale],
+    ["filterLiquify", "liquify", CMD.liquify],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(title),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        void session.openWarpDialog(id);
+      },
+    });
+  }
+  // WP5.6 — the PERSPECTIVE CROP tool, in the crop flyout without a key
+  // (Photoshop's), and its Apply (Enter does the same in the tool).
+  const perspectiveCrop = createPerspectiveCropMachine();
+  contributeImageTool(host, session, {
+    id: PERSPECTIVE_CROP_TOOL_ID,
+    title: t(TOOL.perspectiveCrop),
+    icon: "tool-crop",
+    group: CROP_TOOL_ID,
+    section: "transform",
+    gesture: () =>
+      makePerspectiveCropGesture(host, session, perspectiveCrop),
+  });
+  command({
+    id: "media.paged.image.command.commitPerspectiveCrop",
+    title: t(CMD.applyPerspectiveCrop),
+    category: "Image",
+    handler: () => {
+      void commitPerspectiveCropOf(perspectiveCrop, session);
     },
   });
 

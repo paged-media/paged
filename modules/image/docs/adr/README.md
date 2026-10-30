@@ -44,6 +44,7 @@ stood, for decisions made earlier; their status says so.
 | [478](478-psd-write-depth.md) | The layered PSD save writes what it reads | Accepted 2026-10-28 (WP5.15) |
 | [479](479-depth-and-colour-modes.md) | 16 bits end to end, colour modes as a projection, and the proof view | Accepted 2026-10-28 (WP5.13; amends 455) |
 | [482](482-smart-objects-in-full.md) | A smart object is a source, a placement and its filters; the layer is their render | Accepted 2026-10-29 (WP5.14; amends 467 and 478) |
+| [483](483-transform-and-warp-on-pixels.md) | Warps on pixels are backward maps from `paged-warp`, sampled by three kernels | Accepted 2026-10-30 (WP5.6; amends 467) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
