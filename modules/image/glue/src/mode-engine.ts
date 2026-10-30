@@ -1,4 +1,4 @@
-// The engine doors of IMAGE ▸ MODE (image ADRs 479, 483, WP5.13): the
+// The engine doors of IMAGE ▸ MODE (image ADRs 479, 484, WP5.13): the
 // document's depth (8, 16 or 32 bits per channel) and colour mode
 // (Grayscale, RGB, CMYK, Lab, Indexed, Multichannel; Duotone from a file), the 16-bit hand-off of the decode worker, and the
 // Proof Colors / Gamut Warning display transform. Kept beside `engine.ts`
@@ -9,7 +9,7 @@
 // image's undo list, engine-side.
 
 /** A document colour mode, as the engine names it. Indexed and
- *  Multichannel are single-image modes (image ADR 483); a Duotone document
+ *  Multichannel are single-image modes (image ADR 484); a Duotone document
  *  only opens from its file. */
 export type ColorModeName =
   "rgb" | "gray" | "cmyk" | "lab" | "indexed" | "multichannel" | "duotone";
@@ -61,7 +61,7 @@ export interface ModeEngine {
   imageSetBits(handle: number, bits: ChannelBits): Promise<boolean>;
   /** Image ▸ Mode ▸ Indexed Color… over the stack bound to `handle`: the
    *  image flattened and every pixel the nearest palette colour, at 8
-   *  bits, one undo step (image ADR 483). */
+   *  bits, one undo step (image ADR 484). */
   imageSetIndexed(
     handle: number,
     palette: IndexedPalette,

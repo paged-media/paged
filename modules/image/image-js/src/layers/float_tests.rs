@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! 32-bit float through the layer stack (image ADR 483): a float layer
+//! 32-bit float through the layer stack (image ADR 484): a float layer
 //! holds linear light, the fold blends the linear values (as Photoshop's
 //! 32-bit documents do) and keeps values above 1, the display view is the
 //! sRGB encoding, and Image ▸ Mode ▸ 32 Bits/Channel is one undo step.

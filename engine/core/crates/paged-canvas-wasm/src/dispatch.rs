@@ -483,6 +483,12 @@ impl WorkerCore {
                 let affected_story = story_id_for_mutation(&m);
                 let t0 = clock();
                 let model = self.model.as_mut().expect("checked above");
+                // Engine ADR 1040 — a tracked change carries the date of
+                // the edit that made it: the shell's clock stamps it (the
+                // engine reads none). A stub clock (0) stamps nothing.
+                if t0 > 0.0 {
+                    model.set_review_clock(Some(paged_canvas::review::iso_date(t0)));
+                }
                 match model.apply_mutation(&m) {
                     Ok(outcome) => {
                         // Invalidate only the pages that contain the

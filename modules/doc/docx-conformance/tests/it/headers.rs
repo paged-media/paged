@@ -221,12 +221,15 @@ fn a_body_edit_leaves_every_header_footer_and_settings_part_byte_identical__feat
     let session = DocSession::load(&original).unwrap();
     let base = session.lowered();
     let mut content = StoryContentIn {
+        comments: Vec::new(),
         self_id: "Story/doc".into(),
         paragraphs: base
             .story
             .paragraphs()
             .iter()
             .map(|p| ParagraphContentIn {
+                mark_change: None,
+                props_change: None,
                 paragraph_style: p.para_style_id.clone(),
                 runs: p
                     .runs

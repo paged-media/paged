@@ -621,7 +621,7 @@ fn blending_converted_cmyk_layers_in_rgb_is_measured_per_mode__feat__image_psd_l
         .iter()
         .map(|b| b.category)
         .collect();
-    // Since the ink fold (image ADR 483) only the modes it cannot fold —
+    // Since the ink fold (image ADR 484) only the modes it cannot fold —
     // the four non-separable ones — are blockers; the separable ones fold
     // in inks and are judged per file against the composite.
     assert_eq!(
@@ -834,7 +834,7 @@ fn the_ink_fold_names_what_it_declines_and_an_edit_keeps_the_inks__feat__image_i
     assert!(changed_inside, "the damage takes the new pixels' inks");
 }
 
-/// The `cmyk-blend` gate after the ink fold (image ADR 483): only the
+/// The `cmyk-blend` gate after the ink fold (image ADR 484): only the
 /// layers the ink fold cannot composite (Hue, Saturation, Color,
 /// Luminosity) decline `blend-modes`, and the documents that mix —
 /// `normal-stack` at 8 and 16 bits, declined by the RGB fold's

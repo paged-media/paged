@@ -88,6 +88,14 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   the final vote on the GPU (`geom.patch_vote`) or its CPU twin;
   presets from an `.abr` brush library. The type tool paints a shaped run of text into the
   active layer with font bytes the host serves for the document's fonts.
+- **Transform and warp** ([ADR 483](adr/483-transform-and-warp-on-pixels.md)). Free Transform
+  of a layer or a selection, with Edit ▸ Transform ▸ Free distort and Perspective opening the box
+  in that mode; Warp… (the fifteen styles or a custom mesh dragged on the canvas,
+  `geom.warp_mesh`); Puppet Warp… (pins on an as-rigid-as-possible mesh, Rigid / Normal /
+  Distort); Filter ▸ Liquify… (Forward Warp, Reconstruct, Smooth, Twirl both ways, Pucker, Bloat,
+  Push Left, the freeze mask; `geom.warp_field`); Content-aware scale… (seam carving, Amount,
+  the selection as protection); the Perspective Crop tool over every layer. Each is one undo step
+  with a live preview.
 - **Layers.** Add, duplicate, remove, reorder; visibility, lock, opacity and 26 blend modes;
   a mask from the selection, Add layer mask (reveal all or hide all) and painting on a mask
   (a Pixels/Mask edit target: the brush and pencil paint the foreground's grey, the eraser
@@ -312,7 +320,7 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   through a kernel (2826 distinct levels on a 16384-level ramp under a Levels gamma of 2.2, where
   Photoshop keeps 16259 and an 8-bit document 184). The scene-layer item and tiles are 8-bit (the
   display view). A 16-bit CMYK PSD and a 16-bit RLE layer channel are reduced to 8 bits and say
-  so. A curve is a 256-entry table. **32 bits** ([ADR 483](adr/483-float-documents-and-the-single-image-modes.md)):
+  so. A curve is a 256-entry table. **32 bits** ([ADR 484](adr/484-float-documents-and-the-single-image-modes.md)):
   OpenEXR, Radiance HDR and 32-bit PSDs open as 32-bit float, linear light, and Image ▸ Mode ▸
   32 Bits/Channel converts (one undo step); the fold blends the linear values and keeps values
   above 1, the frame shows them at exposure 0, and the layered save writes 32 bits (`Lr32`).
@@ -326,7 +334,7 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   the 95th percentile, where blending the RGB conversions was 10–50 off; a non-separable mode,
   Blend If, an adjustment layer or a style composites in RGB
   ([ADR 481](adr/481-n-channel-planes-and-the-ink-fold.md)). Grayscale and Lab documents fold in
-  their stored numbers, Lab with Photoshop's chroma rule (ADR 483): within 1.9 ΔE p95 of
+  their stored numbers, Lab with Photoshop's chroma rule (ADR 484): within 1.9 ΔE p95 of
   Photoshop's merged Lab composite at 8 bits and 0.25 at 16 (the RGB fold was up to 43), grey
   within 1.1 and 0.1; Hue and Saturation fold a Lab document in RGB. Image ▸ Mode ▸ Indexed
   Color… (Exact, Web, adaptive; no dither — our Web mapping is Photoshop's on every pixel of the
@@ -343,7 +351,7 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   16-bit RLE; Lab and grey through the CMS, Indexed through its table, Multichannel through its
   inks, Duotone as its grey), and a transparent document's white-matted
   merged colour is un-matted (CMYK: matted against the paper). Layers are imported from RGB,
-  CMYK (separable blends; ADR 483), Grayscale, Duotone and Lab files at 8 and 16 bits and RGB and
+  CMYK (separable blends; ADR 484), Grayscale, Duotone and Lab files at 8 and 16 bits and RGB and
   Grayscale files at 32, each layer and its mask at its own bounds ([ADR 464](adr/464-layers-at-their-own-bounds.md);
   the 384 MiB budget counts the rectangles): pixel layers, groups and their user masks (an
   isolated group blends through its mask, a pass-through group's members each go through it),
@@ -450,6 +458,10 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
 - A runner for the GEGL oracle the registry names for some rows.
 - Drawing the PSD adjustment kinds the import declines (above) as Photoshop does, and writing Color
   Lookup layers, text (`TySh`, WP5.10), vector masks and shapes (WP5.11).
+- Transform and warp (ADR 483): the Warp styles are paged-warp's closed forms, not Photoshop's
+  (recorded, large distances on a square); Perspective Warp, Lens Correction, Adaptive Wide Angle,
+  Vanishing Point and Liquify's face-aware tools are not offered; Puppet Warp has no pin depth or
+  rotation; Content-Aware Scale has no Protect Skin Tones or interactive box.
 - Smart objects (ADR 482): a warp (`customEnvelopeWarp`) is read and kept, not drawn; smart
   filters blend in Normal mode only and run at 8 bits; the filter mask is set from the selection,
   inverted, cleared or switched, not painted; a linked file is read again only through a picker;

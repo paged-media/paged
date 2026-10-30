@@ -755,7 +755,7 @@ fn decode_psd(bytes: &[u8]) -> Result<DecodedImage, IngestError> {
 
 /// Does this PSD's composite open through its own stored numbers
 /// ([`decode_psd_samples`]) rather than the RGB8 decode? Every mode but
-/// RGB and CMYK, and every 32-bit document (image ADR 483).
+/// RGB and CMYK, and every 32-bit document (image ADR 484).
 fn decodes_from_samples(file: &PsdFile) -> bool {
     use image_psd::model::ColorMode as P;
     file.header.depth == 32
@@ -765,7 +765,7 @@ fn decodes_from_samples(file: &PsdFile) -> bool {
         )
 }
 
-/// A PSD's merged composite from its stored numbers (image ADR 483):
+/// A PSD's merged composite from its stored numbers (image ADR 484):
 /// 32-bit RGB and Grayscale as linear floats; Grayscale, Duotone (its
 /// grey) and Lab through [`crate::color_mode::StoredToSrgb`] at the file's
 /// depth; Indexed through its colour table; Multichannel as its channels'
@@ -956,7 +956,7 @@ fn decode_source(mut source: RasterSource<MemoryByteSource>) -> Result<DecodedIm
 
     let cmyk = matches!(channels, ChannelLayout::Cmyk | ChannelLayout::Cmyka);
     // 32-bit float (OpenEXR, Radiance HDR): linear light, held as it is
-    // (image ADR 483).
+    // (image ADR 484).
     if info.format.depth == SampleDepth::F32 && channels == ChannelLayout::Rgba {
         let f: Vec<f32> = buf
             .as_chunks::<4>()

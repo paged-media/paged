@@ -102,10 +102,16 @@ describe("the Filter dialog component", () => {
       ].map((e) => e.getAttribute("data-filter-param"));
       const defaults = filterDefaults(def);
       // At the defaults: every parameter whose condition holds; on-canvas
-      // points show as a count instead of a control.
+      // points and data (WP5.6's pins, strokes, mesh) show as a count
+      // instead of a control.
       expect(shown).toEqual(
         def.params
-          .filter((p) => paramShown(p, defaults) && p.kind !== "points")
+          .filter(
+            (p) =>
+              paramShown(p, defaults) &&
+              p.kind !== "points" &&
+              p.kind !== "data",
+          )
           .map((p) => p.key),
       );
       expect(
@@ -113,6 +119,19 @@ describe("the Filter dialog component", () => {
       ).not.toBeNull();
       cleanup();
     }
+  });
+
+  it("counts the on-canvas data of the warps, with a reset [image.editor.transform-warp]", () => {
+    const { q } = filterHarness("puppetWarp");
+    expect(q('[data-filter-data="pins"]')!.textContent).toBe("0 pins");
+    expect(q('[data-filter-data-reset="pins"]')!.disabled).toBe(true);
+    cleanup();
+    const h = filterHarness("liquify");
+    expect(h.q('[data-filter-data="strokes"]')!.textContent).toBe("0 strokes");
+    cleanup();
+    const w = filterHarness("warp");
+    expect(w.q('[data-filter-data="mesh"]')!.textContent).toBe("style mesh");
+    expect(w.q('[data-filter-data="rect"]')).toBeNull();
   });
 
   it("sends a slider's, a choice's and a switch's value, not a constant", () => {

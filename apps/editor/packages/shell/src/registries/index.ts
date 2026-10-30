@@ -93,12 +93,15 @@ export {
   createControlBarGroupRegistry,
   createDocumentContextStore,
   createStatusItemRegistry,
+  createMarginBandRegistry,
   type ControlBarGroupContribution,
   type ControlBarGroupRegistry,
   type DocumentContextStore,
   type ScopedItemRegistry,
   type StatusItemContribution,
   type StatusItemRegistry,
+  type MarginBandContribution,
+  type MarginBandRegistry,
 } from "./context-bar";
 
 export {

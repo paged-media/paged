@@ -73,7 +73,7 @@ pub enum DisplayTreatment {
     /// conversion: the working pixels are a lossy reading of the file.
     HdrClipped,
     /// A float source (OpenEXR, Radiance HDR, a 32-bit PSD) held as 32-bit
-    /// float, linear light (image ADR 483): nothing is lost; the frame
+    /// float, linear light (image ADR 484): nothing is lost; the frame
     /// shows it at exposure 0, values above white clipped.
     Float32,
 }

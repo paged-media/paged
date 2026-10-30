@@ -55,7 +55,7 @@ fn separable(def: &image_kernels::KernelDef) -> bool {
 }
 
 /// A layer's Color or Luminosity in a Lab document: L* from one side,
-/// a* and b* from the other — two separable steps (image ADR 483).
+/// a* and b* from the other — two separable steps (image ADR 484).
 fn lab_split(def: &image_kernels::KernelDef) -> bool {
     matches!(def.id, "compose.color" | "compose.luminosity")
 }

@@ -142,7 +142,7 @@ in a converted document's mode and depth are ADR 481. 32-bit float, Indexed, Duo
 Multichannel, and Lab blending in L*a*b* remain open (ADR 481, Deferred).
 
 
-## Amendment, 2026-10-30 (ADR 483)
+## Amendment, 2026-10-30 (ADR 484)
 
 32-bit float documents (linear light, end to end), Lab and Grayscale folded in their own
 numbers, Indexed and Multichannel as single-image modes and Duotone read as its grey are ADR

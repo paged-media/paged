@@ -111,6 +111,17 @@ pub(super) fn map_point(op: CanvasOp, w: u32, h: u32, p: [f32; 2]) -> [f32; 2] {
                 [ow as f32 / 2.0, oh as f32 / 2.0],
             )
         }
+        CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        } => match super::perspective_crop_maps(quad, width, height) {
+            Some((forward, _)) => {
+                let q = paged_warp::apply(&forward, (f64::from(p[0]), f64::from(p[1])));
+                [q.0 as f32, q.1 as f32]
+            }
+            None => p,
+        },
     }
 }
 

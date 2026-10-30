@@ -512,7 +512,7 @@ const NOT_REPRODUCED: &[(&[u8; 4], &str)] = &[
 pub const CMYK_RGB_SAFE_BLENDS: &[&[u8; 4]] = &[b"norm", b"mul "];
 
 /// The blend modes that still decline a CMYK document's LAYER import
-/// (image ADR 483): those its consumer cannot composite in the inks. Since
+/// (image ADR 484): those its consumer cannot composite in the inks. Since
 /// image ADR 481 a CMYK document with a profile folds every SEPARABLE mode
 /// in its inks as Photoshop does (`image-js`'s ink fold, within 7 levels
 /// of Photoshop's merged composite on `cmyk-stacks/blend-modes`), and the
@@ -529,7 +529,7 @@ pub const CMYK_INK_FOLD_DECLINES: &[&[u8; 4]] =
 pub type InkToRgba8<'a> = &'a dyn Fn(&[u8]) -> Vec<u8>;
 
 /// A Grayscale or Lab document's colour transform as the import takes it
-/// (image ADR 483): the colour channels of a run of pixels as the file
+/// (image ADR 484): the colour channels of a run of pixels as the file
 /// stores them, normalised to `0..=1` (`v / 255` or `v / 65535`; Lab's L*
 /// over the full range, a* and b* about the middle), interleaved — one a
 /// pixel for Grayscale, three for Lab — in; straight sRGB `0..=1`, three a
@@ -764,7 +764,7 @@ impl PsdFile {
 
     /// [`Self::layer_plates_rgba8`] for a GRAYSCALE, DUOTONE (its grey) or
     /// LAB document (image
-    /// ADR 483): every plate's stored colour goes through `to_rgb`
+    /// ADR 484): every plate's stored colour goes through `to_rgb`
     /// ([`DeviceToRgb`]) at the file's depth, so a 16-bit document's plates
     /// carry `rgba16`. A 32-bit Grayscale document needs no transform (its
     /// grey is linear light, replicated); an RGB one ignores it.
@@ -1831,7 +1831,7 @@ impl PsdFile {
     }
 
     /// A 32-bit RGB or Grayscale layer's linear floats (grey replicated),
-    /// straight RGBA over its clipped rectangle (image ADR 483).
+    /// straight RGBA over its clipped rectangle (image ADR 484).
     fn layer_bounded_rgba32(
         &self,
         layer: &LayerRecord,

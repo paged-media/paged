@@ -39,7 +39,7 @@ use std::sync::Arc;
 use image_core::SampleDepth;
 
 /// Straight (non-premultiplied) RGBA at 8 or 16 bits per sample, or 32-bit
-/// float (image ADR 483).
+/// float (image ADR 484).
 ///
 /// The integer depths hold sRGB-ENCODED colour; `F32` holds LINEAR light,
 /// scene-referred (a value may exceed 1), as a Photoshop 32-bit document

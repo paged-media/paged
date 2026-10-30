@@ -1,4 +1,4 @@
-// The colour modes and the depth image ADR 483 adds, recorded: layered
+// The colour modes and the depth image ADR 484 adds, recorded: layered
 // Lab, Grayscale and 32-bit float documents with REAL merged data (the
 // merged composite, in the document's own numbers, is the oracle the
 // replay folds the layers against), Photoshop's 8/16 -> 32 Bits/Channel

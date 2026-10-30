@@ -1,4 +1,4 @@
-# ADR 483 — 32-bit float documents, Lab and Grayscale in their own numbers, and the single-image modes
+# ADR 484 — 32-bit float documents, Lab and Grayscale in their own numbers, and the single-image modes
 
 - **Status:** Accepted, 2026-10-30 (WP5.13, third part; amends 455, 478, 479 and 481).
 - **Scope:** `image-js/src/pixels.rs` (`SampleDepth::F32` in the store), `layers.rs`

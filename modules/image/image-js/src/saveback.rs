@@ -1013,7 +1013,7 @@ mod tests {
         }
     }
 
-    /// A 32-bit document (image ADR 483) is saved as one: depth 32, its
+    /// A 32-bit document (image ADR 484) is saved as one: depth 32, its
     /// layers in `Lr32` as linear floats, the composite RAW floats — and
     /// reads back through the import as the floats it wrote.
     #[test]
@@ -1049,7 +1049,7 @@ mod tests {
         }
     }
 
-    /// Indexed Color… and Multichannel (image ADR 483): the stack is
+    /// Indexed Color… and Multichannel (image ADR 484): the stack is
     /// flattened into its mode as one undo step, an edit stays in the
     /// table's colours, and the save writes the one image Photoshop keeps —
     /// the colour table or the named inks, no layer records — which

@@ -67,6 +67,7 @@ import {
   type WorkspaceEngine,
   type WorkspaceWasm,
 } from "./workspace-engine";
+import { wrapWarps, type WarpEngine, type WarpWasm } from "./warp-engine";
 
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
@@ -547,7 +548,7 @@ export type DisplayTreatment =
   | "cmyk-converted"
   | "cmyk-uncalibrated"
   | "hdr-clipped"
-  /** A float source held as 32-bit float, linear light (image ADR 483). */
+  /** A float source held as 32-bit float, linear light (image ADR 484). */
   | "float-32";
 
 /** The DecodedInfo every kernel-apply returns. One place, because six
@@ -1368,7 +1369,8 @@ export interface FilterMask {
 /** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
  *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`;
  *  the workspace (image ADR 475) in `workspace-engine.ts`; the
- *  smart objects (ADR 482) in `smart-engine.ts`. */
+ *  smart objects (ADR 482) in `smart-engine.ts`; the pixel warps (ADR 483)
+ *  in `warp-engine.ts`. */
 export interface ImageEngine
   extends
     MaskingEngine,
@@ -1377,7 +1379,8 @@ export interface ImageEngine
     FilterEngine,
     VectorEngine<DecodedInfo>,
     WorkspaceEngine,
-    SmartEngine<DecodedInfo> {
+    SmartEngine<DecodedInfo>,
+    WarpEngine<DecodedInfo> {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -2484,7 +2487,8 @@ export interface ImageWasmModule
     FilterWasm,
     VectorWasm,
     WorkspaceWasm,
-    SmartWasm {
+    SmartWasm,
+    WarpWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -3324,6 +3328,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     ...wrapVectors(wasm, decodedInfoOf),
     ...workspaceEngine(wasm),
     ...wrapSmart(wasm, decodedInfoOf),
+    ...wrapWarps(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,

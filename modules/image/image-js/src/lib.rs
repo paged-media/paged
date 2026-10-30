@@ -84,6 +84,7 @@ pub mod smart;
 pub mod stroke;
 pub mod text;
 pub mod vectors;
+pub mod warps;
 pub mod workspace;
 
 /// The frozen kernel ABI version this artifact was built against.
@@ -138,6 +139,8 @@ mod wasm {
     mod filters_stylize;
     // Smart objects (ADR 482): transform, filters, contents, links.
     mod smart_doors;
+    // WP5.6: Warp, Liquify, Puppet Warp, Content-Aware Scale (ADR 483).
+    mod warps;
 
     thread_local! {
         /// The bundle-realm GPU device (I-07: created HERE, where
@@ -1913,7 +1916,7 @@ mod wasm {
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {
             let result = async {
-                // Multichannel (image ADR 483): the channels of the
+                // Multichannel (image ADR 484): the channels of the
                 // document's RGB or grey, the stack flattened.
                 let changed = if mode == crate::color_mode::ColorMode::Multichannel {
                     let from = doc.stack.mode().mode;
@@ -1948,7 +1951,7 @@ mod wasm {
         .await
     }
 
-    /// IMAGE ▸ MODE ▸ INDEXED COLOR… (image ADR 483) over the bound stack:
+    /// IMAGE ▸ MODE ▸ INDEXED COLOR… (image ADR 484) over the bound stack:
     /// the visible image flattened and every pixel the nearest colour of
     /// `palette` — `exact` (the image's own colours, at most 256), `web`
     /// (216), or `adaptive` (`colours` of them, median cut) — at 8 bits,
@@ -5145,7 +5148,7 @@ mod wasm {
         // An Indexed or Multichannel document is one image in Photoshop
         // (no layer records): it opens as its composite in its mode, with
         // its table, so an edit stays in the mode and the save writes it
-        // back (image ADR 483).
+        // back (image ADR 484).
         let single = PSDS.with(|m| {
             m.borrow().get(&psd_handle).and_then(|f| {
                 matches!(
@@ -5179,7 +5182,7 @@ mod wasm {
             // layered open and the flattened one agree; the stack then
             // works in RGB, which the image's treatment already states.
             // A Grayscale or Lab document's plates go through the
-            // transform its composite took (image ADR 483).
+            // transform its composite took (image ADR 484).
             let stored = crate::color_mode::StoredToSrgb::for_psd(file).map_err(ingest_err)?;
             let import = if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
                 let ink = crate::ingest::psd_ink_transform(file);
@@ -6857,12 +6860,46 @@ mod wasm {
                 )))
             }
         };
+        run_canvas_op(op).await
+    }
+
+    /// The PERSPECTIVE CROP tool's commit (WP5.6, image ADR 483) over the
+    /// whole stack, in place on the bound handle: the quadrilateral `quad`
+    /// (NW, NE, SE, SW, canvas px — eight numbers) drawn upright onto a
+    /// `width`×`height` canvas through its homography (every layer, mask
+    /// and channel through `geom.warp_projective`, bicubic; paths, guides
+    /// and smart placements through the same map). GPU-only; drops the
+    /// selection; one undo step. Returns `[width, height]`.
+    #[wasm_bindgen]
+    pub async fn layers_perspective_crop(
+        quad: Vec<f32>,
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<u32>, JsValue> {
+        let quad: [f32; 8] = quad.try_into().map_err(|q: Vec<f32>| {
+            JsValue::from_str(&format!(
+                "a perspective crop is four corners (8 numbers), got {}",
+                q.len()
+            ))
+        })?;
+        run_canvas_op(crate::layers::CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        })
+        .await
+    }
+
+    /// One canvas op over the whole stack (see `layers_canvas_op`).
+    async fn run_canvas_op(op: crate::layers::CanvasOp) -> Result<Vec<u32>, JsValue> {
+        use crate::layers::CanvasOp;
         let deselect = matches!(
             op,
             CanvasOp::Crop { .. }
                 | CanvasOp::Straighten { .. }
                 | CanvasOp::Resample { .. }
                 | CanvasOp::RotateArbitrary { .. }
+                | CanvasOp::Perspective { .. }
         );
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {

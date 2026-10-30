@@ -419,6 +419,32 @@ class UndoGroupState {
   }
 }
 
+/**
+ * The largest SVG the client posts for an import, in bytes: the engine's
+ * own limit (`paged_svg::limits::MAX_SVG_BYTES`, 32 MiB). The file rides
+ * the JSON channel as a number array the worker buffers at about 20 bytes
+ * per input byte, so a much larger one would exhaust the worker before
+ * the engine could refuse it; the client answers for it instead, with the
+ * engine's own reply shape and wording.
+ */
+const SVG_IMPORT_MAX_BYTES = 32 * 1024 * 1024;
+
+function svgTooLarge(size: number): WorkerToMain {
+  return {
+    seq: null,
+    protocol: PROTOCOL_VERSION,
+    kind: "svgImportPlanned",
+    payload: {
+      mutation: null,
+      report: { items: 0, notes: [] },
+      width: 0,
+      height: 0,
+      error:
+        `the SVG is too large to read: ${size} bytes, over ` +
+        `${SVG_IMPORT_MAX_BYTES / (1024 * 1024)} MiB (the limit is ${SVG_IMPORT_MAX_BYTES} bytes)`,
+    },
+  };
+}
 export class CanvasClient {
   private readonly worker: Worker;
   /** The selection last posted (`setSelection`); `documentStats` posts it
@@ -531,6 +557,12 @@ export class CanvasClient {
         () => this.post(kind),
         (reply) => reply.kind === "documentLoaded",
       );
+    }
+    if (
+      kind.kind === "requestSvgImport" &&
+      kind.payload.bytes.length > SVG_IMPORT_MAX_BYTES
+    ) {
+      return svgTooLarge(kind.payload.bytes.length);
     }
     const face = this.noteFontRegistry(kind);
     const reply = await this.post(kind);

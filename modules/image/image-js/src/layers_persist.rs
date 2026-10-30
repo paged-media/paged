@@ -767,7 +767,7 @@ impl LayerStack {
                 }
                 None => w.i64(-1),
             }
-            // The single-image modes' table (image ADR 483, version 9).
+            // The single-image modes' table (image ADR 484, version 9).
             if version >= 9 {
                 match &self.mode.table {
                     Some(t) => {

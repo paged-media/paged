@@ -78,6 +78,27 @@ export function contentToChar(paras: ParagraphTexts, offset: number): number {
   return chars;
 }
 
+/** A story character offset as a content offset: the inverse of
+ *  {@link contentToChar} (the engine's `char_to_content_offset`). A
+ *  character at a paragraph's end is that paragraph's end, not the next
+ *  one's start. */
+export function charToContent(paras: ParagraphTexts, at: number): number {
+  let consumed = 0;
+  let chars = 0;
+  for (let i = 0; i < paras.length; i++) {
+    if (i > 0) consumed += 1;
+    const text = paras[i]!;
+    const n = charCount(text);
+    if (at <= chars + n) {
+      const head = [...text].slice(0, Math.max(0, at - chars)).join("");
+      return consumed + utf8.encode(head).length;
+    }
+    consumed += utf8.encode(text).length;
+    chars += n;
+  }
+  return consumed;
+}
+
 /** The paragraph spans in character space: `[start, end)` per paragraph. */
 export function paragraphSpans(paras: ParagraphTexts): Array<[number, number]> {
   const out: Array<[number, number]> = [];

@@ -1,4 +1,4 @@
-// What IMAGE ▸ MODE contributes to the editor (image ADRs 479, 483,
+// What IMAGE ▸ MODE contributes to the editor (image ADRs 479, 484,
 // WP5.13): the depth (8 / 16 / 32 bits per channel) and colour-mode
 // commands (Greyscale, RGB, CMYK, Lab, Multichannel; Indexed Color… opens
 // its dialog) and the proof view (Proof colours, Gamut warning and the

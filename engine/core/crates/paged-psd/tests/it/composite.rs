@@ -375,7 +375,7 @@ fn a_cmyk_document_is_judged_by_its_own_blockers__feat__image_psd_layer_import()
     let err = f.layer_plates_rgba8().expect_err("needs the ink transform");
     assert!(err.to_string().contains("layer_plates_rgba8_via"), "{err}");
 
-    // Lab is no longer a colour-mode blocker (image ADR 483); its plates
+    // Lab is no longer a colour-mode blocker (image ADR 484); its plates
     // need the caller's transform. Indexed still is (no layers).
     let lab = psd_model(3, 1, 1, ColorMode::Lab, false, 0, vec![0; 3]);
     let cats: Vec<&str> = lab
@@ -393,7 +393,7 @@ fn a_cmyk_document_is_judged_by_its_own_blockers__feat__image_psd_layer_import()
     assert!(cats.contains(&"colour-mode"), "{cats:?}");
 }
 
-/// Any mode's merged composite in its stored numbers (image ADR 483):
+/// Any mode's merged composite in its stored numbers (image ADR 484):
 /// Lab un-matted against its white (a* and b* about the middle), a
 /// 32-bit composite as floats, an Indexed one as its index with the
 /// colour table beside it.

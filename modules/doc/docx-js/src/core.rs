@@ -416,6 +416,10 @@ impl DocSession {
                 .insert(token.to_string(), id.to_string());
         }
         let created = |t: &str| bindings.para_token_to_style_id.contains_key(t);
+        // Doc ADR 613 — the read-back paragraphs lined up with the blocks
+        // (tracked paragraph marks inserted or removed in paged).
+        let (prepared, review_plan) = docx_export::review::prepare(&marked, content, layout);
+        let content = &prepared;
         let mut edited_marked = overlay_story_content_with(&marked, content, layout, &created);
         // What the canvas put into the text that is not text: notes kept,
         // added and removed; new fields (taken out of the edited runs).
@@ -428,7 +432,14 @@ impl DocSession {
         let mut skips = changes.skips.clone();
         skips.extend(docx_export::overlay_tables(&mut edited, tables));
         skips.extend(overlay_cells_known(&mut edited, cells, &created));
-        let edits = diff(&baseline, &edited, &bindings);
+        // Doc ADR 613 — the paragraphs whose review markup changed are
+        // written whole, before the run patcher; the differ sees them as
+        // they were.
+        skips.extend(review_plan.skips.iter().cloned());
+        let dirty = docx_export::review::dirty_blocks(&baseline, &edited, &bindings, &review_plan);
+        let para_edits = docx_export::review::para_edits(&baseline, &edited, &bindings, &dirty);
+        let masked = docx_export::review::masked(&baseline, &edited, &dirty, &review_plan);
+        let mut edits = diff(&baseline, &masked, &bindings);
         let mut package = self.package.clone();
         let note_plan = st::plan_new_notes(&package, &self.main_part, &changes);
         let bookmarks = st::new_bookmarks(&marked, content, &structure.anchors, layout);
@@ -443,9 +454,39 @@ impl DocSession {
                 .require(&self.main_part)
                 .map_err(|e| e.to_string())?,
         );
+        let mut atoms = atoms;
+        let _ = docx_export::review::take_dirty(&mut edits, &mut atoms, &dirty);
+        let source_comment_ids: std::collections::BTreeSet<i64> =
+            self.model.comments.iter().map(|c| c.id).collect();
+        let review = docx_export::review::write_paragraphs(
+            &mut package,
+            &self.main_part,
+            &baseline,
+            &edited,
+            &bindings,
+            &dirty,
+            &review_plan,
+            &para_edits,
+            &source_comment_ids,
+        )
+        .map_err(|e| e.to_string())?;
+        skips.extend(review.skips);
         skips.extend(
             docx_export::apply_edits_with(&mut package, &self.main_part, &bindings, &edits, &atoms)
                 .map_err(|e| e.to_string())?,
+        );
+        docx_export::review::remove_joined(&mut package, &self.main_part)
+            .map_err(|e| e.to_string())?;
+        skips.extend(
+            docx_export::review::save_comments(
+                &mut package,
+                &self.main_part,
+                &marked,
+                &self.model.comments,
+                &review_plan,
+                &review.comment_ids,
+            )
+            .map_err(|e| e.to_string())?,
         );
         skips.extend(
             st::save_notes(

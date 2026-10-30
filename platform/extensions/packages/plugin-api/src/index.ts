@@ -72,6 +72,8 @@ export type {
   ValueTypeKind,
   PropertySchema,
   IdmlSpelling,
+  EffectKindDescriptor,
+  EffectParamDescriptor,
   ContentSchema,
   ObjectErrorCode,
   ObjectValue,

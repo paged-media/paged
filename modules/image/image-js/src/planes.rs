@@ -195,7 +195,7 @@ pub fn rgb_of_ink_planes(
 
 /// A Grayscale document's plane of straight RGB pixels `px`: the stored
 /// grey (the mode's grey profile) in every colour channel, `(G, G, G, α)`
-/// at `px`'s depth (image ADR 483).
+/// at `px`'s depth (image ADR 484).
 pub fn gray_plane_of(t: &ModeTransform, px: &Pixels) -> Pixels {
     let n = px.pixel_count();
     let rgb: Vec<f32> = (0..n)

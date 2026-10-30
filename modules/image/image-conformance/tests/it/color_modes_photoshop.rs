@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The colour modes and the depth of image ADR 483 against Photoshop,
+//! The colour modes and the depth of image ADR 484 against Photoshop,
 //! replayed from `fixtures/photoshop/color-modes`
 //! (`scripts/photoshop/probes/color-modes.jsx`, Photoshop 27.10).
 //!
@@ -460,7 +460,7 @@ fn multichannel_channels_are_the_rgb_values__feat__image_io_depth_color_modes() 
 // ─────────────── what the save writes, opened by Photoshop ───────────────
 
 /// The documents the layered save writes in the modes and the depth of
-/// image ADR 483, over the background of a Photoshop-written RGB file: a
+/// image ADR 484, over the background of a Photoshop-written RGB file: a
 /// painted square under Multiply at 70 %, then 32 bits; that image as
 /// Indexed (Web palette) and as Multichannel. Each with our composite
 /// (the CPU fold, deterministic).
@@ -475,8 +475,8 @@ fn saved_cases() -> Vec<(&'static str, Vec<u8>, Pixels)> {
         bg.layer_mask.layers.truncate(1);
         bg.layer_mask.section_raw = None;
         let import = bg.layer_plates_rgba8().expect("background");
-        let mut s = LayerStack::from_psd_plates_with(&import, Some(&bg.layer_mask.layers))
-            .expect("stack");
+        let mut s =
+            LayerStack::from_psd_plates_with(&import, Some(&bg.layer_mask.layers)).expect("stack");
         let j = s.add("painted");
         let (w, h) = (s.width(), s.height());
         let px: Vec<u8> = (0..w * h)
@@ -516,11 +516,8 @@ fn saved_cases() -> Vec<(&'static str, Vec<u8>, Pixels)> {
     let (b, c) = write(&file, &s);
     cases.push(("saved-indexed-web.psd", b, c));
     let (file, mut s) = base();
-    pollster::block_on(s.convert_flat(
-        None,
-        DocMode::multichannel_from(M::Rgb).expect("from RGB"),
-    ))
-    .expect("multichannel");
+    pollster::block_on(s.convert_flat(None, DocMode::multichannel_from(M::Rgb).expect("from RGB")))
+        .expect("multichannel");
     let (b, c) = write(&file, &s);
     cases.push(("saved-multichannel.psd", b, c));
     cases

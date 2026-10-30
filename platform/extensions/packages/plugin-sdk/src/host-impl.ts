@@ -100,6 +100,7 @@ import type {
   SubContextState,
   ControlBarGroupContribution,
   StatusItemContribution,
+  MarginBandContribution,
   ElementId,
   FontFaceAsset,
   HitFilter,
@@ -171,6 +172,7 @@ import type {
 import { DisposableStore, toDisposable } from "./disposables.js";
 import {
   caretReadRange,
+  charToContent,
   contentToChar,
   paragraphsRange,
   paragraphTexts,
@@ -347,6 +349,11 @@ export const HOST_FEATURES: readonly string[] = [
   // when the host's registry reads it).
   "contribute.controlBarGroup@1",
   "contribute.statusItem@1",
+  // Extensions ADR 349 amendment 1 (C5) — the margin-band DOOR (static);
+  // a host that shows bands is the dynamic `shell.marginBand@1`. The
+  // character-to-content conversion is the SDK's own.
+  "contribute.marginBand@1",
+  "text.contentRange@1",
   "contribute.keybinding.scope@1",
   // ADR 323 — the object model: the contribution door and `host.objects`
   // (core addresses always route; a private registry serves core + this
@@ -517,6 +524,16 @@ export const HOST_FEATURES: readonly string[] = [
   // ignores `clip` (a plain group) and refuses a group child. paged.draw's
   // clipped repeat asks it before choosing a clip group over paste-into.
   "document.clipGroups@1",
+  // Engine ADR 1047 — live shapes. The vendored wire and catalog carry
+  // `frameShapeSides` / `frameShapeStarInset` (a live polygon or star on
+  // a Polygon) and `frameShapePieStart` / `frameShapePieEnd` (a pie on an
+  // Oval), through the ordinary property doors. STATIC, like
+  // `document.fillRule@1`: the paths are additive at protocol 78, so the
+  // handshake does not prove the engine has them — an older engine
+  // refuses the write as an unknown path. paged.draw's Star tool asks it
+  // before it makes a live star (a polygon, then its points and inset)
+  // rather than a plain path.
+  "document.liveShapes@1",
   // Engine ADR 1031 (protocol v77) — SVG in and out through paged-svg.
   // STATIC: the flag says this SDK forwards both doors. The worker
   // handshake pins the protocol, and an engine without the messages
@@ -2632,6 +2649,21 @@ export function createBundleHost(
       }
       return store.add(reg.register(c));
     },
+    // Extensions ADR 349 amendment 1 (C5) — a margin band borrows its
+    // context's declaration, like a status item.
+    marginBand(c: MarginBandContribution) {
+      assertNamespaced(c.id, "marginBand");
+      requireOwnContext(c.scope?.editContext, "contribute.marginBand");
+      const reg = getEditor()?.registries?.marginBands;
+      if (!reg) {
+        log.warn(
+          `contribute.marginBand("${c.id}") registered nothing — the host ` +
+            `wired no margin bands (probe supports("shell.marginBand@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      return store.add(reg.register(c));
+    },
     objectType(c) {
       requireDeclared(
         declaresType(declared?.objectTypes, c.type),
@@ -4381,6 +4413,17 @@ export function createBundleHost(
         storyId: sel.storyId,
         start: contentToChar(paras, sel.start),
         end: contentToChar(paras, sel.end),
+      };
+    },
+    async contentRange(range) {
+      requireDocRead("text.contentRange");
+      const content = await document.storyContent(range.storyId);
+      if (!content) return null;
+      const paras = paragraphTexts(content);
+      return {
+        storyId: range.storyId,
+        start: charToContent(paras, range.start),
+        end: charToContent(paras, range.end),
       };
     },
     async find(spec) {
@@ -6224,6 +6267,9 @@ export function createBundleHost(
   }
   if (getEditor()?.registries?.subContexts) {
     featureSet.add("shell.subContext@1");
+  }
+  if (getEditor()?.registries?.marginBands) {
+    featureSet.add("shell.marginBand@1");
   }
   if (getEditor()?.registries?.frameSurfaces) {
     featureSet.add("editContext.frameSurface@1");

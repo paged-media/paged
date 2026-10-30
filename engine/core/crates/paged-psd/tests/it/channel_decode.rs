@@ -279,7 +279,7 @@ fn image_psd_layer_channel_data_zip_prediction_handapplied_delta() {
 
 #[test]
 fn image_psd_layer_channel_data_zip_prediction_32bit_reads_byte_planes() {
-    // 32-bit prediction (image ADR 483): a row's floats as four byte
+    // 32-bit prediction (image ADR 484): a row's floats as four byte
     // planes, delta-coded over the row's bytes. Two rows of three.
     let floats = [0.5f32, 1.0, -2.25, 3.0e-3, 7.5, 0.0];
     let mut deltaed = Vec::new();

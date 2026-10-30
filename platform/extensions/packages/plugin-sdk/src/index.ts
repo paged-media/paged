@@ -24,6 +24,7 @@
 // them.
 
 export {
+  charToContent,
   contentToChar,
   paragraphTexts,
   wordAroundCaret,
@@ -214,6 +215,8 @@ export {
 } from "./core-commands.generated.js";
 export {
   CORE_CATALOG_ROWS,
+  CORE_EFFECT_CATEGORIES,
+  CORE_EFFECT_KINDS,
   CORE_OBJECT_SCHEMAS,
   CORE_PATHS,
   CORE_PATH_ALIASES,

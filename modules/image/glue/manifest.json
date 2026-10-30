@@ -292,6 +292,13 @@
       "media.paged.image.command.vectorMaskInvert",
       "media.paged.image.command.vectorMaskRasterize",
       "media.paged.image.command.freeTransform",
+      "media.paged.image.command.transformDistort",
+      "media.paged.image.command.transformPerspective",
+      "media.paged.image.command.transformWarp",
+      "media.paged.image.command.puppetWarp",
+      "media.paged.image.command.contentAwareScale",
+      "media.paged.image.command.filterLiquify",
+      "media.paged.image.command.commitPerspectiveCrop",
       "media.paged.image.command.modeBits8",
       "media.paged.image.command.modeBits16",
       "media.paged.image.command.modeBits32",
@@ -326,6 +333,7 @@
     "tools": [
       "media.paged.image.tool.crop",
       "media.paged.image.tool.transform",
+      "media.paged.image.tool.perspectiveCrop",
       "media.paged.image.tool.move",
       "media.paged.image.tool.marqueeRect",
       "media.paged.image.tool.marqueeEllipse",
@@ -470,6 +478,62 @@
         {
           "id": "media.paged.image.command.freeTransform",
           "title": "Free transform",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.transformDistort",
+          "title": "Transform: distort",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.transformPerspective",
+          "title": "Transform: perspective",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.transformWarp",
+          "title": "Transform: warp…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.puppetWarp",
+          "title": "Puppet warp…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.contentAwareScale",
+          "title": "Content-aware scale…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterLiquify",
+          "title": "Liquify…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.commitPerspectiveCrop",
+          "title": "Apply perspective crop",
           "args": {
             "kind": "struct",
             "fields": {}

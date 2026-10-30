@@ -98,7 +98,7 @@ fn raster_err(format: &'static str, e: paged_raster::Error) -> CodecError {
 /// The format the adapters decode into: sRGB-encoded (or device inks),
 /// straight alpha. Only `channels` and `depth` vary.
 pub(crate) const fn decoded_format(channels: ChannelLayout, depth: SampleDepth) -> PixelFormat {
-    // 32-bit float is linear light (image ADR 483); the integer depths
+    // 32-bit float is linear light (image ADR 484); the integer depths
     // are sRGB-encoded.
     let float = matches!(depth, SampleDepth::F32);
     PixelFormat {
@@ -254,7 +254,7 @@ fn to_layout(img: RasterImage, name: &'static str) -> Result<Decoded> {
     let premul = img.alpha == Alpha::Associated;
     let source_bits = file.bits_per_sample;
     // Floats in RGB or grey are handed over as 32-bit float, linear light
-    // (image ADR 483); Lab, and floats in another model, through RGBA8.
+    // (image ADR 484); Lab, and floats in another model, through RGBA8.
     let float = matches!(img.data, Samples::F32(_))
         && matches!(img.model, ColorModel::Rgb | ColorModel::Gray);
     let via_rgba8 =

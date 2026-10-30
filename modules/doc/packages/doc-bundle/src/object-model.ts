@@ -54,6 +54,11 @@
 // where a run was poured is doc-host-model's.
 
 import { WORD_COMMAND } from "./word/commands.js";
+import {
+  REVIEW_COMMAND,
+  type ReviewArgs,
+  type ReviewResult,
+} from "./word/review.js";
 import type { LoweredDoc, LoweredParagraph } from "@paged-media/doc-host-model";
 import {
   bodyParagraphLocation,
@@ -1351,6 +1356,31 @@ function wordTypedCommands(
   );
 }
 
+/** Doc ADR 613 — the typed twins of the review commands: each takes the
+ *  arguments its command reads (a change or comment id, an author, a text)
+ *  and answers `{ applied, id? }`; a refusal (nothing at the caret, no
+ *  change by that author) answers `applied: false` with the reason. */
+function reviewTypedCommands(
+  deps: DocObjectModelDeps,
+): TypedCommandContribution[] {
+  return Object.values(REVIEW_COMMAND).map(
+    (id) =>
+      ({
+        ...decl(id),
+        handler: async (_ctx: unknown, args: ReviewArgs) => {
+          const out = await deps.reviewCommand?.(id, args ?? {});
+          if (out === undefined || out === false)
+            throw new Error(
+              `unavailable: ${id} needs the Word chrome (the wordDocument context)`,
+            );
+          return out.id === undefined
+            ? { applied: out.applied }
+            : { applied: out.applied, id: out.id };
+        },
+      }) as TypedCommandContribution,
+  );
+}
+
 // ------------------------------------------------------------ entry
 
 export interface DocObjectModelDeps {
@@ -1364,6 +1394,12 @@ export interface DocObjectModelDeps {
   /** Run a Word command by id (the Word chrome, ADR 608); false when the
    *  chrome is not contributed or the id is not a Word command. */
   wordCommand?(id: string): Promise<boolean>;
+  /** Doc ADR 613 — run a review command by id with its typed arguments;
+   *  false when the id is not one, undefined without the Word chrome. */
+  reviewCommand?(
+    id: string,
+    args: ReviewArgs,
+  ): Promise<ReviewResult | false | undefined>;
   /** Doc ADR 616 — the open document as a .docx (save-back, or a new
    *  package for a document that did not come from Word). */
   saveAsDocx?(): Promise<{ bytes: Uint8Array; fileName: string } | null>;
@@ -1386,6 +1422,7 @@ export function createDocObjectModel(
     commands: [
       ...typedCommands(host, deps.place, deps.exportBytes, deps),
       ...wordTypedCommands(deps),
+      ...reviewTypedCommands(deps),
     ],
     // Editor plan G3a: a paragraph's text, a merge field, a list's items.
     templateFields: docTemplateFields(host),

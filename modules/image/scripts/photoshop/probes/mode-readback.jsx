@@ -1,5 +1,5 @@
 // Photoshop OPENS what paged's layered save writes in the modes and the
-// depth of image ADR 483: a 32-bit document with two live layers, an
+// depth of image ADR 484: a 32-bit document with two live layers, an
 // Indexed one and a Multichannel one. The inputs are written by
 // `write_mode_readback_inputs` (image-conformance, ignored test) into
 // <stage>/mode-readback/ with a manifest of file names:

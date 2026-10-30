@@ -11,7 +11,7 @@
 // since 5, the colour mode since 6, image ADR 479; a smart object's
 // placement, file, filters and record since 7, image ADR 482; a
 // 32-bit float layer (depth 32) and the single-image modes' table since 9,
-// image ADR 483). `writePgil(readPgil(m, b))` reproduces the
+// image ADR 484). `writePgil(readPgil(m, b))` reproduces the
 // engine's own export byte for byte, including the slot order — the
 // object-model spec proves that against the real wasm, so a drift in
 // either codec fails there rather than in a document.
@@ -222,7 +222,7 @@ export interface PgilStack {
 export interface PgilMode {
   color: number;
   profile: Uint8Array | null;
-  /** Version 9 (image ADR 483): an Indexed document's colour table, a
+  /** Version 9 (image ADR 484): an Indexed document's colour table, a
    *  Multichannel document's channels or a Duotone document's
    *  specification, as the engine encodes it (`null`: none). */
   table: Uint8Array | null;

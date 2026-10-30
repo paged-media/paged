@@ -30,9 +30,9 @@
 //! lcms2 on native, moxcms on wasm32) with the Color Settings default
 //! rendering, relative colorimetric with black-point compensation.
 //!
-//! The stored channels are the planes' (image ADRs 481, 483): a CMYK,
+//! The stored channels are the planes' (image ADRs 481, 484): a CMYK,
 //! Grayscale or Lab document folds in its own numbers. The single-image
-//! modes (image ADR 483) are a mode and a table: INDEXED holds the colours
+//! modes (image ADR 484) are a mode and a table: INDEXED holds the colours
 //! of its table (each pixel the nearest entry), MULTICHANNEL its spot
 //! channels (from RGB, one ink a channel, which changes no colour), and a
 //! DUOTONE read from a file is its grey with the file's specification
@@ -136,7 +136,7 @@ pub struct DocMode {
     pub mode: ColorMode,
     pub cmyk_profile: Option<Arc<[u8]>>,
     /// An Indexed document's colours, a Multichannel document's channels,
-    /// a Duotone document's specification (image ADR 483).
+    /// a Duotone document's specification (image ADR 484).
     pub table: Option<Arc<ModeTable>>,
 }
 
@@ -347,7 +347,7 @@ impl DocMode {
         })
     }
 
-    /// An Indexed document of `colours` (image ADR 483).
+    /// An Indexed document of `colours` (image ADR 484).
     pub fn indexed(colours: Vec<[u8; 3]>) -> DocMode {
         DocMode {
             mode: ColorMode::Indexed,
