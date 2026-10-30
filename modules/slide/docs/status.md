@@ -162,7 +162,7 @@ Read from the code on 2026-10-30.
   select, Shift/Cmd+click, drag to move the selection, hide, set the transition, double-click to
   open a slide.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
-  `.ppsx` and `.potx`: one wasm call (`importPptx`; `slide_js_bg.wasm` is 6.18 MiB, with paged.sheet's workbook engine for live charts) returns the package and a report; the host opens the package, and the source deck and the report are kept as container
+  `.ppsx` and `.potx`: one wasm call (`importPptx`; `slide_js_bg.wasm` is 6.64 MiB (release, 2026-10-30), with paged.sheet's workbook engine for live charts and the WebP decoder) returns the package and a report; the host opens the package, and the source deck and the report are kept as container
   parts.
 - **Embedded fonts** (ADR 707). `pptx-fonts` decodes the faces PowerPoint embeds: Embedded
   OpenType (all three header versions, XOR obfuscation) and MicroType Express (LZCOMP and the
