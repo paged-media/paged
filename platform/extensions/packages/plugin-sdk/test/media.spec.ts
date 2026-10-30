@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Extensions ADR 347 (C6) — the media door over engine ADR 1027's movie and
+// Extensions ADR 345, amendment 1 (C6) — the media door over engine ADR 1027's movie and
 // sound frames, on the real engine: the flag and the catalog row, a medium
 // stored and read back by its frame, the same bytes stored twice in one
 // part, a `frameMedia` write undone in one step, a link answered as a URL.
@@ -50,7 +50,7 @@ async function frameOn(h: HeadlessHost): Promise<ElementId> {
 
 const CLIP = new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 1, 2, 3]);
 
-describe("the media door (extensions ADR 347)", () => {
+describe("the media door (extensions ADR 345, amendment 1)", () => {
   it("is advertised, and the vendored catalog carries frameMedia", () => {
     expect(HOST_FEATURES).toContain("document.media@1");
     const row = (

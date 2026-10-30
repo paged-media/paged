@@ -2863,7 +2863,7 @@ export interface PartsSurface {
 // -------------------------------------------------------------- media
 
 /**
- * Extensions ADR 347 (contract C6) — the MEDIA door. A movie or sound frame
+ * Extensions ADR 345, amendment 1 (contract C6) — the MEDIA door. A movie or sound frame
  * (engine ADR 1027) is a rectangle whose placed picture is its poster and
  * whose `frameMedia` property says where its medium is and how it plays.
  * The engine never plays a medium; a bundle that presents the document (a
@@ -3734,7 +3734,7 @@ export interface BundleHost {
    *  null/`[]`, writes reject, and `supports("storage.parts@1")` is false. The
    *  part-types are declared in `contributes.partTypes`. */
   readonly parts: PartsSurface;
-  /** Extensions ADR 347 (C6) — a movie or sound frame's medium: read its
+  /** Extensions ADR 345, amendment 1 (C6) — a movie or sound frame's medium: read its
    *  bytes or URL, and keep new media in the document. Always present;
    *  probe `supports("document.media@1")`. */
   readonly media: MediaSurface;

@@ -557,7 +557,7 @@ export const HOST_FEATURES: readonly string[] = [
   // reads no row. A bundle that would otherwise bake a picture fix into
   // the pixels (paged.slide's DrawingML picture effects) asks it first.
   "document.imageAdjustments@1",
-  // Extensions ADR 347 (C6) — the media door over engine ADR 1027's movie
+  // Extensions ADR 345, amendment 1 (C6) — the media door over engine ADR 1027's movie
   // and sound frames: `host.media.read` (a frame's medium, its bytes or
   // URL) and `host.media.store` (keep media bytes in the document).
   // STATIC: `frameMedia` is additive at protocol 78, so an older engine
@@ -5653,7 +5653,7 @@ export function createBundleHost(
   };
 
   // ----------------------------------------------------- media
-  // Extensions ADR 347 (C6) — a movie or sound frame's medium (engine ADR
+  // Extensions ADR 345, amendment 1 (C6) — a movie or sound frame's medium (engine ADR
   // 1027). `read` is the frame's `frameMedia` row plus its bytes (a part,
   // read by its full path: the engine serves any `paged/` part for
   // reading) or its URL; `store` writes the bytes into the engine's shared
@@ -6602,7 +6602,7 @@ export function createBundleHost(
   };
 }
 
-/** Extensions ADR 347 — a media part's name: the first 128 bits of the
+/** Extensions ADR 345, amendment 1 — a media part's name: the first 128 bits of the
  *  bytes' SHA-256, in hex. */
 async function sha256Name(bytes: Uint8Array): Promise<string> {
   const digest = new Uint8Array(

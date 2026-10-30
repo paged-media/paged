@@ -373,7 +373,7 @@ export type {
 // Engine ADR 1037 — one step of an image frame's filter stack, the item of
 // the `imageAdjustments` value `frameImageAdjustments` carries.
 export type { RasterOp } from "./wire.js";
-// Extensions ADR 347 (C6) — movie and sound frames (engine ADR 1027).
+// Extensions ADR 345, amendment 1 (C6) — movie and sound frames (engine ADR 1027).
 export type { MediaItem, MediaKind, MediaPlay, MediaSource } from "./wire.js";
 
 // Engine ADR 1031 — `host.document.importSvg` / `exportSvg`'s options and

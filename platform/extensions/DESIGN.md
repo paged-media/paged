@@ -800,7 +800,7 @@ value, on a rectangle, oval or polygon. The engine draws and exports the
 picture through it; IDML keeps it in a label. Additive at protocol 77:
 an older engine refuses the write as an unknown path and reads no row.
 
-`"document.media@1"` (extensions ADR 347, engine ADR 1027) is the media
+`"document.media@1"` (extensions ADR 345, amendment 1, engine ADR 1027) is the media
 door. A movie or sound frame is a rectangle whose picture is its poster and
 whose `frameMedia` (a `MediaItem`: kind, a part or link source, trim, fades,
 play on click or automatically, loop, volume, hide while not playing) names

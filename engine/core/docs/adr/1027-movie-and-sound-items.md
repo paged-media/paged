@@ -7,7 +7,7 @@
   `paged-introspect` (the `frameMedia` row); `paged-canvas` (the rectangle's property read, the
   media folder's write rule in `set_paged_part_as`, `export_losses.rs`); `paged-store`
   (`media_part_path`, `package::wrap_document_with_parts`); `idml-import` and `idml-export`
-  (the label). The slide side is slide ADR 718, the contract extensions ADR 347.
+  (the label). The slide side is slide ADR 718, the contract extensions ADR 345, amendment 1.
 
 ## Context
 
@@ -48,7 +48,7 @@ shares the part.
 there (a movie inserted by one module plays in another's presentation), none may change one
 (`set_paged_part_as` refuses other bytes for a path that is held; the same bytes are a no-op).
 A part is named by its content: `paged_store::media_part_path` (BLAKE3, as the model's image
-blobs are) for the Rust writers, the SHA-256 of the media door (extensions ADR 347) in the
+blobs are) for the Rust writers, the SHA-256 of the media door (extensions ADR 345, amendment 1) in the
 browser. `package::wrap_document_with_parts` lets an importer write the parts into the
 package it builds.
 
@@ -65,7 +65,7 @@ from InDesign. A paged movie is written as the picture frame of its poster, with
 JSON in a `paged:media` label the import reads back onto the frame; `idml_export_losses` names
 each one (InDesign shows the poster; a part medium travels only in a `.paged` file).
 
-**Playing is the host's.** A presentation reads the medium (extensions ADR 347) and plays it in
+**Playing is the host's.** A presentation reads the medium (extensions ADR 345, amendment 1) and plays it in
 its own media element over the frame.
 
 ## Consequences

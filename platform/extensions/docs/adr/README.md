@@ -65,9 +65,8 @@ and each one names the plugins that follow it and those that do not.
 | [342](342-a-story-the-document-does-not-hold.md) | A story the document does not hold, laid out and drawn by the engine | Accepted 2026-10-27 |
 | [343](343-the-data-door.md) | The data door: one bundle serves the document's data, any bundle reads, writes and binds it | Accepted 2026-10-24 |
 | [344](344-the-actions-door.md) | The actions door: named pure steps, registered by any bundle, run and cached by any | Accepted 2026-10-24 |
-| [345](345-presentations-and-module-views.md) | Presentations and module views: a bundle's surface on the screen, a second window, in place of the canvas | Accepted 2026-10-25 |
+| [345](345-presentations-and-module-views.md) | Presentations and module views: a bundle's surface on the screen, a second window, in place of the canvas | Accepted 2026-10-25; amended 2026-10-30 (the media door, C6) |
 | [346](346-page-layers.md) | A page as layers: the background and each item alone, at one scale | Accepted 2026-10-25; amended 2026-10-28 (paragraph layers) |
-| [347](347-the-media-door.md) | The media door: a movie or sound frame's bytes or URL, and media kept in the document | Accepted 2026-10-30 |
 | [348](348-editing-doors.md) | The editing doors: control-bar groups, scoped keys, status items, the text selection | Accepted 2026-10-24 |
 | [349](349-review-and-structure-doors.md) | The structure doors: headers, footers and notes edited in place (C6) | Accepted 2026-10-28 |
 
