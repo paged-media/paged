@@ -98,12 +98,23 @@ fn raster_err(format: &'static str, e: paged_raster::Error) -> CodecError {
 /// The format the adapters decode into: sRGB-encoded (or device inks),
 /// straight alpha. Only `channels` and `depth` vary.
 pub(crate) const fn decoded_format(channels: ChannelLayout, depth: SampleDepth) -> PixelFormat {
+    // 32-bit float is linear light (image ADR 483); the integer depths
+    // are sRGB-encoded.
+    let float = matches!(depth, SampleDepth::F32);
     PixelFormat {
         channels,
         depth,
         alpha: AlphaMode::Straight,
-        transfer: Transfer::Gamma(TransferCurve::Srgb),
-        space: ColorSpaceRef::Named(NamedSpace::Srgb),
+        transfer: if float {
+            Transfer::Linear
+        } else {
+            Transfer::Gamma(TransferCurve::Srgb)
+        },
+        space: ColorSpaceRef::Named(if float {
+            NamedSpace::LinearSrgb
+        } else {
+            NamedSpace::Srgb
+        }),
     }
 }
 
@@ -242,7 +253,12 @@ fn to_layout(img: RasterImage, name: &'static str) -> Result<Decoded> {
     let alpha = img.alpha != Alpha::None;
     let premul = img.alpha == Alpha::Associated;
     let source_bits = file.bits_per_sample;
-    let via_rgba8 = matches!(img.model, ColorModel::Lab) || matches!(img.data, Samples::F32(_));
+    // Floats in RGB or grey are handed over as 32-bit float, linear light
+    // (image ADR 483); Lab, and floats in another model, through RGBA8.
+    let float = matches!(img.data, Samples::F32(_))
+        && matches!(img.model, ColorModel::Rgb | ColorModel::Gray);
+    let via_rgba8 =
+        matches!(img.model, ColorModel::Lab) || (matches!(img.data, Samples::F32(_)) && !float);
     let (channels, depth, pixels) = if via_rgba8 {
         let rgba = paged_raster::to_rgba8(&img, &paged_raster::PagedColour::default())
             .map_err(|e| raster_err(name, e))?;
@@ -294,7 +310,24 @@ fn to_layout(img: RasterImage, name: &'static str) -> Result<Decoded> {
                 let bytes = v.iter().flat_map(|s| s.to_ne_bytes()).collect();
                 (layout, SampleDepth::U16, bytes)
             }
-            Samples::F32(_) => unreachable!("floats take the RGBA8 path"),
+            Samples::F32(v) => {
+                // Straight RGBA floats, whatever the source's layout.
+                let k = ch;
+                let mut out = Vec::with_capacity(n * 16);
+                for p in v.chunks_exact(k) {
+                    let (rgb, a) = match (img.model, alpha) {
+                        (ColorModel::Gray, false) => ([p[0]; 3], 1.0),
+                        (ColorModel::Gray, true) => ([p[0]; 3], p[1]),
+                        (_, false) => ([p[0], p[1], p[2]], 1.0),
+                        (_, true) => ([p[0], p[1], p[2]], p[3]),
+                    };
+                    let un = |c: f32| if premul && a > 0.0 { c / a } else { c };
+                    for c in [un(rgb[0]), un(rgb[1]), un(rgb[2]), a.clamp(0.0, 1.0)] {
+                        out.extend_from_slice(&c.to_ne_bytes());
+                    }
+                }
+                (ChannelLayout::Rgba, SampleDepth::F32, out)
+            }
         }
     };
     let format = decoded_format(channels, depth);

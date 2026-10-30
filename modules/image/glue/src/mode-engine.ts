@@ -1,6 +1,6 @@
-// The engine doors of IMAGE ▸ MODE (image ADR 479, WP5.13): the
-// document's depth (8 or 16 bits per channel) and colour mode (Grayscale,
-// RGB, CMYK, Lab), the 16-bit hand-off of the decode worker, and the
+// The engine doors of IMAGE ▸ MODE (image ADRs 479, 483, WP5.13): the
+// document's depth (8, 16 or 32 bits per channel) and colour mode
+// (Grayscale, RGB, CMYK, Lab, Indexed, Multichannel; Duotone from a file), the 16-bit hand-off of the decode worker, and the
 // Proof Colors / Gamut Warning display transform. Kept beside `engine.ts`
 // (which spreads `modeEngine` into the engine it wraps), like the masking
 // doors.
@@ -8,8 +8,18 @@
 // A depth or mode change over a bound layer stack is ONE undo step on the
 // image's undo list, engine-side.
 
-/** A document colour mode, as the engine names it. */
-export type ColorModeName = "rgb" | "gray" | "cmyk" | "lab";
+/** A document colour mode, as the engine names it. Indexed and
+ *  Multichannel are single-image modes (image ADR 483); a Duotone document
+ *  only opens from its file. */
+export type ColorModeName =
+  "rgb" | "gray" | "cmyk" | "lab" | "indexed" | "multichannel" | "duotone";
+
+/** Bits per channel a document holds (32 is float, linear light). */
+export type ChannelBits = 8 | 16 | 32;
+
+/** An Indexed Color palette: the image's own colours (at most 256), the
+ *  216 Web colours, or an adaptive one of `colours` (median cut). */
+export type IndexedPalette = "exact" | "web" | "adaptive";
 
 /** What Proof Colors simulates: nothing, Gray Gamma 2.2, or a CMYK press
  *  through a profile. */
@@ -20,6 +30,11 @@ export interface ModeWasm {
   image_samples16(handle: number): Uint16Array;
   image_bits(handle: number): number;
   image_set_bits(handle: number, bits: number): Promise<boolean>;
+  image_set_indexed(
+    handle: number,
+    palette: string,
+    colours: number,
+  ): Promise<boolean>;
   image_mode(): string;
   image_set_mode(
     handle: number,
@@ -38,12 +53,20 @@ export interface ModeEngine {
   /** An engine-held image's samples at 16 bits (an 8-bit one widened
    *  exactly) — the decode worker's hand-off of a 16-bit source. */
   imageSamples16(handle: number): Uint16Array;
-  /** Bits per channel the image holds: 8 or 16. */
-  imageBits(handle: number): 8 | 16;
-  /** Image ▸ Mode ▸ 8/16 Bits/Channel. With a stack bound to `handle`
-   *  every layer converts as one undo step. Resolves to whether anything
-   *  changed. */
-  imageSetBits(handle: number, bits: 8 | 16): Promise<boolean>;
+  /** Bits per channel the image holds: 8, 16 or 32 (float). */
+  imageBits(handle: number): ChannelBits;
+  /** Image ▸ Mode ▸ 8/16/32 Bits/Channel. With a stack bound to `handle`
+   *  every layer converts as one undo step (32 bits: linear light).
+   *  Resolves to whether anything changed. */
+  imageSetBits(handle: number, bits: ChannelBits): Promise<boolean>;
+  /** Image ▸ Mode ▸ Indexed Color… over the stack bound to `handle`: the
+   *  image flattened and every pixel the nearest palette colour, at 8
+   *  bits, one undo step (image ADR 483). */
+  imageSetIndexed(
+    handle: number,
+    palette: IndexedPalette,
+    colours: number,
+  ): Promise<boolean>;
   /** The bound document's colour mode (`rgb` with no stack open). */
   imageMode(): ColorModeName;
   /** Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color over
@@ -67,7 +90,15 @@ export interface ModeEngine {
   ): void;
 }
 
-const MODES: readonly ColorModeName[] = ["rgb", "gray", "cmyk", "lab"];
+const MODES: readonly ColorModeName[] = [
+  "rgb",
+  "gray",
+  "cmyk",
+  "lab",
+  "indexed",
+  "multichannel",
+  "duotone",
+];
 
 export function isColorModeName(v: string): v is ColorModeName {
   return (MODES as readonly string[]).includes(v);
@@ -77,8 +108,13 @@ export function modeEngine(wasm: ModeWasm): ModeEngine {
   const bytes = (p?: Uint8Array | null) => p ?? new Uint8Array(0);
   return {
     imageSamples16: (handle) => wasm.image_samples16(handle),
-    imageBits: (handle) => (wasm.image_bits(handle) === 16 ? 16 : 8),
+    imageBits: (handle) => {
+      const b = wasm.image_bits(handle);
+      return b === 32 ? 32 : b === 16 ? 16 : 8;
+    },
     imageSetBits: (handle, bits) => wasm.image_set_bits(handle, bits),
+    imageSetIndexed: (handle, palette, colours) =>
+      wasm.image_set_indexed(handle, palette, colours),
     imageMode() {
       const m = wasm.image_mode();
       return isColorModeName(m) ? m : "rgb";

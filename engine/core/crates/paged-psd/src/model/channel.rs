@@ -502,7 +502,10 @@ mod tests {
 
     #[test]
     fn image_psd_thirty_two_bit_channels_round_trip_through_the_byte_plane_prediction() {
-        let samples: Vec<f32> = (0..15).map(|i| i as f32 * 0.37 - 1.5).chain([3.25e3]).collect();
+        let samples: Vec<f32> = (0..15)
+            .map(|i| i as f32 * 0.37 - 1.5)
+            .chain([3.25e3])
+            .collect();
         let ch = ChannelData::encode_zip_predicted32(&samples, 4, 4).expect("encode");
         assert_eq!(ch.compression, Compression::ZipPrediction);
         assert_eq!(ch.decode_samples32(4, 4).expect("decode"), samples);
@@ -512,7 +515,10 @@ mod tests {
             bytes: [0.5f32, 2.0].iter().flat_map(|v| v.to_be_bytes()).collect(),
         };
         assert_eq!(raw.decode_samples32(1, 2).expect("raw"), vec![0.5, 2.0]);
-        assert_eq!(raw.decode(Container::Psd, 1, 2, 32).expect("8-bit view"), vec![128, 255]);
+        assert_eq!(
+            raw.decode(Container::Psd, 1, 2, 32).expect("8-bit view"),
+            vec![128, 255]
+        );
     }
 
     /// 16-bit RAW reduces by the HIGH byte — the same convention the

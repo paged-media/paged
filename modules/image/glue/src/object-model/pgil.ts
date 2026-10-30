@@ -9,13 +9,15 @@
 // version 7 is written (fill layers, typed adjustment layers, the
 // Photoshop-parity properties and layer comps since 4, the styles' state
 // since 5, the colour mode since 6, image ADR 479; a smart object's
-// placement, file, filters and record since 7, image ADR 482). `writePgil(readPgil(m, b))` reproduces the
+// placement, file, filters and record since 7, image ADR 482; a
+// 32-bit float layer (depth 32) and the single-image modes' table since 9,
+// image ADR 483). `writePgil(readPgil(m, b))` reproduces the
 // engine's own export byte for byte, including the slot order — the
 // object-model spec proves that against the real wasm, so a drift in
 // either codec fails there rather than in a document.
 
 const MAGIC = [0x50, 0x47, 0x49, 0x4c]; // "PGIL"
-export const PGIL_VERSION = 8;
+export const PGIL_VERSION = 9;
 
 export interface PgilRect {
   x: number;
@@ -94,7 +96,7 @@ export interface PgilCompEntry {
   id: number;
   visible: boolean;
   pixels: Uint8Array | null;
-  depth: 8 | 16;
+  depth: 8 | 16 | 32;
   rect: PgilRect | null;
   appearance: {
     opacity: number;
@@ -179,7 +181,7 @@ export interface PgilLayer {
   group: number | null;
   maskEnabled: boolean;
   kind: PgilLayerKind;
-  depth: 8 | 16;
+  depth: 8 | 16 | 32;
   /** The layer's pixels: canvas-sized, or `rect`-sized when bounded. */
   pixels: Uint8Array;
   rect: PgilRect | null;
@@ -212,7 +214,7 @@ export interface PgilStack {
    *  in its ext block's tail, as the engine's `lfx2` bytes). */
   styles: PgilStyles;
   /** Version 6 (image ADR 479): the document's colour mode — 0 RGB,
-   *  1 Grayscale, 2 CMYK, 3 Lab — and the CMYK profile it converts
+   *  1 Grayscale, 2 CMYK, 3 Lab, 4 Indexed, 5 Multichannel, 6 Duotone — and the CMYK profile it converts
    *  through (`null`: none). */
   mode: PgilMode;
 }
@@ -220,9 +222,17 @@ export interface PgilStack {
 export interface PgilMode {
   color: number;
   profile: Uint8Array | null;
+  /** Version 9 (image ADR 483): an Indexed document's colour table, a
+   *  Multichannel document's channels or a Duotone document's
+   *  specification, as the engine encodes it (`null`: none). */
+  table: Uint8Array | null;
 }
 
-export const DEFAULT_MODE: Readonly<PgilMode> = { color: 0, profile: null };
+export const DEFAULT_MODE: Readonly<PgilMode> = {
+  color: 0,
+  profile: null,
+  table: null,
+};
 
 /** The document's Global Light and the patterns its styles draw. */
 export interface PgilStyles {
@@ -475,7 +485,7 @@ export function readPgil(
     const maskEnabled = r.u8() !== 0;
     const kindCode = r.u8();
     const depth = r.u8();
-    if (depth !== 8 && depth !== 16)
+    if (depth !== 8 && depth !== 16 && depth !== 32)
       throw new Error(`layer manifest: depth ${depth}`);
     const pixels = buf(r.u32());
     let rect: PgilRect | null = null;
@@ -603,7 +613,8 @@ export function readPgil(
         const lid = r.u32();
         const visible = r.u8() !== 0;
         const slot = opt(r.i64());
-        const depth = r.u8() === 16 ? 16 : 8;
+        const d = r.u8();
+        const depth = d === 32 ? 32 : d === 16 ? 16 : 8;
         const x = r.i32(),
           y = r.i32(),
           w = r.u32(),
@@ -655,6 +666,10 @@ export function readPgil(
     mode.color = r.u8();
     const at = r.i64();
     mode.profile = at >= 0 ? buf(at) : null;
+    if (version >= 9) {
+      const t = r.i64();
+      mode.table = t >= 0 ? buf(t) : null;
+    }
   }
   return {
     version,
@@ -670,7 +685,7 @@ export function readPgil(
   };
 }
 
-/** Encode a stack as the engine's version-8 export: the manifest first,
+/** Encode a stack as the engine's version-9 export: the manifest first,
  *  then the buffers, slots assigned in the engine's order (group masks,
  *  then per layer: pixels, mask, smart source). */
 export function writePgil(stack: PgilStack): Uint8Array[] {
@@ -841,6 +856,7 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
   }
   w.u8(stack.mode.color);
   w.i64(stack.mode.profile ? slot(stack.mode.profile) : -1);
+  w.i64(stack.mode.table ? slot(stack.mode.table) : -1);
   return [w.done(), ...buffers];
 }
 

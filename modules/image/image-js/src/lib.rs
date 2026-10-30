@@ -362,6 +362,7 @@ mod wasm {
             D::CmykConverted => 3,
             D::CmykUncalibrated => 4,
             D::HdrClipped => 5,
+            D::Float32 => 6,
         }
     }
 
@@ -1916,12 +1917,13 @@ mod wasm {
                 // document's RGB or grey, the stack flattened.
                 let changed = if mode == crate::color_mode::ColorMode::Multichannel {
                     let from = doc.stack.mode().mode;
-                    let m = crate::color_mode::DocMode::multichannel_from(from).ok_or_else(|| {
-                        JsValue::from_str(&format!(
-                            "Multichannel is made from an RGB or Grayscale document, not {}",
-                            from.label()
-                        ))
-                    })?;
+                    let m =
+                        crate::color_mode::DocMode::multichannel_from(from).ok_or_else(|| {
+                            JsValue::from_str(&format!(
+                                "Multichannel is made from an RGB or Grayscale document, not {}",
+                                from.label()
+                            ))
+                        })?;
                     doc.stack
                         .convert_flat(ctx.as_deref(), m)
                         .await
@@ -1952,7 +1954,11 @@ mod wasm {
     /// (216), or `adaptive` (`colours` of them, median cut) — at 8 bits,
     /// one undo step. Answers whether anything changed.
     #[wasm_bindgen]
-    pub async fn image_set_indexed(handle: u32, palette: &str, colours: u32) -> Result<bool, JsValue> {
+    pub async fn image_set_indexed(
+        handle: u32,
+        palette: &str,
+        colours: u32,
+    ) -> Result<bool, JsValue> {
         if LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) != Some(handle) {
             return Err(JsValue::from_str(
                 "no layer stack open on this image (layers_open first)",
@@ -5144,7 +5150,8 @@ mod wasm {
             m.borrow().get(&psd_handle).and_then(|f| {
                 matches!(
                     f.header.color_mode,
-                    image_psd::model::ColorMode::Indexed | image_psd::model::ColorMode::Multichannel
+                    image_psd::model::ColorMode::Indexed
+                        | image_psd::model::ColorMode::Multichannel
                 )
                 .then(|| crate::color_mode::DocMode::of_psd(f))
                 .flatten()
@@ -8304,11 +8311,7 @@ mod wasm {
                 .as_ref()
                 .ok_or_else(|| JsValue::from_str("no layer stack is open"))?;
             let composite = IMAGES
-                .with(|m| {
-                    m.borrow()
-                        .get(&doc.handle)
-                        .map(|i| i.rgba.clone())
-                })
+                .with(|m| m.borrow().get(&doc.handle).map(|i| i.rgba.clone()))
                 .ok_or_else(|| JsValue::from_str("the layer stack's image is gone"))?;
             PSDS.with(|m| {
                 let mut map = m.borrow_mut();

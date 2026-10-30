@@ -324,7 +324,11 @@ fn converted(
         )
     });
     stack
-        .set_mode(DocMode { mode, cmyk_profile, table: None })
+        .set_mode(DocMode {
+            mode,
+            cmyk_profile,
+            table: None,
+        })
         .expect("mode");
     // The background record goes with the conversion too.
     (file, stack)

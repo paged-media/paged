@@ -784,7 +784,11 @@ fn decode_psd_samples(file: &PsdFile) -> Result<DecodedImage, IngestError> {
         let f: Vec<f32> = (0..n)
             .flat_map(|i| {
                 let s = &c.samples[i * k..i * k + k];
-                let (r, g, b) = if k >= 3 { (s[0], s[1], s[2]) } else { (s[0], s[0], s[0]) };
+                let (r, g, b) = if k >= 3 {
+                    (s[0], s[1], s[2])
+                } else {
+                    (s[0], s[0], s[0])
+                };
                 [r, g, b, alpha(i)]
             })
             .collect();
@@ -827,7 +831,12 @@ fn decode_psd_samples(file: &PsdFile) -> Result<DecodedImage, IngestError> {
                     Some(t) if (c.samples[i] * 255.0).round() as usize == t => 0.0,
                     _ => alpha(i),
                 };
-                [q16(rgb[i * 3]), q16(rgb[i * 3 + 1]), q16(rgb[i * 3 + 2]), q16(a)]
+                [
+                    q16(rgb[i * 3]),
+                    q16(rgb[i * 3 + 1]),
+                    q16(rgb[i * 3 + 2]),
+                    q16(a),
+                ]
             })
             .collect();
         let px = crate::pixels::Pixels::from_rgba16(&s);
@@ -837,11 +846,16 @@ fn decode_psd_samples(file: &PsdFile) -> Result<DecodedImage, IngestError> {
             px.at_depth(SampleDepth::U8)
         }
     };
+    let display = if c.depth == 32 {
+        crate::display::DisplayTreatment::Float32
+    } else {
+        crate::display::DisplayTreatment::AssumedSrgb
+    };
     Ok(DecodedImage {
         width: c.width,
         height: c.height,
         rgba,
-        display: crate::display::DisplayTreatment::AssumedSrgb,
+        display,
         depth_reduced: false,
     })
 }
@@ -941,6 +955,30 @@ fn decode_source(mut source: RasterSource<MemoryByteSource>) -> Result<DecodedIm
         .map_err(|e| IngestError::Decode(e.to_string()))?;
 
     let cmyk = matches!(channels, ChannelLayout::Cmyk | ChannelLayout::Cmyka);
+    // 32-bit float (OpenEXR, Radiance HDR): linear light, held as it is
+    // (image ADR 483).
+    if info.format.depth == SampleDepth::F32 && channels == ChannelLayout::Rgba {
+        let f: Vec<f32> = buf
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_ne_bytes(*b))
+            .collect();
+        let px = crate::pixels::Pixels::from_rgba32f(&f);
+        let (px, w, h) = if orientation == Orientation::TopLeft {
+            (px, w, h)
+        } else {
+            let (b, w2, h2) = apply_orientation(px.to_rgba8().into_owned(), w, h, orientation);
+            (crate::pixels::Pixels::from_rgba8(b.into()), w2, h2)
+        };
+        return Ok(DecodedImage {
+            width: w,
+            height: h,
+            display: crate::display::DisplayTreatment::Float32,
+            depth_reduced: depth_reduced || !px.is_float(),
+            rgba: px,
+        });
+    }
     if sixteen && !cmyk {
         // Straight through at 16 bits: `buf` holds native-endian u16s,
         // which is what `Pixels` stores at `U16`; Gray widens to RGBA16.
@@ -1618,11 +1656,9 @@ pub(crate) async fn adjust_rgba8_uncached(
             selection,
         )
         .await?;
-        return Ok(
-            crate::pixels::Pixels::from_f16(&out, image.rgba.depth())
-                .to_rgba8()
-                .into_owned(),
-        );
+        return Ok(crate::pixels::Pixels::from_f16(&out, image.rgba.depth())
+            .to_rgba8()
+            .into_owned());
     }
     // The GPU kernel chain (skipped wholesale when only a curve is set).
     let mut pixels = if params.has_gpu_stage() {

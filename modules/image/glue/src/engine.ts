@@ -546,7 +546,9 @@ export type DisplayTreatment =
   | "profile-rejected"
   | "cmyk-converted"
   | "cmyk-uncalibrated"
-  | "hdr-clipped";
+  | "hdr-clipped"
+  /** A float source held as 32-bit float, linear light (image ADR 483). */
+  | "float-32";
 
 /** The DecodedInfo every kernel-apply returns. One place, because six
  *  hand-written copies of the same field list is six chances to forget
@@ -589,6 +591,8 @@ export function displayTreatmentOf(code: number | undefined): DisplayTreatment {
       return "cmyk-uncalibrated";
     case 5:
       return "hdr-clipped";
+    case 6:
+      return "float-32";
     default:
       return "assumed-srgb";
   }
@@ -601,6 +605,7 @@ const TREATMENT = defineMessages("image.colourTreatment", {
   cmykConverted: "CMYK, converted to sRGB",
   cmykUncalibrated: "CMYK, converted to sRGB without a profile",
   hdrClipped: "HDR, clipped to sRGB (no tone mapping)",
+  float32: "32-bit float, linear light (shown at exposure 0)",
   assumed: "sRGB assumed",
 });
 
@@ -616,6 +621,8 @@ export function displayTreatmentLabel(treatment: DisplayTreatment): string {
       return t(TREATMENT.cmykUncalibrated);
     case "hdr-clipped":
       return t(TREATMENT.hdrClipped);
+    case "float-32":
+      return t(TREATMENT.float32);
     default:
       return t(TREATMENT.assumed);
   }

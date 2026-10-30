@@ -196,7 +196,11 @@ fn lab_and_grayscale_documents_blend_in_their_own_numbers_as_photoshop_does__fea
             "{id}: a Lab document's Hue … Luminosity layers fold in RGB"
         );
         let stack = open_keeping(&file, true, &keep);
-        assert_eq!(stack.ink_fold_declines(), None, "{id}: every blend is separable here");
+        assert_eq!(
+            stack.ink_fold_declines(),
+            None,
+            "{id}: every blend is separable here"
+        );
         let ours = rgb_of(&pollster::block_on(stack.composite_px(ctx, None)).expect("fold"));
         let rgb = rgb_of(
             &pollster::block_on(open_keeping(&file, false, &keep).composite_px(ctx, None))
@@ -228,7 +232,12 @@ fn lab_and_grayscale_documents_blend_in_their_own_numbers_as_photoshop_does__fea
         }
     }
     println!("{}", report.join("\n"));
-    assert!(problems.is_empty(), "{}\n{}", problems.join("\n"), report.join("\n"));
+    assert!(
+        problems.is_empty(),
+        "{}\n{}",
+        problems.join("\n"),
+        report.join("\n")
+    );
 }
 
 #[test]
@@ -256,13 +265,21 @@ fn a_float_document_folds_linear_light_as_photoshop_does__feat__image_io_depth_c
             }
         }
         report.push(format!("{id:<12} max |linear| {worst:.4}"));
-        let stated = FLOAT_STATED.iter().find(|t| t.0 == *id).map_or(0.002, |t| t.1);
+        let stated = FLOAT_STATED
+            .iter()
+            .find(|t| t.0 == *id)
+            .map_or(0.002, |t| t.1);
         if worst > stated {
             problems.push(format!("{id}: {worst:.4}, stated {stated}"));
         }
     }
     println!("{}", report.join("\n"));
-    assert!(problems.is_empty(), "{}\n{}", problems.join("\n"), report.join("\n"));
+    assert!(
+        problems.is_empty(),
+        "{}\n{}",
+        problems.join("\n"),
+        report.join("\n")
+    );
 }
 
 /// The 32-bit tiles that are not within 0.002 of Photoshop's linear
@@ -284,11 +301,16 @@ const FLOAT_STATED: &[(&str, f32)] = &[
 #[test]
 fn eight_and_sixteen_to_32_bits_is_photoshops_linearisation__feat__image_io_depth_color_modes() {
     let sweep = png16("stimuli/colour-sweep.png");
-    let px16: Vec<u16> = sweep.iter().flat_map(|p| [p[0], p[1], p[2], u16::MAX]).collect();
+    let px16: Vec<u16> = sweep
+        .iter()
+        .flat_map(|p| [p[0], p[1], p[2], u16::MAX])
+        .collect();
     // 16 → 32: the sRGB decode of every sample.
     let file = psd("float-from-16");
     let c = file.composite_samples().expect("merged");
-    let lin = Pixels::from_rgba16(&px16).at_depth(SampleDepth::F32).to_f32_linear();
+    let lin = Pixels::from_rgba16(&px16)
+        .at_depth(SampleDepth::F32)
+        .to_f32_linear();
     let mut worst = 0f32;
     for i in 0..sweep.len() {
         for ch in 0..3 {
@@ -315,7 +337,10 @@ fn eight_and_sixteen_to_32_bits_is_photoshops_linearisation__feat__image_io_dept
         }
     }
     println!("float-from-8: off a level {off_level:.4}, ours within {off_ours} ({differ} samples differ)");
-    assert!(off_level < 0.03, "float-from-8 is not a decoded level: {off_level}");
+    assert!(
+        off_level < 0.03,
+        "float-from-8 is not a decoded level: {off_level}"
+    );
     assert!(off_ours <= 1, "float-from-8: {off_ours} levels from ours");
 }
 
@@ -356,10 +381,18 @@ fn indexed_documents_decode_and_map_to_the_nearest_colour_as_photoshop_does__fea
         let ours = web[image_js::color_mode::nearest_index(&web, rgb)];
         if ours != theirs {
             differ += 1;
-            worst = worst.max((0..3).map(|k| (i32::from(ours[k]) - i32::from(theirs[k])).abs()).max().unwrap());
+            worst = worst.max(
+                (0..3)
+                    .map(|k| (i32::from(ours[k]) - i32::from(theirs[k])).abs())
+                    .max()
+                    .unwrap(),
+            );
         }
     }
-    println!("indexed-web: {differ} of {} pixels map elsewhere (worst {worst} levels)", sweep.len());
+    println!(
+        "indexed-web: {differ} of {} pixels map elsewhere (worst {worst} levels)",
+        sweep.len()
+    );
     assert_eq!(differ, 0, "every pixel takes Photoshop's colour");
     assert!(worst <= 51, "one Web step at most: {worst}");
     for id in ["indexed-web", "indexed-exact"] {
@@ -371,8 +404,8 @@ fn indexed_documents_decode_and_map_to_the_nearest_colour_as_photoshop_does__fea
         let render = png16(&format!("color-modes/{id}.png"));
         let mut worst = 0u16;
         for (i, r) in render.iter().enumerate() {
-            for k in 0..3 {
-                worst = worst.max(img.rgba.sample16(i, k).abs_diff(r[k]) / 257);
+            for (k, &v) in r.iter().enumerate() {
+                worst = worst.max(img.rgba.sample16(i, k).abs_diff(v) / 257);
             }
         }
         println!("{id}: decode vs Photoshop's render, max {worst} levels");
@@ -391,7 +424,12 @@ fn indexed_documents_decode_and_map_to_the_nearest_colour_as_photoshop_does__fea
 fn multichannel_channels_are_the_rgb_values__feat__image_io_depth_color_modes() {
     let file = psd("multichannel-8");
     let mode = image_js::color_mode::DocMode::of_psd(&file).expect("multichannel");
-    let spots = mode.table.as_ref().and_then(|t| t.spots()).expect("channels").to_vec();
+    let spots = mode
+        .table
+        .as_ref()
+        .and_then(|t| t.spots())
+        .expect("channels")
+        .to_vec();
     assert_eq!(spots.len(), 3);
     assert_eq!(
         spots.iter().map(|s| s.ink).collect::<Vec<_>>(),

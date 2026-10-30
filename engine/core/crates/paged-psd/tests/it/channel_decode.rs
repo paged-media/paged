@@ -284,7 +284,7 @@ fn image_psd_layer_channel_data_zip_prediction_32bit_reads_byte_planes() {
     let floats = [0.5f32, 1.0, -2.25, 3.0e-3, 7.5, 0.0];
     let mut deltaed = Vec::new();
     for row in floats.chunks(3) {
-        let mut planar = vec![0u8; 12];
+        let mut planar = [0u8; 12];
         for (x, v) in row.iter().enumerate() {
             for (b, byte) in v.to_be_bytes().iter().enumerate() {
                 planar[b * 3 + x] = *byte;

@@ -1288,7 +1288,7 @@ fn decode_mode_table(b: &[u8]) -> Result<crate::color_mode::ModeTable, IngestErr
             let n = usize::from(u16_at(3)?);
             let body = b.get(5..5 + n * 3).ok_or_else(bad)?;
             Ok(T::Palette {
-                colours: body.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect(),
+                colours: body.as_chunks::<3>().0.to_vec(),
                 transparent: u8::try_from(t).ok(),
             })
         }

@@ -370,12 +370,12 @@ impl PsdFile {
             });
         }
         let planes = decode_planes_f32(self)?;
-        let alpha = if self.layer_mask.transparency_in_merged && h.color_mode != ColorMode::Multichannel
-        {
-            planes.get(channels).cloned()
-        } else {
-            None
-        };
+        let alpha =
+            if self.layer_mask.transparency_in_merged && h.color_mode != ColorMode::Multichannel {
+                planes.get(channels).cloned()
+            } else {
+                None
+            };
         let n = (h.width as usize) * (h.height as usize);
         let mid = if h.depth == 16 {
             32768.0 / 65535.0

@@ -22,6 +22,7 @@ import {
 import { GALLERY_EFFECTS } from "../src/filters";
 import {
   ImageSizeDialog,
+  IndexedColorDialog,
   lengthToPx,
   pxToLength,
   RotateDialog,
@@ -245,6 +246,26 @@ describe("the Trim and Rotate dialogs", () => {
     fireEvent.click(q('[data-image-trim-by="bottom-right"]'));
     fireEvent.click(q("[data-image-trim-apply]"));
     expect(onTrim).toHaveBeenCalledWith("bottom-right");
+  });
+
+  it("Indexed Color hands over its palette; only Adaptive takes a colour count", () => {
+    const onApply = mock((_p: string, _n: number) => {});
+    const view = render(
+      <IndexedColorDialog busy={false} onApply={onApply} onCancel={() => {}} />,
+    );
+    const q = (sel: string) =>
+      view.container.querySelector(sel) as HTMLInputElement;
+    fireEvent.change(q("[data-image-indexed-colours]"), {
+      target: { value: "64" },
+    });
+    fireEvent.click(q("[data-image-indexed-apply]"));
+    expect(onApply).toHaveBeenLastCalledWith("adaptive", 64);
+    fireEvent.change(q("[data-image-indexed-palette]"), {
+      target: { value: "web" },
+    });
+    expect(q("[data-image-indexed-colours]").disabled).toBe(true);
+    fireEvent.click(q("[data-image-indexed-apply]"));
+    expect(onApply).toHaveBeenLastCalledWith("web", 64);
   });
 
   it("Rotate signs the angle by direction; without a GPU only quarter turns go", () => {

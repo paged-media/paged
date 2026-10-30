@@ -294,10 +294,13 @@
       "media.paged.image.command.freeTransform",
       "media.paged.image.command.modeBits8",
       "media.paged.image.command.modeBits16",
+      "media.paged.image.command.modeBits32",
       "media.paged.image.command.modeGray",
       "media.paged.image.command.modeRgb",
       "media.paged.image.command.modeCmyk",
       "media.paged.image.command.modeLab",
+      "media.paged.image.command.modeIndexed",
+      "media.paged.image.command.modeMultichannel",
       "media.paged.image.command.proofColors",
       "media.paged.image.command.gamutWarning",
       "media.paged.image.command.proofSetupCmyk",
@@ -2486,6 +2489,14 @@
           }
         },
         {
+          "id": "media.paged.image.command.modeBits32",
+          "title": "Mode: 32 bits per channel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.modeGray",
           "title": "Mode: greyscale (image)",
           "args": {
@@ -2512,6 +2523,22 @@
         {
           "id": "media.paged.image.command.modeLab",
           "title": "Mode: Lab colour (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeIndexed",
+          "title": "Mode: indexed colour… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeMultichannel",
+          "title": "Mode: multichannel (image)",
           "args": {
             "kind": "struct",
             "fields": {}

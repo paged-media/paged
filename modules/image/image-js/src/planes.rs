@@ -270,7 +270,9 @@ fn lab_ab_stored(v: f32, sixteen: bool) -> f32 {
 /// Straight RGB of a folded grey plane, at `depth`.
 pub fn rgb_of_gray_plane(t: &ModeTransform, p: &Pixels, depth: image_core::SampleDepth) -> Pixels {
     let n = p.pixel_count();
-    let g: Vec<f32> = (0..n).map(|i| f32::from(p.sample16(i, 0)) / 65535.0).collect();
+    let g: Vec<f32> = (0..n)
+        .map(|i| f32::from(p.sample16(i, 0)) / 65535.0)
+        .collect();
     let rgb = t.rgb_of(&g);
     finish_rgb(&rgb, p, depth)
 }

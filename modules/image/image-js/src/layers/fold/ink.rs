@@ -107,7 +107,9 @@ fn declines(steps: &[Step], space: PlaneSpace) -> Option<&'static str> {
 /// as Overlay does; Linear Burn and Linear Dodge add the two offsets from
 /// the middle (Linear Light over a source halved about the middle — `true`
 /// asks for that source); every other mode as it is.
-fn lab_chroma_blend(def: &'static image_kernels::KernelDef) -> (&'static image_kernels::KernelDef, bool) {
+fn lab_chroma_blend(
+    def: &'static image_kernels::KernelDef,
+) -> (&'static image_kernels::KernelDef, bool) {
     let k = |n: &str| crate::stroke::blend_kernel(n).expect("a compose kernel");
     match def.id {
         // Color takes the source's chroma (Luminosity keeps the

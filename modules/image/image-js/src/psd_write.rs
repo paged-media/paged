@@ -147,7 +147,7 @@ enum Kind {
     /// as its device values through the same transform (image ADR 481).
     Device(
         crate::color_mode::ColorMode,
-        crate::color_mode::ModeTransform,
+        Box<crate::color_mode::ModeTransform>,
     ),
 }
 
@@ -236,7 +236,7 @@ impl Store {
 
     fn device(mode: &crate::color_mode::DocMode) -> Result<Kind, IngestError> {
         match crate::color_mode::ModeTransform::new(mode)? {
-            Some(t) => Ok(Kind::Device(mode.mode, t)),
+            Some(t) => Ok(Kind::Device(mode.mode, Box::new(t))),
             // A CMYK mode without a profile holds every sRGB colour; its
             // inks are the plain formula's, as the file's own CMYK
             // without a profile writes them.
@@ -1221,10 +1221,9 @@ fn write_single_image(
         ));
     }
     let mode = stack.mode();
-    let table = mode
-        .table
-        .as_deref()
-        .ok_or_else(|| IngestError::Unsupported(format!("{} without its table", mode.mode.label())))?;
+    let table = mode.table.as_deref().ok_or_else(|| {
+        IngestError::Unsupported(format!("{} without its table", mode.mode.label()))
+    })?;
     let sixteen = mode.mode == M::Multichannel && stack.depth() == image_core::SampleDepth::U16;
     let rgba = composite.to_rgba8();
     let planes: Vec<Vec<u16>> = match (mode.mode, table) {
@@ -1301,7 +1300,9 @@ fn write_single_image(
                 .collect()
         }
     };
-    file.resources.blocks.retain(|b| b.id != ICC_PROFILE_ID && b.id != ICC_UNTAGGED_ID);
+    file.resources
+        .blocks
+        .retain(|b| b.id != ICC_PROFILE_ID && b.id != ICC_UNTAGGED_ID);
     file.header.color_mode = psd_mode(mode.mode);
     file.header.depth = if sixteen { 16 } else { 8 };
     file.header.channels = planes.len() as u16;

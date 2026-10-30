@@ -212,7 +212,9 @@ impl Pixels {
                 });
                 std::borrow::Cow::Owned(
                     (0..self.pixel_count() * 4)
-                        .map(|i| (encode_f32(self.f32_at(i / 4, i % 4), i % 4) * 255.0).round() as u8)
+                        .map(|i| {
+                            (encode_f32(self.f32_at(i / 4, i % 4), i % 4) * 255.0).round() as u8
+                        })
                         .collect(),
                 )
             }

@@ -839,13 +839,14 @@ impl PsdFile {
             // A 16-bit document's plates are held twice during the
             // import: their 8-bit view and their 16-bit samples; a 32-bit
             // one's, its byte view and its floats.
-            w * h * if float {
-                20
-            } else if sixteen_rgb || device16 {
-                12
-            } else {
-                4
-            }
+            w * h
+                * if float {
+                    20
+                } else if sixteen_rgb || device16 {
+                    12
+                } else {
+                    4
+                }
         };
         // Masks: a group's is canvas-extent, an adjustment's too (it says
         // where the adjustment applies); a pixel layer's is cut to its
@@ -1068,8 +1069,8 @@ impl PsdFile {
         // its own evidence, so a 16-bit RLE file still declines — but a
         // 16-bit RAW one imports its LAYERS instead of the whole file
         // falling back to a flattened composite.
-        let float_ok = h.depth == 32
-            && matches!(h.color_mode, ColorMode::Rgb | ColorMode::Grayscale);
+        let float_ok =
+            h.depth == 32 && matches!(h.color_mode, ColorMode::Rgb | ColorMode::Grayscale);
         if h.depth != 8 && h.depth != 16 && !float_ok {
             block(
                 "depth",
@@ -1741,11 +1742,7 @@ impl PsdFile {
 
     /// The record's rectangle clipped to the canvas, and the record's own
     /// size: what every bounded decode starts from.
-    fn layer_rect(
-        layer: &LayerRecord,
-        cw: u32,
-        ch: u32,
-    ) -> (paged_pixel::Region, u32, u32) {
+    fn layer_rect(layer: &LayerRecord, cw: u32, ch: u32) -> (paged_pixel::Region, u32, u32) {
         let lw = (layer.right - layer.left).max(0) as u32;
         let lh = (layer.bottom - layer.top).max(0) as u32;
         let x0 = i64::from(layer.left).clamp(0, i64::from(cw));
@@ -1863,7 +1860,14 @@ impl PsdFile {
             }
         }
         let px: Vec<f32> = (0..n)
-            .flat_map(|i| [planes[0][i], planes[1][i], planes[2][i], a[i].clamp(0.0, 1.0)])
+            .flat_map(|i| {
+                [
+                    planes[0][i],
+                    planes[1][i],
+                    planes[2][i],
+                    a[i].clamp(0.0, 1.0),
+                ]
+            })
             .collect();
         Ok((rect, Self::place(layer, rect, lw, lh, &px)))
     }

@@ -3605,7 +3605,9 @@ impl LayerStack {
     pub fn set_depth(&mut self, depth: image_core::SampleDepth) -> Result<bool, IngestError> {
         if !matches!(
             depth,
-            image_core::SampleDepth::U8 | image_core::SampleDepth::U16 | image_core::SampleDepth::F32
+            image_core::SampleDepth::U8
+                | image_core::SampleDepth::U16
+                | image_core::SampleDepth::F32
         ) {
             return Err(IngestError::Unsupported(format!(
                 "a layer stack holds 8, 16 or 32 bits per channel, not {depth:?}"

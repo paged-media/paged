@@ -408,15 +408,24 @@ fn composite_samples_reads_every_mode_in_its_own_numbers__feat__image_io_depth_c
     let c = f.composite_samples().expect("Lab");
     assert_eq!((c.channels, c.depth), (3, 8));
     for (got, want) in c.samples.iter().zip([l, a, b]) {
-        assert!((got * 255.0 - f32::from(want)).abs() < 1.5, "{got} vs {want}");
+        assert!(
+            (got * 255.0 - f32::from(want)).abs() < 1.5,
+            "{got} vs {want}"
+        );
     }
     assert!((c.alpha.unwrap()[0] - 128.0 / 255.0).abs() < 1e-6);
 
     // 32-bit RGB, RAW big-endian floats, values above 1 kept.
-    let raw: Vec<u8> = [2.5f32, 0.25, 0.0].iter().flat_map(|v| v.to_be_bytes()).collect();
+    let raw: Vec<u8> = [2.5f32, 0.25, 0.0]
+        .iter()
+        .flat_map(|v| v.to_be_bytes())
+        .collect();
     let mut f = psd_model(3, 1, 1, ColorMode::Rgb, false, 0, raw);
     f.header.depth = 32;
-    assert_eq!(f.composite_samples().expect("float").samples, vec![2.5, 0.25, 0.0]);
+    assert_eq!(
+        f.composite_samples().expect("float").samples,
+        vec![2.5, 0.25, 0.0]
+    );
 
     // Indexed: the index and the 768-byte table (reds, greens, blues).
     let mut f = psd_model(1, 1, 1, ColorMode::Indexed, false, 0, vec![2]);

@@ -127,3 +127,11 @@ blended square Photoshop blends in L*a*b* and the stack in RGB: 10 ΔE under a 7
 - [ADR 478](478-psd-write-depth.md) — the layered save, now in the document's mode and depth
 - [ADR 480](480-tiles-past-the-device-and-the-cpu-fold.md) — the tiled and CPU folds the ink
   planes go through
+
+
+## Amendment, 2026-10-30 (ADR 483)
+
+Of the deferred list: 32-bit float documents, Indexed and Multichannel, and the Lab and grey
+plane fold (with Photoshop's Lab chroma rule) are ADR 483, which also lifts the `cmyk-blend`
+gate for the separable modes the ink fold composites. Duotone conversion, and the ink fold for
+non-separable modes, adjustments and styles, remain open.

@@ -38,7 +38,10 @@ fn two_layers(bottom: [f32; 4], top: [f32; 4], blend: &str, opacity: f32) -> Lay
     let mut s = LayerStack::from_image_px(4, 2, solid(4, 2, bottom)).expect("open");
     assert_eq!(s.depth(), SampleDepth::F32);
     let at = s.add("Top");
-    assert!(s.layers()[at].rgba.depth() == SampleDepth::F32, "a new layer is float");
+    assert!(
+        s.layers()[at].rgba.depth() == SampleDepth::F32,
+        "a new layer is float"
+    );
     s.layer_at_mut(at).expect("top").rgba = solid(4, 2, top).into();
     s.set_blend(at, blend).expect("blend");
     s.set_opacity(at, opacity).expect("opacity");
@@ -73,16 +76,24 @@ fn a_float_document_blends_linear_light_and_keeps_values_above_one__feat__image_
     // The display view encodes and clips.
     let view = pollster::block_on(s.composite(None, None)).expect("view");
     assert_eq!(view[0], 255);
-    assert_eq!(view[1], (paged_color::math::linear_to_srgb(0.35) * 255.0).round() as u8);
+    assert_eq!(
+        view[1],
+        (paged_color::math::linear_to_srgb(0.35) * 255.0).round() as u8
+    );
 }
 
 #[test]
 fn mode_32_bits_is_one_undo_step_and_round_trips_8bit_pixels__feat__image_io_depth_color_modes() {
-    let src: Vec<u8> = (0..32u8).flat_map(|i| [i * 8, 255 - i * 8, i * 3, 255]).collect();
+    let src: Vec<u8> = (0..32u8)
+        .flat_map(|i| [i * 8, 255 - i * 8, i * 3, 255])
+        .collect();
     let mut s = LayerStack::from_image(8, 4, Arc::from(src.clone())).expect("open");
     assert!(s.set_depth(SampleDepth::F32).expect("to 32"));
     assert_eq!(s.depth(), SampleDepth::F32);
-    assert!(!s.set_depth(SampleDepth::F32).expect("again"), "same depth records nothing");
+    assert!(
+        !s.set_depth(SampleDepth::F32).expect("again"),
+        "same depth records nothing"
+    );
     let view = pollster::block_on(s.composite(None, None)).expect("view");
     assert_eq!(&view[..], &src[..], "8 → 32 changes no colour on screen");
     assert!(s.set_depth(SampleDepth::U8).expect("back to 8"));
@@ -110,8 +121,12 @@ fn an_8bit_brush_edit_on_a_float_layer_keeps_the_untouched_hdr_pixels__feat__ima
     let mut edit = s.active().rgba.canvas().to_rgba8().into_owned();
     let i = (w as usize + 2) * 4;
     edit[i..i + 4].copy_from_slice(&[255, 255, 255, 255]);
-    s.edit_active("Brush", Region::new(1, 0, 3, 3), Pixels::from_rgba8(Arc::from(edit)))
-        .expect("edit");
+    s.edit_active(
+        "Brush",
+        Region::new(1, 0, 3, 3),
+        Pixels::from_rgba8(Arc::from(edit)),
+    )
+    .expect("edit");
     let after = s.active().rgba.canvas().to_f32_linear();
     for p in 0..(w * h) as usize {
         let want: &[f32] = if p == w as usize + 2 {
@@ -119,7 +134,11 @@ fn an_8bit_brush_edit_on_a_float_layer_keeps_the_untouched_hdr_pixels__feat__ima
         } else {
             &[3.0, 0.5, 0.25, 1.0]
         };
-        assert!(close(&after[p * 4..p * 4 + 4], want, 1e-6), "pixel {p}: {:?}", &after[p * 4..p * 4 + 4]);
+        assert!(
+            close(&after[p * 4..p * 4 + 4], want, 1e-6),
+            "pixel {p}: {:?}",
+            &after[p * 4..p * 4 + 4]
+        );
     }
 }
 

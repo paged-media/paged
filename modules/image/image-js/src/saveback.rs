@@ -1035,11 +1035,9 @@ mod tests {
             assert!((alpha[i] - want[i * 4 + 3]).abs() < 1e-6);
         }
         let import = f.layer_plates_rgba8().expect("float layers import");
-        let back = crate::layers::LayerStack::from_psd_plates_with(
-            &import,
-            Some(&f.layer_mask.layers),
-        )
-        .expect("stack");
+        let back =
+            crate::layers::LayerStack::from_psd_plates_with(&import, Some(&f.layer_mask.layers))
+                .expect("stack");
         assert_eq!(back.depth(), image_core::SampleDepth::F32);
         for (a, b) in back.layers().iter().zip(s.layers()) {
             assert_eq!(
@@ -1063,8 +1061,10 @@ mod tests {
         use crate::color_mode::{web_palette, ColorMode as M, DocMode};
         let mut s = layered_stack();
         let steps = s.history().depth;
-        assert!(pollster::block_on(s.convert_flat(None, DocMode::indexed(web_palette())))
-            .expect("indexed"));
+        assert!(
+            pollster::block_on(s.convert_flat(None, DocMode::indexed(web_palette())))
+                .expect("indexed")
+        );
         assert_eq!(s.history().depth, steps + 1, "one undo step");
         assert_eq!(s.len(), 1, "flattened");
         assert_eq!(s.mode().mode, M::Indexed);
@@ -1078,7 +1078,7 @@ mod tests {
         };
         assert!(on_table(s.layers()[0].rgba.canvas()));
         // A brush colour lands as the nearest table colour.
-        let paint = std::sync::Arc::from(vec![17u8, 200, 99, 255].repeat(8).into_boxed_slice());
+        let paint = std::sync::Arc::from([17u8, 200, 99, 255].repeat(8).into_boxed_slice());
         s.edit_active(
             "Brush",
             image_core::Region::new(0, 0, 4, 2),
@@ -1108,14 +1108,24 @@ mod tests {
         let m = DocMode::multichannel_from(M::Rgb).expect("from RGB");
         assert!(pollster::block_on(s.convert_flat(None, m)).expect("multichannel"));
         let composite = pollster::block_on(s.composite_px(None, None)).expect("composite");
-        assert_eq!(&*composite.to_rgba8(), &*before, "its inks change no colour");
+        assert_eq!(
+            &*composite.to_rgba8(),
+            &*before,
+            "its inks change no colour"
+        );
         let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
         crate::psd_write::psd_write_stack_px(&mut f, &s, &composite).expect("written");
         let bytes = f.write().expect("bytes");
         let f = PsdFile::parse(&bytes).expect("reparse");
-        assert_eq!(f.header.color_mode, image_psd::model::ColorMode::Multichannel);
+        assert_eq!(
+            f.header.color_mode,
+            image_psd::model::ColorMode::Multichannel
+        );
         assert_eq!(f.header.channels, 3);
-        assert_eq!(crate::color_mode::spot_names(&f), ["Cyan", "Magenta", "Yellow"]);
+        assert_eq!(
+            crate::color_mode::spot_names(&f),
+            ["Cyan", "Magenta", "Yellow"]
+        );
         let img = crate::ingest::decode_rgba8(&bytes).expect("decodes");
         assert_eq!(&*img.rgba.to_rgba8(), &*before);
         assert_eq!(DocMode::of_psd(&f).expect("mode"), s.mode().clone());

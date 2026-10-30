@@ -238,7 +238,8 @@ pub fn adaptive_palette(rgba: &[u8], n: usize) -> Vec<[u8; 3]> {
             .max_by_key(|&(_, r)| r)
             .unwrap_or((0, 0))
     };
-    let mut boxes: Vec<std::ops::Range<usize>> = vec![0..px.len()];
+    let mut boxes: Vec<std::ops::Range<usize>> = Vec::with_capacity(n);
+    boxes.push(0..px.len());
     while boxes.len() < n {
         let Some((i, c)) = boxes
             .iter()
@@ -323,7 +324,10 @@ impl DocMode {
                 Some(ModeTable::Spots(
                     (0..k)
                         .map(|i| SpotChannel {
-                            name: names.get(i).cloned().unwrap_or_else(|| format!("Channel {}", i + 1)),
+                            name: names
+                                .get(i)
+                                .cloned()
+                                .unwrap_or_else(|| format!("Channel {}", i + 1)),
                             ink: inks
                                 .get(i)
                                 .map_or([0, 0, 0], |c| c.map(|v| (v * 255.0).round() as u8)),
@@ -447,7 +451,12 @@ impl ModeTransform {
         )
         .map_err(cms_err)?;
         let palette = (mode.mode == ColorMode::Indexed)
-            .then(|| mode.table.as_ref().and_then(|t| t.palette()).map(<[_]>::to_vec))
+            .then(|| {
+                mode.table
+                    .as_ref()
+                    .and_then(|t| t.palette())
+                    .map(<[_]>::to_vec)
+            })
             .flatten();
         Ok(Some(ModeTransform {
             to,
@@ -677,7 +686,12 @@ pub fn spot_inks(file: &image_psd::model::PsdFile) -> Vec<[f32; 3]> {
         let f = |v: u16| f32::from(v) / 65535.0;
         out.push(match space {
             0 => [f(a), f(b), f(c)],
-            2 => paged_color::math::naive_cmyk_to_srgb(1.0 - f(a), 1.0 - f(b), 1.0 - f(c), 1.0 - f(d)),
+            2 => paged_color::math::naive_cmyk_to_srgb(
+                1.0 - f(a),
+                1.0 - f(b),
+                1.0 - f(c),
+                1.0 - f(d),
+            ),
             8 => [1.0 - f32::from(a) / 10000.0; 3],
             7 => {
                 let l = f32::from(a) / 100.0;
