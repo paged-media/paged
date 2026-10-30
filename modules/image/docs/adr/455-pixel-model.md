@@ -98,3 +98,9 @@ its own depth, the fold uploads each plate at its depth and reads back at the do
 being refused, the decode worker hands a 16-bit source over as samples, and a 16-bit RGB PSD's
 layers import at 16 bits. The display view (`composite`, tiles, the scene image) stays 8-bit.
 
+
+## Amendment, 2026-10-29 (ADR 481)
+
+`paged-pixel`'s PixelFormat interface is at version 2 (`PIXEL_FORMAT_VERSION`): `ChannelLayout`
+names `Lab`, `LabA` and `Planes { colours, alpha }`, N colours carried as ⌈N/3⌉ RGBA planes
+sharing the alpha. A CMYK document's layers fold as two such planes of ink brightness.

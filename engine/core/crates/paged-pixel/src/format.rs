@@ -25,6 +25,13 @@
 /// Channel layout. Spec-verbatim set (§5.1); codec-native layouts that
 /// don't appear here (e.g. interleaved RGB without alpha) are described
 /// by the codec's `SourceInfo` and converted at the slice boundary.
+///
+/// AMENDMENT 1 ([`PIXEL_FORMAT_VERSION`] 2, image ADR 481): `Lab`/`LabA`
+/// (L*, a*, b* as a PSD stores them) and `Planes`, N colour channels and
+/// an optional alpha carried as ⌈N/3⌉ RGBA planes that share the alpha —
+/// three colours a plane — so every `vec4` kernel folds them unchanged.
+/// A CMYK layer of the image module's ink fold is `Planes { colours: 4,
+/// alpha: true }`: `(C', M', Y', α)` and `(K', K', K', α)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChannelLayout {
     Gray,
@@ -32,9 +39,18 @@ pub enum ChannelLayout {
     Rgba,
     Cmyk,
     Cmyka,
+    Lab,
+    LabA,
+    Planes { colours: u8, alpha: bool },
 }
 
+/// The version of this frozen interface: 1 at M0, 2 with amendment 1
+/// (image ADR 481: `Lab`, `LabA`, `Planes`). A consumer that matches on
+/// [`ChannelLayout`] exhaustively names the version it was written for.
+pub const PIXEL_FORMAT_VERSION: u32 = 2;
+
 impl ChannelLayout {
+    /// Interleaved channels (colours and alpha).
     pub const fn count(self) -> u8 {
         match self {
             ChannelLayout::Gray => 1,
@@ -42,7 +58,23 @@ impl ChannelLayout {
             ChannelLayout::Rgba => 4,
             ChannelLayout::Cmyk => 4,
             ChannelLayout::Cmyka => 5,
+            ChannelLayout::Lab => 3,
+            ChannelLayout::LabA => 4,
+            ChannelLayout::Planes { colours, alpha } => colours + alpha as u8,
         }
+    }
+
+    /// The RGBA planes a layout takes in the planar form: three colours a
+    /// plane, the alpha in every plane (one plane for every layout of
+    /// three colours or fewer).
+    pub const fn planes(self) -> u8 {
+        let colours = match self {
+            ChannelLayout::Gray | ChannelLayout::GrayA => 1,
+            ChannelLayout::Rgba | ChannelLayout::Lab | ChannelLayout::LabA => 3,
+            ChannelLayout::Cmyk | ChannelLayout::Cmyka => 4,
+            ChannelLayout::Planes { colours, .. } => colours,
+        };
+        colours.div_ceil(3)
     }
 }
 
@@ -151,6 +183,24 @@ mod tests {
         assert_eq!(PixelFormat::REF_WORKING.bytes_per_pixel(), 16);
         assert_eq!(PixelFormat::REF_WORKING.channels, ChannelLayout::Rgba);
         assert_ne!(PixelFormat::GPU_WORKING, PixelFormat::REF_WORKING);
+    }
+
+    #[test]
+    fn planes_hold_three_colours_each() {
+        assert_eq!(PIXEL_FORMAT_VERSION, 2);
+        assert_eq!(ChannelLayout::Rgba.planes(), 1);
+        assert_eq!(ChannelLayout::Cmyka.planes(), 2);
+        let cmyk = ChannelLayout::Planes {
+            colours: 4,
+            alpha: true,
+        };
+        assert_eq!((cmyk.count(), cmyk.planes()), (5, 2));
+        let multi = ChannelLayout::Planes {
+            colours: 7,
+            alpha: false,
+        };
+        assert_eq!((multi.count(), multi.planes()), (7, 3));
+        assert_eq!(ChannelLayout::LabA.count(), 4);
     }
 
     #[test]

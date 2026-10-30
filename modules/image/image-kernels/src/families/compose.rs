@@ -132,13 +132,13 @@ fn s_hard_light(cb: f32, cs: f32) -> f32 {
     return s_screen(cb, 2.0 * cs - 1.0);
 }
 fn s_color_dodge(cb: f32, cs: f32) -> f32 {
-    if (cb == 0.0) { return 0.0; }
-    if (cs == 1.0) { return 1.0; }
+    if (cb <= 0.0) { return 0.0; }
+    if (cs >= 1.0) { return 1.0; }
     return min(1.0, cb / (1.0 - cs));
 }
 fn s_color_burn(cb: f32, cs: f32) -> f32 {
-    if (cs == 0.0) { return 0.0; }
-    if (cb == 1.0) { return 1.0; }
+    if (cs <= 0.0) { return 0.0; }
+    if (cb >= 1.0) { return 1.0; }
     return 1.0 - min(1.0, (1.0 - cb) / cs);
 }
 fn s_soft_light(cb: f32, cs: f32) -> f32 {

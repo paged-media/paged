@@ -539,7 +539,7 @@ describe("the layer stack", () => {
     k.dispose();
   });
 
-  it("addLayerMaskHideAll adds a hide-all mask (its composite is GPU-only and says so); undo removes it", async () => {
+  it("addLayerMaskHideAll adds a hide-all mask (composited on the CPU without a GPU); undo removes it", async () => {
     covers("command:media.paged.image.command.addLayerMaskHideAll");
     await refusesWithoutImage(
       `${C}.addLayerMaskHideAll`,
@@ -548,10 +548,10 @@ describe("the layer stack", () => {
     const k = await ingested();
     await k.run(`${C}.addLayerMaskHideAll`);
     expect(k.session.state().layers.layers[0].hasMask).toBe(true);
-    // Hiding everything changes the composite, and compositing layers
-    // is a WGSL dispatch: the mask is in the stack, the frame is not
-    // recomposited, and the status names the GPU.
-    expect(k.session.state().status).toMatch(/GPU-only/);
+    // Hiding everything changes the composite; without a GPU the fold
+    // runs on the kernels' CPU twins (image ADR 480), so the frame is
+    // recomposited and the status says what happened.
+    expect(k.session.state().status).toMatch(/hide-all mask/);
     await k.run(`${C}.undo`);
     expect(k.session.state().layers.layers[0].hasMask).toBe(false);
     k.dispose();
