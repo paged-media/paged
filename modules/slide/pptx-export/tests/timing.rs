@@ -400,3 +400,55 @@ fn an_empty_timing_on_a_slide_without_one_keeps_the_decks_bytes() {
     let out = pptx_export::export(&bytes, &plan).unwrap();
     assert_eq!(out.bytes, bytes);
 }
+
+/// A motion path edited on the canvas (slide ADR 714, amendment
+/// 2026-10-30) is written as its `p:animMotion path`, with Path lock as
+/// `pathEditMode`, on that slide alone.
+#[test]
+fn an_edited_motion_path_is_written_with_its_lock() {
+    let bytes = fixture("animations");
+    let doc = imported(&bytes);
+    let page = (0..doc.spreads.len())
+        .find(|&p| {
+            let mut found = false;
+            if let Some(t) = label_timing(&doc, p) {
+                t.walk(&mut |n| found |= matches!(n, TimeNode::AnimMotion { .. }));
+            }
+            found
+        })
+        .expect("a slide with a motion path");
+    let mut t = label_timing(&doc, page).unwrap();
+    let new_path = "M 0 0 C 0.1 0 0.2 0.1 0.25 0.2 E";
+    let mut edited = 0;
+    t.walk_mut(&mut |n| {
+        if let TimeNode::AnimMotion {
+            path,
+            path_edit_mode,
+            pts_types,
+            ..
+        } = n
+        {
+            if edited == 0 {
+                *path = Some(new_path.into());
+                *path_edit_mode = Some("fixed".into());
+                *pts_types = None;
+                edited += 1;
+            }
+        }
+    });
+    assert_eq!(edited, 1);
+    let out = export_doc(&bytes, &doc, Some((page, t.clone())));
+    keep(&out.bytes, "timing-motion-path");
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    assert_eq!(changed_parts(&bytes, &out.bytes).len(), 1);
+    let part = changed_parts(&bytes, &out.bytes).remove(0);
+    let xml = String::from_utf8(parts(&out.bytes)[&part].clone()).unwrap();
+    assert!(
+        xml.contains(&format!(r#"path="{new_path}""#)) && xml.contains(r#"pathEditMode="fixed""#),
+        "{part}"
+    );
+    assert_eq!(
+        timing_of(&out.bytes, &part).unwrap(),
+        t.without_document_names()
+    );
+}
