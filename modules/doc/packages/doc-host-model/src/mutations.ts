@@ -8,8 +8,10 @@
 import type { Mutation } from "@paged-media/plugin-api";
 
 import type {
+  LoweredAnchor,
   LoweredBlock,
   LoweredCell,
+  LoweredCellLook,
   LoweredDoc,
   LoweredParagraph,
   LoweredStyle,
@@ -108,6 +110,8 @@ interface ImageAt {
   widthPt: number;
   heightPt: number;
   uri: string;
+  /** Doc ADR 614 — a float's anchored-object settings. */
+  anchor?: LoweredAnchor;
 }
 
 /** A hyperlink span: the `[start, end)` story offsets of a linked run + target. */
@@ -367,6 +371,7 @@ function poured(
         widthPt: img.widthPt,
         heightPt: img.heightPt,
         uri: img.uri,
+        ...(img.anchor ? { anchor: img.anchor } : {}),
       });
     }
     // Separator text for insertText, but NOT an offset advance (contiguous).
@@ -472,11 +477,11 @@ export function buildTextPour(
   for (const r of ranges.filter((r) => r.scope === "character")) {
     ops.push(applyStyleOp(storyId, r.start, r.end, r.style, "character"));
   }
-  for (const img of images) {
+  for (const [k, img] of images.entries()) {
     // `insertAnchoredFrame` is a v52 wire op (core protocol 52); it postdates the
     // published plugin-api Mutation union, so cast via `unknown`. The host applies
     // it once running the v52+ canvas-wasm; older hosts reject it (honest degrade).
-    ops.push({
+    const insert = {
       op: "insertAnchoredFrame",
       args: {
         storyId,
@@ -486,7 +491,8 @@ export function buildTextPour(
         imageUri: img.uri,
         ...(img.paragraph !== undefined ? { paragraph: img.paragraph } : {}),
       },
-    } as unknown as Mutation);
+    } as unknown as Mutation;
+    ops.push(img.anchor ? anchoredFloat(insert, img.anchor, k) : insert);
   }
   for (const link of links) {
     // `insertHyperlink` is a v53 wire op (core protocol 53) — like
@@ -516,6 +522,76 @@ export function buildTextPour(
   // (U+2028, Word's line break, is 3 bytes here and 1 char in `length`.)
   const byteLength = lead + body.bytes;
   return { mutations: ops, length, byteLength, carets, breaks };
+}
+
+/** Doc ADR 614 — a float as an anchored object: the frame and its
+ *  anchored-object settings, one batch whose handle names the frame. */
+export function anchoredFloat(
+  insert: Mutation,
+  anchor: LoweredAnchor,
+  n: number,
+): Mutation {
+  const handle = `docFloat${n}`;
+  const elementId = { kind: "rectangle", id: `$h:${handle}` };
+  const set = (path: string, value: unknown): Mutation =>
+    ({
+      op: "setElementProperty",
+      args: { elementId, path, value },
+    }) as unknown as Mutation;
+  const text = (value: string) => ({ type: "text", value });
+  const length = (value: number) => ({ type: "length", value });
+  return {
+    op: "batch",
+    args: {
+      ops: [
+        insert,
+        { op: "bindCreated", args: { handle } },
+        set("anchoredPosition", text(anchor.position)),
+        set("anchorPoint", text(anchor.anchorPoint)),
+        set("anchoredHorizontalReference", text(anchor.horizontalReference)),
+        set("anchoredHorizontalAlignment", text(anchor.horizontalAlignment)),
+        set("anchoredVerticalReference", text(anchor.verticalReference)),
+        set("anchoredVerticalAlignment", text(anchor.verticalAlignment)),
+        set("anchoredXOffset", length(anchor.xOffsetPt)),
+        set("anchoredYOffset", length(anchor.yOffsetPt)),
+      ],
+    },
+  } as unknown as Mutation;
+}
+
+/** Doc ADR 614 — a cell's Word borders and shading: its four edges'
+ *  weight and colour, and its fill. */
+function cellLookOps(
+  look: LoweredCellLook,
+  elementId: Record<string, unknown>,
+): Mutation[] {
+  const set = (path: string, value: unknown): Mutation =>
+    ({
+      op: "setElementProperty",
+      args: { elementId, path, value },
+    }) as Mutation;
+  const ops: Mutation[] = [];
+  for (const [side, edge] of [
+    ["Top", look.top],
+    ["Left", look.left],
+    ["Bottom", look.bottom],
+    ["Right", look.right],
+  ] as const) {
+    ops.push(
+      set(`cell${side}EdgeStrokeWeight`, {
+        type: "length",
+        value: edge.weightPt,
+      }),
+      set(`cell${side}EdgeStrokeColor`, {
+        type: "colorRef",
+        value: edge.color,
+      }),
+    );
+  }
+  if (look.fill) {
+    ops.push(set("cellFillColor", { type: "colorRef", value: look.fill }));
+  }
+  return ops;
 }
 
 /** The mutation that inserts a field or a note reference (doc ADRs 611 /
@@ -801,6 +877,7 @@ export function buildTableCells(
         },
       } as Mutation);
     }
+    if (cell.look) ops.push(...cellLookOps(cell.look, elementId));
     if (cell.rowSpan > 1 || cell.colSpan > 1) {
       ops.push({
         op: "setCellSpan",
@@ -880,6 +957,10 @@ export type StoryStep =
       textLength: number;
       insert: Mutation;
       cells: (tableId: string) => Mutation;
+      /** Doc ADR 614 — the style of the table's own paragraph (Word's
+       *  `w:jc` aligns the table), applied after the cells at the table's
+       *  contiguous offset `styleBase`. */
+      style?: (styleBase: number) => Mutation;
     };
 
 /**
@@ -1049,6 +1130,8 @@ export function buildStoryBlocks(
       const slot = cellCarets.length;
       cellCarets.push([]);
       if (buildTableCellCarets(table, storyId, "").length > 0) hasCarets = true;
+      const tableParagraph = last;
+      const paraStyle = table.paraStyleId;
       steps.push({
         kind: "table",
         breakBefore,
@@ -1058,6 +1141,19 @@ export function buildStoryBlocks(
           cellCarets[slot] = buildTableCellCarets(table, storyId, tableId);
           return buildTableCells(table, storyId, tableId);
         },
+        ...(paraStyle
+          ? {
+              style: (styleBase: number) =>
+                applyStyleOp(
+                  storyId,
+                  styleBase,
+                  styleBase,
+                  paraStyle,
+                  "paragraph",
+                  tableParagraph,
+                ),
+            }
+          : {}),
       });
     } else {
       pending.push(block);
