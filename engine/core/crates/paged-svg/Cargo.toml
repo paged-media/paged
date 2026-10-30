@@ -50,6 +50,9 @@ usvg = { version = "0.48", default-features = false, features = ["svgz"] }
 roxmltree = "0.21"
 simplecss = "0.2"
 svgtypes = "0.16"
+# The guarded parse (`limits`) inflates SVGZ itself, through a bounded
+# reader, with the flate2 usvg's `svgz` feature already links.
+flate2 = { workspace = true }
 # The import's output is the wire's own vocabulary.
 paged-wire = { path = "../paged-wire", optional = true }
 paged-mutate = { path = "../paged-mutate", optional = true }
@@ -64,4 +67,3 @@ wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
-flate2 = { workspace = true }
