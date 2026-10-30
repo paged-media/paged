@@ -45,6 +45,7 @@ import { t } from "@paged-media/strings";
 
 import type { DocEngine } from "./engine.js";
 import { DOC } from "./messages.js";
+import { pourPageItems } from "./page-items.js";
 import { applyStyleOpsReporting, pourSteps } from "./pour.js";
 
 /** What a standalone open produced: the section stories (save-back reads
@@ -236,6 +237,7 @@ export async function finishStandalone(
     );
   }
   await pourHeadersFooters(host, ir);
+  await pourPageItems(host, ir);
   await setFootnoteOptions(host, ir);
   // Doc ADR 613 — a document Word tracked changes in keeps tracking them:
   // switched on last, so the pour itself was not recorded.

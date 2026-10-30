@@ -35,9 +35,14 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod objects;
 pub mod review;
 pub mod symbols;
 pub mod theme;
+pub use objects::{
+    BorderEdge, Borders, CellLook, HeightRule, Language, NestedTable, PreferredWidth, TableLook,
+    TableStyleProps, TextBox, WidthKind,
+};
 pub use review::{
     ChangeKind, Comment, FormatChange, ParaPropsChange, ParagraphReview, Revision, RunChange,
 };
@@ -469,6 +474,10 @@ pub struct Run {
     /// run: the threads' first comments, never a reply.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<i64>,
+    /// Text boxes drawn by this run (`w:drawing` holding a `wps:txbx`, or
+    /// `w:pict` holding a `v:textbox`), doc ADR 614.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub text_boxes: Vec<TextBox>,
 }
 
 fn is_zero_usize(n: &usize) -> bool {
@@ -845,6 +854,10 @@ pub struct Float {
     /// `@simplePos="1"` with `wp:simplePos` (x, y) from the page's
     /// top-left: the position elements are ignored.
     pub simple_pos: Option<(i64, i64)>,
+    /// `wp:wrapPolygon` of a tight or through wrap: its start and line-to
+    /// points, in Word's 21600-unit square over the drawing's extent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wrap_polygon: Vec<(i64, i64)>,
 }
 
 /// One axis of a float's position (`wp:positionH` / `wp:positionV`).
@@ -988,6 +1001,10 @@ pub struct RunProps {
     /// no character shading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shading: Option<Shading>,
+    /// `w:lang` (doc ADR 614): the Latin language becomes the engine's
+    /// applied language; East Asian and complex script are read only.
+    #[serde(default, skip_serializing_if = "Language::is_empty")]
+    pub lang: Language,
 }
 
 /// Paragraph alignment (`w:jc`).
@@ -1045,6 +1062,9 @@ pub struct Style {
     pub para: ParaProps,
     /// Character-level properties defined by the style (`w:rPr`).
     pub run: RunProps,
+    /// A table style's table-level properties (doc ADR 614).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table: Option<TableStyleProps>,
 }
 
 /// `w:style/@w:type`.
@@ -1071,6 +1091,9 @@ pub struct Table {
     /// and column ordinals skip them, so row and column edits are refused.
     #[serde(default)]
     pub content_control_rows: bool,
+    /// Borders, shading, indent, alignment, layout and width (doc ADR 614).
+    #[serde(default)]
+    pub look: TableLook,
 }
 
 /// Cell margins in twips, each side as declared (`None` = not declared
@@ -1104,6 +1127,12 @@ pub struct TableRow {
     /// (`w:hRule` `atLeast`, Word's default, or `exact`).
     #[serde(default)]
     pub height: Option<i32>,
+    /// `w:trHeight/@w:hRule` (doc ADR 614).
+    #[serde(default)]
+    pub height_rule: HeightRule,
+    /// `w:trPr/w:cantSplit`: Word keeps the row on one page.
+    #[serde(default)]
+    pub cant_split: bool,
 }
 
 /// A table cell (`w:tc`) — block content (paragraphs) plus merge spans.
@@ -1120,6 +1149,13 @@ pub struct TableCell {
     /// `w:tcPr/w:vAlign`.
     #[serde(default)]
     pub v_align: Option<CellVAlign>,
+    /// Borders, shading and width (doc ADR 614).
+    #[serde(default)]
+    pub look: CellLook,
+    /// Tables nested in the cell, whose content [`Self::paragraphs`] shows
+    /// flattened (doc ADR 614).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nested_tables: Vec<NestedTable>,
 }
 
 /// A cell's vertical-merge role (`w:vMerge`).

@@ -4559,7 +4559,7 @@
           ]
         },
         {
-          "description": "Engine ADR 1037 — record tracked change `change` over story chars\n`[start, end)` (contiguous, as `applyStyle` counts them; of `cell`\nwhen set), or on paragraph `paragraph` for the paragraph kinds\n(`paraProps`, `insertMark`, `deleteMark`). What an importer writes\nfor Word's `w:ins`, `w:del`, `w:rPrChange` and `w:pPrChange`. The\nreply's `createdId` is the change's id. Undoable.",
+          "description": "Engine ADR 1040 — record tracked change `change` over story chars\n`[start, end)` (contiguous, as `applyStyle` counts them; of `cell`\nwhen set), or on paragraph `paragraph` for the paragraph kinds\n(`paraProps`, `insertMark`, `deleteMark`). What an importer writes\nfor Word's `w:ins`, `w:del`, `w:rPrChange` and `w:pPrChange`. The\nreply's `createdId` is the change's id. Undoable.",
           "type": "object",
           "properties": {
             "op": {
@@ -4620,7 +4620,7 @@
           ]
         },
         {
-          "description": "Engine ADR 1037 — Accept: tracked change `id`, every change by\n`author`, or every change (in story `storyId` only when set). One\nundo step.",
+          "description": "Engine ADR 1040 — Accept: tracked change `id`, every change by\n`author`, or every change (in story `storyId` only when set). One\nundo step.",
           "type": "object",
           "properties": {
             "op": {
@@ -4660,7 +4660,7 @@
           ]
         },
         {
-          "description": "Engine ADR 1037 — Reject, scoped as `acceptChange`. One undo step.",
+          "description": "Engine ADR 1040 — Reject, scoped as `acceptChange`. One undo step.",
           "type": "object",
           "properties": {
             "op": {
@@ -8622,6 +8622,11 @@
           "const": "frameFillRule"
         },
         {
+          "description": "The placed picture's filter stack, in order: `Value::ImageAdjustments`\n(the whole list; the empty list clears it). On a Rectangle, Oval or\nPolygon (the kinds that place a picture). IDML has no such construct:\nthe export keeps the stack in a label and reports it as lost.\nPaint-only (`frame_style`).",
+          "type": "string",
+          "const": "frameImageAdjustments"
+        },
+        {
           "description": "A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a\nswatch. `ColorRef(None)` clears the run's own value (inherit);\n`ColorRef(Some(\"Swatch/None\"))` says \"no highlight\" over a style\nthat sets one. On a `StoryRange`, or a character / paragraph style\nthrough `SetStyleProperty`. Paint-only.",
           "type": "string",
           "const": "characterHighlightColor"
@@ -8692,7 +8697,7 @@
           "const": "documentShowFieldCodes"
         },
         {
-          "description": "Word's Track Changes (engine ADR 1037), on `NodeId::Document`:\n`Value::Bool`, default false. While on, text and formatting edits on\nstory ranges are recorded as tracked changes.",
+          "description": "Word's Track Changes (engine ADR 1040), on `NodeId::Document`:\n`Value::Bool`, default false. While on, text and formatting edits on\nstory ranges are recorded as tracked changes.",
           "type": "string",
           "const": "documentTrackChanges"
         },
@@ -8702,7 +8707,7 @@
           "const": "documentTrackChangesAuthor"
         },
         {
-          "description": "How tracked changes and comments show (engine ADR 1037):\n`Value::Text` `simple` / `all` / `none` / `original`, default `all`.\nA whole-document reflow.",
+          "description": "How tracked changes and comments show (engine ADR 1040):\n`Value::Text` `simple` / `all` / `none` / `original`, default `all`.\nA whole-document reflow.",
           "type": "string",
           "const": "documentMarkupView"
         }
@@ -9693,6 +9698,26 @@
             "type",
             "value"
           ]
+        },
+        {
+          "description": "Engine ADR 1037 — an image frame's whole filter stack, the value of\n`frame.imageAdjustments`. Serialises as `{ type:\n\"imageAdjustments\", value: [{ op: \"exposure\", ev: 0.5 }, …] }`. The\ninverse carries the prior stack, so undo restores it exactly.\nAdditive new variant (the `TabStops` / `Lengths` precedent).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "imageAdjustments"
+            },
+            "value": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/RasterOp"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
         }
       ]
     },
@@ -10158,6 +10183,338 @@
       "required": [
         "space",
         "value"
+      ]
+    },
+    "RasterOp": {
+      "description": "One step of an image frame's filter stack (engine ADR 1037).",
+      "oneOf": [
+        {
+          "description": "Exposure in stops, applied to the light (a 2.2 decode): +1 doubles\nit. `adjust.exposure` on encoded input.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "exposure"
+            },
+            "ev": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "ev"
+          ]
+        },
+        {
+          "description": "Brightness as an offset (−1..=1) and contrast as a slope about\nmid-grey (1 the identity). `adjust.brightness_contrast`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "brightnessContrast"
+            },
+            "brightness": {
+              "type": "number",
+              "format": "float"
+            },
+            "contrast": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "brightness",
+            "contrast"
+          ]
+        },
+        {
+          "description": "Photoshop's Levels: input black and white points, the midtone\ngamma (1 the identity), output black and white. `adjust.levels`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "levels"
+            },
+            "inBlack": {
+              "type": "number",
+              "format": "float"
+            },
+            "inWhite": {
+              "type": "number",
+              "format": "float"
+            },
+            "gamma": {
+              "type": "number",
+              "format": "float"
+            },
+            "outBlack": {
+              "type": "number",
+              "format": "float"
+            },
+            "outWhite": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "inBlack",
+            "inWhite",
+            "gamma",
+            "outBlack",
+            "outWhite"
+          ]
+        },
+        {
+          "description": "A tone curve through control points `[input, output]` (0..=1),\nPhotoshop's natural cubic spline, on every channel.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "curves"
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "float"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          },
+          "required": [
+            "op",
+            "points"
+          ]
+        },
+        {
+          "description": "Hue (degrees), saturation and lightness (−1..=1) on the whole\npicture. `adjust.hue_saturation`'s master row.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "hueSaturation"
+            },
+            "hue": {
+              "type": "number",
+              "format": "float"
+            },
+            "saturation": {
+              "type": "number",
+              "format": "float"
+            },
+            "lightness": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "hue",
+            "saturation",
+            "lightness"
+          ]
+        },
+        {
+          "description": "Recolour to one hue: the picture's tones in `hue` (degrees) at\n`saturation` (0..=1), lightness shifted by `lightness` (−1..=1).\n`adjust.hue_saturation`'s colorize.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "recolor"
+            },
+            "hue": {
+              "type": "number",
+              "format": "float"
+            },
+            "saturation": {
+              "type": "number",
+              "format": "float"
+            },
+            "lightness": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "hue",
+            "saturation",
+            "lightness"
+          ]
+        },
+        {
+          "description": "Two inks: the picture's luminance mapped from `shadow` to\n`highlight` (RGB). `adjust.gradient_map` with two stops.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "duotone"
+            },
+            "shadow": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "highlight": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "op",
+            "shadow",
+            "highlight"
+          ]
+        },
+        {
+          "description": "Photoshop's Black & White: a grey mixed from six colour ranges\n(its default weights are 0.4, 0.6, 0.4, 0.6, 0.2, 0.8).\n`adjust.black_white`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "blackWhite"
+            },
+            "reds": {
+              "type": "number",
+              "format": "float"
+            },
+            "yellows": {
+              "type": "number",
+              "format": "float"
+            },
+            "greens": {
+              "type": "number",
+              "format": "float"
+            },
+            "cyans": {
+              "type": "number",
+              "format": "float"
+            },
+            "blues": {
+              "type": "number",
+              "format": "float"
+            },
+            "magentas": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "reds",
+            "yellows",
+            "greens",
+            "cyans",
+            "blues",
+            "magentas"
+          ]
+        },
+        {
+          "description": "Unsharp mask: `amount` (1 = 100 %) of the difference from a\nGaussian blur of `radius` pixels (σ, at most 64). `conv.unsharp`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "sharpen"
+            },
+            "amount": {
+              "type": "number",
+              "format": "float"
+            },
+            "radius": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "amount",
+            "radius"
+          ]
+        },
+        {
+          "description": "Gaussian blur of `radius` pixels (σ, at most 64: a wide blur runs\nas several passes). `conv.gaussian_h`/`_v`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "blur"
+            },
+            "radius": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "radius"
+          ]
+        },
+        {
+          "description": "Posterize to `levels` tones per channel (2..). `adjust.posterize`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "posterize"
+            },
+            "levels": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "levels"
+          ]
+        },
+        {
+          "description": "Black where the luminance is below `level` (0..=1), white above.\n`adjust.threshold`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "threshold"
+            },
+            "level": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "op",
+            "level"
+          ]
+        },
+        {
+          "description": "A negative (alpha kept).",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "invert"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        }
       ]
     },
     "PathfinderKind": {
@@ -10627,7 +10984,7 @@
       ]
     },
     "ChangeSpec": {
-      "description": "Engine ADR 1037 — one tracked change to record over a range or on a\nparagraph. `id` absent: the change joins an adjacent change of the same\nkind and author, else the engine mints one.",
+      "description": "Engine ADR 1040 — one tracked change to record over a range or on a\nparagraph. `id` absent: the change joins an adjacent change of the same\nkind and author, else the engine mints one.",
       "type": "object",
       "properties": {
         "kind": {
@@ -10677,7 +11034,7 @@
       ]
     },
     "ChangeSpecKind": {
-      "description": "Engine ADR 1037 — what [`Operation::RecordChange`] records.",
+      "description": "Engine ADR 1040 — what [`Operation::RecordChange`] records.",
       "oneOf": [
         {
           "description": "The range's text was inserted (`w:ins`).",

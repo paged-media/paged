@@ -9,6 +9,7 @@ concurrency:
 # MONOREPO (step A3): ported from paged-media/plugin-publish
 # .github/workflows/ci.yml; runs in modules/publish.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:

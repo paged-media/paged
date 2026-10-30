@@ -504,6 +504,16 @@ impl DocSession {
             st::save_headers(&mut package, &self.model, &marked, &structure.headers)
                 .map_err(|e| e.to_string())?,
         );
+        // Doc ADR 614: the text boxes placed as page items.
+        skips.extend(
+            docx_export::textbox::save_text_boxes(
+                &mut package,
+                &self.model,
+                &marked,
+                &structure.text_boxes,
+            )
+            .map_err(|e| e.to_string())?,
+        );
         skips.extend(
             docx_export::apply_style_plan(&mut package, self.styles_part.as_deref(), &plan)
                 .map_err(|e| e.to_string())?,

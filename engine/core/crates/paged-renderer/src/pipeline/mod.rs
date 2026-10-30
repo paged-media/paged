@@ -57,6 +57,7 @@ mod deltas;
 mod font_table;
 mod footnotes;
 mod geom;
+pub mod image_adjust;
 mod image_convert;
 mod image_decode;
 mod images;
@@ -367,6 +368,13 @@ pub struct PipelineOptions<'a> {
     /// behaviour: a fresh local cache per call.
     pub image_decode_cache:
         Option<&'a std::cell::RefCell<HashMap<String, paged_compose::DecodedImage>>>,
+    /// Engine ADR 1037 — the display density, in device pixels per point,
+    /// an image frame's filter stack is evaluated for: a picture larger
+    /// than that is reduced first (to a power-of-two share, so zooming
+    /// does not re-run the stack). `None`, the default and what an export
+    /// wants, evaluates at the picture's own pixels, so a PDF embeds the
+    /// adjusted picture at its effective ppi.
+    pub image_adjust_px_per_pt: Option<f32>,
     /// Perf-FontTable — pre-built shaping table. When `Some`,
     /// `build_document` skips its internal `FontTable::build` call
     /// (which walks every paragraph + resolver-fetches every font
@@ -663,6 +671,7 @@ impl Default for PipelineOptions<'_> {
             break_story_filter: None,
             break_page_range: None,
             image_decode_cache: None,
+            image_adjust_px_per_pt: None,
             pre_built_font_table: None,
             cmyk_transform_cache: None,
             master_text_emit_cache: None,

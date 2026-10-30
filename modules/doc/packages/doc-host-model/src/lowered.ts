@@ -209,6 +209,9 @@ export interface LoweredImage {
    *  engine can create a positioned, wrapped anchored object. Absent for an
    *  inline picture. */
   float?: LoweredFloat;
+  /** Doc ADR 614 — a float placed as an anchored object: the engine's
+   *  anchored-object settings, set on the frame `insertAnchoredFrame` makes. */
+  anchor?: LoweredAnchor;
   /** Doc ADR 618 — the picture's DrawingML look as the shared mapper
    *  (`dml-native`) lowered it: fill, outline, opacity and effects, colours
    *  as `#RRGGBB`. Carried for when the engine's anchored frames hold it;
@@ -289,6 +292,8 @@ export interface LoweredFloat {
   relativeHeight: number;
   /** `wp:simplePos` (x, y) from the page's top-left, when used. */
   simplePosPt?: [number, number];
+  /** `wp:wrapPolygon`, in the drawing's own points. */
+  wrapPolygonPt?: [number, number][];
 }
 
 /** One axis of a float's position. */
@@ -334,6 +339,10 @@ export interface LoweredTable {
   /** See `LoweredBlock`'s table: the paragraphs it pours as when it cannot
    *  be a native table. */
   flow?: LoweredParagraph[];
+  /** Doc ADR 614 — the table's own paragraph's style (Word's `w:jc`). */
+  paraStyleId?: string | null;
+  /** Doc ADR 614 — what the engine does not lay out yet, carried. */
+  layout?: LoweredTableLayout;
 }
 
 /** One table cell, addressed by its resolved grid position. */
@@ -348,6 +357,8 @@ export interface LoweredCell {
   insetsPt?: [number, number, number, number];
   /** `TopAlign` / `CenterAlign` / `BottomAlign` (Word's `w:vAlign`). */
   vAlign?: string;
+  /** Doc ADR 614 — Word's borders and shading on the cell's edges. */
+  look?: LoweredCellLook;
 }
 
 export interface LoweredSection {
@@ -499,6 +510,82 @@ export interface LoweredDoc {
   comments?: LoweredComment[];
   /** Doc ADR 613 — Word records changes in this document. */
   trackChanges?: boolean;
+  /** Doc ADR 614 — floating pictures and text boxes placed as page items. */
+  pageItems?: LoweredPageItem[];
+}
+
+/** Doc ADR 614 — a float's anchored-object settings, the engine's names. */
+export interface LoweredAnchor {
+  /** `Anchored` (custom) or `AbovePosition`. */
+  position: string;
+  anchorPoint: string;
+  horizontalReference: string;
+  horizontalAlignment: string;
+  verticalReference: string;
+  verticalAlignment: string;
+  xOffsetPt: number;
+  yOffsetPt: number;
+}
+
+/** Doc ADR 614 — one cell edge as the engine strokes it. */
+export interface LoweredEdge {
+  weightPt: number;
+  /** A swatch token. */
+  color: string;
+}
+
+/** Doc ADR 614 — a cell's edges and fill. */
+export interface LoweredCellLook {
+  top: LoweredEdge;
+  left: LoweredEdge;
+  bottom: LoweredEdge;
+  right: LoweredEdge;
+  fill?: string;
+}
+
+/** Doc ADR 614 — table layout Word asks for that the engine does not do. */
+export interface LoweredTableLayout {
+  fixed?: boolean;
+  widthPt?: number;
+  widthPct?: number;
+  cellWidthsPt?: (number | null)[];
+  indentPt?: number;
+  cantSplit?: boolean[];
+  exactRows?: boolean[];
+}
+
+/** Doc ADR 614 — a page item's text wrap (the engine's `TextWrap`). */
+export interface LoweredWrap {
+  mode: string;
+  offsetsPt: [number, number, number, number];
+  side?: string;
+  contour?: string;
+  polygonPt?: [number, number][];
+}
+
+/** Doc ADR 614 — a float or text box placed as a page item, written into
+ *  the standalone skeleton; the bundle pours a text box's story. */
+export interface LoweredPageItem {
+  id: string;
+  host: { kind: "page"; pageId: string } | { kind: "master"; masterId: string };
+  bounds: [number, number, number, number];
+  item:
+    | { kind: "picture"; uri: string }
+    | {
+        kind: "textBox";
+        storyId: string;
+        paragraphs: LoweredParagraph[];
+        insetsPt: [number, number, number, number];
+      };
+  wrap?: LoweredWrap;
+  behind?: boolean;
+  fx?: NativeFx;
+  source: {
+    part: string;
+    ordinal?: number;
+    vml?: boolean;
+    editable?: boolean;
+  };
 }
 
 /** Parse the JSON string `docx-js` produces into a typed [`LoweredDoc`]. */

@@ -45,6 +45,7 @@ use paged_ooxml::ooxmlsdk::simple_type::{
 use paged_ooxml::{parse_root, part_dir, rels, resolve_target, OoxmlError, OpcPackage};
 
 mod comments;
+mod objects;
 mod theme;
 pub use comments::{comments_parts, CommentParts};
 use docx_core::{
@@ -79,6 +80,9 @@ struct ImportCtx<'a> {
     /// `wp:docPr/@id`, in document order (doc ADR 618): read once through
     /// the shared DrawingML reader, which works on the element tree.
     looks: std::cell::RefCell<Looks>,
+    /// The text boxes' looks and ordinal of the part being mapped (doc ADR
+    /// 614).
+    objects: std::cell::RefCell<objects::PartObjects>,
 }
 
 /// Pictures' looks by `wp:docPr/@id`, each id's in document order (an id
@@ -105,6 +109,7 @@ impl ImportCtx<'_> {
     /// mapped), replacing the previous part's.
     fn load_looks(&self, part: &[u8]) {
         *self.looks.borrow_mut() = picture_looks(part);
+        *self.objects.borrow_mut() = objects::PartObjects::for_part(part);
     }
 
     /// The look of the next picture whose `wp:docPr` is `id`.
@@ -413,6 +418,7 @@ pub fn import_docx_with_package(
                 .collect(),
             open_comments: std::cell::RefCell::new(Vec::new()),
             looks: std::cell::RefCell::new(picture_looks(doc_bytes)),
+            objects: std::cell::RefCell::new(objects::PartObjects::for_part(doc_bytes)),
             images: ImageResolver {
                 rels: doc_rels,
                 package: &pkg,
@@ -1678,10 +1684,13 @@ fn map_table(t: &wml::Table, ctx: &ImportCtx, table_ord: u32) -> docx_core::Tabl
                     _ => None,
                 })
             });
+            let (height_rule, cant_split) = objects::row_rules(tr.table_row_properties.as_deref());
             rows.push(docx_core::TableRow {
                 cells,
                 is_header,
                 height,
+                height_rule,
+                cant_split,
             });
             if !row_in_control {
                 row_ord += 1;
@@ -1715,6 +1724,7 @@ fn map_table(t: &wml::Table, ctx: &ImportCtx, table_ord: u32) -> docx_core::Tabl
         rows,
         cell_margins,
         content_control_rows,
+        look: objects::table_look(t.table_properties.as_deref(), ctx.theme.as_ref()),
     }
 }
 
@@ -1779,6 +1789,7 @@ fn map_cell(
     // Cell paragraphs carry a `CellPath` (tbl/tr/tc/p ordinals) so save-back can
     // locate them; `source_para_ord` is meaningless here.
     let mut paragraphs = Vec::new();
+    let mut nested_tables = Vec::new();
     let mut para = 0u32;
     for cc in &c.table_cell_choice {
         match cc {
@@ -1803,6 +1814,35 @@ fn map_cell(
                     para,
                 };
                 cell_content_control(sdt, ctx, path, &mut paragraphs);
+            }
+            // A table nested in the cell (doc ADR 614): kept whole for the
+            // native lowering, and shown as its paragraphs, held, where it
+            // stands. It is not one of the cell's `<w:p>` children the
+            // patcher counts, so `para` does not move.
+            wml::TableCellChoice::Table(t) => {
+                let path = CellPath {
+                    table_ord,
+                    row,
+                    cell,
+                    para,
+                };
+                let table = map_table(t, ctx, table_ord);
+                let first = paragraphs.len() as u32;
+                for r in &table.rows {
+                    for c in &r.cells {
+                        for p in &c.paragraphs {
+                            let mut p = p.clone();
+                            p.source_cell = Some(path);
+                            p.held.in_content_control = true;
+                            paragraphs.push(p);
+                        }
+                    }
+                }
+                nested_tables.push(docx_core::NestedTable {
+                    first_para: first,
+                    para_count: paragraphs.len() as u32 - first,
+                    table,
+                });
             }
             _ => {}
         }
@@ -1840,6 +1880,8 @@ fn map_cell(
         paragraphs,
         grid_span,
         v_merge,
+        look: objects::cell_look(props, ctx.theme.as_ref()),
+        nested_tables,
     }
 }
 
@@ -2038,6 +2080,7 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
     let mut note_at = 0usize;
     let mut ptabs = Vec::new();
     let mut symbols = Vec::new();
+    let mut text_boxes = Vec::new();
     for c in &r.run_choice {
         match c {
             wml::RunChoice::Text(t) => {
@@ -2121,14 +2164,28 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
             // (shape, text box, chart) is counted, not carried.
             wml::RunChoice::Drawing(d) => match map_drawing(d, ctx) {
                 Some(img) => images.push(img),
-                None => other_drawings += 1,
+                None => match objects::drawing_text_box(d, ctx) {
+                    Some(tb) => text_boxes.push(tb),
+                    None => other_drawings += 1,
+                },
             },
             // A legacy VML picture (`w:pict`): a picture where Word gives it
             // room in the flow, else counted as not placed.
             wml::RunChoice::Picture(p) => match map_pict(p, ctx) {
                 Some(img) => images.push(img),
-                None => ctx.unplaced_vml.set(ctx.unplaced_vml.get() + 1),
+                None => match objects::vml_text_box(p, ctx) {
+                    Some(tb) => text_boxes.push(tb),
+                    None => ctx.unplaced_vml.set(ctx.unplaced_vml.get() + 1),
+                },
             },
+            // Doc ADR 614: a drawing or picture behind markup compatibility.
+            wml::RunChoice::AlternateContent(ac) => objects::alternate_content(
+                ac,
+                ctx,
+                &mut images,
+                &mut text_boxes,
+                &mut other_drawings,
+            ),
             // A footnote/endnote reference mark — the run carries no text; the
             // note body lives in the notes part, keyed by this id.
             wml::RunChoice::FootnoteReference(f) => {
@@ -2165,6 +2222,7 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
         change: None,
         format_change: None,
         comments: Vec::new(),
+        text_boxes,
     }
 }
 
@@ -2438,6 +2496,7 @@ fn map_float(a: &wp::Anchor) -> Float {
         Some(W::WrapTight(w)) => {
             f.wrap = FloatWrap::Tight;
             f.wrap_text = Some(w.wrap_text.to_string());
+            f.wrap_polygon = wrap_polygon(&w.wrap_polygon);
             if let Some(v) = w.distance_from_left {
                 f.dist_left = i64::from(v);
             }
@@ -2448,6 +2507,7 @@ fn map_float(a: &wp::Anchor) -> Float {
         Some(W::WrapThrough(w)) => {
             f.wrap = FloatWrap::Through;
             f.wrap_text = Some(w.wrap_text.to_string());
+            f.wrap_polygon = wrap_polygon(&w.wrap_polygon);
             if let Some(v) = w.distance_from_left {
                 f.dist_left = i64::from(v);
             }
@@ -2466,6 +2526,14 @@ fn map_float(a: &wp::Anchor) -> Float {
         }
     }
     f
+}
+
+/// A `wp:wrapPolygon`'s points (start, then each line-to), in Word's
+/// 21600-unit square.
+fn wrap_polygon(p: &wp::WrapPolygon) -> Vec<(i64, i64)> {
+    std::iter::once((p.start_point.x, p.start_point.y))
+        .chain(p.line_to.iter().map(|l| (l.x, l.y)))
+        .collect()
 }
 
 /// A DrawingML coordinate as EMU (its XML text is an integer, or a
@@ -2583,6 +2651,7 @@ fn apply_run_property_choice(
         C::VerticalTextAlignment(v) => props.vert_align = Some(vert_align(&v.val)),
         C::Position(p) => props.baseline_half_pts = signed_hps(&p.val),
         C::Spacing(sp) => props.spacing_twips = Some(sp.val),
+        C::Languages(l) => props.lang = objects::language(l),
         _ => {}
     }
 }
@@ -2652,6 +2721,9 @@ fn run_props_base(rpr: &wml::RunPropertiesBaseStyle, theme: Option<&Theme>) -> R
     if let Some(u) = &rpr.underline {
         props.underline = Some(underline_on(u));
     }
+    if let Some(l) = &rpr.languages {
+        props.lang = objects::language(l);
+    }
     props
 }
 
@@ -2697,6 +2769,9 @@ fn map_style(s: &wml::Style, theme: Option<&Theme>) -> Option<Style> {
         is_default: s.default.is_some() && on(&s.default),
         para,
         run,
+        table: (kind == StyleKind::Table)
+            .then(|| objects::table_style_props(s, theme))
+            .flatten(),
     })
 }
 
@@ -2741,6 +2816,9 @@ fn run_props_named(rpr: &wml::StyleRunProperties, theme: Option<&Theme>) -> RunP
     }
     if let Some(sp) = &rpr.spacing {
         props.spacing_twips = Some(sp.val);
+    }
+    if let Some(l) = &rpr.languages {
+        props.lang = objects::language(l);
     }
     props
 }
