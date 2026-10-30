@@ -1248,6 +1248,38 @@ impl<'a, 'b> Walker<'a, 'b> {
         }
     }
 
+    /// Engine ADR 1007 — an ExtGState whose luminosity soft mask is the
+    /// form `mask` paints (page space, the CTM at `gs` time) over `bbox`;
+    /// outside the form the backdrop is black, so nothing shows there.
+    fn alpha_mask_gs(&mut self, mask: Content, bbox: paged_compose::Rect) -> String {
+        let form_ref = self.state.refs.alloc();
+        let pad = 1.0;
+        self.pending_forms.push(PendingForm {
+            form_ref,
+            data: mask.finish().to_vec(),
+            bbox: pdf_writer::Rect::new(
+                bbox.x - pad,
+                bbox.y - pad,
+                bbox.x + bbox.w + pad,
+                bbox.y + bbox.h + pad,
+            ),
+            group: PendingFormGroup::LuminosityGray,
+        });
+        let gs_ref = self.state.refs.alloc();
+        {
+            let mut gs = self.state.pdf.ext_graphics(gs_ref);
+            let mut sm = gs.soft_mask();
+            sm.subtype(pdf_writer::types::MaskType::Luminosity);
+            sm.group(form_ref);
+            sm.backdrop([0.0]);
+            sm.finish();
+            gs.finish();
+        }
+        let name = format!("GsSm{}", self.resources.ext_g_states.len());
+        self.resources.ext_g_states.insert(name.clone(), gs_ref);
+        name
+    }
+
     fn emit_fill(
         &mut self,
         content: &mut Content,
@@ -1272,7 +1304,82 @@ impl<'a, 'b> Walker<'a, 'b> {
                 overprint,
             );
         }
+        // Engine ADR 1007 — a ramp with translucent stops paints under a
+        // luminosity soft mask of its alpha. The mask is set before the
+        // path's transform, so it lives in page space; its form repeats
+        // the transform to lay the alpha shading where the colour one goes.
+        if let Some(stops) = gradient_stops(list, paint) {
+            if crate::color::stops_translucent(stops) {
+                let page_path = transform_path(path, transform);
+                let bbox = path_bbox(&page_path);
+                let mut mask = Content::new();
+                let alpha_sh = match paint {
+                    Paint::LinearGradient(id) => list.linear_gradient(*id).map(|g| {
+                        mask.transform(transform.0);
+                        crate::color::write_linear_shading_of(
+                            self.state,
+                            self.input,
+                            g,
+                            path_bbox(path),
+                            crate::color::ShadeChannels::Alpha,
+                        )
+                    }),
+                    Paint::RadialGradient(id) => list.radial_gradient(*id).map(|g| {
+                        mask.transform(transform.0);
+                        crate::color::write_radial_shading_of(
+                            self.state,
+                            self.input,
+                            g,
+                            path_bbox(path),
+                            crate::color::ShadeChannels::Alpha,
+                        )
+                    }),
+                    Paint::SweepGradient(id) => list.sweep_gradient(*id).map(|g| {
+                        let (center, start) = page_sweep(g, transform);
+                        crate::color::write_sweep_shading(
+                            self.state,
+                            &g.stops,
+                            center,
+                            start,
+                            bbox,
+                            crate::color::ShadeChannels::Alpha,
+                        )
+                    }),
+                    _ => None,
+                };
+                if let Some(sh) = alpha_sh {
+                    let name = format!("Sh{}", self.resources.shadings.len());
+                    self.resources.shadings.insert(name.clone(), sh);
+                    mask.shading(Name(name.as_bytes()));
+                    let gs = self.alpha_mask_gs(mask, bbox);
+                    content.set_parameters(Name(gs.as_bytes()));
+                }
+            }
+        }
         match paint {
+            Paint::SweepGradient(id) => {
+                if let Some(g) = list.sweep_gradient(*id) {
+                    // Engine ADR 1007 — the sweep is defined in page
+                    // space (its angle is the page's, as the rasterisers
+                    // read it), so the path is too.
+                    let page_path = transform_path(path, transform);
+                    crate::path::emit_path(content, &page_path);
+                    crate::path::clip(content, &page_path);
+                    content.end_path();
+                    let (center, start) = page_sweep(g, transform);
+                    let sh_ref = crate::color::write_sweep_shading(
+                        self.state,
+                        &g.stops,
+                        center,
+                        start,
+                        path_bbox(&page_path),
+                        crate::color::ShadeChannels::Color,
+                    );
+                    let name = format!("Sh{}", self.resources.shadings.len());
+                    self.resources.shadings.insert(name.clone(), sh_ref);
+                    content.shading(Name(name.as_bytes()));
+                }
+            }
             Paint::LinearGradient(id) => {
                 if let Some(g) = list.linear_gradient(*id) {
                     // Clip to the path, then paint the shading over the
@@ -1371,8 +1478,69 @@ impl<'a, 'b> Walker<'a, 'b> {
                     path_bbox(&transformed),
                 )
             }),
+            Paint::SweepGradient(id) => list.sweep_gradient(*id).map(|g| {
+                let (center, start) = page_sweep(g, transform);
+                crate::color::write_sweep_shading(
+                    self.state,
+                    &g.stops,
+                    center,
+                    start,
+                    stroke_bbox(&transformed, stroke.width),
+                    crate::color::ShadeChannels::Color,
+                )
+            }),
             _ => None,
         };
+        // Engine ADR 1007 — a translucent ramp strokes under a soft mask
+        // of its alpha, the same shading in DeviceGray over the stroke's
+        // reach (the stroke itself bounds what it paints).
+        if shading.is_some() {
+            if let Some(stops) = gradient_stops(list, paint) {
+                if crate::color::stops_translucent(stops) {
+                    let reach = stroke_bbox(&transformed, stroke.width);
+                    let alpha = match paint {
+                        Paint::LinearGradient(id) => list.linear_gradient(*id).map(|g| {
+                            crate::color::write_linear_shading_of(
+                                self.state,
+                                self.input,
+                                g,
+                                path_bbox(&transformed),
+                                crate::color::ShadeChannels::Alpha,
+                            )
+                        }),
+                        Paint::RadialGradient(id) => list.radial_gradient(*id).map(|g| {
+                            crate::color::write_radial_shading_of(
+                                self.state,
+                                self.input,
+                                g,
+                                path_bbox(&transformed),
+                                crate::color::ShadeChannels::Alpha,
+                            )
+                        }),
+                        Paint::SweepGradient(id) => list.sweep_gradient(*id).map(|g| {
+                            let (center, start) = page_sweep(g, transform);
+                            crate::color::write_sweep_shading(
+                                self.state,
+                                &g.stops,
+                                center,
+                                start,
+                                reach,
+                                crate::color::ShadeChannels::Alpha,
+                            )
+                        }),
+                        _ => None,
+                    };
+                    if let Some(sh) = alpha {
+                        let name = format!("Sh{}", self.resources.shadings.len());
+                        self.resources.shadings.insert(name.clone(), sh);
+                        let mut mask = Content::new();
+                        mask.shading(Name(name.as_bytes()));
+                        let gs = self.alpha_mask_gs(mask, reach);
+                        content.set_parameters(Name(gs.as_bytes()));
+                    }
+                }
+            }
+        }
         match shading {
             Some(sh_ref) => {
                 let pat_ref = self.state.refs.alloc();
@@ -1467,6 +1635,40 @@ pub(crate) fn transform_path(
             .collect(),
     )
     .with_fill_rule(path.fill_rule)
+}
+
+/// Engine ADR 1007 — a gradient paint's stops, `None` for a solid one.
+fn gradient_stops<'a>(
+    list: &'a paged_compose::DisplayList,
+    paint: &Paint,
+) -> Option<&'a [paged_compose::GradientStop]> {
+    match paint {
+        Paint::LinearGradient(id) => list.linear_gradient(*id).map(|g| g.stops.as_slice()),
+        Paint::RadialGradient(id) => list.radial_gradient(*id).map(|g| g.stops.as_slice()),
+        Paint::SweepGradient(id) => list.sweep_gradient(*id).map(|g| g.stops.as_slice()),
+        _ => None,
+    }
+}
+
+/// Engine ADR 1007 — a sweep gradient's centre and start angle in page
+/// space: the centre through the transform, the angle turned by the
+/// transform's rotation (`paged_gpu::vello_map::sweep_rotation`).
+fn page_sweep(g: &paged_compose::SweepGradient, t: &Transform) -> ((f32, f32), f32) {
+    let [a, b, ..] = t.0;
+    let turn = if a.hypot(b) < 1e-9 { 0.0 } else { b.atan2(a) };
+    (t.apply(g.center.0, g.center.1), g.start_angle + turn)
+}
+
+/// A path's bbox grown by half a stroke width (and a miter's reach).
+fn stroke_bbox(path: &paged_compose::PathData, width: f32) -> paged_compose::Rect {
+    let b = path_bbox(path);
+    let g = width.max(0.0) * 2.0 + 1.0;
+    paged_compose::Rect {
+        x: b.x - g,
+        y: b.y - g,
+        w: b.w + 2.0 * g,
+        h: b.h + 2.0 * g,
+    }
 }
 
 pub(crate) fn path_bbox(path: &paged_compose::PathData) -> paged_compose::Rect {

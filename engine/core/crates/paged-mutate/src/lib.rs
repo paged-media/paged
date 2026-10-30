@@ -89,8 +89,8 @@ pub use operation::{
     FieldKind, GradientSpec, GradientStopSpec, GroupSpec, GuideOrientationSpec, InvalidationHint,
     NestedParent, NodeId, NodeSpec, NumberingLevelSpec, NumberingListSpec, OpacityMaskMode,
     Operation, ParagraphListState, PathPointAddress, PathPointRole, PathfinderKind,
-    PathfinderRegionVerb, PropertyPath, StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec,
-    TextPathSpec, Value, ZOrderTarget,
+    PathfinderRegionVerb, PropertyPath, StopColorSpec, StyleCollection, StyleScope,
+    SwatchColorSpec, SwatchSpec, TextPathSpec, Value, ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
 
@@ -277,6 +277,7 @@ mod tests {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
+            gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
             effects: None,
             effect_stack: Vec::new(),
             appearance: Vec::new(),
@@ -1050,11 +1051,15 @@ mod tests {
                     stop_color: "Color/Red".into(),
                     location_pct: 0.0,
                     midpoint_pct: Some(40.0),
+                    opacity_pct: None,
+                    color: None,
                 },
                 GradientStopSpec {
                     stop_color: "Color/Yellow".into(),
                     location_pct: 100.0,
                     midpoint_pct: None,
+                    opacity_pct: None,
+                    color: None,
                 },
             ],
         };
@@ -1077,6 +1082,8 @@ mod tests {
                         stop_color: "Color/Blue".into(),
                         location_pct: 0.0,
                         midpoint_pct: None,
+                        opacity_pct: None,
+                        color: None,
                     }],
                 },
             })

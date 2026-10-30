@@ -803,6 +803,8 @@ export const CORE_PATHS: Record<
   frameShapeStarInset: V71,
   frameShapePieStart: V71,
   frameShapePieEnd: V71,
+  // Engine ADR 1007: "Within" / "Along" / "Across".
+  frameGradientStrokeMode: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",

@@ -91,6 +91,7 @@ mod page_metadata;
 mod page_ops;
 mod page_space_geometry;
 mod paint_invalidation;
+mod paint_v2;
 mod paragraph_address;
 mod paragraph_composer_path;
 mod paragraph_keep_start_paths;

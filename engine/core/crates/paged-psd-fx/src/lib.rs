@@ -238,6 +238,10 @@ impl Mapper<'_> {
                 stop_color: self.color(s.rgb),
                 location_pct: s.at * 100.0,
                 midpoint_pct: Some(s.midpoint * 100.0),
+                // Paint v2's stop opacity (engine ADR 1007) is a follow-up:
+                // the opacity stops are reported below.
+                opacity_pct: None,
+                inline_color: None,
             })
             .collect();
         if g.opacity_stops.iter().any(|o| o.opacity < 1.0) {
