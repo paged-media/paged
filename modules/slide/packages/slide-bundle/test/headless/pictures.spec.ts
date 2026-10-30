@@ -402,14 +402,16 @@ describe("pictures in every format (slide W4)", () => {
     await expect(insert(host, png(), true)).rejects.toThrow();
   }, 120_000);
 
-  for (const [name, make] of [
-    ["WebP", () => WEBP],
-    ["TGA", tga],
-    ["QOI", qoi],
-    ["PSD", psd],
-    ["ICO", ico],
+  // WebP, TGA, QOI and ICO are decoded by the exporter (ADR 723); a PSD
+  // goes as the PNG the host renders of the frame.
+  for (const [name, make, how] of [
+    ["WebP", () => WEBP, "a PNG of its own pixels"],
+    ["TGA", tga, "a PNG of its own pixels"],
+    ["QOI", qoi, "a PNG of its own pixels"],
+    ["PSD", psd, "the PNG the engine renders of it"],
+    ["ICO", ico, "a PNG of its own pixels"],
   ] as const) {
-    it(`a ${name} picture is written as the PNG the engine renders of it`, async () => {
+    it(`a ${name} picture is written as ${how}`, async () => {
       const bytes = fixture("geometry");
       const { host, exporter } = await open(bytes, "geometry");
       await insert(host, make());

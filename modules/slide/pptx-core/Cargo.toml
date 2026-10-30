@@ -18,6 +18,10 @@ paged-ooxml.workspace = true
 # The chart model (`chart`), with this crate's paints and text properties.
 dml-chart.workspace = true
 serde.workspace = true
+# Pictures PowerPoint cannot open, written as PNG (`transcode`, ADR 723):
+# the PNG writer's deflate, and WebP's decoder (the engine's own, pure Rust).
+flate2.workspace = true
+image-webp = "0.2"
 
 [dev-dependencies]
 serde_json.workspace = true

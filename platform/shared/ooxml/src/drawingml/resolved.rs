@@ -114,30 +114,11 @@ impl PatternPaint {
     }
 }
 
-/// The foreground share of a preset pattern (`ST_PresetPatternVal`): the
-/// percentage presets say theirs; the others are estimated from the 8 × 8
-/// cells Office draws (thin lines and grids a quarter, dark and wide ones
-/// half, the figured patterns about three eighths).
+/// The foreground share of a preset pattern (`ST_PresetPatternVal`), from
+/// its cell as PowerPoint draws it ([`super::pattern::CELLS`]); half for a
+/// name ECMA-376 does not define.
 pub fn pattern_coverage(preset: &str) -> f64 {
-    if let Some(n) = preset
-        .strip_prefix("pct")
-        .and_then(|n| n.parse::<f64>().ok())
-    {
-        return (n / 100.0).clamp(0.0, 1.0);
-    }
-    match preset {
-        "ltHorz" | "ltVert" | "ltDnDiag" | "ltUpDiag" | "narHorz" | "narVert" => 0.25,
-        "horz" | "vert" | "dnDiag" | "upDiag" | "dashHorz" | "dashVert" | "dashDnDiag"
-        | "dashUpDiag" | "smGrid" | "dotGrid" => 0.25,
-        "dkHorz" | "dkVert" | "dkDnDiag" | "dkUpDiag" | "wdDnDiag" | "wdUpDiag" => 0.5,
-        "cross" | "lgGrid" => 0.234_375,
-        "diagCross" | "smConfetti" | "lgConfetti" | "zigZag" | "wave" | "diagBrick"
-        | "horzBrick" | "weave" | "plaid" | "divot" | "shingle" | "trellis" | "sphere"
-        | "dotDmnd" => 0.375,
-        "openDmnd" | "solidDmnd" => 0.25,
-        "smCheck" | "lgCheck" => 0.5,
-        _ => 0.5,
-    }
+    super::pattern::coverage(preset).unwrap_or(0.5)
 }
 
 impl Paint {
@@ -365,6 +346,70 @@ pub struct Effects {
     pub blur: Option<Blur>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub fill_overlay: Option<FillOverlay>,
+    /// The 3-D look (`a:scene3d`, `a:sp3d`), when it draws anything.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub three_d: Option<ThreeD>,
+}
+
+/// A shape's 3-D look, resolved: lengths in pt.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ThreeD {
+    /// The camera preset (`orthographicFront`, the flat view, by default).
+    pub camera: String,
+    /// The camera is turned (a rotation or a field of view of its own).
+    pub camera_turned: bool,
+    /// The light rig and the direction it lights from (`threePt`, `t`).
+    pub light_rig: String,
+    pub light_dir: String,
+    pub bevel_top: Option<BevelSide>,
+    pub bevel_bottom: Option<BevelSide>,
+    pub extrusion: f64,
+    pub contour: f64,
+    pub material: Option<String>,
+}
+
+impl ThreeD {
+    /// Seen straight on, as PowerPoint draws a flat shape: an
+    /// orthographic front camera that is not turned.
+    pub fn is_front(&self) -> bool {
+        self.camera == "orthographicFront" && !self.camera_turned
+    }
+}
+
+/// A bevel: its width and height (pt) and preset.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct BevelSide {
+    pub width: f64,
+    pub height: f64,
+    pub preset: String,
+}
+
+/// Resolve a shape's 3-D properties; `None` when they draw nothing.
+pub fn three_d(t: &effect::Shape3d) -> Option<ThreeD> {
+    if t.is_flat() {
+        return None;
+    }
+    let side = |b: &effect::Bevel| BevelSide {
+        width: emu_to_pt(b.w),
+        height: emu_to_pt(b.h),
+        preset: b.preset.clone(),
+    };
+    Some(ThreeD {
+        camera: t
+            .camera
+            .clone()
+            .unwrap_or_else(|| "orthographicFront".into()),
+        camera_turned: t.camera_turned,
+        light_rig: t.light_rig.clone().unwrap_or_else(|| "threePt".into()),
+        light_dir: t.light_dir.clone().unwrap_or_else(|| "t".into()),
+        bevel_top: t.bevel_top.as_ref().map(side),
+        bevel_bottom: t.bevel_bottom.as_ref().map(side),
+        extrusion: emu_to_pt(t.extrusion),
+        contour: emu_to_pt(t.contour),
+        material: t.material.clone(),
+    })
 }
 
 impl Effects {
@@ -528,6 +573,7 @@ pub fn effects(
             blend: o.blend.clone(),
             paint: paint(&o.fill, schemes, note),
         }),
+        three_d: fx.three_d.as_ref().and_then(three_d),
     }
 }
 
@@ -720,8 +766,9 @@ mod tests {
         };
         assert_eq!(pp.coverage(), 0.25);
         assert_eq!(pp.mix(), ([191, 191, 191], 1.0));
+        // PowerPoint's own cells: its 90 % pattern covers 62 of 64 bits.
         assert_eq!(pattern_coverage("dkDnDiag"), 0.5);
-        assert_eq!(pattern_coverage("pct90"), 0.9);
+        assert_eq!(pattern_coverage("pct90"), 62.0 / 64.0);
     }
 
     #[test]

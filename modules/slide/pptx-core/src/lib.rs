@@ -34,6 +34,7 @@
 pub mod anim;
 pub mod chart;
 pub mod media;
+pub mod transcode;
 
 use serde::{Deserialize, Serialize};
 

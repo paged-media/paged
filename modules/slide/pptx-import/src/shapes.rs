@@ -24,7 +24,7 @@ use pptx_core::{
     Xfrm,
 };
 
-use crate::paint::{color_in, effects, fill_in, line};
+use crate::paint::{color_in, fill_in, line};
 use crate::text::text_body;
 use crate::xml::{alternate, El, Ns};
 use crate::Ctx;
@@ -181,7 +181,7 @@ pub fn shape_props(el: &El, ctx: &Ctx) -> ShapeProps {
         },
         fill: fill_in(el, ctx),
         line: el.child(Ns::A, "ln").map(|l| line(l, ctx)),
-        effects: paged_ooxml::drawingml::effect::container(el).map(|e| effects(e, ctx)),
+        effects: crate::paint::shape_effects(el, ctx),
     }
 }
 

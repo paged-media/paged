@@ -735,9 +735,7 @@ fn theme(el: &El, ctx: &Ctx) -> Theme {
         effect_styles: list("effectStyleLst")
             .map(|l| {
                 l.children_named(Ns::A, "effectStyle")
-                    .map(|s| {
-                        paged_ooxml::drawingml::effect::container(s).map(|e| paint::effects(e, ctx))
-                    })
+                    .map(|s| paint::shape_effects(s, ctx))
                     .collect()
             })
             .unwrap_or_default(),

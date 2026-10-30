@@ -31,7 +31,8 @@
 //!   gradient's angle and span as PowerPoint runs it (across the box
 //!   projected on its direction); a radial one's centre and reach; a
 //!   pattern as the mix of its two colours (the engine has no pattern
-//!   paint yet: reported).
+//!   paint yet: reported), or, for a module that places pictures, as a
+//!   picture of its tiles ([`pattern`], [`Mapper::pattern_tile`]).
 //! - **Strokes** ([`Mapper::stroke`]): weight, compound lines as stroke
 //!   styles, preset and custom dashes as per-item dash patterns, caps,
 //!   joins, the miter limit, inside alignment and arrowheads.
@@ -72,18 +73,20 @@
 use std::collections::BTreeMap;
 
 pub mod native;
+pub mod pattern;
 
 use paged_model::effect_stack::{
     ColorOverlayParams, Effect, EffectEntry, GaussianBlurParams, IndesignEffect, ReflectionParams,
 };
 use paged_model::{
-    ArrowheadType, ColorEntry, ColorModel, ColorSpace, DropShadowSetting, FeatherParams, FillRule,
-    FrameEffects, GradientEntry, GradientFeatherParams, GradientFeatherStop, GradientKind,
-    GradientStopRef, InnerShadowParams, OuterGlowParams, PathAnchor, RasterOp,
+    ArrowheadType, BevelEmbossParams, ColorEntry, ColorModel, ColorSpace, DropShadowSetting,
+    FeatherParams, FillRule, FrameEffects, GradientEntry, GradientFeatherParams,
+    GradientFeatherStop, GradientKind, GradientStopRef, InnerShadowParams, OuterGlowParams,
+    PathAnchor, RasterOp,
 };
 pub use paged_ooxml::drawingml::resolved::{
-    radial_reach, Blur, Effects, FillOverlay, Glow, ImageEffect, Paint, PatternPaint, Picture,
-    PresetShadow, Reflection, Rgb, Shadow, Stop, Stroke,
+    radial_reach, BevelSide, Blur, Effects, FillOverlay, Glow, ImageEffect, Paint, PatternPaint,
+    Picture, PresetShadow, Reflection, Rgb, Shadow, Stop, Stroke, ThreeD,
 };
 
 /// The None swatch: no paint.
@@ -477,6 +480,22 @@ impl Mapper {
         }
     }
 
+    /// A pattern fill as a picture of its tiles over `bounds` on the slide
+    /// ([`pattern::tile`]), for a module that places it in the shape and
+    /// keeps the authored pattern to write back. Reported once: the engine
+    /// on main has no pattern paint.
+    pub fn pattern_tile(
+        &mut self,
+        pp: &PatternPaint,
+        bounds: [f64; 4],
+    ) -> Option<pattern::PatternTile> {
+        let t = pattern::tile(pp, bounds)?;
+        self.lose(
+            "pattern fill drawn as a picture of its tiles (no pattern paint on main); written back as it was",
+        );
+        Some(t)
+    }
+
     /// A stroke's fields; no stroke is the None swatch at weight 0.
     pub fn stroke(&mut self, s: Option<&Stroke>) -> StrokeFields {
         let Some(s) = s else {
@@ -603,6 +622,12 @@ impl Mapper {
             effects.gradient_feather = Some(gf);
             any = true;
         }
+        if let Some(t) = &fx.three_d {
+            if let Some(b) = self.bevel(t) {
+                effects.bevel = Some(b);
+                any = true;
+            }
+        }
         // The effects InDesign has none of, in the order PowerPoint draws
         // them: the overlay on the shape, the blur of it, its reflection.
         let mut extra: Vec<EffectEntry> = Vec::new();
@@ -629,6 +654,7 @@ impl Mapper {
                 IndesignEffect::DropShadow => t.shadow.is_some(),
                 IndesignEffect::InnerShadow => effects.inner_shadow.is_some(),
                 IndesignEffect::OuterGlow => effects.outer_glow.is_some(),
+                IndesignEffect::BevelEmboss => effects.bevel.is_some(),
                 IndesignEffect::Feather => effects.feather.is_some(),
                 IndesignEffect::GradientFeather => effects.gradient_feather.is_some(),
                 _ => false,
@@ -644,6 +670,43 @@ impl Mapper {
             t.effects = Some(effects);
         }
         t
+    }
+
+    /// A top bevel seen from the front (`a:sp3d/a:bevelT` in a flat
+    /// `a:scene3d`) as the engine's inner bevel (slide ADR 723): its width
+    /// the bevel's size, its height over its width the depth, its preset
+    /// the technique ([`bevel_technique`]), the light rig's direction the
+    /// light's angle. A turned or perspective camera, a contour and a
+    /// bottom bevel or extrusion seen at an angle are reported; seen from
+    /// the front, PowerPoint draws neither a bottom bevel nor an
+    /// extrusion, so neither is a loss.
+    fn bevel(&mut self, t: &ThreeD) -> Option<BevelEmbossParams> {
+        if !t.is_front() {
+            self.lose("a 3-D rotation or perspective camera is not carried: the shape is drawn seen from the front");
+            if t.bevel_bottom.is_some() || t.extrusion > 0.0 {
+                self.lose("a bottom bevel or an extrusion seen at an angle is not drawn");
+            }
+        }
+        if t.contour > 0.0 {
+            self.lose("a 3-D contour is not drawn");
+        }
+        let top = t.bevel_top.as_ref()?;
+        if top.width <= 0.0 || top.height <= 0.0 {
+            return None;
+        }
+        Some(BevelEmbossParams {
+            size: Some(pt(top.width)),
+            depth_pct: Some(pt((top.height / top.width * 100.0).clamp(1.0, 1000.0))),
+            angle_deg: Some(pt(light_angle(&t.light_dir) + RIG_KEY_OFFSET)),
+            altitude_deg: Some(BEVEL_ALTITUDE),
+            style: Some("InnerBevel".into()),
+            direction: Some("Up".into()),
+            technique: Some(bevel_technique(&top.preset).into()),
+            soften: Some(0.0),
+            highlight_opacity_pct: Some(75.0),
+            shadow_opacity_pct: Some(BEVEL_SHADOW_OPACITY),
+            ..BevelEmbossParams::default()
+        })
     }
 
     /// `a:fillOverlay` as a colour overlay under its blend mode; `None`
@@ -973,6 +1036,84 @@ pub fn picture_adjustment_loss(op: &RasterOp) -> String {
     adjustment_loss(element, op)
 }
 
+/// The light's altitude a bevel is lit from, degrees: PowerPoint's
+/// three-point rig lights a flat shape from about 30° above it.
+pub const BEVEL_ALTITUDE: f32 = 30.0;
+
+/// PowerPoint's rig lit "from the top" draws a bevel's highlight on its
+/// top and left edges: its key light stands 45° counter-clockwise of the
+/// rig's direction (the `bevels` fixture's PDF).
+pub const RIG_KEY_OFFSET: f64 = 45.0;
+
+/// The bevel's shadow side is fainter than its highlight in PowerPoint's
+/// render: 40 % (the `bevels` fixture, scored by SSIM against 50 % and
+/// 25 %).
+pub const BEVEL_SHADOW_OPACITY: f32 = 40.0;
+
+/// The engine's bevel technique for a DrawingML bevel preset: the rounded
+/// presets are smooth, the straight-sided ones hard chisels, the stepped
+/// ones soft chisels.
+pub fn bevel_technique(preset: &str) -> &'static str {
+    match preset {
+        "angle" | "hardEdge" | "coolSlant" | "slope" | "cross" => "ChiselHard",
+        "artDeco" | "riblet" | "divot" => "ChiselSoft",
+        _ => "Smooth",
+    }
+}
+
+/// The DrawingML bevel preset a technique comes back as: the inverse of
+/// [`bevel_technique`] for its first preset of each kind.
+pub fn bevel_preset(technique: Option<&str>) -> &'static str {
+    match technique {
+        Some("ChiselHard") => "angle",
+        Some("ChiselSoft") => "softRound",
+        _ => "circle",
+    }
+}
+
+/// A light rig's direction (`a:lightRig dir`) as the light's angle,
+/// degrees counter-clockwise from +x (the top is 90°).
+pub fn light_angle(dir: &str) -> f64 {
+    match dir {
+        "r" => 0.0,
+        "tr" => 45.0,
+        "tl" => 135.0,
+        "l" => 180.0,
+        "bl" => 225.0,
+        "b" => 270.0,
+        "br" => 315.0,
+        _ => 90.0,
+    }
+}
+
+/// The inverse of [`light_angle`]: the nearest of the eight directions.
+pub fn light_dir(angle: f64) -> &'static str {
+    const DIRS: [&str; 8] = ["r", "tr", "t", "tl", "l", "bl", "b", "br"];
+    DIRS[((angle.rem_euclid(360.0) / 45.0).round() as usize) % 8]
+}
+
+/// The engine's bevel back as a flat 3-D look (the inverse of the
+/// mapper's bevel): a top bevel `size` wide, `size × depth` high.
+pub fn three_d_of(b: &BevelEmbossParams) -> ThreeD {
+    let size = b.size.unwrap_or(5.0).max(0.0) as f64;
+    let depth = b.depth_pct.unwrap_or(100.0).max(1.0) as f64 / 100.0;
+    ThreeD {
+        camera: "orthographicFront".into(),
+        camera_turned: false,
+        light_rig: "threePt".into(),
+        light_dir: light_dir(b.angle_deg.unwrap_or(135.0) as f64 - RIG_KEY_OFFSET).into(),
+        bevel_top: Some(BevelSide {
+            width: size,
+            height: size * depth,
+            preset: bevel_preset(b.technique.as_deref()).into(),
+        }),
+        bevel_bottom: None,
+        extrusion: 0.0,
+        contour: 0.0,
+        material: None,
+    }
+}
+
 /// A gradient feather for a gradient whose stops differ in alpha: the
 /// engine's gradient swatches carry no alpha, so the fade rides on the
 /// item instead. `None` for any other paint.
@@ -1105,8 +1246,9 @@ pub fn effects_with_stack(
 }
 
 /// The engine's drop shadow and effects back as the neutral IR, with
-/// `rgb_of` naming a colour swatch's colour. What the engine holds and
-/// DrawingML does not (bevel, satin, directional feather) is left out.
+/// `rgb_of` naming a colour swatch's colour; a bevel as a flat 3-D look
+/// ([`three_d_of`]). What the engine holds and DrawingML does not (satin,
+/// directional feather) is left out.
 pub fn effects_of(
     drop: Option<&DropShadowSetting>,
     fx: Option<&FrameEffects>,
@@ -1150,6 +1292,7 @@ pub fn effects_of(
             alpha: pct(g.opacity_pct, 0.75),
         });
         out.soft_edge = fx.feather.as_ref().and_then(|f| f.width).map(|w| w as f64);
+        out.three_d = fx.bevel.as_ref().map(three_d_of);
     }
     out
 }

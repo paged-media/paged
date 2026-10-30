@@ -19,10 +19,12 @@
 // Insert ▸ Pictures and icons (slide W4): any picture the engine reads,
 // placed on the active slide as a picture frame in one undo step. An SVG
 // (an icon) stays vector: the engine draws it as paths, and export writes
-// it as PowerPoint does, an `asvg:svgBlip` beside a PNG fallback. A format
-// PowerPoint does not open (WebP, PSD, TGA, …) is written as a PNG of the
-// frame. Export asks for those PNGs (`rastersNeeded`); the host renders
-// them (`render.element`) and the export runs again with them.
+// it as PowerPoint does, an `asvg:svgBlip` beside a PNG fallback. A WebP,
+// TGA, ICO or QOI picture is decoded by the exporter and written as a PNG
+// of its own pixels (slide ADR 723). Any other format PowerPoint does not
+// open (PSD, AVIF, JPEG XL, …) is written as a PNG of the frame. Export
+// asks for those PNGs (`rastersNeeded`); the host renders them
+// (`render.element`) and the export runs again with them.
 
 import type {
   BundleHost,

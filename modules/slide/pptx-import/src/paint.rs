@@ -74,3 +74,17 @@ pub fn effects(el: &El, ctx: &Ctx) -> Effects {
     }
     fx
 }
+
+/// The effects of a shape's properties (`a:spPr`, an `a:effectStyle`):
+/// its effect list ([`effects`]) and its 3-D look (`a:scene3d`,
+/// `a:sp3d`) beside it; `None` when it has neither.
+pub fn shape_effects(el: &El, ctx: &Ctx) -> Option<Effects> {
+    let mut fx = paged_ooxml::drawingml::effect::container(el).map(|e| effects(e, ctx));
+    if let Some(t) = paged_ooxml::drawingml::three_d(el) {
+        let only = fx.is_none();
+        let fx = fx.get_or_insert_with(Effects::default);
+        fx.three_d = Some(t);
+        fx.three_d_only = only;
+    }
+    fx
+}

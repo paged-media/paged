@@ -344,27 +344,37 @@ fn shape_stroke(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Op
 
 /// The effects a shape draws: its own `a:effectLst`, else the theme's
 /// effect style its `a:effectRef` names (whose `phClr` is the reference's
-/// colour).
+/// colour); and its own 3-D look (`a:scene3d`, `a:sp3d`), else that
+/// style's. Each part falls back on its own, as PowerPoint's do.
 fn effects(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Effects {
-    let (fx, ph) = match &props.effects {
-        Some(fx) => (Some(fx.clone()), None),
-        None => {
-            let r = style
-                .and_then(|s| s.effect_ref.as_ref())
-                .filter(|r| r.idx > 0);
-            let fx = r.and_then(|r| {
-                ctx.theme?
-                    .effect_styles
-                    .get(r.idx as usize - 1)
-                    .cloned()
-                    .flatten()
-            });
-            (
-                fx,
-                style_color(ctx, &style.and_then(|s| s.effect_ref.clone())),
-            )
-        }
+    let styled = || {
+        let r = style
+            .and_then(|s| s.effect_ref.as_ref())
+            .filter(|r| r.idx > 0);
+        r.and_then(|r| {
+            ctx.theme?
+                .effect_styles
+                .get(r.idx as usize - 1)
+                .cloned()
+                .flatten()
+        })
     };
+    let own = props.effects.as_ref();
+    let (mut fx, ph) = match own.filter(|fx| !fx.three_d_only) {
+        Some(fx) => (Some(fx.clone()), None),
+        None => (
+            styled(),
+            style_color(ctx, &style.and_then(|s| s.effect_ref.clone())),
+        ),
+    };
+    let three_d = match own.and_then(|fx| fx.three_d.clone()) {
+        Some(t) => Some(t),
+        None => styled().and_then(|s| s.three_d),
+    };
+    if let Some(t) = three_d {
+        let fx = fx.get_or_insert_with(Default::default);
+        fx.three_d = Some(t);
+    }
     fx.map(|fx| resolved::effects(&fx, &ctx.colors(ph), &mut |n| ctx.note(n)))
         .unwrap_or_default()
 }

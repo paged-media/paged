@@ -1397,6 +1397,7 @@ impl<'a> Writer<'a, '_> {
                     self.effects_of(ec).as_deref(),
                     BEFORE_EFFECTS,
                 )?;
+                x = patch_three_d(&x, eb, ec)?;
             }
             for k in keys {
                 let known = [PLACE, FILL, LINE, FRAME, IGNORE, EFFECTS]
@@ -1808,6 +1809,7 @@ impl<'a> Writer<'a, '_> {
                 self.effects_of(ec).as_deref(),
                 BEFORE_EFFECTS,
             )?;
+            x = patch_three_d(&x, eb, ec)?;
         }
         let other: Vec<String> = keys
             .into_iter()
@@ -1846,15 +1848,24 @@ impl<'a> Writer<'a, '_> {
 
     /// The picture element `e`'s image as parts of the deck. PNG, JPEG,
     /// GIF, BMP and TIFF go as they are. An SVG goes as an `asvg:svgBlip`
-    /// beside a PNG fallback. Any other format goes as a PNG of the frame,
-    /// so its crop is in the image. A PNG the host has not rendered yet is
-    /// asked for in [`Shared::needs`].
+    /// beside a PNG fallback. A WebP, TGA, ICO or QOI goes as a PNG of all
+    /// its pixels, decoded here (ADR 723), so its crop stays a crop. Any
+    /// other format goes as a PNG of the frame the host renders, so its
+    /// crop is in the image. A PNG the host has not rendered yet is asked
+    /// for in [`Shared::needs`].
     fn add_image(&self, e: &Elem, bytes: &[u8]) -> Result<BlipOut, String> {
         use pptx_core::media::{sniff, PicFormat};
         let fmt = sniff(bytes).ok_or("the image is in no format the engine reads")?;
         if fmt.in_deck() {
             return Ok(BlipOut {
                 rid: self.add_part(bytes, fmt.extension()),
+                svg: None,
+                baked: false,
+            });
+        }
+        if let Some(png) = pptx_core::transcode::to_png(bytes) {
+            return Ok(BlipOut {
+                rid: self.add_part(&png, "png"),
                 svg: None,
                 baked: false,
             });
@@ -2533,6 +2544,48 @@ fn set_shape_id(x: &str, id: u32) -> String {
 /// Replace (or insert, or remove) a child of `spPr` of the shape element
 /// `x`: the first child named one of `names`; a new one goes after the last
 /// child named in `after` (first when none).
+/// The bevel an element's effects hold (slide ADR 723).
+fn bevel_of(e: &Elem) -> Option<paged_model::BevelEmbossParams> {
+    let fx: paged_model::FrameEffects = serde_json::from_value(e.v.get("effects")?.clone()).ok()?;
+    fx.bevel
+}
+
+/// A bevel changed in the editor, written back: its 3-D look (`a:sp3d`,
+/// with a flat `a:scene3d` when the shape has none) or, when removed, no
+/// `a:sp3d`. An unchanged bevel keeps the shape's own 3-D XML, its preset
+/// and scene with it.
+fn patch_three_d(x: &str, eb: &Elem, ec: &Elem) -> Result<String, String> {
+    let (b, c) = (bevel_of(eb), bevel_of(ec));
+    let same = match (&b, &c) {
+        (None, None) => true,
+        (Some(b), Some(c)) => serde_json::to_value(b).ok() == serde_json::to_value(c).ok(),
+        _ => false,
+    };
+    if same {
+        return Ok(x.to_string());
+    }
+    let after: Vec<&str> = BEFORE_EFFECTS
+        .iter()
+        .copied()
+        .chain(["a:effectLst", "a:effectDag"])
+        .collect();
+    let Some(c) = c else {
+        return set_sppr(x, &["a:sp3d"], None, &after);
+    };
+    let xml = paged_ooxml::drawingml::write::three_d(&dml_native::three_d_of(&c));
+    let (scene, sp) = xml.split_at(xml.find("<a:sp3d").unwrap_or(0));
+    let has_scene = xml::root(x)
+        .and_then(|r| r.path(x, &["p:spPr"]))
+        .is_some_and(|p| p.children(x).iter().any(|k| k.name == "a:scene3d"));
+    let mut x = x.to_string();
+    if !has_scene {
+        x = set_sppr(&x, &["a:scene3d"], Some(scene), &after)?;
+    }
+    let mut after = after;
+    after.push("a:scene3d");
+    set_sppr(&x, &["a:sp3d"], Some(sp), &after)
+}
+
 fn set_sppr(x: &str, names: &[&str], new: Option<&str>, after: &[&str]) -> Result<String, String> {
     set_child(x, &["p:spPr"], names, new, after)
 }

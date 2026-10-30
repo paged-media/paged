@@ -1007,3 +1007,140 @@ fn shadows_glow_soft_edge_and_dashes_set_in_the_editor_read_back__feat__plugin_s
     assert_eq!(stroke.as_ref().unwrap().dash.as_deref(), Some("sysDash"));
     keep(&out.bytes, "effects-edited");
 }
+
+/// The `a:spPr` of shape `id` in a slide part's XML.
+fn sp_pr_of(xml: &str, id: u32) -> String {
+    let at = xml
+        .find(&format!(r#"<p:cNvPr id="{id}""#))
+        .expect("the shape");
+    let from = xml[at..].find("<p:spPr").unwrap() + at;
+    let to = xml[from..].find("</p:spPr>").unwrap() + from;
+    xml[from..to].to_string()
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn a_pattern_is_drawn_as_its_tiles_and_written_back_as_it_was__feat__plugin_slide_native_effects() {
+    let bytes = fixture("patterns");
+    let base = imported(&bytes);
+    // Every pattern shape of slide 1 holds its tile picture and no fill.
+    let sp = &base.spreads[0].spread;
+    let tiled = sp
+        .polygons
+        .iter()
+        .filter(|p| p.image_bytes.is_some() && p.fill_color.as_deref() == Some("Swatch/None"))
+        .count();
+    assert_eq!(tiled, 27);
+    // Unedited: the deck's own bytes.
+    let same = export_doc(&bytes, &base);
+    assert_eq!(same.bytes, bytes);
+    // Moved: the slide is rewritten, the pattern stays `a:pattFill`.
+    let before = resolved(&bytes);
+    let key = top_keys(&base, 0)[0].clone();
+    let mut doc = base.clone();
+    move_shape(&mut doc, 0, &key, 10.0, 0.0);
+    let out = export_doc(&bytes, &doc);
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    assert_eq!(
+        changed_parts(&bytes, &out.bytes),
+        vec![before.slides[0].part.clone()]
+    );
+    let xml = part_text(&out.bytes, &before.slides[0].part);
+    let sp_pr = sp_pr_of(&xml, shape_id(&key));
+    assert!(sp_pr.contains(r#"<a:pattFill prst="pct5">"#), "{sp_pr}");
+    let after = resolved(&out.bytes);
+    assert!(matches!(
+        item(&after, 0, shape_id(&key)).kind,
+        ItemKind::Shape {
+            fill: slide_resolve::model::Paint::Pattern(_),
+            ..
+        }
+    ));
+    keep(&out.bytes, "patterns-moved");
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn a_bevel_reads_as_the_engines_bevel_and_an_edit_writes_its_3d_look__feat__plugin_slide_native_effects(
+) {
+    let bytes = fixture("bevels");
+    let base = imported(&bytes);
+    let same = export_doc(&bytes, &base);
+    assert_eq!(same.bytes, bytes);
+    let before = resolved(&bytes);
+    let part = before.slides[0].part.clone();
+    let keys = top_keys(&base, 0);
+    let poly = |doc: &Document, key: &str| match elements(doc, 0, key)
+        .into_iter()
+        .find(|r| matches!(r, FrameRef::Polygon(_)))
+    {
+        Some(FrameRef::Polygon(i)) => i,
+        _ => panic!("no outline for {key}"),
+    };
+    // relaxedInset (the second shape) is a smooth inner bevel.
+    let relaxed = &keys[1];
+    let b = base.spreads[0].spread.polygons[poly(&base, relaxed)]
+        .effects
+        .as_ref()
+        .and_then(|e| e.bevel.clone())
+        .expect("a bevel");
+    assert_eq!(b.technique.as_deref(), Some("Smooth"));
+    assert_eq!(b.size, Some(6.0));
+    // A shadow added beside it keeps the bevel's own XML (its preset).
+    let mut doc = base.clone();
+    let i = poly(&doc, relaxed);
+    doc.spreads[0].spread.polygons[i].drop_shadow = Some(paged_model::DropShadowSetting {
+        mode: "Drop".into(),
+        x_offset: 3.0,
+        y_offset: 3.0,
+        size: 2.0,
+        opacity_pct: 50.0,
+        ..Default::default()
+    });
+    let out = export_doc(&bytes, &doc);
+    let sp_pr = sp_pr_of(&part_text(&out.bytes, &part), shape_id(relaxed));
+    assert!(
+        sp_pr.contains(r#"<a:bevelT prst="relaxedInset"/>"#),
+        "{sp_pr}"
+    );
+    assert!(sp_pr.contains("<a:outerShdw"), "{sp_pr}");
+    // A bevel made deeper in the editor is written as a hard 3-D look.
+    let mut doc = base.clone();
+    let i = poly(&doc, relaxed);
+    let fx = doc.spreads[0].spread.polygons[i].effects.as_mut().unwrap();
+    fx.bevel = Some(paged_model::BevelEmbossParams {
+        size: Some(12.0),
+        depth_pct: Some(50.0),
+        technique: Some("ChiselHard".into()),
+        angle_deg: Some(135.0),
+        ..b.clone()
+    });
+    let out = export_doc(&bytes, &doc);
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    let sp_pr = sp_pr_of(&part_text(&out.bytes, &part), shape_id(relaxed));
+    assert!(
+        sp_pr.contains(r#"<a:bevelT w="152400" h="76200" prst="angle"/>"#),
+        "{sp_pr}"
+    );
+    assert_eq!(sp_pr.matches("<a:scene3d>").count(), 1, "{sp_pr}");
+    let after = resolved(&out.bytes);
+    let t = item(&after, 0, shape_id(relaxed))
+        .effects
+        .three_d
+        .clone()
+        .unwrap();
+    assert_eq!(t.bevel_top.unwrap().preset, "angle");
+    keep(&out.bytes, "bevel-edited");
+    // Removed: no `a:sp3d` left.
+    let mut doc = base.clone();
+    let i = poly(&doc, relaxed);
+    doc.spreads[0].spread.polygons[i]
+        .effects
+        .as_mut()
+        .unwrap()
+        .bevel = None;
+    let out = export_doc(&bytes, &doc);
+    let sp_pr = sp_pr_of(&part_text(&out.bytes, &part), shape_id(relaxed));
+    assert!(!sp_pr.contains("<a:sp3d"), "{sp_pr}");
+    keep(&out.bytes, "bevel-removed");
+}

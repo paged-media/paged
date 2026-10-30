@@ -827,7 +827,28 @@ impl Builder<'_> {
                     .cloned()
                     .collect();
                 if has_fill || stroke.is_some() {
-                    let fc = self.paint(fill);
+                    // A pattern fill is drawn as a picture of its tiles in
+                    // the outline (the engine on main has no pattern paint,
+                    // ADR 723); the deck's `a:pattFill` is written back.
+                    let tile = match fill {
+                        Paint::Pattern(pp) => {
+                            // The item's opacity already carries an alpha
+                            // both colours share (slide-resolve).
+                            let op = it.opacity.clamp(1e-3, 1.0);
+                            let pp = PatternPaint {
+                                fg_alpha: (pp.fg_alpha / op).min(1.0),
+                                bg_alpha: (pp.bg_alpha / op).min(1.0),
+                                ..pp.clone()
+                            };
+                            self.dml.pattern_tile(&pp, slide_box(it))
+                        }
+                        _ => None,
+                    };
+                    let fc = if tile.is_some() {
+                        NONE_SWATCH.to_string()
+                    } else {
+                        self.paint(fill)
+                    };
                     let sf = self.stroke(stroke.as_ref());
                     let gp = box_placement(fill, it.w, it.h);
                     // Item ids are `u` + hex, so derived ids take suffixes
@@ -861,6 +882,16 @@ impl Builder<'_> {
                         label,
                         os.as_deref(),
                     );
+                    if let Some(t) = tile {
+                        if let Some(poly) = sb
+                            .spread
+                            .polygons
+                            .last_mut()
+                            .filter(|p| p.self_id.as_deref() == Some(pid.as_str()))
+                        {
+                            place_tile(poly, &t, &it.transform, &it.id);
+                        }
+                    }
                     let details: Vec<SubPath> = outline
                         .iter()
                         .filter(|s| !s.filled && s.stroked)
@@ -1599,6 +1630,63 @@ impl Builder<'_> {
 
 /// A top-level slide item's shape key: its `cNvPr` id, or `bg` for the
 /// slide's background (the one item with no shape behind it).
+/// The box an item covers on its slide, `[left, top, right, bottom]` pt:
+/// its local box `(0, 0)`–`(w, h)` through its transform.
+fn slide_box(it: &Item) -> [f64; 4] {
+    let m = &it.transform;
+    let at = |x: f64, y: f64| (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]);
+    let pts = [at(0.0, 0.0), at(it.w, 0.0), at(0.0, it.h), at(it.w, it.h)];
+    let xs = pts.iter().map(|p| p.0);
+    let ys = pts.iter().map(|p| p.1);
+    [
+        xs.clone().fold(f64::INFINITY, f64::min),
+        ys.clone().fold(f64::INFINITY, f64::min),
+        xs.fold(f64::NEG_INFINITY, f64::max),
+        ys.fold(f64::NEG_INFINITY, f64::max),
+    ]
+}
+
+/// Place a pattern's tile picture in `poly`: the picture's pixels on the
+/// slide's grid, mapped into the item's inner space through the inverse
+/// of its transform, so the pattern stays upright as PowerPoint draws it.
+fn place_tile(
+    poly: &mut paged_model::Polygon,
+    t: &dml_native::pattern::PatternTile,
+    transform: &[f64; 6],
+    id: &str,
+) {
+    let [a, b, c, d, e, f] = *transform;
+    let det = a * d - b * c;
+    if det.abs() < 1e-12 {
+        return;
+    }
+    // inv(T) ∘ S, S the pixels' scale and origin on the slide.
+    let inv = [
+        d / det,
+        -b / det,
+        -c / det,
+        a / det,
+        (c * f - d * e) / det,
+        (b * e - a * f) / det,
+    ];
+    let k = 1.0 / t.px_per_pt;
+    let s = [k, 0.0, 0.0, k, t.origin[0], t.origin[1]];
+    let m = [
+        inv[0] * s[0] + inv[2] * s[1],
+        inv[1] * s[0] + inv[3] * s[1],
+        inv[0] * s[2] + inv[2] * s[3],
+        inv[1] * s[2] + inv[3] * s[3],
+        inv[0] * s[4] + inv[2] * s[5] + inv[4],
+        inv[1] * s[4] + inv[3] * s[5] + inv[5],
+    ];
+    poly.has_image_element = true;
+    poly.image_link = Some(format!("file:pattern-{id}.png"));
+    poly.image_item_transform = Some(matrix(&m));
+    poly.image_bytes = Some(pptx_core::transcode::png_indexed(
+        t.w, t.h, &t.palette, &t.indices,
+    ));
+}
+
 pub fn slide_key(it: &Item) -> String {
     if it.meta.shape_id == 0 && it.meta.order == 0 {
         "bg".to_string()

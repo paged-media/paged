@@ -41,12 +41,14 @@
 pub mod color;
 pub mod effect;
 pub mod paint;
+pub mod pattern;
 pub mod resolved;
 pub mod write;
 
 pub use color::{color, color_in, resolve, Color, ColorBase, Rgba, SchemeColors};
 pub use effect::{
-    effects, effects_in, Blur, Effects, FillOverlay, Glow, PresetShadow, Reflection, Shadow,
+    effects, effects_in, shape_effects, three_d, Bevel, Blur, Effects, FillOverlay, Glow,
+    PresetShadow, Reflection, Shadow, Shape3d,
 };
 pub use paint::{
     blip, fill, fill_in, gradient, line, rect_attrs, Blip, BlipEffect, Fill, Gradient,
@@ -83,6 +85,6 @@ pub fn shape_properties(sp_pr: &El, rels: Rels) -> ShapeProperties {
     ShapeProperties {
         fill: fill_in(sp_pr, rels),
         line: sp_pr.child(Ns::A, "ln").map(|l| line(l, rels)),
-        effects: effects_in(sp_pr, rels),
+        effects: shape_effects(sp_pr, rels).unwrap_or_default(),
     }
 }
