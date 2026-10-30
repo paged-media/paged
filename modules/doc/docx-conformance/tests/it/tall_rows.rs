@@ -70,6 +70,8 @@ fn a_row_taller_than_the_page_is_a_native_row_that_splits__feat__plugin_doc_word
 fn save_back_steps_over_a_tall_native_table__feat__plugin_doc_word_pagination() {
     let baseline = lowered();
     let para = |text: &str| ParagraphContentIn {
+        mark_change: None,
+        props_change: None,
         paragraph_style: None,
         runs: vec![RunContentIn {
             text: text.to_string(),
@@ -85,6 +87,7 @@ fn save_back_steps_over_a_tall_native_table__feat__plugin_doc_word_pagination() 
     let edited = overlay_story_content(
         &baseline,
         &StoryContentIn {
+            comments: Vec::new(),
             self_id: "s".into(),
             paragraphs,
         },

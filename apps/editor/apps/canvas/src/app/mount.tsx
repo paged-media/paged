@@ -44,6 +44,7 @@ import {
   pageDecorationsContribution,
   isolationDimContribution,
   subContextContribution,
+  marginBandContribution,
   marginGuidesContribution,
   pathEditContribution,
   resizeHandlesContribution,
@@ -339,6 +340,7 @@ import {
 } from "../select-all";
 import { CorpusPicker } from "../ui/CorpusPicker";
 import { templateFieldsContribution } from "../overlays/template-fields";
+import { liveShapeHandlesContribution } from "../overlays/live-shape-handles";
 import {
   EditorInstanceProvider,
   createEditorServices,
@@ -361,6 +363,9 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // Editor ADR 301 — a header, footer or note edited in place: the veil
   // around it and its bar.
   subContextContribution,
+  // Editor ADR 300 — the markup margin band: a bundle's balloons (tracked
+  // changes, comments) beside the pages while its context is active.
+  marginBandContribution,
   // Template fields (docs/composable-editor.md §7.10): outlines, labels and a
   // picture's Replace button, for an author and a filler only.
   templateFieldsContribution,
@@ -378,6 +383,8 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   selectionChromeContribution,
   resizeHandlesContribution,
   rotateHandleContribution,
+  // Editor ADR 310 — the live-shape widgets (corners, sides, star, pie).
+  liveShapeHandlesContribution,
   // W2.9 — text-frame threading ports on the selection chrome.
   threadingPortsContribution,
   // B4 — the story's route across the spread (View ▸ Show text

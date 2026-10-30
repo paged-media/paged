@@ -664,6 +664,17 @@ pub(super) fn emit_oval_image(
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
     rendering: paged_color::cms::Rendering,
 ) {
+    // Engine ADR 1047 — a pie's picture is clipped to the wedge.
+    if let Some(twin) = paged_model::live_shape::pie_polygon(oval) {
+        return emit_polygon_image(
+            page,
+            &twin,
+            options,
+            page_image_cache,
+            decoded_cache,
+            rendering,
+        );
+    }
     let resolved = if let Some(bytes) = oval.image_bytes.as_deref() {
         resolve_inline_image_bytes(
             oval.self_id.as_deref(),

@@ -335,8 +335,11 @@ fn content(paragraphs: &[LoweredParagraph], id: &str) -> StoryContentIn {
                         ..Default::default()
                     })
                     .collect(),
+                mark_change: None,
+                props_change: None,
             })
             .collect(),
+        comments: Vec::new(),
     }
 }
 

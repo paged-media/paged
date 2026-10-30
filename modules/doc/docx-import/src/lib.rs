@@ -44,9 +44,13 @@ use paged_ooxml::ooxmlsdk::simple_type::{
 };
 use paged_ooxml::{parse_root, part_dir, rels, resolve_target, OoxmlError, OpcPackage};
 
+mod comments;
 mod objects;
 mod theme;
-use docx_core::Theme;
+pub use comments::{comments_parts, CommentParts};
+use docx_core::{
+    ChangeKind, FormatChange, ParaPropsChange, ParagraphReview, Revision, RunChange, Theme,
+};
 
 /// Import context threaded through the body mapping: the numbering resolver and
 /// the image (media-part) resolver.
@@ -67,6 +71,11 @@ struct ImportCtx<'a> {
     hidden_styles: std::collections::HashSet<String>,
     /// The document theme, for theme colours and fonts (doc ADR 609).
     theme: Option<Theme>,
+    /// Doc ADR 613 — the ids of the comments that start a thread (a reply's
+    /// range is its thread's, and is not read again).
+    comment_roots: std::collections::HashSet<i64>,
+    /// The thread comments whose range is open where the walk stands.
+    open_comments: std::cell::RefCell<Vec<i64>>,
     /// The DrawingML look of the pictures of the part being mapped, by
     /// `wp:docPr/@id`, in document order (doc ADR 618): read once through
     /// the shared DrawingML reader, which works on the element tree.
@@ -81,6 +90,21 @@ struct ImportCtx<'a> {
 type Looks = std::collections::HashMap<u32, std::collections::VecDeque<Option<PictureLook>>>;
 
 impl ImportCtx<'_> {
+    /// A `w:commentRangeStart` / `w:commentRangeEnd` met in the text.
+    fn comment_range(&self, id: &str, start: bool) {
+        let Ok(id) = id.trim().parse::<i64>() else {
+            return;
+        };
+        if !self.comment_roots.contains(&id) {
+            return;
+        }
+        let mut open = self.open_comments.borrow_mut();
+        open.retain(|c| *c != id);
+        if start {
+            open.push(id);
+        }
+    }
+
     /// Read the looks of the pictures in `part` (the part about to be
     /// mapped), replacing the previous part's.
     fn load_looks(&self, part: &[u8]) {
@@ -367,6 +391,13 @@ pub fn import_docx_with_package(
         .as_ref()
         .and_then(|s| s.auto_hyphenation.as_ref())
         .is_some_and(|a| on(&a.val));
+    // Doc ADR 613 — Word records changes in this document.
+    let track_revisions = settings
+        .as_ref()
+        .and_then(|s| s.track_revisions.as_ref())
+        .is_some_and(|t| t.val.is_none() || on(&t.val));
+    // Doc ADR 613 — the comment threads; their ranges are read on the runs.
+    let comments = comments::read_comments(&pkg, &main_part);
 
     let (body, sections, notes, headers_footers, unplaced_vml, held) = {
         let doc_rels = pkg
@@ -380,6 +411,12 @@ pub fn import_docx_with_package(
             held: std::cell::Cell::new(BodyHeld::default()),
             hidden_styles: wml_styles.as_ref().map(hidden_styles).unwrap_or_default(),
             theme: theme.clone(),
+            comment_roots: comments
+                .iter()
+                .filter(|c| c.parent.is_none())
+                .map(|c| c.id)
+                .collect(),
+            open_comments: std::cell::RefCell::new(Vec::new()),
             looks: std::cell::RefCell::new(picture_looks(doc_bytes)),
             objects: std::cell::RefCell::new(objects::PartObjects::for_part(doc_bytes)),
             images: ImageResolver {
@@ -421,6 +458,8 @@ pub fn import_docx_with_package(
         unplaced_vml,
         held,
         theme,
+        comments,
+        track_revisions,
     };
     Ok((doc, pkg, main_part))
 }
@@ -866,6 +905,8 @@ fn map_body(body: &wml::Body, ctx: &ImportCtx) -> MappedBody {
             wml::BodyChoice::Paragraph(p) => walk.paragraph(p, false),
             wml::BodyChoice::Table(t) => walk.table(t),
             wml::BodyChoice::SdtBlock(sdt) => walk.content_control(sdt),
+            wml::BodyChoice::CommentRangeStart(c) => ctx.comment_range(&c.id, true),
+            wml::BodyChoice::CommentRangeEnd(c) => ctx.comment_range(&c.id, false),
             _ => {}
         }
     }
@@ -917,17 +958,9 @@ impl BodyWalk<'_, '_> {
             .paragraph_properties
             .as_deref()
             .and_then(|pp| pp.section_properties.as_deref());
-        if mark_deleted(p) {
-            // A tracked deletion of the paragraph mark joins the paragraph to
-            // the next one once accepted. With nothing left in it, accepting
-            // removes it: so is it here (its bytes stay in the source). One
-            // that keeps content stays a paragraph of its own.
-            if sect.is_none() && !para.runs.iter().any(run_has_content) {
-                self.pending_bookmarks = std::mem::take(&mut para.bookmarks);
-                return;
-            }
-            self.ctx.bump(|h| h.deleted_marks_kept += 1);
-        }
+        // Doc ADR 613 — a paragraph whose mark is a tracked deletion stays a
+        // paragraph: the mark carries the deletion (`Paragraph::review`),
+        // which accepting resolves.
         self.blocks.push(Block::Paragraph(para));
         if let Some(sp) = sect {
             let mut section = map_section(sp);
@@ -965,15 +998,6 @@ impl BodyWalk<'_, '_> {
             }
         }
     }
-}
-
-/// Whether a paragraph's mark is a tracked deletion (`w:pPr/w:rPr/w:del` or
-/// `w:moveFrom`).
-fn mark_deleted(p: &wml::Paragraph) -> bool {
-    p.paragraph_properties
-        .as_deref()
-        .and_then(|pp| pp.paragraph_mark_run_properties.as_deref())
-        .is_some_and(|m| m.deleted.is_some() || m.move_from.is_some())
 }
 
 /// Whether a run puts anything on the page.
@@ -1109,6 +1133,7 @@ fn map_paragraph(
             tracked_ppr,
         },
         toc_field,
+        review: paragraph_review(p),
     }
 }
 
@@ -1121,12 +1146,101 @@ enum Inline<'a> {
     Field(&'a wml::SimpleField),
     /// A run-level content control (`w:sdt`).
     ContentControl(&'a wml::SdtRun),
-    /// A tracked insertion or move to here (`w:ins` / `w:moveTo`).
-    Inserted(Vec<Inline<'a>>),
-    /// A tracked deletion or move away (`w:del` / `w:moveFrom`).
-    Deleted,
+    /// A tracked insertion or move to here (`w:ins` / `w:moveTo`), or a
+    /// deletion or move away (`w:del` / `w:moveFrom`) — doc ADR 613: the
+    /// runs carry the change.
+    Tracked(Vec<Inline<'a>>, RunChange),
     Bookmark(&'a str),
+    /// `w:commentRangeStart` (true) / `w:commentRangeEnd` (false).
+    CommentRange(&'a str, bool),
     Other,
+}
+
+fn revision(id: &str, author: &str, date: &Option<String>, moved: bool) -> Revision {
+    Revision {
+        id: id.trim().to_string(),
+        author: (!author.is_empty()).then(|| author.to_string()),
+        date: date.clone(),
+        moved,
+    }
+}
+
+fn inserted(i: &wml::InsertedRun) -> Inline<'_> {
+    Inline::Tracked(
+        i.inserted_run_choice
+            .iter()
+            .map(inline_of_inserted)
+            .collect(),
+        RunChange {
+            kind: ChangeKind::Insert,
+            revision: revision(&i.id, &i.author, &i.date, false),
+        },
+    )
+}
+
+fn moved_to(m: &wml::MoveToRun) -> Inline<'_> {
+    Inline::Tracked(
+        m.move_to_run_choice.iter().map(inline_of_move_to).collect(),
+        RunChange {
+            kind: ChangeKind::Insert,
+            revision: revision(&m.id, &m.author, &m.date, true),
+        },
+    )
+}
+
+fn deleted(d: &wml::DeletedRun) -> Inline<'_> {
+    Inline::Tracked(
+        d.deleted_run_choice.iter().map(inline_of_deleted).collect(),
+        RunChange {
+            kind: ChangeKind::Delete,
+            revision: revision(&d.id, &d.author, &d.date, false),
+        },
+    )
+}
+
+fn moved_from(m: &wml::MoveFromRun) -> Inline<'_> {
+    Inline::Tracked(
+        m.move_from_run_choice
+            .iter()
+            .map(inline_of_move_from)
+            .collect(),
+        RunChange {
+            kind: ChangeKind::Delete,
+            revision: revision(&m.id, &m.author, &m.date, true),
+        },
+    )
+}
+
+fn inline_of_deleted(c: &wml::DeletedRunChoice) -> Inline<'_> {
+    use wml::DeletedRunChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
+        _ => Inline::Other,
+    }
+}
+
+fn inline_of_move_from(c: &wml::MoveFromRunChoice) -> Inline<'_> {
+    use wml::MoveFromRunChoice as C;
+    match c {
+        C::WRun(r) => Inline::Run(r),
+        C::SdtRun(s) => Inline::ContentControl(s),
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
+        _ => Inline::Other,
+    }
 }
 
 fn inline_of_paragraph(c: &wml::ParagraphChoice) -> Inline<'_> {
@@ -1136,16 +1250,12 @@ fn inline_of_paragraph(c: &wml::ParagraphChoice) -> Inline<'_> {
         C::Hyperlink(h) => Inline::Hyperlink(h),
         C::SimpleField(f) => Inline::Field(f),
         C::SdtRun(s) => Inline::ContentControl(s),
-        C::InsertedRun(i) => Inline::Inserted(
-            i.inserted_run_choice
-                .iter()
-                .map(inline_of_inserted)
-                .collect(),
-        ),
-        C::MoveToRun(m) => {
-            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
-        }
-        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         _ => Inline::Other,
     }
@@ -1158,16 +1268,12 @@ fn inline_of_hyperlink(c: &wml::HyperlinkChoice) -> Inline<'_> {
         C::Hyperlink(h) => Inline::Hyperlink(h),
         C::SimpleField(f) => Inline::Field(f),
         C::SdtRun(s) => Inline::ContentControl(s),
-        C::InsertedRun(i) => Inline::Inserted(
-            i.inserted_run_choice
-                .iter()
-                .map(inline_of_inserted)
-                .collect(),
-        ),
-        C::MoveToRun(m) => {
-            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
-        }
-        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         _ => Inline::Other,
     }
 }
@@ -1179,16 +1285,12 @@ fn inline_of_field(c: &wml::SimpleFieldChoice) -> Inline<'_> {
         C::Hyperlink(h) => Inline::Hyperlink(h),
         C::SimpleField(f) => Inline::Field(f),
         C::SdtRun(s) => Inline::ContentControl(s),
-        C::InsertedRun(i) => Inline::Inserted(
-            i.inserted_run_choice
-                .iter()
-                .map(inline_of_inserted)
-                .collect(),
-        ),
-        C::MoveToRun(m) => {
-            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
-        }
-        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         _ => Inline::Other,
     }
 }
@@ -1200,16 +1302,12 @@ fn inline_of_content_control(c: &wml::SdtContentRunChoice) -> Inline<'_> {
         C::Hyperlink(h) => Inline::Hyperlink(h),
         C::SimpleField(f) => Inline::Field(f),
         C::SdtRun(s) => Inline::ContentControl(s),
-        C::InsertedRun(i) => Inline::Inserted(
-            i.inserted_run_choice
-                .iter()
-                .map(inline_of_inserted)
-                .collect(),
-        ),
-        C::MoveToRun(m) => {
-            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
-        }
-        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         _ => Inline::Other,
     }
@@ -1220,16 +1318,12 @@ fn inline_of_inserted(c: &wml::InsertedRunChoice) -> Inline<'_> {
     match c {
         C::WRun(r) => Inline::Run(r),
         C::SdtRun(s) => Inline::ContentControl(s),
-        C::InsertedRun(i) => Inline::Inserted(
-            i.inserted_run_choice
-                .iter()
-                .map(inline_of_inserted)
-                .collect(),
-        ),
-        C::MoveToRun(m) => {
-            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
-        }
-        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         _ => Inline::Other,
     }
@@ -1240,16 +1334,12 @@ fn inline_of_move_to(c: &wml::MoveToRunChoice) -> Inline<'_> {
     match c {
         C::WRun(r) => Inline::Run(r),
         C::SdtRun(s) => Inline::ContentControl(s),
-        C::InsertedRun(i) => Inline::Inserted(
-            i.inserted_run_choice
-                .iter()
-                .map(inline_of_inserted)
-                .collect(),
-        ),
-        C::MoveToRun(m) => {
-            Inline::Inserted(m.move_to_run_choice.iter().map(inline_of_move_to).collect())
-        }
-        C::DeletedRun(_) | C::MoveFromRun(_) => Inline::Deleted,
+        C::InsertedRun(i) => inserted(i),
+        C::MoveToRun(m) => moved_to(m),
+        C::DeletedRun(d) => deleted(d),
+        C::MoveFromRun(m) => moved_from(m),
+        C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
+        C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         _ => Inline::Other,
     }
@@ -1280,6 +1370,8 @@ struct Stamp {
     field_code: Option<String>,
     field_seq: Option<u32>,
     merge: Option<MergeField>,
+    /// Doc ADR 613 — the tracked insertion or deletion the runs sit in.
+    change: Option<RunChange>,
 }
 
 /// One paragraph's inline walk.
@@ -1385,6 +1477,7 @@ impl<'a> ParaWalk<'_, 'a> {
                         field_code: Some(fs.instruction.trim().to_string()),
                         field_seq: Some(seq),
                         merge,
+                        change: stamp.change.clone(),
                     };
                     self.items(
                         fs.simple_field_choice.iter().map(inline_of_field).collect(),
@@ -1410,21 +1503,22 @@ impl<'a> ParaWalk<'_, 'a> {
                         stamp,
                     );
                 }
-                // A tracked insertion: shown as accepted.
-                Inline::Inserted(children) => {
+                // Doc ADR 613 — a tracked insertion or deletion: its runs
+                // are shown and carry the change (a deletion's text is its
+                // `w:delText`). They sit on another XML path.
+                Inline::Tracked(children, change) => {
                     self.ctx.bump(|h| h.tracked_changes += 1);
                     let inner_path = match path {
                         Path::Locked(Some(s)) => Path::Locked(Some(s)),
                         _ => Path::Locked(Some(RunSource::Tracked)),
                     };
-                    self.items(children, inner_path, stamp);
+                    let stamp = Stamp {
+                        change: Some(change),
+                        ..stamp.clone()
+                    };
+                    self.items(children, inner_path, &stamp);
                 }
-                // A tracked deletion: not shown, as once accepted. Its bytes
-                // stay in the source.
-                Inline::Deleted => {
-                    self.ctx.bump(|h| h.tracked_changes += 1);
-                    self.unshown += 1;
-                }
+                Inline::CommentRange(id, start) => self.ctx.comment_range(id, start),
                 Inline::Other => {}
             }
         }
@@ -1466,13 +1560,15 @@ impl<'a> ParaWalk<'_, 'a> {
             }
             return;
         }
-        if r.run_properties
+        let mut run = map_run(r, self.ctx);
+        if let Some(c) = r
+            .run_properties
             .as_deref()
-            .is_some_and(|p| p.run_properties_change.is_some())
+            .and_then(|p| p.run_properties_change.as_deref())
         {
             self.ctx.bump(|h| h.tracked_changes += 1);
+            run.format_change = Some(format_change(c, self.ctx.theme.as_ref()));
         }
-        let mut run = map_run(r, self.ctx);
         // Hidden text (`w:vanish`): not shown, as in Word with hidden text
         // off. The run keeps its ordinal, so the runs around it stay
         // addressable, and its bytes stay in the source.
@@ -1489,6 +1585,8 @@ impl<'a> ParaWalk<'_, 'a> {
         run.field_code = stamp.field_code.clone();
         run.field_seq = stamp.field_seq;
         run.merge_field = stamp.merge.clone();
+        run.change = stamp.change.clone();
+        run.comments = self.ctx.open_comments.borrow().clone();
         if let Some(f) = self.fields.last() {
             if f.separated {
                 if let Some(url) = &f.result_url {
@@ -1987,6 +2085,12 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
                     text.push_str(s);
                 }
             }
+            // Doc ADR 613 — a deleted run's text, shown as the deletion.
+            wml::RunChoice::DeletedText(t) => {
+                if let Some(s) = &t.0.xml_content {
+                    text.push_str(s);
+                }
+            }
             wml::RunChoice::TabChar => text.push('\t'),
             // ADR 028/029 — a page or column break is a pagination
             // instruction, not text: it is recorded at its char offset. A
@@ -2112,7 +2216,117 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
         field_code: None,
         field_seq: None,
         merge_field: None,
+        change: None,
+        format_change: None,
+        comments: Vec::new(),
         text_boxes,
+    }
+}
+
+/// Doc ADR 613 — a run's `w:rPrChange`: its change and its look before.
+fn format_change(c: &wml::RunPropertiesChange, theme: Option<&Theme>) -> FormatChange {
+    let mut old_props = RunProps::default();
+    let mut old_style_id = None;
+    for choice in &c.previous_run_properties.run_properties_choice {
+        apply_previous_run_property_choice(choice, &mut old_props, &mut old_style_id, theme);
+    }
+    FormatChange {
+        revision: revision(&c.id, &c.author, &c.date, false),
+        old_style_id,
+        old_props,
+    }
+}
+
+/// [`apply_run_property_choice`] for `w:rPrChange/w:rPr`, which ooxmlsdk
+/// types apart.
+fn apply_previous_run_property_choice(
+    c: &wml::PreviousRunPropertiesChoice,
+    props: &mut RunProps,
+    style_id: &mut Option<String>,
+    theme: Option<&Theme>,
+) {
+    use wml::PreviousRunPropertiesChoice as C;
+    match c {
+        C::RunStyle(s) => *style_id = Some(s.val.clone()),
+        C::RunFonts(f) => theme::apply_fonts(f, theme, props),
+        C::Shading(s) => props.shading = theme::shading(s, theme),
+        C::Bold(b) => props.bold = Some(on(&b.val)),
+        C::Italic(i) => props.italic = Some(on(&i.val)),
+        C::Caps(v) => props.caps = Some(on(&v.val)),
+        C::SmallCaps(v) => props.small_caps = Some(on(&v.val)),
+        C::Strike(v) => props.strike = Some(on(&v.val)),
+        C::Color(col) => theme::apply_color(col, theme, props),
+        C::FontSize(sz) => props.size_half_pts = hps(&sz.val),
+        C::Underline(u) => props.underline = Some(underline_on(u)),
+        C::VerticalTextAlignment(v) => props.vert_align = Some(vert_align(&v.val)),
+        C::Position(p) => props.baseline_half_pts = signed_hps(&p.val),
+        C::Spacing(sp) => props.spacing_twips = Some(sp.val),
+        _ => {}
+    }
+}
+
+/// Doc ADR 613 — a paragraph's review state: its mark's insertion or
+/// deletion (`w:pPr/w:rPr/w:ins|w:del|w:moveTo|w:moveFrom`) and its
+/// `w:pPrChange`.
+fn paragraph_review(p: &wml::Paragraph) -> ParagraphReview {
+    let Some(pp) = p.paragraph_properties.as_deref() else {
+        return ParagraphReview::default();
+    };
+    let mark = pp.paragraph_mark_run_properties.as_deref().and_then(|m| {
+        if let Some(i) = &m.inserted {
+            return Some((
+                ChangeKind::Insert,
+                revision(&i.id, &i.author, &i.date, false),
+            ));
+        }
+        if let Some(d) = &m.deleted {
+            return Some((
+                ChangeKind::Delete,
+                revision(&d.id, &d.author, &d.date, false),
+            ));
+        }
+        if let Some(t) = &m.move_to {
+            return Some((
+                ChangeKind::Insert,
+                revision(&t.id, &t.author, &t.date, true),
+            ));
+        }
+        m.move_from.as_ref().map(|f| {
+            (
+                ChangeKind::Delete,
+                revision(&f.id, &f.author, &f.date, true),
+            )
+        })
+    });
+    let props = pp.paragraph_properties_change.as_deref().map(|c| {
+        let old = c.paragraph_properties_extended.as_deref();
+        ParaPropsChange {
+            revision: revision(&c.id, &c.author, &c.date, false),
+            old_style_id: old
+                .and_then(|o| o.paragraph_style_id.as_ref())
+                .map(|s| s.val.clone()),
+            old_props: old
+                .map(|o| {
+                    para_props(
+                        &o.justification,
+                        &o.indentation,
+                        &o.spacing_between_lines,
+                        Keeps {
+                            next: o.keep_next.as_ref().map(|v| on(&v.val)),
+                            lines: o.keep_lines.as_ref().map(|v| on(&v.val)),
+                            widow_control: o.widow_control.as_ref().map(|v| on(&v.val)),
+                            contextual_spacing: o.contextual_spacing.as_ref().map(|v| on(&v.val)),
+                        },
+                        o.page_break_before.as_ref().map(|v| on(&v.val)),
+                        &o.tabs,
+                    )
+                })
+                .unwrap_or_default(),
+        }
+    });
+    ParagraphReview {
+        mark: mark.map(|(kind, revision)| RunChange { kind, revision }),
+        props,
     }
 }
 

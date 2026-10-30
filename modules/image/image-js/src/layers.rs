@@ -1606,7 +1606,16 @@ impl LayerStack {
             snapshots: Vec::new(),
             next_snapshot_id: 1,
             next_step_id: 1,
-            mode: Default::default(),
+            // A CMYK document stays one (its profile, when the caller has
+            // the file, comes with `adopt_mode`).
+            mode: if import.converted_from_cmyk {
+                crate::color_mode::DocMode {
+                    mode: crate::color_mode::ColorMode::Cmyk,
+                    cmyk_profile: None,
+                }
+            } else {
+                Default::default()
+            },
             workspace: Default::default(),
         };
         stack.styles.global_light = import.global_light;
@@ -3055,7 +3064,22 @@ impl LayerStack {
                 .or_insert_with(|| Arc::clone(&before));
             self.history_states.previous.insert(id, before);
         }
+        // A CMYK layer's own inks (ADR 481) are kept outside the damage.
+        let old_inks = {
+            let l = &self.layers[self.active];
+            l.ext.inks.0.clone().filter(|i| i.of(&l.rgba))
+        };
         self.layers[self.active].rgba = pixels.into();
+        let inks = match (old_inks, self.ink_transform()?) {
+            (Some(old), Some(t)) => Some(Arc::new(old.carried(
+                &t,
+                self.layers[self.active].rgba.canvas(),
+                clipped,
+                self.width,
+            ))),
+            _ => None,
+        };
+        self.layers[self.active].ext.inks = InkCell(inks);
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
             self.push_pixel_step();
         }
@@ -3564,6 +3588,60 @@ impl LayerStack {
         &self.mode
     }
 
+    /// Keep a CMYK file's own INKS on the layers read from it (image ADR
+    /// 481): `cmy` and `k` are the same import read through transforms
+    /// that hand the ink through (`PsdFile::layer_plates_rgba8_via`). The
+    /// layers read from records pair with the import's plates in order; a
+    /// layer whose shape is not its plate's keeps none (its inks are then
+    /// its pixels through the profile). Answers how many layers kept theirs.
+    pub fn attach_inks(
+        &mut self,
+        cmy: &image_psd::LayerImport,
+        k: &image_psd::LayerImport,
+    ) -> usize {
+        let from_records: Vec<usize> = (0..self.layers.len())
+            .filter(|&i| self.layers[i].ext.source.is_some())
+            .collect();
+        if from_records.len() != cmy.layers.len() || cmy.layers.len() != k.layers.len() {
+            return 0;
+        }
+        let mut kept = 0;
+        for (n, &i) in from_records.iter().enumerate() {
+            let (c, kp) = (&cmy.layers[n], &k.layers[n]);
+            let l = &mut self.layers[i];
+            if !l.is_pixels() || l.rgba.is_16bit() {
+                continue;
+            }
+            // The plate at the layer's shape: its own rectangle, or the
+            // canvas (a plate may name the whole canvas as its rectangle).
+            let (w, h) = (cmy.width, cmy.height);
+            let at_shape = |p: &image_psd::LayerPlate| -> Option<Vec<u8>> {
+                match (l.rgba.bounded(), p.rect) {
+                    (Some(b), Some(r)) if b.rect == r => Some(p.rgba.clone()),
+                    (None, None) => Some(p.rgba.clone()),
+                    (None, Some(_)) => Some(p.canvas_rgba8(w, h)),
+                    _ => None,
+                }
+            };
+            let (Some(ci), Some(ki)) = (at_shape(c), at_shape(kp)) else {
+                continue;
+            };
+            if let Some(inks) = crate::planes::InkPlanes::from_ink_rgba8(&l.rgba, &ci, &ki) {
+                l.ext.inks = InkCell(Some(Arc::new(inks)));
+                kept += 1;
+            }
+        }
+        kept
+    }
+
+    /// Take the mode a document was OPENED in (a CMYK, Grayscale or Lab
+    /// file): its pixels already are that mode's colours, so nothing is
+    /// projected and nothing is recorded — the layered save then writes
+    /// the file's own mode back (image ADR 481).
+    pub fn adopt_mode(&mut self, mode: crate::color_mode::DocMode) {
+        self.mode = mode;
+    }
+
     /// Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color:
     /// every layer's pixels (each at its bounds, its alpha kept) put
     /// through the new mode's space and back ([`crate::color_mode`]), and
@@ -3667,14 +3745,33 @@ impl LayerStack {
             }
             _ => {}
         }
-        let ctx = ctx.ok_or_else(|| {
-            IngestError::Unsupported(
-                "compositing layers is GPU-only — call init_gpu first (the blend \
-                 is a registered WGSL kernel dispatch; no CPU blend path ships)"
-                    .into(),
-            )
-        })?;
-        self.composite_resident(ctx, &plates, depth).await
+        // A CMYK document folds in its inks (ADR 481) when its plan is
+        // separable; otherwise in RGB, as below.
+        if let Some(px) = self.composite_inks(ctx, &plates, depth).await? {
+            return Ok(px);
+        }
+        // Without a device the fold runs on the CPU twins (ADR 480):
+        // pixel, adjustment, group and clipping layers; a style needs one.
+        let Some(ctx) = ctx else {
+            return self
+                .composite_tiled(None, &plates, depth, fold::CPU_TILE_SIDE)
+                .await;
+        };
+        self.fold_on(ctx, &plates, depth).await
+    }
+
+    /// The fold on the device: whole, or tile by tile past the device's
+    /// limits (ADR 480).
+    async fn fold_on(
+        &self,
+        ctx: &GpuContext,
+        plates: &[(usize, Plate)],
+        depth: image_core::SampleDepth,
+    ) -> Result<crate::pixels::Pixels, IngestError> {
+        match self.fold_tile_side(ctx) {
+            Some(side) => self.composite_tiled(Some(ctx), plates, depth, side).await,
+            None => self.composite_resident(ctx, plates, depth).await,
+        }
     }
 
     /// Every visible fill layer whose render is stale, rendered now (for
@@ -3760,14 +3857,23 @@ impl LayerStack {
             }
             _ => {}
         }
-        let ctx = ctx.ok_or_else(|| {
-            IngestError::Unsupported("compositing layers is GPU-only — call init_gpu first".into())
-        })?;
         // The tools sample 8-bit.
-        Ok(self
-            .composite_resident(ctx, &plates, image_core::SampleDepth::U8)
-            .await?
-            .raw_arc())
+        let px = match ctx {
+            Some(ctx) => {
+                self.fold_on(ctx, &plates, image_core::SampleDepth::U8)
+                    .await?
+            }
+            None => {
+                self.composite_tiled(
+                    None,
+                    &plates,
+                    image_core::SampleDepth::U8,
+                    fold::CPU_TILE_SIDE,
+                )
+                .await?
+            }
+        };
+        Ok(px.raw_arc())
     }
 
     /// The fold as it ran before it became resident: every blend its own
@@ -6306,15 +6412,22 @@ mod tests {
     }
 
     #[test]
-    fn image_editor_layers_a_second_painted_layer_makes_the_composite_gpu_only() {
+    fn image_editor_layers_a_second_painted_layer_folds_on_the_cpu_without_a_device() {
         let mut s = stack(4, 4);
         s.add("Paint");
         s.edit_active("fill", Region::new(0, 0, 4, 4), px(4, 4, 200).into())
             .expect("unlocked");
         assert!(!s.composite_is_trivial());
-        // …and says so rather than inventing a CPU blend.
-        let err = pollster::block_on(s.composite(None, None)).expect_err("GPU-only");
-        assert!(format!("{err}").contains("GPU-only"));
+        // …and folds on the kernels' CPU twins (ADR 480): source-over,
+        // alpha 200 over alpha 128 is 200 + 128 · (1 − 200/255) ≈ 228.
+        assert!(s.composite_runs_without_gpu());
+        let out = pollster::block_on(s.composite(None, None)).expect("the CPU fold");
+        assert_eq!(out.len(), 64);
+        assert!(
+            out.chunks(4).all(|p| p[3].abs_diff(228) <= 1),
+            "{:?}",
+            &out[..4]
+        );
     }
 
     #[test]

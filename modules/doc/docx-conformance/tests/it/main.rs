@@ -30,6 +30,7 @@ mod pictures;
 mod poi_corpus;
 mod real_docx;
 mod real_word_corpus;
+mod review;
 mod run_specials;
 mod save_back;
 mod sections;

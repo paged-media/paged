@@ -1,7 +1,8 @@
 # ADR 349 — The structure doors: headers, footers and notes edited in place (C6)
 
-- **Status:** Accepted 2026-10-28 (C6). The review and spelling doors (C5 margin band, C7
-  `host.spelling`, C8 styled clipboard) are recorded here when their waves add them.
+- **Status:** Accepted 2026-10-28 (C6); amendment 1 2026-10-29 (C5, the margin band). The
+  spelling and clipboard doors (C7 `host.spelling`, C8 styled clipboard) are recorded here
+  when their waves add them.
 - **Scope:** `packages/plugin-api/src/{editor,host,contributions}.ts`,
   `packages/plugin-sdk/src/{host-impl,harness}.ts`. Editor side: editor ADR 301. First consumer:
   paged.doc (doc ADR 611). DESIGN.md §29.
@@ -41,3 +42,33 @@ given page.
 - `kind: "note"` waits for the engine to put a caret into a footnote's text; until then a
   bundle can use it for a note it keeps in a story of its own.
 - Additive: an older host warns and answers false / null.
+
+## Amendment 1 (2026-10-29): the markup margin band (C5) and `text.contentRange`
+
+paged.doc's review wave (doc ADR 613; engine ADRs 1040 and 1020) needs Word's markup area: a
+balloon per deletion, formatting change and comment thread beside the page, level with its
+text. Two additive members:
+
+- **C5 `contribute.marginBand({ id, scope: { editContext }, title?, width?, order?, items(),
+  onDidChange(listener), render })`.** `items()` answers `MarginBandItem { id, anchor:
+  { storyId, start, end }, kind?, color? }`, the anchor in CONTENT offsets (the caret's);
+  `render` is React in the host realm, called once per item with `MarginBalloonProps { item,
+  editContext, active }` (`active`: the caret or the selection touches the anchor). The host
+  places, stacks and keeps the balloons with their text (editor ADR 300) and reads `items()`
+  again after `onDidChange`. Gates as a status item (ADR 348): namespaced id, the scope's
+  context declared and registered by the same bundle; no manifest field.
+- **`host.text.contentRange({ storyId, start, end })`**: story CHARACTERS (what the engine's
+  `trackedChanges` and `comments` collections, story-range addresses and find hits'
+  `charStart` count) as content offsets (what `viewport.revealText`, `selection` and an anchor
+  take), `null` when the story does not read. Gated on `capabilities.document.read`. The pure
+  conversion is exported as `charToContent` beside `contentToChar`, for a bundle converting
+  many ranges of one story at once.
+- **Probes:** `contribute.marginBand@1` and `text.contentRange@1` (static);
+  `shell.marginBand@1` (the editor's `marginBands` registry, `ShellRegistries.marginBands`).
+- **Harness:** `createHeadlessHost` records the bands (`marginBandsContributed()`); the fake
+  editor carries a `marginBands` registry.
+- The review commands themselves need no new door: they are engine mutations
+  (`acceptChange`, `rejectChange`, `insertComment`, `replyComment`, `resolveComment`,
+  `deleteComment`, `editComment`, `set` on the document's `documentTrackChanges*` and
+  `documentMarkupView`) through `document.mutate`, and reads through `document.collection`.
+- Versions: the lockstep plugin-sdk / plugin-api bump happens at integration.
