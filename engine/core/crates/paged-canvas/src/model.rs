@@ -5420,6 +5420,7 @@ impl CanvasModel {
                 height: *height,
                 image_uri: image_uri.clone(),
                 self_id: self.mint_page_item_id_with_offset(mint_offset),
+                restore: None,
             }),
             Mutation::InsertHyperlink {
                 story_id,

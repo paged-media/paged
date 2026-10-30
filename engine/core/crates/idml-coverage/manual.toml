@@ -14,6 +14,38 @@ name = "make_anchored_frame"
 # `anchored_kind_from_name`: the inline-anchored page items.
 elements = ["TextFrame", "Rectangle", "Group"]
 
+# The effect settings' shared readers (engine ADR 1045: the spread and the
+# story reader both call them).
+[[fn]]
+file = "crates/idml-import/src/effect_xml.rs"
+name = "applied"
+elements = ["InnerShadowSetting", "OuterGlowSetting", "InnerGlowSetting", "BevelAndEmbossSetting", "SatinSetting", "FeatherSetting", "DirectionalFeatherSetting", "GradientFeatherSetting"]
+
+[[fn]]
+file = "crates/idml-import/src/effect_xml.rs"
+name = "parse_drop_shadow"
+elements = ["DropShadowSetting"]
+
+[[fn]]
+file = "crates/idml-import/src/effect_xml.rs"
+name = "gradient_stop"
+elements = ["GradientStop", "OpacityGradientStop"]
+
+[[fn]]
+file = "crates/idml-import/src/anchored_fx.rs"
+name = "stack_label"
+elements = ["KeyValuePair"]
+
+[[fn]]
+file = "crates/idml-import/src/anchored_fx.rs"
+name = "blending"
+elements = ["BlendingSetting"]
+
+[[fn]]
+file = "crates/idml-import/src/story.rs"
+name = "anchored_rectangle_attrs"
+elements = ["Rectangle"]
+
 # A tracked change's attributes (D-01).
 [[fn]]
 file = "crates/idml-import/src/story.rs"
@@ -778,6 +810,24 @@ parts = ["MasterSpreads"]
 [[part_entry]]
 file = "crates/idml-import/src/story.rs"
 name = "parse_story"
+parts = ["Stories"]
+
+# Engine ADR 1045 — the effect readers the spread and the story reader
+# share, and the story reader's anchored-frame cursor (reached through a
+# method call the walk does not follow).
+[[part_entry]]
+file = "crates/idml-import/src/effect_xml.rs"
+name = "applied"
+parts = ["Spreads", "MasterSpreads", "Stories"]
+
+[[part_entry]]
+file = "crates/idml-import/src/anchored_fx.rs"
+name = "stack_label"
+parts = ["Stories"]
+
+[[part_entry]]
+file = "crates/idml-import/src/anchored_fx.rs"
+name = "blending"
 parts = ["Stories"]
 
 [[part_entry]]

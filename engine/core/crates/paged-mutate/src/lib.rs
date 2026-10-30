@@ -3206,6 +3206,7 @@ mod tests {
                 height: 80.0,
                 image_uri: Some("data:image/png;base64,AAAA".to_string()),
                 self_id: "Rectangle/img1".to_string(),
+                restore: None,
             })
             .unwrap();
 
@@ -3246,10 +3247,183 @@ mod tests {
                 height: 10.0,
                 image_uri: None,
                 self_id: "Rectangle/img2".to_string(),
+                restore: None,
             })
             .unwrap();
         let p2 = &project.document().stories[0].story.paragraphs[1];
         assert_eq!(p2.anchored_frame_offsets, vec![1]);
+    }
+
+    /// Engine ADR 1045 — the frame paths a free frame takes reach an
+    /// anchored frame: fill, stroke, opacity, a drop shadow, an effect and
+    /// the effect stack, each with its exact inverse; an anchored group's
+    /// look stays refused.
+    #[test]
+    #[allow(non_snake_case)]
+    fn frame_paths_reach_an_anchored_frame__feat__anchored_inline_objects_anchored_effects() {
+        use crate::operation::{EffectEntrySpec, EffectKind};
+        let mut project = Project::new(document_with_one_story("Story/u1"));
+        project
+            .apply(Operation::InsertAnchoredFrame {
+                paragraph: None,
+                story_id: "Story/u1".to_string(),
+                offset: 3,
+                width: 100.0,
+                height: 80.0,
+                image_uri: Some("data:image/png;base64,AAAA".to_string()),
+                self_id: "pic".to_string(),
+                restore: None,
+            })
+            .unwrap();
+        let node = NodeId::Rectangle("pic".to_string());
+        let before =
+            serde_json::to_string(&project.document().stories[0].story.paragraphs[0]).unwrap();
+        let writes = [
+            (
+                PropertyPath::FrameFillColor,
+                Value::ColorRef(Some("Color/Black".into())),
+            ),
+            (PropertyPath::FrameStrokeWeight, Value::Length(Some(2.0))),
+            (PropertyPath::FrameOpacity, Value::Length(Some(60.0))),
+            (PropertyPath::FrameBlendMode, Value::Text("Multiply".into())),
+            (PropertyPath::FrameDropShadow, Value::Bool(true)),
+            (
+                PropertyPath::FrameEffectStack,
+                Value::EffectStack {
+                    entries: vec![
+                        EffectEntrySpec::new(EffectKind::DropShadow),
+                        EffectEntrySpec::new(EffectKind::OuterGlow),
+                        EffectEntrySpec {
+                            radius_pt: Some(2.0),
+                            ..EffectEntrySpec::new(EffectKind::GaussianBlur)
+                        },
+                    ],
+                    prev: None,
+                },
+            ),
+            (
+                PropertyPath::FrameDropShadowXOffset,
+                Value::Length(Some(4.0)),
+            ),
+        ];
+        let mut inverses = Vec::new();
+        for (path, value) in writes {
+            let applied = project
+                .apply(Operation::SetProperty {
+                    node: node.clone(),
+                    path,
+                    value,
+                })
+                .unwrap_or_else(|e| panic!("{path:?}: {e:?}"));
+            inverses.push(applied.inverse);
+        }
+        {
+            let af = &project.document().stories[0].story.paragraphs[0].anchored_frames[0];
+            assert_eq!(af.fill_color.as_deref(), Some("Color/Black"));
+            assert_eq!(af.stroke_weight, Some(2.0));
+            assert_eq!(af.opacity, Some(60.0));
+            assert_eq!(af.blend_mode.as_deref(), Some("Multiply"));
+            assert_eq!(af.drop_shadow.as_ref().map(|d| d.x_offset), Some(4.0));
+            let fx = af.effects.as_ref().expect("effects");
+            assert!(fx.outer_glow.is_some(), "the stack switched the glow on");
+            assert_eq!(af.effect_stack.len(), 3, "the blur makes the stack stored");
+        }
+        for inverse in inverses.into_iter().rev() {
+            crate::apply(project.document_mut(), &inverse).unwrap();
+        }
+        let after =
+            serde_json::to_string(&project.document().stories[0].story.paragraphs[0]).unwrap();
+        assert_eq!(after, before, "every inverse restores the frame exactly");
+
+        // The per-field effect paths reach it too.
+        for (path, value) in [
+            (PropertyPath::FrameFeatherEnabled, Value::Bool(true)),
+            (PropertyPath::FrameFeatherWidth, Value::Length(Some(6.0))),
+            (PropertyPath::FrameInnerShadowEnabled, Value::Bool(true)),
+        ] {
+            crate::apply(
+                project.document_mut(),
+                &Operation::SetProperty {
+                    node: node.clone(),
+                    path,
+                    value,
+                },
+            )
+            .unwrap_or_else(|e| panic!("{path:?}: {e:?}"));
+        }
+        {
+            let af = &project.document().stories[0].story.paragraphs[0].anchored_frames[0];
+            let fx = af.effects.as_ref().expect("effects");
+            assert_eq!(fx.feather.as_ref().and_then(|f| f.width), Some(6.0));
+            assert!(fx.inner_shadow.is_some());
+        }
+        // An anchored group's look is refused, not stored undrawn.
+        project.document_mut().stories[0].story.paragraphs[1]
+            .anchored_frames
+            .push(paged_model::AnchoredFrame {
+                frame_kind: paged_model::AnchoredFrameKind::Group,
+                self_id: Some("grp".into()),
+                ..Default::default()
+            });
+        assert!(crate::apply(
+            project.document_mut(),
+            &Operation::SetProperty {
+                node: NodeId::Group("grp".into()),
+                path: PropertyPath::FrameOpacity,
+                value: Value::Length(Some(50.0)),
+            },
+        )
+        .is_err());
+
+        // A removal's undo puts the frame back whole, look included.
+        crate::apply(
+            project.document_mut(),
+            &Operation::SetProperty {
+                node: node.clone(),
+                path: PropertyPath::FrameOpacity,
+                value: Value::Length(Some(30.0)),
+            },
+        )
+        .unwrap();
+        let looked =
+            serde_json::to_string(&project.document().stories[0].story.paragraphs[0]).unwrap();
+        let removed = crate::apply(
+            project.document_mut(),
+            &Operation::RemoveAnchoredFrame {
+                story_id: "Story/u1".to_string(),
+                self_id: "pic".to_string(),
+            },
+        )
+        .unwrap();
+        crate::apply(project.document_mut(), &removed.inverse).unwrap();
+        let back =
+            serde_json::to_string(&project.document().stories[0].story.paragraphs[0]).unwrap();
+        assert_eq!(back, looked);
+    }
+
+    /// Engine ADR 1045 — an anchored frame without a look serialises as
+    /// it always did: no key of the look appears.
+    #[test]
+    #[allow(non_snake_case)]
+    fn an_anchored_frame_without_a_look_serialises_as_before__feat__anchored_inline_objects_anchored_effects(
+    ) {
+        let af = paged_model::AnchoredFrame {
+            self_id: Some("a".into()),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&af).unwrap();
+        for key in [
+            "opacity",
+            "blend_mode",
+            "drop_shadow",
+            "effects",
+            "effect_stack",
+            "fill_transparency",
+            "stroke_dash",
+            "gradient_fill_start",
+        ] {
+            assert!(!json.contains(&format!("\"{key}\"")), "{key} in {json}");
+        }
     }
 
     #[test]

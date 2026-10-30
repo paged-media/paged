@@ -33,7 +33,9 @@ use std::io::{self, Cursor, Read};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
+mod anchored_fx;
 pub mod designmap;
+mod effect_xml;
 pub mod graphic;
 pub mod spread;
 pub mod story;

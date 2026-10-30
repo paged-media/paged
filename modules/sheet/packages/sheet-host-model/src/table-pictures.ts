@@ -24,7 +24,7 @@
 
 import type { Mutation, PageId } from "@paged-media/plugin-api";
 
-import { nativeFxOps } from "./chart";
+import { chartFxOps } from "./chart";
 import type { LoweredContent, LoweredPicture } from "./lowered";
 import { columnOrder } from "./lower-to-table";
 import {
@@ -87,7 +87,7 @@ export function tablePictureOps(
           fit: p.inCell ? "Proportionally" : "ContentToFrame",
         },
       },
-      ...nativeFxOps(p.fx, 0, 0, undefined, false, {
+      ...chartFxOps(p.fx, 0, 0, undefined, false, {
         kind: "rectangle",
         id: `$h:${handle}`,
       }),
