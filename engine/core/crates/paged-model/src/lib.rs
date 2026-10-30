@@ -35,6 +35,7 @@ pub mod effect_stack;
 pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
+pub mod live_shape;
 pub mod review;
 pub mod winding;
 pub mod word_field;
@@ -2804,6 +2805,13 @@ pub struct Oval {
     /// field is here so every frame kind takes the same write.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1047 — the live pie: the wedge of the ellipse the oval
+    /// draws, as Illustrator's pie start and end angles. `None` is the
+    /// whole ellipse (and the only value IDML spells natively; the IDML
+    /// export writes a pie's outline and keeps the angles in the item's
+    /// label, [`crate::live_shape::label`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pie: Option<crate::live_shape::PieAngles>,
     /// Engine ADR 1037 — the picture's filter stack, applied in order when
     /// it is drawn and exported. Empty (the default, and every imported
     /// frame without the label) draws the picture as it is; an empty stack
@@ -2869,6 +2877,7 @@ impl Oval {
             corners: Default::default(),
             end_cap: None,
             fill_rule: FillRule::NonZero,
+            pie: None,
             image_adjustments: Vec::new(),
         }
     }
@@ -3548,6 +3557,13 @@ pub struct Polygon {
     /// C-62 — `RightArrowHeadScale` (percent, default 100).
     #[serde(default = "default_arrowhead_scale")]
     pub end_arrow_scale: f32,
+    /// Engine ADR 1047 — the live polygon or star the anchors were made
+    /// from: its side count and star inset. It is LIVE while the anchors
+    /// are still what these parameters make in their own bounding box
+    /// ([`crate::live_shape::live_polygon`]); an edit of the points ends
+    /// it without a write. `None` for every other path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_shape: Option<crate::live_shape::PolygonShape>,
 }
 
 impl Polygon {
@@ -3617,6 +3633,7 @@ impl Polygon {
             end_arrow: ArrowheadType::None,
             start_arrow_scale: 100.0,
             end_arrow_scale: 100.0,
+            live_shape: None,
         }
     }
 }

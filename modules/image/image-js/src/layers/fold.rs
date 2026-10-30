@@ -1977,6 +1977,58 @@ impl LayerStack {
                     cov,
                     extra: _,
                 } => {
+                    // A BOUNDED plate blends only inside its rectangle, as
+                    // the whole fold blends it (ADR 464): the window's
+                    // texels outside it are left as they are, never blended
+                    // with a transparent texel — that blend is the identity
+                    // only up to f16 rounding, so the refold of a dirty
+                    // window landed a level off the whole fold there.
+                    if let Some(b) = rect {
+                        let win = Region::new(rx as i32, ry as i32, rw, rh);
+                        let Some(hit) = b.intersect(win) else {
+                            continue;
+                        };
+                        let hr = (hit.x as u32, hit.y as u32, hit.w, hit.h);
+                        let (hx, hy) = (hr.0 - rx, hr.1 - ry);
+                        let bytes = window_f16_bounded(px, *b, hr);
+                        let src = batch.upload(hit.w, hit.h, TexFormat::Rgba16Float, &bytes);
+                        let plate = batch.target(hit.w, hit.h);
+                        batch
+                            .dispatch(
+                                &CAST_PREMULTIPLY,
+                                &[&src],
+                                CastPremultiplyParams::new().as_bytes(),
+                                None,
+                                &plate,
+                            )
+                            .map_err(gpu_err)?;
+                        let mask = (!cov.is_none()).then(|| {
+                            batch.upload(
+                                hit.w,
+                                hit.h,
+                                TexFormat::R16Float,
+                                &mask_window(cov, w, hr),
+                            )
+                        });
+                        let a = acc.take().unwrap_or_else(|| ctx.zeros(rw, rh));
+                        let sub = batch.target(hit.w, hit.h);
+                        batch.copy(&a, (hx, hy), &sub, (0, 0), hit.w, hit.h);
+                        let blended = batch.target(hit.w, hit.h);
+                        batch
+                            .dispatch(
+                                pixel_kernel(blend, *gamma),
+                                &[&sub, &plate],
+                                &pixel_params(*opacity, *gamma),
+                                mask.as_ref(),
+                                &blended,
+                            )
+                            .map_err(gpu_err)?;
+                        let out = batch.target(rw, rh);
+                        batch.copy(&a, (0, 0), &out, (0, 0), rw, rh);
+                        batch.copy(&blended, (0, 0), &out, (hx, hy), hit.w, hit.h);
+                        acc = Some(out);
+                        continue;
+                    }
                     // The plate's window: copied from the cached plate,
                     // or uploaded and premultiplied (premultiplying an
                     // opaque texel is exactly the identity, so this does
