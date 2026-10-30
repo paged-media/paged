@@ -64,6 +64,7 @@ fn document(rect_attrs: &str, styles: StyleSheet) -> paged_scene::Document {
         text_frame_index: HashMap::new(),
         styles,
         anchors: Vec::new(),
+        symbols: Vec::new(),
     }
 }
 

@@ -27,6 +27,8 @@
 
 import { ANIM_TYPED } from "../../src/anim/contribute";
 import { CONTENT_CMD, CONTENT_TYPED } from "../../src/content-commands";
+import { DESIGN_CMD, DESIGN_TYPED } from "../../src/design";
+import { MASTER_CMD, MASTER_TYPED } from "../../src/masters-commands";
 import { OUTPUT_CMD, OUTPUT_TYPED } from "../../src/output/commands";
 import { SHOW_CMD } from "../../src/show/contribute";
 import { readFileSync } from "node:fs";
@@ -142,6 +144,12 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
         // Pictures, the format painter, SmartArt text (slide W4).
         ...Object.values(CONTENT_CMD),
         ...Object.values(CONTENT_TYPED),
+        // Design ▸ Themes and the live theme (slide ADR 713).
+        ...Object.values(DESIGN_CMD),
+        ...Object.values(DESIGN_TYPED),
+        // Masters and layouts (slide ADR 712).
+        ...Object.values(MASTER_CMD),
+        ...Object.values(MASTER_TYPED),
       ].sort(),
     );
   });

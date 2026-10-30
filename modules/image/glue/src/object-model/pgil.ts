@@ -5,15 +5,16 @@
 // nor a GPU.
 //
 // The format is the engine's (image-js/src/layers_persist.rs): a compact
-// manifest plus the buffers it names by slot. Versions 1–4 are read;
-// version 4 is written (fill layers, typed adjustment layers, the
-// Photoshop-parity properties and layer comps). `writePgil(readPgil(m, b))` reproduces the
+// manifest plus the buffers it names by slot. Versions 1–6 are read;
+// version 6 is written (fill layers, typed adjustment layers, the
+// Photoshop-parity properties and layer comps since 4, the styles' state
+// since 5, the colour mode since 6, image ADR 479). `writePgil(readPgil(m, b))` reproduces the
 // engine's own export byte for byte, including the slot order — the
 // object-model spec proves that against the real wasm, so a drift in
 // either codec fails there rather than in a document.
 
 const MAGIC = [0x50, 0x47, 0x49, 0x4c]; // "PGIL"
-export const PGIL_VERSION = 5;
+export const PGIL_VERSION = 6;
 
 export interface PgilRect {
   x: number;
@@ -163,7 +164,18 @@ export interface PgilStack {
   /** Version 5: the layer styles' shared state (a layer's own style rides
    *  in its ext block's tail, as the engine's `lfx2` bytes). */
   styles: PgilStyles;
+  /** Version 6 (image ADR 479): the document's colour mode — 0 RGB,
+   *  1 Grayscale, 2 CMYK, 3 Lab — and the CMYK profile it converts
+   *  through (`null`: none). */
+  mode: PgilMode;
 }
+
+export interface PgilMode {
+  color: number;
+  profile: Uint8Array | null;
+}
+
+export const DEFAULT_MODE: Readonly<PgilMode> = { color: 0, profile: null };
 
 /** The document's Global Light and the patterns its styles draw. */
 export interface PgilStyles {
@@ -496,6 +508,12 @@ export function readPgil(
       });
     }
   }
+  const mode: PgilMode = { ...DEFAULT_MODE };
+  if (version >= 6) {
+    mode.color = r.u8();
+    const at = r.i64();
+    mode.profile = at >= 0 ? buf(at) : null;
+  }
   return {
     version,
     width,
@@ -506,10 +524,11 @@ export function readPgil(
     layers,
     comps,
     styles,
+    mode,
   };
 }
 
-/** Encode a stack as the engine's version-5 export: the manifest first,
+/** Encode a stack as the engine's version-6 export: the manifest first,
  *  then the buffers, slots assigned in the engine's order (group masks,
  *  then per layer: pixels, mask, smart source). */
 export function writePgil(stack: PgilStack): Uint8Array[] {
@@ -666,6 +685,8 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
     w.f32(p.angle);
     w.u32(slot(p.tile));
   }
+  w.u8(stack.mode.color);
+  w.i64(stack.mode.profile ? slot(stack.mode.profile) : -1);
   return [w.done(), ...buffers];
 }
 
@@ -690,6 +711,7 @@ export function clonePgil(s: PgilStack): PgilStack {
       entries: c.entries.map((e) => ({ ...e })),
     })),
     styles: { ...s.styles, patterns: s.styles.patterns.map((p) => ({ ...p })) },
+    mode: { ...s.mode },
   };
 }
 
@@ -734,5 +756,6 @@ export function stackFromImage(
     ],
     comps: [],
     styles: { ...DEFAULT_STYLES, patterns: [] },
+    mode: { ...DEFAULT_MODE },
   };
 }

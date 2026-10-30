@@ -53,6 +53,7 @@ import { defineMessages, t } from "@paged-media/strings";
 import { sha256Hex } from "@paged-media/helpers";
 
 import { latestWins } from "./coalesce";
+import type { ColorModeName, ProofTarget } from "./mode-engine";
 import {
   initialRetouch,
   makeRetouch,
@@ -595,6 +596,14 @@ export interface ImageSessionState {
    *  `pickExportProfile`), by name; null = the source's own CMYK profile
    *  or, without one, the naive formula. */
   exportProfile: string | null;
+  /** IMAGE ▸ MODE (image ADR 479): the document's depth and colour mode,
+   *  read from the engine after every stack change, and the Proof Colors
+   *  / Gamut Warning display setup (View, never the document). */
+  mode: {
+    bits: 8 | 16;
+    color: ColorModeName;
+    proof: { target: ProofTarget; colors: boolean; gamut: boolean };
+  };
   /** The Curves eyedropper waiting for a click on the image, or null. */
   curvesPicker: CurvesPick | null;
   /** The per-channel curves the Curves tools (Auto, the eyedroppers)
@@ -722,6 +731,13 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   applyGradientMap(
     shadow: readonly [number, number, number],
     highlight: readonly [number, number, number],
+  ): Promise<boolean>;
+  /** FREE TRANSFORM (Edit ▸ Free Transform): resample the active layer —
+   *  or the selection's pixels — through the forward image-px `matrix`
+   *  (`geom.warp_projective`). One undo step. */
+  transformLayer(
+    matrix: readonly number[],
+    interp?: "bilinear" | "bicubic",
   ): Promise<boolean>;
   /** A parametric distortion (geom.warp_backward). */
   applyWarp(
@@ -955,6 +971,19 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
   canvasOp(
     op: CanvasOpKind,
     size?: { width: number; height: number; anchorX: number; anchorY: number },
+  ): Promise<boolean>;
+  /** Image ▸ Mode ▸ 8 / 16 Bits/Channel (every layer; one undo step). */
+  setBits(bits: 8 | 16): Promise<boolean>;
+  /** Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color (every
+   *  layer; one undo step). CMYK converts through the chosen CMYK profile
+   *  (`pickExportProfile`); without one the plain ink formula changes no
+   *  colour, and the status says so. */
+  setColorMode(mode: ColorModeName): Promise<boolean>;
+  /** View ▸ Proof Colors / Gamut Warning on the image preview: `target`
+   *  is the output simulated (Gray Gamma 2.2, or CMYK through the chosen
+   *  profile or the document's own). A display transform only. */
+  setProof(
+    p: Partial<{ target: ProofTarget; colors: boolean; gamut: boolean }>,
   ): Promise<boolean>;
   /** Select ▸ Modify by `radius` px. */
   modifySelection(op: SelectionModifyOp, radius: number): boolean;
@@ -1671,6 +1700,19 @@ const S = defineMessages("image.status", {
     "{name} — {width}×{height} decoded into the selected frame. Apply to composite, or paint on it.",
   canvasSized: "Canvas size → {width}×{height}. One undo step.",
   canvasChanged: "Canvas → {width}×{height}. One undo step.",
+  modeBitsSet: "Mode → {bits} bits per channel. One undo step.",
+  modeBitsAlready: "The image already has {bits} bits per channel.",
+  modeColorSet: "Mode → {mode}. One undo step.",
+  modeColorAlready: "The image is already in {mode}.",
+  modeCmykNoProfile:
+    "CMYK Color without a CMYK profile: the plain ink formula changes no colour. Choose a CMYK profile in Export as… to convert through a press.",
+  proofOn: "Proof view on (the document is unchanged).",
+  proofOff: "Proof view off.",
+  proofFailed: "Proof view failed: {error}",
+  modeNameGray: "Greyscale",
+  modeNameRgb: "RGB colour",
+  modeNameCmyk: "CMYK colour",
+  modeNameLab: "Lab colour",
   psdSaveBack: "PSD save-back — {shape}.",
   jpegSaveBack:
     "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG).",
@@ -1876,6 +1918,7 @@ const PICK = defineMessages("image.curvesPick", {
  *  status line reports them (message keys; `applyEffect` and `layerOp`
  *  read them through `t`). */
 const E = defineMessages("image.effect", {
+  freeTransform: "Free transform",
   redEye: "Red eye",
   patch: "Patch",
   median: "Median",
@@ -1977,6 +2020,15 @@ const L = defineMessages("image.layerOps", {
   compApplied: "Layer comp “{name}” applied.",
 });
 
+/** Each colour mode's name, as the status line says it. */
+const MODE_NAME: Record<ColorModeName, string> = {
+  gray: S.modeNameGray,
+  rgb: S.modeNameRgb,
+  cmyk: S.modeNameCmyk,
+  lab: S.modeNameLab,
+};
+const modeLabel = (m: ColorModeName): string => t(MODE_NAME[m]);
+
 /** Each selection modification's outcome. */
 const MODIFIED: Record<SelectionModifyOp, string> = {
   expand: S.selectionExpanded,
@@ -2072,6 +2124,11 @@ export function createImageSession(host: BundleHost): ImageSession {
     saveBack: null,
     sourceMetadata: null,
     exportProfile: null,
+    mode: {
+      bits: 8,
+      color: "rgb",
+      proof: { target: "off", colors: false, gamut: false },
+    },
     brush: { ...DEFAULT_BRUSH_PARAMS, color: [...DEFAULT_BRUSH_PARAMS.color] },
     blendModes: [],
     strokeActive: false,
@@ -2383,11 +2440,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       // bytes survive (the importer may reuse them).
       const copy = bytes.slice();
       const decoded = await pool.decode(copy);
-      const info = engine.ingestRgba8(
-        decoded.width,
-        decoded.height,
-        decoded.rgba,
-      );
+      // A 16-bit source crosses as its samples, so the document keeps the
+      // depth the main-thread decode would have (image ADR 479).
+      const info = decoded.samples16
+        ? engine.ingestRgba16(decoded.width, decoded.height, decoded.samples16)
+        : engine.ingestRgba8(decoded.width, decoded.height, decoded.rgba);
       // The worker already ran the display transform inside its own
       // `decode_image`; `ingestRgba8` takes raw pixels and so reports
       // "sRGB assumed". Restore the treatment the worker measured, or the
@@ -2436,6 +2493,11 @@ export function createImageSession(host: BundleHost): ImageSession {
           ? state.dialog.index
           : state.layers.active;
       state.layerStyle = engine.layerStyle(styled);
+      state.mode = {
+        ...state.mode,
+        bits: engine.imageBits(state.source.handle),
+        color: engine.imageMode(),
+      };
     } catch (err) {
       host.log.debug("layer readout failed", err);
       state.layers = EMPTY_LAYER_STACK;
@@ -4725,6 +4787,98 @@ export function createImageSession(host: BundleHost): ImageSession {
       return true;
     },
 
+    async setBits(bits) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      discardStroke();
+      let changed: boolean;
+      try {
+        engine.layersOpen(src.handle);
+        changed = await engine.imageSetBits(src.handle, bits);
+      } catch (err) {
+        setStatus(
+          t(S.whatFailed, { what: `${bits} bits`, error: errText(err) }),
+        );
+        emit();
+        return false;
+      }
+      refreshLayers();
+      if (changed) {
+        markPixelsEdited();
+        bumpTiles();
+        if (src.elementId) await api.apply();
+      }
+      setStatus(t(changed ? S.modeBitsSet : S.modeBitsAlready, { bits }));
+      emit();
+      return changed;
+    },
+
+    async setColorMode(mode) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      discardStroke();
+      const profile = mode === "cmyk" ? exportProfileBytes : null;
+      let changed: boolean;
+      try {
+        engine.layersOpen(src.handle);
+        changed = await engine.imageSetMode(src.handle, mode, profile);
+      } catch (err) {
+        setStatus(
+          t(S.whatFailed, { what: modeLabel(mode), error: errText(err) }),
+        );
+        emit();
+        return false;
+      }
+      refreshLayers();
+      if (changed) {
+        markPixelsEdited();
+        bumpTiles();
+        if (src.elementId) await api.apply();
+      }
+      setStatus(
+        mode === "cmyk" && !profile
+          ? t(S.modeCmykNoProfile)
+          : t(changed ? S.modeColorSet : S.modeColorAlready, {
+              mode: modeLabel(mode),
+            }),
+      );
+      emit();
+      return changed;
+    },
+
+    async setProof(p) {
+      if (!engine || !state.source) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      const next = { ...state.mode.proof, ...p };
+      const on = next.target !== "off" && (next.colors || next.gamut);
+      try {
+        engine.viewSetProof(
+          on ? next.target : "off",
+          next.colors,
+          next.gamut,
+          next.target === "cmyk" ? exportProfileBytes : null,
+        );
+      } catch (err) {
+        setStatus(t(S.proofFailed, { error: errText(err) }));
+        emit();
+        return false;
+      }
+      state.mode = { ...state.mode, proof: next };
+      // The frame re-derives from the composite through the view.
+      if (state.source.elementId) await api.apply();
+      setStatus(on ? t(S.proofOn) : t(S.proofOff));
+      emit();
+      return true;
+    },
+
     modifySelection(op, radius) {
       if (!engine || !state.source) {
         setStatus(t(S.nothingIngestedIngestAPlacedImage));
@@ -5106,6 +5260,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
 
+    async transformLayer(matrix, interp = "bicubic") {
+      return this.applyEffect(E.freeTransform, (h) =>
+        engine!.applyProjective(h, matrix, interp),
+      );
+    },
     async applyWarp(kind, amount, frequency = 1) {
       return this.applyEffect(
         t(E.distort, { kind: warpKindLabel(kind) }),

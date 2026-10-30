@@ -103,7 +103,7 @@ template fields | fill | check` run the same messages headlessly.
   master draws them (InDesign's Override; `emptyText` for a new slide's placeholders). A page
   item can be a hyperlink's source (`insertItemHyperlink`, IDML's `HyperlinkPageItemSource`). A
   snapshot of a master page draws the master as a page; `masterPages` lists each master's pages
-  and items ([ADR 1026](adr/1026-masters-based-on-masters.md), v77 riders).
+  and items ([ADR 1026](adr/1026-masters-based-on-masters.md), protocol 78).
 - **Footnotes and hyperlinks edited over the wire.** `insertFootnote` and `deleteFootnote` add
   and remove a note and its reference, and a text delete over a reference takes its note
   ([ADR 163](adr/163-footnotes-inserted-and-deleted.md)). `deleteHyperlink` and `editHyperlink`

@@ -1645,22 +1645,37 @@ test.describe.serial("plugin menus — paged.draw", () => {
         const out: string[] = [];
         type N = { id?: { kind: string; id: string }; children?: N[] };
         const visit = (n: N) => {
-          if (n.id?.kind === "polygon") out.push(n.id.id);
+          if (n.id?.kind === "instance") out.push(n.id.id);
           for (const ch of n.children ?? []) visit(ch);
         };
         for (const n of JSON.parse(r.output[0] ?? "[]") as N[]) visit(n);
         return out;
       });
-    // An instance re-emits the definition through insertPath: its leaf is
-    // a path, whatever the source was.
+    // With the host's document.symbols@1 an instance is the engine's
+    // instance node (engine ADR 1039), whatever the source was.
     const designer = new Designer(live);
     await designer.selectElements([pair[0]!]);
     await runCommand(live, "media.paged.draw.command.defineSymbol");
+    const newestSymbolId = () =>
+      live.evaluate(async () => {
+        const rows = await (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                collection(n: string): Promise<Array<{ id: string }>>;
+              };
+            };
+          }
+        ).__canvas.client.collection("symbols");
+        return rows[rows.length - 1]?.id ?? "";
+      });
+    await expect.poll(newestSymbolId).not.toBe("");
+    const symbolId = await newestSymbolId();
     const placed: Array<{ kind: string; id: string }> = [];
     for (const x of [450, 520]) {
       const was = await paths();
       await runCommand(live, "media.paged.draw.command.placeSymbolInstance", {
-        symbolId: "sym-1",
+        symbolId,
         x,
         y: 420,
       });
@@ -1668,7 +1683,7 @@ test.describe.serial("plugin menus — paged.draw", () => {
         .poll(async () => (await paths()).length)
         .toBe(was.length + 1);
       const id = (await paths()).find((r) => !was.includes(r))!;
-      placed.push({ kind: "polygon", id });
+      placed.push({ kind: "instance", id });
     }
     await designer.selectElements([placed[0]!]);
     await expectGreyedAndInert(bare, "Edit/Select same/Symbol instance");

@@ -144,6 +144,15 @@ export function EditContextController() {
         return;
       }
 
+      // A sub-edit of a context that takes no keys of its own (a bundle's
+      // open transform box, extensions ADR 339): Esc and Enter end the
+      // SUB-EDIT through the tool in hand, not the context.
+      if (
+        !onContentKey &&
+        isDirtyRef.current() &&
+        (e.key === "Escape" || e.key === "Enter")
+      )
+        return;
       if (e.key === "Escape") {
         if (subContexts?.current()) return;
         e.preventDefault();

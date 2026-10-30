@@ -16,11 +16,12 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// A ZIP writer for `package -o x.zip`: deflated entries (stored when
-// deflating does not help), CRC-32, one central directory. No ZIP64: a
-// package over 4 GiB is refused.
-
-import { deflateRawSync } from "node:zlib";
+// The one ZIP writer of the built-ins, the editor and the CLI (plan C13):
+// entries in the order given, CRC-32, one central directory, UTF-8 names.
+// Deflate is the caller's: the CLI hands Node's `deflateRawSync`, the
+// browser stores (an export of PNG, JPEG or WebP files gains nothing from
+// deflating them again). An entry is stored whenever deflating does not
+// make it smaller. No ZIP64: an archive over 4 GiB is refused.
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -32,26 +33,36 @@ const CRC_TABLE = (() => {
   return t;
 })();
 
+/** The CRC-32 (IEEE) of `bytes`, as ZIP and PNG use it. */
 export function crc32(bytes: Uint8Array): number {
   let c = 0xffffffff;
   for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff]! ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
+export interface ZipOptions {
+  /** Raw DEFLATE (no zlib header) of an entry; absent: every entry is
+   *  stored. */
+  deflate?: (data: Uint8Array) => Uint8Array;
+}
+
 /** The ZIP of `entries` (path → bytes), in the order given. */
-export function zip(entries: ReadonlyArray<[string, Uint8Array]>): Uint8Array {
+export function zip(
+  entries: ReadonlyArray<readonly [string, Uint8Array]>,
+  options: ZipOptions = {},
+): Uint8Array {
   const parts: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
   for (const [name, data] of entries) {
     const nameBytes = new TextEncoder().encode(name);
-    const deflated = deflateRawSync(data);
-    const stored = deflated.byteLength >= data.byteLength;
-    const body = stored ? data : new Uint8Array(deflated);
+    const deflated = options.deflate?.(data);
+    const stored = !deflated || deflated.byteLength >= data.byteLength;
+    const body = stored ? data : deflated;
     const crc = crc32(data);
     if (offset + body.byteLength > 0xffffffff)
       throw new Error(
-        "the package is over 4 GiB, which a ZIP without ZIP64 cannot hold",
+        "the archive is over 4 GiB, which a ZIP without ZIP64 cannot hold",
       );
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);

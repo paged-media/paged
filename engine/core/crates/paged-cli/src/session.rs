@@ -543,6 +543,7 @@ fn handle(live: &mut Live, req: Request) -> Result<Value> {
                 format: Default::default(),
                 background: Default::default(),
                 trim: false,
+                quality: None,
             })?;
             let png = expect_reply!(reply, WorkerToMainKind::SnapshotReady(p) => p,
                 format!("render page {}", page_id.0))?;

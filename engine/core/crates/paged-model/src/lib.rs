@@ -1137,6 +1137,167 @@ pub enum FrameRef {
     /// Index into `Spread::groups` — sub-groups are first-class
     /// members so the renderer can bracket each one independently.
     Group(usize),
+    /// Engine ADR 1039 — index into `Spread::instances`: a placed
+    /// reference to a [`SymbolDefinition`] of the document.
+    Instance(usize),
+}
+
+// ---------------------------------------------------------------------------
+// Symbols (engine ADR 1039)
+// ---------------------------------------------------------------------------
+
+/// Engine ADR 1039 — a symbol DEFINITION: reusable artwork kept once in the
+/// document ([`SymbolDefinition::items`]) and drawn wherever a
+/// [`SymbolInstance`] names it. The items are ordinary page items (text
+/// frames with their stories, gradients, placed images, groups, nested
+/// instances) in DEFINITION SPACE, where the registration point (the centre
+/// of the artwork as it was captured) is the origin.
+///
+/// `revision` counts redefinitions; the renderer caches a definition's
+/// display list per `(id, revision)`. Native only: IDML has no symbol, so the
+/// writer expands every instance (and reports it) and keeps the definition
+/// in a label to restore it on reimport.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SymbolDefinition {
+    /// Document-unique id the instances name.
+    pub id: String,
+    /// The name the Symbols panel shows.
+    pub name: String,
+    /// Bumped by every redefinition.
+    #[serde(default)]
+    pub revision: u64,
+    /// The artwork: `frames_in_order` lists the roots back to front;
+    /// members, pasted-in children and mask items sit in the kind vecs
+    /// beside them, as in a page-item snippet. No pages.
+    pub items: Spread,
+    /// The stories the items' text frames and text paths name.
+    #[serde(default)]
+    pub stories: Vec<SymbolStory>,
+    /// The artwork's union box in definition space.
+    pub bounds: Bounds,
+    /// Default 9-slice guides for the definition's instances.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nine_slice: Option<NineSlice>,
+}
+
+/// A story held by a [`SymbolDefinition`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SymbolStory {
+    pub self_id: String,
+    pub story: Story,
+}
+
+/// Engine ADR 1039 — 9-slice scaling guides, as insets from the
+/// definition's bounds in definition space. When an instance is scaled, the
+/// four corners keep their size, the edges stretch along their own axis and
+/// the centre stretches in both.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct NineSlice {
+    pub left: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+}
+
+/// Engine ADR 1039 — a colour tint over an instance's artwork (Illustrator's
+/// Symbol Stainer): every solid paint and gradient stop moves `amount` of
+/// the way towards `color` (sRGB, `0..=1`). Images are not tinted.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct SymbolTint {
+    pub color: [f32; 3],
+    pub amount: f32,
+}
+
+/// Engine ADR 1039 — what one instance overrides of its definition.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct SymbolOverrides {
+    /// Instance opacity, `0..=100` (IDML's scale).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f32>,
+    /// Blend mode, in `Rectangle::blend_mode`'s value space.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint: Option<SymbolTint>,
+}
+
+impl SymbolOverrides {
+    pub fn is_empty(&self) -> bool {
+        self.opacity.is_none() && self.blend_mode.is_none() && self.tint.is_none()
+    }
+}
+
+fn symbol_instance_visible() -> bool {
+    true
+}
+
+/// Engine ADR 1039 — a page item that draws a [`SymbolDefinition`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SymbolInstance {
+    pub self_id: Option<String>,
+    /// The [`SymbolDefinition::id`] it draws.
+    pub symbol: String,
+    /// Definition space → spread space (`[a, b, c, d, tx, ty]`, the
+    /// `ItemTransform` convention): `(tx, ty)` is where the registration
+    /// point lands. Like every leaf's, spread-absolute when the instance is
+    /// a group member.
+    pub item_transform: [f32; 6],
+    #[serde(default)]
+    pub item_layer: Option<String>,
+    #[serde(default = "symbol_instance_visible")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default, skip_serializing_if = "SymbolOverrides::is_empty")]
+    pub overrides: SymbolOverrides,
+    /// This instance's 9-slice guides; `None` uses the definition's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nine_slice: Option<NineSlice>,
+    /// Its definition's bounds (definition space): a derived cache, so
+    /// what sees only a spread (hit testing, snapping, z-order, a group's
+    /// box) can measure the instance. Not serialised; refreshed from the
+    /// symbol store by `paged_scene::Document::rebuild_indexes` after every
+    /// load and mutation.
+    #[serde(skip, default = "instance_bounds_unset")]
+    pub bounds: Bounds,
+}
+
+fn instance_bounds_unset() -> Bounds {
+    Bounds::ZERO
+}
+
+impl SymbolInstance {
+    /// The instance's box in spread space: the axis-aligned hull of its
+    /// definition's bounds, mapped.
+    pub fn spread_box(&self) -> Bounds {
+        self.spread_bounds(self.bounds)
+    }
+
+    /// The instance's box in spread space, given its definition's bounds:
+    /// the axis-aligned hull of the mapped corners.
+    pub fn spread_bounds(&self, def_bounds: Bounds) -> Bounds {
+        let m = self.item_transform;
+        let mut b = Bounds {
+            top: f32::INFINITY,
+            left: f32::INFINITY,
+            bottom: f32::NEG_INFINITY,
+            right: f32::NEG_INFINITY,
+        };
+        for (x, y) in [
+            (def_bounds.left, def_bounds.top),
+            (def_bounds.right, def_bounds.top),
+            (def_bounds.left, def_bounds.bottom),
+            (def_bounds.right, def_bounds.bottom),
+        ] {
+            let px = m[0] * x + m[2] * y + m[4];
+            let py = m[1] * x + m[3] * y + m[5];
+            b.left = b.left.min(px);
+            b.right = b.right.max(px);
+            b.top = b.top.min(py);
+            b.bottom = b.bottom.max(py);
+        }
+        b
+    }
 }
 
 /// Group-level transparency block parsed from `<TransparencySetting>` /
@@ -9061,6 +9222,12 @@ pub struct Spread {
     /// that silently "round-trips" is worse than an honest loss.
     #[serde(default)]
     pub opacity_masks: std::collections::HashMap<String, OpacityMask>,
+    /// Engine ADR 1039 — the spread's symbol instances, listed in
+    /// [`Spread::frames_in_order`] (or a group's `members`) as
+    /// [`FrameRef::Instance`]. Absent from the native encoding when empty,
+    /// so a document without symbols serialises as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub instances: Vec<SymbolInstance>,
 }
 
 /// C-28 — how a mask item's artwork resolves to coverage. Mirrors

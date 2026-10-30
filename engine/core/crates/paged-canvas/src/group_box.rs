@@ -114,6 +114,11 @@ fn leaf_extent(spread: &Spread, leaf: FrameRef, to_group: &Affine) -> Option<Bou
             let path = (f.anchors.clone(), f.subpath_starts.clone());
             (path, f.bounds, f.item_transform)
         }),
+        // Engine ADR 1039 — an instance is its definition's box.
+        FrameRef::Instance(i) => spread
+            .instances
+            .get(i)
+            .map(|f| ((Vec::new(), Vec::new()), f.bounds, Some(f.item_transform))),
         FrameRef::Group(_) => None,
     }?;
     let m = multiply(*to_group, transform.unwrap_or(IDENTITY));

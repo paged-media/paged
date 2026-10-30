@@ -152,6 +152,12 @@ pub struct DocState {
     /// The font subset pool (glyph usage accumulated across pages,
     /// written at finish).
     pub fonts: FontPool,
+    /// Engine ADR 1039 — one form XObject per symbol definition (by
+    /// `SymbolForm::key`), shared by every instance on every page.
+    pub symbol_forms: BTreeMap<u64, Ref>,
+    /// The resource dictionaries of those forms, written at finish like
+    /// the pages' (fonts are complete only then).
+    pub symbol_resources: Vec<(Ref, PageResources)>,
 }
 
 impl DocState {
@@ -169,6 +175,8 @@ impl DocState {
             gs_pool: BTreeMap::new(),
             separation_pool: BTreeMap::new(),
             fonts: FontPool::default(),
+            symbol_forms: BTreeMap::new(),
+            symbol_resources: Vec::new(),
         }
     }
 
@@ -258,50 +266,12 @@ impl DocState {
             None
         };
 
+        for (at, res) in &self.symbol_resources {
+            write_resources(&mut self.pdf, *at, res);
+        }
         for (page_idx, page) in self.pages.iter().enumerate() {
             // The shared indirect /Resources dict (page + its forms).
-            {
-                let mut res = self
-                    .pdf
-                    .indirect(page.resources_ref)
-                    .start::<pdf_writer::writers::Resources>();
-                if !page.resources.ext_g_states.is_empty() {
-                    let mut d = res.ext_g_states();
-                    for (name, r) in &page.resources.ext_g_states {
-                        d.pair(Name(name.as_bytes()), *r);
-                    }
-                }
-                if !page.resources.color_spaces.is_empty() {
-                    let mut d = res.color_spaces();
-                    for (name, r) in &page.resources.color_spaces {
-                        d.pair(Name(name.as_bytes()), *r);
-                    }
-                }
-                if !page.resources.fonts.is_empty() {
-                    let mut d = res.fonts();
-                    for (name, r) in &page.resources.fonts {
-                        d.pair(Name(name.as_bytes()), *r);
-                    }
-                }
-                if !page.resources.x_objects.is_empty() {
-                    let mut d = res.x_objects();
-                    for (name, r) in &page.resources.x_objects {
-                        d.pair(Name(name.as_bytes()), *r);
-                    }
-                }
-                if !page.resources.shadings.is_empty() {
-                    let mut d = res.shadings();
-                    for (name, r) in &page.resources.shadings {
-                        d.pair(Name(name.as_bytes()), *r);
-                    }
-                }
-                if !page.resources.patterns.is_empty() {
-                    let mut d = res.patterns();
-                    for (name, r) in &page.resources.patterns {
-                        d.pair(Name(name.as_bytes()), *r);
-                    }
-                }
-            }
+            write_resources(&mut self.pdf, page.resources_ref, &page.resources);
             let mut p = self.pdf.page(page.page_ref);
             p.parent(self.page_tree_ref);
             p.media_box(page.media_box);
@@ -763,6 +733,47 @@ fn write_outlines(
         item.dest().page(page).fit();
     }
     Some(root)
+}
+
+/// One indirect /Resources dictionary.
+fn write_resources(pdf: &mut Pdf, at: Ref, res: &PageResources) {
+    let mut w = pdf.indirect(at).start::<pdf_writer::writers::Resources>();
+    if !res.ext_g_states.is_empty() {
+        let mut d = w.ext_g_states();
+        for (name, r) in &res.ext_g_states {
+            d.pair(Name(name.as_bytes()), *r);
+        }
+    }
+    if !res.color_spaces.is_empty() {
+        let mut d = w.color_spaces();
+        for (name, r) in &res.color_spaces {
+            d.pair(Name(name.as_bytes()), *r);
+        }
+    }
+    if !res.fonts.is_empty() {
+        let mut d = w.fonts();
+        for (name, r) in &res.fonts {
+            d.pair(Name(name.as_bytes()), *r);
+        }
+    }
+    if !res.x_objects.is_empty() {
+        let mut d = w.x_objects();
+        for (name, r) in &res.x_objects {
+            d.pair(Name(name.as_bytes()), *r);
+        }
+    }
+    if !res.shadings.is_empty() {
+        let mut d = w.shadings();
+        for (name, r) in &res.shadings {
+            d.pair(Name(name.as_bytes()), *r);
+        }
+    }
+    if !res.patterns.is_empty() {
+        let mut d = w.patterns();
+        for (name, r) in &res.patterns {
+            d.pair(Name(name.as_bytes()), *r);
+        }
+    }
 }
 
 #[cfg(test)]

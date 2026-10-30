@@ -557,6 +557,51 @@ bound) bundle.
   tool-preview slot, which would erase the active tool's preview.
 - Same `capabilities.rendering ∋ "overlay"` gate as `setToolPreview`.
 
+### 4.5e `host.overlay.handles` and `host.transformBox` — handles the host hits [ADR 339]
+
+Two doors that answer the POINTER for a bundle, so its handles behave like
+the host's chrome without each bundle re-deriving screen metrics from the
+camera (extensions ADR 339; the host tool is editor ADR 295).
+
+- **The primitive.** `ToolPreviewHandle` (`kind: "handle"`, `shape` square /
+  round / centre / rotateZone, `sizePx`, `active`) is a marker drawn at a
+  constant SCREEN size at a page-local point — in the tool-preview slot and
+  in layers. `rotateZone` draws nothing: it is a hit area.
+- **Handle sets.** `host.overlay.handles(id?)` → `{ set(space, handles),
+clear(), hitTest(pageId, pagePoint), dispose() }`. `space` is
+  `{ pageId }` (page-local pt) or `{ element }` (the frame's content space:
+  its box top-left, through its item transform, resolved at `set`). Radii are
+  screen px (6, a rotate zone 28); earlier handles win an overlap; sets stack
+  with the bundle's layers in creation order. Every pointer event of the
+  bundle's own tools carries `hitHandle: { set, id }` over a handle, and a
+  handle's `cursor` is the tool's cursor there unless the tool's `cursorAt`
+  answers.
+- **The transform box.** `host.transformBox.open({ pageId, quad, mode?,
+reference?, toolId?, onChange?, onCommit, onCancel? })` draws a box (eight
+  handles, the reference point; the rotate zones just outside the corners)
+  over a quad the bundle owns, takes the pointer and keys of the bundle's
+  tools while open (an open box makes the bundle's edit context dirty, so Esc and
+  Enter end the box, not the context), and reports `{ matrix, quad, reference, mode, operation }`:
+  `matrix` is a row-major 3×3 projective matrix from the box as opened to the
+  box now (affine until a distort or perspective drag). Enter commits, Escape
+  cancels; a press outside the box beyond the rotate zones reaches the tool;
+  opening a second box cancels the first; `toolId` makes one of the bundle's
+  tools the active one while the box is open. The modifiers and modes are the
+  host Free Transform tool's (`freeTransform`, `constrain`, `freeDistort`,
+  `perspective`). The host never touches the content: the bundle applies the
+  matrix (paged.image resamples a layer through `geom.warp_projective`).
+- **One geometry.** The box's hit order, metrics and drag arms are
+  `transform-box.ts`, exported from the SDK root (`hitTestBox`,
+  `operationFor`, `dragBox`, `homographyFromQuads`, `quadMap`, …); the host
+  tool runs the same code.
+- **Routing.** `contribute.tool` wraps each gesture handler the bundle's
+  factory makes: the box first, then `hitHandle` stamping. A handler that
+  never reads the field sees no change.
+- **Flags.** `overlay.handles@1` and `host.transformBox@1` are DYNAMIC: true
+  when the host renders overlay layers (the handle primitive ships with this
+  SDK's host). Without them both doors still hit, route and report, and draw
+  nothing. Gate: `capabilities.rendering ∋ "overlay"`.
+
 ### 4.5b `host.text` — measurement + the caret read door [S-13 · C-9]
 
 `measureString(family, style, text, sizePt)` (S-13 — real engine-shaper
@@ -756,6 +801,23 @@ returns it to the default vertical stack; the page order stays
 and the pages collection's `canvasOriginPt` / `canvasPlaced` / `boundsPt` —
 and the catalog the `pageCanvasOrigin` page path. An artboard's name is the
 page metadata entry `x-paged:paged.artboard` (`{"v":1,"data":{"name"}}`).
+
+`"document.symbols@1"` (engine ADR 1039, protocol 78) is the engine's
+symbol: a definition kept once in the document and instances that draw it
+(`FrameRef::Instance`, addressed `instance:<id>`). The doors are five wire
+ops — `createSymbol { name, elementIds, symbolId?, replace?, nineSlice? }`
+(the items become one instance unless `replace: false`; `createdId` is
+it), `redefineSymbol { symbolId, elementIds?, name?, nineSlice?, replace? }`
+(every instance follows), `placeSymbolInstance { symbolId, pageId, at?,
+linear?, nineSlice? }`, `breakSymbolLink { elementId }` and
+`deleteSymbol { symbolId }` — each one undo step, and the `symbols`
+collection lists the definitions with their instances. An instance's
+opacity, blend mode, transform, visibility and lock are the ordinary
+element paths; its tint and 9-slice guides are `symbolInstanceTint`
+(`[r, g, b, amount]`) and `symbolInstanceNineSlice` (`[left, top, right,
+bottom]`). STATIC: protocol 78's handshake proves the engine has them.
+paged.draw's Symbols panel uses them when the flag is up and keeps its
+re-emitted artwork (draw ADR 356) as the fallback for a host without it.
 
 ### 4.9 `host.editor` — the marked escape hatch
 
@@ -1493,7 +1555,7 @@ clears its missing flag.
 
 The sheets-mode grid's range copy/paste (cells + values) had nowhere to
 land (RFI §6 K-6). `host.clipboard` is the door: a read/write surface over
-the SYSTEM clipboard with a rich `{ text?, tabular? }` payload. The
+the SYSTEM clipboard with a rich `{ text?, tabular?, svg? }` payload. The
 manifest already declared a `clipboard` enum (`none | vector | full`) ahead
 of any surface; this change gives it teeth.
 
@@ -1554,6 +1616,20 @@ Wholly additive: a new `host.clipboard` member + `ClipboardSurface` /
 `capabilities.clipboard` manifest field (the enum itself is unchanged). No
 existing member changed; the gate / namespace rule / every other door are
 untouched.
+
+### 14.6 The svg half (extensions ADR 341 — `clipboard.svg@1`)
+
+`ClipboardPayload.svg` is an SVG document (UTF-8 text), the platform's
+vector interchange. On write the host puts it on the clipboard as
+`image/svg+xml` where the platform takes that type; on read it fills `svg`
+from plain text that IS an SVG document (Illustrator writes its source
+there; the browser's `image/svg+xml` is sanitised and loses `<style>`),
+else from the `image/svg+xml` flavour, and an SVG text is never read as a
+TSV grid. `"vector"` and `"full"` both carry it. A backend declares the
+half with `ClipboardBackend.svg: true`; without it the door strips `svg`
+both ways and `supports("clipboard.svg@1")` is false. The editor's backend
+and the harness's `inMemoryClipboard` declare it. What browsers can and
+cannot reach (no PDF anywhere) is recorded in editor ADR 289.
 
 ## 15. The capability-gated worker door (K-3 / S-07 / I-02 — `host.workers`)
 

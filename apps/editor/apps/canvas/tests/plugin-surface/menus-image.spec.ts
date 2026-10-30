@@ -19,7 +19,7 @@
 
 // PLUGIN MENUS — paged.image (modules/image/glue/src/menu.ts).
 //
-// Two hundred and fifteen entries: two hundred and twelve under the Image menu (folded into
+// Two hundred and twenty-five entries: two hundred and twenty-two under the Image menu (folded into
 // Plugins ▸ Image; shown as a context menu inside a raster frame) and three
 // under the host's Edit menu (Edit ▸ Selection to path, Edit ▸ Path to
 // selection, Edit ▸ Content-aware fill…).
@@ -1445,6 +1445,166 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
+  test("Image/Mode/Greyscale — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/Greyscale");
+    await expectGreyedAndInert(bare, "Image/Mode/Greyscale");
+    const out = await clickEntry(
+      live,
+      "Image/Mode/Greyscale",
+      "media.paged.image.command.modeGray",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Mode/RGB colour — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/RGB colour");
+    await expectGreyedAndInert(bare, "Image/Mode/RGB colour");
+    const out = await clickEntry(
+      live,
+      "Image/Mode/RGB colour",
+      "media.paged.image.command.modeRgb",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Mode/CMYK colour — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/CMYK colour");
+    await expectGreyedAndInert(bare, "Image/Mode/CMYK colour");
+    const out = await clickEntry(
+      live,
+      "Image/Mode/CMYK colour",
+      "media.paged.image.command.modeCmyk",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Mode/Lab colour — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/Lab colour");
+    await expectGreyedAndInert(bare, "Image/Mode/Lab colour");
+    const out = await clickEntry(
+      live,
+      "Image/Mode/Lab colour",
+      "media.paged.image.command.modeLab",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Mode/8 bits per channel — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/8 bits per channel");
+    await expectGreyedAndInert(bare, "Image/Mode/8 bits per channel");
+    const out = await clickEntry(
+      live,
+      "Image/Mode/8 bits per channel",
+      "media.paged.image.command.modeBits8",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Mode/16 bits per channel — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/16 bits per channel");
+    await expectGreyedAndInert(bare, "Image/Mode/16 bits per channel");
+    const out = await clickEntry(
+      live,
+      "Image/Mode/16 bits per channel",
+      "media.paged.image.command.modeBits16",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Proof/Proof colours — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Proof/Proof colours");
+    await expectGreyedAndInert(bare, "Image/Proof/Proof colours");
+    const out = await clickEntry(
+      live,
+      "Image/Proof/Proof colours",
+      "media.paged.image.command.proofColors",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Proof/Gamut warning — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Proof/Gamut warning");
+    await expectGreyedAndInert(bare, "Image/Proof/Gamut warning");
+    const out = await clickEntry(
+      live,
+      "Image/Proof/Gamut warning",
+      "media.paged.image.command.gamutWarning",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Proof/Working CMYK — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Proof/Working CMYK");
+    await expectGreyedAndInert(bare, "Image/Proof/Working CMYK");
+    const out = await clickEntry(
+      live,
+      "Image/Proof/Working CMYK",
+      "media.paged.image.command.proofSetupCmyk",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Proof/Working grey — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Proof/Working grey");
+    await expectGreyedAndInert(bare, "Image/Proof/Working grey");
+    const out = await clickEntry(
+      live,
+      "Image/Proof/Working grey",
+      "media.paged.image.command.proofSetupGray",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
   test("Image/Trim… — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Trim…");
     await expectGreyedAndInert(bare, "Image/Trim…");
@@ -2140,6 +2300,23 @@ test.describe.serial("plugin menus — paged.image", () => {
       live,
       "Image/File/Export as…",
       "media.paged.image.command.exportAs",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Edit/Free transform — with no image open, raises the Image panel @feat:image.editor.transform-warp", async () => {
+    covers("menu:Edit/Free transform");
+    covers("command:media.paged.image.command.freeTransform");
+    await expectGreyedAndInert(bare, "Edit/Free transform");
+    const out = await clickEntry(
+      live,
+      "Edit/Free transform",
+      "media.paged.image.command.freeTransform",
     );
     expect(out.shell).toEqual([
       { door: "openPanel", arg: "media.paged.image.panel.adjustments" },

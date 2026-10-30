@@ -74,6 +74,8 @@ pub enum NodeIdJson {
     Polygon(String),
     GraphicLine(String),
     Group(String),
+    /// Engine ADR 1039 — a symbol instance.
+    Instance(String),
     Spread(String),
     Page(String),
     Layer(String),
@@ -113,6 +115,7 @@ impl From<NodeId> for NodeIdJson {
             NodeId::Polygon(s) => NodeIdJson::Polygon(s),
             NodeId::GraphicLine(s) => NodeIdJson::GraphicLine(s),
             NodeId::Group(s) => NodeIdJson::Group(s),
+            NodeId::Instance(s) => NodeIdJson::Instance(s),
             NodeId::Spread(s) => NodeIdJson::Spread(s),
             NodeId::Page(s) => NodeIdJson::Page(s),
             NodeId::Layer(s) => NodeIdJson::Layer(s),
@@ -153,6 +156,7 @@ impl From<&NodeIdJson> for NodeId {
             NodeIdJson::Polygon(s) => NodeId::Polygon(s.clone()),
             NodeIdJson::GraphicLine(s) => NodeId::GraphicLine(s.clone()),
             NodeIdJson::Group(s) => NodeId::Group(s.clone()),
+            NodeIdJson::Instance(s) => NodeId::Instance(s.clone()),
             NodeIdJson::Spread(s) => NodeId::Spread(s.clone()),
             NodeIdJson::Page(s) => NodeId::Page(s.clone()),
             NodeIdJson::Layer(s) => NodeId::Layer(s.clone()),
@@ -248,6 +252,15 @@ fn frames_for_spread(parsed: &paged_scene::ParsedSpread) -> Vec<FrameEntry> {
             frames.push(FrameEntry {
                 label: format!("Rectangle {}", short_id(&self_id)),
                 id: NodeIdJson::Rectangle(self_id),
+            });
+        }
+    }
+    // Engine ADR 1039 — symbol instances are page items too.
+    for inst in &parsed.spread.instances {
+        if let Some(self_id) = inst.self_id.clone() {
+            frames.push(FrameEntry {
+                label: format!("Instance {} ({})", short_id(&self_id), inst.symbol),
+                id: NodeIdJson::Instance(self_id),
             });
         }
     }

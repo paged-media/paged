@@ -578,6 +578,31 @@ fn push_frame_ref(
                 push_group_members(spread, g, group_chain, layer_z, out, doc_order);
             }
         }
+        // Engine ADR 1039 — an instance is hit inside its definition's
+        // bounds, oriented by its transform.
+        FrameRef::Instance(i) => {
+            if let Some(f) = spread.instances.get(i) {
+                if !f.visible {
+                    return;
+                }
+                let Some(id) = f.self_id.as_ref() else {
+                    return;
+                };
+                let z = lookup_z(layer_z, f.item_layer.as_deref());
+                out.push(Candidate {
+                    element_id: ElementId::Instance(id.clone()),
+                    bounds: f.bounds,
+                    item_transform: Some(f.item_transform),
+                    item_layer: f.item_layer.clone(),
+                    is_text: false,
+                    parent_story: None,
+                    group_chain: group_chain.to_vec(),
+                    layer_z: z,
+                    doc_order: *doc_order,
+                });
+                *doc_order += 1;
+            }
+        }
     }
 }
 

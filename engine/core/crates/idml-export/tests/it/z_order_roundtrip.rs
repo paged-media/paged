@@ -108,6 +108,7 @@ fn open(package: &[u8]) -> Document {
         text_frame_index: Default::default(),
         styles: Default::default(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     }
 }
 
@@ -142,6 +143,7 @@ fn z_ids(spread: &idml_import::Spread) -> Vec<String> {
                 FrameRef::GraphicLine(i) => spread.graphic_lines[i].self_id.clone(),
                 FrameRef::Polygon(i) => spread.polygons[i].self_id.clone(),
                 FrameRef::Group(i) => spread.groups[i].self_id.clone(),
+                FrameRef::Instance(i) => spread.instances[i].self_id.clone(),
             };
             id.expect("every fixture item has a Self")
         })

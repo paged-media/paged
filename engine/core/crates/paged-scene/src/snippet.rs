@@ -85,4 +85,7 @@ pub struct SnippetResources {
     pub stroke_styles: BTreeMap<String, paged_model::StrokeStyleDef>,
     #[serde(default)]
     pub conditions: BTreeMap<String, paged_model::ConditionDef>,
+    /// Engine ADR 1039 — the symbol definitions the copied instances draw.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbols: Vec<paged_model::SymbolDefinition>,
 }

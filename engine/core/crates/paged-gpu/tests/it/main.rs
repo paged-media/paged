@@ -4,6 +4,7 @@
 //! its own process. A new test file goes here and gets a `mod` line below.
 
 mod svg_reference;
+mod symbol_parity;
 mod vello_effects;
 mod vello_image_atlas;
 mod view_parity;

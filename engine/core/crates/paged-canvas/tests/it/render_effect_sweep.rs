@@ -1185,6 +1185,7 @@ fn cases() -> Vec<Case> {
     page_cases(&mut c);
     path_cases(&mut c);
     pathfinder_cases(&mut c);
+    symbol_cases(&mut c);
     structure_cases(&mut c);
     layer_cases(&mut c);
     palette_cases(&mut c);
@@ -2704,6 +2705,91 @@ fn path_cases(c: &mut Vec<Case>) {
         Mutation::SimplifyPath {
             element_id: ElementId::Polygon(id),
             tolerance: 40.0,
+        }
+    }));
+}
+
+// ── symbols (engine ADR 1039) ───────────────────────────────────────
+
+/// A quad made a symbol `Symbol/sweep`; with `replace` the quad becomes its
+/// instance (answered), else it stays and no instance exists.
+fn quad_symbol(m: &mut CanvasModel, replace: bool) -> Option<String> {
+    let id = add_quad(m, 120.0, 120.0, 160.0, 120.0);
+    let out = m
+        .apply_mutation(&Mutation::CreateSymbol {
+            name: "Sweep".into(),
+            element_ids: vec![ElementId::Polygon(id)],
+            symbol_id: Some("Symbol/sweep".into()),
+            replace: Some(replace),
+            nine_slice: None,
+        })
+        .expect("createSymbol");
+    match out.created_id {
+        Some(ElementId::Instance(i)) => Some(i),
+        _ => None,
+    }
+}
+
+fn place_sweep(m: &mut CanvasModel) -> Mutation {
+    Mutation::PlaceSymbolInstance {
+        symbol_id: "Symbol/sweep".into(),
+        page_id: first_page(m),
+        at: Some((400.0, 500.0)),
+        linear: None,
+        nine_slice: None,
+    }
+}
+
+fn symbol_cases(c: &mut Vec<Case>) {
+    c.push(when_used(
+        "CreateSymbol",
+        "geometry",
+        "a symbol made without replacing its items is a definition: nothing on the page draws it yet",
+        |m| {
+            let id = add_quad(m, 120.0, 120.0, 160.0, 120.0);
+            Mutation::CreateSymbol {
+                name: "Sweep".into(),
+                element_ids: vec![ElementId::Polygon(id)],
+                symbol_id: Some("Symbol/sweep".into()),
+                replace: Some(false),
+                nine_slice: None,
+            }
+        },
+        |m| {
+            let place = place_sweep(m);
+            m.apply_mutation(&place).expect("place");
+        },
+    ));
+    c.push(paints("PlaceSymbolInstance", "geometry", |m| {
+        quad_symbol(m, false);
+        place_sweep(m)
+    }));
+    c.push(paints("RedefineSymbol", "geometry", |m| {
+        quad_symbol(m, false);
+        let place = place_sweep(m);
+        m.apply_mutation(&place).expect("place");
+        let other = add_quad(m, 60.0, 60.0, 40.0, 200.0);
+        Mutation::RedefineSymbol {
+            symbol_id: "Symbol/sweep".into(),
+            element_ids: vec![ElementId::Polygon(other)],
+            name: None,
+            nine_slice: None,
+            replace: Some(false),
+        }
+    }));
+    // Break Link and Delete Symbol draw the same pixels (it::symbols
+    // asserts that) but the digest moves: the replay bracket
+    // (`BeginSymbol` / `EndSymbol`) becomes loose page items.
+    c.push(paints("BreakSymbolLink", "geometry", |m| {
+        let instance = quad_symbol(m, true).expect("an instance");
+        Mutation::BreakSymbolLink {
+            element_id: ElementId::Instance(instance),
+        }
+    }));
+    c.push(paints("DeleteSymbol", "geometry", |m| {
+        quad_symbol(m, true);
+        Mutation::DeleteSymbol {
+            symbol_id: "Symbol/sweep".into(),
         }
     }));
 }

@@ -794,7 +794,13 @@ export type WorkerToMain = WorkerToMainKind & {
 //   the viewer session's `PageRect.xPt`. A new Mutation kind an older worker
 //   cannot apply, hence the bump; it rides the unpublished v77 (added
 //   before first consumer sync, governance rule 4).
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
+// v78 — symbols (engine ADR 1039): the mutations createSymbol,
+//   redefineSymbol, placeSymbolInstance, breakSymbolLink and deleteSymbol;
+//   `FrameRef::Instance` page items. Additive with them: `ElementId::Instance`
+//   (`instance:<id>`), the element paths `symbolInstanceTint` /
+//   `symbolInstanceNineSlice`, the `symbols` collection. New Mutation kinds
+//   an older worker cannot apply, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
 
 /// A per-run script budget on the wire (v63). Every field is optional
 /// and falls back to the engine's default, so a caller overrides only
@@ -1349,7 +1355,9 @@ pub enum MainToWorkerKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         clip: Option<crate::snapshot::SnapshotClip>,
         /// Extensions ADR 338 — `"png"` (the default) or `"rgba"`: raw
-        /// straight-alpha RGBA8 in `SnapshotPng.rgba`.
+        /// straight-alpha RGBA8 in `SnapshotPng.rgba`. Editor ADR 288 adds
+        /// `"jpeg"`, `"webp"` and `"tiff"`: the file in `SnapshotPng.bytes`,
+        /// encoded by `paged-raster`, drawn on the CPU rasterizer.
         #[serde(
             default,
             skip_serializing_if = "crate::snapshot::SnapshotFormat::is_png"
@@ -1365,6 +1373,10 @@ pub enum MainToWorkerKind {
         /// Nothing drawn answers `SnapshotError::NothingDrawn`.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         trim: bool,
+        /// Editor ADR 288 (asset export) — `format: "jpeg"`: the quality,
+        /// 1 to 100 (absent: 90). Other formats ignore it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quality: Option<u8>,
     },
     /// Replace the worker's current selection. Phase 3 Item 1 — the
     /// worker mirrors the main thread's `ContentSelection` so the
@@ -3269,6 +3281,9 @@ pub enum CollectionName {
     /// a caller should still treat it as an on-demand analysis rather
     /// than something to poll.
     InkCoverage,
+    /// Engine ADR 1039 — the document's symbol definitions
+    /// ([`SymbolSummary`]), in creation order. Additive (rides v78).
+    Symbols,
 }
 
 impl CollectionName {
@@ -3311,6 +3326,7 @@ impl CollectionName {
             Self::Stories => "stories",
             Self::NumberingLists => "numberingLists",
             Self::InkCoverage => "inkCoverage",
+            Self::Symbols => "symbols",
         }
     }
 
@@ -3353,6 +3369,7 @@ impl CollectionName {
             "stories" => Self::Stories,
             "numberingLists" => Self::NumberingLists,
             "inkCoverage" => Self::InkCoverage,
+            "symbols" => Self::Symbols,
             _ => return None,
         })
     }
@@ -3816,7 +3833,7 @@ pub struct PageSummary {
     /// edges it means. Absent for a generated page and from older workers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bounds_pt: Option<[f32; 4]>,
-    /// v77 rider (engine ADR 1026) — the master items the page hides
+    /// v78 rider (engine ADR 1026) — the master items the page hides
     /// (`Page@OverrideList`): those it holds its own copies of, or does not
     /// show. Empty when none; older workers omit it.
     #[serde(default)]
@@ -3864,19 +3881,19 @@ pub struct MasterPageSummary {
     pub self_id: String,
     pub label: String,
     pub page_count: u32,
-    /// v77 rider (engine ADR 1026) — the master's pages: each page's id,
+    /// v78 rider (engine ADR 1026) — the master's pages: each page's id,
     /// size, the master it is based on (its `AppliedMaster`), its override
     /// list and its plugin metadata. Older workers omit it.
     #[serde(default)]
     pub pages: Vec<MasterPageEntry>,
-    /// v77 rider (engine ADR 1026) — the master's items as scene-tree rows,
+    /// v78 rider (engine ADR 1026) — the master's items as scene-tree rows,
     /// in stacking order, with their plugin metadata: what `tree` gives
     /// for a page. Older workers omit it.
     #[serde(default)]
     pub items: Vec<SceneTreeNode>,
 }
 
-/// v77 rider (engine ADR 1026) — one page of a master spread.
+/// v78 rider (engine ADR 1026) — one page of a master spread.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
@@ -4074,7 +4091,7 @@ pub struct HyperlinkSummary {
     pub destination_url: Option<String>,
     #[serde(default)]
     pub destination_page: Option<String>,
-    /// v77 rider (engine ADR 1026) — the page item the link starts from,
+    /// v78 rider (engine ADR 1026) — the page item the link starts from,
     /// when its source is an item (`insertItemHyperlink`) rather than text.
     #[serde(default)]
     pub source_item: Option<String>,
@@ -4269,6 +4286,29 @@ pub struct ConditionSummary {
 /// `documentCollection:numberingLists`. The editor's list-definitions
 /// surface renders this; `continue_across_stories` is the flag that
 /// drives cross-story numbering continuity in the renderer.
+/// Engine ADR 1039 — one symbol definition, as the `symbols` collection
+/// lists it.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolSummary {
+    /// The id the symbol ops take (`Symbol/u1`).
+    pub id: String,
+    pub name: String,
+    /// Bumped by every redefinition of its artwork.
+    pub revision: u64,
+    /// The artwork's box in symbol space, `[top, left, bottom, right]`
+    /// pt (the registration point is the origin).
+    pub bounds: [f32; 4],
+    /// Its 9-slice guides, `[left, top, right, bottom]`, when set.
+    #[serde(default)]
+    pub nine_slice: Option<[f32; 4]>,
+    /// How many page items the artwork holds (roots).
+    pub item_count: u32,
+    /// The instances on the document's spreads, as `instance:<id>`.
+    pub instances: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
@@ -5000,6 +5040,7 @@ mod tests {
                 format: Default::default(),
                 background: Default::default(),
                 trim: false,
+                quality: None,
             },
         };
         let json = serde_json::to_string(&msg).unwrap();
@@ -5372,8 +5413,8 @@ mod tests {
     /// release commitment, not a detail — the protocol-governance
     /// record exists because nine bumps once shipped untagged.
     #[test]
-    fn protocol_version_is_v77() {
-        assert_eq!(PROTOCOL_VERSION.0, 77);
+    fn protocol_version_is_v78() {
+        assert_eq!(PROTOCOL_VERSION.0, 78);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the

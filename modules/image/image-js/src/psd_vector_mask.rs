@@ -759,6 +759,7 @@ mod tests {
             )]);
             v.disabled = vector_disabled;
             LayerPlate {
+                rgba16: None,
                 name: String::new(),
                 blend_key: *b"norm",
                 opacity: 255,

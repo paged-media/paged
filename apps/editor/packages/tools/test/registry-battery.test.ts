@@ -43,6 +43,7 @@ describe("the built-in tools, mounted from the registry", () => {
         "paged.tool.ellipse",
         "paged.tool.ellipseFrame",
         "paged.tool.eyedropper",
+        "paged.tool.freeTransform",
         "paged.tool.gradientFeather",
         "paged.tool.gradientSwatch",
         "paged.tool.line",

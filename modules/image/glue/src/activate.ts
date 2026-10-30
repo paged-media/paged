@@ -55,6 +55,7 @@ import { createImageSession } from "./session";
 import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
 import { contributeMasking } from "./masking-contrib";
+import { contributeMode } from "./mode-contrib";
 import { BG, type BlurKind } from "./filters-blur-gallery";
 import {
   contributeVectors,
@@ -66,6 +67,7 @@ import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { adjustmentKindLabel } from "./panels/sections/layer-parity";
 import { makeCropGesture } from "./crop-tool";
+import { beginLayerTransform, makeTransformGesture } from "./transform-tool";
 import { makeMoveGesture } from "./move-tool";
 import { makeBucketGesture } from "./bucket-tool";
 import { makeGradientGesture } from "./gradient-tool";
@@ -113,6 +115,7 @@ const CMD = defineMessages("image.command", {
   autoEnhanceImage: "Auto-enhance image",
   serveImageTilesToTheRenderer: "Serve image tiles to the renderer",
   applyCrop: "Apply crop",
+  freeTransform: "Free transform",
   fillSelectionWithAGradient: "Fill selection with a gradient",
   fillSelectionWithNoise: "Fill selection with noise",
   addImageLayer: "Add image layer",
@@ -231,6 +234,7 @@ const ONE_SHOT_LABELS = defineMessages("image.effect", {
 
 const TOOL = defineMessages("image.tool", {
   crop: "Crop",
+  freeTransform: "Free transform",
   movePixels: "Move pixels",
   paintBucket: "Paint bucket",
   gradient: "Gradient",
@@ -328,6 +332,7 @@ defineTranslations("de", de);
 
 const PANEL_ID = "media.paged.image.panel.adjustments";
 const CROP_TOOL_ID = "media.paged.image.tool.crop";
+const TRANSFORM_TOOL_ID = "media.paged.image.tool.transform";
 const MOVE_TOOL_ID = "media.paged.image.tool.move";
 const BUCKET_TOOL_ID = "media.paged.image.tool.bucket";
 const GRADIENT_TOOL_ID = "media.paged.image.tool.gradient";
@@ -598,6 +603,44 @@ export function activate(host: BundleHost): BundleHandle {
     group: EYEDROPPER_TOOL_ID,
     section: "drawType",
     gesture: () => makeColorSamplerGesture(host, session),
+  });
+
+  // FREE TRANSFORM of the active layer (or the selection's pixels): the
+  // host draws the transform box and does the gesture math
+  // (`host.transformBox`, extensions ADR 339); the tool only hosts it and
+  // the session resamples once on commit (`geom.warp_projective`). It
+  // shares the crop slot and takes no shortcut: Edit ▸ Free transform
+  // opens it from any tool. Enter applies, Esc cancels, a press outside
+  // the box applies.
+  contributeTool(host, {
+    id: TRANSFORM_TOOL_ID,
+    title: t(TOOL.freeTransform),
+    icon: "tool-freeTransform",
+    group: CROP_TOOL_ID,
+    section: "transform",
+    // Cmd is the box's distort / shear modifier, not Direct Selection.
+    cmdIsModifier: true,
+    gesture: () => makeTransformGesture(host, session, TRANSFORM_TOOL_ID),
+  });
+  // Edit ▸ Free transform: open the box over the active layer, or apply
+  // the open one (the command toggles, as Photoshop's Cmd+T commits).
+  command({
+    id: "media.paged.image.command.freeTransform",
+    title: t(CMD.freeTransform),
+    category: "Image",
+    handler: () => {
+      const open = host.transformBox.active();
+      if (open) {
+        open.commit();
+        return;
+      }
+      // Nothing ingested: raise the panel, as every image verb does.
+      if (!session.state().source) {
+        host.shell.openPanel(PANEL_ID);
+        return;
+      }
+      void beginLayerTransform(host, session, TRANSFORM_TOOL_ID);
+    },
   });
 
   // The crop commit command (also surfaced as the panel's "Apply crop"
@@ -1815,6 +1858,8 @@ export function activate(host: BundleHost): BundleHandle {
   // Vectors inside the image (ADR 476): the pen and shape tools, the
   // Paths panel's verbs, Layer ▸ Vector Mask.
   const vectorsSub = contributeVectors(host, session, command, PANEL_ID);
+  // Image ▸ Mode (ADR 479): depth, colour mode and the proof view.
+  const modeSub = contributeMode(host, session, command, PANEL_ID);
 
   // K-2 — the raster importer: opening/dropping a raster file routes
   // its bytes HERE (decode into the session, raise the panel; it does
@@ -1989,6 +2034,7 @@ export function activate(host: BundleHost): BundleHandle {
         LASSO_TOOL_ID,
         MAGIC_WAND_TOOL_ID,
         CROP_TOOL_ID,
+        TRANSFORM_TOOL_ID,
         MOVE_TOOL_ID,
         BUCKET_TOOL_ID,
         GRADIENT_TOOL_ID,
@@ -2027,6 +2073,8 @@ export function activate(host: BundleHost): BundleHandle {
       },
       onExit: () => {
         host.log.debug("rasterImage context exited");
+        // An open transform box does not outlive the context.
+        host.transformBox.active()?.cancel();
         // Leaving the image hands its edits to the document.
         if (session.state().uncommitted) void session.commitToDocument();
       },
@@ -2166,6 +2214,7 @@ export function activate(host: BundleHost): BundleHandle {
       retouchSettingsSub?.dispose();
       menuSub.dispose();
       maskingSub.dispose();
+      modeSub.dispose();
       vectorsSub.dispose();
       providerInvalidate = null;
       for (const h of providerHandles.splice(0)) h.dispose();

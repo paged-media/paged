@@ -102,6 +102,11 @@ pub struct Document {
     /// work as the parser emits the corresponding markers.
     #[serde(skip)]
     pub anchors: Vec<Anchor>,
+    /// Engine ADR 1039 — the document's symbol definitions, which
+    /// [`paged_model::SymbolInstance`]s on the spreads draw. Absent from the
+    /// native encoding when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbols: Vec<paged_model::SymbolDefinition>,
 }
 
 /// A spread plus the path it came from in the container.
@@ -198,6 +203,11 @@ fn content_box_geometry(
 }
 
 impl Document {
+    /// Engine ADR 1039 — the symbol definition `id` names.
+    pub fn symbol(&self, id: &str) -> Option<&paged_model::SymbolDefinition> {
+        self.symbols.iter().find(|d| d.id == id)
+    }
+
     /// Rebuild the derived caches (`frame_for_story`, `text_frame_index`,
     /// `anchors`) purely from the primary `spreads` / `stories` fields.
     ///
@@ -208,6 +218,22 @@ impl Document {
     /// is what keeps the caches true of a MUTATED document. Must reproduce
     /// exactly what `open` used to build inline.
     pub fn rebuild_indexes(&mut self) {
+        // Engine ADR 1039 — every instance carries its definition's bounds.
+        {
+            let bounds: HashMap<&str, paged_model::Bounds> = self
+                .symbols
+                .iter()
+                .map(|d| (d.id.as_str(), d.bounds))
+                .collect();
+            for parsed in &mut self.spreads {
+                for inst in &mut parsed.spread.instances {
+                    inst.bounds = bounds
+                        .get(inst.symbol.as_str())
+                        .copied()
+                        .unwrap_or(paged_model::Bounds::ZERO);
+                }
+            }
+        }
         self.rebuild_frame_indexes();
         self.rebuild_anchor_table();
     }

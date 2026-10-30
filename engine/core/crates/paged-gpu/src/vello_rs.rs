@@ -866,6 +866,9 @@ fn build_scene_with_transform_filtered(
                 emit_soft_mask(scene, page_to_px, &artwork, mask_type, invert);
                 scene.pop_layer();
             }
+            // Engine ADR 1039 — a symbol copy draws as the commands between
+            // the markers; the markers draw nothing.
+            DisplayCommand::BeginSymbol { .. } | DisplayCommand::EndSymbol(_) => {}
             DisplayCommand::PushClip { path_id, transform } => {
                 let scene = scene_stack.last_mut().expect("scene_stack underflow");
                 let Some(path_data) = list.paths.get(*path_id) else {

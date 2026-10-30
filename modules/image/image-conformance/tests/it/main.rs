@@ -45,6 +45,7 @@ mod filters_render;
 mod filters_stylize;
 mod golden_expansion;
 mod gpu_module_kernels;
+mod mode_conversions_photoshop;
 mod oracle_photoshop;
 mod oracle_photoshop_selection;
 mod oracle_vips;

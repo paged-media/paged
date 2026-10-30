@@ -35,6 +35,10 @@ pub struct ColorCtx<'a> {
     pub map: &'a ColorMap,
     /// `phClr` — the colour a style reference supplies.
     pub placeholder: Option<Rgba>,
+    /// That colour's theme key, when it is a theme colour (slide ADR 713).
+    pub placeholder_key: Option<String>,
+    /// The theme, when it is not the deck's first (a key's prefix).
+    pub theme_tag: Option<&'a str>,
 }
 
 impl SchemeColors for ColorCtx<'_> {
@@ -60,6 +64,19 @@ impl SchemeColors for ColorCtx<'_> {
         let (_, c) = self.theme?.colors.iter().find(|(k, _)| k == mapped)?;
         // A theme slot is itself a colour (srgb or sys) with no further mapping.
         Some(drawingml::resolve(c, &()))
+    }
+
+    /// A theme colour's key (`accent1 lumMod75000`): the slot through the
+    /// colour map, with its transforms (slide ADR 713).
+    fn theme_key(&self, c: &Color) -> Option<String> {
+        crate::theme::key_of(c, self.map, self.placeholder_key.as_deref(), self.theme_tag)
+    }
+}
+
+impl ColorCtx<'_> {
+    /// [`SchemeColors::theme_key`] by name.
+    pub fn key(&self, c: &Color) -> Option<String> {
+        self.theme_key(c)
     }
 }
 
@@ -126,6 +143,8 @@ mod tests {
             theme: Some(&th),
             map: &map,
             placeholder: None,
+            placeholder_key: None,
+            theme_tag: None,
         };
         assert_eq!(
             resolve(&c(ColorBase::Scheme("tx1".into()), &[]), &ctx).bytes(),
@@ -149,6 +168,8 @@ mod tests {
             theme: Some(&th),
             map: &map,
             placeholder: None,
+            placeholder_key: None,
+            theme_tag: None,
         };
         // White at 85 % luminance: PowerPoint's "Background 1, darker 15 %" = D9D9D9.
         let d = resolve(
@@ -174,6 +195,8 @@ mod tests {
             theme: None,
             map: &map,
             placeholder: Some(Rgba::from_hex(0xff0000)),
+            placeholder_key: None,
+            theme_tag: None,
         };
         let x = resolve(
             &c(ColorBase::Scheme("phClr".into()), &[("alpha", 50_000)]),

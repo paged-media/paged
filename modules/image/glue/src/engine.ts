@@ -40,6 +40,7 @@ import {
   type MaskingEngine,
   type MaskingWasm,
 } from "./masking-engine";
+import { modeEngine, type ModeEngine, type ModeWasm } from "./mode-engine";
 import type { GlobalLight, LayerStyle } from "./layer-style";
 import {
   wrapVectors,
@@ -1344,6 +1345,7 @@ export interface FilterMask {
 export interface ImageEngine
   extends
     MaskingEngine,
+    ModeEngine,
     RetouchEngine<DecodedInfo>,
     FilterEngine,
     VectorEngine<DecodedInfo> {
@@ -1382,6 +1384,14 @@ export interface ImageEngine
    *  returning a handle for the GPU adjust + tile paths. `rgba` must be
    *  `width*height*4` bytes; a mismatch throws. */
   ingestRgba8(width: number, height: number, rgba: Uint8Array): DecodedInfo;
+  /** `ingestRgba8`'s 16-bit twin: `width*height*4` straight RGBA samples
+   *  at 16 bits (the decode worker's hand-off of a 16-bit source, so the
+   *  off-thread decode keeps the depth; image ADR 479). */
+  ingestRgba16(
+    width: number,
+    height: number,
+    samples: Uint16Array,
+  ): DecodedInfo;
   /** Run the adjustments chain (GPU for the kernel stages + a CPU curve
    *  LUT pass) and return straight RGBA8 — the C-1 Stage-A scene-item
    *  payload. Identity params return the decode verbatim without touching
@@ -1907,6 +1917,15 @@ export interface ImageEngine
     amount: number,
     frequency?: number,
   ): Promise<DecodedInfo>;
+  /** FREE TRANSFORM of the active layer (`geom.warp_projective`): the
+   *  FORWARD 3×3 map in image px (row-major), bilinear or bicubic,
+   *  transparent outside; with a selection only its pixels move. One
+   *  journaled edit. */
+  applyProjective(
+    handle: number,
+    matrix: readonly number[],
+    interp: "bilinear" | "bicubic",
+  ): Promise<DecodedInfo>;
   /** STYLIZE — directional relief. `height === 0` is the identity. */
   applyEmboss(
     handle: number,
@@ -2406,7 +2425,7 @@ interface DecodedHandleWasm {
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
 export interface ImageWasmModule
-  extends MaskingWasm, RetouchWasm, FilterWasm, VectorWasm {
+  extends MaskingWasm, ModeWasm, RetouchWasm, FilterWasm, VectorWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -2439,6 +2458,11 @@ export interface ImageWasmModule
     width: number,
     height: number,
     bytes: Uint8Array,
+  ): DecodedHandleWasm;
+  ingest_rgba16(
+    width: number,
+    height: number,
+    samples: Uint16Array,
   ): DecodedHandleWasm;
   adjust_image(
     handle: number,
@@ -2829,6 +2853,11 @@ export interface ImageWasmModule
     amount: number,
     frequency: number,
   ): Promise<DecodedHandleWasm>;
+  apply_projective(
+    handle: number,
+    matrix: Float32Array,
+    interp: number,
+  ): Promise<DecodedHandleWasm>;
   apply_emboss(
     handle: number,
     angle_deg: number,
@@ -3210,6 +3239,7 @@ export interface ImageWasmModule
 export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
   return {
     ...maskingEngine(wasm),
+    ...modeEngine(wasm),
     ...wrapRetouch(wasm, decodedInfoOf),
     ...filterEngineOf(wasm, decodedInfoOf),
     ...wrapVectors(wasm, decodedInfoOf),
@@ -3259,6 +3289,18 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     },
     ingestRgba8(width, height, rgba) {
       const h = wasm.ingest_rgba8(width, height, rgba);
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    ingestRgba16(width, height, samples) {
+      const h = wasm.ingest_rgba16(width, height, samples);
       const info = {
         handle: h.handle,
         width: h.width,
@@ -3848,6 +3890,15 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         display: displayTreatmentOf(h.display),
         depthReduced: h.depth_reduced === true,
       };
+    },
+    async applyProjective(handle, matrix, interp) {
+      return decodedInfoOf(
+        await wasm.apply_projective(
+          handle,
+          Float32Array.from(matrix),
+          interp === "bicubic" ? 1 : 0,
+        ),
+      );
     },
     // ONE decoder for all six: the return shape is identical, and six
     // hand-written copies of it is six chances to forget a field.

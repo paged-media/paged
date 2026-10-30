@@ -196,6 +196,7 @@ pub(super) fn frame_ref_self_id(
         F::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.as_deref(),
         F::Polygon(i) => spread.polygons.get(i)?.self_id.as_deref(),
         F::Group(i) => spread.groups.get(i)?.self_id.as_deref(),
+        F::Instance(i) => spread.instances.get(i)?.self_id.as_deref(),
     }
 }
 
@@ -266,6 +267,8 @@ pub(super) fn frame_ref_local_pages(
             .polygons
             .get(i)
             .map(|f| transform_bounds(f.bounds, f.item_transform)),
+        // Engine ADR 1039 — its definition's bounds, mapped.
+        F::Instance(i) => spread.instances.get(i).map(|inst| inst.spread_box()),
         // Engine ADR 1010: a group is on every page one of its members
         // is on (a clip group brackets its members on each of them).
         F::Group(gi) => {
@@ -868,6 +871,9 @@ pub(super) fn build_document_inner(
     // English hyphenator did every paragraph of every document. Holding
     // the whole set costs nothing, because a hyphenator parses its
     // pattern file on first use.
+    // Engine ADR 1039 — the symbol definitions this document's instances
+    // draw, each built once (or served from the caller's cache).
+    let symbol_lists = super::symbols::prepare(document, options, font_table);
     let hyphenators = paged_text::Hyphenators::new();
     let hyphenator = paged_text::Hyphenator::for_language(paged_text::Language::EnglishUS);
 
@@ -1420,6 +1426,32 @@ pub(super) fn build_document_inner(
             }
             let master_order = master_paint_order(&master.spread);
             let mut emit_master = |fr: paged_model::FrameRef| {
+                // A hidden master item draws nowhere, as a hidden body item
+                // does not (`Visible="false"`, and the items an export of
+                // some items alone hides: `build_page_filtered`).
+                let s = &master.spread;
+                let hidden = match fr {
+                    paged_model::FrameRef::TextFrame(i) => {
+                        s.text_frames.get(i).is_some_and(|f| !f.visible)
+                    }
+                    paged_model::FrameRef::Rectangle(i) => {
+                        s.rectangles.get(i).is_some_and(|f| !f.visible)
+                    }
+                    paged_model::FrameRef::Oval(i) => s.ovals.get(i).is_some_and(|f| !f.visible),
+                    paged_model::FrameRef::GraphicLine(i) => {
+                        s.graphic_lines.get(i).is_some_and(|f| !f.visible)
+                    }
+                    paged_model::FrameRef::Polygon(i) => {
+                        s.polygons.get(i).is_some_and(|f| !f.visible)
+                    }
+                    paged_model::FrameRef::Group(_) => false,
+                    paged_model::FrameRef::Instance(i) => {
+                        s.instances.get(i).is_some_and(|f| !f.visible)
+                    }
+                };
+                if hidden {
+                    return;
+                }
                 match fr {
                     paged_model::FrameRef::TextFrame(idx) => {
                         let Some(frame) = master.spread.text_frames.get(idx) else {
@@ -1602,7 +1634,9 @@ pub(super) fn build_document_inner(
                             Some(compose_outer_matrix(mpt_outer, copy.item_transform));
                         emit_line_into(&mut pages[i], &copy, document, palette, color_ctx);
                     }
-                    paged_model::FrameRef::Group(_) => {}
+                    // Engine ADR 1039 — instances are placed on body spreads
+                    // only (`placeSymbolInstance` names one); a master holds none.
+                    paged_model::FrameRef::Group(_) | paged_model::FrameRef::Instance(_) => {}
                 }
             };
             for &fr in &master_order {
@@ -1648,6 +1682,7 @@ pub(super) fn build_document_inner(
             ovals: vec![None; spread.ovals.len()],
             graphic_lines: vec![None; spread.graphic_lines.len()],
             polygons: vec![None; spread.polygons.len()],
+            instances: vec![None; spread.instances.len()],
             text_slots: vec![Vec::new(); spread.text_frames.len()],
             z_seq: 0,
         };
@@ -1681,6 +1716,10 @@ pub(super) fn build_document_inner(
                 // Group: derive layer from the first leaf member with
                 // an ItemLayer. If none, treat as "no layer" (MAX).
                 paged_model::FrameRef::Group(_) => None,
+                paged_model::FrameRef::Instance(i) => spread
+                    .instances
+                    .get(i)
+                    .and_then(|f| f.item_layer.as_deref()),
             };
             id.and_then(|s| layer_z_index.get(s).copied())
                 .unwrap_or(usize::MAX)
@@ -1753,6 +1792,7 @@ pub(super) fn build_document_inner(
             options: &PipelineOptions,
             color_ctx: ColorCtx<'_>,
             auto_sized_bounds: &HashMap<String, paged_model::Bounds>,
+            symbols: &super::symbols::SymbolLists,
         ) {
             match fr {
                 paged_model::FrameRef::TextFrame(idx) => {
@@ -2000,6 +2040,7 @@ pub(super) fn build_document_inner(
                         options,
                         color_ctx,
                         auto_sized_bounds,
+                        symbols,
                     );
                 }
                 paged_model::FrameRef::Oval(idx) => {
@@ -2102,6 +2143,7 @@ pub(super) fn build_document_inner(
                         options,
                         color_ctx,
                         auto_sized_bounds,
+                        symbols,
                     );
                 }
                 paged_model::FrameRef::GraphicLine(idx) => {
@@ -2270,7 +2312,57 @@ pub(super) fn build_document_inner(
                         options,
                         color_ctx,
                         auto_sized_bounds,
+                        symbols,
                     );
+                }
+                // Engine ADR 1039 — replay the definition's display list
+                // under the instance's transform, on every page it reaches.
+                paged_model::FrameRef::Instance(idx) => {
+                    let Some(inst) = spread.instances.get(idx) else {
+                        return;
+                    };
+                    if !is_layer_visible(document, inst.item_layer.as_deref()) || !inst.visible {
+                        return;
+                    }
+                    let sym = match inst.overrides.tint {
+                        Some(t) if t.amount > 0.0 => symbols.tinted(&inst.symbol, t),
+                        _ => symbols.get(&inst.symbol),
+                    };
+                    let Some(sym) = sym else {
+                        return;
+                    };
+                    total_stats.frames += 1;
+                    let nine = inst
+                        .nine_slice
+                        .or_else(|| document.symbol(&inst.symbol).and_then(|d| d.nine_slice));
+                    let spread_bounds = inst.spread_bounds(sym.bounds);
+                    let overlaps = pages_overlapping_frame(&spread_bounds, local_geoms);
+                    let local_indices: Vec<usize> = if overlaps.is_empty() {
+                        vec![page_for_frame(&spread_bounds, local_geoms).unwrap_or(0)]
+                    } else {
+                        overlaps
+                    };
+                    for &local_idx in &local_indices {
+                        let page_idx = range.start + local_idx;
+                        let before = pages[page_idx].list.commands.len();
+                        let outer =
+                            super::text_frame::frame_outer_transform(&pages[page_idx], None);
+                        super::symbols::emit_instance(
+                            &mut pages[page_idx],
+                            &sym,
+                            inst,
+                            nine,
+                            outer,
+                        );
+                        let after = pages[page_idx].list.commands.len();
+                        if after > before && frame_spans.instances[idx].is_none() {
+                            frame_spans.instances[idx] = Some(crate::module::FrameCmdSpan {
+                                page_idx,
+                                start: before,
+                                end: after,
+                            });
+                        }
+                    }
                 }
                 paged_model::FrameRef::Group(gi) => {
                     if let Some(g) = spread.groups.get(gi) {
@@ -2325,6 +2417,7 @@ pub(super) fn build_document_inner(
                                 options,
                                 color_ctx,
                                 auto_sized_bounds,
+                                symbols,
                             );
                         }
                         if clip.is_some() {
@@ -2372,6 +2465,7 @@ pub(super) fn build_document_inner(
             options: &PipelineOptions,
             color_ctx: ColorCtx<'_>,
             auto_sized_bounds: &HashMap<String, paged_model::Bounds>,
+            symbols: &super::symbols::SymbolLists,
         ) {
             let Some(host_id) = host_id else { return };
             let Some(children) = spread.nested_children.get(host_id) else {
@@ -2408,6 +2502,7 @@ pub(super) fn build_document_inner(
                     options,
                     color_ctx,
                     auto_sized_bounds,
+                    symbols,
                 );
             }
             for &local_idx in host_local_indices {
@@ -2447,6 +2542,7 @@ pub(super) fn build_document_inner(
             options: &PipelineOptions,
             color_ctx: ColorCtx<'_>,
             auto_sized_bounds: &HashMap<String, paged_model::Bounds>,
+            symbols: &super::symbols::SymbolLists,
         ) {
             let mask_entry = frame_ref_self_id(spread, fr)
                 .and_then(|id| spread.opacity_masks.get(id))
@@ -2468,6 +2564,7 @@ pub(super) fn build_document_inner(
                     options,
                     color_ctx,
                     auto_sized_bounds,
+                    symbols,
                 );
                 return;
             };
@@ -2506,6 +2603,7 @@ pub(super) fn build_document_inner(
                 options,
                 color_ctx,
                 auto_sized_bounds,
+                symbols,
             );
             for &local_idx in &union {
                 pages[range.start + local_idx].list.push(
@@ -2528,6 +2626,7 @@ pub(super) fn build_document_inner(
                 options,
                 color_ctx,
                 auto_sized_bounds,
+                symbols,
             );
             for &local_idx in &union {
                 pages[range.start + local_idx].list.push(
@@ -2565,6 +2664,7 @@ pub(super) fn build_document_inner(
                 options,
                 color_ctx,
                 &auto_sized_bounds,
+                &symbol_lists,
             );
         }
         spread_frame_spans.push(frame_spans);

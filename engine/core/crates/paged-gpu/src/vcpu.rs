@@ -1089,6 +1089,9 @@ impl Raster<'_> {
                         .unwrap_or_else(|| KRect::new(-1.0e6, -1.0e6, 1.0e6, 1.0e6).to_path(0.1));
                     self.active().push_clip(path, rule);
                 }
+                // Engine ADR 1039 — a symbol copy draws as the commands
+                // between the markers; the markers draw nothing.
+                DisplayCommand::BeginSymbol { .. } | DisplayCommand::EndSymbol(_) => {}
                 DisplayCommand::PopClip(_) | DisplayCommand::EndSoftMask(_) => {
                     let floor = self.clip_floor();
                     let surface = self.active();

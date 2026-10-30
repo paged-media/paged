@@ -1,7 +1,7 @@
 # ADR 1026 — Masters based on masters, overrides on the wire, page items as link sources
 
 - **Status:** Accepted 2026-10-29.
-- **Scope:** protocol v77 (riders, see Consequences). `paged-scene`
+- **Scope:** protocol 78 (additions to the unreleased protocol, see Consequences). `paged-scene`
   (`Document::master_chain`, `master_basis_allowed`, `MAX_MASTER_DEPTH`); `paged-renderer`
   (`pipeline::geom::master_levels`, the master pass in `build_engine`); `paged-mutate`
   (`ApplyMasterToPage` on a master page, `SetPageOverrides`, `OverrideMasterItems`,
@@ -88,9 +88,9 @@ thumbnail).
   silently dropped before. No fixture of the IDML corpus uses it (checked over 306 files), so
   no existing rendering changes; `paged-renderer` `masters_based_on` covers the cases above
   with a hand-written package.
-- The riders ride v77 as the earlier ones did (engine ADRs 1011, 1022): new mutation kinds and
-  additive read fields, no change to an existing shape. `applyMasterToPage` keeps its shape and
-  accepts more.
+- The additions join protocol 78, which is not released yet (engine ADR 1039 opened it): new
+  mutation kinds and additive read fields, no change to an existing shape. `applyMasterToPage`
+  keeps its shape and accepts more.
 - The item a source names is not followed by edits: a duplicate of the item does not carry the
   link, and deleting the item leaves the source to name nothing (export skips nothing; IDML
   readers ignore a source whose item is missing). The renderer does not draw link areas for

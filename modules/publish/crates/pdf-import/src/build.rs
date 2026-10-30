@@ -181,6 +181,7 @@ pub fn build_document_from(ir: &DocumentIr, source: Option<&[u8]>) -> Result<Doc
         text_frame_index: HashMap::new(),
         styles: Default::default(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     };
     document.rebuild_indexes();
     Ok(document)

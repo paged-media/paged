@@ -207,6 +207,8 @@ pub(super) fn rebase_path_ids(cmd: &mut paged_compose::DisplayCommand, offset: i
         | PopLayer(_)
         | BeginSoftMask { .. }
         | BeginMaskedContent(_)
-        | EndSoftMask(_) => {}
+        | EndSoftMask(_)
+        | BeginSymbol { .. }
+        | EndSymbol(_) => {}
     }
 }

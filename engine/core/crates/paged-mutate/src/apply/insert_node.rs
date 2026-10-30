@@ -48,7 +48,8 @@ pub(super) fn fr_index(fr: &FrameRef) -> usize {
         | FrameRef::Oval(i)
         | FrameRef::GraphicLine(i)
         | FrameRef::Polygon(i)
-        | FrameRef::Group(i) => *i,
+        | FrameRef::Group(i)
+        | FrameRef::Instance(i) => *i,
     }
 }
 
@@ -60,6 +61,7 @@ pub(super) fn fr_with_index(fr: &FrameRef, i: usize) -> FrameRef {
         FrameRef::GraphicLine(_) => FrameRef::GraphicLine(i),
         FrameRef::Polygon(_) => FrameRef::Polygon(i),
         FrameRef::Group(_) => FrameRef::Group(i),
+        FrameRef::Instance(_) => FrameRef::Instance(i),
     }
 }
 
@@ -97,6 +99,7 @@ pub(super) fn ensure_frames_in_order(spread: &mut Spread) {
     v.extend((0..spread.graphic_lines.len()).map(FrameRef::GraphicLine));
     v.extend((0..spread.polygons.len()).map(FrameRef::Polygon));
     v.extend((0..spread.groups.len()).map(FrameRef::Group));
+    v.extend((0..spread.instances.len()).map(FrameRef::Instance));
     spread.frames_in_order = v;
 }
 
@@ -125,6 +128,7 @@ fn z_table_before_insert(spread: &Spread, template: &FrameRef) -> Vec<FrameRef> 
     push(spread.graphic_lines.len(), FrameRef::GraphicLine);
     push(spread.polygons.len(), FrameRef::Polygon);
     push(spread.groups.len(), FrameRef::Group);
+    push(spread.instances.len(), FrameRef::Instance);
     v
 }
 
@@ -648,6 +652,7 @@ fn apply_insert_captured(
         Oval(Box<Oval>),
         GraphicLine(Box<GraphicLine>),
         Polygon(Box<Polygon>),
+        Instance(Box<paged_model::SymbolInstance>),
     }
     let decode = |e: serde_json::Error| malformed(e.to_string());
     let item = match node {
@@ -668,6 +673,7 @@ fn apply_insert_captured(
             p.image_bytes = image_bytes.clone();
             Item::Polygon(p)
         }
+        NodeId::Instance(_) => Item::Instance(serde_json::from_value(item).map_err(decode)?),
         other => return Err(malformed(format!("{other:?} is not a page item"))),
     };
     let labels: Option<Vec<(String, String)>> = envelope
@@ -691,6 +697,7 @@ fn apply_insert_captured(
             Item::Oval(_) => s.ovals.len(),
             Item::GraphicLine(_) => s.graphic_lines.len(),
             Item::Polygon(_) => s.polygons.len(),
+            Item::Instance(_) => s.instances.len(),
         };
         check_emptied_groups(doc, &spread_id, &groups, Some((position, &len)))?;
         let spread = find_spread_mut(doc, &spread_id).expect("checked above");
@@ -715,6 +722,7 @@ fn apply_insert_captured(
         Item::Oval(_) => s.ovals.len(),
         Item::GraphicLine(_) => s.graphic_lines.len(),
         Item::Polygon(_) => s.polygons.len(),
+        Item::Instance(_) => s.instances.len(),
     };
     if position > len {
         return Err(OperationError::InvalidPosition {
@@ -743,6 +751,10 @@ fn apply_insert_captured(
         Item::Polygon(p) => {
             s.polygons.insert(position, *p);
             FrameRef::Polygon(position)
+        }
+        Item::Instance(i) => {
+            s.instances.insert(position, *i);
+            FrameRef::Instance(position)
         }
     };
     register_frame_ref(s, new_ref, position, z_slot);
