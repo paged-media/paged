@@ -1000,6 +1000,10 @@ export const CORE_PATHS: Record<
   paragraphBorderWeight: V71,
   documentShowHiddenText: V71,
   documentShowFieldCodes: V71,
+  // Engine ADR 1040 — Track Changes and the markup view.
+  documentTrackChanges: V71,
+  documentTrackChangesAuthor: V71,
+  documentMarkupView: V71,
   frameDropShadowBlendMode: {
     scope: "frame",
     wire: "text",

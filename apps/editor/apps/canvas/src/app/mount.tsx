@@ -44,6 +44,7 @@ import {
   pageDecorationsContribution,
   isolationDimContribution,
   subContextContribution,
+  marginBandContribution,
   marginGuidesContribution,
   pathEditContribution,
   resizeHandlesContribution,
@@ -362,6 +363,9 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // Editor ADR 301 — a header, footer or note edited in place: the veil
   // around it and its bar.
   subContextContribution,
+  // Editor ADR 300 — the markup margin band: a bundle's balloons (tracked
+  // changes, comments) beside the pages while its context is active.
+  marginBandContribution,
   // Template fields (docs/composable-editor.md §7.10): outlines, labels and a
   // picture's Replace button, for an author and a filler only.
   templateFieldsContribution,

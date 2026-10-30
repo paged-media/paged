@@ -1241,6 +1241,33 @@ impl CanvasModel {
                                 scene.designmap.document_preference.show_field_codes == Some(true),
                             ));
                         }
+                        // Engine ADR 1040 — Track Changes and the markup view.
+                        PropertyPath::DocumentTrackChanges => {
+                            return Ok(Value::Bool(
+                                scene.designmap.document_preference.track_changes == Some(true),
+                            ));
+                        }
+                        PropertyPath::DocumentTrackChangesAuthor => {
+                            return Ok(Value::Text(
+                                scene
+                                    .designmap
+                                    .document_preference
+                                    .track_changes_author
+                                    .clone()
+                                    .unwrap_or_default(),
+                            ));
+                        }
+                        PropertyPath::DocumentMarkupView => {
+                            return Ok(Value::Text(
+                                scene
+                                    .designmap
+                                    .document_preference
+                                    .markup_view
+                                    .unwrap_or_default()
+                                    .as_str()
+                                    .to_string(),
+                            ));
+                        }
                         _ => {}
                     }
                     // ADR 162 — the document's footnote options.

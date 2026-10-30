@@ -40,6 +40,81 @@ use serde::{Deserialize, Serialize};
 pub struct StoryContentIn {
     pub self_id: String,
     pub paragraphs: Vec<ParagraphContentIn>,
+    /// Doc ADR 613 — the story's comments (every thread entry), as the
+    /// engine reads them back.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<CommentContentIn>,
+}
+
+/// Doc ADR 613 — one tracked change as the engine reads it back.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeContentIn {
+    pub id: String,
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+}
+
+/// Doc ADR 613 — a run's tracked format change: the run's look before.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormatChangeContentIn {
+    pub change: ChangeContentIn,
+    #[serde(default)]
+    pub before: RunContentIn,
+}
+
+/// Doc ADR 613 — a paragraph's tracked property change.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PropsChangeContentIn {
+    pub change: ChangeContentIn,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_paragraph_style: Option<String>,
+}
+
+/// Doc ADR 613 — one comment as the engine reads it back.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentContentIn {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<u32>,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initials: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub resolved: bool,
+}
+
+impl ChangeContentIn {
+    /// The lowering's form; a paragraph mark's (`mark`) kind is always
+    /// `insertMark` / `deleteMark`.
+    pub(crate) fn lowered(&self, mark: bool) -> docx_lower::ir::LoweredChange {
+        let kind = match (self.kind.as_str(), mark) {
+            ("insert" | "insertMark", true) => "insertMark",
+            ("delete" | "deleteMark", true) => "deleteMark",
+            (k, _) => k,
+        };
+        docx_lower::ir::LoweredChange {
+            id: self.id.clone(),
+            kind: kind.to_string(),
+            author: self.author.clone(),
+            date: self.date.clone(),
+        }
+    }
 }
 
 /// One read-back paragraph.
@@ -49,6 +124,12 @@ pub struct ParagraphContentIn {
     #[serde(default)]
     pub paragraph_style: Option<String>,
     pub runs: Vec<RunContentIn>,
+    /// Doc ADR 613 — the paragraph mark's tracked insertion or deletion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark_change: Option<ChangeContentIn>,
+    /// Doc ADR 613 — the tracked change of its properties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub props_change: Option<PropsChangeContentIn>,
 }
 
 /// One read-back run: its text, its applied character style, and the
@@ -86,6 +167,15 @@ pub struct RunContentIn {
     /// back (engine ADR 1022): its instruction.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field_code: Option<String>,
+    /// Doc ADR 613 — the tracked insertion or deletion the run's text is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<ChangeContentIn>,
+    /// Doc ADR 613 — the run's tracked format change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_change: Option<Box<FormatChangeContentIn>>,
+    /// Doc ADR 613 — the comments whose range covers the run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<String>,
 }
 
 impl RunContentIn {
@@ -168,26 +258,62 @@ fn run_token(styles: &mut Vec<LoweredStyle>, r: &RunContentIn) -> Option<String>
 /// fields (a hyperlink target, a merge field).
 fn overlay_runs(styles: &mut Vec<LoweredStyle>, runs: &mut Vec<LoweredRun>, read: &[RunContentIn]) {
     let tokens: Vec<Option<String>> = read.iter().map(|r| run_token(styles, r)).collect();
+    // Doc ADR 613 — the review state read back.
+    let review: Vec<_> = read.iter().map(|r| run_review(styles, r)).collect();
     if read.len() == runs.len() {
-        for ((run, r), token) in runs.iter_mut().zip(read).zip(tokens) {
+        for (((run, r), token), (change, format, comments)) in
+            runs.iter_mut().zip(read).zip(tokens).zip(review)
+        {
             run.text = r.text.clone();
             run.char_style_id = token;
             if let Some(code) = &r.field_code {
                 run.field = Some(field_of(code));
             }
+            run.change = change;
+            run.format_change = format;
+            run.comments = comments;
         }
     } else {
         *runs = read
             .iter()
             .zip(tokens)
-            .map(|(r, token)| LoweredRun {
-                text: r.text.clone(),
-                char_style_id: token,
-                field: r.field_code.as_deref().map(field_of),
-                ..Default::default()
-            })
+            .zip(review)
+            .map(
+                |((r, token), (change, format_change, comments))| LoweredRun {
+                    text: r.text.clone(),
+                    char_style_id: token,
+                    field: r.field_code.as_deref().map(field_of),
+                    change,
+                    format_change,
+                    comments,
+                    ..Default::default()
+                },
+            )
             .collect();
     }
+}
+
+/// Doc ADR 613 — a read-back run's review state in the lowering's form: its
+/// change, its format change (the look before as a style token, an edit
+/// style when it has direct formatting) and its comments.
+#[allow(clippy::type_complexity)]
+fn run_review(
+    styles: &mut Vec<LoweredStyle>,
+    r: &RunContentIn,
+) -> (
+    Option<docx_lower::ir::LoweredChange>,
+    Option<docx_lower::ir::LoweredFormatChange>,
+    Vec<String>,
+) {
+    let change = r.change.as_ref().map(|c| c.lowered(false));
+    let format = r
+        .format_change
+        .as_ref()
+        .map(|f| docx_lower::ir::LoweredFormatChange {
+            change: f.change.lowered(false),
+            before_char_style_id: run_token(styles, &f.before),
+        });
+    (change, format, r.comments.clone())
 }
 
 /// A read-back field instruction as the lowering's field.
@@ -227,6 +353,8 @@ fn fold_segments(
     ParagraphContentIn {
         paragraph_style: parts.first().and_then(|p| p.paragraph_style.clone()),
         runs,
+        mark_change: parts.last().and_then(|p| p.mark_change.clone()),
+        props_change: parts.first().and_then(|p| p.props_change.clone()),
     }
 }
 
@@ -333,6 +461,15 @@ pub fn overlay_story_content_with(
         // character by character (text edits, runs the engine joined, a
         // run split by a new look, direct formatting).
         overlay_runs(&mut styles, &mut p.runs, &folded.runs);
+        // Doc ADR 613 — the paragraph's review state read back.
+        p.mark_change = folded.mark_change.as_ref().map(|c| c.lowered(true));
+        p.props_change = folded
+            .props_change
+            .as_ref()
+            .map(|c| docx_lower::ir::LoweredPropsChange {
+                change: c.change.lowered(false),
+                before_para_style_id: c.before_paragraph_style.clone(),
+            });
     }
     edited.styles = styles;
     edited
@@ -880,8 +1017,11 @@ mod tests {
 
     fn read(runs: Vec<RunContentIn>) -> StoryContentIn {
         StoryContentIn {
+            comments: Vec::new(),
             self_id: "s".into(),
             paragraphs: vec![ParagraphContentIn {
+                mark_change: None,
+                props_change: None,
                 paragraph_style: None,
                 runs,
             }],
@@ -927,10 +1067,13 @@ mod tests {
                 ..Default::default()
             }));
         let story = |texts: &[&str]| StoryContentIn {
+            comments: Vec::new(),
             self_id: "s".into(),
             paragraphs: texts
                 .iter()
                 .map(|t| ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: None,
                     runs: vec![plain(t)],
                 })
@@ -1074,6 +1217,8 @@ mod tests {
                 cell: 0,
                 text: "Total 12".into(),
                 paragraphs: Some(vec![ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: None,
                     runs: vec![plain("Total "), bold("12")],
                 }]),
@@ -1108,6 +1253,8 @@ mod tests {
                 cell: 0,
                 text: "Total 14".into(),
                 paragraphs: Some(vec![ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: None,
                     runs: vec![bold("Other")],
                 }]),

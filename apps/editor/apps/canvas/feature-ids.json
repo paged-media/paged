@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 829,
-    "keybinding": 164,
+    "command": 847,
+    "keybinding": 166,
     "menu": 597,
-    "panel": 143,
+    "panel": 144,
     "tool": 126
   },
   "features": [
@@ -207,6 +207,96 @@
     },
     {
       "id": "command:media.paged.doc.command.placeDoc",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.acceptAll",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.acceptChange",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.deleteComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.markupAll",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.markupNone",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.markupOriginal",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.markupSimple",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.newComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.nextChange",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.nextComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.previousChange",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.previousComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.rejectAll",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.rejectChange",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.replyComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.resolveComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.showReview",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.toggleTrackChanges",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -4381,6 +4471,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+alt+m→media.paged.doc.command.review.newComment",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+alt+shift+d→paged.edit.duplicate",
       "kind": "keybinding",
       "owner": "editor"
@@ -4552,6 +4647,11 @@
     },
     {
       "id": "keybinding:cmd+shift+d→media.paged.doc.command.word.doubleUnderline",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+shift+e→media.paged.doc.command.review.toggleTrackChanges",
       "kind": "keybinding",
       "owner": "media.paged.doc"
     },
@@ -8027,6 +8127,11 @@
     },
     {
       "id": "panel:media.paged.doc.panel.references",
+      "kind": "panel",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "panel:media.paged.doc.panel.review",
       "kind": "panel",
       "owner": "media.paged.doc"
     },
