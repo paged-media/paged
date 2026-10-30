@@ -4042,6 +4042,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-psd-fx"
+version = "0.0.0"
+dependencies = [
+ "paged-model",
+ "paged-psd",
+]
+
+[[package]]
 name = "paged-raster"
 version = "0.0.0"
 dependencies = [

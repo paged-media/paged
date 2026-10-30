@@ -53,6 +53,8 @@ defineMessages("menu", {
   Transform: "Transform",
   Effects: "Effects",
   "Effects…": "Effects…",
+  "Transparency…": "Transparency…",
+  "Appearance…": "Appearance…",
   "Picture adjustments…": "Picture adjustments…",
   Settings: "Settings",
   "Models…": "Models…",
@@ -142,11 +144,16 @@ export const COCKPIT_MENU_SEAMS: MenuItemContribution[] = [
   // Object ▸ Effects: the Effects panel, and Global light… (registered
   // with its dialog, panels/global-light-dialog.tsx).
   panel("Object/Effects/Effects…", "paged.effects", 30, "effects"),
+  // Editor ADR 309 — the Transparency and Appearance panels beside it; the
+  // effect kinds themselves follow as Object ▸ Effects ▸ <group> rows
+  // (effect-menu.ts).
+  panel("Object/Effects/Transparency…", "paged.transparency", 31, "effects"),
+  panel("Object/Effects/Appearance…", "paged.appearance", 32, "effects"),
   // Engine ADR 1037 — the placed picture's filter stack.
   panel(
     "Object/Effects/Picture adjustments…",
     "paged.picture-adjustments",
-    32,
+    33,
     "effects",
   ),
   // ── Edit ▸ Settings ── editor ADR 290: the ML service's models.

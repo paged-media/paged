@@ -632,6 +632,7 @@ fn opacity_mask_artwork_has_no_stacking_position() {
             mask: rect("c"),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .expect("make the mask");

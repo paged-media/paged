@@ -422,6 +422,23 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
     </>
   ),
 
+  // Two overlapping discs, the front one half see-through —
+  // transparency (editor ADR 309).
+  "panel-transparency": (
+    <>
+      <circle cx={9} cy={12} r={6} {...LINE} />
+      <circle cx={15} cy={12} r={6} {...LINE} strokeDasharray="2 2" />
+    </>
+  ),
+
+  // Three rows in a list, the middle one marked — appearance.
+  "panel-appearance": (
+    <>
+      <path d="M4 6 L20 6 M4 12 L20 12 M4 18 L20 18" {...LINE} />
+      <circle cx={7} cy={12} r={1.6} {...LINE} />
+    </>
+  ),
+
   // 2–3 stacked offset sheets — layers.
   "panel-layers": (
     <>
