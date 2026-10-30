@@ -1735,6 +1735,7 @@
     "framePdfPage",
     "frameFillRule",
     "frameImageAdjustments",
+    "frameGradientStrokeMode",
     "frameGradientFillStart",
     "frameShapeSides",
     "frameShapeStarInset",
@@ -4119,6 +4120,23 @@
       },
       "wire": "imageAdjustments",
       "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameGradientStrokeMode",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "Within",
+          "Along",
+          "Across"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "Within",
       "access": "readWrite",
       "bindable": true
     },
@@ -18045,6 +18063,23 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "imageAdjustments"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameGradientStrokeMode",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "Within",
+            "Along",
+            "Across"
+          ]
+        },
+        "nullable": true,
+        "default": "Within",
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
       },
       {
         "addressKind": "frame",
