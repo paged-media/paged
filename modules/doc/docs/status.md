@@ -86,6 +86,7 @@ C5 (extensions ADR 349 amendment 1) and editor ADR 300 (`src/word/review.tsx`,
 - Not yet: a comment's text cannot be edited after its balloon closes (the engine's
   `editComment` is wired for the new-comment balloon only); the author colours of the balloons
   are the bundle's order of appearance and need not match the engine's text colours.
+
 ## W4a: floating objects, text boxes, nested tables, table look, language (2026-10-29)
 
 Doc ADR [614](adr/614-floating-objects-and-content-controls.md). Plugin only: Word mapped onto
