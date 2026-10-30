@@ -1850,7 +1850,7 @@ pub enum Mutation {
         invert: Option<bool>,
         /// Illustrator's Clip: `false` lets the area the artwork does not
         /// paint show the target. Absent is `true`. Additive (no bump).
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default)]
         clip: Option<bool>,
     },
     /// v58 (C-28) — **Release Opacity Mask**: drop the relation; the

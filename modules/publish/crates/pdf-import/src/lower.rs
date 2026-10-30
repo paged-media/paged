@@ -688,6 +688,8 @@ impl<'a> Lowering<'a> {
                     mask_item: mask_id,
                     mask_type,
                     invert: false,
+                    // A PDF soft mask hides what its group does not paint.
+                    clip: true,
                 },
             );
         }
