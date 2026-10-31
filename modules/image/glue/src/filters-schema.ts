@@ -70,6 +70,19 @@ export type ParamSpec = ParamCommon &
         kind: "image";
         default: number;
       }
+    | {
+        /** Geometry made ON THE CANVAS that the dialog only counts and
+         *  resets (Warp's custom mesh, Puppet Warp's pins, Liquify's
+         *  strokes; WP5.6): a flat list, positions NORMALISED to the
+         *  image so the proxy preview and the full pass agree. */
+        kind: "data";
+        default: readonly number[];
+        /** How many items the list holds (the dialog's readout); none
+         *  shows no readout. */
+        count?(v: readonly number[]): number;
+        /** The readout's message (`{count}`). */
+        countLabel?: string;
+      }
   );
 
 /** What a filter's `run` may need beyond its values. */
@@ -98,6 +111,10 @@ export interface FilterDef {
    *  the points' `pxValue` (a percentage that is really a length, the
    *  Filter Gallery's stack). */
   scale?(values: FilterValues, factor: number): Record<string, FilterValue>;
+  /** A TRANSFORM (Warp, Puppet Warp, Content-Aware Scale, Liquify;
+   *  WP5.6): it bends the active layer's pixels and is never added to a
+   *  smart object as a smart filter. */
+  transform?: boolean;
   run(
     engine: ImageEngine,
     handle: number,
@@ -200,7 +217,12 @@ export type FilterId =
   | "mosaicTiles"
   | "patchwork"
   | "filterGallery"
-  | "blurGallery";
+  | "blurGallery"
+  // WP5.6 — transform and warp on pixels (filters-warp.ts).
+  | "warp"
+  | "puppetWarp"
+  | "liquify"
+  | "contentAwareScale";
 
 export type FilterGroup =
   | "Blur"
@@ -213,7 +235,8 @@ export type FilterGroup =
   | "Stylize"
   | "Pixelate"
   | "Filter Gallery"
-  | "Adjust";
+  | "Adjust"
+  | "Transform";
 
 export const F = defineMessages("image.filter", {
   gaussianBlur: "Gaussian blur",

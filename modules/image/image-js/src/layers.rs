@@ -370,6 +370,17 @@ pub enum CanvasOp {
     RotateArbitrary {
         degrees: f32,
     },
+    /// The Perspective Crop tool's commit (WP5.6): the quadrilateral
+    /// `quad` (NW, NE, SE, SW corners, canvas px, flat x/y pairs) drawn
+    /// upright onto a `width`×`height` canvas through the homography that
+    /// takes the new canvas's corners onto it (`paged-warp`), sampled by
+    /// `geom.warp_projective` (bicubic, transparent outside the old
+    /// canvas).
+    Perspective {
+        quad: [f32; 8],
+        width: u32,
+        height: u32,
+    },
 }
 
 /// The reconstruction filter of [`CanvasOp::Resample`] — the three T1
@@ -415,6 +426,23 @@ pub fn rotated_bounds(w: u32, h: u32, degrees: f32) -> (u32, u32) {
     (fit(w * c + h * s), fit(w * s + h * c))
 }
 
+/// The Perspective Crop's homographies: `(forward, inverse)`, forward
+/// taking the old canvas's points onto the new canvas (the quad onto its
+/// `width`×`height` rectangle) and inverse the other way (what
+/// `geom.warp_projective` samples through). `None` for a degenerate quad.
+pub fn perspective_crop_maps(
+    quad: [f32; 8],
+    width: u32,
+    height: u32,
+) -> Option<(paged_warp::Homography, paged_warp::Homography)> {
+    let q = |i: usize| (f64::from(quad[2 * i]), f64::from(quad[2 * i + 1]));
+    let (w, h) = (f64::from(width), f64::from(height));
+    let rect = [(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)];
+    let inverse = paged_warp::from_quads(rect, [q(0), q(1), q(2), q(3)])?;
+    let forward = paged_warp::invert(inverse)?;
+    Some((forward, inverse))
+}
+
 impl CanvasOp {
     /// Image ▸ Image Rotation ▸ Arbitrary as the op it is: a quarter or
     /// half turn (and a whole one, which is no op) becomes the EXACT
@@ -445,7 +473,8 @@ impl CanvasOp {
             CanvasOp::Resize { width, height, .. }
             | CanvasOp::Crop { width, height, .. }
             | CanvasOp::Resample { width, height, .. }
-            | CanvasOp::Straighten { width, height, .. } => (width, height),
+            | CanvasOp::Straighten { width, height, .. }
+            | CanvasOp::Perspective { width, height, .. } => (width, height),
             CanvasOp::RotateArbitrary { degrees } => rotated_bounds(w, h, degrees),
         }
     }
@@ -458,6 +487,7 @@ impl CanvasOp {
             CanvasOp::Resample { .. }
                 | CanvasOp::Straighten { .. }
                 | CanvasOp::RotateArbitrary { .. }
+                | CanvasOp::Perspective { .. }
         )
     }
 
@@ -474,6 +504,7 @@ impl CanvasOp {
             CanvasOp::Resample { .. } => "Image size",
             CanvasOp::Straighten { .. } => "Straighten and crop",
             CanvasOp::RotateArbitrary { .. } => "Rotate canvas",
+            CanvasOp::Perspective { .. } => "Perspective crop",
         }
     }
 
@@ -553,7 +584,8 @@ impl CanvasOp {
             }
             CanvasOp::Resample { .. }
             | CanvasOp::Straighten { .. }
-            | CanvasOp::RotateArbitrary { .. } => None,
+            | CanvasOp::RotateArbitrary { .. }
+            | CanvasOp::Perspective { .. } => None,
         }
     }
 
@@ -1917,7 +1949,10 @@ impl LayerStack {
             if !rerendered {
                 let canvas = layer.rgba.canvas();
                 let depth = canvas.depth();
-                let out = if matches!(op, CanvasOp::RotateArbitrary { .. }) {
+                let out = if matches!(
+                    op,
+                    CanvasOp::RotateArbitrary { .. } | CanvasOp::Perspective { .. }
+                ) {
                     // The rotated edge blends with the transparent
                     // surround: interpolate ASSOCIATED colour, or the
                     // fringe darkens towards the black of rgb(0,0,0,0).
@@ -1992,6 +2027,7 @@ impl LayerStack {
                 CanvasOp::Crop { .. } | CanvasOp::Straighten { .. } => {
                     format!("the crop rectangle is empty against {w}×{h}")
                 }
+                CanvasOp::Perspective { .. } => "the perspective crop's size is empty".into(),
                 _ => "canvas size must be at least 1×1".into(),
             }));
         }
@@ -1999,6 +2035,20 @@ impl LayerStack {
             if !degrees.is_finite() {
                 return Err(IngestError::Unsupported(
                     "the rotation angle must be finite".into(),
+                ));
+            }
+        }
+        if let CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        } = op
+        {
+            if quad.iter().any(|v| !v.is_finite())
+                || perspective_crop_maps(quad, width, height).is_none()
+            {
+                return Err(IngestError::Unsupported(
+                    "the perspective crop's corners make no quadrilateral (three in a line)".into(),
                 ));
             }
         }
@@ -5017,6 +5067,32 @@ async fn gpu_canvas_op(
         CanvasOp::RotateArbitrary { degrees } => {
             rotate_onto_bounds(ctx, win, w, h, degrees, [0; 8]).await
         }
+        CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        } => {
+            use image_kernels::families::geom::{
+                WarpInterp, WarpProjectiveParams, GEOM_WARP_PROJECTIVE,
+            };
+            let (_, inverse) = perspective_crop_maps(quad, width, height).ok_or_else(|| {
+                IngestError::Unsupported("the perspective crop's quad is degenerate".into())
+            })?;
+            let params = WarpProjectiveParams::from_inverse(inverse, WarpInterp::Bicubic, false);
+            image_gpu::execute_windowed_once_async(
+                ctx,
+                &GEOM_WARP_PROJECTIVE,
+                win,
+                w,
+                h,
+                params.as_bytes(),
+                None,
+                width,
+                height,
+            )
+            .await
+            .map_err(|e| IngestError::Pipeline(e.to_string()))
+        }
         _ => Err(IngestError::Unsupported(format!(
             "{} is an exact op with no dispatch",
             op.label()
@@ -5587,6 +5663,59 @@ mod tests {
             Some(ResampleFilter::Lanczos3)
         );
         assert_eq!(ResampleFilter::from_wire("bicubic"), None);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn perspective_crop_maps_the_quad_upright_in_one_undo_step__feat__image_editor_transform_warp()
+    {
+        // The maps: the quad's corners land on the new canvas's corners.
+        let quad = [1.0, 0.0, 3.0, 0.0, 3.0, 2.0, 1.0, 2.0];
+        let (fwd, inv) = perspective_crop_maps(quad, 2, 2).expect("a rectangle");
+        let p = paged_warp::apply(&fwd, (3.0, 2.0));
+        assert!((p.0 - 2.0).abs() < 1e-9 && (p.1 - 2.0).abs() < 1e-9);
+        let q = paged_warp::apply(&inv, (0.0, 0.0));
+        assert!((q.0 - 1.0).abs() < 1e-9 && q.1.abs() < 1e-9);
+        let map = masking_ops::map_point(
+            CanvasOp::Perspective {
+                quad,
+                width: 2,
+                height: 2,
+            },
+            3,
+            2,
+            [2.0, 1.0],
+        );
+        assert!(
+            (map[0] - 1.0).abs() < 1e-5 && (map[1] - 1.0).abs() < 1e-5,
+            "{map:?}"
+        );
+        // A degenerate quad is refused before anything changes.
+        let mut s = numbered();
+        let flat = CanvasOp::Perspective {
+            quad: [0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0],
+            width: 2,
+            height: 2,
+        };
+        assert!(pollster::block_on(s.transform_canvas_gpu(None, flat)).is_err());
+        assert!(s.undo_labels().is_empty());
+        let Some(ctx) = device() else { return };
+        // An axis-aligned quad on whole pixels is the plain crop: the
+        // bicubic taps land on pixel centres.
+        pollster::block_on(s.transform_canvas_gpu(
+            Some(ctx),
+            CanvasOp::Perspective {
+                quad,
+                width: 2,
+                height: 2,
+            },
+        ))
+        .expect("perspective crop");
+        assert_eq!((s.width, s.height), (2, 2));
+        assert_eq!(reds(&s), vec![1, 2, 11, 12]);
+        assert_eq!(s.undo_labels(), vec!["Perspective crop"]);
+        assert_eq!(s.undo().as_deref(), Some("Perspective crop"));
+        assert_eq!((s.width, s.height), (3, 2));
     }
 
     #[test]

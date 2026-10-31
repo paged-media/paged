@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 848,
+    "command": 855,
     "keybinding": 166,
-    "menu": 600,
+    "menu": 607,
     "panel": 146,
-    "tool": 126
+    "tool": 127
   },
   "features": [
     {
@@ -1571,12 +1571,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.commitPerspectiveCrop",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.contentAwareFill",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.contentAwareFillWorkspace",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.contentAwareScale",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1922,6 +1932,11 @@
     },
     {
       "id": "command:media.paged.image.command.filterLightingEffects",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.filterLiquify",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2561,6 +2576,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.puppetWarp",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.quickMask",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2772,6 +2792,21 @@
     },
     {
       "id": "command:media.paged.image.command.toggleSnapGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.transformDistort",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.transformPerspective",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.transformWarp",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -5661,6 +5696,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Edit/Content-aware scale…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Edit/Copy",
       "kind": "menu",
       "owner": "editor"
@@ -5727,6 +5767,11 @@
     },
     {
       "id": "menu:Edit/Path to selection",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Puppet warp…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -5802,6 +5847,21 @@
     },
     {
       "id": "menu:Edit/Selection to path",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Transform/Free distort",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Transform/Perspective",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Transform/Warp…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -5962,6 +6022,11 @@
     },
     {
       "id": "menu:Image/Apply crop",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Apply perspective crop",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6437,6 +6502,11 @@
     },
     {
       "id": "menu:Image/Filter/Filter gallery…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Filter/Liquify…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -9237,6 +9307,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.pencil",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.perspectiveCrop",
       "kind": "tool",
       "owner": "media.paged.image"
     },

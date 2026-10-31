@@ -918,6 +918,18 @@ const TABLE: &[Row] = &[
           stress: P::Raw(warp_mesh_arc),
           note: "the identity patch is the source rectangle: Newton lands on \
                  each texel's own centre, both mix factors 0" },
+    Row { id: "geom.warp_field",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[
+              ("src_w", V::U(OUT)), ("src_h", V::U(OUT)),
+              ("field_x", V::U(0)), ("field_y", V::U(OUT - 1)),
+              ("cols", V::U(OUT)), ("rows", V::U(1)),
+              ("step", V::F(OUT as f32)), ("interp", V::U(1)), ("masked", V::U(1))]),
+          note: "the field travels in in0 beside the source (WP5.6), and this lane's in0 is \
+                 the stimulus tile alone, so no field of zeros exists here: the stress reads \
+                 the tile's last row as the nodes (displacements under 2 px) and runs the \
+                 SELECTION lane, where a zero mask is the exact no-op. Identity and parity \
+                 are family_warp.rs's, over a packed window" },
     Row { id: "geom.mosaic",
           identity: Identity::Params(P::Fields(&[("cell_px", V::F(1.0))])),
           stress: P::Fields(&[("cell_px", V::F(8.0))]),

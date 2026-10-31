@@ -37,6 +37,7 @@ import type {
   GestureHandler,
   PagedEditor,
   ProjectiveMatrix,
+  TransformBoxMode,
   TransformBoxSession,
   TransformBoxUpdate,
   TransformQuad,
@@ -75,12 +76,15 @@ export function layerQuadOnPage(
   return [at(0, 0), at(w, 0), at(w, h), at(0, h)];
 }
 
-/** Open the box over the active layer. Resolves the session's box, or
- *  null with the reason in the status line. */
+/** Open the box over the active layer — in `mode` (Edit ▸ Transform ▸
+ *  Distort opens it in `freeDistort`, ▸ Perspective in `perspective`,
+ *  WP5.6). Resolves the session's box, or null with the reason in the
+ *  status line. */
 export async function beginLayerTransform(
   host: BundleHost,
   session: ImageSession,
   toolId: string,
+  mode?: TransformBoxMode,
 ): Promise<TransformBoxSession | null> {
   const src = session.state().source;
   if (!src) return null;
@@ -90,6 +94,7 @@ export async function beginLayerTransform(
     pageId: fit.pageId,
     quad: layerQuadOnPage(fit, src.width, src.height),
     toolId,
+    ...(mode ? { mode } : {}),
     onCommit(u: TransformBoxUpdate) {
       void session.transformLayer(pageToImageMatrix(fit, u.matrix));
     },

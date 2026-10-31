@@ -34,3 +34,4 @@ bytemuck = { workspace = true }
 # generated WGSL can't be validated in build.rs because assembly lives
 # in this crate).
 naga = { workspace = true }
+half = { workspace = true }
