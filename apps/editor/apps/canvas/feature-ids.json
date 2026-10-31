@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 867,
+    "command": 873,
     "keybinding": 166,
-    "menu": 612,
-    "panel": 146,
+    "menu": 616,
+    "panel": 147,
     "tool": 127
   },
   "features": [
@@ -701,12 +701,22 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.applyBrush",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.applyGraphicStyle",
       "kind": "command",
       "owner": "media.paged.draw"
     },
     {
       "id": "command:media.paged.draw.command.applyGuideColor",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.applyWidthProfile",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -742,6 +752,16 @@
     },
     {
       "id": "command:media.paged.draw.command.breakSymbolLink",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.brushOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.brushes",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -991,6 +1011,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.newBrush",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.offsetPath",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1212,6 +1237,11 @@
     },
     {
       "id": "command:media.paged.draw.command.releaseRepeat",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.removeBrush",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -5666,7 +5696,27 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Stroke/Brush options…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Stroke/Brushes…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Stroke/Dashes…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Stroke/New brush from selection",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Stroke/Remove brush",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -8317,6 +8367,11 @@
     },
     {
       "id": "panel:media.paged.draw.panel.blend",
+      "kind": "panel",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "panel:media.paged.draw.panel.brushes",
       "kind": "panel",
       "owner": "media.paged.draw"
     },
