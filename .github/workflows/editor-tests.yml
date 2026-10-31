@@ -733,7 +733,7 @@ jobs:
       # The engine and the bundles' engine wasm, as in `checks` (restored
       # from the cache that job, or an earlier run, saved). The Playwright
       # surface runs against the vite DEV server (playwright.config
-      # `webServer: bunx --bun vite`), whose import analysis resolves the bundles'
+      # `webServer`: Vite on Node), whose import analysis resolves the bundles'
       # relative wasm glue (sheet, web, doc, draw, image, pdf) at transform
       # time. The typecheck runs in `checks`.
       - name: engine wasm packages
