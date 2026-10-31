@@ -56,6 +56,10 @@ pub(crate) struct HyperlinkState {
     /// The runs the source tags, per story, as contiguous char ranges.
     /// Only read when `hyperlink` is present.
     pub spans: Vec<(String, u32, u32)>,
+    /// Engine ADR 1026 — the source when it is a page item
+    /// (`HyperlinkPageItemSource`), with its index in the designmap.
+    #[serde(default)]
+    pub item_source: Option<(usize, paged_model::HyperlinkPageItemSource)>,
 }
 
 fn not_found(id: &str) -> OperationError {
@@ -130,6 +134,15 @@ fn capture(
         (Some(_), Some(src)) => source_spans(doc, src),
         _ => Vec::new(),
     };
+    let item_source = match (&hyperlink, source_id) {
+        (Some(_), Some(src)) => doc
+            .designmap
+            .hyperlink_page_item_sources
+            .iter()
+            .position(|p| p.self_id == src)
+            .map(|i| (i, doc.designmap.hyperlink_page_item_sources[i].clone())),
+        _ => None,
+    };
     HyperlinkState {
         hyperlink_id: hyperlink_id.to_string(),
         source_id: source_id.map(str::to_string),
@@ -139,6 +152,7 @@ fn capture(
             .map(|d| (d.clone(), destination_entry(doc, d)))
             .collect(),
         spans,
+        item_source,
     }
 }
 
@@ -190,6 +204,10 @@ pub(super) fn apply_delete_hyperlink(
 
     if let Some(src) = link.source.as_deref() {
         untag(doc, src);
+        // Engine ADR 1026 — a page-item source goes with its link.
+        doc.designmap
+            .hyperlink_page_item_sources
+            .retain(|p| p.self_id != src);
     }
     doc.designmap
         .hyperlinks
@@ -399,6 +417,15 @@ pub(super) fn apply_restore_hyperlink(
         let at = (*index).min(links.len());
         links.insert(at, record.clone());
     }
+    // Engine ADR 1026 — a page-item source, where it stood.
+    if let Some(src) = state.source_id.as_deref() {
+        let sources = &mut doc.designmap.hyperlink_page_item_sources;
+        sources.retain(|p| p.self_id != src);
+        if let (Some(_), Some((index, record))) = (&state.hyperlink, &state.item_source) {
+            let at = (*index).min(sources.len());
+            sources.insert(at, record.clone());
+        }
+    }
     // Then the source tag.
     match (&state.hyperlink, state.source_id.as_deref()) {
         (Some(_), Some(src)) => {
@@ -424,5 +451,116 @@ pub(super) fn apply_restore_hyperlink(
             state: serde_json::to_string(&now).unwrap_or_default(),
         },
         invalidation,
+    })
+}
+
+/// Engine ADR 1026 — make page item `item_id` (any page or master item) the
+/// source of a new hyperlink to `url`, or to page `page` when given: a
+/// clickable shape. The ids are the caller's (the canvas mints them).
+/// Inverse: `DeleteHyperlink`, which takes the source with the link.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn apply_insert_item_hyperlink(
+    doc: &mut Document,
+    item_id: &str,
+    url: &str,
+    page: Option<&str>,
+    name: Option<&str>,
+    source_id: &str,
+    dest_id: &str,
+    hyperlink_id: &str,
+) -> Result<AppliedOperation, OperationError> {
+    let dm = &doc.designmap;
+    for (taken, id) in [
+        (
+            dm.hyperlinks.iter().any(|h| h.self_id == hyperlink_id),
+            hyperlink_id,
+        ),
+        (
+            dm.hyperlink_destinations
+                .iter()
+                .any(|d| d.self_id == dest_id),
+            dest_id,
+        ),
+        (
+            dm.hyperlink_page_item_sources
+                .iter()
+                .any(|p| p.self_id == source_id),
+            source_id,
+        ),
+    ] {
+        if taken {
+            return Err(OperationError::DuplicateNodeId { id: id.to_string() });
+        }
+    }
+    let spreads = || {
+        doc.spreads
+            .iter()
+            .map(|p| &p.spread)
+            .chain(doc.master_spreads.values().map(|m| &m.spread))
+    };
+    let item_exists = spreads().any(|sp| {
+        let ids = sp
+            .text_frames
+            .iter()
+            .map(|f| f.self_id.as_deref())
+            .chain(sp.rectangles.iter().map(|f| f.self_id.as_deref()))
+            .chain(sp.ovals.iter().map(|f| f.self_id.as_deref()))
+            .chain(sp.graphic_lines.iter().map(|f| f.self_id.as_deref()))
+            .chain(sp.polygons.iter().map(|f| f.self_id.as_deref()))
+            .chain(sp.groups.iter().map(|f| f.self_id.as_deref()));
+        let mut ids = ids;
+        ids.any(|i| i == Some(item_id))
+    });
+    if !item_exists {
+        return Err(OperationError::NodeNotFound(NodeId::Rectangle(
+            item_id.to_string(),
+        )));
+    }
+    if let Some(pid) = page {
+        let exists = doc.spreads.iter().any(|parsed| {
+            parsed
+                .spread
+                .pages
+                .iter()
+                .any(|p| p.self_id.as_deref() == Some(pid))
+        });
+        if !exists {
+            return Err(OperationError::NodeNotFound(NodeId::Page(pid.to_string())));
+        }
+    }
+    let dm = &mut doc.designmap;
+    dm.hyperlink_page_item_sources
+        .push(paged_model::HyperlinkPageItemSource {
+            self_id: source_id.to_string(),
+            source_page_item: item_id.to_string(),
+            name: None,
+        });
+    dm.hyperlink_destinations.push(HyperlinkDestination {
+        self_id: dest_id.to_string(),
+        kind: match page {
+            Some(pid) => HyperlinkDestinationKind::Page(pid.to_string()),
+            None => HyperlinkDestinationKind::Url(url.to_string()),
+        },
+    });
+    dm.hyperlinks.push(Hyperlink {
+        self_id: hyperlink_id.to_string(),
+        name: name.map(str::to_string),
+        source: Some(source_id.to_string()),
+        destination: Some(dest_id.to_string()),
+    });
+    Ok(AppliedOperation {
+        op: Operation::InsertItemHyperlink {
+            item_id: item_id.to_string(),
+            url: url.to_string(),
+            page: page.map(str::to_string),
+            name: name.map(str::to_string),
+            source_id: source_id.to_string(),
+            dest_id: dest_id.to_string(),
+            hyperlink_id: hyperlink_id.to_string(),
+        },
+        inverse: Operation::DeleteHyperlink {
+            hyperlink_id: hyperlink_id.to_string(),
+        },
+        invalidation: InvalidationHint::default(),
     })
 }
