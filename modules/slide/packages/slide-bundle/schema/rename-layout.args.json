@@ -1,0 +1,12 @@
+{
+  "kind": "struct",
+  "fields": {
+    "layout": {
+      "kind": "ref",
+      "to": "plugin:media.paged.slide/layout"
+    },
+    "name": {
+      "kind": "text"
+    }
+  }
+}
