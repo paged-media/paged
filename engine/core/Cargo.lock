@@ -2359,6 +2359,7 @@ dependencies = [
  "base64",
  "flate2",
  "idml-import",
+ "paged-blend",
  "paged-gen",
  "paged-model",
  "paged-mutate",
@@ -3522,6 +3523,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-blend"
+version = "0.0.0"
+
+[[package]]
 name = "paged-canvas"
 version = "0.0.0"
 dependencies = [
@@ -3533,6 +3538,7 @@ dependencies = [
  "idml-import",
  "image",
  "js-sys",
+ "paged-blend",
  "paged-color",
  "paged-compose",
  "paged-composition",
@@ -3643,6 +3649,7 @@ version = "0.0.0"
 dependencies = [
  "bytes",
  "kurbo 0.11.3",
+ "paged-blend",
  "paged-color",
  "paged-model",
  "paged-scene",
@@ -3906,6 +3913,7 @@ dependencies = [
  "futures-channel",
  "image",
  "naga",
+ "paged-blend",
  "paged-compose",
  "paged-fidelity",
  "paged-raster",
@@ -3930,6 +3938,7 @@ dependencies = [
  "bytes",
  "idml-import",
  "image",
+ "paged-blend",
  "paged-compose",
  "paged-model",
  "paged-mutate",
@@ -4051,6 +4060,7 @@ name = "paged-psd"
 version = "0.0.0"
 dependencies = [
  "miniz_oxide 0.9.1",
+ "paged-blend",
  "paged-pixel",
  "paged-test-resources",
  "serde",
