@@ -1754,6 +1754,15 @@ pub enum PropertyPath {
     /// An oval's pie end angle (Illustrator's Pie End Angle):
     /// `Value::Length`, `None` is 360.
     FrameShapePieEnd,
+    // ---- engine ADR 1007 — paint model v2 ---------------------------
+    /// How the frame's gradient stroke maps onto the stroke:
+    /// `Value::Text` `"Within"` (IDML's mode, the default), `"Along"`
+    /// (the ramp runs along the path) or `"Across"` (from one edge of the
+    /// stroke to the other); `""` clears to `"Within"`. On a TextFrame,
+    /// Rectangle, Oval, Polygon or GraphicLine. No IDML attribute carries
+    /// it: the IDML export writes the stroke `Within` and reports the
+    /// loss. Paint-only (`frame_style`).
+    FrameGradientStrokeMode,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -2165,6 +2174,7 @@ impl PropertyPath {
             PropertyPath::FrameShapeStarInset => "frame.shapeStarInset",
             PropertyPath::FrameShapePieStart => "frame.shapePieStart",
             PropertyPath::FrameShapePieEnd => "frame.shapePieEnd",
+            PropertyPath::FrameGradientStrokeMode => "frame.gradientStrokeMode",
         }
     }
 }
@@ -3919,6 +3929,27 @@ pub struct GradientStopSpec {
     /// 0..=100 midpoint to the next stop; `None` ⇒ linear (50).
     #[serde(default)]
     pub midpoint_pct: Option<f32>,
+    /// Engine ADR 1007 — the stop's opacity, 0..=100; `None` ⇒ 100.
+    /// Clamped to the range on apply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity_pct: Option<f32>,
+    /// Engine ADR 1007 — the stop's own colour instead of a swatch.
+    /// When set it wins over `stop_color`, which may then be `""`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<StopColorSpec>,
+}
+
+/// Engine ADR 1007 — a gradient stop's inline colour on the wire.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct StopColorSpec {
+    /// `"CMYK"` | `"RGB"` | `"LAB"` | `"Gray"`, as a swatch's `space`.
+    pub space: String,
+    /// Channel values in `space` (CMYK percent, RGB 0..=255, Lab
+    /// `L* a* b*`, Gray percent).
+    pub value: Vec<f32>,
 }
 
 /// B-04 — creation spec for a page-item group. Members are NodeIds
@@ -4079,7 +4110,7 @@ pub struct GradientSpec {
     pub self_id: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
-    /// `Type`: `"Linear"` | `"Radial"`.
+    /// `Type`: `"Linear"` | `"Radial"` | `"Conic"` (engine ADR 1007).
     pub kind: String,
     pub stops: Vec<GradientStopSpec>,
 }

@@ -1533,6 +1533,7 @@ fn synthetic_rectangle(
             .map(|[x, y]| [bounds.left + x - af_left(af), bounds.top + y - af_top(af)]),
         gradient_stroke_angle: None,
         gradient_stroke_length: None,
+        gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
         text_paths: Vec::new(),
         // Anchored frames don't currently carry overprint attrs in our
         // AnchoredFrame mirror; default to knockout (the IDML default).
@@ -1669,6 +1670,7 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         subpath_starts: Vec::new(),
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
+        gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
         effects: None,
         effect_stack: Vec::new(),
         appearance: Vec::new(),

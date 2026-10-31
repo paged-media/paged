@@ -67,6 +67,7 @@ mod object_style_options_pipeline;
 mod opacity_mask;
 mod overprint;
 mod overset_continuation;
+mod paint_v2;
 mod paragraph_pages;
 mod paste_into;
 mod pipeline_lib;

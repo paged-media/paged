@@ -66,6 +66,8 @@ const STRUCTURED: &[(&str, &str)] = &[
     // Engine ADR 1039 — four numbers each.
     ("symbolInstanceTint", "[1, 0, 0, 0.5]"),
     ("symbolInstanceNineSlice", "[2, 2, 2, 2]"),
+    // Engine ADR 1007 — the gradient's start point, [x, y].
+    ("frameGradientFillStart", "[10, 20]"),
     (
         "framePathPoint",
         "{ type: 'pathPoint', value: { address: { index: 0, role: 'anchor' }, position: [5, 5] } }",
