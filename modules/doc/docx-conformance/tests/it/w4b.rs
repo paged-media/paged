@@ -276,3 +276,123 @@ fn control_values_are_saved_into_their_sdt__feat__doc_content_controls() {
     ));
     assert!(!controls[3].showing_placeholder);
 }
+
+/// Word's answer for the W4b documents (`fixtures/w4b-*.word.json`,
+/// `scripts/word-objects-probe.sh <out> w4b-scripts w4b-controls`), or
+/// `None` where the recording is absent.
+fn word(name: &str) -> Option<serde_json::Value> {
+    let path = format!("{}/fixtures/{name}.word.json", env!("CARGO_MANIFEST_DIR"));
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| serde_json::from_str(&s).unwrap())
+}
+
+/// The text boxes Word draws on the first page, as (left, right, text).
+fn word_lines(answer: &serde_json::Value) -> Vec<(f64, f64, String)> {
+    answer["pages"][0]["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| {
+            let left = l["left"].as_f64().unwrap();
+            let width = l["width"].as_f64().unwrap();
+            (left, left + width, l["text"].as_str().unwrap().to_string())
+        })
+        .collect()
+}
+
+/// Word reads `w:jc` and `w:ind` in a `w:bidi` paragraph logically, from
+/// the paragraph's start edge (the right): `left` sets the line against
+/// the right margin (540 pt on a 612 pt page with 72 pt margins), a left
+/// indent of 1 in holds it 72 pt off that margin, and `right` sets it
+/// against the left margin. The lowering keeps `jc` and `ind` as Word
+/// wrote them beside the paragraph's direction, which the engine reads
+/// the same way (engine ADR 1051).
+#[test]
+fn right_to_left_alignment_and_indents_are_logical_as_in_word__feat__doc_bidi_paragraph() {
+    let Some(answer) = word("w4b-scripts") else {
+        return;
+    };
+    let lines = word_lines(&answer);
+    let find = |needle: &str| {
+        lines
+            .iter()
+            .find(|(_, _, t)| t.contains(needle))
+            .unwrap_or_else(|| panic!("Word drew no line with {needle:?}"))
+            .clone()
+    };
+    // p0, Arabic, `jc="left"`: against the right margin.
+    let arabic = lines
+        .iter()
+        .find(|(_, _, t)| t.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c)))
+        .expect("the Arabic line");
+    assert!((arabic.1 - 540.0).abs() <= 2.0, "{arabic:?}");
+    // p1, Hebrew with a Latin word: the base direction orders the runs
+    // right to left, so the digits stand leftmost and the Hebrew rightmost.
+    let (digits, word_run) = (find("2026"), find("Word"));
+    assert!(digits.0 < word_run.0, "{digits:?} {word_run:?}");
+    // p3, `jc="left"` and `ind w:left="1440"`: 72 pt off the right margin.
+    let indented = find("Bidi left indented");
+    assert!((indented.1 - 468.0).abs() <= 2.0, "{indented:?}");
+    // p4, `jc="right"`: against the left margin.
+    let right = find("Bidi right");
+    assert!((right.0 - 72.0).abs() <= 2.0, "{right:?}");
+
+    let ir = lowered(&w4b_scripts_docx());
+    let paras = ir.story.paragraphs();
+    let p3 = style(&ir, paras[3].para_style_id.as_deref().unwrap());
+    assert_eq!(
+        prop(p3, "paragraphDirection"),
+        Some(&PropValue::Text("rtl".into()))
+    );
+    assert_eq!(
+        prop(p3, "paragraphJustification"),
+        Some(&PropValue::Text("LeftAlign".into()))
+    );
+    assert_eq!(
+        prop(p3, "paragraphLeftIndent"),
+        Some(&PropValue::Length(72.0))
+    );
+    let p4 = style(&ir, paras[4].para_style_id.as_deref().unwrap());
+    assert_eq!(
+        prop(p4, "paragraphJustification"),
+        Some(&PropValue::Text("RightAlign".into()))
+    );
+}
+
+/// Word draws every inline control as text of its line: the checkbox's
+/// unchecked glyph between "Agree " and " colour", the drop-down's and the
+/// date's shown values, the placeholder text, all on one line.
+#[test]
+fn controls_draw_as_text_of_their_line_as_in_word__feat__doc_content_controls() {
+    let Some(answer) = word("w4b-controls") else {
+        return;
+    };
+    let tops: Vec<f64> = answer["pages"][0]["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["top"].as_f64().unwrap())
+        .collect();
+    assert!(
+        tops.iter().all(|t| (t - tops[0]).abs() <= 2.0),
+        "one line: {tops:?}"
+    );
+    let lines = word_lines(&answer);
+    let at = |needle: &str| {
+        lines
+            .iter()
+            .find(|(_, _, t)| t.contains(needle))
+            .unwrap_or_else(|| panic!("Word drew no {needle:?}"))
+            .0
+    };
+    assert!(at("Agree") < at("\u{2610}") && at("\u{2610}") < at("colour"));
+    let text: String = {
+        let mut l = lines.clone();
+        l.sort_by(|a, b| a.0.total_cmp(&b.0));
+        l.into_iter().map(|(_, _, t)| t).collect()
+    };
+    for shown in ["Red", "2 January 2026", "Click here", "rich", "Medium"] {
+        assert!(text.contains(shown), "{shown:?} in {text:?}");
+    }
+}

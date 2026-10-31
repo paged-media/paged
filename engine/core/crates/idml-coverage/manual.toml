@@ -1680,3 +1680,10 @@ keys = [
   "XMLAttribute@Value",
   "XMLElement@XMLContent",
 ]
+
+[[unseen]]
+reason = "InDesign's Middle Eastern edition writes a run's or a character style's direction when it differs from the default (engine ADR 1051: Word's w:rtl reaches the same slot); every census document is a standard edition's and sets CharacterDirection only on paragraph styles, at DefaultDirection."
+keys = [
+  "CharacterStyle@CharacterDirection",
+  "CharacterStyleRange@CharacterDirection",
+]

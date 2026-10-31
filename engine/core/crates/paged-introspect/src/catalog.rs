@@ -538,6 +538,12 @@ fn host_functions() -> Vec<HostFn> {
            "Word's Insert Bookmark: a named text destination at a story offset, which REF and PAGEREF fields and cross-references name. Returns its id."),
         f!("paged.deleteTextAnchor", "(anchorId)", "bool", "author",
            "Delete a bookmark (a text destination). Undoable."),
+        f!("paged.setContentControlValue", "(storyId, controlId, value)", "bool", "author",
+           "Set a content control's value: a text or rich text control's text, a drop-down or combo box item, a date (YYYY-MM-DD) or a checkbox's true / false; the control's text becomes the value's. Refused for a locked control or a value its kind does not take (engine ADR 1052). Undoable."),
+        f!("paged.toggleContentControl", "(storyId, controlId)", "bool", "author",
+           "Flip a checkbox content control (engine ADR 1052). Undoable."),
+        f!("paged.chooseContentControlItem", "(storyId, controlId, index)", "bool", "author",
+           "Choose item index (0-based) of a drop-down or combo box content control (engine ADR 1052). Undoable."),
         f!("paged.insertCrossReference", "(storyId, offset, {bookmark} | {storyId, paragraph}, {referTo?: text|pageNumber|aboveBelow, hyperlink?})", "bool", "author",
            "Word's Insert Cross-reference: a REF or PAGEREF field with its result, to a bookmark or to a paragraph (which gets a hidden _Ref bookmark). One undo step."),
         f!("paged.insertTableOfContents", "(storyId, offset, [{style, level}], {title?, tocStyleName?, pageNumbers?, leader?, tabPosition?})", "bool", "author",
@@ -1537,7 +1543,10 @@ mod tests {
         //
         // 268 -> 272: ADR 1047 — live shapes (a polygon's sides and star
         // inset, an oval's pie angles).
-        assert_eq!(cat.settable_paths.len(), 272, "settable path count drifted");
+        //
+        // 272 -> 282: ADR 1051 — the paragraph direction and the eight
+        // script paths; ADR 1052 — a range's content control.
+        assert_eq!(cat.settable_paths.len(), 282, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

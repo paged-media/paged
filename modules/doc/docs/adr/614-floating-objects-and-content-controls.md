@@ -159,6 +159,9 @@ name so it is not hyphenated as English; `x-none` → `[No Language]`). `rFonts`
 
 - `docx-conformance/tests/it/objects.rs` on `objects_*_docx()`; Word's answers
   `fixtures/objects-*.word.json` (`scripts/word-objects-probe.sh`).
+- Content controls: `docx-conformance/tests/it/w4b.rs` on `w4b_controls_docx()`; Word's answer
+  `fixtures/w4b-controls.word.json` (every inline control drawn as text of its line), and Word
+  opened the saved file with changed values without a repair prompt (2026-10-31).
 - `docx-conformance/tests/it/floats.rs` (the earlier float fixture, now placed).
 - `doc-host-model/test/objects.spec.ts`; `doc-bundle/test/headless/objects.spec.ts`.
 

@@ -1317,6 +1317,27 @@
       "summary": "Delete a bookmark (a text destination). Undoable."
     },
     {
+      "name": "paged.setContentControlValue",
+      "params": "(storyId, controlId, value)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Set a content control's value: a text or rich text control's text, a drop-down or combo box item, a date (YYYY-MM-DD) or a checkbox's true / false; the control's text becomes the value's. Refused for a locked control or a value its kind does not take (engine ADR 1052). Undoable."
+    },
+    {
+      "name": "paged.toggleContentControl",
+      "params": "(storyId, controlId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Flip a checkbox content control (engine ADR 1052). Undoable."
+    },
+    {
+      "name": "paged.chooseContentControlItem",
+      "params": "(storyId, controlId, index)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Choose item index (0-based) of a drop-down or combo box content control (engine ADR 1052). Undoable."
+    },
+    {
       "name": "paged.insertCrossReference",
       "params": "(storyId, offset, {bookmark} | {storyId, paragraph}, {referTo?: text|pageNumber|aboveBelow, hyperlink?})",
       "returns": "bool",

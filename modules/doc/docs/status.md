@@ -48,11 +48,15 @@ Evidence: `docx-conformance/tests/it/w4b.rs`, `docx-export/src/controls.rs`,
 `doc-host-model/test/controls.spec.ts`, `doc-bundle/test/content-controls.spec.ts`; the engine's
 `word_direction.rs` (renderer, IDML), `content_controls.rs` (canvas), `word_model.rs` (mutate).
 
-Not measured against Word yet: Word would not open any probe file during this wave's session
-(not even a W4a fixture it opened on 2026-10-29), so the logical reading of `w:jc` / `w:ind` in a
-`w:bidi` paragraph and the open-without-repair check of the saved files are still to be asked
-(`scripts/word-pagination-probe.sh` on `dump-fixture w4b-scripts` / `w4b-controls`, and the
-saved files the conformance tests write with `W4B_DUMP=<dir>`).
+Word's answers (Word 16 for Mac, 2026-10-31; `scripts/word-objects-probe.sh <out> w4b-scripts
+w4b-controls`, recorded as `fixtures/w4b-*.word.json`): in a `w:bidi` paragraph `w:jc` and
+`w:ind` are logical (`left` against the right margin, a left indent off the right margin,
+`right` against the left margin), as the lowering and the engine read them; every inline control
+draws as text of its line (the checkbox glyph, the shown item, date and placeholder). Word opened
+the saved files of a script edit and of changed control values (`W4B_DUMP`) without a repair
+prompt (their PDFs are the evidence). Tests: `w4b.rs`
+`right_to_left_alignment_and_indents_are_logical_as_in_word`,
+`controls_draw_as_text_of_their_line_as_in_word`.
 
 Not yet: a paragraph's own `w:bidi` changed on the canvas is written back only through its
 style; Word's `w:b`-not-for-complex-script rule; mirrored neutral glyphs; controls in headers,

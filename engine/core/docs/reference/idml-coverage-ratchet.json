@@ -8,22 +8,22 @@
   },
   "metrics": {
     "weightedImport": {
-      "covered": 133683,
+      "covered": 134226,
       "total": 633952,
-      "value": 0.210872
+      "value": 0.211729
     },
     "impactImport": {
-      "covered": 26646,
+      "covered": 26648,
       "total": 54667,
-      "value": 0.487424
+      "value": 0.48746
     },
     "weightedExport": {
-      "covered": 98669,
+      "covered": 99212,
       "total": 633952,
-      "value": 0.155641
+      "value": 0.156498
     },
     "misplacedReads": 30,
-    "unseenReads": 433,
+    "unseenReads": 435,
     "unjustifiedUnseenReads": 0
   },
   "coveredImport": [
@@ -413,6 +413,7 @@
     "Resources/Styles|ParagraphStyle@BulletsCharacterStyle|properties-child",
     "Resources/Styles|ParagraphStyle@BulletsTextAfter|attr",
     "Resources/Styles|ParagraphStyle@Capitalization|attr",
+    "Resources/Styles|ParagraphStyle@CharacterDirection|attr",
     "Resources/Styles|ParagraphStyle@Composer|attr",
     "Resources/Styles|ParagraphStyle@DesiredGlyphScaling|attr",
     "Resources/Styles|ParagraphStyle@DesiredLetterSpacing|attr",
@@ -497,6 +498,7 @@
     "Resources/Styles|ParagraphStyle@ParagraphBorderTopRightCornerOption|attr",
     "Resources/Styles|ParagraphStyle@ParagraphBorderTopRightCornerRadius|attr",
     "Resources/Styles|ParagraphStyle@ParagraphBorderWidth|attr",
+    "Resources/Styles|ParagraphStyle@ParagraphDirection|attr",
     "Resources/Styles|ParagraphStyle@ParagraphShadingBottomOffset|attr",
     "Resources/Styles|ParagraphStyle@ParagraphShadingBottomOrigin|attr",
     "Resources/Styles|ParagraphStyle@ParagraphShadingClipToFrame|attr",
@@ -1068,6 +1070,7 @@
     "Stories|ParagraphStyleRange@ParagraphBorderTopLeftCornerRadius|attr",
     "Stories|ParagraphStyleRange@ParagraphBorderTopRightCornerRadius|attr",
     "Stories|ParagraphStyleRange@ParagraphBorderWeight|attr",
+    "Stories|ParagraphStyleRange@ParagraphDirection|attr",
     "Stories|ParagraphStyleRange@ParagraphShadingColor|attr",
     "Stories|ParagraphStyleRange@ParagraphShadingOn|attr",
     "Stories|ParagraphStyleRange@ParagraphShadingTint|attr",
@@ -1587,6 +1590,7 @@
     "Resources/Styles|ParagraphStyle@BulletsCharacterStyle|properties-child",
     "Resources/Styles|ParagraphStyle@BulletsTextAfter|attr",
     "Resources/Styles|ParagraphStyle@Capitalization|attr",
+    "Resources/Styles|ParagraphStyle@CharacterDirection|attr",
     "Resources/Styles|ParagraphStyle@Composer|attr",
     "Resources/Styles|ParagraphStyle@DesiredGlyphScaling|attr",
     "Resources/Styles|ParagraphStyle@DesiredLetterSpacing|attr",
@@ -1650,6 +1654,7 @@
     "Resources/Styles|ParagraphStyle@ParagraphBorderTint|attr",
     "Resources/Styles|ParagraphStyle@ParagraphBorderTopOffset|attr",
     "Resources/Styles|ParagraphStyle@ParagraphBorderWidth|attr",
+    "Resources/Styles|ParagraphStyle@ParagraphDirection|attr",
     "Resources/Styles|ParagraphStyle@ParagraphShadingBottomOffset|attr",
     "Resources/Styles|ParagraphStyle@ParagraphShadingLeftOffset|attr",
     "Resources/Styles|ParagraphStyle@ParagraphShadingOn|attr",
@@ -2093,6 +2098,7 @@
     "Stories|ParagraphStyleRange@ParagraphBorderColor|attr",
     "Stories|ParagraphStyleRange@ParagraphBorderOn|attr",
     "Stories|ParagraphStyleRange@ParagraphBorderWeight|attr",
+    "Stories|ParagraphStyleRange@ParagraphDirection|attr",
     "Stories|ParagraphStyleRange@ParagraphShadingColor|attr",
     "Stories|ParagraphStyleRange@ParagraphShadingOn|attr",
     "Stories|ParagraphStyleRange@ParagraphShadingTint|attr",

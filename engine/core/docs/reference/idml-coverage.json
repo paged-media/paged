@@ -50,7 +50,7 @@
     },
     "misplacedReads": 30,
     "unseenReads": 435,
-    "unjustifiedUnseenReads": 2
+    "unjustifiedUnseenReads": 0
   },
   "rows": [
     {
@@ -38961,7 +38961,7 @@
       "element": "CharacterStyle",
       "attribute": "CharacterDirection",
       "kind": "attr",
-      "reason": null
+      "reason": "InDesign's Middle Eastern edition writes a run's or a character style's direction when it differs from the default (engine ADR 1051: Word's w:rtl reaches the same slot); every census document is a standard edition's and sets CharacterDirection only on paragraph styles, at DefaultDirection."
     },
     {
       "element": "CharacterStyle",
@@ -39243,7 +39243,7 @@
       "element": "CharacterStyleRange",
       "attribute": "CharacterDirection",
       "kind": "attr",
-      "reason": null
+      "reason": "InDesign's Middle Eastern edition writes a run's or a character style's direction when it differs from the default (engine ADR 1051: Word's w:rtl reaches the same slot); every census document is a standard edition's and sets CharacterDirection only on paragraph styles, at DefaultDirection."
     },
     {
       "element": "CharacterStyleRange",

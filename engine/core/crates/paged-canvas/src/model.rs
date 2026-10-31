@@ -9886,6 +9886,7 @@ impl CanvasModel {
         let mut shadings = Vec::new();
         // Engine ADR 1051.
         let mut scripts = Vec::new();
+        let mut controls = Vec::new();
         let mut directions = Vec::new();
         let mut ligatures: Vec<Option<bool>> = Vec::new();
         let mut space_before: Vec<Option<f32>> = Vec::new();
@@ -10068,6 +10069,16 @@ impl CanvasModel {
                 no_breaks.push(rr.no_break);
                 decorations.push(decoration_values(&rr.decorations));
                 scripts.push(script_values(&rr.script));
+                // Engine ADR 1052 — the run's own control, as its JSON.
+                controls.push([(
+                    paged_mutate::PropertyPath::CharacterContentControl,
+                    paged_mutate::Value::Text(
+                        run.control
+                            .as_ref()
+                            .and_then(|c| serde_json::to_string(c).ok())
+                            .unwrap_or_default(),
+                    ),
+                )]);
                 ligatures.push(rr.ligatures_on);
                 applied_conditions.push(run.applied_conditions.join(" "));
             }
@@ -10492,6 +10503,13 @@ impl CanvasModel {
             script_values(&Default::default()),
         ));
         entries.extend(collapsed_entries(&directions, direction_value(None)));
+        entries.extend(collapsed_entries(
+            &controls,
+            [(
+                paged_mutate::PropertyPath::CharacterContentControl,
+                paged_mutate::Value::Text(String::new()),
+            )],
+        ));
 
         Some(ElementProperties {
             id: id.clone(),

@@ -52,11 +52,14 @@ byte-identical.
   right-to-left paragraph, a Latin / Japanese paragraph with an East Asian face and hint, two
   Latin right-to-left paragraphs aligned left and right): the lowered paths, a script edit
   written back as Word's run properties, zero-edit saves byte-identical.
-- Word's answer is still to be asked: Word opened no probe file during this wave's session
-  (status.md, W4b). The fixture's p3 and p4 (`w:jc="left"` with a left indent, `w:jc="right"`,
-  both `w:bidi`) are the question; until Word answers, the logical reading is the
-  specification's (ECMA-376 `start`/`end`, which transitional `left`/`right` alias in a
-  right-to-left paragraph).
+- Word's answer (`fixtures/w4b-scripts.word.json`, `scripts/word-objects-probe.sh <out>
+  w4b-scripts`, Word 16 for Mac, 2026-10-31): alignment and indents in a `w:bidi` paragraph
+  are logical. `w:jc="left"` sets the line against the right margin, a left indent of 1 in
+  holds it 72 pt off the right margin, `w:jc="right"` sets it against the left margin, and
+  the Hebrew paragraph orders its runs right to left. The test
+  `right_to_left_alignment_and_indents_are_logical_as_in_word` holds the lowering to it.
+  Word opened the saved file of a script edit without a repair prompt (its PDF is the
+  evidence).
 
 ## Consequences
 

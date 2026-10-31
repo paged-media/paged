@@ -11,7 +11,8 @@
 #
 # A fixture is one of objects-floats, objects-text-boxes,
 # objects-nested-tables, objects-table-look, objects-languages (all when
-# none is named). Needs Microsoft Word (macOS) and poppler.
+# none is named), or W4b's w4b-scripts, w4b-controls (doc ADRs 614, 620).
+# Needs Microsoft Word (macOS) and poppler.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$(mkdir -p "$1" && cd "$1" && pwd)"

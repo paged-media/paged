@@ -3610,6 +3610,65 @@ fn style_cases(c: &mut Vec<Case>) {
             continue_numbering: false,
         },
     ));
+    // Engine ADR 1052 — a content control's value is its runs' text: each
+    // value change paints. The prepare step makes the story's first run a
+    // control (a checkbox whose glyphs every face has).
+    fn seed_control(m: &mut CanvasModel, kind: paged_model::ContentControlKind) -> String {
+        let story_id = m.scene().stories[0].self_id.clone();
+        let run = &mut m.scene_mut().stories[0].story.paragraphs[0].runs[0];
+        run.control = Some(paged_model::ContentControl {
+            id: "sweep".into(),
+            kind,
+            tag: None,
+            alias: None,
+            lock: None,
+            showing_placeholder: false,
+            placeholder_style: None,
+        });
+        story_id
+    }
+    c.push(paints("SetContentControlValue", "styles-cascade", |m| {
+        let story_id = seed_control(m, paged_model::ContentControlKind::PlainText { multi_line: false });
+        Mutation::SetContentControlValue {
+            story_id,
+            control_id: "sweep".into(),
+            value: "Swept value".into(),
+        }
+    }));
+    c.push(paints("ToggleContentControl", "styles-cascade", |m| {
+        let story_id = seed_control(
+            m,
+            paged_model::ContentControlKind::Checkbox {
+                checked: false,
+                checked_glyph: "Y".into(),
+                checked_font: None,
+                unchecked_glyph: "N".into(),
+                unchecked_font: None,
+            },
+        );
+        Mutation::ToggleContentControl {
+            story_id,
+            control_id: "sweep".into(),
+        }
+    }));
+    c.push(paints("ChooseContentControlItem", "styles-cascade", |m| {
+        let story_id = seed_control(
+            m,
+            paged_model::ContentControlKind::DropDown {
+                combo: false,
+                items: vec![
+                    paged_model::ListItem { display: "First".into(), value: "a".into() },
+                    paged_model::ListItem { display: "Second choice".into(), value: "b".into() },
+                ],
+                value: None,
+            },
+        );
+        Mutation::ChooseContentControlItem {
+            story_id,
+            control_id: "sweep".into(),
+            index: 1,
+        }
+    }));
     // Engine ADR 1022 — a bookmark and an index marker print nothing; a
     // cross-reference, a table of contents and F9 write text.
     c.push(inert(

@@ -49,6 +49,7 @@ use paged_script::{execute_script, ScriptResult};
 use serde_json::Value;
 
 mod console;
+mod controls;
 mod document;
 mod frames;
 mod history;
@@ -69,6 +70,7 @@ mod xml;
 /// The row files, read for the enumeration gate.
 const ROW_SOURCES: &[&str] = &[
     include_str!("console.rs"),
+    include_str!("controls.rs"),
     include_str!("document.rs"),
     include_str!("frames.rs"),
     include_str!("history.rs"),

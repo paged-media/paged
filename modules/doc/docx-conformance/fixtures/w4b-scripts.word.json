@@ -1,0 +1,109 @@
+{
+ "pages": [
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [],
+   "lines": [
+    {
+     "top": 73.0,
+     "left": 483.0,
+     "width": 57.0,
+     "height": 16.0,
+     "text": " ملاعلاب ابحرم"
+    },
+    {
+     "top": 74.0,
+     "left": 476.0,
+     "width": 2.0,
+     "height": 15.0,
+     "text": " "
+    },
+    {
+     "top": 99.0,
+     "left": 449.0,
+     "width": 2.0,
+     "height": 15.0,
+     "text": " "
+    },
+    {
+     "top": 99.0,
+     "left": 456.0,
+     "width": 26.0,
+     "height": 15.0,
+     "text": "2026"
+    },
+    {
+     "top": 99.0,
+     "left": 482.0,
+     "width": 3.0,
+     "height": 13.0,
+     "text": " "
+    },
+    {
+     "top": 99.0,
+     "left": 485.0,
+     "width": 28.0,
+     "height": 15.0,
+     "text": "Word"
+    },
+    {
+     "top": 99.0,
+     "left": 513.0,
+     "width": 27.0,
+     "height": 13.0,
+     "text": " םולש"
+    },
+    {
+     "top": 124.0,
+     "left": 72.0,
+     "width": 30.0,
+     "height": 15.0,
+     "text": "Hello "
+    },
+    {
+     "top": 124.0,
+     "left": 138.0,
+     "width": 37.0,
+     "height": 15.0,
+     "text": " world. "
+    },
+    {
+     "top": 125.0,
+     "left": 102.0,
+     "width": 36.0,
+     "height": 12.0,
+     "text": "日本語"
+    },
+    {
+     "top": 150.0,
+     "left": 374.0,
+     "width": 2.0,
+     "height": 15.0,
+     "text": " "
+    },
+    {
+     "top": 150.0,
+     "left": 381.0,
+     "width": 88.0,
+     "height": 15.0,
+     "text": "Bidi left indented"
+    },
+    {
+     "top": 175.0,
+     "left": 65.0,
+     "width": 2.0,
+     "height": 15.0,
+     "text": " "
+    },
+    {
+     "top": 175.0,
+     "left": 72.0,
+     "width": 45.0,
+     "height": 15.0,
+     "text": "Bidi right"
+    }
+   ]
+  }
+ ]
+}
