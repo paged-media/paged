@@ -236,12 +236,13 @@ pub fn gradient_midpoint_paint(
         .stops
         .iter()
         .filter_map(|s| {
-            let p = color_id_to_paint(&s.stop_color, palette, color_ctx)?;
-            let c = match p {
+            let p = color_entry_to_paint(&s.resolve_color(palette)?, color_ctx)?;
+            let mut c = match p {
                 Paint::Solid(c) => c,
                 Paint::Cmyk { rgb, .. } => rgb,
                 _ => return None,
             };
+            c.a *= s.opacity();
             Some(((s.location_pct / 100.0).clamp(0.0, 1.0), c))
         })
         .collect();
@@ -271,7 +272,16 @@ pub fn gradient_midpoint_paint(
 }
 
 pub fn color_id_to_paint(id: &str, palette: &Graphic, color_ctx: ColorCtx<'_>) -> Option<Paint> {
-    let entry = palette.resolve(id)?;
+    color_entry_to_paint(palette.resolve(id)?, color_ctx)
+}
+
+/// [`color_id_to_paint`] for a colour already in hand — a swatch, or a
+/// gradient stop's inline colour (engine ADR 1007), which resolves
+/// exactly as an unnamed swatch of the same space and value would.
+pub fn color_entry_to_paint(
+    entry: &paged_model::ColorEntry,
+    color_ctx: ColorCtx<'_>,
+) -> Option<Paint> {
     // Ink Manager — "Use Standard Lab Values for Spots". Off (the
     // default, and InDesign's) this is `None` and every line below is
     // the historical path.
@@ -523,10 +533,14 @@ pub fn color_id_to_paint_with_list_dir(
             .stops
             .iter()
             .filter_map(|s| {
-                let color = color_id_to_paint(&s.stop_color, palette, color_ctx)
+                // Engine ADR 1007 — a stop's inline colour resolves as an
+                // unnamed swatch would; its opacity rides on the colour's
+                // alpha (unpremultiplied, like every display-list colour).
+                let entry = s.resolve_color(palette)?;
+                let mut color = color_entry_to_paint(&entry, color_ctx)
                     .and_then(|p| paint_as_solid_with_icc(p, color_ctx))?;
-                let entry = palette.resolve(&s.stop_color);
-                let cmyk = entry.and_then(|e| e.effective_cmyk());
+                color.a = s.opacity();
+                let cmyk = entry.effective_cmyk();
                 Some(StopRef {
                     offset: (s.location_pct / 100.0).clamp(0.0, 1.0),
                     color,
@@ -545,6 +559,16 @@ pub fn color_id_to_paint_with_list_dir(
         if raw_stops.len() < 2 {
             return None;
         }
+        // Engine ADR 1007 — a ramp whose opacity and colour both change
+        // along a segment is defined unpremultiplied (colour and alpha
+        // blend apart, as PDF's colour shading under its alpha soft mask
+        // does). The rasterisers interpolate a gradient's stops
+        // premultiplied, so such a ramp is tessellated: with 16 sub-stops
+        // per segment the two readings differ by under one 8-bit level.
+        let has_alpha_ramp = raw_stops.windows(2).any(|w| {
+            let (a, b) = (&w[0].color, &w[1].color);
+            (a.a - b.a).abs() > 1e-4 && (a.r != b.r || a.g != b.g || a.b != b.b)
+        });
         let cmyk_tessellate_xform = color_ctx
             .icc
             .filter(|_| raw_stops.iter().any(|s| s.cmyk.is_some()));
@@ -602,9 +626,10 @@ pub fn color_id_to_paint_with_list_dir(
                     };
                     let paged_color::LinearRgb([r, g, b_]) =
                         xform.cmyk_percent_to_linear_rgb(interp);
+                    let alpha = a.color.a * (1.0 - f) + b.color.a * f;
                     out.push(paged_compose::GradientStop {
                         offset: a.offset * (1.0 - t) + b.offset * t,
-                        color: paged_compose::Color::rgba(r, g, b_, 1.0),
+                        color: paged_compose::Color::rgba(r, g, b_, alpha),
                     });
                 }
             }
@@ -615,7 +640,7 @@ pub fn color_id_to_paint_with_list_dir(
                 color: last.color,
             });
             out
-        } else if has_midpoint {
+        } else if has_midpoint || has_alpha_ramp {
             // sRGB blend with a non-default midpoint on at least one
             // segment: tessellate so the colour follows the midpoint
             // power curve. Offset stays linear in `t`. Segments whose
@@ -693,6 +718,20 @@ pub fn color_id_to_paint_with_list_dir(
                 stops,
             });
             return Some(Paint::RadialGradient(id));
+        }
+        // Engine ADR 1007 — a conic gradient turns once around the box's
+        // centre (the fill module moves it to an explicit
+        // `GradientFillStart`), starting at the gradient angle. The angle
+        // is counter-clockwise on the page like a linear one's; the sweep
+        // pool measures clockwise in y-down space, hence the sign.
+        if matches!(grad.kind, paged_model::GradientKind::Conic) {
+            let start_angle = -gradient_angle_deg.unwrap_or(0.0).to_radians();
+            let id = list.push_sweep_gradient(paged_compose::SweepGradient {
+                center: (0.5, 0.5),
+                start_angle,
+                stops,
+            });
+            return Some(Paint::SweepGradient(id));
         }
         let (start, end) =
             linear_gradient_endpoints(gradient_angle_deg, gradient_length_pt, path_dims_pt);

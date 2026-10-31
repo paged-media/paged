@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 868,
+    "command": 871,
     "keybinding": 167,
-    "menu": 612,
+    "menu": 615,
     "panel": 147,
     "tool": 127
   },
@@ -2376,6 +2376,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.modeBits32",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.modeBits8",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2391,7 +2396,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.modeIndexed",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.modeLab",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.modeMultichannel",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -7156,6 +7171,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Mode/32 bits per channel",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Mode/8 bits per channel",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -7171,7 +7191,17 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Mode/Indexed colour…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Mode/Lab colour",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Mode/Multichannel",
       "kind": "menu",
       "owner": "media.paged.image"
     },

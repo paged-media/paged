@@ -74,6 +74,13 @@ pub(super) fn emit_oval_into(
             page, &twin, document, palette, fallback, color_ctx, content, module,
         );
     }
+    // Engine ADR 1042 — an oval under vector effects is the polygon its
+    // effected outline describes.
+    if let Some(poly) = paged_vector_fx::bake::bake_oval(oval) {
+        return super::text_path::emit_polygon_into(
+            page, &poly, document, palette, fallback, color_ctx, content, module,
+        );
+    }
     if !oval.appearance.is_empty() {
         return super::appearance::emit_oval(
             page, oval, document, palette, fallback, color_ctx, content, module,
@@ -741,7 +748,15 @@ fn emit_line_body(
         );
         let band_source = (line.effects.is_some()).then(|| path.clone());
         let (path_id, _) = page.list.paths.intern(cache_key, path);
-        paged_compose::dash_fit::push_stroke(&mut page.list, path_id, stroke, stroke_paint, outer);
+        crate::module::stroke_gradient::emit_mapped_stroke(
+            page,
+            resolved.gradient_stroke_mode,
+            stroke_paint,
+            stroke,
+            |page, paint, stroke| {
+                paged_compose::dash_fit::push_stroke(&mut page.list, path_id, stroke, paint, outer);
+            },
+        );
         if let Some(centreline) = band_source {
             crate::module::line_effects_module(
                 page,
@@ -804,12 +819,20 @@ fn emit_line_body(
         true,
     );
     let diagonal_id = page.list.paths.push_anon(diagonal.clone());
-    paged_compose::dash_fit::push_stroke(
-        &mut page.list,
-        diagonal_id,
-        stroke,
+    crate::module::stroke_gradient::emit_mapped_stroke(
+        page,
+        resolved.gradient_stroke_mode,
         stroke_paint,
-        Transform::IDENTITY,
+        stroke,
+        |page, paint, stroke| {
+            paged_compose::dash_fit::push_stroke(
+                &mut page.list,
+                diagonal_id,
+                stroke,
+                paint,
+                Transform::IDENTITY,
+            );
+        },
     );
     crate::module::line_effects_module(
         page,
@@ -1028,6 +1051,20 @@ pub(super) fn emit_rectangle_into(
     content: ContentPainter<'_>,
     module: ModulePainter<'_>,
 ) {
+    // Engine ADR 1042 — draw the rectangle its vector effects describe.
+    if let Some(baked) = paged_vector_fx::bake::bake_rectangle(rect) {
+        return emit_rectangle_into(
+            page,
+            &baked,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            drop_shadow,
+            content,
+            module,
+        );
+    }
     if !rect.appearance.is_empty() {
         return super::appearance::emit_rectangle(
             page, rect, document, palette, fallback, color_ctx, content, module,
@@ -1396,7 +1433,15 @@ pub(super) fn emit_rectangle_body(
                 // Frame opacity is applied at the transparency-group
                 // level by the orchestrator; per-paint scaling here
                 // would double-apply the alpha.
-                emit_stroke_rect_transformed(inset, outer, stroke, paint, &mut page.list);
+                crate::module::stroke_gradient::emit_mapped_stroke(
+                    page,
+                    resolved.gradient_stroke_mode,
+                    paint,
+                    stroke,
+                    |page, paint, stroke| {
+                        emit_stroke_rect_transformed(inset, outer, stroke, paint, &mut page.list);
+                    },
+                );
             }
         }
     }

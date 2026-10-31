@@ -555,6 +555,11 @@ export const HOST_FEATURES: readonly string[] = [
   // refuses the path (an outcome) and reads no row. A bundle that would
   // otherwise bake an effect into pixels asks this flag first.
   "document.effectStack@1",
+  // Engine ADR 1042 (protocol 78) — live vector effects: the vector kinds
+  // on `frameEffectStack`, `groupEffectStack` (a group's Pathfinder
+  // effect) and the `expandAppearance` op. STATIC: the worker handshake
+  // pins protocol 78, which applies them.
+  "document.vectorEffects@1",
   // Engine ADR 1043 — native appearance: several fills and strokes on one
   // page item. The vendored wire and catalog carry `frameAppearance` (the
   // whole layer list, `{ type: "appearance", value: { layers } }`, one
@@ -580,6 +585,16 @@ export const HOST_FEATURES: readonly string[] = [
   // STATIC: `frameMedia` is additive at protocol 78, so an older engine
   // reads no row (`read` answers null) and refuses the write.
   "document.media@1",
+  // Engine ADR 1007 — paint model v2. The vendored wire carries a gradient
+  // stop's `opacityPct` and inline `color` (`createGradient` /
+  // `editGradient`), the `"Conic"` kind, `frameGradientStrokeMode`
+  // ("Within" / "Along" / "Across") and `frameGradientFillStart`; the
+  // `gradientDetail` read answers them. STATIC, like `document.fillRule@1`:
+  // all additive at protocol 76, so the handshake does not prove the engine
+  // has it — an older engine drops the stop fields (an opaque, swatch-only
+  // ramp) and refuses the paths. paged.draw's SVG importer asks it before
+  // writing a gradient with inline, translucent stops.
+  "document.paint2@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never

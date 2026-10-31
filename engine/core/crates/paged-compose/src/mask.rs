@@ -1306,28 +1306,6 @@ pub fn drop_shadow_stamps(
     }]
 }
 
-/// Sample an alpha stop list at `t` (0..=1), linearly between stops.
-fn sample_gradient_alpha(stops: &[(f32, f32)], t: f32) -> f32 {
-    if stops.is_empty() {
-        return 1.0;
-    }
-    if t <= stops[0].0 {
-        return stops[0].1;
-    }
-    if t >= stops[stops.len() - 1].0 {
-        return stops[stops.len() - 1].1;
-    }
-    for w in stops.windows(2) {
-        let (l0, a0) = w[0];
-        let (l1, a1) = w[1];
-        if t >= l0 && t <= l1 {
-            let span = (l1 - l0).max(1e-6);
-            return a0 + (a1 - a0) * ((t - l0) / span);
-        }
-    }
-    stops[stops.len() - 1].1
-}
-
 /// Gradient feather — the alpha the object KEEPS, sampled from a 1-D
 /// gradient along the axis and confined to the path.
 ///
@@ -1398,7 +1376,7 @@ pub fn gradient_feather_mask(
                         ((px_pt - sx).hypot(py_pt - sy) / radius).clamp(0.0, 1.0)
                     }
                 };
-                sample_gradient_alpha(&stops, t)
+                crate::gradient_sample::sample_alpha(&stops, t)
             };
             let aa_unit = aa as f32 / 255.0;
             let keep = 1.0 - aa_unit * (1.0 - alpha);

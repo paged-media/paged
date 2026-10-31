@@ -178,7 +178,7 @@ impl LayerStack {
     }
 
     /// A plain layer (normal, full opacity, unmasked) holding `px`.
-    fn plain_layer(&mut self, name: String, px: Pixels, group: Option<u32>) -> Layer {
+    pub(super) fn plain_layer(&mut self, name: String, px: Pixels, group: Option<u32>) -> Layer {
         Layer {
             kind: LayerKind::Pixels,
             id: self.fresh_id(),

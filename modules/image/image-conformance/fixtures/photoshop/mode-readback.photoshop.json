@@ -1,0 +1,79 @@
+{
+  "fixture": "mode-readback",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/mode-readback.jsx",
+    "script_sha256": "188a0284c42a82a80d3b8bec2e5b07efd1da33415d570e7a6d05ffb74a7544f8",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-30T21:03:33.282Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "saved-float-32",
+      "params": {
+        "file": "saved-float-32.psd"
+      },
+      "profile": "sRGB IEC61966-2.1 (Lineares RGB-Profil)",
+      "bits": 32,
+      "files": [
+        "mode-readback/saved-float-32.merged.psd"
+      ],
+      "values": {
+        "mode": "DocumentMode.RGB",
+        "bits": 32,
+        "layers": 2,
+        "channels": [
+          "Rot",
+          "Grün",
+          "Blau"
+        ]
+      }
+    },
+    {
+      "id": "saved-indexed-web",
+      "params": {
+        "file": "saved-indexed-web.psd"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "mode-readback/saved-indexed-web.merged.psd"
+      ],
+      "values": {
+        "mode": "DocumentMode.INDEXEDCOLOR",
+        "bits": 8,
+        "layers": 1,
+        "channels": [
+          "Indiziert"
+        ]
+      }
+    },
+    {
+      "id": "saved-multichannel",
+      "params": {
+        "file": "saved-multichannel.psd"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "mode-readback/saved-multichannel.merged.psd"
+      ],
+      "values": {
+        "mode": "DocumentMode.MULTICHANNEL",
+        "bits": 8,
+        "layers": 1,
+        "channels": [
+          "Cyan",
+          "Magenta",
+          "Yellow"
+        ]
+      }
+    }
+  ]
+}

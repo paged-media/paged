@@ -668,6 +668,7 @@ fn dissolving_an_empty_group_from_a_file_is_undoable() {
             corner_option: Some("RoundedCorner".to_string()),
             corners: Default::default(),
             clip: false,
+            effect_stack: Vec::new(),
         });
         spread.frames_in_order.insert(1, FrameRef::Group(index));
     }

@@ -127,6 +127,8 @@ test.describe("live shapes: the widgets of the selected shape", () => {
     const from = await screenPoint(page, 120, 120);
     const to = await screenPoint(page, 260, 260);
     await dragMouse(page, from, to);
+    // The widgets work under the selection tools: back to Selection.
+    await page.locator('[data-tool-slot="select"]').click();
     const handles = page.locator(
       "[data-live-shape-handles][data-live-shape-kind='polygon']",
     );

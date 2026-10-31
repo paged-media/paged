@@ -1481,6 +1481,7 @@ pub(crate) fn new_text_frame(
         subpath_starts: Vec::new(),
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
+        gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
         effects: None,
         effect_stack: Vec::new(),
         appearance: Vec::new(),
@@ -1633,6 +1634,7 @@ pub(crate) fn new_rectangle(
         fill_rule: paged_model::FillRule::NonZero,
         image_adjustments: Vec::new(),
         media: None,
+        gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
     }
 }
 

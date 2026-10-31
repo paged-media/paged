@@ -125,10 +125,15 @@ export interface GradientStopWire {
   resolvedRgbHex: string;
   locationPct: number;
   midpointPct: number | null;
+  /** Engine ADR 1007 — the stop's opacity (0..100); absent/null = 100. */
+  opacityPct?: number | null;
+  /** Engine ADR 1007 — the stop's own colour (`stopColorRef` is then
+   *  `""`); absent/null = the swatch. */
+  color?: { space: string; value: number[] } | null;
 }
 
 /** A gradient swatch's full detail: `kind` is `"linear"` / `"radial"` /
- *  `"unknown"` (lower-case, unlike the `GradientSpec` a write takes). */
+ *  `"conic"` / `"unknown"` (lower-case, unlike the `GradientSpec` a write takes). */
 export interface GradientDetailWire {
   selfId: string;
   name: string;

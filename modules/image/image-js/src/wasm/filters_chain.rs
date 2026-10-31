@@ -110,6 +110,17 @@ fn through_coverage(
     let n = orig.pixel_count();
     let w = width as usize;
     let cov_at = |i: usize| f32::from(cov.coverage_at((i % w) as u32, (i / w) as u32)) / 255.0;
+    if orig.is_float() || out.is_float() {
+        // 32-bit float: mix the linear values (unclamped).
+        let (a, b) = (orig.to_f32_linear(), out.to_f32_linear());
+        let s: Vec<f32> = (0..n * 4)
+            .map(|j| {
+                let k = cov_at(j / 4);
+                a[j] + (b[j] - a[j]) * k
+            })
+            .collect();
+        return crate::pixels::Pixels::from_rgba32f(&s);
+    }
     if orig.is_16bit() || out.is_16bit() {
         let mut s = Vec::with_capacity(n * 4);
         for i in 0..n {

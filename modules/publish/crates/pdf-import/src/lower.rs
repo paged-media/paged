@@ -123,6 +123,8 @@ impl Palette {
                     stop_color: self.color_id(s.rgb),
                     location_pct: s.offset * 100.0,
                     midpoint_pct: None,
+                    opacity_pct: None,
+                    inline_color: None,
                 })
                 .collect();
             self.graphic.gradients.insert(

@@ -805,6 +805,8 @@ export const CORE_PATHS: Record<
   frameShapePieEnd: V71,
   // A movie or sound frame's medium is protocol 78 (engine ADR 1027).
   frameMedia: V71,
+  // Engine ADR 1007: "Within" / "Along" / "Across".
+  frameGradientStrokeMode: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",
@@ -972,6 +974,8 @@ export const CORE_PATHS: Record<
   groupKnockout: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   // A clip group is protocol 76 (engine ADR 1010); a pre-71 engine has none.
   groupClip: V71,
+  // Engine ADR 1042 — a group's vector effects (a Pathfinder compound shape).
+  groupEffectStack: V71,
   // Engine ADR 1039 (protocol 78) — a symbol instance's tint
   // `[r, g, b, amount]` and 9-slice guides `[left, top, right, bottom]`.
   symbolInstanceTint: {
