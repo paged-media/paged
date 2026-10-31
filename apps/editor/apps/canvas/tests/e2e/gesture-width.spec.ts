@@ -66,7 +66,35 @@ async function anchorCount(
   }, ref);
 }
 
-test("WD-01 — a Width-tool drag near an anchor widens the selected open path; ONE undo restores it @feat:frames-paths.stroke-variable-width @level:gesture", async ({
+async function stackKinds(
+  page: Page,
+  ref: { kind: string; id: string },
+): Promise<string[]> {
+  return page.evaluate(async (id) => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            elementProperties: (id: unknown) => Promise<{
+              entries: {
+                path: string;
+                value?: {
+                  type?: string;
+                  value?: { entries?: { kind: string }[] };
+                };
+              }[];
+            } | null>;
+          };
+        };
+      }
+    ).__canvas;
+    const res = await c.client.elementProperties(id);
+    const e = res?.entries.find((x) => x.path === "frameEffectStack");
+    return (e?.value?.value?.entries ?? []).map((x) => x.kind);
+  }, ref);
+}
+
+test("WD-01 — a Width-tool drag on the selected path's stroke gives it a live width point; ONE undo restores it @feat:frames-paths.stroke-variable-width @level:gesture", async ({
   page,
 }) => {
   await openCanvas(page);
@@ -139,15 +167,28 @@ test("WD-01 — a Width-tool drag near an anchor widens the selected open path; 
   const out = await screenPoint(page, anchorPt!.x, anchorPt!.y - 40);
   await dragMouse(page, at, out);
 
-  // outlineStrokeVariable REPLACES the centreline with its swept outline
-  // (a closed filled contour), so the anchor count jumps — a semantic
-  // oracle that doesn't depend on the profile magnitude reaching a
-  // pixel threshold.
-  await expect
-    .poll(async () => anchorCount(page, drawn!), { timeout: 5_000 })
-    .toBeGreaterThan(anchorsBefore);
+  // WP6.4 — the Width tool's default result is LIVE width points (engine
+  // ADR 10XX): a polygon keeps its anchors and gains a `widthProfile`
+  // entry on its stack. A graphic line carries no stack and takes the v0
+  // lane, where outlineStrokeVariable replaces the centreline with its
+  // swept outline and the anchor count jumps.
+  const live = drawn!.kind === "polygon";
+  if (live) {
+    await expect
+      .poll(async () => stackKinds(page, drawn!), { timeout: 5_000 })
+      .toContain("widthProfile");
+    expect(await anchorCount(page, drawn!)).toBe(anchorsBefore);
+  } else {
+    await expect
+      .poll(async () => anchorCount(page, drawn!), { timeout: 5_000 })
+      .toBeGreaterThan(anchorsBefore);
+  }
 
-  // 3. One undo restores the original path geometry.
+  // 3. One undo restores the original path.
   await undo(page);
   await expect.poll(async () => anchorCount(page, drawn!)).toBe(anchorsBefore);
+  if (live)
+    await expect
+      .poll(async () => stackKinds(page, drawn!))
+      .not.toContain("widthProfile");
 });

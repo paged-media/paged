@@ -922,6 +922,26 @@ STATIC: the protocol-78 handshake proves the engine has the op and the
 paths. paged.draw's effect UI (WP6.3) and the host Effects panel list the
 kinds from the schema's `EffectKind`.
 
+`"document.strokeStyles@1"` (engine ADR 10XX, protocol 78) says the
+engine draws STROKE STYLES: two more vector kinds of `frameEffectStack`
+that draw the item's stroke along its path, painted with the stroke's
+paint. `widthProfile` (`widthPoints`: `[t, width]`, `t` the arc-length
+fraction of each contour, `width` × the stroke weight, eased between
+points) is Illustrator's variable-width stroke; `brush` (`brushType`:
+`art`, `scatter`, `pattern` or `bristle`; the artwork in the brush frame
+as `artNodes` / `artStarts` / `artClosed`, empty for the kind's own;
+`scalePct`, `spacingPct`, `scatterPct`, `rotateDeg`,
+`rotateVariationDeg`, `sizeMinPct`, `flipAlong`, `flipAcross`,
+`tileAspect`, `bristles`, `bristleThicknessPct`, `seed`) draws a brush's
+artwork. Both together: the brush is as wide as the profile says. The
+item's fill stays on its source outline; a group's stack refuses them.
+Expand Appearance keeps a stroke-only item's artwork and refuses one with
+a fill; IDML export writes the artwork as a path (beside a fill, as a
+polygon `<id>vfx` after the item) and restores it on a paged read.
+Introspection lists them with `strokeStyle: true` in the `stroke`
+category, which is no Effect menu group. paged.draw's Width tool,
+Paintbrush (live result) and Brushes panel write them (draw ADR 366).
+
 `"document.paint2@1"` (engine ADR 1007) is another property flag: the
 vendored wire carries a gradient stop's opacity (`opacityPct`) and inline
 colour (`color`), the `"Conic"` gradient kind, `frameGradientStrokeMode`

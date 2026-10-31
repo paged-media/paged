@@ -239,7 +239,8 @@ export interface EffectKindDescriptor {
   kind: string;
   /** An English name; a host translates it by `kind`. */
   title: string;
-  /** The Effect menu group, one of `effectCategories`. */
+  /** The Effect menu group, one of `effectCategories` — or `stroke` for a
+   *  stroke style, which is no Effect menu group (engine ADR 10XX). */
   category: string;
   /** One of InDesign's nine: its parameters are the per-field paths in
    *  `fieldPaths`, not entry fields. */
@@ -256,6 +257,11 @@ export interface EffectKindDescriptor {
   enablePath?: string;
   /** InDesign kinds: its per-field paths on the object target. */
   fieldPaths?: readonly string[];
+  /** Engine ADR 1042: a live vector effect (it changes the geometry). */
+  vector?: boolean;
+  /** Engine ADR 10XX: a stroke style (`widthProfile`, `brush`) — applied
+   *  from a stroke or brushes panel, not the Effect menu. */
+  strokeStyle?: boolean;
 }
 
 /** One parameter of a stack-only effect kind. */

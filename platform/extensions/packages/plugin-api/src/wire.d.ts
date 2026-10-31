@@ -1044,7 +1044,7 @@ export interface StopColorSpec {
  * Engine ADR 1008 — an effect kind on the stack: InDesign\'s nine, then
  * the stack-only ones, then (engine ADR 1042) the live vector effects.
  */
-export type EffectKind = "dropShadow" | "innerShadow" | "outerGlow" | "innerGlow" | "bevelEmboss" | "satin" | "feather" | "directionalFeather" | "gradientFeather" | "gaussianBlur" | "outlineStroke" | "colorOverlay" | "gradientOverlay" | "reflection" | "softEdge" | "noise" | "colorAdjust" | "roughen" | "zigZag" | "puckerBloat" | "twist" | "tweak" | "transformCopies" | "freeDistort" | "warp" | "offsetPath" | "outlinePath" | "roundCorners" | "scribble" | "convertToShape" | "pathfinder";
+export type EffectKind = "dropShadow" | "innerShadow" | "outerGlow" | "innerGlow" | "bevelEmboss" | "satin" | "feather" | "directionalFeather" | "gradientFeather" | "gaussianBlur" | "outlineStroke" | "colorOverlay" | "gradientOverlay" | "reflection" | "softEdge" | "noise" | "colorAdjust" | "roughen" | "zigZag" | "puckerBloat" | "twist" | "tweak" | "transformCopies" | "freeDistort" | "warp" | "offsetPath" | "outlinePath" | "roundCorners" | "scribble" | "convertToShape" | "pathfinder" | "widthProfile" | "brush";
 
 /**
  * Engine ADR 1008 — one entry of an effect stack on the wire. Every
@@ -1081,6 +1081,14 @@ export type EffectKind = "dropShadow" | "innerShadow" | "outerGlow" | "innerGlow
  * | `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |
  * | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
  * | `pathfinder` | `op` (on a group\'s stack only) |
+ *
+ * The stroke styles (engine ADR 10XX), on a page item\'s object stack
+ * only:
+ *
+ * | kind | fields |
+ * | --- | --- |
+ * | `widthProfile` | `widthPoints` (`[t, width]`: arc-length fraction 0..1, width × the stroke weight) |
+ * | `brush` | `brushType` (`art` / `scatter` / `pattern` / `bristle`), `artNodes` (`[x, y, inX, inY, outX, outY]` in the brush frame), `artStarts`, `artClosed`, `scalePct`, `spacingPct`, `scatterPct`, `rotateDeg`, `rotateVariationDeg`, `sizeMinPct`, `flipAlong`, `flipAcross`, `tileAspect`, `bristles`, `bristleThicknessPct`, `seed` |
  *
  * InDesign\'s kinds carry no parameters here: theirs are the per-field
  * paths (`frameInnerShadowSize`, …), and the stack keeps them.
@@ -1152,6 +1160,21 @@ export interface EffectEntrySpec {
     height?: number | null;
     cornerRadius?: number | null;
     op?: string | null;
+    widthPoints?: [number, number][] | null;
+    brushType?: string | null;
+    artNodes?: [number, number, number, number, number, number][] | null;
+    artStarts?: number[] | null;
+    artClosed?: boolean[] | null;
+    scalePct?: number | null;
+    spacingPct?: number | null;
+    scatterPct?: number | null;
+    rotateVariationDeg?: number | null;
+    sizeMinPct?: number | null;
+    flipAlong?: boolean | null;
+    flipAcross?: boolean | null;
+    tileAspect?: number | null;
+    bristles?: number | null;
+    bristleThicknessPct?: number | null;
 }
 
 /**

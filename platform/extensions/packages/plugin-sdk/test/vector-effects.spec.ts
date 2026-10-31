@@ -89,3 +89,32 @@ describe("live vector effects (engine ADR 1042) [effects-transparency.live-vecto
     expect(refused.applied).toBe(false);
   });
 });
+
+describe("stroke styles (engine ADR 10XX) [plugin-draw.brushes-width]", () => {
+  it("is advertised; a width profile and a brush are stack entries, one undo step", async () => {
+    expect(HOST_FEATURES).toContain("document.strokeStyles@1");
+    const h = (live = await createHeadlessHost({ console: silent }));
+    expect(h.host.supports("document.strokeStyles@1")).toBe(true);
+    const id = await frameOn(h);
+    const address = `frame:${String(id.id)}`;
+    const out = await h.objects.set(address, "frameEffectStack", [
+      {
+        kind: "widthProfile",
+        enabled: true,
+        widthPoints: [
+          [0, 0],
+          [0.5, 2],
+          [1, 0],
+        ],
+      },
+      { kind: "brush", enabled: true, brushType: "scatter", seed: 3 },
+    ]);
+    expect(out).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(kinds(await h.objects.get(address, "frameEffectStack"))).toEqual([
+      "widthProfile",
+      "brush",
+    ]);
+    await h.host.document.undo();
+    expect(kinds(await h.objects.get(address, "frameEffectStack"))).toEqual([]);
+  });
+});

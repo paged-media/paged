@@ -557,6 +557,11 @@ export const HOST_FEATURES: readonly string[] = [
   // effect) and the `expandAppearance` op. STATIC: the worker handshake
   // pins protocol 78, which applies them.
   "document.vectorEffects@1",
+  // Engine ADR 10XX (protocol 78) — stroke styles: the `widthProfile` and
+  // `brush` kinds on `frameEffectStack` draw the item's stroke as a
+  // variable-width band or a brush's artwork along the path. STATIC: the
+  // protocol-78 handshake of an engine that carries the two kinds.
+  "document.strokeStyles@1",
   // Engine ADR 1043 — native appearance: several fills and strokes on one
   // page item. The vendored wire and catalog carry `frameAppearance` (the
   // whole layer list, `{ type: "appearance", value: { layers } }`, one
