@@ -20,6 +20,7 @@ members = [
     "crates/paged-sniff",
     "crates/paged-svg",
     "crates/paged-ps",
+    "crates/paged-blend",
     "crates/paged-compose",
     "crates/paged-gpu",
     "crates/paged-renderer",

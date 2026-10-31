@@ -284,6 +284,41 @@ thread_local! {
     });
 }
 
+/// A mesh raster's cache key and its peniko image.
+type MeshImage = ((u64, i32), ImageData);
+
+thread_local! {
+    /// Engine ADR 1048 — the last mesh rasters as peniko images: the same
+    /// blob on every redraw at one scale, so the GPU uploads it once.
+    static MESH_IMAGES: RefCell<Vec<MeshImage>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A mesh raster as a peniko image (straight alpha, as the CPU lane's
+/// pixmap reads it).
+fn mesh_image_data(raster: &paged_compose::MeshRaster) -> ImageData {
+    MESH_IMAGES.with(|c| {
+        let mut c = c.borrow_mut();
+        if let Some(at) = c.iter().position(|(k, _)| *k == raster.key) {
+            let hit = c.remove(at);
+            let data = hit.1.clone();
+            c.push(hit);
+            return data;
+        }
+        let data = ImageData {
+            data: Blob::new(Arc::new(raster.rgba.as_ref().clone())),
+            format: ImageFormat::Rgba8,
+            alpha_type: ImageAlphaType::Alpha,
+            width: raster.width,
+            height: raster.height,
+        };
+        if c.len() >= 8 {
+            c.remove(0);
+        }
+        c.push((raster.key, data.clone()));
+        data
+    })
+}
+
 /// The image's pixels as a peniko `ImageData`, decoded at most once per
 /// image while it stays within the budget. `None` when the image has
 /// neither usable RGBA nor decodable encoded bytes.
@@ -466,7 +501,7 @@ fn init_gpu() -> Result<GpuState, String> {
 fn build_scene(list: &DisplayList, options: &RasterOptions) -> Scene {
     let scale = options.dpi / 72.0;
     let page_to_px = kurbo::Affine::scale(scale as f64);
-    build_scene_with_transform(list, page_to_px)
+    build_scene_with_transform_filtered(list, page_to_px, false, Some(options.dpi))
 }
 
 /// Surface-presenter entrypoint. Same scene-building as `build_scene`
@@ -485,8 +520,9 @@ pub(crate) fn build_scene_for_surface(
     build_scene_with_transform(list, page_to_surface)
 }
 
+#[cfg(any(target_arch = "wasm32", test))]
 pub(crate) fn build_scene_with_transform(list: &DisplayList, page_to_px: kurbo::Affine) -> Scene {
-    build_scene_with_transform_filtered(list, page_to_px, /*skip_overprints=*/ false)
+    build_scene_with_transform_filtered(list, page_to_px, /*skip_overprints=*/ false, None)
 }
 
 /// Same as `build_scene_with_transform`, but with the option to skip
@@ -688,10 +724,123 @@ fn paint_effect_stamps(
     }
 }
 
+/// The resolution a page scene built in page pt (the presenter's,
+/// which the camera scales later) bakes its Photoshop-mode groups at.
+#[cfg(feature = "cpu")]
+const SURFACE_BAKE_DPI: f32 = 144.0;
+
+/// ADR 1034 — Vello cannot read a layer's backdrop, so a group in one of
+/// Photoshop's eleven blend modes is composited by the CPU lane (which
+/// can) and drawn here as the picture it left: the backdrop with the
+/// group blended in. Keyed by the group's opening command. Without the
+/// `cpu` feature there is no CPU lane, and such a group draws its
+/// nearest native mode ([`blend_to_peniko`]).
+struct PhotoshopBakes {
+    by_begin: std::collections::HashMap<usize, crate::BlendBake>,
+    /// Page pt per bake pixel.
+    pt_per_px: f64,
+}
+
+#[cfg(feature = "cpu")]
+fn photoshop_bakes(list: &DisplayList, bake_dpi: Option<f32>) -> Option<PhotoshopBakes> {
+    if !crate::vcpu::has_photoshop_blend(list) {
+        return None;
+    }
+    // A scene built in device pixels bakes at that resolution, pixel for
+    // pixel; one built in page pt (the presenter's) at a fixed one.
+    let dpi = bake_dpi.unwrap_or(SURFACE_BAKE_DPI);
+    let extent = paged_compose::extent::painted_bounds(list)?;
+    let mut options = crate::RasterOptions::new(
+        (extent.x + extent.w).max(1.0),
+        (extent.y + extent.h).max(1.0),
+    );
+    options.dpi = dpi;
+    // Transparent paper: a bake carries the surface it composited onto,
+    // not the page under it.
+    options.background = paged_compose::Color::rgba(0.0, 0.0, 0.0, 0.0);
+    let (_, bakes) = crate::vcpu::rasterize_with_blend_bakes(list, &options);
+    Some(PhotoshopBakes {
+        by_begin: bakes.into_iter().map(|b| (b.begin, b)).collect(),
+        pt_per_px: 72.0 / dpi as f64,
+    })
+}
+
+#[cfg(not(feature = "cpu"))]
+fn photoshop_bakes(_list: &DisplayList, _bake_dpi: Option<f32>) -> Option<PhotoshopBakes> {
+    None
+}
+
+/// The index of the `EndBlendGroup` / `PopLayer` closing the group that
+/// opens at `start` (the list's length when it never closes).
+fn group_end(commands: &[DisplayCommand], start: usize) -> usize {
+    let mut depth = 0usize;
+    for (i, c) in commands.iter().enumerate().skip(start) {
+        match c {
+            DisplayCommand::BeginBlendGroup { .. } | DisplayCommand::PushLayer { .. } => depth += 1,
+            DisplayCommand::EndBlendGroup(_) | DisplayCommand::PopLayer(_) => {
+                depth -= 1;
+                if depth == 0 {
+                    return i;
+                }
+            }
+            _ => {}
+        }
+    }
+    commands.len()
+}
+
+/// Draw a bake: erase the rectangle it covers in the current layer
+/// (`DestOut`, so nothing outside it is touched), then paint the bake's
+/// pixels there. The bake already holds the backdrop, so replacing is
+/// the composite.
+fn draw_photoshop_bake(
+    scene: &mut Scene,
+    page_to_px: kurbo::Affine,
+    bake: &crate::BlendBake,
+    pt_per_px: f64,
+) {
+    let rect = kurbo::Rect::new(
+        bake.x as f64 * pt_per_px,
+        bake.y as f64 * pt_per_px,
+        (bake.x as f64 + bake.w as f64) * pt_per_px,
+        (bake.y as f64 + bake.h as f64) * pt_per_px,
+    );
+    scene.push_layer(
+        Fill::NonZero,
+        PenikoBlendMode::new(Mix::Normal, Compose::DestOut),
+        1.0,
+        page_to_px,
+        &rect,
+    );
+    scene.fill(
+        Fill::NonZero,
+        page_to_px,
+        PenikoColor::from_rgba8(0, 0, 0, 255),
+        None,
+        &rect,
+    );
+    scene.pop_layer();
+    let brush = ImageBrush::new(ImageData {
+        data: Blob::new(Arc::new(bake.rgba.clone().into_boxed_slice())),
+        format: ImageFormat::Rgba8,
+        alpha_type: ImageAlphaType::AlphaPremultiplied,
+        width: bake.w,
+        height: bake.h,
+    });
+    let place = page_to_px
+        * kurbo::Affine::scale(pt_per_px)
+        * kurbo::Affine::translate((bake.x as f64, bake.y as f64));
+    scene.draw_image(&brush, place);
+}
+
+/// `bake_dpi` is the device resolution a scene drawn in device pixels
+/// is rendered at (its Photoshop-mode bakes then land pixel for pixel);
+/// `None` for a scene the presenter scales later.
 fn build_scene_with_transform_filtered(
     list: &DisplayList,
     page_to_px: kurbo::Affine,
     skip_overprints: bool,
+    bake_dpi: Option<f32>,
 ) -> Scene {
     // Stack of in-flight scenes. The bottom entry is the final
     // returned scene; additional entries are sub-scenes captured
@@ -761,6 +910,10 @@ fn build_scene_with_transform_filtered(
         let c = page_to_px.as_coeffs();
         (c[0].hypot(c[1])) as f32
     };
+    let bakes = photoshop_bakes(list, bake_dpi);
+    // The last command of a baked group: everything up to it is in the
+    // bake already.
+    let mut skip_through: Option<usize> = None;
 
     // An effect layer the CPU lane drew in this lane's place: its
     // commands up to and including its `PopLayer` are skipped.
@@ -771,6 +924,32 @@ fn build_scene_with_transform_filtered(
                 continue;
             }
             skip_until = None;
+        }
+        if let Some(end) = skip_through {
+            if cmd_idx <= end {
+                continue;
+            }
+            skip_through = None;
+        }
+        // A group in one of Photoshop's modes is drawn from the CPU lane's
+        // bake, which holds its effects too (engine ADR 1034).
+        if let (
+            Some(bakes),
+            DisplayCommand::BeginBlendGroup { blend_mode, .. }
+            | DisplayCommand::PushLayer { blend_mode, .. },
+        ) = (&bakes, cmd)
+        {
+            if !blend_mode.is_native() {
+                if let Some(bake) = bakes.by_begin.get(&cmd_idx) {
+                    let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                    draw_photoshop_bake(scene, page_to_px, bake, bakes.pt_per_px);
+                    paged_compose::perf::count(|c| c.blend_cpu_composites += 1);
+                }
+                // A group the CPU lane cut to nothing (off the page)
+                // draws nothing.
+                skip_through = Some(group_end(&list.commands, cmd_idx));
+                continue;
+            }
         }
         #[cfg(feature = "cpu")]
         if let DisplayCommand::PushLayer {
@@ -1162,6 +1341,18 @@ fn build_scene_with_transform_filtered(
                 let pixel_to_unit = kurbo::Affine::scale_non_uniform(inv_w, inv_h);
                 let pixel_to_px = page_to_px * unit_to_page * pixel_to_unit;
                 scene.draw_image(&brush, pixel_to_px);
+            }
+            DisplayCommand::MeshShade {
+                mesh_id, transform, ..
+            } => {
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let Some((raster, to_px)) =
+                    crate::vello_map::mesh_image(list, *mesh_id, transform, page_to_px)
+                else {
+                    continue;
+                };
+                let brush = ImageBrush::new(mesh_image_data(&raster));
+                scene.draw_image(&brush, to_px);
             }
             DisplayCommand::DropShadow { .. } | DisplayCommand::PathShadow { .. } => {
                 // The CPU lane's own shadow: the shape moved, blurred,
@@ -1995,6 +2186,7 @@ fn gpu_compute_overprint_path(
         list,
         kurbo::Affine::scale(scale as f64),
         /*skip_overprints=*/ true,
+        Some(options.dpi),
     );
     let vello_target = create_storage_texture(
         &state.device,
@@ -3268,6 +3460,11 @@ mod tests {
         p.segments.push(PathSegment::LineTo { x: 0.0, y: 1.0 });
         p.segments.push(PathSegment::Close);
         list.paths.push_anon(p)
+    }
+
+    fn px_w(buf: &[u8], w: usize, x: usize, y: usize) -> [u8; 4] {
+        let i = (y * w + x) * 4;
+        [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
     }
 
     /// Whether the readback buffer is a real render rather than the
@@ -5237,6 +5434,125 @@ mod tests {
         }
     }
 
+    /// Engine ADR 1048 — a mesh shading under a clip draws alike on both
+    /// lanes (ADR 146): both sample the one raster `paged_compose::mesh`
+    /// makes at the display scale, upright and under a turn.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn mesh_shades_alike_on_both_lanes__feat__color_swatches_mesh_freeform_gradients() {
+        use paged_compose::{
+            DisplayCommand, FreeformShading, FreeformSource, MeshShading, Rect, ShadePatch,
+            Transform,
+        };
+        let c = |r: f32, g: f32, b: f32, a: f32| ComposeColor::rgba(r, g, b, a);
+        let mut net = [[(0.0f32, 0.0f32); 4]; 4];
+        for (i, row) in net.iter_mut().enumerate() {
+            for (j, p) in row.iter_mut().enumerate() {
+                *p = (j as f32 / 3.0, i as f32 / 3.0);
+            }
+        }
+        // Bow the top edge in, so the surface is curved.
+        net[0][1].1 = 0.3;
+        net[0][2].1 = 0.3;
+        let patch = ShadePatch {
+            points: paged_compose::mesh::coons_points(&ShadePatch {
+                points: net,
+                colors: [c(1.0, 0.0, 0.0, 1.0); 4],
+                tensor: false,
+            }),
+            colors: [
+                c(1.0, 0.0, 0.0, 1.0),
+                c(0.0, 1.0, 0.0, 1.0),
+                c(0.0, 0.0, 1.0, 0.5),
+                c(1.0, 1.0, 0.0, 1.0),
+            ],
+            tensor: false,
+        };
+        let freeform = FreeformShading {
+            bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 1.0,
+                h: 1.0,
+            },
+            points: vec![
+                FreeformSource {
+                    at: (0.2, 0.2),
+                    color: c(1.0, 0.0, 0.0, 1.0),
+                    spread: 0.05,
+                },
+                FreeformSource {
+                    at: (0.8, 0.7),
+                    color: c(0.0, 0.0, 1.0, 1.0),
+                    spread: 0.0,
+                },
+            ],
+            lines: vec![],
+        };
+        for (k, mesh) in [
+            MeshShading::patches(vec![patch]),
+            MeshShading::freeform(freeform),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for turned in [false, true] {
+                let mut list = DisplayList::new();
+                let rect = unit_rect_path(&mut list);
+                let bounds = mesh.bounds().expect("bounds");
+                let id = list.push_mesh(mesh.clone());
+                let transform = if turned {
+                    Transform([0.0, 50.0, -50.0, 0.0, 90.0, 5.0])
+                } else {
+                    Transform([50.0, 0.0, 0.0, 50.0, 35.0, 5.0])
+                };
+                list.commands.push(DisplayCommand::PushClip {
+                    path_id: rect,
+                    transform,
+                });
+                list.commands.push(DisplayCommand::MeshShade {
+                    mesh_id: id,
+                    bounds,
+                    transform,
+                });
+                list.commands.push(DisplayCommand::PopClip(transform));
+                for dpi in [72.0, 144.0] {
+                    let mut opts = RasterOptions::new(120.0, 60.0);
+                    opts.dpi = dpi;
+                    opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+                    let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+                    if !gpu_or_skip(&gpu) {
+                        return;
+                    }
+                    let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+                    let w = (120.0 * dpi / 72.0) as usize;
+                    let h = (60.0 * dpi / 72.0) as usize;
+                    let mut far = 0usize;
+                    for y in 0..h {
+                        for x in 0..w {
+                            let (g, c) = (px_w(&gpu, w, x, y), px_w(&cpu, w, x, y));
+                            if (0..4).any(|i| g[i].abs_diff(c[i]) > 8) {
+                                far += 1;
+                            }
+                        }
+                    }
+                    assert!(
+                        far <= w * h / 400,
+                        "shading {k}, turned {turned}, {dpi} dpi: lanes differ by > 8 on {far} px"
+                    );
+                    // The shading painted: the clip's middle is not the page.
+                    let (mx, my) = (w / 2, h / 2);
+                    let mid = px_w(&cpu, w, mx, my);
+                    assert!(
+                        mid[0] < 250 || mid[1] < 250 || mid[2] < 250,
+                        "shading {k} painted: {mid:?}"
+                    );
+                }
+            }
+        }
+    }
+
     /// Engine ADR 1007 — a conic gradient sweeps alike on both lanes, and
     /// turns with the path's transform: under a quarter turn the start
     /// (red) moves from the +x axis to +y.
@@ -5495,6 +5811,81 @@ mod tests {
             assert_eq!(red_at(buf, 55, 45), 0, "inside both outlines");
             assert_eq!(red_at(buf, 20, 45), 255, "inside the outer only");
             assert_eq!(red_at(buf, 90, 45), 255, "inside the inner only");
+        }
+    }
+
+    /// Engine ADR 1034 — every Photoshop mode draws on the GPU lane what
+    /// it draws on the CPU lane: the GPU scene places the CPU lane's
+    /// composite of the group over its backdrop, so the two agree pixel
+    /// for pixel up to the lanes' own antialiasing of the rest. The
+    /// render stat counts each group the CPU lane composited.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn photoshop_modes_match_the_cpu_lane__feat__effects_transparency_blend_modes_27() {
+        use crate::blend_fixtures::*;
+        let mut opts = RasterOptions::new(W, H);
+        opts.dpi = 144.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        for mode in photoshop_modes() {
+            for opacity in [1.0f32, 0.6] {
+                let list = scene(mode, opacity);
+                let before = paged_compose::perf::snapshot();
+                let Some((worst, ndiff)) = cpu_gpu_delta(&list, &opts) else {
+                    return;
+                };
+                let after = paged_compose::perf::snapshot().since(&before);
+                assert!(
+                    after.blend_cpu_composites >= 2,
+                    "{mode:?}: the GPU scene took the CPU composite (and the CPU lane counted none)"
+                );
+                assert!(
+                    ndiff <= 40 && worst <= 64,
+                    "{mode:?} at {opacity}: lanes differ on {ndiff} pixels (worst {worst})"
+                );
+            }
+        }
+    }
+
+    /// The same inside a parent group (a Normal group at full opacity,
+    /// and an isolated one): the bake replaces the region in the layer
+    /// the group draws into.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn nested_photoshop_modes_match_the_cpu_lane__feat__effects_transparency_blend_modes_27() {
+        use crate::blend_fixtures::*;
+        use paged_compose::{DisplayCommand, Rect, Transform};
+        let mut opts = RasterOptions::new(W, H);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        for isolated in [false, true] {
+            let inner = scene(paged_compose::BlendMode::LinearBurn, 1.0);
+            let mut list = DisplayList::new();
+            list.commands.push(DisplayCommand::BeginBlendGroup {
+                bounds: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: W,
+                    h: H,
+                },
+                blend_mode: paged_compose::BlendMode::Normal,
+                opacity: 1.0,
+                isolated,
+                knockout: false,
+                transform: Transform::IDENTITY,
+            });
+            list.paths = inner.paths;
+            list.commands.extend(inner.commands);
+            list.commands
+                .push(DisplayCommand::EndBlendGroup(Transform::IDENTITY));
+            let Some((worst, ndiff)) = cpu_gpu_delta(&list, &opts) else {
+                return;
+            };
+            assert!(
+                ndiff <= 40 && worst <= 64,
+                "isolated={isolated}: lanes differ on {ndiff} pixels (worst {worst})"
+            );
         }
     }
 }

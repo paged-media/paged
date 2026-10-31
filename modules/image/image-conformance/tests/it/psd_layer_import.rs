@@ -78,8 +78,7 @@ fn image_psd_layer_pixel_import_folds_to_the_flatten_reference() {
         let px = plate.canvas_rgba8(m.width, m.height);
         assert_eq!(px.len(), n * 4, "a plate on the canvas");
         let src = premultiplied(&px);
-        let blend = Blend::from_psd_key(std::str::from_utf8(&plate.blend_key).unwrap_or("norm"))
-            .unwrap_or(Blend::Normal);
+        let blend = Blend::from_psd_key(&plate.blend_key).unwrap_or(Blend::Normal);
         let opacity = plate.opacity as f32 / 255.0;
         for (bd, &s) in canvas.iter_mut().zip(src.iter()) {
             *bd = compose_ref::composite(*bd, s, opacity, blend);

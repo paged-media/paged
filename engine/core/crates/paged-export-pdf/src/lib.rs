@@ -237,6 +237,12 @@ pub enum ExportDiagnostic {
     /// The build carries no rasterizer (`raster-effects` off): the layer's
     /// content was written without its effect.
     EffectNotRasterized,
+    /// Engine ADR 1034 — a group in one of Photoshop's blend modes, which
+    /// PDF cannot name, drawn as a raster of its composite with the
+    /// backdrop baked in (at `ExportOptions::effect_dpi`).
+    BlendModeRasterized {
+        mode: &'static str,
+    },
 }
 
 /// Severity of a preflight finding (panels.md gap 20). Errors block a
@@ -265,6 +271,7 @@ impl ExportDiagnostic {
             ExportDiagnostic::ImageMissingBytes { .. } => "image_missing_bytes",
             ExportDiagnostic::EffectRasterized { .. } => "effect_rasterized",
             ExportDiagnostic::EffectNotRasterized => "effect_not_rasterized",
+            ExportDiagnostic::BlendModeRasterized { .. } => "blend_mode_rasterized",
         }
     }
 
@@ -279,6 +286,7 @@ impl ExportDiagnostic {
             ExportDiagnostic::ImageMissingBytes { .. } => FindingSeverity::Warning,
             ExportDiagnostic::EffectRasterized { .. } => FindingSeverity::Warning,
             ExportDiagnostic::EffectNotRasterized => FindingSeverity::Warning,
+            ExportDiagnostic::BlendModeRasterized { .. } => FindingSeverity::Warning,
         }
     }
 
@@ -302,6 +310,10 @@ impl ExportDiagnostic {
                  adjustment has no PDF form and this build cannot rasterise it; the object was \
                  written without it"
                 .to_string(),
+            ExportDiagnostic::BlendModeRasterized { mode } => format!(
+                "blend mode {mode} has no PDF equivalent; the group is drawn as a raster of \
+                 its composite with what lies under it, at the effect resolution"
+            ),
         }
     }
 }

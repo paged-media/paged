@@ -128,6 +128,7 @@ pub enum Wire {
     ImageAdjustments,
     ParagraphRule,
     GradientFeather,
+    FillMesh,
     GradientStops,
     SwatchColor,
     FramePath,
@@ -557,24 +558,17 @@ impl PropertySchema {
 
 // ---- shared vocabularies --------------------------------------------
 
-pub const BLEND_MODES: &[&str] = &[
-    "Normal",
-    "Multiply",
-    "Screen",
-    "Overlay",
-    "SoftLight",
-    "HardLight",
-    "ColorDodge",
-    "ColorBurn",
-    "Darken",
-    "Lighten",
-    "Difference",
-    "Exclusion",
-    "Hue",
-    "Saturation",
-    "Color",
-    "Luminosity",
-];
+/// The 27 blend modes' model spellings, in Photoshop's menu order —
+/// derived from `paged-blend`, the one definition (engine ADR 1034).
+pub const BLEND_MODES: &[&str] = &{
+    let mut out = [""; 27];
+    let mut i = 0;
+    while i < out.len() {
+        out[i] = paged_blend::BlendMode::MENU[i].name();
+        i += 1;
+    }
+    out
+};
 pub const JUSTIFICATION: &[&str] = &[
     "LeftAlign",
     "CenterAlign",
@@ -870,6 +864,7 @@ pub fn coerce(schema: &PropertySchema, input: Input<'_>) -> Result<Value, String
                     entries: Vec::new(),
                     prev: None,
                 },
+                Wire::FillMesh => Value::FillMesh(None),
                 Wire::Appearance => Value::Appearance {
                     layers: Vec::new(),
                     prev: None,
@@ -1031,6 +1026,14 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
                 .map_err(|e| format!("a colour is {{ space, value, model?, tint? }}: {e}"))?;
             validate(schema, &Value::SwatchColor(spec))
         }
+        // Engine ADR 1048 — a mesh fill as its own object.
+        J::Object(_) if schema.wire == Wire::FillMesh => {
+            let spec: paged_mutate::MeshFillSpec =
+                serde_json::from_value(json.clone()).map_err(|e| {
+                    format!("a mesh fill is {{ kind: \"mesh\" | \"freeform\", … }}: {e}")
+                })?;
+            validate(schema, &Value::FillMesh(Some(spec)))
+        }
         J::Object(o) if schema.wire == Wire::AppearanceLayer && !o.contains_key("type") => {
             #[derive(serde::Deserialize)]
             struct At {
@@ -1105,6 +1108,7 @@ pub fn wire_of(value: &Value) -> Option<Wire> {
         Value::ParagraphRule(_) => Wire::ParagraphRule,
         Value::GradientFeather(_) => Wire::GradientFeather,
         Value::EffectStack { .. } => Wire::EffectStack,
+        Value::FillMesh(_) => Wire::FillMesh,
         Value::Appearance { .. } => Wire::Appearance,
         Value::AppearanceLayer { .. } => Wire::AppearanceLayer,
         Value::GradientStops(_) => Wire::GradientStops,

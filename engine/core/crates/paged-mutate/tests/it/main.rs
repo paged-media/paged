@@ -21,6 +21,7 @@ mod kernel_direction;
 mod kernel_ops;
 mod line_effects;
 mod masters_based_on;
+mod mesh_fill;
 mod object_style_corners;
 mod offset_compound_oracle;
 mod oval_bounds;

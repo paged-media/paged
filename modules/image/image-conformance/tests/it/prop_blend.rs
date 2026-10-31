@@ -101,7 +101,7 @@ fn def_of(b: Blend) -> &'static KernelDef {
     FAMILY
         .iter()
         .copied()
-        .find(|d| d.id == b.kernel_id())
+        .find(|d| d.id == image_conformance::compose_ref::kernel_id(b))
         .expect("every Blend has a compose kernel")
 }
 

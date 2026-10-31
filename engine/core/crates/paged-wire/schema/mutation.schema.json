@@ -8898,6 +8898,11 @@
           "description": "How the frame's gradient stroke maps onto the stroke:\n`Value::Text` `\"Within\"` (IDML's mode, the default), `\"Along\"`\n(the ramp runs along the path) or `\"Across\"` (from one edge of the\nstroke to the other); `\"\"` clears to `\"Within\"`. On a TextFrame,\nRectangle, Oval, Polygon or GraphicLine. No IDML attribute carries\nit: the IDML export writes the stroke `Within` and reports the\nloss. Paint-only (`frame_style`).",
           "type": "string",
           "const": "frameGradientStrokeMode"
+        },
+        {
+          "description": "The frame's native mesh fill, a gradient mesh or a freeform\ngradient (`Value::FillMesh`), shown instead of its fill swatch;\n`Value::FillMesh(None)` clears it back to the swatch. Points are in\nthe frame's inner coordinates. On a TextFrame, Rectangle, Oval or\nPolygon. Whole-value, like `FrameGradientFeather`: the Mesh tool\nsends the edited mesh, and its inverse is the mesh it replaced.\nNo IDML attribute carries it: the IDML export keeps the swatch,\nstores the mesh in a label the import restores and reports the\nloss. Paint-only (`frame_style`).",
+          "type": "string",
+          "const": "frameFillMesh"
         }
       ]
     },
@@ -9719,6 +9724,30 @@
               },
               "required": [
                 "entries"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "description": "Engine ADR 1048 — a frame's gradient mesh or freeform gradient\n(`PropertyPath::FrameFillMesh`); `None` clears it.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "fillMesh"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MeshFillSpec"
+                },
+                {
+                  "type": "null"
+                }
               ]
             }
           },
@@ -10668,6 +10697,205 @@
         "convertToShape",
         "pathfinder",
         "envelope"
+      ]
+    },
+    "MeshFillSpec": {
+      "description": "Engine ADR 1048 — a frame's native mesh fill on the wire: the\nmirror of `paged_model::MeshFill` (points in the frame's inner\ncoordinates; colours inline, `space` as a swatch's).",
+      "oneOf": [
+        {
+          "description": "A gradient mesh: one or more grids of patches.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "mesh"
+            },
+            "grids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MeshGridSpec"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "grids"
+          ]
+        },
+        {
+          "description": "A freeform gradient: coloured points, and lines through some of\nthem (each a list of point indices, two or more).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "freeform"
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FreeformPointSpec"
+              }
+            },
+            "lines": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                }
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "points"
+          ]
+        }
+      ]
+    },
+    "MeshGridSpec": {
+      "description": "One grid of a gradient mesh: `rows × cols` patches over\n`(rows + 1) × (cols + 1)` nodes, row-major from the top-left.",
+      "type": "object",
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "cols": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MeshNodeSpec"
+          }
+        },
+        "tensor": {
+          "description": "Per patch (row-major) its interior control points `p11 p12 p21\np22` — tensor patches; empty: Coons patches.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "rows",
+        "cols",
+        "nodes"
+      ]
+    },
+    "MeshNodeSpec": {
+      "description": "One mesh point: its position, its four handles (towards the previous\ncolumn, the next column, the previous row, the next row) and colour.",
+      "type": "object",
+      "properties": {
+        "point": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "handles": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "color": {
+          "$ref": "#/$defs/MeshColorSpec"
+        }
+      },
+      "required": [
+        "point",
+        "handles",
+        "color"
+      ]
+    },
+    "MeshColorSpec": {
+      "description": "A mesh or freeform point's colour.",
+      "type": "object",
+      "properties": {
+        "space": {
+          "description": "`\"CMYK\"` | `\"RGB\"` | `\"LAB\"` | `\"Gray\"`, as a swatch's `space`.",
+          "type": "string"
+        },
+        "value": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          }
+        },
+        "opacityPct": {
+          "description": "0..=100; absent is 100 (clamped on apply).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        }
+      },
+      "required": [
+        "space",
+        "value"
+      ]
+    },
+    "FreeformPointSpec": {
+      "description": "One freeform colour point.",
+      "type": "object",
+      "properties": {
+        "point": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "color": {
+          "$ref": "#/$defs/MeshColorSpec"
+        },
+        "spreadPct": {
+          "description": "How far the colour holds before it blends, in percent (0..=100)\nof the frame's box diagonal; absent is 0.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        }
+      },
+      "required": [
+        "point",
+        "color"
       ]
     },
     "PaintLayerSpec": {

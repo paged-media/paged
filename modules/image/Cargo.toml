@@ -47,6 +47,9 @@ paged-color = { path = "../../engine/core/crates/paged-color" }
 # Free transform's homography, type layers' warp envelopes and smart objects'
 # projective warp (paged-warp, PM-0014 L2).
 paged-warp = { path = "../../engine/core/crates/paged-warp" }
+# The 27 blend modes: names, PSD keys and the scalar formulas the compose
+# reference twins call (engine ADR 1034).
+paged-blend = { path = "../../engine/core/crates/paged-blend" }
 thiserror = "2"
 anyhow = "1"
 bytes = "1"

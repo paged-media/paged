@@ -71,6 +71,7 @@ export const FIXTURES = {
   anchored: "corpus/idml/generated/anchored.idml",
   conditions: "corpus/idml/generated/conditions.idml",
   navigation: "corpus/idml/generated/navigation.idml",
+  masters: "corpus/idml/generated/masters.idml",
   // real documents (user-curated)
   sample: "corpus/idml/samples/sample.idml",
   "line-sheet": "corpus/idml/samples/line-sheet.idml",
