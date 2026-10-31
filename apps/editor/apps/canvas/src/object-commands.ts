@@ -2178,7 +2178,11 @@ const GRADIENT_SWATCH_TOOL_ID = "paged.tool.gradientSwatch";
  *  gradient point; WP7.2). */
 function toolOwnsDeleteKeys(s: KeyOwnerState | null): boolean {
   const tool = s?.tool?.effectiveTool;
-  if (tool === PAGE_TOOL_ID || tool === ARTBOARD_TOOL_ID || tool === MESH_TOOL_ID)
+  if (
+    tool === PAGE_TOOL_ID ||
+    tool === ARTBOARD_TOOL_ID ||
+    tool === MESH_TOOL_ID
+  )
     return true;
   if (tool !== GRADIENT_SWATCH_TOOL_ID) return false;
   const mode = s?.toolSettings?.getValue?.(GRADIENT_SWATCH_TOOL_ID, "mode");
