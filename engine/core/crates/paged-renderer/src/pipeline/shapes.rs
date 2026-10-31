@@ -74,6 +74,13 @@ pub(super) fn emit_oval_into(
             page, &twin, document, palette, fallback, color_ctx, content, module,
         );
     }
+    // Engine ADR 10XX — a stroke style beside a fill, a picture or an
+    // appearance: the fill part and the stroke artwork as two parts.
+    if paged_vector_fx::bake::oval_splits(oval) {
+        return super::appearance::emit_oval(
+            page, oval, document, palette, fallback, color_ctx, content, module,
+        );
+    }
     // Engine ADR 1042 — an oval under vector effects is the polygon its
     // effected outline describes.
     if let Some(poly) = paged_vector_fx::bake::bake_oval(oval) {
@@ -1051,6 +1058,13 @@ pub(super) fn emit_rectangle_into(
     content: ContentPainter<'_>,
     module: ModulePainter<'_>,
 ) {
+    // Engine ADR 10XX — a stroke style beside a fill, a picture or an
+    // appearance: the fill part and the stroke artwork as two parts.
+    if paged_vector_fx::bake::rectangle_splits(rect) {
+        return super::appearance::emit_rectangle(
+            page, rect, document, palette, fallback, color_ctx, content, module,
+        );
+    }
     // Engine ADR 1042 — draw the rectangle its vector effects describe.
     if let Some(baked) = paged_vector_fx::bake::bake_rectangle(rect) {
         return emit_rectangle_into(

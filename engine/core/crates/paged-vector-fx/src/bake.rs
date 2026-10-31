@@ -500,3 +500,235 @@ pub fn bake_group(spread: &Spread, group: &paged_model::Group) -> Option<Polygon
     bake_paths!(out, fx);
     Some(out)
 }
+
+// ---- Stroke styles (engine ADR 10XX) --------------------------------
+//
+// A stroke style takes the STROKE's place; the item's fill (and picture,
+// and appearance) stays on the source outline. A consumer that draws one
+// item per outline splits the item in two: its FILL PART (the item, the
+// stroke switched off, the stroke styles taken out of its stack — its
+// other vector entries still apply) and its STROKE ARTWORK (a polygon of
+// the stroke style's outline, filled with the stroke's paint). The
+// renderer draws the two as the parts of one appearance (ADR 1043);
+// IDML export writes them as two items. [`bake_rectangle`] and its
+// siblings bake the stroke part only: on an item that fills, a caller
+// that wants both splits first ([`splits`]).
+
+/// Whether an item with this stack, fill and content must be split to
+/// draw its stroke style: it has an enabled one, and the source outline
+/// paints something besides the stroke (a fill, a picture, an
+/// appearance).
+pub fn splits(stack: &[EffectEntry], fill_color: Option<&str>, other_content: bool) -> bool {
+    paged_model::effect_stack::has_stroke_style(stack) && (paints(fill_color) || other_content)
+}
+
+/// The stack without its stroke styles, in canonical form.
+pub fn without_stroke_style(stack: &[EffectEntry]) -> Vec<EffectEntry> {
+    let rest: Vec<EffectEntry> = stack
+        .iter()
+        .filter(|e| !e.effect.is_stroke_style())
+        .cloned()
+        .collect();
+    if is_canonical(&rest) {
+        Vec::new()
+    } else {
+        rest
+    }
+}
+
+fn has_picture(
+    link: &Option<String>,
+    element: bool,
+    pdf: bool,
+    eps: bool,
+    placed: bool,
+    bytes: bool,
+) -> bool {
+    link.is_some() || element || pdf || eps || placed || bytes
+}
+
+/// Whether a rectangle's stroke style needs the split ([`splits`]).
+pub fn rectangle_splits(r: &Rectangle) -> bool {
+    splits(
+        &r.effect_stack,
+        r.fill_color.as_deref(),
+        !r.appearance.is_empty()
+            || !r.text_paths.is_empty()
+            || has_picture(
+                &r.image_link,
+                r.has_image_element,
+                r.has_inline_pdf,
+                r.has_inline_eps,
+                r.placed_pdf.is_some(),
+                r.image_bytes.is_some(),
+            ),
+    )
+}
+/// Whether an oval's stroke style needs the split.
+pub fn oval_splits(o: &Oval) -> bool {
+    splits(
+        &o.effect_stack,
+        o.fill_color.as_deref(),
+        !o.appearance.is_empty()
+            || has_picture(
+                &o.image_link,
+                o.has_image_element,
+                o.has_inline_pdf,
+                o.has_inline_eps,
+                o.placed_pdf.is_some(),
+                o.image_bytes.is_some(),
+            ),
+    )
+}
+/// Whether a polygon's stroke style needs the split.
+pub fn polygon_splits(p: &Polygon) -> bool {
+    splits(
+        &p.effect_stack,
+        p.fill_color.as_deref(),
+        !p.appearance.is_empty()
+            || !p.text_paths.is_empty()
+            || has_picture(
+                &p.image_link,
+                p.has_image_element,
+                p.has_inline_pdf,
+                p.has_inline_eps,
+                p.placed_pdf.is_some(),
+                p.image_bytes.is_some(),
+            ),
+    )
+}
+/// Whether a text frame's stroke style needs the split (its story is
+/// laid out in the source frame either way).
+pub fn text_frame_splits(t: &TextFrame) -> bool {
+    splits(
+        &t.effect_stack,
+        t.fill_color.as_deref(),
+        !t.appearance.is_empty(),
+    )
+}
+
+macro_rules! fill_part {
+    ($item:expr) => {{
+        let mut x = $item.clone();
+        x.stroke_color = Some(NONE.to_string());
+        x.effect_stack = without_stroke_style(&x.effect_stack);
+        x
+    }};
+}
+
+macro_rules! stroke_part {
+    ($item:expr) => {{
+        let mut x = $item.clone();
+        x.fill_color = Some(NONE.to_string());
+        x.appearance.clear();
+        x
+    }};
+}
+
+/// The fill part of a rectangle with a stroke style (see above).
+pub fn fill_part_rectangle(r: &Rectangle) -> Rectangle {
+    fill_part!(r)
+}
+/// The fill part of an oval with a stroke style.
+pub fn fill_part_oval(o: &Oval) -> Oval {
+    fill_part!(o)
+}
+/// The fill part of a polygon with a stroke style.
+pub fn fill_part_polygon(p: &Polygon) -> Polygon {
+    fill_part!(p)
+}
+/// The fill part of a text frame with a stroke style.
+pub fn fill_part_text_frame(t: &TextFrame) -> TextFrame {
+    fill_part!(t)
+}
+
+/// The polygon `id` that paints a baked stroke part: its outline, its
+/// fill (the stroke's paint), the item's place and layer. Picture,
+/// effects and transparency belong to the item.
+fn art_polygon(
+    id: String,
+    item_transform: Option<[f32; 6]>,
+    layer: Option<String>,
+    part: &Polygon,
+) -> Polygon {
+    let mut out = Polygon::new(id, part.bounds);
+    out.item_transform = item_transform;
+    out.item_layer = layer;
+    out.anchors = part.anchors.clone();
+    out.subpath_starts = part.subpath_starts.clone();
+    out.subpath_open = part.subpath_open.clone();
+    out.fill_color = part.fill_color.clone();
+    out.fill_tint = part.fill_tint;
+    out.gradient_fill_angle = part.gradient_fill_angle;
+    out.gradient_fill_length = part.gradient_fill_length;
+    out.overprint_fill = part.overprint_fill;
+    out.stroke_color = Some(NONE.to_string());
+    out.stroke_weight = Some(0.0);
+    out.fill_rule = paged_model::FillRule::NonZero;
+    out
+}
+
+macro_rules! stroke_art_of {
+    ($item:expr, $bake:expr, $poly:expr) => {{
+        let item = $item;
+        if !paged_model::effect_stack::has_stroke_style(&item.effect_stack) {
+            return None;
+        }
+        let part = stroke_part!(item);
+        let baked = $bake(&part)?;
+        let poly: Polygon = $poly(&baked);
+        if !paints(poly.fill_color.as_deref()) || poly.anchors.is_empty() {
+            return None;
+        }
+        Some(art_polygon(
+            format!("{}vfx", item.self_id.as_deref().unwrap_or("item")),
+            item.item_transform,
+            item.item_layer.clone(),
+            &poly,
+        ))
+    }};
+}
+
+fn rect_as_poly(r: &Rectangle) -> Polygon {
+    let mut p = Polygon::new(r.self_id.clone().unwrap_or_default(), r.bounds);
+    p.anchors = r.anchors.clone();
+    p.subpath_starts = r.subpath_starts.clone();
+    p.subpath_open = r.subpath_open.clone();
+    p.fill_color = r.fill_color.clone();
+    p.fill_tint = r.fill_tint;
+    p.gradient_fill_angle = r.gradient_fill_angle;
+    p.gradient_fill_length = r.gradient_fill_length;
+    p.overprint_fill = r.overprint_fill;
+    p
+}
+
+fn text_as_poly(t: &TextFrame) -> Polygon {
+    let mut p = Polygon::new(t.self_id.clone().unwrap_or_default(), t.bounds);
+    p.anchors = t.anchors.clone();
+    p.subpath_starts = t.subpath_starts.clone();
+    p.subpath_open = t.subpath_open.clone();
+    p.fill_color = t.fill_color.clone();
+    p.fill_tint = t.fill_tint;
+    p.gradient_fill_angle = t.gradient_fill_angle;
+    p.gradient_fill_length = t.gradient_fill_length;
+    p
+}
+
+/// The stroke artwork of a rectangle's stroke style, a polygon `<id>vfx`
+/// in the rectangle's space; `None` without an enabled stroke style or
+/// without a stroke that paints.
+pub fn stroke_art_rectangle(r: &Rectangle) -> Option<Polygon> {
+    stroke_art_of!(r, bake_rectangle, rect_as_poly)
+}
+/// The stroke artwork of an oval's stroke style.
+pub fn stroke_art_oval(o: &Oval) -> Option<Polygon> {
+    stroke_art_of!(o, bake_oval, |p: &Polygon| p.clone())
+}
+/// The stroke artwork of a polygon's stroke style.
+pub fn stroke_art_polygon(p: &Polygon) -> Option<Polygon> {
+    stroke_art_of!(p, bake_polygon, |p: &Polygon| p.clone())
+}
+/// The stroke artwork of a text frame's stroke style.
+pub fn stroke_art_text_frame(t: &TextFrame) -> Option<Polygon> {
+    stroke_art_of!(t, bake_text_frame, text_as_poly)
+}

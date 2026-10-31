@@ -944,6 +944,19 @@ pub(super) fn emit_text_frame_into(
     drop_shadow: Option<DropShadow>,
     auto_sized_bounds: Option<paged_model::Bounds>,
 ) -> Option<BodyTextSlot> {
+    // Engine ADR 10XX — a stroke style beside a fill or an appearance:
+    // the fill part and the stroke artwork as two parts.
+    if paged_vector_fx::bake::text_frame_splits(frame) {
+        return super::appearance::emit_text_frame(
+            page,
+            frame,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            auto_sized_bounds,
+        );
+    }
     // Engine ADR 1042 — the frame's body is drawn as its effected
     // outline; its story still lays out in the source frame.
     if let Some(baked) = paged_vector_fx::bake::bake_text_frame(frame) {

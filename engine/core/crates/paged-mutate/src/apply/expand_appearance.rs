@@ -88,6 +88,9 @@ pub(super) fn apply_expand_appearance(
         },
         invalidation: structural(),
     };
+    if restore.is_none() {
+        refuse_split(doc, node)?;
+    }
     match node {
         NodeId::Rectangle(id) => {
             let item = find_rectangle_mut(doc, id)
@@ -132,6 +135,44 @@ pub(super) fn apply_expand_appearance(
             "Expand Appearance takes a rectangle, oval, polygon, text frame or group",
         )),
     }
+}
+
+/// Engine ADR 10XX — an item whose stroke style sits beside a fill, a
+/// picture or an appearance draws two outlines (the fill on the source,
+/// the stroke's artwork); one baked item cannot keep both, so Expand
+/// Appearance refuses it rather than drop the fill.
+fn refuse_split(doc: &Document, node: &NodeId) -> Result<(), OperationError> {
+    use paged_vector_fx::bake;
+    let split =
+        doc.spreads.iter().any(|p| {
+            let s = &p.spread;
+            match node {
+                NodeId::Rectangle(id) => s.rectangles.iter().any(|f| {
+                    f.self_id.as_deref() == Some(id.as_str()) && bake::rectangle_splits(f)
+                }),
+                NodeId::Oval(id) => s
+                    .ovals
+                    .iter()
+                    .any(|f| f.self_id.as_deref() == Some(id.as_str()) && bake::oval_splits(f)),
+                NodeId::Polygon(id) => s
+                    .polygons
+                    .iter()
+                    .any(|f| f.self_id.as_deref() == Some(id.as_str()) && bake::polygon_splits(f)),
+                NodeId::TextFrame(id) => s.text_frames.iter().any(|f| {
+                    f.self_id.as_deref() == Some(id.as_str()) && bake::text_frame_splits(f)
+                }),
+                _ => false,
+            }
+        });
+    if split {
+        return Err(refuse(
+            node,
+            "the item's stroke style sits beside its fill, picture or appearance; \
+             expanding would keep one outline and drop the other — outline the stroke \
+             (switch the fill off) first",
+        ));
+    }
+    Ok(())
 }
 
 /// Apply `second` after `first` was applied; undo `first` if it fails.

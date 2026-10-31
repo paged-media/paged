@@ -653,6 +653,10 @@ struct ModelGeometry {
     /// Per-contour start offsets into `anchors` (see
     /// [`idml_import::Polygon::subpath_starts`]). Empty ⇒ one contour.
     subpath_starts: Vec<usize>,
+    /// Per-contour open flags (see `subpath_open`), for the kinds whose
+    /// contours the writer may add or re-flag (text frame, rectangle,
+    /// polygon); `None` keeps the source's contour structure as it is.
+    subpath_open: Option<Vec<bool>>,
     /// Model AABB. For a `FrameBounds` edit the anchors stay stale while
     /// this moves, so a divergence here (with unchanged anchors) means
     /// "rectangle resized" — regenerate the corners from these bounds.
@@ -743,6 +747,28 @@ impl ModelGeometry {
     /// anchors. (The companion half of that fix keeps foreign
     /// `<PathPointArray>`s out of the contour count altogether — see
     /// `PathCtx::foreign_depth` in [`rewrite_spread`].)
+    /// How many contours the model has, when the writer may restructure
+    /// the item's contours (engine ADR 1042 / 10XX: a baked effect or
+    /// stroke style can turn one contour into several): `None` otherwise.
+    fn contour_count(&self) -> Option<usize> {
+        if self.oval || self.anchors.is_empty() {
+            return None;
+        }
+        self.subpath_open.as_ref()?;
+        Some(self.subpath_starts.len().max(1))
+    }
+
+    /// Whether model contour `contour` is open.
+    fn contour_open(&self, contour: usize) -> Option<bool> {
+        self.contour_count()?;
+        Some(
+            self.subpath_open
+                .as_ref()
+                .and_then(|o| o.get(contour).copied())
+                .unwrap_or(false),
+        )
+    }
+
     fn contour_slice(&self, contour: usize) -> Option<&[PathAnchor]> {
         if self.subpath_starts.is_empty() {
             return (contour == 0).then_some(self.anchors.as_slice());
@@ -842,11 +868,13 @@ fn model_geometry(
                     bounds: paged_model::live_shape::anchor_box(&anchors).unwrap_or(o.bounds),
                     anchors,
                     subpath_starts: Vec::new(),
+                    subpath_open: None,
                 },
                 None => ModelGeometry {
                     oval: true,
                     anchors: Vec::new(),
                     subpath_starts: Vec::new(),
+                    subpath_open: None,
                     bounds: o.bounds,
                 },
             }),
@@ -854,6 +882,7 @@ fn model_geometry(
             oval: false,
             anchors: idml_anchors(&f.anchors, &f.subpath_starts, &f.subpath_open, f.fill_rule),
             subpath_starts: f.subpath_starts.clone(),
+            subpath_open: Some(f.subpath_open.clone()),
             bounds: f.bounds,
         }),
         b"Rectangle" => rectangles
@@ -863,6 +892,7 @@ fn model_geometry(
                 oval: false,
                 anchors: idml_anchors(&r.anchors, &r.subpath_starts, &r.subpath_open, r.fill_rule),
                 subpath_starts: r.subpath_starts.clone(),
+                subpath_open: Some(r.subpath_open.clone()),
                 bounds: r.bounds,
             }),
         b"Polygon" => polygons
@@ -872,6 +902,7 @@ fn model_geometry(
                 oval: false,
                 anchors: idml_anchors(&r.anchors, &r.subpath_starts, &r.subpath_open, r.fill_rule),
                 subpath_starts: r.subpath_starts.clone(),
+                subpath_open: Some(r.subpath_open.clone()),
                 bounds: r.bounds,
             }),
         b"GraphicLine" => graphic_lines
@@ -881,6 +912,7 @@ fn model_geometry(
                 oval: false,
                 anchors: idml_anchors(&r.anchors, &r.subpath_starts, &r.subpath_open, r.fill_rule),
                 subpath_starts: r.subpath_starts.clone(),
+                subpath_open: None,
                 bounds: r.bounds,
             }),
         _ => None,
@@ -3488,6 +3520,8 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
         /// through verbatim and do not advance `contour`, so the two
         /// indices stay in step by construction.
         foreign_depth: usize,
+        /// Depth of the item's own open `<PathGeometry>`, or 0.
+        geometry_depth: usize,
         /// Buffered events inside the open `<PathPointArray>` (point
         /// elements + any whitespace between them).
         buffered: Vec<Event<'static>>,
@@ -3624,6 +3658,38 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                     if let Some(ctx) = path_ctx.last_mut() {
                         if ctx.foreign_depth == 0 {
                             ctx.foreign_depth = depth;
+                        }
+                    }
+                }
+                // The item's own `<PathGeometry>` (Item > Properties >
+                // PathGeometry), and each of its contours' `PathOpen`:
+                // a contour the model now opens or closes (a baked
+                // effect, engine ADR 1042 / 10XX) is re-flagged.
+                if let Some(ctx) = path_ctx.last_mut() {
+                    if ctx.array_depth == 0 && ctx.foreign_depth == 0 {
+                        if name_owned == b"PathGeometry" && depth == ctx.item_depth + 2 {
+                            ctx.geometry_depth = depth;
+                        } else if name_owned == b"GeometryPathType"
+                            && ctx.geometry_depth != 0
+                            && depth == ctx.geometry_depth + 1
+                        {
+                            let want = ctx.geom.as_ref().and_then(|g| g.contour_open(ctx.contour));
+                            let have = attr_value(&e, b"PathOpen").as_deref() == Some("true");
+                            if let Some(want) = want.filter(|w| *w != have) {
+                                let mut gp = BytesStart::new("GeometryPathType");
+                                for a in e.attributes().flatten() {
+                                    if a.key.as_ref() != b"PathOpen" {
+                                        gp.push_attribute(a);
+                                    }
+                                }
+                                gp.push_attribute((
+                                    "PathOpen",
+                                    if want { "true" } else { "false" },
+                                ));
+                                writer.write_event(Event::Start(gp))?;
+                                buf.clear();
+                                continue;
+                            }
                         }
                     }
                 }
@@ -3818,6 +3884,7 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                         contour: 0,
                         array_depth: 0,
                         foreign_depth: 0,
+                        geometry_depth: 0,
                         buffered: Vec::new(),
                         parsed: Vec::new(),
                     });
@@ -4097,6 +4164,40 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                         depth = depth.saturating_sub(1);
                         buf.clear();
                         continue;
+                    }
+                    // Closing the item's own `<PathGeometry>`: the
+                    // contours the model has beyond the source's (a baked
+                    // effect or stroke style, engine ADR 1042 / 10XX)
+                    // are written before the close.
+                    if ctx.geometry_depth != 0
+                        && depth == ctx.geometry_depth
+                        && name_owned == b"PathGeometry"
+                    {
+                        ctx.geometry_depth = 0;
+                        if let Some(g) = ctx.geom.as_ref() {
+                            let count = g.contour_count().unwrap_or(0);
+                            for c in ctx.contour..count {
+                                let mut gp = BytesStart::new("GeometryPathType");
+                                let open = g.contour_open(c).unwrap_or(false);
+                                gp.push_attribute((
+                                    "PathOpen",
+                                    if open { "true" } else { "false" },
+                                ));
+                                writer.write_event(Event::Start(gp))?;
+                                writer
+                                    .write_event(Event::Start(BytesStart::new("PathPointArray")))?;
+                                for a in g.contour_slice(c).unwrap_or(&[]) {
+                                    write_path_point(&mut writer, a)?;
+                                }
+                                writer.write_event(Event::End(
+                                    quick_xml::events::BytesEnd::new("PathPointArray"),
+                                ))?;
+                                writer.write_event(Event::End(
+                                    quick_xml::events::BytesEnd::new("GeometryPathType"),
+                                ))?;
+                            }
+                            ctx.contour = ctx.contour.max(count);
+                        }
                     }
                     // Leaving the picture box / clipping path: the
                     // frame's own contours resume here.

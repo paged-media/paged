@@ -38,14 +38,25 @@
 //! rasterizers and PDF see nothing new: groups and paths they already draw.
 
 use paged_model::appearance::{drawn_order, AppearanceParts, PaintLayerKind};
-use paged_model::effect_stack::{EffectBearing, EffectTarget};
+use paged_model::effect_stack::{
+    has_stroke_style, has_vector, EffectBearing, EffectEntry, EffectTarget,
+};
 
 use super::*;
 use crate::module::effect_stack::StackMode;
 
 /// The parts of `item`, bottom to top, each with whether it paints the
 /// item's content.
-fn parts<T: AppearanceParts>(item: &T) -> Vec<(T, bool)> {
+///
+/// Engine ADR 10XX — an item whose `stack` holds a stroke style is drawn
+/// split: its fill part and its stroke part are separate parts even when
+/// one follows the other, and every part takes the item's vector entries
+/// (the stroke part with the stroke style, which draws its artwork; the
+/// others without, so the fill stays on the source outline).
+fn parts<T: AppearanceParts>(item: &T, stack: &[EffectEntry]) -> Vec<(T, bool)> {
+    if has_stroke_style(stack) {
+        return split_parts(item, stack);
+    }
     let order = drawn_order(item.appearance());
     let mut out = Vec::with_capacity(order.len());
     let mut i = 0;
@@ -77,6 +88,57 @@ fn parts<T: AppearanceParts>(item: &T) -> Vec<(T, bool)> {
         i += 1;
     }
     out
+}
+
+/// The parts of an item with a stroke style (see [`parts`]).
+fn split_parts<T: AppearanceParts>(item: &T, stack: &[EffectEntry]) -> Vec<(T, bool)> {
+    let vector: Vec<EffectEntry> = stack
+        .iter()
+        .filter(|e| e.effect.is_vector())
+        .cloned()
+        .collect();
+    let fill_vector: Vec<EffectEntry> = vector
+        .iter()
+        .filter(|e| !e.effect.is_stroke_style())
+        .cloned()
+        .collect();
+    let with = |mut x: T, v: &[EffectEntry]| {
+        x.effect_stack_mut().extend(v.iter().cloned());
+        x
+    };
+    let mut out = Vec::new();
+    for l in drawn_order(item.appearance()) {
+        match l.kind {
+            PaintLayerKind::FrameFill => {
+                out.push((
+                    with(item.base_item(l.enabled, false, true), &fill_vector),
+                    true,
+                ));
+            }
+            PaintLayerKind::FrameStroke => {
+                if l.enabled {
+                    out.push((with(item.base_item(false, true, false), &vector), false));
+                }
+            }
+            PaintLayerKind::Fill | PaintLayerKind::Stroke => {
+                if l.paints() {
+                    out.push((with(item.layer_item(&l), &fill_vector), false));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The item whose object effects wrap the parts: its vector entries are
+/// the parts' (ADR 1042 runs them on the geometry), not the run's.
+fn outer<T: AppearanceParts + Clone>(item: &T, stack: &[EffectEntry]) -> Option<T> {
+    if !has_vector(stack) {
+        return None;
+    }
+    let mut x = item.clone();
+    *x.effect_stack_mut() = paged_vector_fx::bake::without_vector(stack);
+    Some(x)
 }
 
 fn geometry_bounds(resolved: &ResolvedFrame<'_>) -> Rect {
@@ -159,7 +221,9 @@ pub(super) fn emit_rectangle(
     let frames = page.stats.frames;
     let start = page.list.commands.len();
     let group = open_object_group(page, &resolved);
-    for (part, with_content) in parts(rect) {
+    let outer_owned = outer(rect, &rect.effect_stack);
+    let outer_item = outer_owned.as_ref().unwrap_or(rect);
+    for (part, with_content) in parts(rect, &rect.effect_stack) {
         let mut none = |_: &mut BuiltPage| {};
         let c: super::shapes::ContentPainter<'_> = if with_content {
             &mut *content
@@ -189,8 +253,8 @@ pub(super) fn emit_rectangle(
         page,
         start,
         None,
-        rect,
-        rect.effects.as_ref(),
+        outer_item,
+        outer_item.effects.as_ref(),
         &resolved,
         palette,
         color_ctx,
@@ -216,7 +280,9 @@ pub(super) fn emit_oval(
     let frames = page.stats.frames;
     let start = page.list.commands.len();
     let group = open_object_group(page, &resolved);
-    for (part, with_content) in parts(oval) {
+    let outer_owned = outer(oval, &oval.effect_stack);
+    let outer_item = outer_owned.as_ref().unwrap_or(oval);
+    for (part, with_content) in parts(oval, &oval.effect_stack) {
         let mut none = |_: &mut BuiltPage| {};
         let c: super::shapes::ContentPainter<'_> = if with_content {
             &mut *content
@@ -245,8 +311,8 @@ pub(super) fn emit_oval(
         page,
         start,
         None,
-        oval,
-        oval.effects.as_ref(),
+        outer_item,
+        outer_item.effects.as_ref(),
         &resolved,
         palette,
         color_ctx,
@@ -272,7 +338,9 @@ pub(super) fn emit_polygon(
     let frames = page.stats.frames;
     let start = page.list.commands.len();
     let group = open_object_group(page, &resolved);
-    for (part, with_content) in parts(poly) {
+    let outer_owned = outer(poly, &poly.effect_stack);
+    let outer_item = outer_owned.as_ref().unwrap_or(poly);
+    for (part, with_content) in parts(poly, &poly.effect_stack) {
         let mut none = |_: &mut BuiltPage| {};
         let c: super::shapes::ContentPainter<'_> = if with_content {
             &mut *content
@@ -301,8 +369,8 @@ pub(super) fn emit_polygon(
         page,
         start,
         None,
-        poly,
-        poly.effects.as_ref(),
+        outer_item,
+        outer_item.effects.as_ref(),
         &resolved,
         palette,
         color_ctx,
@@ -338,7 +406,9 @@ pub(super) fn emit_text_frame(
     let frames = page.stats.frames;
     let start = page.list.commands.len();
     let group = open_object_group(page, &resolved);
-    for (part, _) in parts(frame) {
+    let outer_owned = outer(frame, &frame.effect_stack);
+    let outer_item = outer_owned.as_ref().unwrap_or(frame);
+    for (part, _) in parts(frame, &frame.effect_stack) {
         let _ = super::text_frame::emit_text_frame_into(
             page,
             &part,
@@ -359,8 +429,8 @@ pub(super) fn emit_text_frame(
         page,
         start,
         group.then_some(slot),
-        frame,
-        frame.effects.as_ref(),
+        outer_item,
+        outer_item.effects.as_ref(),
         &resolved,
         palette,
         color_ctx,

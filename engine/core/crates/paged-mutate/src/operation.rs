@@ -2331,10 +2331,13 @@ pub enum EffectKind {
     Scribble,
     ConvertToShape,
     Pathfinder,
+    // Engine ADR 10XX — the stroke styles.
+    WidthProfile,
+    Brush,
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 31] = [
+    pub const ALL: [EffectKind; 33] = [
         EffectKind::DropShadow,
         EffectKind::InnerShadow,
         EffectKind::OuterGlow,
@@ -2366,6 +2369,8 @@ impl EffectKind {
         EffectKind::Scribble,
         EffectKind::ConvertToShape,
         EffectKind::Pathfinder,
+        EffectKind::WidthProfile,
+        EffectKind::Brush,
     ];
 
     fn indesign(self) -> Option<paged_model::effect_stack::IndesignEffect> {
@@ -2418,6 +2423,8 @@ impl EffectKind {
             EffectKind::Scribble => "scribble",
             EffectKind::ConvertToShape => "convertToShape",
             EffectKind::Pathfinder => "pathfinder",
+            EffectKind::WidthProfile => "widthProfile",
+            EffectKind::Brush => "brush",
         }
     }
 
@@ -2460,6 +2467,14 @@ impl EffectKind {
 /// | `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |
 /// | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
 /// | `pathfinder` | `op` (on a group's stack only) |
+///
+/// The stroke styles (engine ADR 10XX), on a page item's object stack
+/// only:
+///
+/// | kind | fields |
+/// | --- | --- |
+/// | `widthProfile` | `widthPoints` (`[t, width]`: arc-length fraction 0..1, width × the stroke weight) |
+/// | `brush` | `brushType` (`art` / `scatter` / `pattern` / `bristle`), `artNodes` (`[x, y, inX, inY, outX, outY]` in the brush frame), `artStarts`, `artClosed`, `scalePct`, `spacingPct`, `scatterPct`, `rotateDeg`, `rotateVariationDeg`, `sizeMinPct`, `flipAlong`, `flipAcross`, `tileAspect`, `bristles`, `bristleThicknessPct`, `seed` |
 ///
 /// InDesign's kinds carry no parameters here: theirs are the per-field
 /// paths (`frameInnerShadowSize`, …), and the stack keeps them.
@@ -2601,6 +2616,37 @@ pub struct EffectEntrySpec {
     pub corner_radius: Option<f32>,
     #[serde(default)]
     pub op: Option<String>,
+    // Engine ADR 10XX — the stroke styles' parameters.
+    #[serde(default)]
+    pub width_points: Option<Vec<[f32; 2]>>,
+    #[serde(default)]
+    pub brush_type: Option<String>,
+    #[serde(default)]
+    pub art_nodes: Option<Vec<[f32; 6]>>,
+    #[serde(default)]
+    pub art_starts: Option<Vec<u32>>,
+    #[serde(default)]
+    pub art_closed: Option<Vec<bool>>,
+    #[serde(default)]
+    pub scale_pct: Option<f32>,
+    #[serde(default)]
+    pub spacing_pct: Option<f32>,
+    #[serde(default)]
+    pub scatter_pct: Option<f32>,
+    #[serde(default)]
+    pub rotate_variation_deg: Option<f32>,
+    #[serde(default)]
+    pub size_min_pct: Option<f32>,
+    #[serde(default)]
+    pub flip_along: Option<bool>,
+    #[serde(default)]
+    pub flip_across: Option<bool>,
+    #[serde(default)]
+    pub tile_aspect: Option<f32>,
+    #[serde(default)]
+    pub bristles: Option<u32>,
+    #[serde(default)]
+    pub bristle_thickness_pct: Option<f32>,
 }
 
 /// Engine ADR 1008 — the wire value of a target's effect stack as the
@@ -2694,6 +2740,21 @@ impl EffectEntrySpec {
             height: None,
             corner_radius: None,
             op: None,
+            width_points: None,
+            brush_type: None,
+            art_nodes: None,
+            art_starts: None,
+            art_closed: None,
+            scale_pct: None,
+            spacing_pct: None,
+            scatter_pct: None,
+            rotate_variation_deg: None,
+            size_min_pct: None,
+            flip_along: None,
+            flip_across: None,
+            tile_aspect: None,
+            bristles: None,
+            bristle_thickness_pct: None,
         }
     }
 

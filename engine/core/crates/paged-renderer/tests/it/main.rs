@@ -13,6 +13,7 @@ mod baseline_grid_pipeline;
 mod blank_paragraphs_pipeline;
 mod blend_group_bounds;
 mod break_records;
+mod brush_strokes;
 mod c1_no_idml;
 mod cell_first_baseline;
 mod chain_widths_pipeline;

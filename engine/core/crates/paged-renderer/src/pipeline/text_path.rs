@@ -178,6 +178,13 @@ pub(super) fn emit_polygon_into(
     content: super::shapes::ContentPainter<'_>,
     module: super::shapes::ModulePainter<'_>,
 ) {
+    // Engine ADR 10XX — a stroke style beside a fill, a picture or an
+    // appearance: the fill part and the stroke artwork as two parts.
+    if paged_vector_fx::bake::polygon_splits(poly) {
+        return super::appearance::emit_polygon(
+            page, poly, document, palette, fallback, color_ctx, content, module,
+        );
+    }
     // Engine ADR 1042 — draw the polygon its vector effects describe.
     if let Some(baked) = paged_vector_fx::bake::bake_polygon(poly) {
         return emit_polygon_into(

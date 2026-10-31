@@ -26,6 +26,7 @@ mod bake;
 mod effects;
 mod illustrator_oracle;
 mod properties;
+mod stroke_style;
 
 use paged_model::PathAnchor;
 use paged_vector_fx::Shape;
