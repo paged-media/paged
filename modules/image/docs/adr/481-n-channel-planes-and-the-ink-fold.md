@@ -132,6 +132,7 @@ blended square Photoshop blends in L*a*b* and the stack in RGB: 10 ΔE under a 7
 ## Amendment, 2026-10-30 (ADR 484)
 
 Of the deferred list: 32-bit float documents, Indexed and Multichannel, and the Lab and grey
-plane fold (with Photoshop's Lab chroma rule) are ADR 484, which also lifts the `cmyk-blend`
-gate for the separable modes the ink fold composites. Duotone conversion, and the ink fold for
-non-separable modes, adjustments and styles, remain open.
+plane fold (with Photoshop's Lab chroma rule) are ADR 484, which also folds Hue, Saturation,
+Color and Luminosity on the ink planes (Photoshop's own rule, measured) and lifts the
+`cmyk-blend` gate for every mode the ink fold composites. Duotone conversion, and the ink fold
+for Darker and Lighter Color, Blend If, adjustments and styles, remain open.

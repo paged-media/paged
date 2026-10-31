@@ -38,8 +38,8 @@
 //!    Measured against OUR transform of Photoshop's merged CMYK composite
 //!    (so the CMM difference of 2. is not charged to the blend) and,
 //!    end to end, against Photoshop's sRGB conversion. [`STACKS`] and
-//!    [`TILES`] hold the distances; [`TILES`] is what the `cmyk-blend`
-//!    blocker rests on.
+//!    [`TILES`] hold the distances; [`TILES`] is why a CMYK document
+//!    folds in its inks (section 4, image ADRs 481 and 484), not in RGB.
 
 use std::path::PathBuf;
 
@@ -443,7 +443,10 @@ type StackOutcome = Result<(u8, u8), &'static str>;
 /// * `normal-stack` is DECLINED by the gate: its 60 % layer, 50 % group
 ///   and feathered edges mix colours, and RGB mixing of the converted
 ///   colours lands up to 61 levels from Photoshop's CMYK mixing;
-/// * `blend-modes` is DECLINED before decoding (`cmyk-blend`);
+/// * `blend-modes`: every one of its modes folds in inks since image
+///   ADR 484, so nothing declines it before decoding; flattened in RGB
+///   as measured here it is far off and DECLINED by the gate
+///   (`cmyk-composite`);
 /// * `normal-stack-16`: Photoshop writes a 16-bit document's layers into
 ///   the `Lr16` block, which the parse reads into the layer list since
 ///   image ADR 478; like `normal-stack` it is then DECLINED by the gate
@@ -453,8 +456,6 @@ const STACKS: &[(&str, StackOutcome)] = &[
     ("transparent-soft", Ok((2, 1))),
     ("normal-stack", Err("cmyk-composite")),
     ("normal-stack-16", Err("cmyk-composite")),
-    // Every blend folds in inks now (image ADR 484); the RGB fold this
-    // measures is far off, so its per-file check declines it.
     ("blend-modes", Err("cmyk-composite")),
 ];
 
@@ -537,10 +538,11 @@ const NORMAL_STACK_MAX: u8 = 61;
 
 /// Per blend-mode tile of `blend-modes`: our RGB blend of the converted
 /// plates vs our transform of Photoshop's CMYK blend — (max levels, ΔE00
-/// p95) — and whether the mode passes the static blocker. The normal
-/// tiles pass it and are then judged by the gate; every other mode was
-/// measured far off across its footprint, which is the `cmyk-blend`
-/// blocker (`image_psd::layer_pixels::CMYK_RGB_SAFE_BLENDS`).
+/// p95) — and whether the mode is Normal. The normal tiles are judged
+/// per file by the gate; every other mode was measured far off across
+/// its footprint, which is why a CMYK document folds them in its inks
+/// (section 4): the separable ones since image ADR 481, Hue, Saturation,
+/// Color and Luminosity since image ADR 484.
 ///
 /// Re-recorded 2026-10-24 when the ink transform became relative
 /// colorimetric with BPC (it was the perceptual table): the steeper
@@ -602,7 +604,7 @@ fn blending_converted_cmyk_layers_in_rgb_is_measured_per_mode__feat__image_psd_l
             if normal {
                 "-> the gate judges it"
             } else {
-                "-> cmyk-blend"
+                "-> folds in inks"
             }
         ));
         if m > max || d.delta_e_p95 > de_p95 + 0.05 {
@@ -613,7 +615,7 @@ fn blending_converted_cmyk_layers_in_rgb_is_measured_per_mode__feat__image_psd_l
         }
         if !normal && d.delta_e_p95 < 2.0 {
             problems.push(format!(
-                "{id}: now within dE00 p95 {:.2} — reconsider the cmyk-blend blocker for it",
+                "{id}: the RGB blend is now within dE00 p95 {:.2} — re-record it",
                 d.delta_e_p95
             ));
         }
@@ -623,10 +625,8 @@ fn blending_converted_cmyk_layers_in_rgb_is_measured_per_mode__feat__image_psd_l
         .iter()
         .map(|b| b.category)
         .collect();
-    // Since the ink fold (image ADR 484) every mode of the tiles folds in
-    // inks and is judged per file against the composite: no blocker.
+    // Every mode of the tiles folds in inks (image ADR 484): no blocker.
     assert!(blocked.is_empty(), "{blocked:?}");
-    assert!(blocked.iter().all(|b| *b == "cmyk-blend"));
     println!("{}", report.join("\n"));
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
@@ -635,10 +635,9 @@ fn blending_converted_cmyk_layers_in_rgb_is_measured_per_mode__feat__image_psd_l
 
 /// A CMYK document opened as the app opens it (image ADR 481): its mode
 /// and profile adopted, every layer's own inks kept, so the composite
-/// folds in inks. The import lifts the `cmyk-blend` blocker (the ink fold
-/// is what it was waiting for); a non-separable layer is removed, so the
-/// stack folds in inks (`keep` decides by layer name).
-fn ink_stack(file: &PsdFile, keep: &dyn Fn(&str) -> bool) -> LayerStack {
+/// folds in inks. The import lifts the `cmyk-blend` blocker (Darker and
+/// Lighter Color only since image ADR 484).
+fn ink_stack(file: &PsdFile) -> LayerStack {
     let ink = image_js::ingest::psd_ink_transform(file);
     let convert = |cmyk: &[u8]| ink.to_rgba8(cmyk);
     let import = file
@@ -667,11 +666,6 @@ fn ink_stack(file: &PsdFile, keep: &dyn Fn(&str) -> bool) -> LayerStack {
         .expect("k");
     let kept = stack.attach_inks(&cmy, &k);
     assert_eq!(kept, import.layers.len(), "every layer keeps its own inks");
-    for i in (0..stack.len()).rev() {
-        if !keep(&stack.layers()[i].name) {
-            stack.remove(i).expect("remove");
-        }
-    }
     stack
 }
 
@@ -717,7 +711,7 @@ const INK_TILES: &[(&str, u8, f64)] = &[
 #[allow(non_snake_case)]
 fn a_cmyk_document_composites_in_its_inks_as_photoshop_does__feat__image_io_depth_color_modes() {
     let file = psd("blend-modes");
-    let stack = ink_stack(&file, &|_| true);
+    let stack = ink_stack(&file);
     assert_eq!(
         stack.ink_fold_declines(),
         None,
@@ -759,7 +753,7 @@ fn a_cmyk_document_composites_in_its_inks_as_photoshop_does__feat__image_io_dept
         }
     }
     let file = psd("normal-stack");
-    let stack = ink_stack(&file, &|_| true);
+    let stack = ink_stack(&file);
     let ours = pollster::block_on(stack.composite(ctx, None)).expect("the ink fold");
     let (m, mean) = dist(&ours, &ours_converted_merged(&file));
     report.push(format!("normal-stack  max {m:>3}  mean {mean:.3}"));
@@ -780,16 +774,26 @@ fn a_cmyk_document_composites_in_its_inks_as_photoshop_does__feat__image_io_dept
 /// `normal-stack` folded in inks (measured 2; the RGB fold: 61 levels).
 const NORMAL_STACK_INK_MAX: u8 = 3;
 
-/// What is not separable folds in RGB, and says so; an edit keeps the
-/// file's inks outside its damage and takes the profile's inside it.
+/// Every mode of `blend-modes` folds in inks; Darker and Lighter Color,
+/// unmeasured in CMYK, fold in RGB and say so; an edit keeps the file's
+/// inks outside its damage and takes the profile's inside it.
 #[test]
 #[allow(non_snake_case)]
 fn the_ink_fold_names_what_it_declines_and_an_edit_keeps_the_inks__feat__image_io_depth_color_modes(
 ) {
-    let all = ink_stack(&psd("blend-modes"), &|_| true);
-    assert_eq!(all.ink_fold_declines(), Some("a non-separable blend mode"));
+    let mut all = ink_stack(&psd("blend-modes"));
+    assert_eq!(all.ink_fold_declines(), None);
+    for mode in ["darker_color", "lighter_color"] {
+        let top = all.len() - 1;
+        all.set_blend(top, mode).expect("a blend");
+        assert_eq!(
+            all.ink_fold_declines(),
+            Some("a non-separable blend mode"),
+            "{mode}"
+        );
+    }
 
-    let mut s = ink_stack(&psd("normal-stack"), &|_| true);
+    let mut s = ink_stack(&psd("normal-stack"));
     let i = 1;
     let before = s.layers()[i].ext.inks.0.clone().expect("the file's inks");
     let before_cmy = before.cmy.canvas().to_rgba8().into_owned();
@@ -834,9 +838,9 @@ fn the_ink_fold_names_what_it_declines_and_an_edit_keeps_the_inks__feat__image_i
     assert!(changed_inside, "the damage takes the new pixels' inks");
 }
 
-/// The `cmyk-blend` gate after the ink fold (image ADR 484): only the
-/// layers the ink fold cannot composite (Hue, Saturation, Color,
-/// Luminosity) decline `blend-modes`, and the documents that mix —
+/// The `cmyk-blend` gate after the ink fold (image ADR 484): it keeps
+/// only Darker and Lighter Color, which the ink fold does not composite,
+/// so nothing declines `blend-modes`; and the documents that mix —
 /// `normal-stack` at 8 and 16 bits, declined by the RGB fold's
 /// `cmyk-composite` check — pass that check once opened as the app opens
 /// them (mode adopted, inks kept), so they open as layers.
@@ -853,11 +857,10 @@ fn the_cmyk_gates_follow_the_ink_fold__feat__image_io_depth_color_modes() {
     for id in ["normal-stack", "normal-stack-16", "opaque-stack"] {
         let file = psd(id);
         assert!(file.layer_import_blockers().is_empty(), "{id}");
-        let stack = ink_stack(&file, &|_| true);
+        let stack = ink_stack(&file);
         let ours = pollster::block_on(stack.composite(ctx, None)).expect("the ink fold");
         let a = cmyk_flatten_agrees(&ours, &ours_converted_merged(&file))
             .unwrap_or_else(|e| panic!("{id}: {e}"));
         println!("{id}: {:.2}% off, max {}", a.pct_off, a.max);
     }
 }
-

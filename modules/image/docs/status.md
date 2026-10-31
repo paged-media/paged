@@ -330,10 +330,10 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   layer through the engine's CMS (Gray Gamma 2.2, the session's CMYK profile, CIE Lab) and keep the
   document inside that mode: a pixel edit lands projected inside its damage. A CMYK document with
   a profile composites in its INKS — every layer as two ink planes, a CMYK file's layers with the
-  file's own inks — so separable blends agree with Photoshop's CMYK composite within 0.7 ΔE00 at
-  the 95th percentile, where blending the RGB conversions was 10–50 off; a non-separable mode,
-  Blend If, an adjustment layer or a style composites in RGB
-  ([ADR 481](adr/481-n-channel-planes-and-the-ink-fold.md)). Grayscale and Lab documents fold in
+  file's own inks — so the separable blends and Hue, Saturation, Color and Luminosity (ADR 484)
+  agree with Photoshop's CMYK composite within 0.7 ΔE00 at the 95th percentile, where blending
+  the RGB conversions was 10–50 off; Darker/Lighter Color, Blend If, an adjustment layer or a
+  style composites in RGB ([ADR 481](adr/481-n-channel-planes-and-the-ink-fold.md)). Grayscale and Lab documents fold in
   their stored numbers, Lab with Photoshop's chroma rule (ADR 484): within 1.9 ΔE p95 of
   Photoshop's merged Lab composite at 8 bits and 0.25 at 16 (the RGB fold was up to 43), grey
   within 1.1 and 0.1; Hue and Saturation fold a Lab document in RGB. Image ▸ Mode ▸ Indexed
@@ -351,7 +351,7 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   16-bit RLE; Lab and grey through the CMS, Indexed through its table, Multichannel through its
   inks, Duotone as its grey), and a transparent document's white-matted
   merged colour is un-matted (CMYK: matted against the paper). Layers are imported from RGB,
-  CMYK (separable blends; ADR 484), Grayscale, Duotone and Lab files at 8 and 16 bits and RGB and
+  CMYK (every blend but Darker/Lighter Color; ADR 484), Grayscale, Duotone and Lab files at 8 and 16 bits and RGB and
   Grayscale files at 32, each layer and its mask at its own bounds ([ADR 464](adr/464-layers-at-their-own-bounds.md);
   the 384 MiB budget counts the rectangles): pixel layers, groups and their user masks (an
   isolated group blends through its mask, a pass-through group's members each go through it),

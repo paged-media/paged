@@ -68,11 +68,20 @@ class alone, an empty or a monotone object), so no duotone can be recorded, and 
 cannot be written without one. The table is persisted (layer manifest version 9; the
 object model's TypeScript codec reads and writes it byte for byte).
 
+**Hue, Saturation, Color and Luminosity fold on the ink planes.** Photoshop applies their
+formulas to a CMYK document's inks as they are: to `C'M'Y'` as if it were RGB, and to `K'`, a
+grey, where they keep the backdrop's black (Luminosity takes the source's). The compose kernels
+do exactly that unchanged on the two ink planes, so the ink fold composites the four modes too
+(`cmyk-stacks/blend-modes`: within 0.68 ΔE00 at the 95th percentile and 3 levels at most of
+Photoshop's CMYK composite, where blending the RGB conversions was 11–20 off). Darker and Lighter
+Color are not measured in CMYK and still fold in RGB, saying so (`ink_fold_declines`).
+
 **The CMYK import gate follows the ink fold.** `cmyk-blend` now declines only the blends the
-ink fold cannot composite (Hue, Saturation, Color, Luminosity, Darker and Lighter Color:
-`CMYK_INK_FOLD_DECLINES`); a separable one is composited in inks and the per-file check against
-the merged composite (`cmyk_flatten_agrees`) judges it. `normal-stack` — declined by that check
-when it blended in RGB (61 levels) — passes through the ink fold at 2 levels, at 8 and 16 bits.
+ink fold cannot composite (Darker and Lighter Color: `CMYK_INK_FOLD_DECLINES`); every other mode
+is composited in inks and the per-file check against the merged composite
+(`cmyk_flatten_agrees`) judges it. `normal-stack` — declined by that check when it blended in
+RGB (61 levels) — passes through the ink fold at 2 levels, at 8 and 16 bits; `blend-modes`, one
+tile per mode, imports with no blocker.
 
 ## Evidence
 
@@ -84,7 +93,11 @@ Photoshop's sRGB render; Multichannel from RGB. `color_modes_photoshop.rs` repla
 
 - Lab: every judged tile within 2.7 ΔE*ab (max) and 1.9 (p95) at 8 bits, 0.5 / 0.25 at 16, where
   the RGB fold was 8.2–43 at p95; Grayscale within 1.5 / 1.1 at 8 bits and 0.2 / 0.1 at 16
-  (the RGB fold: up to 6.7).
+  (the RGB fold: up to 6.7). The 8-bit Lab maximum is one pixel's worst, and an 8-bit a* or b*
+  step is 1 ΔE*ab on its own: the GPU fold (Metal) measures 2.11 at worst (Soft Light), the CPU
+  fold a runner without a GPU takes 2.47 (p95 1.81), the two folds rounding a few edge pixels
+  to neighbouring steps. The bound (2.7, first 2.4) covers both with a quarter of a step to
+  spare; the p95 bound, which the improvement over the RGB fold rests on, is unchanged.
 - 32 bits: every offered separable tile within 0.001 of Photoshop's linear values; 16 → 32 is
   the sRGB decode within 8 · 10⁻⁵; 8 → 32 stores decoded 8-bit levels, ours within a level
   (Photoshop rounds its own 15-bit samples).
@@ -96,8 +109,10 @@ Photoshop's sRGB render; Multichannel from RGB. `color_modes_photoshop.rs` repla
   table colour of ours) and the Multichannel one (Cyan, Magenta, Yellow; every sample ours).
   Without the HDR Color Mode Data Photoshop writes for a 32-bit document (`hdrt`, `hdra`) it
   refuses the file, so the save writes Photoshop's defaults when the document had none.
-- `psd_cmyk_photoshop.rs`: the gate's four blockers on `blend-modes`, and `normal-stack`(-16) and
-  `opaque-stack` through the ink fold.
+- `psd_cmyk_photoshop.rs`: every `blend-modes` tile through the ink fold (Hue 3 levels / 0.68
+  ΔE00 p95, Saturation 1 / 0.66, Color 3 / 0.68, Luminosity 1 / 0.66) and no blocker on it;
+  Darker and Lighter Color declined by name; `normal-stack`(-16) and `opaque-stack` through the
+  ink fold.
 - `image-js`: `float_tests.rs` (linear blend, values above 1 through the fold, the 32-bit
   conversion's undo step, an 8-bit stroke keeping HDR pixels, a float grey, persistence),
   `saveback.rs` (32-bit save and reopen, Indexed and Multichannel save and reopen), `pixels.rs`;
@@ -125,8 +140,8 @@ Photoshop's sRGB render; Multichannel from RGB. `color_modes_photoshop.rs` repla
 - Duotone conversion and its curves dialog (no scriptable oracle; the specification is
   undocumented).
 - An unclamped Add (and Photoshop's 32-bit non-separable rules) for float documents.
-- Hue and Saturation in Lab (L*C*h steps); the ink fold for non-separable modes, adjustments and
-  styles in CMYK; adjustments and styles in a mode's own numbers.
+- Hue and Saturation in Lab (L*C*h steps); Darker and Lighter Color, Blend If, adjustments and
+  styles in CMYK's inks; adjustments and styles in a mode's own numbers.
 - Residency tier 3.
 
 ## Related
