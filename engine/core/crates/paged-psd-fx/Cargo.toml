@@ -1,0 +1,15 @@
+[package]
+name = "paged-psd-fx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Photoshop layer styles (paged-psd's lfx2 / lmfx model) mapped onto the engine's ordered effect stack (engine ADR 1008): what the stack can say natively, the rest reported as losses. The shared effect mapper of plan C16 (PM-0014 L2)."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-psd = { path = "../paged-psd" }
+paged-model = { path = "../paged-model" }

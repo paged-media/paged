@@ -136,8 +136,9 @@ pub fn record_ext(rec: &LayerRecord) -> LayerExt {
 
 /// The record's layer STYLE (`lmfx`, else `lfx2`), when it has one.
 pub fn style_of(rec: &LayerRecord) -> Option<image_psd::effects::LayerStyle> {
-    let payload = block(rec, b"lmfx").or_else(|| block(rec, b"lfx2"))?;
-    image_psd::effects::LayerStyle::parse(payload).ok()
+    // The engine's reader (paged-psd), which the page items' effect
+    // mapping (paged-psd-fx, engine ADR 1044) reads the same blocks with.
+    image_psd::effects::layer_style(rec)
 }
 
 /// Blending Options ▸ Advanced Blending: `infx` (Blend Interior Effects

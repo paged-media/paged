@@ -9756,6 +9756,21 @@ pub struct OpacityMask {
     /// Invert the resolved coverage — Illustrator's "Invert Mask".
     #[serde(default)]
     pub invert: bool,
+    /// Illustrator's "Clip": the area the artwork does not paint hides
+    /// the target (a black backdrop, PDF's default). Off, that area
+    /// SHOWS the target: the artwork is resolved over a white backdrop
+    /// (PDF's `/BC`). On by default, so a mask without the field reads
+    /// as before.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub clip: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 // ---------------------------------------------------------------------------

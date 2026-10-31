@@ -1865,6 +1865,10 @@ pub enum Mutation {
         mask_type: Option<String>,
         #[serde(default)]
         invert: Option<bool>,
+        /// Illustrator's Clip: `false` lets the area the artwork does not
+        /// paint show the target. Absent is `true`. Additive (no bump).
+        #[serde(default)]
+        clip: Option<bool>,
     },
     /// v58 (C-28) — **Release Opacity Mask**: drop the relation; the
     /// artwork returns to top level, geometry untouched. Rides

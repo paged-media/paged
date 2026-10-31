@@ -69,7 +69,7 @@ export const CORE_WIRE_OPS: Readonly<Record<string, CoreWireOpRow>> = {
   "pasteInto": { args: {"kind":"struct","fields":{"containerId":{"kind":"ref","to":"item"},"childId":{"kind":"ref","to":"item"}}}, nullFill: [] },
   "releaseFrom": { args: {"kind":"struct","fields":{"childId":{"kind":"ref","to":"item"}}}, nullFill: [] },
   "reorderElement": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"to":{"kind":"struct","fields":{},"open":true,"shape":"ZOrderTarget"}}}, nullFill: [] },
-  "applyOpacityMask": { args: {"kind":"struct","fields":{"targetId":{"kind":"ref","to":"item"},"maskId":{"kind":"ref","to":"item"},"maskType":{"kind":"text","optional":true},"invert":{"kind":"bool","optional":true}}}, nullFill: [] },
+  "applyOpacityMask": { args: {"kind":"struct","fields":{"targetId":{"kind":"ref","to":"item"},"maskId":{"kind":"ref","to":"item"},"maskType":{"kind":"text","optional":true},"invert":{"kind":"bool","optional":true},"clip":{"kind":"bool","optional":true}}}, nullFill: [] },
   "releaseOpacityMask": { args: {"kind":"struct","fields":{"targetId":{"kind":"ref","to":"item"}}}, nullFill: [] },
   "attachTextToPath": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"storyId":{"kind":"ref","to":"story"},"pathTypeAlignment":{"kind":"text","optional":true},"flipPathEffect":{"kind":"text","optional":true},"startBracket":{"kind":"number","optional":true},"endBracket":{"kind":"number","optional":true}}}, nullFill: [] },
   "detachTextFromPath": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"}}}, nullFill: [] },

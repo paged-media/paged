@@ -948,6 +948,7 @@ name = "image-kernels"
 version = "0.0.0"
 dependencies = [
  "bytemuck",
+ "half",
  "naga",
  "paged-kernels",
  "paged-pixel",
