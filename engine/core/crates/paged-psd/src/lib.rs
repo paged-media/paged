@@ -79,7 +79,7 @@ mod emit;
 mod parse;
 
 pub use abr::AbrFile;
-pub use composite::{CompositeCmyk8, CompositeRgba8};
+pub use composite::{CompositeCmyk8, CompositeRgba8, CompositeSamples, IndexedPalette};
 pub use container::Container;
 pub use descriptor::{Descriptor, DescriptorValue, RefItem};
 pub use layer_list::{

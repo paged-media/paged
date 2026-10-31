@@ -351,6 +351,13 @@
       "summary": "Delete a symbol; its instances become ordinary items first."
     },
     {
+      "name": "paged.expandAppearance",
+      "params": "(elementId)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Expand Appearance: the item becomes what its live vector effects draw (engine ADR 1042)."
+    },
+    {
       "name": "paged.createMaster",
       "params": "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })",
       "returns": "bool",
@@ -1851,6 +1858,7 @@
     "groupIsolateBlending",
     "groupKnockout",
     "groupClip",
+    "groupEffectStack",
     "symbolInstanceTint",
     "symbolInstanceNineSlice",
     "symbolInstanceSymbol",
@@ -2138,6 +2146,7 @@
     "placeSymbolInstance",
     "breakSymbolLink",
     "deleteSymbol",
+    "expandAppearance",
     "onMaster",
     "createMaster",
     "deleteMaster",
@@ -6747,6 +6756,19 @@
       "wire": "bool",
       "nullable": false,
       "default": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "groupEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
       "access": "readWrite",
       "bindable": true
     },
@@ -20734,6 +20756,23 @@
       },
       {
         "addressKind": "frame",
+        "path": "groupEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
         "path": "symbolInstanceTint",
         "type": {
           "kind": "list",
@@ -28334,6 +28373,804 @@
           "default": 0.0
         }
       ]
+    },
+    {
+      "kind": "roughen",
+      "title": "Roughen",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "size",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "detailPerInch",
+          "title": "Detail",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 10.0
+        },
+        {
+          "field": "smooth",
+          "title": "Smooth",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "zigZag",
+      "title": "Zig zag",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "size",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 10.0
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "ridges",
+          "title": "Ridges per segment",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 4.0
+        },
+        {
+          "field": "smooth",
+          "title": "Smooth",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "puckerBloat",
+      "title": "Pucker & bloat",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "amountPct",
+          "title": "Amount",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -200.0,
+            "max": 200.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "twist",
+      "title": "Twist",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "angleDeg",
+          "title": "Angle",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -3600.0,
+            "max": 3600.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "tweak",
+      "title": "Tweak",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "amountH",
+          "title": "Horizontal",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "amountV",
+          "title": "Vertical",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "anchors",
+          "title": "Anchor points",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "inHandles",
+          "title": "In control points",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "outHandles",
+          "title": "Out control points",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "transformCopies",
+      "title": "Transform",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "scaleHPct",
+          "title": "Scale horizontal",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -10000.0,
+            "max": 10000.0
+          },
+          "default": 100.0
+        },
+        {
+          "field": "scaleVPct",
+          "title": "Scale vertical",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -10000.0,
+            "max": 10000.0
+          },
+          "default": 100.0
+        },
+        {
+          "field": "moveH",
+          "title": "Move horizontal",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "moveV",
+          "title": "Move vertical",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "rotateDeg",
+          "title": "Rotate",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "reflectX",
+          "title": "Reflect X",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "reflectY",
+          "title": "Reflect Y",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "copies",
+          "title": "Copies",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "origin",
+          "title": "Origin",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "topLeft",
+              "top",
+              "topRight",
+              "left",
+              "center",
+              "right",
+              "bottomLeft",
+              "bottom",
+              "bottomRight"
+            ]
+          },
+          "default": "center"
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "freeDistort",
+      "title": "Free distort",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "corners",
+          "title": "Corners",
+          "type": {
+            "kind": "list",
+            "of": {
+              "kind": "list",
+              "of": {
+                "kind": "number"
+              }
+            }
+          }
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "warp",
+      "title": "Warp",
+      "category": "warp",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "style",
+          "title": "Style",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "arc",
+              "arcLower",
+              "arcUpper",
+              "arch",
+              "bulge",
+              "shellLower",
+              "shellUpper",
+              "flag",
+              "wave",
+              "fish",
+              "rise",
+              "fisheye",
+              "inflate",
+              "squeeze",
+              "twist"
+            ]
+          },
+          "default": "arc"
+        },
+        {
+          "field": "horizontal",
+          "title": "Horizontal",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "bendPct",
+          "title": "Bend",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 50.0
+        },
+        {
+          "field": "distortHPct",
+          "title": "Horizontal distortion",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "distortVPct",
+          "title": "Vertical distortion",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "offsetPath",
+      "title": "Offset path",
+      "category": "path",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "offset",
+          "title": "Offset",
+          "type": {
+            "kind": "length"
+          },
+          "default": 10.0
+        },
+        {
+          "field": "join",
+          "title": "Joins",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "miter",
+              "round",
+              "bevel"
+            ]
+          },
+          "default": "miter"
+        },
+        {
+          "field": "miterLimit",
+          "title": "Miter limit",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": 1.0,
+            "max": 500.0
+          },
+          "default": 4.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "outlinePath",
+      "title": "Outline stroke",
+      "category": "path",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [],
+      "vector": true
+    },
+    {
+      "kind": "roundCorners",
+      "title": "Round corners",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "radius",
+          "title": "Radius",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 10.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "scribble",
+      "title": "Scribble",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "angleDeg",
+          "title": "Angle",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 30.0
+        },
+        {
+          "field": "pathOverlap",
+          "title": "Path overlap",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "pathOverlapVariation",
+          "title": "Overlap variation",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "strokeWidth",
+          "title": "Stroke width",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 3.0
+        },
+        {
+          "field": "curvinessPct",
+          "title": "Curviness",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "curvinessVariationPct",
+          "title": "Curviness variation",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "spacing",
+          "title": "Spacing",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "spacingVariation",
+          "title": "Spacing variation",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "convertToShape",
+      "title": "Convert to shape",
+      "category": "convertToShape",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "shape",
+          "title": "Shape",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "rectangle",
+              "roundedRectangle",
+              "ellipse"
+            ]
+          },
+          "default": "rectangle"
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "extraWidth",
+          "title": "Extra width",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "extraHeight",
+          "title": "Extra height",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "width",
+          "title": "Width",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 36.0
+        },
+        {
+          "field": "height",
+          "title": "Height",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 36.0
+        },
+        {
+          "field": "cornerRadius",
+          "title": "Corner radius",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 9.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "pathfinder",
+      "title": "Pathfinder",
+      "category": "pathfinder",
+      "indesign": false,
+      "targets": [
+        "group"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "op",
+          "title": "Shape mode",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "add",
+              "subtract",
+              "intersect",
+              "exclude"
+            ]
+          },
+          "default": "add"
+        }
+      ],
+      "vector": true
     }
   ],
   "effectCategories": [

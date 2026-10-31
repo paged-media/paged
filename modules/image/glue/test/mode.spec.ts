@@ -125,6 +125,55 @@ describe("Image ▸ Mode ▸ colour modes [image.io.depth-color-modes]", () => {
   });
 });
 
+describe("Image ▸ Mode ▸ 32 bits, Indexed and Multichannel [image.io.depth-color-modes]", () => {
+  it("modeBits32 holds linear light as one undo step and shows the same colours", async () => {
+    covers("command:media.paged.image.command.modeBits32");
+    const k = await ingested();
+    const before = await sourcePixels(k.session);
+    await run(k, "modeBits32");
+    expect(k.session.state().mode.bits).toBe(32);
+    const e = await imageEngine();
+    expect(e.imageBits(k.session.state().source!.handle)).toBe(32);
+    expect(k.session.state().history?.undoSteps).toEqual(["32 Bits/Channel"]);
+    // 8 → 32 decodes the sRGB transfer exactly: the view is the image.
+    expect(await sourcePixels(k.session)).toEqual(before);
+    await run(k, "modeBits8");
+    expect(k.session.state().mode.bits).toBe(8);
+    expect(await sourcePixels(k.session)).toEqual(before);
+    k.dispose();
+  });
+
+  it("modeIndexed opens Indexed Color…; the Web palette flattens into its 216 colours", async () => {
+    covers("command:media.paged.image.command.modeIndexed");
+    const k = await ingested();
+    await run(k, "modeIndexed");
+    expect(k.session.state().dialog).toEqual({ kind: "indexedColor" });
+    expect(await k.session.setIndexedColor("web")).toBe(true);
+    expect(k.session.state().dialog).toBeNull();
+    expect(k.session.state().mode.color).toBe("indexed");
+    expect(k.session.state().history?.undoSteps).toEqual(["Indexed Color"]);
+    expect(k.session.state().status).toMatch(/216 colours/);
+    const px = await sourcePixels(k.session);
+    for (let i = 0; i < px.px.length; i += 4)
+      for (let c = 0; c < 3; c++) expect(px.px[i + c]! % 51).toBe(0);
+    await run(k, "undo");
+    expect(k.session.state().mode.color).toBe("rgb");
+    k.dispose();
+  });
+
+  it("modeMultichannel keeps every colour in its three inks, one undo step", async () => {
+    covers("command:media.paged.image.command.modeMultichannel");
+    const k = await ingested();
+    const before = await sourcePixels(k.session);
+    await run(k, "modeMultichannel");
+    expect(k.session.state().mode.color).toBe("multichannel");
+    expect(k.session.state().history?.undoSteps).toEqual(["Multichannel"]);
+    // Opaque source: the flatten over white and the inks change nothing.
+    expect(await sourcePixels(k.session)).toEqual(before);
+    k.dispose();
+  });
+});
+
 describe("the proof view [image.io.depth-color-modes]", () => {
   it("proofSetupGray + proofColors simulates grey without touching the document", async () => {
     covers("command:media.paged.image.command.proofSetupGray");

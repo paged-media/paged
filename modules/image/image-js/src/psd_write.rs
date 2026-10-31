@@ -72,6 +72,22 @@ const ICC_PROFILE_ID: u16 = 1039;
 /// The image resource that marks a document UNTAGGED (its profile ignored).
 const ICC_UNTAGGED_ID: u16 = 1041;
 
+/// The Color Mode Data of a 32-bit document: the HDR Toning settings
+/// (`hdrt`, the method "Linear" with Photoshop's defaults) and the 32-bit
+/// preview options (`hdra`), as Photoshop 27.10 writes them for a document
+/// converted to 32 Bits/Channel [OBS: `color-modes/float-32`]. Photoshop
+/// refuses to open a 32-bit PSD whose Color Mode Data is empty ("the
+/// options specified for opening are wrong"; image ADR 484).
+const HDR_COLOR_MODE_DATA: [u8; 110] = [
+    0x68, 0x64, 0x72, 0x74, 0x00, 0x00, 0x00, 0x03, 0x3e, 0x6b, 0x85, 0x1f, 0x00, 0x00, 0x00, 0x02,
+    0x00, 0x00, 0x00, 0x07, 0x00, 0x4c, 0x00, 0x69, 0x00, 0x6e, 0x00, 0x65, 0x00, 0x61, 0x00, 0x72,
+    0x00, 0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0xff, 0x01, 0x01,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+    0x00, 0x00, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00, 0x68, 0x64, 0x72, 0x61, 0x00, 0x00, 0x00, 0x06,
+    0x00, 0x00, 0x00, 0x00, 0x41, 0xa0, 0x00, 0x00, 0x41, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
 fn err(e: image_psd::PsdError) -> IngestError {
     IngestError::Decode(e.to_string())
 }
@@ -122,7 +138,7 @@ enum Kind {
     /// as its device values through the same transform (image ADR 481).
     Device(
         crate::color_mode::ColorMode,
-        crate::color_mode::ModeTransform,
+        Box<crate::color_mode::ModeTransform>,
     ),
 }
 
@@ -130,6 +146,10 @@ enum Kind {
 struct Store {
     container: Container,
     sixteen: bool,
+    /// 32 bits per channel, float (image ADR 484): linear light, RGB or
+    /// Grayscale, every channel ZIP with prediction as Photoshop writes
+    /// its `Lr32` block, the composite RAW.
+    float: bool,
     kind: Kind,
     width: u32,
     height: u32,
@@ -147,6 +167,9 @@ fn psd_mode(m: crate::color_mode::ColorMode) -> ColorMode {
         M::Gray => ColorMode::Grayscale,
         M::Cmyk => ColorMode::Cmyk,
         M::Lab => ColorMode::Lab,
+        M::Indexed => ColorMode::Indexed,
+        M::Multichannel => ColorMode::Multichannel,
+        M::Duotone => ColorMode::Duotone,
     }
 }
 
@@ -163,6 +186,7 @@ impl Store {
             )));
         }
         let sixteen = stack.depth() == image_core::SampleDepth::U16;
+        let float = stack.depth() == image_core::SampleDepth::F32;
         let mode = stack.mode();
         let kind = if psd_mode(mode.mode) == h.color_mode {
             match h.color_mode {
@@ -179,8 +203,16 @@ impl Store {
         Ok(Store {
             container: file.container,
             sixteen,
+            float,
             remode: psd_mode(mode.mode) != h.color_mode,
-            redepth: h.depth != if sixteen { 16 } else { 8 },
+            redepth: h.depth
+                != if float {
+                    32
+                } else if sixteen {
+                    16
+                } else {
+                    8
+                },
             kind,
             width,
             height,
@@ -195,7 +227,7 @@ impl Store {
 
     fn device(mode: &crate::color_mode::DocMode) -> Result<Kind, IngestError> {
         match crate::color_mode::ModeTransform::new(mode)? {
-            Some(t) => Ok(Kind::Device(mode.mode, t)),
+            Some(t) => Ok(Kind::Device(mode.mode, Box::new(t))),
             // A CMYK mode without a profile holds every sRGB colour; its
             // inks are the plain formula's, as the file's own CMYK
             // without a profile writes them.
@@ -225,7 +257,7 @@ impl Store {
     fn colour_ids(&self) -> &'static [i16] {
         match self.psd_mode() {
             ColorMode::Cmyk => &[0, 1, 2, 3],
-            ColorMode::Grayscale => &[0],
+            ColorMode::Grayscale | ColorMode::Duotone => &[0],
             _ => &[0, 1, 2],
         }
     }
@@ -234,36 +266,54 @@ impl Store {
     /// `u16` when the document is 8-bit) as channel data: RLE at 8 bits,
     /// ZIP with prediction at 16 (Photoshop's choices [OBS]); an empty
     /// plane RAW.
-    fn encode(&self, plane: &[u16], rows: u32, cols: u32) -> Result<ChannelData, IngestError> {
+    fn encode(&self, plane: &[f32], rows: u32, cols: u32) -> Result<ChannelData, IngestError> {
         if rows == 0 || cols == 0 {
             return Ok(ChannelData {
                 compression: Compression::Raw,
                 bytes: Vec::new(),
             });
         }
-        if self.sixteen {
-            ChannelData::encode_zip_predicted16(plane, rows, cols).map_err(err)
+        if self.float {
+            ChannelData::encode_zip_predicted32(plane, rows, cols).map_err(err)
+        } else if self.sixteen {
+            let s: Vec<u16> = plane.iter().map(|&v| v as u16).collect();
+            ChannelData::encode_zip_predicted16(&s, rows, cols).map_err(err)
         } else {
             let bytes: Vec<u8> = plane.iter().map(|&v| v as u8).collect();
             ChannelData::encode_rle(&bytes, self.container, rows, cols).map_err(err)
         }
     }
 
-    /// An 8-bit coverage value at the store's depth.
-    fn widen(&self, v: u8) -> u16 {
-        if self.sixteen {
-            u16::from(v) * 257
+    /// An 8-bit coverage value at the store's depth (a sample value at 8
+    /// and 16 bits; the coverage itself, 0–1, at 32).
+    fn widen(&self, v: u8) -> f32 {
+        if self.float {
+            f32::from(v) / 255.0
+        } else if self.sixteen {
+            f32::from(u16::from(v) * 257)
         } else {
-            u16::from(v)
+            f32::from(v)
         }
     }
 
     /// The colour planes (R, G, B or the inverted inks) and the alpha
     /// plane of `px` (`n` pixels), at the store's depth.
-    fn planes(&self, px: &crate::pixels::Pixels, n: usize) -> (Vec<Vec<u16>>, Vec<u16>) {
+    fn planes(&self, px: &crate::pixels::Pixels, n: usize) -> (Vec<Vec<f32>>, Vec<f32>) {
         let colours = self.colour_ids().len();
-        let mut planes = vec![vec![0u16; n]; colours];
-        let mut alpha = vec![0u16; n];
+        let mut planes = vec![vec![0f32; n]; colours];
+        let mut alpha = vec![0f32; n];
+        if self.float {
+            // Linear light: RGB as it is, a grey document's grey as the
+            // first channel (every channel is the grey in its pixels).
+            let lin = px.to_f32_linear();
+            for i in 0..n {
+                for (k, plane) in planes.iter_mut().enumerate() {
+                    plane[i] = lin[i * 4 + k];
+                }
+                alpha[i] = lin[i * 4 + 3].clamp(0.0, 1.0);
+            }
+            return (planes, alpha);
+        }
         if let Kind::Device(mode, t) = &self.kind {
             let full = if self.sixteen { 65535.0 } else { 255.0 };
             let rgb: Vec<f32> = (0..n)
@@ -274,10 +324,10 @@ impl Store {
             for i in 0..n {
                 let d = &dev[i * k..i * k + k];
                 for (c, plane) in planes.iter_mut().enumerate() {
-                    plane[i] = device_sample(*mode, c, d[c], self.sixteen);
+                    plane[i] = f32::from(device_sample(*mode, c, d[c], self.sixteen));
                 }
                 let a = f32::from(px.sample16(i, 3)) / 65535.0;
-                alpha[i] = (a * full).round() as u16;
+                alpha[i] = (a * full).round();
             }
             return (planes, alpha);
         }
@@ -303,14 +353,14 @@ impl Store {
             }
             return (planes, alpha);
         }
-        if px.is_16bit() {
+        if px.depth() != image_core::SampleDepth::U8 {
             for i in 0..n {
                 for (k, plane) in planes.iter_mut().enumerate() {
                     let s = px.sample16(i, k);
-                    plane[i] = if self.sixteen { s } else { s >> 8 };
+                    plane[i] = f32::from(if self.sixteen { s } else { s >> 8 });
                 }
                 let a = px.sample16(i, 3);
-                alpha[i] = if self.sixteen { a } else { a >> 8 };
+                alpha[i] = f32::from(if self.sixteen { a } else { a >> 8 });
             }
         } else {
             let raw = px.raw();
@@ -387,7 +437,7 @@ impl Store {
         cov: &[u8],
         enabled: bool,
     ) -> Result<(ChannelInfo, ChannelData, LayerMaskData), IngestError> {
-        let plane: Vec<u16> = cov.iter().map(|&v| self.widen(v)).collect();
+        let plane: Vec<f32> = cov.iter().map(|&v| self.widen(v)).collect();
         let cd = self.encode(&plane, rect.h, rect.w)?;
         let flags = if enabled { 0 } else { 0x02 };
         let (top, left) = (rect.y, rect.x);
@@ -415,16 +465,19 @@ impl Store {
     /// The merged composite (straight RGBA8, canvas-sized) with its
     /// transparency: RLE at 8 bits, RAW at 16 (Photoshop writes a 16-bit
     /// document's composite RAW [OBS]).
-    fn composite(&self, rgba: &[u8]) -> Result<GlobalImageData, IngestError> {
+    fn composite(&self, px: &crate::pixels::Pixels) -> Result<GlobalImageData, IngestError> {
         let n = self.width as usize * self.height as usize;
-        let px = crate::pixels::Pixels::from_rgba8(Arc::from(rgba));
-        let (mut planes, alpha) = self.planes(&px, n);
+        let (mut planes, alpha) = self.planes(px, n);
         planes.push(alpha);
-        if self.sixteen {
-            let mut raw = Vec::with_capacity(planes.len() * n * 2);
+        if self.sixteen || self.float {
+            let mut raw = Vec::with_capacity(planes.len() * n * 4);
             for p in &planes {
-                for v in p {
-                    raw.extend_from_slice(&v.to_be_bytes());
+                for &v in p {
+                    if self.float {
+                        raw.extend_from_slice(&v.to_be_bytes());
+                    } else {
+                        raw.extend_from_slice(&(v as u16).to_be_bytes());
+                    }
                 }
             }
             return Ok(GlobalImageData {
@@ -984,10 +1037,31 @@ pub fn psd_write_stack(
     stack: &LayerStack,
     composite: &[u8],
 ) -> Result<PsdSaveBackShape, IngestError> {
+    psd_write_stack_px(
+        file,
+        stack,
+        &crate::pixels::Pixels::from_rgba8(Arc::from(composite)),
+    )
+}
+
+/// [`psd_write_stack`] with the composite at its own depth (a 16- or
+/// 32-bit document's merged image keeps its samples).
+pub fn psd_write_stack_px(
+    file: &mut PsdFile,
+    stack: &LayerStack,
+    composite: &crate::pixels::Pixels,
+) -> Result<PsdSaveBackShape, IngestError> {
     let (width, height) = (stack.width(), stack.height());
+    if matches!(
+        stack.mode().mode,
+        crate::color_mode::ColorMode::Indexed | crate::color_mode::ColorMode::Multichannel
+    ) {
+        return write_single_image(file, stack, composite);
+    }
     let store = Store::of(file, stack)?;
+    let was_float = file.header.depth == 32;
     let n = width as usize * height as usize;
-    if composite.len() != n * 4 {
+    if composite.pixel_count() != n {
         return Err(IngestError::Decode(
             "layered PSD save: composite is mis-sized".into(),
         ));
@@ -1068,7 +1142,13 @@ pub fn psd_write_stack(
     file.composite = store.composite(composite)?;
     file.header.channels = store.colour_ids().len() as u16 + 1;
     if store.reencode() {
-        file.header.depth = if store.sixteen { 16 } else { 8 };
+        file.header.depth = if store.float {
+            32
+        } else if store.sixteen {
+            16
+        } else {
+            8
+        };
     }
     if store.remode {
         // The new mode's header and the profile its values are in: the
@@ -1094,11 +1174,22 @@ pub fn psd_write_stack(
             file.resources.set_data(ICC_PROFILE_ID, &icc);
         }
     }
+    if store.float && file.color_mode.raw.is_empty() {
+        file.color_mode.raw = HDR_COLOR_MODE_DATA.to_vec();
+    }
+    if !store.float && was_float {
+        // Leaving 32 bits: the HDR settings belong to the float document.
+        file.color_mode.raw.clear();
+    }
     file.layer_mask.layers = records;
     file.layer_mask.transparency_in_merged = true;
     // A 16-bit document keeps its layers in its `Lr16` block, as
     // Photoshop writes them.
-    file.layer_mask.deep_key = store.sixteen.then_some(*b"Lr16");
+    file.layer_mask.deep_key = if store.float {
+        Some(*b"Lr32")
+    } else {
+        store.sixteen.then_some(*b"Lr16")
+    };
     file.layer_mask.section_raw = None;
     // The document's paths: the saved ones and the work path (ADR 476).
     crate::vectors::paths_into_psd(file, stack.masking()).map_err(IngestError::Unsupported)?;
@@ -1106,6 +1197,149 @@ pub fn psd_write_stack(
     let notes = std::mem::take(&mut smart.notes);
     smart.finish(file);
     SAVE_NOTES.with(|n| *n.borrow_mut() = notes);
+    Ok(PsdSaveBackShape::Layered)
+}
+
+/// An INDEXED or MULTICHANNEL document (image ADR 484), which Photoshop
+/// keeps as one image without layers: the header of the mode, its table
+/// (Indexed: the 768-byte colour table, resources 1046 and 1047;
+/// Multichannel: the channels' names, 1006 and 1045, and display colours,
+/// 1077), no layer records, and the composite as the mode stores it —
+/// each pixel's nearest table index, or each channel's ink brightness.
+fn write_single_image(
+    file: &mut PsdFile,
+    stack: &LayerStack,
+    composite: &crate::pixels::Pixels,
+) -> Result<PsdSaveBackShape, IngestError> {
+    use crate::color_mode::ColorMode as M;
+    let (w, h) = (stack.width(), stack.height());
+    let n = w as usize * h as usize;
+    if composite.pixel_count() != n {
+        return Err(IngestError::Decode(
+            "layered PSD save: composite is mis-sized".into(),
+        ));
+    }
+    let mode = stack.mode();
+    let table = mode.table.as_deref().ok_or_else(|| {
+        IngestError::Unsupported(format!("{} without its table", mode.mode.label()))
+    })?;
+    let sixteen = mode.mode == M::Multichannel && stack.depth() == image_core::SampleDepth::U16;
+    let rgba = composite.to_rgba8();
+    let planes: Vec<Vec<u16>> = match (mode.mode, table) {
+        (M::Indexed, t) => {
+            let colours = t
+                .palette()
+                .ok_or_else(|| IngestError::Unsupported("Indexed without a colour table".into()))?;
+            let mut raw = vec![0u8; 768];
+            for (i, c) in colours.iter().take(256).enumerate() {
+                raw[i] = c[0];
+                raw[256 + i] = c[1];
+                raw[512 + i] = c[2];
+            }
+            file.color_mode.raw = raw;
+            file.resources
+                .set_data(1046, &(colours.len().min(256) as u16).to_be_bytes());
+            let transparent = match t {
+                crate::color_mode::ModeTable::Palette {
+                    transparent: Some(i),
+                    ..
+                } => u16::from(*i),
+                _ => 0xFFFF,
+            };
+            file.resources.set_data(1047, &transparent.to_be_bytes());
+            vec![rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|p| crate::color_mode::nearest_index(colours, [p[0], p[1], p[2]]) as u16)
+                .collect()]
+        }
+        (_, t) => {
+            let spots = t
+                .spots()
+                .ok_or_else(|| IngestError::Unsupported("Multichannel without channels".into()))?;
+            file.color_mode.raw.clear();
+            let mut pascal = Vec::new();
+            let mut unicode = Vec::new();
+            let mut display = 1u32.to_be_bytes().to_vec();
+            for sp in spots {
+                let name: Vec<u8> = sp.name.bytes().take(255).collect();
+                pascal.push(name.len() as u8);
+                pascal.extend_from_slice(&name);
+                let units: Vec<u16> = sp.name.encode_utf16().chain([0]).collect();
+                unicode.extend_from_slice(&(units.len() as u32).to_be_bytes());
+                for u in units {
+                    unicode.extend_from_slice(&u.to_be_bytes());
+                }
+                // RGB display colour, 0 % solidity, kind 2 (spot) [OBS].
+                display.extend_from_slice(&0u16.to_be_bytes());
+                for c in sp.ink {
+                    display.extend_from_slice(&(u16::from(c) * 257).to_be_bytes());
+                }
+                display.extend_from_slice(&[0, 0, 0, 0, 2]);
+            }
+            file.resources.set_data(1006, &pascal);
+            file.resources.set_data(1045, &unicode);
+            file.resources.set_data(1077, &display);
+            // Each channel's brightness: the composite's channel its ink
+            // takes away (Cyan from red, …; one Black channel from grey).
+            (0..spots.len())
+                .map(|k| {
+                    (0..n)
+                        .map(|i| {
+                            let s = composite.sample16(i, k % 3);
+                            if sixteen {
+                                s
+                            } else {
+                                s >> 8
+                            }
+                        })
+                        .collect()
+                })
+                .collect()
+        }
+    };
+    file.resources
+        .blocks
+        .retain(|b| b.id != ICC_PROFILE_ID && b.id != ICC_UNTAGGED_ID);
+    file.header.color_mode = psd_mode(mode.mode);
+    file.header.depth = if sixteen { 16 } else { 8 };
+    file.header.channels = planes.len() as u16;
+    file.layer_mask.layers = Vec::new();
+    file.layer_mask.transparency_in_merged = false;
+    file.layer_mask.deep_key = None;
+    file.layer_mask.section_raw = None;
+    file.composite = if sixteen {
+        let mut raw = Vec::with_capacity(planes.len() * n * 2);
+        for p in &planes {
+            for v in p {
+                raw.extend_from_slice(&v.to_be_bytes());
+            }
+        }
+        GlobalImageData {
+            compression: Compression::Raw.code(),
+            raw,
+        }
+    } else {
+        let cw = match file.container {
+            Container::Psb => 4usize,
+            Container::Psd => 2usize,
+        };
+        let split = h as usize * cw;
+        let (mut counts, mut rows) = (Vec::new(), Vec::new());
+        for p in &planes {
+            let bytes: Vec<u8> = p.iter().map(|&v| v as u8).collect();
+            let cd = ChannelData::encode_rle(&bytes, file.container, h, w).map_err(err)?;
+            counts.extend_from_slice(&cd.bytes[..split]);
+            rows.extend_from_slice(&cd.bytes[split..]);
+        }
+        counts.extend_from_slice(&rows);
+        GlobalImageData {
+            compression: Compression::Rle.code(),
+            raw: counts,
+        }
+    };
+    SAVE_NOTES.with(|n| n.borrow_mut().clear());
     Ok(PsdSaveBackShape::Layered)
 }
 

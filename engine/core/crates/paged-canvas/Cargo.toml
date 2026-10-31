@@ -28,6 +28,8 @@ paged-scene = { path = "../paged-scene" }
 paged-compose = { path = "../paged-compose" }
 paged-text = { path = "../paged-text" }
 paged-mutate = { path = "../paged-mutate" }
+# Engine ADR 1042 — hit testing and snapping read the effected outline.
+paged-vector-fx = { path = "../paged-vector-fx" }
 paged-template = { path = "../paged-template" }
 paged-wire = { path = "../paged-wire" }
 # Engine ADR 1031 — SVG import (to wire mutations) and export (of a page's display list).

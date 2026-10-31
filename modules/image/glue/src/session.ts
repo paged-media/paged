@@ -53,7 +53,12 @@ import { defineMessages, t } from "@paged-media/strings";
 import { sha256Hex } from "@paged-media/helpers";
 
 import { latestWins } from "./coalesce";
-import type { ColorModeName, ProofTarget } from "./mode-engine";
+import type {
+  ChannelBits,
+  ColorModeName,
+  IndexedPalette,
+  ProofTarget,
+} from "./mode-engine";
 import {
   initialRetouch,
   makeRetouch,
@@ -378,6 +383,8 @@ export type ImageDialog =
   | { kind: "imageSize" }
   | { kind: "trim" }
   | { kind: "rotate" }
+  /** Image ▸ Mode ▸ Indexed Color… (image ADR 484). */
+  | { kind: "indexedColor" }
   | { kind: "exportAs" }
   | { kind: "newGuide" }
   | { kind: "blendingOptions"; index: number }
@@ -655,7 +662,7 @@ export interface ImageSessionState {
    *  read from the engine after every stack change, and the Proof Colors
    *  / Gamut Warning display setup (View, never the document). */
   mode: {
-    bits: 8 | 16;
+    bits: ChannelBits;
     color: ColorModeName;
     proof: { target: ProofTarget; colors: boolean; gamut: boolean };
   };
@@ -953,6 +960,7 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
       | "imageSize"
       | "trim"
       | "rotate"
+      | "indexedColor"
       | "exportAs"
       | "newGuide"
       | "smartTransform",
@@ -1056,8 +1064,13 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
     op: CanvasOpKind,
     size?: { width: number; height: number; anchorX: number; anchorY: number },
   ): Promise<boolean>;
-  /** Image ▸ Mode ▸ 8 / 16 Bits/Channel (every layer; one undo step). */
-  setBits(bits: 8 | 16): Promise<boolean>;
+  /** Image ▸ Mode ▸ 8 / 16 / 32 Bits/Channel (every layer; one undo
+   *  step; 32 bits hold linear light, image ADR 484). */
+  setBits(bits: ChannelBits): Promise<boolean>;
+  /** Image ▸ Mode ▸ Indexed Color… — the image flattened and every pixel
+   *  the nearest colour of `palette` (`colours` of them for Adaptive), at
+   *  8 bits, one undo step (image ADR 484). */
+  setIndexedColor(palette: IndexedPalette, colours?: number): Promise<boolean>;
   /** Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color (every
    *  layer; one undo step). CMYK converts through the chosen CMYK profile
    *  (`pickExportProfile`); without one the plain ink formula changes no
@@ -1829,6 +1842,11 @@ const S = defineMessages("image.status", {
   modeNameRgb: "RGB colour",
   modeNameCmyk: "CMYK colour",
   modeNameLab: "Lab colour",
+  modeNameIndexed: "Indexed colour",
+  modeNameMultichannel: "Multichannel",
+  modeNameDuotone: "Duotone",
+  modeIndexedSet:
+    "Mode → Indexed colour, {count} colours. The image was flattened. One undo step.",
   psdSaveBack: "PSD save-back — {shape}.",
   jpegSaveBack:
     "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG).",
@@ -2149,6 +2167,9 @@ const MODE_NAME: Record<ColorModeName, string> = {
   rgb: S.modeNameRgb,
   cmyk: S.modeNameCmyk,
   lab: S.modeNameLab,
+  indexed: S.modeNameIndexed,
+  multichannel: S.modeNameMultichannel,
+  duotone: S.modeNameDuotone,
 };
 const modeLabel = (m: ColorModeName): string => t(MODE_NAME[m]);
 
@@ -5164,6 +5185,45 @@ export function createImageSession(host: BundleHost): ImageSession {
         if (src.elementId) await api.apply();
       }
       setStatus(t(changed ? S.modeBitsSet : S.modeBitsAlready, { bits }));
+      emit();
+      return changed;
+    },
+
+    async setIndexedColor(palette, colours = 256) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      discardStroke();
+      let changed: boolean;
+      try {
+        engine.layersOpen(src.handle);
+        changed = await engine.imageSetIndexed(src.handle, palette, colours);
+      } catch (err) {
+        setStatus(
+          t(S.whatFailed, {
+            what: modeLabel("indexed"),
+            error: errText(err),
+          }),
+        );
+        emit();
+        return false;
+      }
+      refreshLayers();
+      if (changed) {
+        markPixelsEdited();
+        bumpTiles();
+        if (src.elementId) await api.apply();
+      }
+      if (state.dialog?.kind === "indexedColor") state.dialog = null;
+      const count =
+        palette === "web" ? 216 : palette === "adaptive" ? colours : null;
+      setStatus(
+        changed
+          ? t(S.modeIndexedSet, { count: count ?? "≤ 256" })
+          : t(S.modeColorAlready, { mode: modeLabel("indexed") }),
+      );
       emit();
       return changed;
     },

@@ -946,6 +946,7 @@ mod tests {
             let doc = DocMode {
                 mode,
                 cmyk_profile: None,
+                table: None,
             };
             s.set_mode(doc.clone()).expect("mode");
             let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
@@ -1012,6 +1013,134 @@ mod tests {
         }
     }
 
+    /// A 32-bit document (image ADR 484) is saved as one: depth 32, its
+    /// layers in `Lr32` as linear floats, the composite RAW floats — and
+    /// reads back through the import as the floats it wrote.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_32bit_document_is_saved_and_reopened_as_floats__feat__image_io_depth_color_modes() {
+        let mut s = layered_stack();
+        s.set_depth(image_core::SampleDepth::F32).expect("32 bits");
+        let composite = pollster::block_on(s.composite_px(None, None)).expect("fold");
+        let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+        crate::psd_write::psd_write_stack_px(&mut f, &s, &composite).expect("written");
+        let f = PsdFile::parse(&f.write().expect("bytes")).expect("reparse");
+        assert_eq!(f.header.depth, 32);
+        assert_eq!(f.layer_mask.deep_key, Some(*b"Lr32"));
+        let merged = f.composite_samples().expect("float composite");
+        assert_eq!(merged.depth, 32);
+        let want = composite.to_f32_linear();
+        let alpha = merged.alpha.expect("transparency");
+        for i in 0..8 {
+            assert!((alpha[i] - want[i * 4 + 3]).abs() < 1e-6);
+        }
+        let import = f.layer_plates_rgba8().expect("float layers import");
+        let back =
+            crate::layers::LayerStack::from_psd_plates_with(&import, Some(&f.layer_mask.layers))
+                .expect("stack");
+        assert_eq!(back.depth(), image_core::SampleDepth::F32);
+        for (a, b) in back.layers().iter().zip(s.layers()) {
+            assert_eq!(
+                a.rgba.canvas().to_f32_linear(),
+                b.rgba.canvas().to_f32_linear(),
+                "{}",
+                b.name
+            );
+        }
+    }
+
+    /// Indexed Color… and Multichannel (image ADR 484): the stack is
+    /// flattened into its mode as one undo step, an edit stays in the
+    /// table's colours, and the save writes the one image Photoshop keeps —
+    /// the colour table or the named inks, no layer records — which
+    /// decodes back to the composite.
+    #[test]
+    #[allow(non_snake_case)]
+    fn indexed_and_multichannel_documents_flatten_and_save_as_one_image__feat__image_io_depth_color_modes(
+    ) {
+        use crate::color_mode::{web_palette, ColorMode as M, DocMode};
+        let mut s = layered_stack();
+        let steps = s.history().depth;
+        assert!(
+            pollster::block_on(s.convert_flat(None, DocMode::indexed(web_palette())))
+                .expect("indexed")
+        );
+        assert_eq!(s.history().depth, steps + 1, "one undo step");
+        assert_eq!(s.len(), 1, "flattened");
+        assert_eq!(s.mode().mode, M::Indexed);
+        let web = web_palette();
+        let on_table = |px: &crate::pixels::Pixels| {
+            px.to_rgba8()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| web.contains(&[p[0], p[1], p[2]]))
+        };
+        assert!(on_table(s.layers()[0].rgba.canvas()));
+        // A brush colour lands as the nearest table colour.
+        let paint = std::sync::Arc::from([17u8, 200, 99, 255].repeat(8).into_boxed_slice());
+        s.edit_active(
+            "Brush",
+            image_core::Region::new(0, 0, 4, 2),
+            crate::pixels::Pixels::from_rgba8(paint),
+        )
+        .expect("paint");
+        assert!(on_table(s.layers()[0].rgba.canvas()));
+        assert_eq!(&s.layers()[0].rgba.canvas().to_rgba8()[..3], &[0, 204, 102]);
+        let composite = pollster::block_on(s.composite_px(None, None)).expect("composite");
+        let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+        crate::psd_write::psd_write_stack_px(&mut f, &s, &composite).expect("written");
+        let bytes = f.write().expect("bytes");
+        let f = PsdFile::parse(&bytes).expect("reparse");
+        assert_eq!(f.header.color_mode, image_psd::model::ColorMode::Indexed);
+        assert_eq!((f.header.channels, f.header.depth), (1, 8));
+        assert!(f.layer_mask.layers.is_empty());
+        assert_eq!(f.indexed_palette().expect("table").count, Some(216));
+        let img = crate::ingest::decode_rgba8(&bytes).expect("decodes");
+        assert_eq!(&*img.rgba.to_rgba8(), &*composite.to_rgba8());
+        assert_eq!(DocMode::of_psd(&f).expect("mode"), s.mode().clone());
+
+        // Multichannel from RGB: three inks, the RGB values (flattened
+        // over white first, as the conversion flattens).
+        let mut s = layered_stack();
+        pollster::block_on(s.flatten(None)).expect("flatten");
+        let before = pollster::block_on(s.composite(None, None)).expect("composite");
+        let m = DocMode::multichannel_from(M::Rgb).expect("from RGB");
+        assert!(pollster::block_on(s.convert_flat(None, m)).expect("multichannel"));
+        let composite = pollster::block_on(s.composite_px(None, None)).expect("composite");
+        assert_eq!(
+            &*composite.to_rgba8(),
+            &*before,
+            "its inks change no colour"
+        );
+        let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+        crate::psd_write::psd_write_stack_px(&mut f, &s, &composite).expect("written");
+        let bytes = f.write().expect("bytes");
+        let f = PsdFile::parse(&bytes).expect("reparse");
+        assert_eq!(
+            f.header.color_mode,
+            image_psd::model::ColorMode::Multichannel
+        );
+        assert_eq!(f.header.channels, 3);
+        assert_eq!(
+            crate::color_mode::spot_names(&f),
+            ["Cyan", "Magenta", "Yellow"]
+        );
+        let img = crate::ingest::decode_rgba8(&bytes).expect("decodes");
+        assert_eq!(&*img.rgba.to_rgba8(), &*before);
+        assert_eq!(DocMode::of_psd(&f).expect("mode"), s.mode().clone());
+        // Converting it back to RGB is a plain mode change.
+        assert!(s.set_mode(DocMode::rgb()).expect("rgb"));
+        // Duotone has no conversion (its inks' format is undocumented).
+        assert!(s
+            .set_mode(DocMode {
+                mode: M::Duotone,
+                cmyk_profile: None,
+                table: None,
+            })
+            .is_err());
+    }
+
     /// What the stack evaluates in RGB is refused in a converted mode, so
     /// the caller flattens and says why: an adjustment layer (Photoshop
     /// applies it to the mode's channels) and Blend If (per channel).
@@ -1022,6 +1151,7 @@ mod tests {
         let gray = DocMode {
             mode: M::Gray,
             cmyk_profile: None,
+            table: None,
         };
         let mut s = layered_stack();
         s.add_adjustment_layer(

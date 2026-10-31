@@ -163,6 +163,8 @@
 // 2026-10-30: symbols (engine ADR 1039) named five new Mutation ops —
 // createSymbol, redefineSymbol, placeSymbolInstance, breakSymbolLink and
 // deleteSymbol. Each got a real-args probe on a scratch frame made a symbol.
+// 2026-10-30: live vector effects (engine ADR 1042) named expandAppearance,
+// probed on a scratch frame carrying a zig zag.
 
 export type CapabilityStatus = "supported" | "unsupported";
 
@@ -735,6 +737,11 @@ export const CAPABILITIES: Capability[] = [
     op: "setPageOverrides",
     status: "supported",
     note: "proto 78, ADR 1026; {page, overrides}; probed on the masters fixture's first page and its master's rectangle",
+  },
+  {
+    op: "expandAppearance",
+    status: "supported",
+    note: "proto 78, engine ADR 1042; {elementId}; probed on a scratch frame with a zig zag",
   },
 ];
 
