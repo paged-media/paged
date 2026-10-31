@@ -347,7 +347,7 @@ const nibFields = (): OptionDef[] => [
 
 /** WP6.4 — what a Paintbrush or Blob Brush stroke becomes: the filled
  *  outline it always made (the default, first), or a LIVE stroke — the
- *  centreline, stroked, its pressure a width profile (engine ADR 10XX),
+ *  centreline, stroked, its pressure a width profile (engine ADR 1053),
  *  re-editable with the Width tool and the Brushes panel. */
 const BRUSH_RESULT: SelectOption<"outline" | "live"> = {
   kind: "select",
@@ -392,7 +392,7 @@ export const ERASER_OPTIONS = defineToolOptions({
 export const WIDTH_OPTIONS = defineToolOptions({
   toolId: "media.paged.draw.tool.width",
   fields: [
-    // WP6.4 — live width points (engine ADR 10XX) first: the default.
+    // WP6.4 — live width points (engine ADR 1053) first: the default.
     {
       kind: "select",
       key: "mode",

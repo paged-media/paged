@@ -32,7 +32,7 @@
 //!   describes (what the renderer draws, what IDML export writes, what
 //!   `expandAppearance` keeps).
 //!
-//! The stroke styles (engine ADR 10XX) are vector entries too: a width
+//! The stroke styles (engine ADR 1053) are vector entries too: a width
 //! profile and the Art, Scatter, Pattern and Bristle brushes draw the
 //! item's STROKE as artwork along the path ([`stroke_style`]); the
 //! outline they return is filled with the stroke's paint, and a caller

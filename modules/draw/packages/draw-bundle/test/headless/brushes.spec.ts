@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// BRUSHES AND WIDTH PROFILES (WP6.4, engine ADR 10XX, draw ADR 366)
+// BRUSHES AND WIDTH PROFILES (WP6.4, engine ADR 1053, draw ADR 366)
 // through the REAL engine: each command writes the selection's stroke
 // style as ONE undo step that undoes and redoes exactly, the stroke is
 // drawn as its artwork while the path keeps its anchors, and what has

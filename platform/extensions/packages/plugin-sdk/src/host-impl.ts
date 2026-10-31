@@ -557,7 +557,7 @@ export const HOST_FEATURES: readonly string[] = [
   // effect) and the `expandAppearance` op. STATIC: the worker handshake
   // pins protocol 78, which applies them.
   "document.vectorEffects@1",
-  // Engine ADR 10XX (protocol 78) — stroke styles: the `widthProfile` and
+  // Engine ADR 1053 (protocol 78) — stroke styles: the `widthProfile` and
   // `brush` kinds on `frameEffectStack` draw the item's stroke as a
   // variable-width band or a brush's artwork along the path. STATIC: the
   // protocol-78 handshake of an engine that carries the two kinds.

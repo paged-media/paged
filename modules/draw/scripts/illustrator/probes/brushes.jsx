@@ -17,7 +17,7 @@
  */
 
 // ORACLE PROBE -- BRUSHES: what Illustrator's own brushes make of a
-// straight open path, expanded (engine ADR 10XX, draw ADR 366).
+// straight open path, expanded (engine ADR 1053, draw ADR 366).
 //
 //   bash scripts/illustrator/run-probe.sh \
 //     scripts/illustrator/probes/brushes.jsx \

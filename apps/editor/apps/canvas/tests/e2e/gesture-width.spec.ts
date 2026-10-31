@@ -168,7 +168,7 @@ test("WD-01 — a Width-tool drag on the selected path's stroke gives it a live 
   await dragMouse(page, at, out);
 
   // WP6.4 — the Width tool's default result is LIVE width points (engine
-  // ADR 10XX): a polygon keeps its anchors and gains a `widthProfile`
+  // ADR 1053): a polygon keeps its anchors and gains a `widthProfile`
   // entry on its stack. A graphic line carries no stack and takes the v0
   // lane, where outlineStrokeVariable replaces the centreline with its
   // swept outline and the anchor count jumps.

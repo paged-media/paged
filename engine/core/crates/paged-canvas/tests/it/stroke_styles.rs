@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 10XX — stroke styles (width profiles, brushes) through the
+//! Engine ADR 1053 — stroke styles (width profiles, brushes) through the
 //! canvas model: the stack paths take them on a page item and refuse them
 //! on a group; Expand Appearance keeps a stroke-only item's artwork and
 //! refuses an item whose fill the artwork would drop; an IDML export

@@ -107,7 +107,7 @@ pub struct EffectKindRow {
     /// and `expandAppearance` keeps its result.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub vector: bool,
-    /// Engine ADR 10XX — a stroke style: a vector effect that draws the
+    /// Engine ADR 1053 — a stroke style: a vector effect that draws the
     /// item's STROKE as artwork along the path (a width profile, a
     /// brush). Applied from the Stroke and Brushes panels and the Width
     /// tool, not the Effect menu: its category ("stroke") is not one of
@@ -289,7 +289,7 @@ const SHAPES: &[&str] = &["rectangle", "roundedRectangle", "ellipse"];
 const PATHFINDER_OPS: &[&str] = &["add", "subtract", "intersect", "exclude"];
 const BRUSH_TYPES: &[&str] = &["art", "scatter", "pattern", "bristle"];
 
-/// Engine ADR 10XX — a stroke style's row.
+/// Engine ADR 1053 — a stroke style's row.
 fn stroke_style(kind: EffectKind, title: &'static str, params: Vec<EffectParam>) -> EffectKindRow {
     EffectKindRow {
         stroke_style: true,

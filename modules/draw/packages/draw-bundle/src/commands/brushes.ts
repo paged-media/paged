@@ -17,7 +17,7 @@
  */
 
 // BRUSHES AND WIDTH PROFILES as live stroke styles (WP6.4, engine ADR
-// 10XX, draw ADR 366). The engine draws a page item's stroke as a
+// 1053, draw ADR 366). The engine draws a page item's stroke as a
 // brush's artwork along its path, or as a variable-width band, from two
 // entries of the item's object effect stack (`frameEffectStack`):
 //

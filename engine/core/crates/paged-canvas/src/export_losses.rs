@@ -944,7 +944,7 @@ pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
         if kinds.is_empty() {
             return;
         }
-        // Engine ADR 10XX — a stroke style beside a fill is written as
+        // Engine ADR 1053 — a stroke style beside a fill is written as
         // two items: the fill part and the stroke's artwork.
         let split = split_ids.contains(&id.map(str::to_string));
         out.push(format!(

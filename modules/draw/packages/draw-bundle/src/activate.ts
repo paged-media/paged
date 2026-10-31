@@ -438,7 +438,7 @@ export function activate(host: BundleHost): BundleHandle {
     ...makeColorGuidePanel(host),
   });
   // WP6.4 — the BRUSHES panel: brush libraries, Brush Options and the
-  // width profile library (live stroke styles, engine ADR 10XX).
+  // width profile library (live stroke styles, engine ADR 1053).
   host.contribute.panel({
     id: BRUSHES_PANEL_ID,
     icon: "ui-sparkle",

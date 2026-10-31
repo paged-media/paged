@@ -748,7 +748,7 @@ impl ModelGeometry {
     /// `<PathPointArray>`s out of the contour count altogether — see
     /// `PathCtx::foreign_depth` in [`rewrite_spread`].)
     /// How many contours the model has, when the writer may restructure
-    /// the item's contours (engine ADR 1042 / 10XX: a baked effect or
+    /// the item's contours (engine ADR 1042 / 1053: a baked effect or
     /// stroke style can turn one contour into several): `None` otherwise.
     fn contour_count(&self) -> Option<usize> {
         if self.oval || self.anchors.is_empty() {
@@ -3664,7 +3664,7 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                 // The item's own `<PathGeometry>` (Item > Properties >
                 // PathGeometry), and each of its contours' `PathOpen`:
                 // a contour the model now opens or closes (a baked
-                // effect, engine ADR 1042 / 10XX) is re-flagged.
+                // effect, engine ADR 1042 / 1053) is re-flagged.
                 if let Some(ctx) = path_ctx.last_mut() {
                     if ctx.array_depth == 0 && ctx.foreign_depth == 0 {
                         if name_owned == b"PathGeometry" && depth == ctx.item_depth + 2 {
@@ -4167,7 +4167,7 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                     }
                     // Closing the item's own `<PathGeometry>`: the
                     // contours the model has beyond the source's (a baked
-                    // effect or stroke style, engine ADR 1042 / 10XX)
+                    // effect or stroke style, engine ADR 1042 / 1053)
                     // are written before the close.
                     if ctx.geometry_depth != 0
                         && depth == ctx.geometry_depth

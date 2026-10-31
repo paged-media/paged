@@ -28,7 +28,7 @@
 //     a same-fill SELECTED element (honest v0 scope below).
 //   · Live (WP6.4, both painting tools' `result: live` option) — the
 //     centreline stays, stroked, its widths a live width profile
-//     (engine ADR 10XX), instead of the filled outline.
+//     (engine ADR 1053), instead of the filled outline.
 //   · Eraser — a UNIFORM round-nib sweep → `outlineStroke` →
 //     `pathfinderBoolean` SUBTRACT from each SELECTED path element.
 //
@@ -360,7 +360,7 @@ async function insertSweptShape(
 
 /** WP6.4 — a LIVE stroke (the tools' `result: live` option): the
  *  centreline itself, stroked with the sweep's paint at the nib's widest,
- *  its per-stop widths a live width profile (engine ADR 10XX) — so the
+ *  its per-stop widths a live width profile (engine ADR 1053) — so the
  *  Width tool and the Brushes panel keep editing it. One batch: defaults
  *  → insert → bind → stack → restore. */
 export function liveStrokeOpsFor(

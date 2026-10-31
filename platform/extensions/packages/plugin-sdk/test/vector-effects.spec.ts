@@ -90,7 +90,7 @@ describe("live vector effects (engine ADR 1042) [effects-transparency.live-vecto
   });
 });
 
-describe("stroke styles (engine ADR 10XX) [plugin-draw.brushes-width]", () => {
+describe("stroke styles (engine ADR 1053) [plugin-draw.brushes-width]", () => {
   it("is advertised; a width profile and a brush are stack entries, one undo step", async () => {
     expect(HOST_FEATURES).toContain("document.strokeStyles@1");
     const h = (live = await createHeadlessHost({ console: silent }));

@@ -35,7 +35,7 @@
 //! before (ADR 1008). The reader restores both. The export's loss report
 //! names every baked item (`paged-canvas`'s `vector_effect_losses`).
 //!
-//! Engine ADR 10XX — a stroke style (a width profile, a brush) draws the
+//! Engine ADR 1053 — a stroke style (a width profile, a brush) draws the
 //! STROKE as artwork. On an item that strokes only, the bake above
 //! writes the artwork in the item's place, filled with the stroke's
 //! paint. Beside a fill, a picture or an appearance the item is SPLIT:

@@ -1082,7 +1082,7 @@ export type EffectKind = "dropShadow" | "innerShadow" | "outerGlow" | "innerGlow
  * | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
  * | `pathfinder` | `op` (on a group\'s stack only) |
  *
- * The stroke styles (engine ADR 10XX), on a page item\'s object stack
+ * The stroke styles (engine ADR 1053), on a page item\'s object stack
  * only:
  *
  * | kind | fields |

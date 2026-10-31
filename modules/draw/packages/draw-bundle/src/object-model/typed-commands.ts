@@ -576,7 +576,7 @@ export const TWINS: readonly TwinSpec[] = [
   twin("recolorArtworkOptions", {}),
   twin("applyGuideColor", { ...T, hex: TEXT, stroke: BOOL }),
   // WP6.4 — brushes and width profiles as live stroke styles (engine ADR
-  // 10XX): a brush by its id (built-in or the document's), its options,
+  // 1053): a brush by its id (built-in or the document's), its options,
   // its removal; a width profile by its library id or its points
   // (`profile: ""` takes `points`: [t, width × weight]); a new brush of
   // the selected artwork; the Brushes panel's raiser takes nothing.

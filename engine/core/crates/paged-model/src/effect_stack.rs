@@ -352,7 +352,7 @@ pub enum Effect {
     ConvertToShape(crate::vector_effect::ConvertToShapeParams),
     /// On a group only: its members combined into one outline.
     Pathfinder(crate::vector_effect::PathfinderParams),
-    // Stroke styles (engine ADR 10XX): vector entries that draw the
+    // Stroke styles (engine ADR 1053): vector entries that draw the
     // item's STROKE as artwork along the path; the fill stays.
     /// A variable-width stroke.
     WidthProfile(crate::vector_effect::WidthProfileParams),
@@ -563,14 +563,14 @@ impl Effect {
         )
     }
 
-    /// Whether this entry is a stroke style (engine ADR 10XX): a vector
+    /// Whether this entry is a stroke style (engine ADR 1053): a vector
     /// entry that draws the item's stroke as artwork along the path.
     pub fn is_stroke_style(&self) -> bool {
         matches!(self, Effect::WidthProfile(_) | Effect::Brush(_))
     }
 }
 
-/// Whether a stack has an enabled stroke style (engine ADR 10XX).
+/// Whether a stack has an enabled stroke style (engine ADR 1053).
 pub fn has_stroke_style(stack: &[EffectEntry]) -> bool {
     stack
         .iter()

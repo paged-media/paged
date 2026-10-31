@@ -2331,7 +2331,7 @@ pub enum EffectKind {
     Scribble,
     ConvertToShape,
     Pathfinder,
-    // Engine ADR 10XX — the stroke styles.
+    // Engine ADR 1053 — the stroke styles.
     WidthProfile,
     Brush,
 }
@@ -2468,7 +2468,7 @@ impl EffectKind {
 /// | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
 /// | `pathfinder` | `op` (on a group's stack only) |
 ///
-/// The stroke styles (engine ADR 10XX), on a page item's object stack
+/// The stroke styles (engine ADR 1053), on a page item's object stack
 /// only:
 ///
 /// | kind | fields |
@@ -2616,7 +2616,7 @@ pub struct EffectEntrySpec {
     pub corner_radius: Option<f32>,
     #[serde(default)]
     pub op: Option<String>,
-    // Engine ADR 10XX — the stroke styles' parameters.
+    // Engine ADR 1053 — the stroke styles' parameters.
     #[serde(default)]
     pub width_points: Option<Vec<[f32; 2]>>,
     #[serde(default)]

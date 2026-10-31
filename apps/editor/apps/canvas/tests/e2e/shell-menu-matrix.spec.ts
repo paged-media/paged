@@ -223,7 +223,7 @@ const EFFECT_ROWS: readonly string[] = (
     }>;
   }
 ).effectKinds
-  // The stroke styles (engine ADR 10XX) have no Effect menu row.
+  // The stroke styles (engine ADR 1053) have no Effect menu row.
   .filter((k) => !k.strokeStyle)
   .map(
     (k) =>

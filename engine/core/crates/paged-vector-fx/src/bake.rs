@@ -501,7 +501,7 @@ pub fn bake_group(spread: &Spread, group: &paged_model::Group) -> Option<Polygon
     Some(out)
 }
 
-// ---- Stroke styles (engine ADR 10XX) --------------------------------
+// ---- Stroke styles (engine ADR 1053) --------------------------------
 //
 // A stroke style takes the STROKE's place; the item's fill (and picture,
 // and appearance) stays on the source outline. A consumer that draws one

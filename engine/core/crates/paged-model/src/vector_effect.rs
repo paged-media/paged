@@ -53,7 +53,7 @@ pub const VECTOR_KINDS: [&str; 16] = [
     "brush",
 ];
 
-/// The stroke styles among the vector kinds (engine ADR 10XX): they
+/// The stroke styles among the vector kinds (engine ADR 1053): they
 /// replace the item's STROKE by the artwork they draw along the path; the
 /// fill stays the item's own.
 pub const STROKE_STYLE_KINDS: [&str; 2] = ["widthProfile", "brush"];
@@ -681,7 +681,7 @@ impl BrushArt {
 }
 
 /// A brush as a stroke style: the stroke is drawn as the brush's artwork
-/// along the path, filled with the stroke's paint (engine ADR 10XX).
+/// along the path, filled with the stroke's paint (engine ADR 1053).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrushParams {
@@ -793,7 +793,7 @@ pub mod label {
 
     /// The label key.
     pub const SOURCE_KEY: &str = "paged:vectorSource";
-    /// Engine ADR 10XX — the label of a stroke-artwork polygon the
+    /// Engine ADR 1053 — the label of a stroke-artwork polygon the
     /// writer split off an item with a stroke style: the item's id.
     pub const STROKE_ART_KEY: &str = "paged:strokeArtOf";
 

@@ -21,7 +21,7 @@
 //
 //   · BRUSHES — a library (Basic, Artistic, Decorative, the document's
 //     own) and its brushes; a click applies the brush to the selection's
-//     stroke as a live stroke style (engine ADR 10XX), Remove takes it
+//     stroke as a live stroke style (engine ADR 1053), Remove takes it
 //     off, New makes a brush of the selected artwork.
 //   · BRUSH OPTIONS — the selected item's brush: size, spacing, scatter,
 //     rotation, flips, tile proportion, bristles; Apply writes them (one

@@ -39,7 +39,7 @@ describe("Effect menu [editor-shell.panels.appearance-transparency]", () => {
     covers("command:paged.effect.add.*");
     const items = buildEffectMenuItems();
     const commands = buildEffectMenuCommands();
-    // The stroke styles (engine ADR 10XX) are applied from the stroke and
+    // The stroke styles (engine ADR 1053) are applied from the stroke and
     // brushes panels: no Effect menu row.
     const menuKinds = CORE_EFFECT_KINDS.filter((k) => !k.strokeStyle);
     expect(items.length).toBe(menuKinds.length);

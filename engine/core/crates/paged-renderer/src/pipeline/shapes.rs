@@ -74,7 +74,7 @@ pub(super) fn emit_oval_into(
             page, &twin, document, palette, fallback, color_ctx, content, module,
         );
     }
-    // Engine ADR 10XX — a stroke style beside a fill, a picture or an
+    // Engine ADR 1053 — a stroke style beside a fill, a picture or an
     // appearance: the fill part and the stroke artwork as two parts.
     if paged_vector_fx::bake::oval_splits(oval) {
         return super::appearance::emit_oval(
@@ -1058,7 +1058,7 @@ pub(super) fn emit_rectangle_into(
     content: ContentPainter<'_>,
     module: ModulePainter<'_>,
 ) {
-    // Engine ADR 10XX — a stroke style beside a fill, a picture or an
+    // Engine ADR 1053 — a stroke style beside a fill, a picture or an
     // appearance: the fill part and the stroke artwork as two parts.
     if paged_vector_fx::bake::rectangle_splits(rect) {
         return super::appearance::emit_rectangle(

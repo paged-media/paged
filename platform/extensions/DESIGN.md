@@ -922,7 +922,7 @@ STATIC: the protocol-78 handshake proves the engine has the op and the
 paths. paged.draw's effect UI (WP6.3) and the host Effects panel list the
 kinds from the schema's `EffectKind`.
 
-`"document.strokeStyles@1"` (engine ADR 10XX, protocol 78) says the
+`"document.strokeStyles@1"` (engine ADR 1053, protocol 78) says the
 engine draws STROKE STYLES: two more vector kinds of `frameEffectStack`
 that draw the item's stroke along its path, painted with the stroke's
 paint. `widthProfile` (`widthPoints`: `[t, width]`, `t` the arc-length

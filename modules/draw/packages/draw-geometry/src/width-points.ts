@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// WIDTH POINTS (WP6.4, engine ADR 10XX) — the live variable-width stroke
+// WIDTH POINTS (WP6.4, engine ADR 1053) — the live variable-width stroke
 // as data: a list of `[t, width]`, `t` the arc-length fraction along each
 // contour (0 its start, 1 its end), `width` the stroke's width there as a
 // multiple of its weight. The engine draws it (the `widthProfile` stroke

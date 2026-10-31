@@ -48,7 +48,7 @@ use crate::module::effect_stack::StackMode;
 /// The parts of `item`, bottom to top, each with whether it paints the
 /// item's content.
 ///
-/// Engine ADR 10XX — an item whose `stack` holds a stroke style is drawn
+/// Engine ADR 1053 — an item whose `stack` holds a stroke style is drawn
 /// split: its fill part and its stroke part are separate parts even when
 /// one follows the other, and every part takes the item's vector entries
 /// (the stroke part with the stroke style, which draws its artwork; the

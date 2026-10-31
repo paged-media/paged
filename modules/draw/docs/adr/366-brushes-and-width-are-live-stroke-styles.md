@@ -5,7 +5,7 @@
   `commands/brushes.ts`, `panels/brushes-panel.tsx`, `handlers/width.ts`, `handlers/brush.ts`,
   the Width, Paintbrush and Blob Brush options in `tool-options.ts`, the Draw ▸ Stroke rows in
   `menu.ts`, the typed twins, the `brushLibrary` part type; the `brushes` oracle probe. Engine
-  ADR 10XX (the `widthProfile` and `brush` stroke styles, host flag
+  ADR 1053 (the `widthProfile` and `brush` stroke styles, host flag
   `document.strokeStyles@1`). Work package WP6.4 of the image/draw plan (gaps D-22, D-23,
   D-24, D-26).
 
@@ -13,7 +13,7 @@
 
 The Width tool and the Paintbrush wrote `outlineStrokeVariable`: the centreline became its
 filled outline, so a width could not be changed again and nothing remembered that the shape
-had been a stroke. paged.draw had no brushes along a path at all. Engine ADR 10XX makes both
+had been a stroke. paged.draw had no brushes along a path at all. Engine ADR 1053 makes both
 live: a page item's object stack takes a `widthProfile` entry (width points along each
 contour) and a `brush` entry (Art, Scatter, Pattern or Bristle, its artwork in the brush
 frame), and the engine draws the stroke from them.
@@ -50,7 +50,7 @@ frame), and the engine draws the stroke from them.
 
 - A brushed or variable-width stroke stays a stroke: its path, its colour and its weight
   edit as before, Expand Appearance keeps the artwork, and IDML gets the artwork as a path
-  with the brush in a label (engine ADR 10XX).
+  with the brush in a label (engine ADR 1053).
 - The oracle: Illustrator 30.1's default art brush, applied to 200, 303 and 420 pt lines and
   expanded, is a stretch of one artwork along the path; the engine, given the 200 pt result as
   its artwork, draws the other two anchor for anchor to 0.01 pt (`test/oracle/brushes.spec.ts`).

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Stroke styles (engine ADR 10XX): the item's stroke drawn as artwork
+//! Stroke styles (engine ADR 1053): the item's stroke drawn as artwork
 //! along its path — a variable-width band (the Width tool's width points,
 //! a width profile) or one of Illustrator's Art, Scatter, Pattern and
 //! Bristle brushes. Each returns the artwork as a filled outline, which

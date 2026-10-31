@@ -1551,7 +1551,7 @@ export {
   COLOR_GUIDE_PANEL_NOTE,
 } from "./panels/color-guide-panel";
 // WP6.4 — brushes and width profiles as live stroke styles (engine ADR
-// 10XX, draw ADR 366).
+// 1053, draw ADR 366).
 export {
   APPLY_BRUSH_COMMAND_ID,
   APPLY_WIDTH_PROFILE_COMMAND_ID,

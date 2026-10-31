@@ -21,7 +21,7 @@
 //   · LIVE (the default) — a drag anywhere on the SELECTED item's stroke
 //     adds a width point there (or moves the one within reach) and the
 //     drag's distance from the path sets its width; the release writes
-//     the item's `widthProfile` stroke style (engine ADR 10XX) — the
+//     the item's `widthProfile` stroke style (engine ADR 1053) — the
 //     path keeps its anchors and the profile stays editable, one undo
 //     step per drag. Any path, closed or compound, rectangle, ellipse or
 //     text frame. The overlay previews the band the profile draws.

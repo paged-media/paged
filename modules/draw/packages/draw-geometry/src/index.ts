@@ -102,7 +102,7 @@ export {
 // (outlineStrokeVariable stops).
 export { peakedWidthProfile } from "./width";
 // WP6.4 — live width points and the width profile library (engine ADR
-// 10XX's `widthProfile` stroke style).
+// 1053's `widthProfile` stroke style).
 export {
   MAX_WIDTH_POINTS,
   WIDTH_POINT_MERGE,

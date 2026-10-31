@@ -1,4 +1,4 @@
-# ADR 10XX — A stroke style draws the stroke along the path: width profiles and brushes
+# ADR 1053 — A stroke style draws the stroke along the path: width profiles and brushes
 
 - **Status:** Accepted 2026-10-31.
 - **Scope:** protocol v78 (rides it: two `EffectKind` members and their

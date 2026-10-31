@@ -20,7 +20,7 @@ canary added is under [Releases](#releases).
   subtracts one from the selected paths; with their `result: live` option the Paintbrush and
   Blob Brush keep the centreline, stroked, its widths a live width profile instead. Width
   (`mode: live`, the default) adds or moves a width point where it is dragged on the selected
-  item's stroke, written as the engine's `widthProfile` stroke style (engine ADR 10XX) — the
+  item's stroke, written as the engine's `widthProfile` stroke style (engine ADR 1053) — the
   path keeps its anchors, one undo step a drag; `mode: outline` (and a graphic line) outlines
   an open path at a varying width as before, and the `widthProfile` command does that with the
   widths given as data (below).
@@ -446,7 +446,7 @@ Recolouring a raster is pixel work and is not registered.
   redefine read it from the instance. Create Outlines reads it from the text frame, so on an
   engine that reports no origin its glyphs with holes land off by it there.
 - **Tools.** The Width tool's live width points are symmetric (one width per point, not one
-  per side), and IDML, which has no variable-width stroke, gets the outline (engine ADR 10XX).
+  per side), and IDML, which has no variable-width stroke, gets the outline (engine ADR 1053).
   Brushes paint their artwork in the stroke's colour only; a bristle brush's strands have no
   opacity of their own; a pattern brush has no corner tiles; Illustrator's brush libraries
   cannot be imported. Eyedropper samples properties, not

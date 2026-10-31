@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 10XX — the stroke styles: width profiles and the Art,
+//! Engine ADR 1053 — the stroke styles: width profiles and the Art,
 //! Scatter, Pattern and Bristle brushes, alone and on page items. Tests
 //! named `*__feat__plugin_draw_brushes_width` are the evidence of the
 //! feature row `plugin-draw.brushes-width`.

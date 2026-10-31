@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// ORACLE — Illustrator's ART BRUSH against the engine's (engine ADR 10XX,
+// ORACLE — Illustrator's ART BRUSH against the engine's (engine ADR 1053,
 // draw ADR 366). The recording (`scripts/illustrator/probes/brushes.jsx`)
 // applies Illustrator 30.1's default art brush to a 1 pt stroke along
 // straight lines 200, 303 and 420 pt long and expands it. What it says,
@@ -76,7 +76,7 @@ beforeAll(async () => {
 });
 afterAll(() => h?.dispose());
 
-describe("oracle — Illustrator's art brush vs the engine's (engine ADR 10XX)", () => {
+describe("oracle — Illustrator's art brush vs the engine's (engine ADR 1053)", () => {
   it("records the art brush on three lengths", () => {
     expect(FIXTURE.produced_by.app).toContain("Illustrator");
     expect(FIXTURE.cases.map((c) => c.id)).toEqual([

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 10XX — stroke styles, drawn: a width profile and a brush
+//! Engine ADR 1053 — stroke styles, drawn: a width profile and a brush
 //! draw the stroke as artwork in the stroke's colour, and the item's fill
 //! stays on the source outline (the split); both rasterizers agree.
 

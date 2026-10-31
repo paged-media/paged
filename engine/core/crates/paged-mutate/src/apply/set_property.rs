@@ -2596,7 +2596,7 @@ pub(super) fn apply_set_property(
                             e.effect.kind_name()
                         )));
                     }
-                    // Engine ADR 10XX — a group has no stroke to style.
+                    // Engine ADR 1053 — a group has no stroke to style.
                     if let Some(e) = stack.iter().find(|e| e.effect.is_stroke_style()) {
                         return Err(refuse(format!(
                             "`{}` styles a page item's stroke; a group has none",

@@ -137,7 +137,7 @@ pub(super) fn apply_expand_appearance(
     }
 }
 
-/// Engine ADR 10XX — an item whose stroke style sits beside a fill, a
+/// Engine ADR 1053 — an item whose stroke style sits beside a fill, a
 /// picture or an appearance draws two outlines (the fill on the source,
 /// the stroke's artwork); one baked item cannot keep both, so Expand
 /// Appearance refuses it rather than drop the fill.
