@@ -679,6 +679,63 @@ export const CAPABILITIES: Capability[] = [
     status: "supported",
     note: "proto 78, ADR 1039; {symbolId}; probed on a scratch symbol",
   },
+  // Review: comments and recorded changes (protocol 78, doc ADR 613).
+  {
+    op: "insertComment",
+    status: "supported",
+    note: "proto 78, doc ADR 613; {storyId, start, end, cell?, comment}; probed on the text fixture's first story",
+  },
+  {
+    op: "replyComment",
+    status: "supported",
+    note: "proto 78, doc ADR 613; {parentId, comment}; probed on a scratch comment",
+  },
+  {
+    op: "editComment",
+    status: "supported",
+    note: "proto 78, doc ADR 613; {commentId, text, date?}; probed on a scratch comment",
+  },
+  {
+    op: "resolveComment",
+    status: "supported",
+    note: "proto 78, doc ADR 613; {commentId, resolved}; probed on a scratch comment",
+  },
+  {
+    op: "deleteComment",
+    status: "supported",
+    note: "proto 78, doc ADR 613; {commentId}; probed on a scratch comment",
+  },
+  {
+    op: "recordChange",
+    status: "supported",
+    note: "proto 78, doc ADR 613; {storyId, start, end, cell?, paragraph?, change}; probed on the text fixture's first story",
+  },
+  {
+    op: "acceptChange",
+    status: "supported",
+    note: "proto 78, doc ADR 613; {storyId?, id?, author?}; probed on a scratch recorded change",
+  },
+  {
+    op: "rejectChange",
+    status: "supported",
+    note: "proto 78, doc ADR 613; {storyId?, id?, author?}; probed on a scratch recorded change",
+  },
+  // Masters based on masters, override lists, item hyperlinks (protocol 78, engine ADR 1026).
+  {
+    op: "insertItemHyperlink",
+    status: "supported",
+    note: "proto 78, ADR 1026; {item, url?, page?, name?}; probed on a scratch frame",
+  },
+  {
+    op: "overrideMasterItems",
+    status: "supported",
+    note: "proto 78, ADR 1026; {page, items, emptyText?}; probed on the masters fixture's first page and its master's rectangle",
+  },
+  {
+    op: "setPageOverrides",
+    status: "supported",
+    note: "proto 78, ADR 1026; {page, overrides}; probed on the masters fixture's first page and its master's rectangle",
+  },
 ];
 
 export function expectedStatus(op: string): Capability | undefined {
