@@ -130,23 +130,27 @@ export function gradientSpecWithStop(
   index: number,
   locationPct: number,
 ): GradientSpec | null {
-  const kind =
-    detail.kind.toLowerCase() === "linear"
-      ? "Linear"
-      : detail.kind.toLowerCase() === "radial"
-        ? "Radial"
-        : null;
+  const kind = (
+    { linear: "Linear", radial: "Radial", conic: "Conic" } as const
+  )[detail.kind.toLowerCase() as "linear" | "radial" | "conic"];
   if (!kind || index < 0 || index >= detail.stops.length) return null;
   return {
     selfId: detail.selfId,
     name: detail.name,
     kind,
+    // Every field of every stop as read — a drag moves a location and
+    // nothing else: an opacity stop keeps its opacity, an inline stop
+    // its colour (engine ADR 1007).
     stops: detail.stops.map((s, i) => ({
-      stopColor: s.stopColorRef,
+      stopColor: s.color ? "" : s.stopColorRef,
       locationPct: i === index ? locationPct : s.locationPct,
       ...(s.midpointPct !== null && s.midpointPct !== undefined
         ? { midpointPct: s.midpointPct }
         : {}),
+      ...(s.opacityPct !== null && s.opacityPct !== undefined
+        ? { opacityPct: s.opacityPct }
+        : {}),
+      ...(s.color ? { color: s.color } : {}),
     })),
   };
 }

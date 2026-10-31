@@ -625,6 +625,15 @@ pub fn element_path(
 }
 
 fn locate(doc: &Document, node: &NodeId) -> Option<ElementInfo> {
+    let mut info = locate_source(doc, node)?;
+    // Engine ADR 1042 — the arrangement reads the outline the item draws.
+    if let Some(path) = super::expand_appearance::effected_path(doc, node) {
+        info.path = path;
+    }
+    Some(info)
+}
+
+fn locate_source(doc: &Document, node: &NodeId) -> Option<ElementInfo> {
     let raw = node.self_id();
     for parsed in &doc.spreads {
         let spread_id = spread_parent_id(parsed);

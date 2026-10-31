@@ -1700,6 +1700,38 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
+  test("Image/Mode/Indexed colour… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/Indexed colour…");
+    await expectGreyedAndInert(bare, "Image/Mode/Indexed colour…");
+    const out = await clickEntry(
+      live,
+      "Image/Mode/Indexed colour…",
+      "media.paged.image.command.modeIndexed",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Mode/Multichannel — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/Multichannel");
+    await expectGreyedAndInert(bare, "Image/Mode/Multichannel");
+    const out = await clickEntry(
+      live,
+      "Image/Mode/Multichannel",
+      "media.paged.image.command.modeMultichannel",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
   test("Image/Mode/8 bits per channel — with no image open, raises the Image panel", async () => {
     covers("menu:Image/Mode/8 bits per channel");
     await expectGreyedAndInert(bare, "Image/Mode/8 bits per channel");
@@ -1723,6 +1755,22 @@ test.describe.serial("plugin menus — paged.image", () => {
       live,
       "Image/Mode/16 bits per channel",
       "media.paged.image.command.modeBits16",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image, the document is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Mode/32 bits per channel — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Mode/32 bits per channel");
+    await expectGreyedAndInert(bare, "Image/Mode/32 bits per channel");
+    const out = await clickEntry(
+      live,
+      "Image/Mode/32 bits per channel",
+      "media.paged.image.command.modeBits32",
     );
     expect(out.shell).toEqual([
       { door: "openPanel", arg: "media.paged.image.panel.adjustments" },

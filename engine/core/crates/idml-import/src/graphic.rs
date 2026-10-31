@@ -241,11 +241,11 @@ fn parse_gradient_stop(e: &quick_xml::events::BytesStart) -> Option<GradientStop
         .and_then(|s| s.parse::<f32>().ok())
         .unwrap_or(0.0);
     let midpoint_pct = attr(e, b"Midpoint").and_then(|s| s.parse::<f32>().ok());
-    Some(GradientStopRef {
+    Some(GradientStopRef::swatch(
         stop_color,
         location_pct,
         midpoint_pct,
-    })
+    ))
 }
 
 /// `<Ink Self="Ink/$ID/Process Cyan" Name="$ID/Process Cyan" Angle="75"

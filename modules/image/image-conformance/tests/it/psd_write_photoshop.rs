@@ -324,7 +324,11 @@ fn converted(
         )
     });
     stack
-        .set_mode(DocMode { mode, cmyk_profile })
+        .set_mode(DocMode {
+            mode,
+            cmyk_profile,
+            table: None,
+        })
         .expect("mode");
     // The background record goes with the conversion too.
     (file, stack)
@@ -581,6 +585,7 @@ fn photoshop_opens_a_converted_document_in_its_new_mode__feat__image_io_depth_co
             image_js::color_mode::ColorMode::Lab => "DocumentMode.LAB",
             image_js::color_mode::ColorMode::Cmyk => "DocumentMode.CMYK",
             image_js::color_mode::ColorMode::Rgb => "DocumentMode.RGB",
+            other => unreachable!("{other:?} is not a converted case"),
         };
         assert_eq!(s(doc, "mode"), want_mode, "{name}");
         assert_eq!(

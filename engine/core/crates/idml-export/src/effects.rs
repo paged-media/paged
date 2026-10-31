@@ -17,7 +17,7 @@ use quick_xml::Writer;
 
 use idml_import::{DropShadowSetting, FrameEffects, TargetTransparency};
 
-use crate::rewrite::{emit_empty_with_attrs, format_f32};
+use crate::rewrite::{emit_empty_with_attrs, emit_start_with_attrs, format_f32};
 
 /// Everything a page item says about its transparency: the object's own
 /// setting and its three targets (R-10). `content` is a text frame's
@@ -352,7 +352,27 @@ fn write_setting(
         push_f32(&mut attrs, "Angle", g.angle_deg);
         push_f32(&mut attrs, "HiliteAngle", g.hilite_angle);
         push_f32(&mut attrs, "HiliteLength", g.hilite_length);
-        emit_empty_with_attrs(writer, "GradientFeatherSetting", &attrs)?;
+        if g.stops.is_empty() {
+            emit_empty_with_attrs(writer, "GradientFeatherSetting", &attrs)?;
+        } else {
+            // The opacity ramp, as InDesign writes it (and the importer
+            // reads it back): one `<OpacityGradientStop>` per stop. A bare
+            // setting is InDesign's default white-to-black fade, so a
+            // feather with stops must carry them (engine ADR 1007).
+            emit_start_with_attrs(writer, "GradientFeatherSetting", &attrs)?;
+            for st in &g.stops {
+                emit_empty_with_attrs(
+                    writer,
+                    "OpacityGradientStop",
+                    &[
+                        ("Opacity", format_f32(st.alpha_pct)),
+                        ("Location", format_f32(st.location_pct)),
+                        ("Midpoint", format_f32(st.midpoint_pct)),
+                    ],
+                )?;
+            }
+            writer.write_event(Event::End(BytesEnd::new("GradientFeatherSetting")))?;
+        }
     }
     writer.write_event(Event::End(BytesEnd::new(element)))?;
     Ok(())

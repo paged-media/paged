@@ -168,13 +168,85 @@ commit picks the stored build whose engine sources equal the worktree's
 `platform/shared/fmt` and `.cargo/config.toml`, committed or not), and refuses
 when none does: then the worktree has engine changes and must build.
 
+## Blaze for the edit loop (optional)
+
+[Blaze](https://github.com/indexable-inc/blaze) runs `cargo check`, `build`
+and `test` from a daemon that keeps a workspace loaded (rust-analyzer's
+database) and compiles what an edit changed. It is not a requirement and
+nothing in the repository calls it: no Moon task, script or CI workflow. Install
+it as its guide says (`docs/install.md` there); `blaze --help` lists the
+commands.
+
+Use it for one thing: quick feedback on one crate while editing.
+
+```sh
+cd engine/core
+BLAZE_PROC_MACRO_WASM=0 blaze check -p paged-svg   # engine/core: see the caveats
+cd modules/image
+blaze check -p image-kernels
+blaze stop                                          # when done
+```
+
+What to know:
+
+- **Blaze builds with its own toolchain**, a pinned Rust nightly it ships,
+  and ignores `rust-toolchain.toml`. Its verdict is a first opinion: `cargo`
+  with the pinned toolchain (`cargo check`, `cargo nextest`, clippy) and CI
+  decide. Run them before a push as before.
+- **The first `blaze` command of a kind is a cargo build** under that nightly
+  (dependencies included), then the daemon loads the workspace. The nightly's
+  artifacts sit next to the pinned toolchain's in the same `target/` (Cargo
+  keys them by compiler), so neither evicts the other, and the target grows.
+- **engine/core needs `BLAZE_PROC_MACRO_WASM=0`.** Blaze runs proc macros as
+  WebAssembly by default; `ouroboros_macro` (through `flo_curves`) panics
+  there, and every blaze command in engine/core fails to load the workspace.
+  With the variable set, proc macros expand natively and everything measured
+  below builds and passes. modules/image works without it.
+- **Memory.** There is one daemon per user. It starts a worker per workspace
+  and kind of command (`check -p`, `test -p`, flags); engine/core workers hold
+  4–5 GB each, modules/image ones 1–3 GB. Measured below, the daemon reached
+  21 GB with three engine/core workers. It caps its workers at half the
+  machine's memory (`BLAZE_MEMORY_MAX`, read when the daemon starts) and exits
+  after 30 idle minutes; `blaze stop` ends it at once and `blaze status` shows
+  the workers.
+- **Disk.** The toolchain takes about 650 MB (`~/.blaze`), the daemon's store
+  1.6 GB after these runs (`~/.cache/ra-jit/store`, capped; `blaze cache gc`).
+- **`blaze test` is not faster here.** After a one-line edit it took longer
+  than `cargo test` in both workspaces measured (below): it rebuilds the test
+  executables in the daemon and reloads the workspace for doc tests. Use
+  `cargo test` / `cargo nextest`.
+- Blaze does not build wasm32 itself (it hands such a build to cargo under its
+  nightly); wasm builds stay with the pinned toolchain ("Fast local wasm
+  builds" above).
+
+Measured on the 16-core Apple M3 Max (128 GB) above, target on the USB SSD,
+blaze 0.20261027 (Rust nightly 2026-10-27) against cargo with the pinned 1.99.1,
+`CARGO_BUILD_JOBS=6`, one run each while other builds kept the machine busy (load
+about 20), so take the numbers as orders of magnitude. "Edit" appends one
+constant to the crate's `lib.rs`.
+
+| Seconds                          | cargo cold | blaze cold | cargo, no change | blaze, no change | cargo after edit | blaze after edit |
+| -------------------------------- | ---------: | ---------: | ---------------: | ---------------: | ---------------: | ---------------: |
+| engine `check -p paged-svg`      |         47 |        196 |             0.67 |             0.41 |              8.0 |          2.2–2.4 |
+| engine `check -p paged-renderer` |        85¹ |        224 |              5.0 |             0.55 |              5.0 |          2.8–2.9 |
+| image `check -p image-kernels`   |         15 |         14 |             0.30 |             0.14 |              1.0 |             0.10 |
+| engine `test -p paged-svg`       |         42 |        163 |              7.6 |               10 |              6.0 |            33–54 |
+| image `test -p image-kernels`    |         24 |         74 |              1.3 |              7.3 |              2.8 |          6.8–8.7 |
+
+¹ After the `paged-svg` runs in the same target.
+
+Both ran the same tests with the same results (paged-svg 19 + 11, image-kernels
+15 + 92). The gain is `check` after an edit in a large workspace, two to ten
+times faster; cold starts and tests cost more than cargo.
+
 ## Not used
 
 - `-Z share-generics=y` needs a nightly compiler. On stable it is already on
   for opt-level 0 and 1, so the workspace's own crates share generics anyway.
 - A nightly toolchain for local work: CI and the fidelity gates build with the
   stable toolchains pinned in each `rust-toolchain.toml`, and local results
-  should match them.
+  should match them. (Blaze, above, brings its own nightly but only as a first
+  opinion in the edit loop.)
 
 ## Measurements
 

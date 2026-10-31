@@ -15,6 +15,8 @@ base64 = { workspace = true }
 idml-import = { path = "../idml-import" }
 paged-scene = { workspace = true }
 paged-model = { workspace = true }
+# Engine ADR 1042 — live vector effects are written baked.
+paged-vector-fx = { path = "../paged-vector-fx" }
 # The engine's raster sniff: a leaf crate, so the writer links no decoder.
 paged-sniff = { path = "../paged-sniff" }
 thiserror = { workspace = true }

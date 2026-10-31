@@ -99,8 +99,12 @@ describe("effect kinds come from core's catalog [effects-transparency.effect-sta
     const fill = addable(s, "fill");
     expect(fill).toContain("innerShadow");
     expect(fill).not.toContain("gaussianBlur");
+    // A kind an object takes is offered unless it is once-only and on the
+    // stack already; a group-only kind (Pathfinder) is not offered here.
     for (const k of CORE_EFFECT_KINDS)
-      expect(object.includes(k.kind) || k.maxPerStack === 1).toBe(true);
+      if (k.targets.includes("object"))
+        expect(object.includes(k.kind) || k.maxPerStack === 1).toBe(true);
+      else expect(object).not.toContain(k.kind);
   });
 
   test("every kind core describes is in exactly one Effect menu group", () => {
@@ -134,14 +138,14 @@ describe("effect kinds come from core's catalog [effects-transparency.effect-sta
 
   test("a kind core adds later is offered without an editor change (plan C16)", () => {
     withFutureKind(() => {
-      expect(addable(s, "object")).toContain("roughen");
-      expect(addable(s, "fill")).not.toContain("roughen");
+      expect(addable(s, "object")).toContain("crystallize");
+      expect(addable(s, "fill")).not.toContain("crystallize");
       const group = effectMenu().find(
         (g) => g.category === "distortAndTransform",
       );
-      expect(group?.kinds.map((k) => k.kind)).toEqual(["roughen"]);
-      expect(controlOf(paramsOf("roughen")[0]!)).toBe("number");
+      expect(group?.kinds.map((k) => k.kind)).toContain("crystallize");
+      expect(controlOf(paramsOf("crystallize")[0]!)).toBe("number");
     });
-    expect(addable(s, "object")).not.toContain("roughen");
+    expect(addable(s, "object")).not.toContain("crystallize");
   });
 });

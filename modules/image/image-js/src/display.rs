@@ -72,6 +72,10 @@ pub enum DisplayTreatment {
     /// so highlights above diffuse white are lost. Stated like a CMYK
     /// conversion: the working pixels are a lossy reading of the file.
     HdrClipped,
+    /// A float source (OpenEXR, Radiance HDR, a 32-bit PSD) held as 32-bit
+    /// float, linear light (image ADR 484): nothing is lost; the frame
+    /// shows it at exposure 0, values above white clipped.
+    Float32,
 }
 
 impl DisplayTreatment {
@@ -84,6 +88,7 @@ impl DisplayTreatment {
             Self::CmykConverted => "CMYK converted to sRGB (embedded profile)",
             Self::CmykUncalibrated => "CMYK converted to sRGB (no usable profile — device formula)",
             Self::HdrClipped => "HDR clipped to sRGB (no tone mapping)",
+            Self::Float32 => "32-bit float, linear light (shown at exposure 0)",
         }
     }
 

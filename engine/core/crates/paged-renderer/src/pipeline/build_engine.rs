@@ -2314,6 +2314,30 @@ pub(super) fn build_document_inner(
                 }
                 paged_model::FrameRef::Group(gi) => {
                     if let Some(g) = spread.groups.get(gi) {
+                        // Engine ADR 1042: a group with a Pathfinder
+                        // effect is one outline (a compound shape),
+                        // drawn in place of its members.
+                        if let Some(poly) = paged_vector_fx::bake::bake_group(spread, g) {
+                            let pages_hit = frame_ref_local_pages(
+                                spread,
+                                paged_model::FrameRef::Group(gi),
+                                local_geoms,
+                            );
+                            for local_idx in pages_hit {
+                                total_stats.frames += 1;
+                                emit_polygon_into(
+                                    &mut pages[range.start + local_idx],
+                                    &poly,
+                                    document,
+                                    palette,
+                                    options.fallback_frame_fill,
+                                    color_ctx,
+                                    &mut |_: &mut BuiltPage| {},
+                                    &mut |_: &mut BuiltPage| {},
+                                );
+                            }
+                            return;
+                        }
                         // Engine ADR 1010: a clip group paints its
                         // members inside the top-most one's outline and
                         // never paints that one itself. The clip goes on

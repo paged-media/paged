@@ -4041,16 +4041,17 @@ pub struct ColorPreview {
 
 /// Concept 2 — full gradient detail: the stop table the ramp
 /// editor mutates and the chips render. Stops carry the swatch REF
-/// (gradients reference swatches, never inline colours — edits to a
-/// component swatch propagate, spot stops survive to Separation at
-/// export) plus a display-resolved hex for painting the ramp.
+/// (edits to a component swatch propagate, spot stops survive to
+/// Separation at export) or, since engine ADR 1007, an inline colour,
+/// plus a display-resolved hex for painting the ramp and the stop's
+/// opacity.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct GradientDetail {
     pub self_id: String,
     pub name: String,
-    /// "linear" | "radial" | "unknown".
+    /// "linear" | "radial" | "conic" | "unknown".
     pub kind: String,
     pub stops: Vec<GradientStopWire>,
 }
@@ -4068,6 +4069,13 @@ pub struct GradientStopWire {
     pub location_pct: f32,
     /// 0..=100 blend midpoint toward the NEXT stop; `None` = 50.
     pub midpoint_pct: Option<f32>,
+    /// Engine ADR 1007 — the stop's opacity, 0..=100; `None` = 100.
+    #[serde(default)]
+    pub opacity_pct: Option<f32>,
+    /// Engine ADR 1007 — the stop's own colour, when it names no
+    /// swatch (`stop_color_ref` is then `""`).
+    #[serde(default)]
+    pub color: Option<paged_mutate::StopColorSpec>,
 }
 
 /// Concept 2 — one ink row for the Ink Manager: a spot swatch's

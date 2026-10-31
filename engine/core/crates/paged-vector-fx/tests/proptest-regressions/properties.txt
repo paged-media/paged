@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 6ceca9e144d4bc5e01459f40124475b2c8b4c8cdb3d91294a9320055fdd4cf07 # shrinks to shape = Shape { contours: [Contour { nodes: [Node { p: (47.33265686035156, 0.0), l: (47.33265686035156, 0.0), r: (47.33265686035156, 0.0) }, Node { p: (350.2023010253906, 0.0), l: (350.2023010253906, 0.0), r: (350.2023010253906, 0.0) }, Node { p: (365.78118896484375, 255.29220581054688), l: (365.78118896484375, 255.29220581054688), r: (365.78118896484375, 255.29220581054688) }], closed: true }] }

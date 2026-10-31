@@ -9316,6 +9316,7 @@ mod tests {
             corner_option: None,
             corners: Default::default(),
             clip: false,
+            effect_stack: Vec::new(),
         }
     }
 

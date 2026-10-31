@@ -2272,31 +2272,12 @@ fn gradient_feather_factors(
                         ((rx * rx + ry * ry).sqrt() / radius).clamp(0.0, 1.0)
                     }
                 };
-                sample_gradient_alpha(&stops, t)
+                paged_compose::gradient_sample::sample_alpha(&stops, t)
             };
             out[k] = 1.0 - (aa as f32 / 255.0) * (1.0 - alpha);
         }
     }
     out
-}
-
-/// Gradient alpha at `t` over sorted `(location, alpha)` stops; outside
-/// the stops' range it holds the nearest endpoint.
-fn sample_gradient_alpha(stops: &[(f32, f32)], t: f32) -> f32 {
-    if t <= stops[0].0 {
-        return stops[0].1;
-    }
-    if t >= stops[stops.len() - 1].0 {
-        return stops[stops.len() - 1].1;
-    }
-    for pair in stops.windows(2) {
-        let ((l_loc, l_alpha), (r_loc, r_alpha)) = (pair[0], pair[1]);
-        if t <= r_loc {
-            let f = (t - l_loc) / (r_loc - l_loc).max(1e-6);
-            return l_alpha + (r_alpha - l_alpha) * f;
-        }
-    }
-    stops[stops.len() - 1].1
 }
 
 /// Is every command on the page a plain draw — a `Normal` fill or

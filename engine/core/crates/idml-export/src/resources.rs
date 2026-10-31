@@ -165,8 +165,10 @@ fn write_gradient(
 ) -> Result<(), quick_xml::Error> {
     let kind = match g.kind {
         GradientKind::Radial => "Radial",
-        // Linear is the IDML default for an unknown / linear type.
-        GradientKind::Linear | GradientKind::Unknown => "Linear",
+        // Linear is the IDML default for an unknown / linear type. IDML
+        // has no conic gradient: it goes out linear, and the canvas's
+        // export losses name it (engine ADR 1007).
+        GradientKind::Linear | GradientKind::Conic | GradientKind::Unknown => "Linear",
     };
     let mut attrs: Vec<(&str, String)> = vec![("Self", g.self_id.clone())];
     if let Some(name) = &g.name {
