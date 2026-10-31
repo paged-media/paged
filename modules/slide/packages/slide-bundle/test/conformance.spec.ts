@@ -296,8 +296,10 @@ describe("File \u25b8 Open of a deck with embedded fonts", () => {
       const missing = (await h.host.document.collection<FontSummary>("fonts"))
         .filter((f) => f.isMissing)
         .map((f) => f.family);
-      // The importer gave the document every face before it opened.
-      expect(missing).toEqual([]);
+      // The importer gave the document every face before it opened. The
+      // layouts' prompts (slide ADR 712: every layout is imported) are set
+      // in the theme fonts, which the deck does not embed.
+      expect(missing.filter((f) => !f.startsWith("Aptos"))).toEqual([]);
     } finally {
       h.dispose();
     }

@@ -4,11 +4,11 @@ Range 700–749.
 
 | ADR | Title | Status |
 |---|---|---|
-| [700](700-pptx-opens-as-a-generated-idml-package.md) | A PPTX opens as a generated IDML package, with inheritance resolved at import | Accepted 2026-10-05; amended 2026-10-19 (ADR 708) |
+| [700](700-pptx-opens-as-a-generated-idml-package.md) | A PPTX opens as a generated IDML package, with inheritance resolved at import | Accepted 2026-10-05; amended 2026-10-19 (ADR 708), 2026-10-29 (ADR 712) |
 | [701](701-paged-ooxml-is-vendored.md) | `paged-ooxml` is vendored from the Word plugin until it is published | Superseded 2026-10-19 by doc ADR 607 |
 | [702](702-drawingml-is-read-as-an-element-tree.md) | PresentationML and DrawingML are read as an element tree | Accepted 2026-10-05 |
 | [703](703-slide-data-storage.md) | Where slide-only data lives | Accepted 2026-10-05; amended 2026-10-29 (ADR 713) |
-| [704](704-pptx-export-regenerates-slides.md) | PPTX export regenerates slides and carries masters, layouts and themes | Accepted 2026-10-05; amended 2026-10-24 (ADR 711) |
+| [704](704-pptx-export-regenerates-slides.md) | PPTX export regenerates slides and carries masters, layouts and themes | Accepted 2026-10-05; amended 2026-10-24 (ADR 711), 2026-10-29 (ADR 712) |
 | [705](705-powerpoint-is-the-oracle.md) | PowerPoint is the oracle | Accepted 2026-10-05 |
 | [706](706-transitions-run-on-webgpu-with-gl-transitions.md) | Slide transitions run on WebGPU, using the gl-transitions shader collection | Accepted 2026-10-05; amended 2026-10-25 (ADR 721) |
 | [707](707-embedded-fonts-are-decoded-and-given-to-the-document.md) | A deck's embedded fonts are decoded here and given to the document within their licences | Accepted 2026-10-14 |
@@ -16,6 +16,7 @@ Range 700–749.
 | [709](709-one-drawingml-chart-reader.md) | One DrawingML chart reader and model for paged.slide and paged.sheet; the layouts stay per module | Accepted 2026-10-19 |
 | [710](710-chart-labels-are-formatted-by-sheet-format.md) | Chart labels are formatted by sheet-format | Accepted 2026-10-19 |
 | [711](711-powerpoint-parity-program.md) | The PowerPoint parity program; export keeps untouched slides byte for byte | Accepted 2026-10-24; amended 2026-10-25 (ADR 717), 2026-10-29 (ADR 713) |
+| [712](712-two-level-masters-and-placeholders-as-overrides.md) | Two-level masters, every layout, placeholders as overrides; the Slide Master view; masters and layouts written back | Accepted 2026-10-29 |
 | [713](713-live-theme.md) | Live theme: theme colours as swatches by key, theme fonts on the root styles, one mutation per theme | Accepted 2026-10-29 |
 | [714](714-timeline-model-and-full-effect-set.md) | Timeline model and full effect set: the timing as a tree, a Rust player, layers composited on WebGPU, presets from PowerPoint | Accepted 2026-10-28; amended 2026-10-30 (motion paths on the canvas) |
 | [715](715-live-charts-via-paged-sheet.md) | Live charts via paged.sheet: the chart's workbook in the slide wasm, slide-chart for the kinds it lays out, paged.sheet for the rest | Accepted 2026-10-25 |

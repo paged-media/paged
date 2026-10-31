@@ -463,3 +463,41 @@ export const DESIGN = defineMessages("slide.design", {
 });
 
 defineTranslations("de", de);
+
+/** The Slide Master view and the layout verbs (slide ADR 712). */
+export const MASTERS = defineMessages("slide.masters", {
+  slideMaster: "Slide master",
+  closeMaster: "Close master view",
+  empty: "This deck has no slide masters.",
+  master: "Slide master",
+  layout: "Layout",
+  usedBy: "{count, plural, one {Used by # slide} other {Used by # slides}}",
+  unused: "Not used",
+  rename: "Rename",
+  preserve: "Preserve",
+  deleteLayout: "Delete layout",
+  insertPlaceholder: "Insert placeholder",
+  placeholders: "Placeholders",
+  deletePlaceholder: "Delete placeholder",
+  textSize: "Text size",
+  textStyle: "Font style",
+  apply: "Apply",
+  changeLayout: "Change layout",
+  resetSlide: "Reset slide",
+  newSlideFrom: "New slide from layout",
+  listLayouts: "List the masters and layouts",
+  renameLayout: "Rename a master or layout",
+  setPreserve: "Preserve a master or layout",
+  deleteLayoutTyped: "Delete a layout no slide uses",
+  insertPlaceholderTyped: "Insert a placeholder on a layout",
+  setPlaceholderStyle: "Set a layout placeholder's text style",
+  phBody: "Content",
+  phTitle: "Title",
+  phPic: "Picture",
+  phChart: "Chart",
+  phTbl: "Table",
+  phMedia: "Media",
+  phDt: "Date",
+  phFtr: "Footer",
+  phSldNum: "Slide number",
+});

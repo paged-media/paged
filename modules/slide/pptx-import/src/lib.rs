@@ -550,6 +550,7 @@ fn master(
             body_style: style("bodyStyle"),
             other_style: style("otherStyle"),
             layouts: layout_parts,
+            preserve: el.attr_bool("preserve").unwrap_or(false),
         },
         layouts,
     ))
@@ -573,6 +574,7 @@ fn layout(
         background: csld.and_then(|c| background(c, &ctx)),
         shapes: csld.map(|c| shapes_of(c, &ctx)).unwrap_or_default(),
         color_map_override: color_map_override(&el),
+        preserve: el.attr_bool("preserve").unwrap_or(false),
     })
 }
 

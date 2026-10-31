@@ -505,7 +505,9 @@ pub fn snapshot_page_with_story<'a>(
                 .build_page_with_story(page_id, story)
                 .map_err(|_| unknown())?,
         ))
-    } else if !hide.is_empty() || !only.is_empty() {
+    // Engine ADR 1026 — a master page draws as a page of its own (its
+    // items over the masters it is based on): a layout's thumbnail.
+    } else if !hide.is_empty() || !only.is_empty() || model.is_master_page(page_id) {
         SnapshotPage::Hiding(Box::new(
             model
                 .build_page_filtered(page_id, hide, only)
