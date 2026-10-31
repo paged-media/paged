@@ -227,6 +227,14 @@ export {
   type CorePathScope,
   type CoreRow71,
 } from "./core-schema.js";
+// Engine ADR 1034 — the one blend-mode list.
+export {
+  BLEND_MODES,
+  BLEND_MODE_NAMES,
+  NATIVE_BLEND_MODE_NAMES,
+  blendModeByName,
+  blendModeGroups,
+} from "./blend-modes.js";
 export { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 export {
   createRecordableAssetSource,

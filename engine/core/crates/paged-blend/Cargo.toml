@@ -1,0 +1,13 @@
+[package]
+name = "paged-blend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "The 27 blend modes (engine ADR 1034): the mode enum, its names, and the scalar compose formulas the engine's CPU lane and paged.image's reference twins share. Leaf crate: depends on nothing."
+
+[lints]
+workspace = true
+
+[dependencies]

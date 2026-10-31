@@ -64,6 +64,7 @@ import type {
   PageId,
   StoryContent,
 } from "@paged-media/plugin-api";
+import { CORE_CATALOG_ROWS } from "@paged-media/plugin-sdk";
 
 import {
   BINDING_KEY,
@@ -244,7 +245,11 @@ const EMPTY_APPEARANCE = { layers: [], prev: null };
 /** Values a frame property takes when nothing sets it — what a fresh frame
  *  already has, and what InDesign writes into every frame of a template
  *  (`[Normal Text Frame]`, no wrap, one column, zero gradient angles, …).
- *  Copying them would change nothing and cost an operation per record. */
+ *  Copying them would change nothing and cost an operation per record.
+ *  Choice and flag defaults the engine catalog names, and empty
+ *  structures, need no entry here (`catalogDefault`, `isEmptyStructure`);
+ *  test/fresh-frame-defaults-real-core.spec.ts names any value a fresh
+ *  frame of the real engine reads that none of them covers. */
 const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
   appliedObjectStyle: [
     "ObjectStyle/$ID/[None]",
@@ -289,12 +294,51 @@ const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
   frameAppearance: [EMPTY_APPEARANCE],
 };
 
+/** The engine catalog's default of every frame property whose type is a
+ *  choice or a flag (`frameGradientStrokeMode` → `"Within"`): the value the
+ *  engine reads where nothing sets it, a fresh frame included. A property
+ *  the engine adds with a default is thereby left to the fresh frame
+ *  without being listed in [`FRESH_FRAME_DEFAULTS`]. Lengths and numbers
+ *  are not taken from it: a fresh frame's stroke weight, gutter or radius
+ *  can come from the document's defaults or its object style instead, so
+ *  a template frame that sets the catalog's value still says something.
+ *  Built once, on first use. */
+let catalogDefaults: ReadonlyMap<string, unknown> | null = null;
+function catalogDefault(path: string): unknown {
+  catalogDefaults ??= new Map(
+    CORE_CATALOG_ROWS.filter(
+      (r) =>
+        r.addressKind === "frame" &&
+        r.default !== undefined &&
+        (r.type.kind === "enum" || r.type.kind === "bool"),
+    ).map((r) => [r.path, r.default]),
+  );
+  return catalogDefaults.get(path);
+}
+
+/** Whether a structured value carries nothing: an object whose every field
+ *  is null, an empty string, an empty list or itself such an object. The
+ *  engine reads its container properties (effect stacks, appearances, mesh
+ *  fills, …) this way on a fresh frame — `{ entries: [], prev: null }` — so
+ *  any new one is a fresh-frame default without being listed. */
+function isEmptyStructure(x: unknown): boolean {
+  if (x === null || x === undefined || x === "") return true;
+  if (Array.isArray(x)) return x.length === 0;
+  if (typeof x === "object")
+    return Object.values(x as Record<string, unknown>).every(isEmptyStructure);
+  return false;
+}
+
 /** Whether a read property value says something a fresh frame does not:
  *  a colour, a length, a non-empty name, a list, an inset that is not zero,
- *  a flag that is on — and not the property's default
- *  ([`FRESH_FRAME_DEFAULTS`]). Unset and default values are left to the
- *  fresh frame, so a plain template frame costs no extra operation per
- *  record. */
+ *  a flag that is on — and not the property's default (listed in
+ *  [`FRESH_FRAME_DEFAULTS`], or the catalog's choice or flag default) nor
+ *  an empty structure. Unset and default
+ *  values are left to the fresh frame, so a plain template frame costs no
+ *  extra operation per record. A fresh frame of the real engine copies
+ *  nothing (test/fresh-frame-defaults-real-core.spec.ts), so a frame
+ *  property the engine adds with a default the writer would copy fails
+ *  that test instead of the merge budget. */
 export function isSetValue(
   v: { type?: string; value?: unknown } | null | undefined,
   path?: string,
@@ -302,6 +346,9 @@ export function isSetValue(
   if (!v) return false;
   const x = v.value;
   if (x === null || x === undefined) return false;
+  if (typeof x === "object" && !Array.isArray(x) && isEmptyStructure(x))
+    return false;
+  if (path && catalogDefault(path) === x) return false;
   if (
     path &&
     FRESH_FRAME_DEFAULTS[path]?.some(
@@ -651,10 +698,23 @@ async function copiedFrameProperties(
   } catch {
     return [];
   }
-  const entries = (props?.entries ?? []) as {
+  return copiedFrameEntries(
+    (props?.entries ?? []) as {
+      path: string;
+      value?: { type?: string; value?: unknown } | null;
+    }[],
+  );
+}
+
+/** Of a frame's read property entries, those a merged copy takes over
+ *  ([`isCopiedFramePath`], [`isSetValue`]), its object style first so the
+ *  frame's own overrides after it win. */
+export function copiedFrameEntries(
+  entries: readonly {
     path: string;
     value?: { type?: string; value?: unknown } | null;
-  }[];
+  }[],
+): CopiedProperty[] {
   const out: CopiedProperty[] = [];
   for (const e of entries) {
     if (!isCopiedFramePath(e.path) || !isSetValue(e.value, e.path)) continue;
