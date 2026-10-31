@@ -1,7 +1,7 @@
 {
   "catalog": {
-    "hostFunctions": 216,
-    "operations": 182
+    "hostFunctions": 219,
+    "operations": 185
   },
   "environment": {
     "cli": true
@@ -1156,6 +1156,48 @@
       },
       "changes": true,
       "op": "deleteHyperlink"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "insertItemHyperlink"
     },
     {
       "cases": [
@@ -9967,6 +10009,90 @@
       "op": "renameMaster"
     },
     {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "setPageOverrides"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "overrideMasterItems"
+    },
+    {
       "cases": [
         "insertSection"
       ],
@@ -10950,17 +11076,17 @@
       "generic": 7,
       "named": 9,
       "none": 1,
-      "not-run": 39,
+      "not-run": 42,
       "parity": 140,
-      "typed": 165
+      "typed": 168
     },
     "boa": {
       "differs": 0,
       "gap": 1,
       "generic": 1,
-      "named": 179,
+      "named": 182,
       "none": 1,
-      "not-run": 39,
+      "not-run": 42,
       "parity": 142,
       "typed": 1
     },
@@ -10968,9 +11094,9 @@
       "differs": 0,
       "gap": 1,
       "generic": 0,
-      "named": 179,
+      "named": 182,
       "none": 1,
-      "not-run": 39,
+      "not-run": 42,
       "parity": 142,
       "typed": 2
     },
@@ -10980,17 +11106,17 @@
       "generic": 0,
       "named": 9,
       "none": 8,
-      "not-run": 39,
+      "not-run": 42,
       "parity": 133,
-      "typed": 165
+      "typed": 168
     },
     "mcp": {
       "differs": 0,
       "gap": 1,
       "generic": 2,
-      "named": 179,
+      "named": 182,
       "none": 1,
-      "not-run": 41,
+      "not-run": 44,
       "parity": 140,
       "typed": 0
     },
@@ -11000,16 +11126,16 @@
       "generic": 7,
       "named": 0,
       "none": 1,
-      "not-run": 39,
+      "not-run": 42,
       "parity": 142,
-      "typed": 174
+      "typed": 177
     },
     "viewer-sdk": {
       "differs": 0,
-      "gap": 182,
+      "gap": 185,
       "generic": 0,
       "named": 0,
-      "none": 182,
+      "none": 185,
       "not-run": 0,
       "parity": 0,
       "typed": 0

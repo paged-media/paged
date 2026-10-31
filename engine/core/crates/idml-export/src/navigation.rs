@@ -104,6 +104,8 @@ pub(crate) struct NavigationPlan<'a> {
     /// URL + page destinations only — text anchors are story markers.
     pub destinations: Vec<&'a HyperlinkDestination>,
     pub hyperlinks: &'a [Hyperlink],
+    /// Engine ADR 1026 — the page items hyperlinks start from.
+    pub item_sources: &'a [paged_model::HyperlinkPageItemSource],
     pub bookmarks: &'a [Bookmark],
     /// Each nested bookmark's parent (core ADR 173).
     pub bookmark_parents: &'a BTreeMap<String, String>,
@@ -173,6 +175,7 @@ fn is_nav_name(name: &[u8]) -> bool {
             | b"HyperlinkPageDestination"
             | b"HyperlinkTextDestination"
             | b"Hyperlink"
+            | b"HyperlinkPageItemSource"
             | b"Bookmark"
     )
 }
@@ -197,6 +200,7 @@ struct Layout {
     section_ids: HashSet<String>,
     destination_ids: HashSet<String>,
     hyperlink_ids: HashSet<String>,
+    item_source_ids: HashSet<String>,
     bookmark_ids: HashSet<String>,
     /// Largest `DestinationUniqueKey` in use.
     max_key: u64,
@@ -284,6 +288,9 @@ fn scan(original: &[u8]) -> Result<Layout, quick_xml::Error> {
                             }
                             (b"Bookmark", Some(id)) => {
                                 out.bookmark_ids.insert(id);
+                            }
+                            (b"HyperlinkPageItemSource", Some(id)) => {
+                                out.item_source_ids.insert(id);
                             }
                             (_, Some(id)) => {
                                 if let Some(k) = key {
@@ -1079,6 +1086,11 @@ pub(crate) fn patch_designmap_navigation(
             }
             // Never a designmap element: it lives inline in its story.
             b"HyperlinkTextDestination" => Ok(()),
+            // Engine ADR 1026 — kept while the model has it.
+            b"HyperlinkPageItemSource" => match id.as_deref() {
+                Some(i) if !plan.item_sources.iter().any(|s| s.self_id == i) => Ok(()),
+                _ => sub.replay(w),
+            },
             // Written whole with the new navigation instead, after every
             // destination: InDesign drops a bookmark whose destination it
             // has not read yet.
@@ -1118,6 +1130,19 @@ pub(crate) fn patch_designmap_navigation(
         // TWICE (a paged.doc lowering minted one id for two links) and the
         // designmap then carried it twice; InDesign dropped both.
         let mut written: HashSet<&str> = HashSet::new();
+        // Engine ADR 1026 — the item sources before the hyperlinks that
+        // name them.
+        for src in plan.item_sources {
+            if !layout.item_source_ids.contains(&src.self_id) && written.insert(&src.self_id) {
+                let mut attrs: Vec<(&str, String)> = vec![("Self", src.self_id.clone())];
+                if let Some(n) = &src.name {
+                    attrs.push(("Name", n.clone()));
+                }
+                attrs.push(("SourcePageItem", src.source_page_item.clone()));
+                attrs.push(("Hidden", "false".to_string()));
+                emit_empty_with_attrs(w, "HyperlinkPageItemSource", &attrs)?;
+            }
+        }
         for d in &plan.destinations {
             if !layout.destination_ids.contains(&d.self_id) && written.insert(&d.self_id) {
                 write_destination(
