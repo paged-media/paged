@@ -82,10 +82,11 @@ Tests: `docx-conformance/tests/it/{objects,floats,tall_rows}.rs` (updated to the
 `doc-bundle/test/headless/objects.spec.ts` (an anchored text box's story, a nested table in its
 cell, unedited saves byte-identical).
 
-Pagination acceptance: not re-measured in this wave. Word 16 on the probe machine did not open
-the three documents through `scripts/word-pagination-probe.sh` (an AppleScript "missing value"
-error before the PDF), so no fresh Word page map exists; the W4a figures below (13.1 %, 2.0 %,
-3.8 % of page starts) are the last measured ones.
+Pagination acceptance (round 16 of `reference/acceptance-real-docx.md`, 2026-10-31, against
+Word's PDFs of 2026-10-02): page starts 13.1 % (parentinvguid), 2.0 % (Bug50936_3); bug59058 lays
+out 31 of Word's 52 pages and has no page starts the method can name now that its tables are
+native. The 95 % target is not met. The run found and fixed an engine id clash that refused a
+table's pictures in cells.
 
 ## W3 (files): tracked changes and comments read and saved back (2026-10-29)
 
