@@ -170,6 +170,7 @@ is not written yet.
 | [1038](1038-the-remaining-codecs-and-the-layered-tiff.md) | The remaining codecs: GIF, BMP, TGA, JPEG XL and AVIF encode, HDR and OpenEXR floats, and the layered TIFF | Accepted 2026-10-28 |
 | [1039](1039-a-symbol-is-drawn-by-its-instances.md) | A symbol is kept once and drawn by its instances: 9-slice, overrides, one PDF form, IDML through labels | Accepted 2026-10-28 |
 | [1040](1040-word-change-tracking.md) | Word's change tracking: changes carried by what they changed, recorded while typing, accepted and rejected as each other's opposite, shown by the markup view (amends 184) | Accepted 2026-10-29 |
+| [1042](1042-live-vector-effects-are-stack-entries.md) | Live vector effects are entries of the effect stack: the build draws the effected outline, editing keeps the source, IDML bakes it | Accepted 2026-10-29 |
 | [1043](1043-an-item-has-several-fills-and-strokes.md) | An item has several fills and strokes (native appearance), drawn as parts, baked to a group in IDML and restored from its label | Accepted 2026-10-29 |
 | [1044](1044-a-photoshop-layer-style-maps-onto-the-effect-stack.md) | A Photoshop layer style maps onto the effect stack: `paged-psd-fx`, losses named | Accepted 2026-10-29 |
 | [1045](1045-an-anchored-frame-paints-as-a-free-frame.md) | An anchored frame paints as a free frame does: its look, its picture in its effects, IDML both ways | Accepted 2026-10-29 |

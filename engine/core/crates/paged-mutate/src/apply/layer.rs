@@ -1066,6 +1066,7 @@ pub(super) fn apply_create_group(
             corner_option: None,
             corners: Default::default(),
             clip: spec.clip,
+            effect_stack: Vec::new(),
         });
         // The recorded slot is where `FrameRef::Group(new_group_idx)`
         // goes in the parent's members. Remove the member entries (may
@@ -1114,6 +1115,7 @@ pub(super) fn apply_create_group(
             corner_option: None,
             corners: Default::default(),
             clip: spec.clip,
+            effect_stack: Vec::new(),
         });
         // Remove the member entries (which MAY be `FrameRef::Group`s in
         // v2 nested create), THEN re-insert the new group ref at the

@@ -88,14 +88,24 @@ fn webp_opens_exactly__feat__image_codec_core_codecs() {
 }
 
 #[test]
-fn radiance_hdr_opens_clipped_and_says_so__feat__image_codec_core_codecs() {
+fn radiance_hdr_opens_as_32bit_float_and_says_so__feat__image_codec_core_codecs() {
     // A flat (uncompressed) 2x1 RGBE file: 0.5 grey and 4.0 (over white).
+    // It opens as 32-bit float, linear light (image ADR 484): 4.0 is kept,
+    // and only the display view clips it.
     let mut hdr = b"#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 2\n".to_vec();
     hdr.extend_from_slice(&[128, 128, 128, 128, 128, 128, 128, 131]);
     let d = decode_rgba8(&hdr).unwrap();
-    assert_eq!(d.display, DisplayTreatment::HdrClipped);
+    assert_eq!(d.display, DisplayTreatment::Float32);
+    assert!(d.rgba.is_float());
+    let lin = d.rgba.to_f32_linear();
+    assert_eq!(&lin[..4], &[0.5, 0.5, 0.5, 1.0]);
+    assert_eq!(&lin[4..8], &[4.0, 4.0, 4.0, 1.0], "4.0 is kept");
     let px = d.rgba.to_rgba8();
-    assert_eq!(&px[4..8], &[255, 255, 255, 255], "4.0 clips to white");
+    assert_eq!(
+        &px[4..8],
+        &[255, 255, 255, 255],
+        "the view clips 4.0 to white"
+    );
     assert!(
         px[0] > 150 && px[0] < 210,
         "0.5 linear is ~188 sRGB: {}",

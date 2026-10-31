@@ -74,6 +74,13 @@ pub(super) fn emit_oval_into(
             page, &twin, document, palette, fallback, color_ctx, content, module,
         );
     }
+    // Engine ADR 1042 — an oval under vector effects is the polygon its
+    // effected outline describes.
+    if let Some(poly) = paged_vector_fx::bake::bake_oval(oval) {
+        return super::text_path::emit_polygon_into(
+            page, &poly, document, palette, fallback, color_ctx, content, module,
+        );
+    }
     if !oval.appearance.is_empty() {
         return super::appearance::emit_oval(
             page, oval, document, palette, fallback, color_ctx, content, module,
@@ -1044,6 +1051,20 @@ pub(super) fn emit_rectangle_into(
     content: ContentPainter<'_>,
     module: ModulePainter<'_>,
 ) {
+    // Engine ADR 1042 — draw the rectangle its vector effects describe.
+    if let Some(baked) = paged_vector_fx::bake::bake_rectangle(rect) {
+        return emit_rectangle_into(
+            page,
+            &baked,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            drop_shadow,
+            content,
+            module,
+        );
+    }
     if !rect.appearance.is_empty() {
         return super::appearance::emit_rectangle(
             page, rect, document, palette, fallback, color_ctx, content, module,

@@ -3,8 +3,10 @@ concurrency:
   # A newer push to a pull request cancels the older run. Main pushes share
   # one group per event type: a running main run always finishes, and a newer
   # push replaces the one still waiting, so direct pushes queue at most one.
+  # A re-dispatch on the same wip/* branch cancels its older dispatched run,
+  # running or not: only a work branch's newest commit needs checking.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/wip/')) }}
 
 # Editor Playwright surface → state-matrix evidence (W0.5).
 #
@@ -913,8 +915,11 @@ jobs:
       # skipped just because an unrelated lean-surface test failed in the
       # main sharded step above (steps don't run after a failure by
       # default). It stays `continue-on-error` so it never gates either.
+      # Not on wip/* branches: those are dispatched as ordinary gate runs
+      # (every work branch), where seeding only lengthened shard 1; seed by
+      # dispatching on main or a non-wip branch.
       - name: seed journey visual baselines (Linux, advisory)
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && matrix.shard == 1 }}
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/heads/wip/') && matrix.shard == 1 }}
         continue-on-error: true
         working-directory: apps/editor/apps/canvas
         env:
@@ -928,7 +933,7 @@ jobs:
             --reporter=list
 
       - name: upload regenerated baselines
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && matrix.shard == 1 }}
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/heads/wip/') && matrix.shard == 1 }}
         uses: actions/upload-artifact@v4
         with:
           name: journey-baselines-linux

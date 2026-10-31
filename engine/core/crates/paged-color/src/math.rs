@@ -29,6 +29,17 @@ pub fn srgb_to_linear(c: f32) -> f32 {
     }
 }
 
+/// Linear light `c` as sRGB-encoded (the sRGB OETF, the inverse of
+/// [`srgb_to_linear`]). Not clamped: a scene-referred value above 1 stays
+/// above 1 (the caller clamps for a display); below 0 answers 0.
+pub fn linear_to_srgb(c: f32) -> f32 {
+    if c <= 0.003_130_8 {
+        c.max(0.0) * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
+}
+
 /// CMYK (each 0..=1) as sRGB-encoded RGB, multiplicatively: the
 /// conversion the engine uses wherever no CMYK profile is configured.
 pub fn naive_cmyk_to_srgb(c: f32, m: f32, y: f32, k: f32) -> [f32; 3] {
@@ -90,5 +101,11 @@ mod tests {
         assert_eq!(naive_cmyk_to_srgb(0.0, 0.0, 0.0, 1.0), [0.0, 0.0, 0.0]);
         assert_eq!(naive_cmyk_to_srgb(0.5, 0.0, 0.0, 0.5), [0.25, 0.5, 0.5]);
         assert_eq!(srgb_to_linear(1.0), 1.0);
+        for i in 0..=255 {
+            let v = i as f32 / 255.0;
+            assert!((linear_to_srgb(srgb_to_linear(v)) - v).abs() < 1e-5);
+        }
+        assert_eq!(linear_to_srgb(-0.5), 0.0);
+        assert!(linear_to_srgb(2.0) > 1.0, "scene-referred stays above 1");
     }
 }
