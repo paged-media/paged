@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 867,
+    "command": 868,
     "keybinding": 166,
-    "menu": 612,
+    "menu": 613,
     "panel": 146,
     "tool": 128
   },
@@ -1267,6 +1267,11 @@
     },
     {
       "id": "command:media.paged.draw.command.saveGraphicStyle",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.savePatternSwatch",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -5627,6 +5632,11 @@
     },
     {
       "id": "menu:Draw/Pattern/Release",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Pattern/Save as pattern swatch",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
