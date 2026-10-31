@@ -299,6 +299,20 @@ pub fn parse_designmap(xml: &[u8]) -> Result<DesignMap, ParseError> {
                         dest_keys.insert(key, self_id);
                     }
                 }
+                // Engine ADR 1026 — a page item a hyperlink starts from.
+                if e.name().as_ref() == b"HyperlinkPageItemSource" {
+                    if let (Some(self_id), Some(item)) =
+                        (attr(&e, b"Self"), attr(&e, b"SourcePageItem"))
+                    {
+                        out.hyperlink_page_item_sources.push(
+                            paged_model::HyperlinkPageItemSource {
+                                self_id,
+                                source_page_item: item,
+                                name: attr(&e, b"Name"),
+                            },
+                        );
+                    }
+                }
                 if e.name().as_ref() == b"HyperlinkURLDestination" {
                     if let Some(self_id) = attr(&e, b"Self") {
                         let url = attr(&e, b"DestinationURL").unwrap_or_default();

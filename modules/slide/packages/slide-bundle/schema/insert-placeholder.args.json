@@ -1,0 +1,27 @@
+{
+  "kind": "struct",
+  "fields": {
+    "layout": {
+      "kind": "ref",
+      "to": "plugin:media.paged.slide/layout"
+    },
+    "type": {
+      "kind": "enum",
+      "members": [
+        "body",
+        "title",
+        "pic",
+        "chart",
+        "tbl",
+        "media",
+        "dt",
+        "ftr",
+        "sldNum"
+      ]
+    },
+    "box": {
+      "kind": "bounds",
+      "optional": true
+    }
+  }
+}

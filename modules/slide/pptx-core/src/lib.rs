@@ -99,6 +99,9 @@ pub struct Master {
     pub other_style: Option<ListStyle>,
     /// Part names of the layouts this master owns, in `p:sldLayoutIdLst` order.
     pub layouts: Vec<String>,
+    /// `preserve`: kept when no slide uses it (slide ADR 712).
+    #[serde(default)]
+    pub preserve: bool,
 }
 
 /// A slide layout (`p:sldLayout`).
@@ -115,6 +118,9 @@ pub struct Layout {
     pub shapes: Vec<Shape>,
     /// `p:clrMapOvr` — `None` = use the master's map.
     pub color_map_override: Option<ColorMap>,
+    /// `preserve`: kept when no slide uses it (slide ADR 712).
+    #[serde(default)]
+    pub preserve: bool,
 }
 
 /// A slide (`p:sld`).

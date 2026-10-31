@@ -46,11 +46,12 @@ impl CanvasModel {
         page_id: &PageId,
         story: &SnapshotStory,
     ) -> Result<paged_renderer::BuiltPage, LoadError> {
-        let (spread_id, (ox, oy), idx) = self
+        let (spread_id, (ox, oy), sp) = self
             .page_insert_context(page_id)
             .ok_or_else(|| LoadError::Build(format!("no page {page_id}")))?;
+        let position = sp.text_frames.len();
         let mut scene = self.scene.clone();
-        insert_story(&mut scene, &spread_id, idx, (ox, oy), story)?;
+        insert_story(&mut scene, &spread_id, position, (ox, oy), story)?;
         let only = [crate::element_selection::ElementId::TextFrame(
             FRAME_ID.to_string(),
         )];
@@ -63,12 +64,11 @@ impl CanvasModel {
 fn insert_story(
     scene: &mut Document,
     spread_id: &str,
-    spread_idx: usize,
+    position: usize,
     (ox, oy): (f32, f32),
     story: &SnapshotStory,
 ) -> Result<(), LoadError> {
     let [t, l, b, r] = story.bounds;
-    let position = scene.spreads[spread_idx].spread.text_frames.len();
     paged_mutate::apply(
         scene,
         &Operation::InsertNode {
@@ -90,10 +90,10 @@ fn insert_story(
 
     // The frame: no inset, no wrap from the page's other items (they are
     // not drawn, and a type layer is not part of the page's layout).
-    if let Some(frame) = scene.spreads[spread_idx]
-        .spread
-        .text_frames
+    if let Some(frame) = scene
+        .spreads
         .iter_mut()
+        .flat_map(|s| s.spread.text_frames.iter_mut())
         .find(|f| f.self_id.as_deref() == Some(FRAME_ID))
     {
         frame.inset_spacing = Some([0.0; 4]);

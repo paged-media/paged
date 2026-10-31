@@ -183,10 +183,18 @@ fn a_theme_tint_on_an_edited_run_is_written_as_a_scheme_colour__feat__plugin_sli
         doc.palette.colors.contains_key(&tint),
         "the picker's tint is a swatch"
     );
-    // The first run of the first slide story.
+    // The first run of the first slide story (masters and layouts have
+    // stories of their own since slide ADR 712).
+    let on_slides: std::collections::BTreeSet<String> = doc
+        .spreads
+        .iter()
+        .flat_map(|s| &s.spread.text_frames)
+        .filter_map(|f| f.parent_story.clone())
+        .collect();
     let story = doc
         .stories
         .iter_mut()
+        .filter(|s| on_slides.contains(&s.self_id))
         .find(|s| s.story.paragraphs.iter().any(|p| !p.runs.is_empty()))
         .unwrap();
     let run = story

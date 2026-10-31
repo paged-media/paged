@@ -31,7 +31,22 @@ pub(super) fn apply_master_to_page(
     page: &str,
     master: Option<&str>,
 ) -> Result<AppliedOperation, OperationError> {
-    let page_ref = find_page_mut(doc, page)
+    // Engine ADR 1026 — a master page applies a master too ("Based on
+    // Master"): refused when it would make a cycle or stack more than
+    // `MAX_MASTER_DEPTH` masters.
+    if let (Some(own), Some(parent)) = (master_holding_page(doc, page), master) {
+        if !doc.master_basis_allowed(&own, parent) {
+            return Err(master_error(
+                &own,
+                format!(
+                    "master {own} cannot be based on {parent}: it would make a cycle, name a \
+                     master the document lacks, or stack more than {} masters",
+                    paged_scene::MAX_MASTER_DEPTH
+                ),
+            ));
+        }
+    }
+    let page_ref = find_page_or_master_page_mut(doc, page)
         .ok_or_else(|| OperationError::NodeNotFound(NodeId::Page(page.to_string())))?;
     let prev = page_ref.applied_master.clone();
     page_ref.applied_master = master.map(str::to_string);
@@ -68,7 +83,9 @@ fn page_level(op: &Operation) -> bool {
         | Operation::CreateMaster { .. }
         | Operation::DeleteMaster { .. }
         | Operation::RestoreMaster { .. }
-        | Operation::RenameMaster { .. } => true,
+        | Operation::RenameMaster { .. }
+        | Operation::SetPageOverrides { .. }
+        | Operation::OverrideMasterItems { .. } => true,
         Operation::Batch { ops } => ops.iter().any(page_level),
         _ => false,
     }
@@ -322,5 +339,291 @@ pub(super) fn apply_rename_master(
             name: prev,
         },
         invalidation: InvalidationHint::default(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Engine ADR 1026 — masters based on masters, overrides
+// ---------------------------------------------------------------------------
+
+/// The `Self` of the master spread that holds page `page`, when it is a
+/// master page.
+fn master_holding_page(doc: &Document, page: &str) -> Option<String> {
+    doc.master_spreads
+        .values()
+        .find(|m| {
+            m.spread
+                .pages
+                .iter()
+                .any(|p| p.self_id.as_deref() == Some(page))
+        })
+        .map(|m| m.self_id.clone())
+}
+
+/// A body page or a master page, by `Self`.
+fn find_page_or_master_page_mut<'a>(
+    doc: &'a mut Document,
+    page: &str,
+) -> Option<&'a mut paged_model::Page> {
+    if find_page_mut(doc, page).is_some() {
+        return find_page_mut(doc, page);
+    }
+    doc.master_spreads.values_mut().find_map(|m| {
+        m.spread
+            .pages
+            .iter_mut()
+            .find(|p| p.self_id.as_deref() == Some(page))
+    })
+}
+
+/// Engine ADR 1026 — set a page's `OverrideList`.
+pub(super) fn apply_set_page_overrides(
+    doc: &mut Document,
+    page: &str,
+    overrides: &[String],
+) -> Result<AppliedOperation, OperationError> {
+    let page_ref = find_page_or_master_page_mut(doc, page)
+        .ok_or_else(|| OperationError::NodeNotFound(NodeId::Page(page.to_string())))?;
+    let mut list: Vec<String> = Vec::new();
+    for id in overrides {
+        if !list.contains(id) {
+            list.push(id.clone());
+        }
+    }
+    let prev = std::mem::replace(&mut page_ref.override_list, list.clone());
+    Ok(AppliedOperation {
+        op: Operation::SetPageOverrides {
+            page: page.to_string(),
+            overrides: list,
+        },
+        inverse: Operation::SetPageOverrides {
+            page: page.to_string(),
+            overrides: prev,
+        },
+        invalidation: InvalidationHint {
+            structural: true,
+            ..Default::default()
+        },
+    })
+}
+
+/// The page item `id` on `spread` as a node, any of the six kinds.
+fn node_by_id(spread: &paged_model::Spread, id: &str) -> Option<NodeId> {
+    let has = |mut ids: std::slice::Iter<'_, Option<String>>| ids.any(|s| s.as_deref() == Some(id));
+    let tf: Vec<Option<String>> = spread
+        .text_frames
+        .iter()
+        .map(|f| f.self_id.clone())
+        .collect();
+    let re: Vec<Option<String>> = spread
+        .rectangles
+        .iter()
+        .map(|f| f.self_id.clone())
+        .collect();
+    let ov: Vec<Option<String>> = spread.ovals.iter().map(|f| f.self_id.clone()).collect();
+    let gl: Vec<Option<String>> = spread
+        .graphic_lines
+        .iter()
+        .map(|f| f.self_id.clone())
+        .collect();
+    let po: Vec<Option<String>> = spread.polygons.iter().map(|f| f.self_id.clone()).collect();
+    let gr: Vec<Option<String>> = spread.groups.iter().map(|f| f.self_id.clone()).collect();
+    let id = id.to_string();
+    if has(tf.iter()) {
+        Some(NodeId::TextFrame(id))
+    } else if has(re.iter()) {
+        Some(NodeId::Rectangle(id))
+    } else if has(ov.iter()) {
+        Some(NodeId::Oval(id))
+    } else if has(gl.iter()) {
+        Some(NodeId::GraphicLine(id))
+    } else if has(po.iter()) {
+        Some(NodeId::Polygon(id))
+    } else if has(gr.iter()) {
+        Some(NodeId::Group(id))
+    } else {
+        None
+    }
+}
+
+/// A page's top-left in its spread's coordinates.
+fn page_origin(p: &paged_model::Page) -> (f32, f32) {
+    let m = p.item_transform.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    let (x, y) = (p.bounds.left, p.bounds.top);
+    (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
+}
+
+/// Engine ADR 1026 — what overriding master items copies: the snippet of
+/// the items as their master holds them, the body page's spread and the
+/// offset that puts the copies where the master draws them.
+pub struct OverrideCopy {
+    pub snippet: super::snippet::ItemSnippet,
+    pub spread: String,
+    pub dx: f32,
+    pub dy: f32,
+    /// The page's `OverrideList` before the override.
+    pub overrides: Vec<String>,
+}
+
+/// Engine ADR 1026 — the copy [`Operation::OverrideMasterItems`] makes of
+/// `items` for body page `page`, without writing anything. The items must
+/// all be on one master the page shows.
+pub fn override_copy(
+    doc: &Document,
+    page: &str,
+    items: &[String],
+    empty_text: bool,
+) -> Result<OverrideCopy, OperationError> {
+    let not_found = || OperationError::NodeNotFound(NodeId::Page(page.to_string()));
+    let (spread_idx, body) = doc
+        .spreads
+        .iter()
+        .enumerate()
+        .find_map(|(i, s)| {
+            s.spread
+                .pages
+                .iter()
+                .find(|p| p.self_id.as_deref() == Some(page))
+                .map(|p| (i, p))
+        })
+        .ok_or_else(not_found)?;
+    let Some(first) = items.first() else {
+        return Err(master_error(page, "no master item to override".into()));
+    };
+    // The master of the page's chain that holds the items.
+    let master = body
+        .applied_master
+        .as_deref()
+        .map(|m| doc.master_chain(m))
+        .unwrap_or_default()
+        .into_iter()
+        .find(|m| node_by_id(&m.spread, first).is_some())
+        .ok_or_else(|| {
+            master_error(
+                page,
+                format!("{first} is not an item of a master this page shows"),
+            )
+        })?;
+    let mut nodes = Vec::new();
+    for id in items {
+        nodes.push(node_by_id(&master.spread, id).ok_or_else(|| {
+            master_error(
+                page,
+                format!("{id} is not an item of master {}", master.self_id),
+            )
+        })?);
+    }
+    let (mx, my) = master
+        .spread
+        .pages
+        .first()
+        .map(page_origin)
+        .unwrap_or((0.0, 0.0));
+    let (bx, by) = page_origin(body);
+    // Copy from a view whose only spread is the master (as `OnMaster`
+    // edits it).
+    let view = Document {
+        designmap: doc.designmap.clone(),
+        palette: doc.palette.clone(),
+        spreads: vec![paged_scene::ParsedSpread {
+            src: master.src.clone(),
+            spread: master.spread.clone(),
+        }],
+        stories: doc.stories.clone(),
+        styles: doc.styles.clone(),
+        ..Document::default()
+    };
+    let mut snippet = super::snippet::extract_snippet(&view, &nodes)?;
+    if empty_text {
+        // A new slide's placeholders: the master's prompt goes, its first
+        // paragraph and first run stay, empty, so what is typed takes
+        // their formatting.
+        for parsed in &mut snippet.stories {
+            let paras = &mut parsed.story.paragraphs;
+            paras.truncate(1);
+            if let Some(p) = paras.first_mut() {
+                p.runs.truncate(1);
+                for r in &mut p.runs {
+                    r.text.clear();
+                    r.hyperlink_source = None;
+                }
+            }
+        }
+        snippet.hyperlinks.clear();
+        snippet.text.clear();
+    }
+    let spread = doc.spreads[spread_idx]
+        .spread
+        .self_id
+        .clone()
+        .ok_or_else(not_found)?;
+    Ok(OverrideCopy {
+        snippet,
+        spread,
+        dx: bx - mx,
+        dy: by - my,
+        overrides: body.override_list.clone(),
+    })
+}
+
+/// Engine ADR 1026 — override master items on a body page: copy them
+/// onto the page's spread where the master draws them and hide the
+/// master's own on this page (`OverrideList`). The items must all be on
+/// one master of the page's chain.
+pub(super) fn apply_override_master_items(
+    doc: &mut Document,
+    page: &str,
+    items: &[String],
+    ids: &[String],
+    story_ids: &[String],
+    empty_text: bool,
+) -> Result<AppliedOperation, OperationError> {
+    let copy = override_copy(doc, page, items, empty_text)?;
+    let json = serde_json::to_string(&copy.snippet)
+        .map_err(|e| master_error(page, format!("override capture failed: {e}")))?;
+    let pasted = super::snippet::apply_insert_snippet(
+        doc,
+        &json,
+        &copy.spread,
+        copy.dx,
+        copy.dy,
+        ids,
+        story_ids,
+    )?;
+    let (new_ids, new_story_ids) = match &pasted.op {
+        Operation::InsertSnippet { ids, story_ids, .. } => (ids.clone(), story_ids.clone()),
+        _ => (Vec::new(), Vec::new()),
+    };
+    let prev = copy.overrides;
+    let mut list = prev.clone();
+    for id in items {
+        if !list.contains(id) {
+            list.push(id.clone());
+        }
+    }
+    if let Some(p) = find_page_mut(doc, page) {
+        p.override_list = list;
+    }
+    Ok(AppliedOperation {
+        op: Operation::OverrideMasterItems {
+            page: page.to_string(),
+            items: items.to_vec(),
+            ids: new_ids,
+            story_ids: new_story_ids,
+            empty_text,
+        },
+        inverse: Operation::Batch {
+            ops: vec![
+                pasted.inverse,
+                Operation::SetPageOverrides {
+                    page: page.to_string(),
+                    overrides: prev,
+                },
+            ],
+        },
+        invalidation: InvalidationHint {
+            structural: true,
+            ..Default::default()
+        },
     })
 }

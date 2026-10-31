@@ -40,8 +40,9 @@
 //
 // A host overlay rather than a bundle's `overlay.handles@1` set: the
 // parameters are the engine's and the widgets work under the host's
-// own selection tools in every module's edit context, as the resize
-// handles do. Pointer events are taken on the widget itself (they stop
+// own selection tools (Selection and Direct Selection only — another
+// tool's drag inside the shape must reach that tool) in every module's
+// edit context. Pointer events are taken on the widget itself (they stop
 // propagation), the way the overlay contributions of the bundles do.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -57,6 +58,7 @@ import type {
 import {
   useCanvasClient,
   useSelection,
+  useTool,
   type OverlayContribution,
   type OverlayProps,
 } from "@paged-media/shell";
@@ -86,6 +88,12 @@ import {
 } from "@paged-media/tools";
 
 export const LIVE_SHAPE_OVERLAY_ID = "paged.live-shape-handles";
+
+/** The tools the widgets work under. */
+const SELECTION_TOOLS: ReadonlySet<string> = new Set([
+  "paged.tool.select",
+  "paged.tool.directSelect",
+]);
 
 /** Screen px. */
 const WIDGET_PX = 7;
@@ -325,6 +333,11 @@ interface Preview {
 function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
   const client = useCanvasClient();
   const { elementSelection, pathEditMode } = useSelection();
+  // Only under the selection tools, as in Illustrator: another tool's
+  // drag inside the shape (Free Transform, a drawing tool) must reach
+  // that tool, and a corner widget sits up to 14 px inside the shape.
+  const { effectiveTool } = useTool();
+  const selecting = SELECTION_TOOLS.has(effectiveTool);
   const [model] = useState(() => new LiveShapeModel(client));
   const s = useSyncExternalStore(model.subscribe, model.snapshot, () => null);
   const [preview, setPreview] = useState<{
@@ -339,7 +352,13 @@ function LiveShapeHandlesRender(props: OverlayProps): ReactElement | null {
     model.select(only);
   }, [model, only]);
 
-  if (!s || !only || pathEditMode || key !== `${s.id.kind}:${s.id.id}`) {
+  if (
+    !s ||
+    !only ||
+    !selecting ||
+    pathEditMode ||
+    key !== `${s.id.kind}:${s.id.id}`
+  ) {
     return <g data-live-shape-handles="" data-count={0} />;
   }
   const pr = props.pageRects.get(s.pageId);
