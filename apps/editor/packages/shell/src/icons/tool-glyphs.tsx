@@ -393,6 +393,25 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
     </>
   ),
 
+  // Mesh — a square patch crossed by one curved row line and one curved
+  // column line, a node square where they meet (the gradient mesh).
+  "tool-mesh": (
+    <>
+      <rect
+        x={4}
+        y={4}
+        width={16}
+        height={16}
+        rx={1.5}
+        {...LINE}
+        strokeWidth={1.6}
+      />
+      <path d="M4 11.5 C 9 8.5, 14 15, 20 11" {...LINE} strokeWidth={1.4} />
+      <path d="M12.5 4 C 9.5 9, 15 14, 11.5 20" {...LINE} strokeWidth={1.4} />
+      <rect x={10.6} y={10.3} width={3} height={3} />
+    </>
+  ),
+
   // Gradient feather — soft radial fade via decreasing-opacity rings.
   "tool-gradientFeather": (
     <>

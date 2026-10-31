@@ -1,0 +1,11 @@
+{
+  "tools.gradient.freeformLines": "Freiform: Linien",
+  "tools.gradient.freeformPoints": "Freiform: Punkte",
+  "tools.gradient.linear": "Linear",
+  "tools.gradient.mode": "Modus",
+  "tools.gradient.points": "{count, plural, one {# Verlaufspunkt} other {# Verlaufspunkte}}",
+  "tools.gradient.spread": "Ausbreitung",
+  "tools.mesh.description": "Klicken Sie in eine Form, um einen Gitterpunkt hinzuzufügen; ziehen Sie einen Punkt oder seine Griffe; färben Sie die ausgewählten Punkte im Bedienfeld „Farbe“.",
+  "tools.mesh.points": "{count, plural, one {# Gitterpunkt} other {# Gitterpunkte}}",
+  "tools.mesh.title": "Gitter"
+}

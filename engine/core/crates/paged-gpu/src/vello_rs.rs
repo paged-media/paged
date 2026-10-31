@@ -284,6 +284,41 @@ thread_local! {
     });
 }
 
+/// A mesh raster's cache key and its peniko image.
+type MeshImage = ((u64, i32), ImageData);
+
+thread_local! {
+    /// Engine ADR 1048 — the last mesh rasters as peniko images: the same
+    /// blob on every redraw at one scale, so the GPU uploads it once.
+    static MESH_IMAGES: RefCell<Vec<MeshImage>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A mesh raster as a peniko image (straight alpha, as the CPU lane's
+/// pixmap reads it).
+fn mesh_image_data(raster: &paged_compose::MeshRaster) -> ImageData {
+    MESH_IMAGES.with(|c| {
+        let mut c = c.borrow_mut();
+        if let Some(at) = c.iter().position(|(k, _)| *k == raster.key) {
+            let hit = c.remove(at);
+            let data = hit.1.clone();
+            c.push(hit);
+            return data;
+        }
+        let data = ImageData {
+            data: Blob::new(Arc::new(raster.rgba.as_ref().clone())),
+            format: ImageFormat::Rgba8,
+            alpha_type: ImageAlphaType::Alpha,
+            width: raster.width,
+            height: raster.height,
+        };
+        if c.len() >= 8 {
+            c.remove(0);
+        }
+        c.push((raster.key, data.clone()));
+        data
+    })
+}
+
 /// The image's pixels as a peniko `ImageData`, decoded at most once per
 /// image while it stays within the budget. `None` when the image has
 /// neither usable RGBA nor decodable encoded bytes.
@@ -1306,6 +1341,18 @@ fn build_scene_with_transform_filtered(
                 let pixel_to_unit = kurbo::Affine::scale_non_uniform(inv_w, inv_h);
                 let pixel_to_px = page_to_px * unit_to_page * pixel_to_unit;
                 scene.draw_image(&brush, pixel_to_px);
+            }
+            DisplayCommand::MeshShade {
+                mesh_id, transform, ..
+            } => {
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let Some((raster, to_px)) =
+                    crate::vello_map::mesh_image(list, *mesh_id, transform, page_to_px)
+                else {
+                    continue;
+                };
+                let brush = ImageBrush::new(mesh_image_data(&raster));
+                scene.draw_image(&brush, to_px);
             }
             DisplayCommand::DropShadow { .. } | DisplayCommand::PathShadow { .. } => {
                 // The CPU lane's own shadow: the shape moved, blurred,
@@ -3415,6 +3462,11 @@ mod tests {
         list.paths.push_anon(p)
     }
 
+    fn px_w(buf: &[u8], w: usize, x: usize, y: usize) -> [u8; 4] {
+        let i = (y * w + x) * 4;
+        [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
+    }
+
     /// Whether the readback buffer is a real render rather than the
     /// zero-fill fallback (the documented "no GPU available" sentinel
     /// from `VelloRasterizer::rasterize`).
@@ -5378,6 +5430,125 @@ mod tests {
                     mid[0] > 240 && (90..=200).contains(&mid[1]),
                     "half way between: {mid:?}"
                 );
+            }
+        }
+    }
+
+    /// Engine ADR 1048 — a mesh shading under a clip draws alike on both
+    /// lanes (ADR 146): both sample the one raster `paged_compose::mesh`
+    /// makes at the display scale, upright and under a turn.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn mesh_shades_alike_on_both_lanes__feat__color_swatches_mesh_freeform_gradients() {
+        use paged_compose::{
+            DisplayCommand, FreeformShading, FreeformSource, MeshShading, Rect, ShadePatch,
+            Transform,
+        };
+        let c = |r: f32, g: f32, b: f32, a: f32| ComposeColor::rgba(r, g, b, a);
+        let mut net = [[(0.0f32, 0.0f32); 4]; 4];
+        for (i, row) in net.iter_mut().enumerate() {
+            for (j, p) in row.iter_mut().enumerate() {
+                *p = (j as f32 / 3.0, i as f32 / 3.0);
+            }
+        }
+        // Bow the top edge in, so the surface is curved.
+        net[0][1].1 = 0.3;
+        net[0][2].1 = 0.3;
+        let patch = ShadePatch {
+            points: paged_compose::mesh::coons_points(&ShadePatch {
+                points: net,
+                colors: [c(1.0, 0.0, 0.0, 1.0); 4],
+                tensor: false,
+            }),
+            colors: [
+                c(1.0, 0.0, 0.0, 1.0),
+                c(0.0, 1.0, 0.0, 1.0),
+                c(0.0, 0.0, 1.0, 0.5),
+                c(1.0, 1.0, 0.0, 1.0),
+            ],
+            tensor: false,
+        };
+        let freeform = FreeformShading {
+            bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 1.0,
+                h: 1.0,
+            },
+            points: vec![
+                FreeformSource {
+                    at: (0.2, 0.2),
+                    color: c(1.0, 0.0, 0.0, 1.0),
+                    spread: 0.05,
+                },
+                FreeformSource {
+                    at: (0.8, 0.7),
+                    color: c(0.0, 0.0, 1.0, 1.0),
+                    spread: 0.0,
+                },
+            ],
+            lines: vec![],
+        };
+        for (k, mesh) in [
+            MeshShading::patches(vec![patch]),
+            MeshShading::freeform(freeform),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for turned in [false, true] {
+                let mut list = DisplayList::new();
+                let rect = unit_rect_path(&mut list);
+                let bounds = mesh.bounds().expect("bounds");
+                let id = list.push_mesh(mesh.clone());
+                let transform = if turned {
+                    Transform([0.0, 50.0, -50.0, 0.0, 90.0, 5.0])
+                } else {
+                    Transform([50.0, 0.0, 0.0, 50.0, 35.0, 5.0])
+                };
+                list.commands.push(DisplayCommand::PushClip {
+                    path_id: rect,
+                    transform,
+                });
+                list.commands.push(DisplayCommand::MeshShade {
+                    mesh_id: id,
+                    bounds,
+                    transform,
+                });
+                list.commands.push(DisplayCommand::PopClip(transform));
+                for dpi in [72.0, 144.0] {
+                    let mut opts = RasterOptions::new(120.0, 60.0);
+                    opts.dpi = dpi;
+                    opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+                    let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+                    if !gpu_or_skip(&gpu) {
+                        return;
+                    }
+                    let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+                    let w = (120.0 * dpi / 72.0) as usize;
+                    let h = (60.0 * dpi / 72.0) as usize;
+                    let mut far = 0usize;
+                    for y in 0..h {
+                        for x in 0..w {
+                            let (g, c) = (px_w(&gpu, w, x, y), px_w(&cpu, w, x, y));
+                            if (0..4).any(|i| g[i].abs_diff(c[i]) > 8) {
+                                far += 1;
+                            }
+                        }
+                    }
+                    assert!(
+                        far <= w * h / 400,
+                        "shading {k}, turned {turned}, {dpi} dpi: lanes differ by > 8 on {far} px"
+                    );
+                    // The shading painted: the clip's middle is not the page.
+                    let (mx, my) = (w / 2, h / 2);
+                    let mid = px_w(&cpu, w, mx, my);
+                    assert!(
+                        mid[0] < 250 || mid[1] < 250 || mid[2] < 250,
+                        "shading {k} painted: {mid:?}"
+                    );
+                }
             }
         }
     }

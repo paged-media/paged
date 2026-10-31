@@ -73,6 +73,7 @@ pub fn empty_text_frame(self_id: &str, bounds: Bounds) -> TextFrame {
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
         gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
+        fill_mesh: None,
         effects: None,
         effect_stack: Vec::new(),
         appearance: Vec::new(),

@@ -242,6 +242,7 @@
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
         "@paged-media/shell": "workspace:*",
+        "@paged-media/strings": "workspace:*",
       },
       "devDependencies": {
         "@paged-media/test-kit": "workspace:*",

@@ -60,6 +60,7 @@ pub mod geometry;
 pub mod gesture;
 mod group_box;
 pub mod hit;
+mod mesh_fill_export;
 pub mod model;
 pub mod mutate;
 mod paint_v2_export;

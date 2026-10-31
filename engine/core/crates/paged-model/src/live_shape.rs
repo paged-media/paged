@@ -425,6 +425,7 @@ pub fn pie_polygon(oval: &Oval) -> Option<Polygon> {
         gradient_stroke_angle: o.gradient_stroke_angle,
         gradient_stroke_length: o.gradient_stroke_length,
         gradient_stroke_mode: o.gradient_stroke_mode,
+        fill_mesh: o.fill_mesh,
         opacity: o.opacity,
         blend_mode: o.blend_mode,
         text_paths: Vec::new(),

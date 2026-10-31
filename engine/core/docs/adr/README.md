@@ -177,6 +177,7 @@ is not written yet.
 | [1045](1045-an-anchored-frame-paints-as-a-free-frame.md) | An anchored frame paints as a free frame does: its look, its picture in its effects, IDML both ways | Accepted 2026-10-29 |
 | [1046](1046-a-scene-layer-takes-its-frames-effects.md) | A scene layer takes its frame's opacity, blend mode and effects | Accepted 2026-10-30 |
 | [1047](1047-live-shapes.md) | A polygon, a star and a pie stay live shapes: parameters on the item, the outline in IDML, the parameters in a label | Accepted 2026-10-30 |
+| [1048](1048-gradient-mesh-and-freeform-gradient.md) | Gradient meshes and freeform gradients are native fills, drawn as a cached raster | Accepted 2026-10-29 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

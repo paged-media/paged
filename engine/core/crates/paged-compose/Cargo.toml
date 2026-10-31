@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 paged-blend = { path = "../paged-blend" }
 paged-scene = { path = "../paged-scene" }
+paged-model = { path = "../paged-model" }
 paged-text = { path = "../paged-text" }
 paged-color = { path = "../paged-color" }
 ttf-parser = "0.25"

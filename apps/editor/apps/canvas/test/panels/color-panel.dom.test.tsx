@@ -26,9 +26,9 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
-import { cockpitActionsOf } from "@paged-media/shell";
+import { cockpitActionsOf, PAINT_TARGET } from "@paged-media/shell";
 
-import { ColorPanel } from "../../src/panels/color-panel";
+import { ColorPanel, mixerToPaint } from "../../src/panels/color-panel";
 import { ColorWheelPanel } from "../../src/panels/color-wheel-panel";
 import { richScene, type RichScene } from "./fixtures";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
@@ -266,5 +266,48 @@ describe("Color panel: controls", () => {
     });
     await h.click(h.root.querySelector("[data-open-color-wheel]")!);
     expect(cockpitActionsOf(h.scope).activeTab?.()).toBe("paged.color-wheel");
+  });
+});
+
+describe("Color panel: the paint target (WP7.2)", () => {
+  test("while a tool offers a paint target, Apply hands it the mixed colour and writes no fill", async () => {
+    covers("panel:paged.color");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    const applied: unknown[] = [];
+    await h.act(() =>
+      h.scope.get(PAINT_TARGET).set({
+        owner: "paged.tool.mesh",
+        label: "2 mesh points",
+        apply: async (color) => {
+          applied.push(color);
+          return true;
+        },
+      }),
+    );
+    expect(panel(h).getAttribute("data-target")).toBe("paint-target");
+    expect(
+      h.root.querySelector('[data-paint-target="paged.tool.mesh"]')
+        ?.textContent,
+    ).toBe("Apply colours the selection: 2 mesh points.");
+    await h.typeInto(channelInputs(h)[0], "60");
+    const from = h.mark();
+    await h.click(h.root.querySelector("[data-mixer-apply]")!);
+    expect(applied).toEqual([{ space: "CMYK", value: [60, 0, 0, 100] }]);
+    expect(h.mutations(from)).toEqual([]);
+
+    // The tool takes the target back: Apply writes the fill again.
+    await h.act(() => h.scope.get(PAINT_TARGET).clear("paged.tool.mesh"));
+    expect(panel(h).getAttribute("data-target")).toBe("selection");
+    expect(h.root.querySelector("[data-paint-target]")).toBeNull();
+  });
+
+  test("a tint folds into the ink channels of the colour handed over", () => {
+    expect(
+      mixerToPaint({ space: "CMYK", value: [0, 100, 50, 0], tint: 50 }),
+    ).toEqual({ space: "CMYK", value: [0, 50, 25, 0] });
+    expect(
+      mixerToPaint({ space: "RGB", value: [10, 20, 30], tint: 50 }),
+    ).toEqual({ space: "RGB", value: [10, 20, 30] });
   });
 });
