@@ -93,7 +93,9 @@ pub fn svg_to_dxf(svg: &str) -> Result<DxfExport, String> {
         dpi: 72.0,
         ..usvg::Options::default()
     };
-    let tree = usvg::Tree::from_str(svg, &opt).map_err(|e| format!("not a readable SVG: {e}"))?;
+    // The engine's guarded parse: over its size and complexity limits
+    // (`paged_svg::limits`) the SVG is refused with the reason.
+    let tree = paged_svg::limits::read_tree(svg.as_bytes(), opt).map_err(|e| e.to_string())?;
     let mut drawing = Drawing::new();
     drawing.header.version = AcadVersion::R2010;
     drawing.header.default_drawing_units = Units::Millimeters;

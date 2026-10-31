@@ -84,6 +84,7 @@ pub mod smart;
 pub mod stroke;
 pub mod text;
 pub mod vectors;
+pub mod warps;
 pub mod workspace;
 
 /// The frozen kernel ABI version this artifact was built against.
@@ -138,6 +139,8 @@ mod wasm {
     mod filters_stylize;
     // Smart objects (ADR 482): transform, filters, contents, links.
     mod smart_doors;
+    // WP5.6: Warp, Liquify, Puppet Warp, Content-Aware Scale (ADR 483).
+    mod warps;
 
     thread_local! {
         /// The bundle-realm GPU device (I-07: created HERE, where
@@ -6720,12 +6723,46 @@ mod wasm {
                 )))
             }
         };
+        run_canvas_op(op).await
+    }
+
+    /// The PERSPECTIVE CROP tool's commit (WP5.6, image ADR 483) over the
+    /// whole stack, in place on the bound handle: the quadrilateral `quad`
+    /// (NW, NE, SE, SW, canvas px — eight numbers) drawn upright onto a
+    /// `width`×`height` canvas through its homography (every layer, mask
+    /// and channel through `geom.warp_projective`, bicubic; paths, guides
+    /// and smart placements through the same map). GPU-only; drops the
+    /// selection; one undo step. Returns `[width, height]`.
+    #[wasm_bindgen]
+    pub async fn layers_perspective_crop(
+        quad: Vec<f32>,
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<u32>, JsValue> {
+        let quad: [f32; 8] = quad.try_into().map_err(|q: Vec<f32>| {
+            JsValue::from_str(&format!(
+                "a perspective crop is four corners (8 numbers), got {}",
+                q.len()
+            ))
+        })?;
+        run_canvas_op(crate::layers::CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        })
+        .await
+    }
+
+    /// One canvas op over the whole stack (see `layers_canvas_op`).
+    async fn run_canvas_op(op: crate::layers::CanvasOp) -> Result<Vec<u32>, JsValue> {
+        use crate::layers::CanvasOp;
         let deselect = matches!(
             op,
             CanvasOp::Crop { .. }
                 | CanvasOp::Straighten { .. }
                 | CanvasOp::Resample { .. }
                 | CanvasOp::RotateArbitrary { .. }
+                | CanvasOp::Perspective { .. }
         );
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {

@@ -131,8 +131,9 @@ pub(super) fn is_svg_magic(bytes: &[u8]) -> bool {
 /// at most `max_px` (matching the DCT-scale cap for raster images),
 /// preserving aspect.
 fn decode_svg_bytes(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
-    let opt = usvg::Options::default();
-    let tree = usvg::Tree::from_data(bytes, &opt).ok()?;
+    // The guarded parse (`paged_svg::limits`): an SVG over the size and
+    // complexity limits decodes to nothing, as an unreadable one does.
+    let tree = paged_svg::limits::read_tree(bytes, usvg::Options::default()).ok()?;
     let svg_w: f32 = tree.size().width().ceil().max(1.0);
     let svg_h: f32 = tree.size().height().ceil().max(1.0);
     let longest = svg_w.max(svg_h);
