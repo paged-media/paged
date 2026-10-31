@@ -356,7 +356,7 @@ impl LayerStack {
             if let Some(px) = rgba {
                 let layer = &mut st.layers[at];
                 let want = (st.width as usize) * (st.height as usize) * 4;
-                if !layer.rgba.is_16bit() && px.len() == want {
+                if layer.rgba.depth() == image_core::SampleDepth::U8 && px.len() == want {
                     layer.rgba = crate::pixels::Pixels::from_rgba8(px).into();
                 }
             }

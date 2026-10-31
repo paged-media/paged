@@ -319,27 +319,40 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   kernels compute in f32 and store f16, so a 16-bit document keeps about 11 bits in the highlights
   through a kernel (2826 distinct levels on a 16384-level ramp under a Levels gamma of 2.2, where
   Photoshop keeps 16259 and an 8-bit document 184). The scene-layer item and tiles are 8-bit (the
-  display view). A 16-bit CMYK PSD, a 16-bit RLE layer channel and 32-bit sources are reduced to 8
-  bits and say so. A curve is a 256-entry table.
+  display view). A 16-bit CMYK PSD and a 16-bit RLE layer channel are reduced to 8 bits and say
+  so. A curve is a 256-entry table. **32 bits** ([ADR 484](adr/484-float-documents-and-the-single-image-modes.md)):
+  OpenEXR, Radiance HDR and 32-bit PSDs open as 32-bit float, linear light, and Image ▸ Mode ▸
+  32 Bits/Channel converts (one undo step); the fold blends the linear values and keeps values
+  above 1, the frame shows them at exposure 0, and the layered save writes 32 bits (`Lr32`).
+  Against Photoshop's own 32-bit document every offered separable blend is within 0.001; Linear
+  Dodge clips at 1 where Photoshop's Add does not, and Hue/Color/Luminosity differ (recorded).
 - **Colour modes.** Image ▸ Mode ▸ Greyscale, RGB colour, CMYK colour and Lab colour convert every
   layer through the engine's CMS (Gray Gamma 2.2, the session's CMYK profile, CIE Lab) and keep the
   document inside that mode: a pixel edit lands projected inside its damage. A CMYK document with
   a profile composites in its INKS — every layer as two ink planes, a CMYK file's layers with the
-  file's own inks — so separable blends agree with Photoshop's CMYK composite within 0.7 ΔE00 at
-  the 95th percentile, where blending the RGB conversions was 10–50 off; a non-separable mode,
-  Blend If, an adjustment layer or a style composites in RGB
-  ([ADR 481](adr/481-n-channel-planes-and-the-ink-fold.md)). Grey and Lab documents still blend
-  in RGB; Indexed, Duotone and Multichannel are not offered. Against Photoshop: greyscale and 16-bit Lab within 0.05 of a level,
+  file's own inks — so the separable blends and Hue, Saturation, Color and Luminosity (ADR 484)
+  agree with Photoshop's CMYK composite within 0.7 ΔE00 at the 95th percentile, where blending
+  the RGB conversions was 10–50 off; Darker/Lighter Color, Blend If, an adjustment layer or a
+  style composites in RGB ([ADR 481](adr/481-n-channel-planes-and-the-ink-fold.md)). Grayscale and Lab documents fold in
+  their stored numbers, Lab with Photoshop's chroma rule (ADR 484): within 1.9 ΔE p95 of
+  Photoshop's merged Lab composite at 8 bits and 0.25 at 16 (the RGB fold was up to 43), grey
+  within 1.1 and 0.1; Hue and Saturation fold a Lab document in RGB. Image ▸ Mode ▸ Indexed
+  Color… (Exact, Web, adaptive; no dither — our Web mapping is Photoshop's on every pixel of the
+  sweep) and Multichannel flatten the image into the mode as one undo step and save as the one
+  image Photoshop keeps; a Duotone file opens as its grey and keeps its specification (no Duotone
+  conversion). Against Photoshop: greyscale and 16-bit Lab within 0.05 of a level,
   CMYK (Coated FOGRA39) and 8-bit Lab within 1.8 ΔE at the 99th percentile. CMYK without a profile
   changes no colour, and the status says so. Image ▸ Proof shows Proof colours and the Gamut warning
   (Gray Gamma 2.2 or the CMYK profile) on the preview without touching the document. The layered PSD
   save writes the document's mode and depth (ADR 481): Photoshop reopens a converted Grayscale,
   Lab, CMYK or 16-bit document with live layers; an adjustment layer or Blend If in a document
   converted to another mode makes the save flatten, saying why.
-- **PSD.** The composite decode takes 8- and 16-bit RGB, greyscale or CMYK, raw or RLE (not
-  16-bit RLE); other modes and depths are refused, and a transparent document's white-matted
-  merged colour is un-matted (CMYK: matted against the paper). Layers are imported from RGB
-  and CMYK files, each layer and its mask at its own bounds ([ADR 464](adr/464-layers-at-their-own-bounds.md);
+- **PSD.** The composite decode takes every mode but Bitmap at 8, 16 and 32 bits, raw or RLE (not
+  16-bit RLE; Lab and grey through the CMS, Indexed through its table, Multichannel through its
+  inks, Duotone as its grey), and a transparent document's white-matted
+  merged colour is un-matted (CMYK: matted against the paper). Layers are imported from RGB,
+  CMYK (every blend but Darker/Lighter Color; ADR 484), Grayscale, Duotone and Lab files at 8 and 16 bits and RGB and
+  Grayscale files at 32, each layer and its mask at its own bounds ([ADR 464](adr/464-layers-at-their-own-bounds.md);
   the 384 MiB budget counts the rectangles): pixel layers, groups and their user masks (an
   isolated group blends through its mask, a pass-through group's members each go through it),
   clipping, user masks, vector masks (drawn from their paths the way Photoshop draws them — a

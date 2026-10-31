@@ -43,6 +43,33 @@ Recorded with **Adobe Illustrator 30.1.0** (build 136R, de_DE, macOS
 | `nine-slice`          | 6     | 9-slice scaling of a symbol instance, expanded by Break Link: the corners keep their size, the edge regions stretch along their own axis and the centre in both — draw-geometry's `nineSlicePoint` (the engine renderer's formula) puts every anchor within 0.05 pt, a 0.8 × shrink included. Break Link inserts an anchor where a cut crosses an edge (the engine clips copies and inserts none), so the comparison is of shape. `getSymbol9SliceGrid` answers `[0, 0, 0, 0]` for a new symbol.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `live-shapes`         | 6     | `polygon()` and `star()` about a centre: a star is draw-geometry's `starPath` to 0.01 pt (first point up, clockwise, inner points between), so a live star (engine ADR 1047) is Illustrator's. An odd polygon has our corners wound counter-clockwise; an even one is turned half a step, flat side up (CONVENTION: the live polygon is InDesign's, a corner up). The scripting DOM has no pie or live-shape property on an ellipse.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
+`vector-effects` (2026-10-29, engine ADR 1042) records Illustrator's live
+vector effects through `applyEffect` + `expandStyle`; the fixture and its
+replay live with the engine (`engine/core/crates/paged-vector-fx/tests/`).
+The effect names and dictionary keys are strings in the plug-ins
+(`Adobe Zigzag` `amount ridges roundness absoluteness`, `Adobe Punk and
+Bloat` `d_factor` — a PERCENTAGE, `Adobe Twirl` `angle`, `Adobe Round
+Corners` `radius`, `Adobe Roughen` `asiz size dtal smth absoluteness`,
+`Adobe Transform` `scaleH_Percent … numCopies`, `Adobe Scribble and Tweak`
+`horz vert ahor aver anch in out`). Recorded: Zig Zag, Pucker & Bloat and
+Round Corners exactly; Transform's copies exactly; Twist to whole points
+(Illustrator rounds); Offset Path; Roughen and Tweak statistically (their
+random sequence is Illustrator's own; two recordings of one case differ).
+NOT recorded: `Adobe Deform` (Warp) answered every dictionary tried with
+the input unchanged; and a discovery probe with out-of-range values
+(`DeformValue 50`, a Free Distort in a unit frame) left Illustrator
+computing past the probe timeout — keep every parameter in its dialog's
+range. Free Distort's `src*`/`dst*` frame is not settled.
+
+`appearance` (engine ADR 1043) is written and NOT YET RECORDED. It builds
+an object's several fills and strokes with the Appearance panel's own
+commands (`Adobe New Fill Shortcut`, `Adobe New Stroke Shortcut`; the DOM's
+`fillColor`, `strokeColor`, `strokeWidth`, `opacity` and `blendingMode`
+then write the targeted layer, or the object -- which one is what the
+recording says), exports each case as PNG-24 into `PAGED_PROBE_OUT`, and
+records Object > Expand Appearance part by part. Record it with
+`PAGED_PROBE_OUT` pointing at
+
 `appearance` (engine ADR 1043, recorded 2026-10-30, 7 cases) builds an
 object's several fills and strokes with the Appearance panel's own commands
 (`Adobe New Fill Shortcut`, `Adobe New Stroke Shortcut`), exports each case

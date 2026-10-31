@@ -897,6 +897,84 @@ pub(crate) fn live_shape_losses(scene: &Document) -> Vec<String> {
     out
 }
 
+/// Engine ADR 1042 — the live vector effects IDML cannot say. Every
+/// item with an enabled vector entry is written BAKED (its effected
+/// outline; an oval as a polygon, a group with a Pathfinder effect as one
+/// polygon), the source and the stack kept in labels a paged reader
+/// restores; InDesign shows the outline, not the effect. A group whose
+/// members a Pathfinder effect cannot be written over (a text frame, a
+/// nested group, a symbol instance) is written as its members.
+pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
+    use paged_model::effect_stack::{vector_entries, EffectEntry};
+    let mut out = Vec::new();
+    let mut unwritten = Vec::new();
+    let mut check = |kind: &str, id: Option<&str>, stack: &[EffectEntry]| {
+        let kinds: Vec<&str> = vector_entries(stack)
+            .map(|e| e.effect.kind_name())
+            .collect();
+        if kinds.is_empty() {
+            return;
+        }
+        out.push(format!(
+            "vector effect{} {} on {kind} `{}` has no IDML form — written baked (the \
+             effected outline{}), the source and the live stack kept in the item's \
+             `paged:vectorSource` and `paged:effectStack` labels, which a paged reader \
+             restores; InDesign shows the outline, not the effect.",
+            if kinds.len() > 1 { "s" } else { "" },
+            kinds
+                .iter()
+                .map(|k| format!("`{k}`"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            id.unwrap_or("?"),
+            match kind {
+                "oval" => ", as a polygon",
+                "group" => ", as one polygon in the group's place",
+                _ => "",
+            }
+        ));
+    };
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        for f in &sp.text_frames {
+            check("text frame", f.self_id.as_deref(), &f.effect_stack);
+        }
+        for f in &sp.rectangles {
+            check("rectangle", f.self_id.as_deref(), &f.effect_stack);
+        }
+        for f in &sp.ovals {
+            check("oval", f.self_id.as_deref(), &f.effect_stack);
+        }
+        for f in &sp.polygons {
+            check("polygon", f.self_id.as_deref(), &f.effect_stack);
+        }
+        for g in &sp.groups {
+            let readable = g.members.iter().all(|m| {
+                matches!(
+                    m,
+                    paged_model::FrameRef::Rectangle(_)
+                        | paged_model::FrameRef::Oval(_)
+                        | paged_model::FrameRef::Polygon(_)
+                        | paged_model::FrameRef::GraphicLine(_)
+                )
+            });
+            if readable {
+                check("group", g.self_id.as_deref(), &g.effect_stack);
+            } else if vector_entries(&g.effect_stack).next().is_some() {
+                unwritten.push(format!(
+                    "the Pathfinder effect on group `{}` is not written — the group holds a \
+                     text frame, a group or a symbol instance, which IDML cannot replace by \
+                     one outline; it is written as its members, the stack kept in its label \
+                     is not (InDesign draws the members).",
+                    g.self_id.as_deref().unwrap_or("?")
+                ));
+            }
+        }
+    }
+    out.extend(unwritten);
+    out
+}
+
 /// Engine ADR 1008 — what an item's effect stack says that IDML cannot:
 /// an effect InDesign does not have (it rides the item's
 /// `paged:effectStack` label, which InDesign keeps and does not draw, so a
@@ -917,7 +995,9 @@ pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
                 EffectTarget::Content => " (content)",
             };
             for e in slots.stack.iter().filter(|e| e.enabled) {
-                if e.effect.indesign().is_none() {
+                // Vector effects are reported (and baked) by
+                // `vector_effect_losses`.
+                if e.effect.indesign().is_none() && !e.effect.is_vector() {
                     out.push(format!(
                         "effect `{}` on {kind} `{id}`{on} has no IDML form — InDesign has its \
                          nine effects only; it is kept in the item's `paged:effectStack` label, \

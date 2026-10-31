@@ -428,6 +428,7 @@ fn bake_one(spread: &mut Spread, me: FrameRef, taken: &mut std::collections::Has
         corner_option: None,
         corners: Default::default(),
         clip: false,
+        effect_stack: Vec::new(),
     };
     spread.groups.push(group);
     let g = FrameRef::Group(spread.groups.len() - 1);
