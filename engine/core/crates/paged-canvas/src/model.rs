@@ -390,6 +390,47 @@ fn created_element_ids(
             .filter_map(page_item_element_id)
             .collect();
     }
+    // Engine ADR 1026 — an override mints one copy per master item (a
+    // group's members ride along and are not reported).
+    if let paged_mutate::Operation::OverrideMasterItems { ids, .. } = op {
+        use crate::element_selection::ElementId;
+        let mut out = Vec::new();
+        for parsed in &doc.spreads {
+            let sp = &parsed.spread;
+            let member = |id: &str| {
+                sp.groups.iter().any(|g| {
+                    g.members
+                        .iter()
+                        .any(|m| frame_self_id(sp, *m).as_deref() == Some(id))
+                })
+            };
+            for id in ids {
+                if member(id) {
+                    continue;
+                }
+                fn is<'a>(mut v: impl Iterator<Item = Option<&'a String>>, id: &str) -> bool {
+                    v.any(|s| s.map(String::as_str) == Some(id))
+                }
+                let e = if is(sp.text_frames.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::TextFrame(id.clone())
+                } else if is(sp.rectangles.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::Rectangle(id.clone())
+                } else if is(sp.ovals.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::Oval(id.clone())
+                } else if is(sp.graphic_lines.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::GraphicLine(id.clone())
+                } else if is(sp.polygons.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::Polygon(id.clone())
+                } else if is(sp.groups.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::Group(id.clone())
+                } else {
+                    continue;
+                };
+                out.push(e);
+            }
+        }
+        return out;
+    }
     created_element_id(doc, op).into_iter().collect()
 }
 
@@ -677,6 +718,10 @@ fn created_element_id(
     // the caller can address it (e.g. offset the anchor after placement).
     if let paged_mutate::Operation::InsertAnchoredFrame { self_id, .. } = op {
         return Some(ElementId::Rectangle(self_id.clone()));
+    }
+    // Engine ADR 1026 — an insert on a master reports what it made.
+    if let paged_mutate::Operation::OnMaster { op, .. } = op {
+        return created_element_id(doc, op);
     }
     // Protocol v34 — a batch reports its LAST creating child (the id
     // the batch-created sentinel resolved to), so insert-with-
@@ -3610,6 +3655,7 @@ impl CanvasModel {
                 Mutation::Batch { .. }
                     | Mutation::DuplicateElements { .. }
                     | Mutation::PasteElements { .. }
+                    | Mutation::OverrideMasterItems { .. }
             ) {
                 created_element_ids(&self.scene, &outcome.applied.op)
                     .into_iter()
@@ -4152,11 +4198,15 @@ impl CanvasModel {
     fn story_of_element(&self, id: &crate::element_selection::ElementId) -> Option<String> {
         use crate::element_selection::ElementId;
         match id {
+            // A master's frames too (engine ADR 1026: an insert on a master
+            // binds its story).
             ElementId::TextFrame(frame_id) => self
                 .scene
                 .spreads
                 .iter()
-                .flat_map(|parsed| parsed.spread.text_frames.iter())
+                .map(|parsed| &parsed.spread)
+                .chain(self.scene.master_spreads.values().map(|m| &m.spread))
+                .flat_map(|spread| spread.text_frames.iter())
                 .find(|f| f.self_id.as_deref() == Some(frame_id.as_str()))
                 .and_then(|f| f.parent_story.clone()),
             ElementId::StoryRange { story_id, .. }
@@ -4296,9 +4346,9 @@ impl CanvasModel {
                 })
             }
             Mutation::InsertFrame { page_id, bounds } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
                 // Append to the kind vec = top of the z-order.
-                let position = self.scene.spreads[idx].spread.rectangles.len();
+                let position = sp.rectangles.len();
                 let d = &self.document_defaults;
                 Some(Operation::InsertNode {
                     parent: NodeId::Spread(spread_id),
@@ -4319,8 +4369,8 @@ impl CanvasModel {
                 })
             }
             Mutation::InsertTextFrame { page_id, bounds } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
-                let position = self.scene.spreads[idx].spread.text_frames.len();
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
+                let position = sp.text_frames.len();
                 // Mint the frame's ParentStory id here (the apply layer
                 // creates the story for an unknown id) — every wire-
                 // inserted text frame is immediately pour-able/hit-able.
@@ -4381,8 +4431,8 @@ impl CanvasModel {
                 start,
                 end,
             } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
-                let position = self.scene.spreads[idx].spread.graphic_lines.len();
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
+                let position = sp.graphic_lines.len();
                 let s = [start.0 + ox, start.1 + oy];
                 let e = [end.0 + ox, end.1 + oy];
                 let corner = |p: [f32; 2]| paged_mutate::operation::PathAnchorSpec {
@@ -4424,8 +4474,8 @@ impl CanvasModel {
                 open,
                 smooth,
             } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
-                let position = self.scene.spreads[idx].spread.polygons.len();
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
+                let position = sp.polygons.len();
                 let mut conv: Vec<paged_mutate::operation::PathAnchorSpec> = anchors
                     .iter()
                     .map(|a| paged_mutate::operation::PathAnchorSpec {
@@ -5330,8 +5380,8 @@ impl CanvasModel {
             }),
             // ── W0.5 wire-expansion ─────────────────────────────────
             Mutation::InsertOval { page_id, bounds } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
-                let position = self.scene.spreads[idx].spread.ovals.len();
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
+                let position = sp.ovals.len();
                 let d = &self.document_defaults;
                 Some(Operation::InsertNode {
                     parent: NodeId::Spread(spread_id),
@@ -5425,6 +5475,28 @@ impl CanvasModel {
                     },
                     hyperlink_id: format!("Hyperlink/{base}"),
                     page: page.as_ref().map(|p| p.0.clone()),
+                })
+            }
+            // Engine ADR 1026 — a clickable item: the source, link and
+            // destination share one minted suffix, as a text link's do.
+            Mutation::InsertItemHyperlink {
+                item,
+                url,
+                page,
+                name,
+            } => {
+                let base = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::InsertItemHyperlink {
+                    item_id: item.clone(),
+                    url: url.clone(),
+                    page: page.as_ref().map(|p| p.0.clone()),
+                    name: name.clone(),
+                    source_id: format!("HyperlinkPageItemSource/{base}"),
+                    dest_id: match page {
+                        Some(_) => format!("HyperlinkPageDestination/{base}"),
+                        None => format!("HyperlinkURLDestination/{base}"),
+                    },
+                    hyperlink_id: format!("Hyperlink/{base}"),
                 })
             }
             Mutation::InsertFootnote {
@@ -6032,6 +6104,33 @@ impl CanvasModel {
                 master_id: master.clone(),
                 name: name.clone(),
             }),
+            Mutation::SetPageOverrides { page, overrides } => Some(Operation::SetPageOverrides {
+                page: page.0.clone(),
+                overrides: overrides.clone(),
+            }),
+            // Engine ADR 1026 — the copies' ids are minted here, from the
+            // same number lines as a paste's.
+            Mutation::OverrideMasterItems {
+                page,
+                items,
+                empty_text,
+            } => {
+                let copy =
+                    paged_mutate::override_copy(&self.scene, page.as_str(), items, *empty_text)
+                        .ok()?;
+                let demand = paged_mutate::snippet_demand(&copy.snippet);
+                let story_ids = self.mint_story_ids(demand.stories, *mint_offset);
+                let ids = (0..demand.items)
+                    .map(|_| self.mint_page_item_id_with_offset(mint_offset))
+                    .collect();
+                Some(Operation::OverrideMasterItems {
+                    page: page.0.clone(),
+                    items: items.clone(),
+                    ids,
+                    story_ids,
+                    empty_text: *empty_text,
+                })
+            }
             Mutation::MovePage { page, after } => Some(Operation::MovePage {
                 page_id: page.0.clone(),
                 after_page_id: after.as_ref().map(|a| a.0.clone()),
@@ -6400,12 +6499,28 @@ impl CanvasModel {
     pub(crate) fn page_insert_context(
         &self,
         page_id: &PageId,
-    ) -> Option<(String, (f32, f32), usize)> {
+    ) -> Option<(String, (f32, f32), &paged_model::Spread)> {
+        // Engine ADR 1026 — a master page: an insert wrapped in `onMaster`
+        // lands on the master spread, which is the only spread it sees.
+        if let Some(m) = self.master_of_page(page_id) {
+            let page = m
+                .spread
+                .pages
+                .iter()
+                .find(|p| p.self_id.as_deref() == Some(page_id.as_str()))?;
+            let b = crate::hit::transform_bbox(page.bounds, page.item_transform);
+            let id = m
+                .spread
+                .self_id
+                .clone()
+                .unwrap_or_else(|| m.self_id.clone());
+            return Some((id, (b.left, b.top), &m.spread));
+        }
         let origin = match self.page(page_id) {
             Some(p) => p.spread_origin,
             None => self.scene_page_origin(page_id)?,
         };
-        let (idx, parsed) = self.scene.spreads.iter().enumerate().find(|(_, parsed)| {
+        let parsed = self.scene.spreads.iter().find(|parsed| {
             parsed
                 .spread
                 .pages
@@ -6420,7 +6535,7 @@ impl CanvasModel {
             .self_id
             .clone()
             .unwrap_or_else(|| parsed.src.clone());
-        Some((spread_id, origin, idx))
+        Some((spread_id, origin, &parsed.spread))
     }
 
     pub(crate) fn resolve_frame_node_id(&self, frame_id: &str) -> Option<paged_mutate::NodeId> {
@@ -10973,6 +11088,9 @@ impl CanvasModel {
             std::collections::HashMap::new();
         // Engine ADR 1022 — page self id → its applied master, as grown.
         let mut master_of: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+        // Engine ADR 1026 — page self id → its override list.
+        let mut overrides_of: std::collections::HashMap<&str, &[String]> =
+            std::collections::HashMap::new();
         // Engine ADR 1011 — the pages placed on the canvas.
         let mut placed: std::collections::HashSet<&str> = std::collections::HashSet::new();
         let mut inner_bounds: std::collections::HashMap<&str, [f32; 4]> =
@@ -10991,6 +11109,7 @@ impl CanvasModel {
                     if let Some(m) = pg.applied_master.as_deref() {
                         master_of.insert(id, m);
                     }
+                    overrides_of.insert(id, &pg.override_list);
                     spread_of.insert(id, &parsed.spread);
                     spread_id_of.insert(id, spread_id.clone());
                     // WP2.7 — the renderer's binding rule
@@ -11062,6 +11181,10 @@ impl CanvasModel {
                     canvas_origin_pt: Some([p.canvas_origin.0, p.canvas_origin.1]),
                     canvas_placed: placed.contains(p.id.as_str()),
                     bounds_pt: inner_bounds.get(p.id.as_str()).copied(),
+                    override_list: overrides_of
+                        .get(p.id.as_str())
+                        .map(|l| l.to_vec())
+                        .unwrap_or_default(),
                 }
             })
             .collect()
@@ -11139,6 +11262,44 @@ impl CanvasModel {
                 label: ms.name.clone().unwrap_or_else(|| self_id.clone()),
                 self_id: self_id.clone(),
                 page_count: ms.spread.pages.len() as u32,
+                pages: ms
+                    .spread
+                    .pages
+                    .iter()
+                    .filter_map(|pg| {
+                        let id = pg.self_id.clone()?;
+                        Some(crate::channel::MasterPageEntry {
+                            size_pt: [
+                                pg.bounds.right - pg.bounds.left,
+                                pg.bounds.bottom - pg.bounds.top,
+                            ],
+                            applied_master: pg.applied_master.clone(),
+                            override_list: pg.override_list.clone(),
+                            plugin_metadata: tree_plugin_metadata(&ms.spread, &id),
+                            self_id: id,
+                        })
+                    })
+                    .collect(),
+                items: {
+                    let sp = &ms.spread;
+                    let order: Vec<paged_model::FrameRef> = if !sp.frames_in_order.is_empty() {
+                        sp.frames_in_order.clone()
+                    } else {
+                        let mut v = Vec::new();
+                        v.extend((0..sp.text_frames.len()).map(paged_model::FrameRef::TextFrame));
+                        v.extend((0..sp.rectangles.len()).map(paged_model::FrameRef::Rectangle));
+                        v.extend((0..sp.ovals.len()).map(paged_model::FrameRef::Oval));
+                        v.extend(
+                            (0..sp.graphic_lines.len()).map(paged_model::FrameRef::GraphicLine),
+                        );
+                        v.extend((0..sp.polygons.len()).map(paged_model::FrameRef::Polygon));
+                        v
+                    };
+                    order
+                        .into_iter()
+                        .filter_map(|fr| frame_to_tree_node(sp, fr))
+                        .collect()
+                },
             })
             .collect();
         out.sort_by(|a, b| a.self_id.cmp(&b.self_id));
@@ -11346,6 +11507,14 @@ impl CanvasModel {
                         Some(paged_model::HyperlinkDestinationKind::Page(p)) => Some(p.clone()),
                         _ => None,
                     },
+                    source_item: h.source.as_deref().and_then(|src| {
+                        self.scene
+                            .designmap
+                            .hyperlink_page_item_sources
+                            .iter()
+                            .find(|p| p.self_id == src)
+                            .map(|p| p.source_page_item.clone())
+                    }),
                 }
             })
             .collect()
@@ -13021,8 +13190,20 @@ impl CanvasModel {
                 continue;
             }
             let raw = id.raw_id();
-            for parsed in &self.scene().spreads {
-                let spread = &parsed.spread;
+            // Engine ADR 1026 — a master's items too, after the pages':
+            // their page is the master's page, their transform in its space.
+            let candidates = self
+                .scene()
+                .spreads
+                .iter()
+                .map(|p| (&p.spread, None))
+                .chain(self.scene().master_spreads.values().map(|m| {
+                    (
+                        &m.spread,
+                        m.spread.pages.first().and_then(|pg| pg.self_id.clone()),
+                    )
+                }));
+            for (spread, master_page) in candidates {
                 let mut story_id = None;
                 let resolved: Option<(paged_model::Bounds, Option<[f32; 6]>, bool)> = match id {
                     ElementId::TextFrame(_) => spread
@@ -13113,7 +13294,20 @@ impl CanvasModel {
                 let Some((bounds, item_transform, has_image)) = resolved else {
                     continue;
                 };
-                let built_page = self.host_page(&parsed.spread, bounds, item_transform);
+                if let Some(page) = master_page {
+                    out.push(crate::channel::ElementGeometryItem {
+                        id: id.clone(),
+                        page_id: Some(PageId(page)),
+                        spread_id: spread.self_id.clone(),
+                        bounds: [bounds.top, bounds.left, bounds.bottom, bounds.right],
+                        item_transform,
+                        page_origin: Some([0.0, 0.0]),
+                        has_image,
+                        story_id,
+                    });
+                    break;
+                }
+                let built_page = self.host_page(spread, bounds, item_transform);
                 // C-23 — an element whose centroid lands on no page is
                 // ON THE PASTEBOARD, not absent. This used to `if let`
                 // the push away, so the door answered nothing for an
@@ -13121,7 +13315,7 @@ impl CanvasModel {
                 out.push(crate::channel::ElementGeometryItem {
                     id: id.clone(),
                     page_id: built_page.map(|bp| bp.id.clone()),
-                    spread_id: parsed.spread.self_id.clone(),
+                    spread_id: spread.self_id.clone(),
                     bounds: [bounds.top, bounds.left, bounds.bottom, bounds.right],
                     item_transform: page_space_transform(built_page, item_transform),
                     page_origin: built_page.map(|bp| [bp.spread_origin.0, bp.spread_origin.1]),
@@ -13758,6 +13952,23 @@ impl CanvasModel {
         Ok(doc)
     }
 
+    /// Engine ADR 1026 — the master spread that holds page `page_id`, when
+    /// it is a master page.
+    fn master_of_page(&self, page_id: &PageId) -> Option<&paged_scene::ParsedMasterSpread> {
+        self.scene.master_spreads.values().find(|m| {
+            m.spread
+                .pages
+                .iter()
+                .any(|p| p.self_id.as_deref() == Some(page_id.as_str()))
+        })
+    }
+
+    /// Engine ADR 1026 — whether `page_id` is a master page (a snapshot
+    /// draws it as a page of its own).
+    pub fn is_master_page(&self, page_id: &PageId) -> bool {
+        self.master_of_page(page_id).is_some()
+    }
+
     /// v70 — the page as it draws with some items hidden: a slideshow's
     /// build steps (each frame is the slide without the items later steps
     /// reveal). A copy of the scene with those items (a group: all its
@@ -13801,6 +14012,15 @@ impl CanvasModel {
     ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
         use crate::element_selection::ElementId;
         use std::collections::HashSet;
+        // Engine ADR 1026 — a master page is drawn as the only page of a
+        // copy whose one spread is its master: the master's items as page
+        // items, over the masters its page applies.
+        if let Some(m) = self.master_of_page(page_id) {
+            let spread = m.spread.clone();
+            let src = m.src.clone();
+            scene.spreads = vec![paged_scene::ParsedSpread { src, spread }];
+            scene.rebuild_indexes();
+        }
         let spreads = || {
             scene
                 .spreads

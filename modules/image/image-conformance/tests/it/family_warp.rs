@@ -246,3 +246,325 @@ fn geom_warp_mesh_parity_negative_bend() {
     parity_for(WarpStyle::Arc, -0.7);
     parity_for(WarpStyle::Twist, -0.5);
 }
+
+// ─────────────────────────── warp_field ─────────────────────────────
+//
+// `geom.warp_field` (WP5.6, image ADR 483): the displacement-field warp of
+// Liquify and Puppet Warp. The scalar twin reads the SAME packed window
+// the GPU does (source above, the field's nodes below or beside it, each
+// node as an f16 integer part and fraction), so the lanes differ only in
+// the f32 rounding of the blend and the taps.
+//
+// feat: geom.warp_field (registry/kernels.yaml), image.editor.transform-warp.
+
+use image_kernels::families::warp::{WarpFieldParams, GEOM_WARP_FIELD};
+use paged_warp::field::{Brush, Field, Liquify, LiquifyTool};
+use paged_warp::puppet::{self, Pin, PuppetMesh, PuppetMode};
+
+/// Pack `src` and `field` into one window the way image-js does.
+fn pack_field(src: &RefTile, field: &Field, interp: u32) -> (RefTile, WarpFieldParams) {
+    let (mut p, ww, wh) =
+        WarpFieldParams::layout(src.w, src.h, field.cols, field.rows, field.step, 8192)
+            .expect("fits");
+    p.interp = interp;
+    let win = RefTile::from_fn(ww, wh, |x, y| {
+        if x < src.w && y < src.h {
+            return src.px[(y * src.w + x) as usize];
+        }
+        let (i, j) = (x.wrapping_sub(p.field_x), y.wrapping_sub(p.field_y));
+        if x >= p.field_x && y >= p.field_y && i < field.cols && j < field.rows {
+            let d = field.d[(j * field.cols + i) as usize];
+            return Px(WarpFieldParams::encode_node(d[0], d[1]));
+        }
+        Px([0.0; 4])
+    });
+    (win, p)
+}
+
+fn cr(t: f32) -> [f32; 4] {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    [
+        -0.5 * t3 + t2 - 0.5 * t,
+        1.5 * t3 - 2.5 * t2 + 1.0,
+        -1.5 * t3 + 2.0 * t2 + 0.5 * t,
+        0.5 * t3 - 0.5 * t2,
+    ]
+}
+
+/// The scalar twin of `geom.warp_field` (unmasked lane).
+fn warp_field_ref(
+    win: &[Px],
+    win_w: u32,
+    _win_h: u32,
+    ox: u32,
+    oy: u32,
+    p: &WarpFieldParams,
+) -> Px {
+    let node = |i: i32, j: i32| -> Px {
+        let ci = i.clamp(0, p.cols as i32 - 1) as u32;
+        let cj = j.clamp(0, p.rows as i32 - 1) as u32;
+        win[((p.field_y + cj) * win_w + p.field_x + ci) as usize]
+    };
+    let src = |x: i32, y: i32| -> Px {
+        if x < 0 || y < 0 || x >= p.src_w as i32 || y >= p.src_h as i32 {
+            return Px([0.0; 4]);
+        }
+        win[(y as u32 * win_w + x as u32) as usize]
+    };
+    let gx = (ox as f32 / p.step).clamp(0.0, (p.cols - 1) as f32);
+    let gy = (oy as f32 / p.step).clamp(0.0, (p.rows - 1) as f32);
+    let (g0x, g0y) = (gx.floor(), gy.floor());
+    let (fx, fy) = (gx - g0x, gy - g0y);
+    let (i, j) = (g0x as i32, g0y as i32);
+    let n = [
+        node(i, j),
+        node(i + 1, j),
+        node(i, j + 1),
+        node(i + 1, j + 1),
+    ];
+    if n.iter().any(|v| v.0[0] >= 20000.0) {
+        return Px([0.0; 4]);
+    }
+    let d = |v: &Px| [v.0[0] + v.0[1], v.0[2] + v.0[3]];
+    let mx =
+        |a: [f32; 2], b: [f32; 2], t: f32| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    let dd = mx(mx(d(&n[0]), d(&n[1]), fx), mx(d(&n[2]), d(&n[3]), fx), fy);
+    let (sx, sy) = (ox as f32 + dd[0], oy as f32 + dd[1]);
+    let (x0, y0) = (sx.floor(), sy.floor());
+    let (tx, ty) = (sx - x0, sy - y0);
+    let (ix, iy) = (x0 as i32, y0 as i32);
+    if p.interp == 1 {
+        let (wx, wy) = (cr(tx), cr(ty));
+        let mut acc = [0f32; 4];
+        for (r, wyr) in wy.iter().enumerate() {
+            let mut row = [0f32; 4];
+            for (c, wxc) in wx.iter().enumerate() {
+                let t = src(ix - 1 + c as i32, iy - 1 + r as i32);
+                for (r, v) in row.iter_mut().zip(t.0) {
+                    *r += v * wxc;
+                }
+            }
+            for (a, r) in acc.iter_mut().zip(row) {
+                *a += r * wyr;
+            }
+        }
+        let a = acc[3].clamp(0.0, 1.0);
+        return Px([
+            acc[0].clamp(0.0, a),
+            acc[1].clamp(0.0, a),
+            acc[2].clamp(0.0, a),
+            a,
+        ]);
+    }
+    lerp(
+        lerp(src(ix, iy), src(ix + 1, iy), tx),
+        lerp(src(ix, iy + 1), src(ix + 1, iy + 1), tx),
+        ty,
+    )
+}
+
+fn liquified(w: u32, h: u32) -> Field {
+    let mut l = Liquify::new(w, h, 16);
+    let b = Brush {
+        size: 14.0,
+        pressure: 1.0,
+        density: 0.5,
+        rate: 1.0,
+    };
+    l.stroke(LiquifyTool::ForwardWarp, &b, &[(8.0, 10.0), (20.0, 12.0)]);
+    l.stroke(LiquifyTool::TwirlClockwise, &b, &[(26.0, 8.0), (27.0, 9.0)]);
+    l.stroke(LiquifyTool::Bloat, &b, &[(12.0, 4.0)]);
+    l.field
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_field_identity_is_a_passthrough__feat__image_editor_transform_warp() {
+    let (w, h) = (24u32, 16u32);
+    let src = stimulus(w, h);
+    let (win, p) = pack_field(&src, &Field::new(w, h, 4), 1);
+    let q = win.quantized_px();
+    for y in 0..h {
+        for x in 0..w {
+            let got = warp_field_ref(&q, win.w, win.h, x, y, &p);
+            let want = q[(y * win.w + x) as usize];
+            for c in 0..4 {
+                assert!((got.0[c] - want.0[c]).abs() < 1e-4, "({x},{y})");
+            }
+        }
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_field_reads_the_displaced_source_and_nothing_where_none__feat__image_editor_transform_warp(
+) {
+    let (w, h) = (20u32, 12u32);
+    let src = stimulus(w, h);
+    let mut f = Field::new(w, h, 1);
+    for v in &mut f.d {
+        *v = [3.0, -2.0];
+    }
+    f.d[5 * 20 + 7] = [f32::NAN; 2];
+    let (win, p) = pack_field(&src, &f, 0);
+    let q = win.quantized_px();
+    let got = warp_field_ref(&q, win.w, win.h, 4, 6, &p);
+    let want = q[(4 * win.w + 7) as usize];
+    assert!((got.0[0] - want.0[0]).abs() < 1e-4, "reads (7, 4)");
+    assert_eq!(warp_field_ref(&q, win.w, win.h, 7, 5, &p).0, [0.0; 4]);
+    // Off the source's right edge: transparent.
+    assert_eq!(warp_field_ref(&q, win.w, win.h, 18, 6, &p).0, [0.0; 4]);
+}
+
+fn field_parity(field: &Field, w: u32, h: u32, interp: u32, what: &str) {
+    let src = stimulus(w, h);
+    let (win, p) = pack_field(&src, field, interp);
+    match parity_windowed(&GEOM_WARP_FIELD, warp_field_ref, &win, w, h, &p) {
+        Some(r) => {
+            eprintln!("geom.warp_field[{what}]: max f16 ULP {}", r.max_ulp);
+            assert_within(r, &GEOM_WARP_FIELD);
+        }
+        None => eprintln!("unavailable: GPU adapter: geom.warp_field parity"),
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_field_parity_liquify__feat__image_editor_transform_warp() {
+    let f = liquified(36, 20);
+    field_parity(&f, 36, 20, 0, "liquify bilinear");
+    field_parity(&f, 36, 20, 1, "liquify bicubic");
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_field_parity_puppet__feat__image_editor_transform_warp() {
+    let (w, h) = (40u32, 24u32);
+    let alpha = vec![255u8; (w * h) as usize];
+    let mesh = PuppetMesh::from_alpha(&alpha, w, h, 6.0, 0.0, 0);
+    let pins = [
+        Pin {
+            at: [0.0, 12.0],
+            to: [0.0, 12.0],
+        },
+        Pin {
+            at: [40.0, 12.0],
+            to: [36.0, 4.0],
+        },
+    ];
+    let bent = puppet::solve(&mesh, &pins, PuppetMode::Rigid);
+    let f = puppet::backward_field(&mesh, &bent, w, h);
+    field_parity(&f, w, h, 1, "puppet bicubic");
+}
+
+/// The CPU twin (paged-resample's `warp_map_rgba8` through the field)
+/// agrees with the kernel's scalar twin within the 8-bit rounding.
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_field_cpu_twin_agrees__feat__image_editor_transform_warp() {
+    let (w, h) = (36u32, 20u32);
+    let f = liquified(w, h);
+    let rgba: Vec<u8> = (0..w * h)
+        .flat_map(|i| {
+            let (x, y) = (i % w, i / w);
+            [(x * 7) as u8, (y * 12) as u8, ((x * y) % 255) as u8, 255]
+        })
+        .collect();
+    let src = RefTile::from_fn(w, h, |x, y| {
+        let i = ((y * w + x) * 4) as usize;
+        Px(std::array::from_fn(|c| f32::from(rgba[i + c]) / 255.0))
+    });
+    let (win, p) = pack_field(&src, &f, 1);
+    let q = win.quantized_px();
+    let cpu = paged_resample::warp_map_rgba8(
+        &rgba,
+        w,
+        h,
+        paged_resample::Window { x: 0, y: 0, w, h },
+        paged_resample::WarpFilter::Bicubic,
+        |x, y| f.source(x - 0.5, y - 0.5),
+    )
+    .unwrap();
+    let mut worst = 0f32;
+    for y in 0..h {
+        for x in 0..w {
+            let r = warp_field_ref(&q, win.w, win.h, x, y, &p);
+            let i = ((y * w + x) * 4) as usize;
+            for c in 0..4 {
+                worst = worst.max((r.0[c] * 255.0 - f32::from(cpu[i + c])).abs());
+            }
+        }
+    }
+    assert!(worst <= 2.0, "worst {worst} levels");
+}
+
+/// `geom.warp_mesh`'s CPU twin — `paged-resample`'s `warp_map_rgba8`
+/// through `paged_warp::envelope::invert` — agrees with the kernel's
+/// scalar twin within the 8-bit rounding, edge pixels aside (the two
+/// Newton solves stop at different residuals on the outline).
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_mesh_cpu_twin_agrees__feat__image_editor_transform_warp() {
+    let (w, h) = (40u32, 24u32);
+    let rgba: Vec<u8> = (0..w * h)
+        .flat_map(|i| {
+            let (x, y) = (i % w, i / w);
+            [(x * 6) as u8, (y * 10) as u8, 128, 255]
+        })
+        .collect();
+    let src = RefTile::from_fn(w, h, |x, y| {
+        let i = ((y * w + x) * 4) as usize;
+        Px(std::array::from_fn(|c| f32::from(rgba[i + c]) / 255.0))
+    });
+    let q = src.quantized_px();
+    for style in [WarpStyle::Arc, WarpStyle::Flag, WarpStyle::Twist] {
+        let (p, ow, oh) = placed(style, 0.5, w, h);
+        let mesh: envelope::Mesh =
+            std::array::from_fn(|i| [f64::from(p.c[2 * i]), f64::from(p.c[2 * i + 1])]);
+        let cpu = paged_resample::warp_map_rgba8(
+            &rgba,
+            w,
+            h,
+            paged_resample::Window {
+                x: 0,
+                y: 0,
+                w: ow,
+                h: oh,
+            },
+            paged_resample::WarpFilter::Bilinear,
+            |x, y| {
+                envelope::invert_extended(&mesh, (x, y), 0.5)
+                    .map(|(u, v)| (u * f64::from(w) - 0.5, v * f64::from(h) - 0.5))
+            },
+        )
+        .unwrap();
+        let (mut worst, mut off) = (0f32, 0usize);
+        for y in 0..oh {
+            for x in 0..ow {
+                let r = warp_mesh_ref(&q, w, h, x, y, &p);
+                let i = ((y * ow + x) * 4) as usize;
+                // The reference is premultiplied, the twin straight.
+                let a = f32::from(cpu[i + 3]) / 255.0;
+                let d = (0..4)
+                    .map(|c| {
+                        let v = f32::from(cpu[i + c]) * if c < 3 { a } else { 1.0 };
+                        (r.0[c] * 255.0 - v).abs()
+                    })
+                    .fold(0.0, f32::max);
+                // The outline: one lane covers the pixel, the other not.
+                if (r.0[3] == 0.0) != (cpu[i + 3] == 0) {
+                    off += 1;
+                    continue;
+                }
+                worst = worst.max(d);
+            }
+        }
+        let total = (ow * oh) as usize;
+        assert!(
+            off * 50 <= total,
+            "{style:?}: {off} of {total} pixels disagree on coverage"
+        );
+        assert!(worst <= 3.0, "{style:?}: worst {worst} levels");
+    }
+}

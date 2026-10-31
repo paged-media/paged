@@ -4434,6 +4434,19 @@ pub struct Hyperlink {
     pub destination: Option<String>,
 }
 
+/// Engine ADR 1026 — IDML `<HyperlinkPageItemSource>`: the page item a
+/// hyperlink starts from. The whole item is the link (a click anywhere on
+/// it follows it); its destination is the hyperlink's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HyperlinkPageItemSource {
+    /// `Self` (`HyperlinkPageItemSource/<id>` as `Hyperlink::source` spells it).
+    pub self_id: String,
+    /// The source page item's `Self` (`SourcePageItem`).
+    pub source_page_item: String,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
 /// IDML `<Bookmark>` definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bookmark {
@@ -10086,6 +10099,13 @@ pub struct DesignMap {
     /// `<Hyperlink Destination="...">` resolves through this table to a
     /// concrete URL or page target.
     pub hyperlink_destinations: Vec<HyperlinkDestination>,
+    /// Engine ADR 1026 — `<HyperlinkPageItemSource>`s: page items that are
+    /// a hyperlink's source (a clickable shape; a PowerPoint shape's click
+    /// action). A [`Hyperlink::source`] names one by its `Self`.
+    /// Not written when empty, so a document without one keeps its bytes
+    /// and its state hash.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hyperlink_page_item_sources: Vec<HyperlinkPageItemSource>,
     /// SDK Phase 5 (v1 sweep) — `<Bookmark>` definitions. Each
     /// is a named anchor pointing at a destination (typically a
     /// hyperlink-page-destination or text-anchor).

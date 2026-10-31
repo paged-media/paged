@@ -330,6 +330,9 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.createMaster", "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })", "bool", "author", "Create a master spread: one page of the given size, or a copy of another master."),
         f!("paged.deleteMaster", "(masterId)", "bool", "author", "Delete a master no page applies."),
         f!("paged.renameMaster", "(masterId, name?)", "bool", "write", "Set (omit/null: clear) a master's name."),
+        f!("paged.setPageOverrides", "(pageId, itemIds)", "bool", "write", "Set a page's (or master page's) override list: the master items it hides."),
+        f!("paged.overrideMasterItems", "(pageId, itemIds, emptyText?)", "bool", "write", "Copy master items onto a page where the master draws them and hide the master's."),
+        f!("paged.insertItemHyperlink", "(itemId, url, pageId?)", "bool", "write", "Make a page item a hyperlink's source, to a URL or a page."),
         f!("paged.onMaster", "(masterId, mutation)", "bool", "write", "Apply a mutation ({ op, args }) to a master spread's items."),
         f!("paged.setPageMetadata", "(pageId, key, value?)", "bool", "write", "Set or delete one plugin-metadata entry on a page (value: the JSON envelope)."),
         // --- frames & groups ---

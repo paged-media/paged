@@ -159,6 +159,7 @@ is not written yet.
 | [1020](1020-range-comments-with-threads.md) | Range comments with threads: a comment's range is the runs that name it (extends 172) | Accepted 2026-10-29 |
 | [1021](1021-find-and-replace.md) | Find and replace: the caret space, Word's specials and wildcards on `regress`, Replace All as one undo step | Accepted 2026-10-24 |
 | [1022](1022-word-document-structure.md) | Word document structure: section first / odd / even masters and odd/even starts (amends 026), Word fields and F9, creating tables of contents, cross-references, bookmarks and index markers | Accepted 2026-10-25 |
+| [1026](1026-masters-based-on-masters.md) | Masters based on masters (four deep, cycles drawn once), override lists and Override on the wire, page items as hyperlink sources | Accepted 2026-10-29 |
 | [1027](1027-movie-and-sound-items.md) | Movie and sound items: a frame whose poster the engine draws and whose medium a presentation plays | Accepted 2026-10-30 |
 | [1030](1030-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
 | [1031](1031-svg-in-and-out-through-paged-svg.md) | SVG in and out through `paged-svg` | Accepted 2026-10-24 |

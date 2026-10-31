@@ -47,6 +47,7 @@ use serde::Deserialize;
 
 pub mod comments;
 pub mod geom;
+pub mod masters;
 pub mod media;
 pub mod native;
 pub mod outline;
@@ -258,6 +259,25 @@ pub(crate) fn attr(tag: &str, name: &str) -> Option<String> {
     Some(unescape(&tag[i..j]))
 }
 
+/// The layout part the page of `spread` applies (slide ADR 712), when it
+/// is one of the deck's layouts.
+fn layout_part_of(
+    deck: &slide_resolve::model::Deck,
+    spread: &paged_model::Spread,
+) -> Option<String> {
+    let m = spread.pages.first()?.applied_master.as_deref()?;
+    let id = m.rsplit('/').next().unwrap_or(m);
+    deck.masters
+        .iter()
+        .find(|x| x.id == id && !x.is_master)
+        .map(|x| x.layout_part.clone())
+}
+
+/// A relationship part's bytes.
+pub(crate) fn write_rels_bytes(r: &Relationships) -> Vec<u8> {
+    write_rels(r)
+}
+
 fn write_rels(r: &Relationships) -> Vec<u8> {
     let mut out = String::from(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -460,7 +480,7 @@ fn new_slide(
     let layout_part = deck
         .masters
         .iter()
-        .find(|m| m.id == layout_spread)
+        .find(|m| m.id == layout_spread && !m.is_master)
         .map(|m| m.layout_part.clone())
         .ok_or("its layout is not one of the deck's")?;
     let layout = ir
@@ -942,6 +962,20 @@ pub fn export_with(
                     let ir_slide = ir.slides.iter().find(|x| x.part == src);
                     let rs = deck.slides.iter().find(|x| x.part == src);
                     if let (Some(ir_slide), Some(rs)) = (ir_slide, rs) {
+                        // Slide ADR 712 — Change Layout: the slide's layout
+                        // relationship follows the layout its page applies.
+                        let now_layout = layout_part_of(deck, cur_spread);
+                        if now_layout.is_some() && now_layout != ir_slide.layout_part {
+                            let target = relative(&dir, now_layout.as_deref().unwrap_or(""));
+                            if let Some(rel) = srels
+                                .items
+                                .iter_mut()
+                                .find(|r| r.rel_type == slide::REL_LAYOUT)
+                            {
+                                rel.target = target;
+                                srels_changed = true;
+                            }
+                        }
                         let mut r = slide::rels_for(&part, srels.clone());
                         let job = slide::Job {
                             part: part.clone(),
@@ -953,7 +987,7 @@ pub fn export_with(
                             base: native::spread_of(base, &rs.id),
                             base_doc: base,
                             cur,
-                            layout: ir_slide.layout_part.clone(),
+                            layout: now_layout.or_else(|| ir_slide.layout_part.clone()),
                         };
                         match slide::write(sh, &job, &mut r) {
                             Ok(Some(out)) => {
@@ -1231,6 +1265,28 @@ pub fn export_with(
             removed.insert(notes);
         }
         prels.items.retain(|r| &r.id != rid);
+    }
+
+    // Slide ADR 712 — the masters and layouts the document changed.
+    if let (Some(sh), Some(deck), Some(base)) = (&shared, &deck, &base) {
+        let used: BTreeSet<String> = sh
+            .cur
+            .spreads
+            .iter()
+            .filter_map(|s| layout_part_of(deck, &s.spread))
+            .collect();
+        let m = masters::write(sh, &pkg, &ir, deck, base, sh.cur, &used);
+        for p in &m.removed {
+            removed.insert(p.clone());
+        }
+        for (p, b) in m.media {
+            media_parts.push(p.clone());
+            out_parts.insert(p, b);
+        }
+        added_types.extend(m.added);
+        out_parts.extend(m.parts);
+        not_exported.extend(m.lost);
+        diagnostics.extend(m.diagnostics);
     }
 
     // Comment parts no written slide names any more go, with their

@@ -88,7 +88,7 @@ Read from the code on 2026-10-30.
   in one undo step.
 - **The native document** (`slide-native`, ADR 700, ADR 708). Built with the engine's model
   crates and opened as `.paged`, the same document the IDML package of before opened to. A
-  flattened master spread per used layout, a page per slide, every item, story and picture
+  master spread per slide master and one per layout based on it (ADR 712), a page per slide, every item, story and picture
   (pictures as image blobs); tables; text frames that grow from their anchored edge;
   PowerPoint's first baseline for percentage line spacing; unwrapped text; gradient feathers for
   translucent gradients; radial gradients centred where `a:fillToRect` puts them; slide numbers as
@@ -96,12 +96,23 @@ Read from the code on 2026-10-30.
 - **Slide state on pages.** Each slide's speaker notes, hidden flag and transition are written
   into its page's plugin metadata at import (`x-paged:media.paged.slide`), so they move,
   duplicate and undo with the slide (engine protocol 70).
-- **New slide from a layout.** The Slides panel offers the deck's layouts (every layout a slide
-  uses); a new slide is a copy of one such slide with only its placeholders kept and emptied, so
-  it has the layout's master and PowerPoint's placeholder formatting. Placeholders carry their
-  PowerPoint type and index as item metadata. Typing into an emptied placeholder keeps its
-  formatting once the engine keeps a cleared paragraph's character attributes (core, next
-  release).
+- **Masters and layouts** (ADR 712, engine ADR 1026). Each slide master is a master spread and
+  each of its layouts, used or not, a master spread based on it. Placeholders are layout items;
+  a slide holds its own copies (engine overrides) and hides every placeholder of its layout. A
+  layout hides the master's placeholders, and its art where it hides master shapes.
+- **New slide from any layout** of any master: one undo step, the layout's placeholders copied
+  and emptied (keeping their formatting), the footers left out. **Change Layout** (Slides panel,
+  typed `changeLayout`) moves the slide's placeholders to the new layout's and adds the missing
+  ones; **Reset Slide** (Slide menu) moves them back to their layout's places.
+- **Slide Master view** (View ▸ Slide Master, a module view): the masters with their layouts as
+  thumbnails; Insert Placeholder, delete a placeholder, Rename, Preserve, Delete an unused
+  layout; a placeholder's text size and font style, which the slides that kept the layout's
+  follow. Typed twins for each (`layouts`, `renameLayout`, `setPreserve`, `deleteLayout`,
+  `insertPlaceholder`, `setPlaceholderStyle`, `changeLayout`, `command.slideMaster`,
+  `command.resetSlide`). Export writes renamed layouts, the Preserve flag, a layout's edited
+  shapes and placeholders (as differences), a placeholder's text style as its `a:lstStyle`, a
+  deleted layout's removal and a slide's new layout; untouched masters and layouts keep their
+  bytes. Shape click actions are also the engine's page-item hyperlinks.
 - **Slides and Notes panels** (M3, first part). A sorter with a thumbnail per slide from the
   engine's renderer: click to go to the slide, drag to reorder, duplicate, delete, hide from the
   slideshow, each one undo step. A notes panel edits the active slide's speaker notes.
@@ -325,15 +336,17 @@ placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.
 
 ## Not built yet
 
+- Masters and layouts (ADR 712): Insert Layout, Duplicate Layout and new slide masters; editing
+  layout placeholders on the canvas (the view edits through its bar); deleting a slide master on
+  export; a layout that paints its own background and shows master shapes holds a copy of the
+  master's art. A placeholder Change Layout adds to an existing slide is exported as a plain
+  shape, not a `p:ph`.
 - Theme approximations (ADR 713): gradient stops, effect, bullet and pattern colours keep their
   values; only the Latin theme fonts are live; the variants are derived; a gallery theme keeps the
   deck's format scheme. Document styles (ADR 719): one set of placeholder styles per deck (the
   first master's); text and shapes keep their own values, so a style edit reaches new text, not
   existing paragraphs; object styles carry fill and line only, and export does not write
   `p:style` back.
-
-- Editing layouts (master spreads) from the plugin, and layouts no slide uses (they are not
-  imported).
 - PPTX export of what the native model cannot say yet, or what export does not write yet:
   effect changes (shadow, opacity on its own), edits inside SmartArt other than its points'
   text (shapes, formatting, added or removed points), a chart's formatting

@@ -37,7 +37,8 @@ pub struct Deck {
     pub theme: Option<crate::theme::ThemeIr>,
     #[serde(default)]
     pub theme_part: Option<String>,
-    /// One per used layout: the slide master's and the layout's own art.
+    /// Slide ADR 712: each slide master, then each of its layouts (based on
+    /// it), in the deck's order.
     pub masters: Vec<MasterPage>,
     pub slides: Vec<SlidePage>,
     /// Paragraph styles the text uses (`Title`, `Body L1` …), per master.
@@ -52,13 +53,29 @@ pub struct Deck {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MasterPage {
-    /// Stable id derived from the layout part (`m1` …).
+    /// `M1` … for slide masters, `m1` … for layouts, in deck order.
     pub id: String,
     /// The layout's name (`Title Slide`, …).
     pub name: String,
+    /// The layout part; empty for a slide master.
     pub layout_part: String,
     pub master_part: String,
     pub items: Vec<Item>,
+    /// A slide master's own spread (else a layout).
+    #[serde(default)]
+    pub is_master: bool,
+    /// The spread a layout is based on: its slide master's.
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// Items of `parent` this spread hides (its `OverrideList`).
+    #[serde(default)]
+    pub overrides: Vec<String>,
+    /// A layout's `type` (`title`, `obj`, …).
+    #[serde(default)]
+    pub layout_type: Option<String>,
+    /// `preserve="1"`.
+    #[serde(default)]
+    pub preserve: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -67,6 +84,10 @@ pub struct SlidePage {
     pub index: usize,
     pub part: String,
     pub master: Option<String>,
+    /// The layout's items this slide hides (its `OverrideList`): every
+    /// placeholder of the layout.
+    #[serde(default)]
+    pub overrides: Vec<String>,
     pub show_master_items: bool,
     pub items: Vec<Item>,
     pub hidden: bool,

@@ -2605,6 +2605,123 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
+  test("Edit/Transform/Free distort — with no image open, raises the Image panel @feat:image.editor.transform-warp", async () => {
+    covers("menu:Edit/Transform/Free distort");
+    covers("command:media.paged.image.command.transformDistort");
+    await expectGreyedAndInert(bare, "Edit/Transform/Free distort");
+    const out = await clickEntry(
+      live,
+      "Edit/Transform/Free distort",
+      "media.paged.image.command.transformDistort",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Edit/Transform/Perspective — with no image open, raises the Image panel @feat:image.editor.transform-warp", async () => {
+    covers("menu:Edit/Transform/Perspective");
+    covers("command:media.paged.image.command.transformPerspective");
+    await expectGreyedAndInert(bare, "Edit/Transform/Perspective");
+    const out = await clickEntry(
+      live,
+      "Edit/Transform/Perspective",
+      "media.paged.image.command.transformPerspective",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Edit/Transform/Warp… — with no image open, raises the Image panel @feat:image.editor.transform-warp", async () => {
+    covers("menu:Edit/Transform/Warp…");
+    covers("command:media.paged.image.command.transformWarp");
+    await expectGreyedAndInert(bare, "Edit/Transform/Warp…");
+    const out = await clickEntry(
+      live,
+      "Edit/Transform/Warp…",
+      "media.paged.image.command.transformWarp",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Edit/Puppet warp… — with no image open, raises the Image panel @feat:image.editor.transform-warp", async () => {
+    covers("menu:Edit/Puppet warp…");
+    covers("command:media.paged.image.command.puppetWarp");
+    await expectGreyedAndInert(bare, "Edit/Puppet warp…");
+    const out = await clickEntry(
+      live,
+      "Edit/Puppet warp…",
+      "media.paged.image.command.puppetWarp",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Edit/Content-aware scale… — with no image open, raises the Image panel @feat:image.editor.transform-warp", async () => {
+    covers("menu:Edit/Content-aware scale…");
+    covers("command:media.paged.image.command.contentAwareScale");
+    await expectGreyedAndInert(bare, "Edit/Content-aware scale…");
+    const out = await clickEntry(
+      live,
+      "Edit/Content-aware scale…",
+      "media.paged.image.command.contentAwareScale",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Filter/Liquify… — with no image open, raises the Image panel @feat:image.editor.transform-warp", async () => {
+    covers("menu:Image/Filter/Liquify…");
+    covers("command:media.paged.image.command.filterLiquify");
+    await expectGreyedAndInert(bare, "Image/Filter/Liquify…");
+    const out = await clickEntry(
+      live,
+      "Image/Filter/Liquify…",
+      "media.paged.image.command.filterLiquify",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Apply perspective crop — runs commitPerspectiveCrop; with no quad drawn it changes nothing @feat:image.editor.transform-warp", async () => {
+    covers("menu:Image/Apply perspective crop");
+    covers("command:media.paged.image.command.commitPerspectiveCrop");
+    await expectGreyedAndInert(bare, "Image/Apply perspective crop");
+    const out = await clickEntry(
+      live,
+      "Image/Apply perspective crop",
+      "media.paged.image.command.commitPerspectiveCrop",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after, "with no quad there is nothing to act on").toBe(
+      out.before,
+    );
+  });
+
   test("Edit/Selection to path — with no image open, raises the Image panel", async () => {
     covers("menu:Edit/Selection to path");
     await expectGreyedAndInert(bare, "Edit/Selection to path");
