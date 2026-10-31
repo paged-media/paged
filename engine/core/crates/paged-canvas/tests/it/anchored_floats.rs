@@ -425,6 +425,54 @@ fn a_picture_in_a_cell_grows_its_row_and_is_drawn() {
     assert!((row_height(&m, &t) - empty).abs() < 0.01);
 }
 
+/// A fresh id sees the frames already in cells: a second picture put into
+/// another cell, in a step of its own, does not take the first one's id
+/// (the minter's scan stopped at the story's own paragraphs, so a real
+/// document's second table of pictures was refused whole as a duplicate).
+#[test]
+fn a_second_picture_in_a_cell_takes_a_fresh_id() {
+    let (mut m, story) = model_with("");
+    let t = table(&mut m, &story, None, vec![200.0, 200.0]);
+    for col in 0..2 {
+        m.apply_mutation(&Mutation::InsertAnchoredFrame {
+            story_id: story.clone(),
+            offset: 0,
+            width: 40.0,
+            height: 30.0,
+            image_uri: None,
+            paragraph: Some(0),
+            kind: None,
+            layout: None,
+            cell: Some(TextCellAddr {
+                table_id: t.clone(),
+                row: 0,
+                col,
+            }),
+        })
+        .unwrap_or_else(|e| panic!("a picture into cell {col}: {e:?}"));
+    }
+    let table = m
+        .scene()
+        .stories
+        .iter()
+        .find(|s| s.self_id == story)
+        .unwrap()
+        .story
+        .paragraphs
+        .iter()
+        .find_map(|p| p.table.as_ref())
+        .expect("the table");
+    let ids: Vec<&str> = table
+        .cells
+        .iter()
+        .flat_map(|c| &c.paragraphs)
+        .flat_map(|p| &p.anchored_frames)
+        .filter_map(|a| a.self_id.as_deref())
+        .collect();
+    assert_eq!(ids.len(), 2, "{ids:?}");
+    assert_ne!(ids[0], ids[1]);
+}
+
 #[test]
 fn a_nested_table_takes_the_cell_paragraph_it_names() {
     let (mut m, story) = model_with("");
