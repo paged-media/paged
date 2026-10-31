@@ -1769,6 +1769,7 @@
     "frameShapeStarInset",
     "frameShapePieStart",
     "frameShapePieEnd",
+    "frameFillMesh",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -4272,6 +4273,18 @@
         "max": 360.0
       },
       "default": 360.0,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameFillMesh",
+      "type": {
+        "kind": "struct",
+        "shape": "MeshFillSpec"
+      },
+      "wire": "fillMesh",
+      "nullable": true,
       "access": "readWrite",
       "bindable": true
     },
@@ -18229,6 +18242,20 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameFillMesh",
+        "type": {
+          "kind": "struct",
+          "fields": {},
+          "shape": "MeshFillSpec",
+          "open": true
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "fillMesh"
       },
       {
         "addressKind": "frame",
