@@ -3,8 +3,10 @@ concurrency:
   # A newer push to a pull request cancels the older run. Main pushes share
   # one group per event type: a running main run always finishes, and a newer
   # push replaces the one still waiting, so direct pushes queue at most one.
+  # A re-dispatch on the same wip/* branch cancels its older dispatched run,
+  # running or not: only a work branch's newest commit needs checking.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/wip/')) }}
 
 # Ported from paged-media/core .github/workflows/ci.yml (monorepo step A3).
 # Every `run:` step executes in engine/core (defaults below); `uses:` steps do
@@ -71,7 +73,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # macOS only on main: a work branch or pull request runs the Linux leg
+        # alone, saving the plan's scarcest runner; main still checks the
+        # native macOS build on every push.
+        os: ${{ github.ref == 'refs/heads/main' && fromJSON('["ubuntu-latest", "macos-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       # The workspace's debug test binaries outgrew the hosted Linux
