@@ -288,11 +288,16 @@ impl<'a> Writer<'a> {
         pad: Option<f32>,
     ) -> Option<(String, FillRule)> {
         let data = self.input.list.paths.get(path_id)?;
-        let mut d = String::new();
         let segs = data.segments.clone();
+        Some((self.d_of(&segs, t, pad), data.fill_rule))
+    }
+
+    /// A segment list's `d`, each point taken through `t`.
+    fn d_of(&mut self, segs: &[PathSegment], t: &Transform, pad: Option<f32>) -> String {
+        let mut d = String::new();
         let mut cur = (0.0f32, 0.0f32);
         let mut start = cur;
-        for s in &segs {
+        for s in segs {
             match *s {
                 PathSegment::MoveTo { x, y } => {
                     let (x, y) = apply(t, x, y);
@@ -375,7 +380,7 @@ impl<'a> Writer<'a> {
                 }
             }
         }
-        Some((d, data.fill_rule))
+        d
     }
 
     fn push(&mut self, at: usize, el: String) {
@@ -487,6 +492,65 @@ impl<'a> Writer<'a> {
                     m.a += s.color.a / n;
                 }
                 Some((css(m), m.a))
+            }
+            Paint::Pattern(id) => {
+                // Engine ADR 1041 — the tile as an SVG `<pattern>`: its
+                // period, every copy of its items, the placement as the
+                // pattern transform (pattern space → the page).
+                let p = list.pattern(*id)?;
+                let tile = p.tile.clone();
+                if !tile.is_drawable() {
+                    return None;
+                }
+                let m = t.compose(&p.to_local).0;
+                if !m.iter().all(|v| v.is_finite()) {
+                    return None;
+                }
+                let mut body = String::new();
+                for &(cx, cy) in &tile.copies {
+                    let at = Transform([1.0, 0.0, 0.0, 1.0, cx, cy]);
+                    for item in &tile.items {
+                        let d = self.d_of(&item.path.segments, &at, None);
+                        let mut el = format!("<path d=\"{d}\"");
+                        match item.fill.as_ref().and_then(|f| self.paint(f, &at)) {
+                            Some((fill, a)) => {
+                                let _ = write!(el, " fill=\"{fill}\"");
+                                if a < 1.0 {
+                                    let _ = write!(el, " fill-opacity=\"{}\"", self.num(a));
+                                }
+                                if item.path.fill_rule == FillRule::EvenOdd {
+                                    el.push_str(" fill-rule=\"evenodd\"");
+                                }
+                            }
+                            None => el.push_str(" fill=\"none\""),
+                        }
+                        if let Some((paint, stroke)) = &item.stroke {
+                            if let Some((sp, a)) = self.paint(paint, &at) {
+                                let _ = write!(el, " stroke=\"{sp}\"");
+                                if a < 1.0 {
+                                    let _ = write!(el, " stroke-opacity=\"{}\"", self.num(a));
+                                }
+                                el.push_str(&self.stroke_attrs(stroke));
+                            }
+                        }
+                        el.push_str("/>");
+                        body.push_str(&el);
+                    }
+                }
+                let pid = self.id("p");
+                let def = format!(
+                    "<pattern id=\"{pid}\" patternUnits=\"userSpaceOnUse\" width=\"{}\" height=\"{}\" patternTransform=\"matrix({} {} {} {} {} {})\">{body}</pattern>",
+                    self.num(tile.period.0),
+                    self.num(tile.period.1),
+                    self.num_m(m[0]),
+                    self.num_m(m[1]),
+                    self.num_m(m[2]),
+                    self.num_m(m[3]),
+                    self.num(m[4]),
+                    self.num(m[5])
+                );
+                self.defs.push(def);
+                Some((format!("url(#{pid})"), 1.0))
             }
         }
     }
