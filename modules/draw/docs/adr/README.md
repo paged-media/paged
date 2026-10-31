@@ -26,7 +26,7 @@ their status says so.
 | [360](360-records-name-no-minted-ids.md) | A bake or trace record names no id its own batch mints | Accepted 2026-10-20 |
 | [361](361-visual-live-constructs-move-to-the-engine.md) | Visual live constructs move to the engine; recipes remain for generators | Accepted 2026-10-24 (partially supersedes 354, 356) |
 | [362](362-retrace-recolour-blend-matching.md) | A trace keeps its options and re-traces in one step; blends match structure; recolouring re-points | Accepted 2026-10-24 |
-| [365](365-pattern-options-save-an-engine-pattern-swatch.md) | Pattern Options save an engine pattern swatch; the tile field stays as pattern artwork | Accepted 2026-10-29 |
+| [366](366-pattern-options-save-an-engine-pattern-swatch.md) | Pattern Options save an engine pattern swatch; the tile field stays as pattern artwork | Accepted 2026-10-29 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

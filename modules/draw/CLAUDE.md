@@ -35,7 +35,7 @@ Shape-Builder pro tools; the Pencil is the host's, built on this repo's
 Appearance/Dash/Path-Ops/Select-Same/Live-Corners commands, the
 Compound-Path pair (Make / Release), PATTERN EDITING v1 (a re-editable
 tile FIELD — pattern ARTWORK, the copies that preview a tile — and,
-since WP6.9 / draw ADR 365, the PATTERN SWATCH it saves: Save swatch /
+since WP6.9 / draw ADR 366, the PATTERN SWATCH it saves: Save swatch /
 Done write the engine's pattern paint (engine ADR 1041, which closed RFI
 C-31) through `createSwatch` with a `pattern`, one undo step, behind
 `supports("document.patternPaint@1")`; the Swatches panel applies it as a
