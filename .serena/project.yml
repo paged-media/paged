@@ -51,6 +51,24 @@ ls_specific_settings:
         - "apps/server/server/Cargo.toml"
       rust:
         analyzerTargetDir: true
+      # Several agents and builds share the machine: rust-analyzer's own
+      # threads and its flycheck's cargo jobs are capped. Serena's diagnostics
+      # come from flycheck, so checkOnSave stays on; `check` replaces Serena's
+      # whole key, so its other fields repeat Serena's values.
+      numThreads: 4
+      check:
+        allTargets: true
+        command: "check"
+        extraArgs: []
+        extraEnv:
+          CARGO_BUILD_JOBS: "4"
+        features:
+        ignore: []
+        invocationLocation: "workspace"
+        invocationStrategy: "per_workspace"
+        noDefaultFeatures:
+        overrideCommand:
+        targets:
 
 ls_workspace_folders: ["."]
 

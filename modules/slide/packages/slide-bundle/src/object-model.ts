@@ -79,8 +79,6 @@ import {
   layouts,
   moveMutation,
   newSlide as newSlideFromLayout,
-  type Layout,
-  type Slide,
 } from "./slides-model.js";
 
 import deckRows from "../schema/deck.json" with { type: "json" };
@@ -1068,22 +1066,6 @@ export function contributeSlideObjectModel(
 
   // ------------------------------------------------------------ commands
 
-  /** The layouts a new slide can be copied from (slides-model.ts), from
-   *  the deck's own reading of each slide's layout. */
-  async function layoutsOf(deck: Deck): Promise<Layout[]> {
-    const slides: Slide[] = [];
-    for (const p of deck.pages) {
-      const layout = await layoutOf(deck, p.id);
-      slides.push({
-        pageId: p.id,
-        number: p.index,
-        sizePt: [0, 0],
-        state: layout ? { layout } : {},
-      });
-    }
-    return layouts(host, slides);
-  }
-
   const newSlide: TypedCommandContribution<
     { after?: string; layout?: string },
     { slide: Address }
@@ -1111,10 +1093,11 @@ export function contributeSlideObjectModel(
       } else if (afterId !== null) {
         master = await layoutOf(deck, afterId);
       }
-      // A layout some slide was made from: copy that slide's placeholders,
-      // emptied, as the Slides panel's New slide does (one undo step).
+      // Any layout of any master (slide ADR 712): a page on it with copies
+      // of its placeholders, emptied, as the Slides panel's New slide
+      // makes (one undo step).
       const layout = master
-        ? (await layoutsOf(deck)).find((l) => l.masterId === master)
+        ? (await layouts(host)).find((l) => l.masterId === master)
         : undefined;
       if (layout) {
         const made = await newSlideFromLayout(host, layout, afterId);

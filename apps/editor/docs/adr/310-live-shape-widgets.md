@@ -20,8 +20,9 @@ nothing edited sides or pies at all.
 
 - **A host overlay, under the host's selection.** The widgets are an overlay contribution of the
   editor (`paged.live-shape-handles`, above the resize and rotate handles), shown for ONE
-  selected rectangle, oval or live polygon outside path-edit mode, whatever module's context is
-  active. They are not a bundle's `overlay.handles@1` set: that door reports hits to the bundle's
+  selected rectangle, oval or live polygon outside path-edit mode, under the Selection and
+  Direct Selection tools (another tool's drag inside the shape — Free Transform, a drawing
+  tool — must reach that tool), whatever module's context is active. They are not a bundle's `overlay.handles@1` set: that door reports hits to the bundle's
   OWN tools, while these widgets belong to the host's Selection tool, like its resize handles,
   and edit engine properties every module's output carries. A widget takes the pointer itself
   (it stops propagation), as the bundles' overlay contributions do.

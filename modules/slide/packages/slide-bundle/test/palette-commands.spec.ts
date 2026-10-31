@@ -53,6 +53,7 @@ import { SHOW_CMD, SHOW_MENU } from "../src/show/contribute";
 import { OUTPUT_CMD, OUTPUT_MENU } from "../src/output/commands";
 import { CONTENT_CMD, CONTENT_MENU } from "../src/content-commands";
 import { DESIGN_CMD, DESIGN_MENU } from "../src/design";
+import { MASTER_CMD, MASTER_MENU } from "../src/masters-commands";
 import { SHAPES_PANEL_ID } from "../src/shapes";
 import {
   DUPLICATE_SLIDE_COMMAND,
@@ -257,6 +258,7 @@ describe("paged.slide palette commands", () => {
       ...Object.values(ANIM_CMD),
       ...Object.values(CONTENT_CMD),
       ...Object.values(DESIGN_CMD),
+      ...Object.values(MASTER_CMD),
     ]);
     const verbs = MANIFEST.contributes.commands.filter((c) => !show.has(c));
     expect([...s.commands.keys()].sort()).toEqual([...verbs].sort());
@@ -618,18 +620,19 @@ describe("paged.slide palette commands", () => {
       },
       parts: { read: async () => null },
     } as unknown as BundleHost);
-    // Every declared command but the Slide Sorter, which needs the view
+    // Every declared command but the Slide Sorter and the Slide Master view, which need the view
     // door this host does not have, and Insert ▸ Shapes…, which opens the
     // Shapes panel and needs the panel and snapshot doors this host lacks.
-    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 2);
+    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 3);
     expect(r.menus.length).toBe(
       MENU_ENTRIES.length +
         SHOW_MENU.length +
         OUTPUT_MENU.length +
         ANIM_MENU.length +
         CONTENT_MENU.length +
-        DESIGN_MENU.length -
-        2,
+        DESIGN_MENU.length +
+        MASTER_MENU.length -
+        3,
     );
     h.dispose();
     expect(r.commands.size).toBe(0);

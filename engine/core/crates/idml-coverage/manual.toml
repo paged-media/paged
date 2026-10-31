@@ -1109,6 +1109,10 @@ parts = ["Resources/Styles"]
 # fails the tool, so the list cannot go stale.
 
 [[unseen]]
+reason = "A page item that is a hyperlink's source: InDesign writes a <HyperlinkPageItemSource> in designmap.xml when a frame or shape (not text) carries a hyperlink (IDML schema, designmap). No census document links an item; the importer reads it for engine ADR 1026 (a PowerPoint shape's click action)."
+elements = ["HyperlinkPageItemSource"]
+
+[[unseen]]
 reason = "Inside a <Properties> value. The census records the Properties child on its owner (Document@Label, TextFramePreference@InsetSpacing, TextWrapPreference@TextWrapOffset, ParagraphStyleRange@BulletChar and @TabList) and does not descend into the value, so the fields inside are never counted."
 elements = ["KeyValuePair", "InsetSpacing", "TextWrapOffset", "BulletChar"]
 keys = [

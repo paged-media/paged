@@ -127,6 +127,13 @@ rust-analyzer reported "Auto-reloading is disabled and the workspace has
 changed, a manual workspace reload is required" right after loading and
 answered every reference request with nothing.
 
+The project file also caps rust-analyzer for a machine that several agents and
+builds share: `numThreads: 4` for its own analysis, and `CARGO_BUILD_JOBS=4`
+for its flycheck. Serena reads Rust diagnostics from flycheck (it sends a save
+before each diagnostics request), so `checkOnSave` stays on. Because a
+top-level key replaces Serena's, the `check` block repeats Serena's other
+`check` values.
+
 With a shared Cargo target directory (a root `.cargo/config.toml` setting
 `build.target-dir`), `cargo.targetDir: true` puts all ten workspaces'
 rust-analyzer checks in one `<shared>/rust-analyzer` directory. They then

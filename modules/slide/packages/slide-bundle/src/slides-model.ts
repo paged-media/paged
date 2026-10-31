@@ -25,6 +25,7 @@
 import type { BundleHost, MutationInput } from "@paged-media/plugin-api";
 
 import type { Timing } from "./anim/model.js";
+import { newSlideMutation, readMasters } from "./masters-model.js";
 
 /** One plugin-metadata entry as the engine reports it. */
 export interface PluginMetadataEntry {
@@ -365,180 +366,45 @@ function defaultRevoke(url: string): void {
   URL.revokeObjectURL(url);
 }
 
-/** A layout a new slide can be made from: a master spread some slide uses. */
+/** A layout a new slide can be made from (slide ADR 712: any layout of
+ *  any master, used or not). */
 export interface Layout {
   masterId: string;
   name: string;
-  /** A slide made from it, copied to make the new one. */
-  templatePageId: string;
 }
 
-/** The layouts new slides can be made from: every master spread a slide
- *  records as its layout, named as the deck named it. */
+/** The layouts new slides can be made from, in deck order: every layout
+ *  of every slide master. */
 export async function layouts(
   host: BundleHost,
-  slides: readonly Slide[],
+  _slides?: readonly Slide[],
 ): Promise<Layout[]> {
-  let masters: readonly { selfId: string; label: string }[] = [];
-  try {
-    masters = await host.document.collection<{ selfId: string; label: string }>(
-      "masterPages",
-    );
-  } catch {
-    masters = [];
-  }
-  const out: Layout[] = [];
-  for (const m of masters) {
-    const template = slides.find((s) => s.state.layout === m.selfId);
-    if (template)
-      out.push({
-        masterId: m.selfId,
-        name: m.label,
-        templatePageId: template.pageId,
-      });
-  }
-  return out;
+  return (await readMasters(host))
+    .filter((m) => m.kind === "layout")
+    .map((m) => ({ masterId: m.masterId, name: m.name }));
 }
-
-/** Whether a scene-tree item is one of a layout's placeholders. */
-function isPlaceholder(
-  meta: readonly PluginMetadataEntry[] | undefined,
-): boolean {
-  const entry = meta?.find((m) => m.key === SLIDE_KEY);
-  if (!entry) return false;
-  try {
-    const env = JSON.parse(entry.value) as { data?: { placeholder?: unknown } };
-    return (
-      typeof env.data?.placeholder === "object" && env.data.placeholder !== null
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** The length of a story in the text-editing unit: UTF-8 bytes, plus one
- *  per paragraph break. */
-function storyLength(content: {
-  paragraphs: { runs: { text: string }[] }[];
-}): number {
-  const enc = new TextEncoder();
-  return content.paragraphs.reduce(
-    (n, p, i) =>
-      n +
-      (i > 0 ? 1 : 0) +
-      p.runs.reduce((m, r) => m + enc.encode(r.text).length, 0),
-    0,
-  );
-}
-
-type TreeNode = {
-  id?: { kind: string; id: string } | null;
-  kind: string;
-  children?: TreeNode[];
-  pluginMetadata?: PluginMetadataEntry[];
-};
 
 /**
- * A new slide from `layout`, after `afterPageId` (or last): a copy of a
- * slide made from that layout, keeping only its placeholders, emptied. The
- * copy brings the layout's master and its placeholders with PowerPoint's
- * own formatting, which the engine keeps on an emptied paragraph. Answers
- * the new page's id, or null when the host refused a step.
- *
- * ONE undo step. Which items to drop and which stories to empty is only
- * known once the copy exists, and a batch cannot name the ids a copy mints
- * inside it; so the copy is made once to read them, undone, and made again
- * with the rest in one batch. The engine mints the same ids for the same
- * copy of the same document (the batch's page is checked against the
- * probe's, and a mismatch is undone and answered null).
+ * A new slide from `layout`, after `afterPageId` (or last): a page on the
+ * layout with copies of its placeholders, emptied, which keep the layout's
+ * formatting (masters-model.ts, engine ADR 1026). ONE undo step. Answers
+ * the new page's id, or null when the host refused.
  */
 export async function newSlide(
   host: BundleHost,
   layout: Layout,
   afterPageId: string | null,
 ): Promise<string | null> {
-  const doc = host.document;
-  const storiesBefore = new Set(
-    (await doc.collection<{ selfId: string }>("stories")).map((s) => s.selfId),
+  const m = (await readMasters(host)).find(
+    (x) => x.masterId === layout.masterId,
   );
-  const probe = await doc.mutate(duplicateMutation(layout.templatePageId));
-  if (!probe.applied) return null;
-  let ops: MutationInput[] | null = null;
-  // The engine names the copy; the page list says where it landed.
-  const pageId = probe.createdPages?.[0] ?? null;
-  try {
-    if (pageId)
-      ops = await emptyCopy(host, layout, pageId, afterPageId, storiesBefore);
-  } finally {
-    await doc.undo();
-  }
-  if (!pageId || !ops) return null;
-  const out = await doc.mutate({
-    op: "batch",
-    args: { ops: [duplicateMutation(layout.templatePageId), ...ops] },
-  } as MutationInput);
-  if (!out.applied) return null;
-  if (out.createdPages?.[0] !== pageId) {
-    await doc.undo();
+  if (!m) return null;
+  const out = await host.document.mutate(newSlideMutation(m, afterPageId));
+  if (!out.applied) {
+    host.log.warn(
+      `paged.slide new slide: refused (${JSON.stringify(out.error)})`,
+    );
     return null;
   }
-  return pageId;
-}
-
-/** What makes the copy `pageId` of `layout`'s slide a new slide: its items
- *  that are not placeholders deleted, its placeholders emptied, its label
- *  the layout's alone, and the page moved after `afterPageId` (or last).
- *  Null when the copy is not in the page list. */
-async function emptyCopy(
-  host: BundleHost,
-  layout: Layout,
-  pageId: string,
-  afterPageId: string | null,
-  storiesBefore: ReadonlySet<string>,
-): Promise<MutationInput[] | null> {
-  const doc = host.document;
-  const pages = await doc.collection<{ selfId: string }>("pages");
-  const index = pages.findIndex((p) => p.selfId === pageId);
-  if (index < 0) return null;
-
-  // The copy's items: the tree lists spreads in page order, one page each.
-  const tree = (await doc.tree()) as TreeNode[];
-  const items = tree[index]?.children?.[0]?.children ?? [];
-  const placeholders = new Set(
-    items
-      .filter((n) => n.id && isPlaceholder(n.pluginMetadata))
-      .map((n) => n.id!.id),
-  );
-
-  // The copy's stories and the frames they flow in.
-  const storyOf = new Map<string, string>();
-  for (const s of await doc.collection<{ selfId: string }>("stories")) {
-    if (storiesBefore.has(s.selfId)) continue;
-    for (const link of await doc.frameChain(s.selfId))
-      storyOf.set(link.frameId, s.selfId);
-  }
-
-  const ops: MutationInput[] = [];
-  for (const n of items) {
-    if (!n.id) continue;
-    if (!placeholders.has(n.id.id)) {
-      ops.push({ op: "deleteFrame", args: { frameId: n.id.id } });
-      continue;
-    }
-    const story = storyOf.get(n.id.id);
-    if (!story) continue;
-    const content = await doc.storyContent(story);
-    const end = content ? storyLength(content) : 0;
-    if (end > 0)
-      ops.push({ op: "deleteRange", args: { storyId: story, start: 0, end } });
-  }
-  // A new slide has no notes and is shown; it keeps its layout.
-  ops.push(setStateMutation(pageId, { layout: layout.masterId }));
-  const order = pages.map((p) => p.selfId);
-  const target = afterPageId
-    ? order.filter((p) => p !== pageId).indexOf(afterPageId) + 1
-    : order.length - 1;
-  const move = moveMutation(order, pageId, target);
-  if (move) ops.push(move);
-  return ops;
+  return out.createdPages?.[0] ?? null;
 }

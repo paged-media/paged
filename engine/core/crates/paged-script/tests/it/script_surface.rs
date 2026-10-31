@@ -159,7 +159,7 @@ fn every_reason_is_a_reason() {
 /// The bridge's own count, so the headline number in the module doc
 /// cannot drift from the code without a failure.
 #[test]
-fn the_script_surface_reaches_184_of_185() {
+fn the_script_surface_reaches_187_of_188() {
     // 144 of 145: v0.71.13 added insertFootnote and deleteFootnote (ADR
     // 163), deleteHyperlink and editHyperlink (ADR 164) and
     // updateTableOfContents (ADR 165); v72 generateIndex (ADR 168),
@@ -178,10 +178,11 @@ fn the_script_surface_reaches_184_of_185() {
     // breakSymbolLink and deleteSymbol (engine ADR 1039); v78 recordChange,
     // acceptChange, rejectChange (engine ADR 1040), insertComment,
     // replyComment, resolveComment, deleteComment and editComment (engine
-    // ADR 1020); setContentControlValue, toggleContentControl and
-    // chooseContentControlItem (engine ADR 1052).
-    assert_eq!(ops_the_bridge_names().len(), 184);
-    assert_eq!(paged_wire::MUTATION_NAMES.len(), 185);
+    // ADR 1020); v78 setPageOverrides, overrideMasterItems and
+    // insertItemHyperlink (engine ADR 1026); setContentControlValue,
+    // toggleContentControl and chooseContentControlItem (engine ADR 1052).
+    assert_eq!(ops_the_bridge_names().len(), 187);
+    assert_eq!(paged_wire::MUTATION_NAMES.len(), 188);
 }
 
 /// The names the bridge actually installs, read out of `install_bridge`

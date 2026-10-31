@@ -178,6 +178,79 @@ pub(super) fn spread_linear_transform(m: Option<[f32; 6]>) -> Transform {
     }
 }
 
+/// Engine ADR 1026 — one master a page shows: the master, which of its
+/// pages lies under the body page, that page's bounds in master-spread
+/// coordinates, and the master items hidden at this level (the body page's
+/// `OverrideList` and those of the master pages above this one).
+pub(super) struct MasterLevel<'a> {
+    pub(super) master: &'a paged_scene::ParsedMasterSpread,
+    pub(super) page: usize,
+    pub(super) page_bounds: Vec<paged_model::Bounds>,
+    pub(super) overrides: std::collections::HashSet<&'a str>,
+}
+
+/// Engine ADR 1026 — the masters a body page shows, nearest first: the
+/// master it applies, then the master that master's page applies ("Based
+/// on Master"), and so on, at most [`paged_scene::MAX_MASTER_DEPTH`] deep.
+/// A master met twice (a cycle) ends the walk. A master page with
+/// `ShowMasterItems="false"` shows none of the masters below it. Each
+/// level's page is routed from the level above it by the same rule a body
+/// page uses ([`master_page_index`]).
+pub(super) fn master_levels<'a>(
+    document: &'a Document,
+    applied_master: Option<&str>,
+    body_page: Option<&'a paged_model::Page>,
+    body_page_bounds: &[paged_model::Bounds],
+    local_page_idx: usize,
+) -> Vec<MasterLevel<'a>> {
+    let mut out: Vec<MasterLevel<'a>> = Vec::new();
+    let Some(mut master) = applied_master.and_then(|r| document.master_spread(r)) else {
+        return out;
+    };
+    let mut overrides: std::collections::HashSet<&'a str> = body_page
+        .map(|p| p.override_list.iter().map(String::as_str).collect())
+        .unwrap_or_default();
+    let mut above_bounds: Vec<paged_model::Bounds> = body_page_bounds.to_vec();
+    let mut above_idx = local_page_idx;
+    loop {
+        if master.spread.pages.is_empty()
+            || out.len() == paged_scene::MAX_MASTER_DEPTH
+            || out.iter().any(|l| l.master.self_id == master.self_id)
+        {
+            break;
+        }
+        let page_bounds: Vec<paged_model::Bounds> = master
+            .spread
+            .pages
+            .iter()
+            .map(|p| transform_bounds(p.bounds, p.item_transform))
+            .collect();
+        let page = master_page_index(&above_bounds, above_idx, &page_bounds);
+        let mpage = &master.spread.pages[page];
+        out.push(MasterLevel {
+            master,
+            page,
+            page_bounds: page_bounds.clone(),
+            overrides: overrides.clone(),
+        });
+        if mpage.show_master_items == Some(false) {
+            break;
+        }
+        let Some(parent) = mpage
+            .applied_master
+            .as_deref()
+            .and_then(|r| document.master_spread(r))
+        else {
+            break;
+        };
+        overrides.extend(mpage.override_list.iter().map(String::as_str));
+        above_bounds = page_bounds;
+        above_idx = page;
+        master = parent;
+    }
+    out
+}
+
 /// Which page of a master spread the body page `local` (an index into
 /// `body`) takes: the master page on the same side of the spine, counted
 /// out from it. `body` and `master` are page bounds in their own spread's

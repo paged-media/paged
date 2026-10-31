@@ -190,6 +190,9 @@ const PALETTE = {
   // Slide W3: Design ▸ Themes opens the Design panel (ADR 713).
   "media.paged.slide.command.design": "Design/Themes",
   "media.paged.slide.command.browseThemes": "Design/Browse for Themes…",
+  // Slide W3b: View ▸ Slide Master and Slide ▸ Reset slide (slide ADR 712).
+  "media.paged.slide.command.slideMaster": "View/Slide Master",
+  "media.paged.slide.command.resetSlide": "Slide/Reset slide",
 } as const;
 
 /** The slide show's commands (slide ADR 716, `src/show/contribute.ts`):
@@ -327,6 +330,16 @@ const DECLARED = {
     THEMES,
     APPLY_THEME,
     REMAP_THEME_REFERENCE,
+    // The masters' palette twins and the layout verbs, for scripts (ADR 712).
+    "media.paged.slide.command.slideMaster",
+    "media.paged.slide.command.resetSlide",
+    "media.paged.slide.layouts",
+    "media.paged.slide.renameLayout",
+    "media.paged.slide.setPreserve",
+    "media.paged.slide.deleteLayout",
+    "media.paged.slide.insertPlaceholder",
+    "media.paged.slide.setPlaceholderStyle",
+    "media.paged.slide.changeLayout",
   ],
   /** The deck's document context (editor ADR 307): no frame is entered;
    *  and a chart frame's data (slide ADR 715), entered by double-click. */
@@ -1431,6 +1444,8 @@ test.describe("plugin surface · paged.slide", () => {
       "media.paged.slide.command.smartArtText": "SmartArt text pane",
       "media.paged.slide.command.design": "Design",
       "media.paged.slide.command.browseThemes": "Browse for Themes…",
+      "media.paged.slide.command.slideMaster": "Slide master",
+      "media.paged.slide.command.resetSlide": "Reset slide",
       ...Object.fromEntries(
         Object.entries(SHOW).map(([id, [title]]) => [id, title]),
       ),

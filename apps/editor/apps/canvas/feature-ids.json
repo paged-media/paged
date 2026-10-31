@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 855,
+    "command": 864,
     "keybinding": 166,
-    "menu": 607,
+    "menu": 609,
     "panel": 146,
     "tool": 127
   },
@@ -3166,6 +3166,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.changeLayout",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.addComment",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -3301,12 +3306,22 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.resetSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.resolveComment",
       "kind": "command",
       "owner": "media.paged.slide"
     },
     {
       "id": "command:media.paged.slide.command.saveAsTemplate",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.slideMaster",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3332,6 +3347,11 @@
     },
     {
       "id": "command:media.paged.slide.deleteCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.deleteLayout",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3371,7 +3391,17 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.insertPlaceholder",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.insertShape",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.layouts",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3416,6 +3446,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.renameLayout",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.renameSection",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -3432,6 +3467,16 @@
     },
     {
       "id": "command:media.paged.slide.setCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setPlaceholderStyle",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setPreserve",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -7851,6 +7896,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Reset slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/SmartArt text pane",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -8089,6 +8139,11 @@
       "id": "menu:View/Slices from guides",
       "kind": "menu",
       "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:View/Slide Master",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:View/Slide Sorter",

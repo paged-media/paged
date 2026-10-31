@@ -434,6 +434,7 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::MoveBookmark { .. }
         | O::RestoreBookmarks { .. }
         | O::DeleteHyperlink { .. }
+        | O::InsertItemHyperlink { .. }
         | O::EditHyperlink { .. }
         | O::RestoreHyperlink { .. }
         | O::SetConditionVisible { .. }
@@ -450,6 +451,8 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::DeleteMaster { .. }
         | O::RestoreMaster { .. }
         | O::RenameMaster { .. }
+        | O::SetPageOverrides { .. }
+        | O::OverrideMasterItems { .. }
         // Anything on a parent page is page setup: its items are scenery
         // on every document page that uses it.
         | O::OnMaster { .. }

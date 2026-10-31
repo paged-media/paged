@@ -95,6 +95,15 @@ template fields | fill | check` run the same messages headlessly.
   `deleteMaster` and `renameMaster` make, remove and name masters. A radial gradient is centred
   at its `GradientFillStart`, and a cell edge draws in its stroke style (a double border as two
   rules) ([ADR 129](adr/129-pages-and-masters-for-presentations.md), protocol 70).
+- **Masters based on masters.** A master page's `AppliedMaster` stacks that master under it on
+  every page that shows it (InDesign's "Based on Master", a PowerPoint layout's slide master), at
+  most four deep, a cycle drawn once; override lists accumulate down the chain.
+  `applyMasterToPage` bases a master on another (a cycle is refused), `setPageOverrides` sets a
+  page's override list, and `overrideMasterItems` copies master items onto a page where the
+  master draws them (InDesign's Override; `emptyText` for a new slide's placeholders). A page
+  item can be a hyperlink's source (`insertItemHyperlink`, IDML's `HyperlinkPageItemSource`). A
+  snapshot of a master page draws the master as a page; `masterPages` lists each master's pages
+  and items ([ADR 1026](adr/1026-masters-based-on-masters.md), protocol 78).
 - **Footnotes and hyperlinks edited over the wire.** `insertFootnote` and `deleteFootnote` add
   and remove a note and its reference, and a text delete over a reference takes its note
   ([ADR 163](adr/163-footnotes-inserted-and-deleted.md)). `deleteHyperlink` and `editHyperlink`

@@ -310,6 +310,90 @@ pub(crate) fn ascii(text: &str) -> String {
     out
 }
 
+/// The `Self` of master spread `id`'s page.
+pub fn master_page_id(id: &str) -> String {
+    format!("{id}pg")
+}
+
+/// A master spread's page metadata (slide ADR 712): whether it is a slide
+/// master or a layout, its part, a layout's type, its name and the
+/// preserve flag.
+pub fn master_label(m: &slide_resolve::model::MasterPage) -> Option<String> {
+    let mut data = serde_json::Map::new();
+    data.insert(
+        "kind".into(),
+        if m.is_master { "master" } else { "layout" }.into(),
+    );
+    let part = if m.is_master {
+        &m.master_part
+    } else {
+        &m.layout_part
+    };
+    if !part.is_empty() {
+        data.insert("part".into(), part.clone().into());
+    }
+    if let Some(t) = &m.layout_type {
+        data.insert("type".into(), t.clone().into());
+    }
+    if m.preserve {
+        data.insert("preserve".into(), true.into());
+    }
+    Some(ascii(
+        &serde_json::json!({ "v": 1, "data": { "master": data } }).to_string(),
+    ))
+}
+
+/// Every element id on `spread` each of `items` (and its members) became:
+/// the item's own id, or it with a suffix the builder derives (`p`, `s`,
+/// `t`, …, never a hex digit).
+fn item_elements(spread: &Spread, items: &[Item]) -> HashMap<String, Vec<String>> {
+    let mut all: Vec<&str> = Vec::new();
+    all.extend(
+        spread
+            .text_frames
+            .iter()
+            .filter_map(|f| f.self_id.as_deref()),
+    );
+    all.extend(
+        spread
+            .rectangles
+            .iter()
+            .filter_map(|f| f.self_id.as_deref()),
+    );
+    all.extend(spread.ovals.iter().filter_map(|f| f.self_id.as_deref()));
+    all.extend(
+        spread
+            .graphic_lines
+            .iter()
+            .filter_map(|f| f.self_id.as_deref()),
+    );
+    all.extend(spread.polygons.iter().filter_map(|f| f.self_id.as_deref()));
+    all.extend(spread.groups.iter().filter_map(|f| f.self_id.as_deref()));
+    fn of_item(it: &Item, all: &[&str], out: &mut Vec<String>) {
+        for e in all {
+            let derived = e.strip_prefix(it.id.as_str()).is_some_and(|rest| {
+                rest.is_empty() || !rest.starts_with(|c: char| c.is_ascii_hexdigit())
+            });
+            if derived {
+                out.push(e.to_string());
+            }
+        }
+        if let ItemKind::Group { children } = &it.kind {
+            for c in children {
+                of_item(c, all, out);
+            }
+        }
+    }
+    items
+        .iter()
+        .map(|it| {
+            let mut v = Vec::new();
+            of_item(it, &all, &mut v);
+            (it.id.clone(), v)
+        })
+        .collect()
+}
+
 /// A placeholder item's metadata: its PowerPoint type and index.
 pub fn placeholder_label(it: &Item) -> Option<String> {
     item_label(it, None)
@@ -698,6 +782,9 @@ struct Builder<'a> {
     page_of_part: BTreeMap<String, String>,
     /// Text hyperlinks: (number, destination).
     links: Vec<(usize, paged_model::HyperlinkDestinationKind)>,
+    /// Shape click actions as the engine's page-item hyperlinks (engine ADR
+    /// 1026): the element clicked, and where it goes.
+    item_links: Vec<(String, paged_model::HyperlinkDestinationKind)>,
     /// Object styles from shape styles (slide ADR 719): references → id,
     /// and each one's definition.
     object_styles: Vec<(String, ObjectStyleDef)>,
@@ -778,6 +865,39 @@ impl Builder<'_> {
         // of a slide's shape names the shape (ADR 711).
         let label = item_label(it, key);
         self.item_body(sb, it, label.as_deref(), key);
+        // A slide shape's click action is also the engine's page-item
+        // hyperlink (engine ADR 1026), so every host follows it; the label
+        // keeps PowerPoint's own spelling for export.
+        if let (Some(h), Some(_)) = (&it.meta.link, key) {
+            if let Some((_, element)) = self.elements.get(&it.id) {
+                if let Some(dest) = self.link_destination(h) {
+                    self.item_links.push((element.clone(), dest));
+                }
+            }
+        }
+    }
+
+    /// Where a link goes in the document: its URL, the page of the slide it
+    /// jumps to, or a show action as a `ppaction://` URL.
+    fn link_destination(
+        &self,
+        h: &pptx_core::Hyperlink,
+    ) -> Option<paged_model::HyperlinkDestinationKind> {
+        use paged_model::HyperlinkDestinationKind as K;
+        let action = h.action.as_deref().filter(|a| !a.is_empty());
+        if let Some(u) = &h.url {
+            Some(K::Url(u.clone()))
+        } else if let Some(page) = h
+            .target_part
+            .as_ref()
+            .and_then(|p| self.page_of_part.get(p))
+        {
+            Some(K::Page(page.clone()))
+        } else {
+            action
+                .filter(|a| a.starts_with("ppaction://"))
+                .map(|a| K::Url(a.to_string()))
+        }
     }
 
     fn item_body(
@@ -1625,6 +1745,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             .map(|s| (s.part.clone(), s.id.clone()))
             .collect(),
         links: Vec::new(),
+        item_links: Vec::new(),
         object_styles: Vec::new(),
         diagnostics: Vec::new(),
     };
@@ -1645,18 +1766,49 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
 
     let mut master_spreads = HashMap::new();
     let mut master_srcs = Vec::new();
+    // Slide ADR 712: every element each master spread's items became, so
+    // the spreads based on it (layouts, slides) can hide them by id.
+    let mut elements_of: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
     for m in &deck.masters {
-        let mut p = page(format!("{}pg", m.id), "n", m.id.to_uppercase());
+        let parent = m.parent.as_deref().unwrap_or("n");
+        let page_name = if m.is_master {
+            format!("S{}", m.id)
+        } else {
+            m.id.to_uppercase()
+        };
+        let mut p = page(master_page_id(&m.id), parent, page_name);
         p.show_master_items = Some(true);
+        p.override_list = m
+            .overrides
+            .iter()
+            .flat_map(|id| {
+                m.parent
+                    .as_ref()
+                    .and_then(|pm| elements_of.get(pm))
+                    .and_then(|e| e.get(id))
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect();
         let mut sb = SpreadBuilder::new(Spread {
             self_id: Some(m.id.clone()),
             item_transform: Some(IDENTITY),
             pages: vec![p],
             ..Spread::default()
         });
+        // A master's and a layout's items carry their shape keys, as a
+        // slide's do: export writes an edited layout back from them.
+        let part = if m.is_master {
+            &m.master_part
+        } else {
+            &m.layout_part
+        };
         for it in &m.items {
-            w.item(&mut sb, it, None);
+            let key = (it.meta.shape_id != 0).then(|| format!("{part}#{}", slide_key(it)));
+            w.item(&mut sb, it, key.as_deref());
         }
+        sb.label(&master_page_id(&m.id), master_label(m).as_deref());
+        elements_of.insert(m.id.clone(), item_elements(&sb.spread, &m.items));
         let src = format!("MasterSpreads/MasterSpread_{}.xml", m.id);
         master_srcs.push(src.clone());
         let name = clean_name(&m.name);
@@ -1676,6 +1828,20 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         let master = s.master.as_deref().unwrap_or("n");
         let mut p = page(s.id.clone(), master, (s.index + 1).to_string());
         p.show_master_items = Some(s.show_master_items);
+        // Slide ADR 712: the slide hides its layout's placeholders; its own
+        // stand in for them.
+        p.override_list = s
+            .overrides
+            .iter()
+            .flat_map(|id| {
+                s.master
+                    .as_ref()
+                    .and_then(|m| elements_of.get(m))
+                    .and_then(|e| e.get(id))
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect();
         let mut sb = SpreadBuilder::new(Spread {
             self_id: Some(format!("s{}", s.id)),
             item_transform: Some(IDENTITY),
@@ -1912,9 +2078,35 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             destination: Some(did),
         });
     }
+    let mut hyperlink_page_item_sources = Vec::new();
+    for (n, (element, dest)) in std::mem::take(&mut w.item_links).into_iter().enumerate() {
+        let n = n + 1;
+        let kind = match dest {
+            paged_model::HyperlinkDestinationKind::Page(_) => "HyperlinkPageDestination",
+            _ => "HyperlinkURLDestination",
+        };
+        let did = format!("{kind}/hs{n}");
+        hyperlink_destinations.push(paged_model::HyperlinkDestination {
+            self_id: did.clone(),
+            kind: dest,
+        });
+        let src = format!("HyperlinkPageItemSource/hs{n}");
+        hyperlink_page_item_sources.push(paged_model::HyperlinkPageItemSource {
+            self_id: src.clone(),
+            source_page_item: element,
+            name: None,
+        });
+        hyperlinks.push(paged_model::Hyperlink {
+            self_id: format!("Hyperlink/hs{n}"),
+            name: Some(format!("Shape link {n}")),
+            source: Some(src),
+            destination: Some(did),
+        });
+    }
     let designmap = DesignMap {
         hyperlinks,
         hyperlink_destinations,
+        hyperlink_page_item_sources,
         spreads: spreads
             .iter()
             .map(|s| SpreadRef { src: s.src.clone() })
