@@ -170,15 +170,82 @@ pub(crate) fn resolve_paint(
             }
             let (cx, cy) = transform.apply(g.center.0, g.center.1);
             // Radians, clockwise in a y-down space — the IR's own
-            // convention — over one full turn.
-            let start = g.start_angle;
-            let end = g.start_angle + std::f32::consts::TAU;
-            let stops = stops_of(&g.stops);
+            // convention — over one full turn. The angle is the path's
+            // own, so it turns with the transform's rotation (engine ADR
+            // 1007: a conic fill on a rotated frame turns with it); a
+            // scale alone leaves it. Both rasterisers read a sweep's angle
+            // in 0..2π only (a start past 0 shortens the turn), so the
+            // sweep always runs 0..2π and the START moves into the stops.
+            let start = g.start_angle + sweep_rotation(transform);
+            let turned = turn_sweep_stops(&g.stops, start / std::f32::consts::TAU);
+            let stops = stops_of(&turned);
             Some(PaintBrush::Gradient(
-                PenikoGradient::new_sweep(kurbo::Point::new(cx as f64, cy as f64), start, end)
-                    .with_stops(stops.as_slice()),
+                PenikoGradient::new_sweep(
+                    kurbo::Point::new(cx as f64, cy as f64),
+                    0.0,
+                    std::f32::consts::TAU,
+                )
+                .with_stops(stops.as_slice()),
             ))
         }
+    }
+}
+
+/// A sweep's stops for a turn that starts `frac` of a turn (clockwise)
+/// past +x, laid on a sweep that starts AT +x: each stop moves on by
+/// `frac`, the ones that pass the end wrap to the start, and the seam at
+/// +x gets the colour the ramp has there (blended in sRGB-encoded values,
+/// as the rasterisers blend a gradient). Engine ADR 1007.
+pub(crate) fn turn_sweep_stops(
+    stops: &[paged_compose::GradientStop],
+    frac: f32,
+) -> Vec<paged_compose::GradientStop> {
+    let f = frac.rem_euclid(1.0);
+    let mut sorted: Vec<paged_compose::GradientStop> = stops.to_vec();
+    sorted.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+    if f < 1e-6 || sorted.len() < 2 {
+        return sorted;
+    }
+    let seam = paged_compose::gradient_sample::sample_ramp(&sorted, 1.0 - f);
+    let mut out = vec![paged_compose::GradientStop {
+        offset: 0.0,
+        color: seam,
+    }];
+    // A stop that wraps past the end lands before one that does not at
+    // the same place: the ramp's end (t = 1) meets its start (t = 0) at
+    // the old start angle, end first.
+    let mut moved: Vec<(bool, paged_compose::GradientStop)> = sorted
+        .iter()
+        .map(|s| {
+            let o = s.offset.clamp(0.0, 1.0) + f;
+            let wraps = o >= 1.0;
+            (
+                !wraps,
+                paged_compose::GradientStop {
+                    offset: if wraps { o - 1.0 } else { o },
+                    color: s.color,
+                },
+            )
+        })
+        .collect();
+    moved.sort_by(|a, b| a.1.offset.total_cmp(&b.1.offset).then(a.0.cmp(&b.0)));
+    out.extend(moved.into_iter().map(|(_, s)| s));
+    out.push(paged_compose::GradientStop {
+        offset: 1.0,
+        color: seam,
+    });
+    out
+}
+
+/// The rotation a transform gives the x axis, in radians (clockwise in
+/// y-down space) — what a sweep gradient's start angle turns by. The PDF
+/// writer reads the same.
+pub(crate) fn sweep_rotation(t: &Transform) -> f32 {
+    let [a, b, ..] = t.0;
+    if a.hypot(b) < 1e-9 {
+        0.0
+    } else {
+        b.atan2(a)
     }
 }
 

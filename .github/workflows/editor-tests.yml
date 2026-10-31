@@ -735,7 +735,7 @@ jobs:
       # The engine and the bundles' engine wasm, as in `checks` (restored
       # from the cache that job, or an earlier run, saved). The Playwright
       # surface runs against the vite DEV server (playwright.config
-      # `webServer: bunx --bun vite`), whose import analysis resolves the bundles'
+      # `webServer`: Vite on Node), whose import analysis resolves the bundles'
       # relative wasm glue (sheet, web, doc, draw, image, pdf) at transform
       # time. The typecheck runs in `checks`.
       - name: engine wasm packages
@@ -841,7 +841,12 @@ jobs:
           (while sleep 30; do
             echo "::group::memory $(date -u +%H:%M:%S)"
             free -m | sed -n 2p
-            ps -eo rss=,comm= --sort=-rss | head -5 | awk '{printf "%7.0f MB %s\n", $1/1024, $2}'
+            ps -eo pid=,ppid=,rss=,args= --sort=-rss | head -6 \
+              | awk '{r=$3; $3=""; printf "%7.0f MB %s\n", r/1024, $0}' | cut -c1-220
+            set -- $(ps -eo pid=,rss= --sort=-rss | head -1)
+            if [ "$2" -gt 4000000 ]; then
+              grep -E 'Rss|Anon|File|Shmem' "/proc/$1/smaps_rollup" | tr -s ' ' | paste -sd' '
+            fi
             echo "::endgroup::"
           done) >&2 &
           logger=$!

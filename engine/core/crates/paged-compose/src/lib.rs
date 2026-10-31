@@ -28,6 +28,7 @@ pub mod dash_fit;
 pub mod display_list;
 pub mod extent;
 pub mod glyph;
+pub mod gradient_sample;
 pub mod layer_fx;
 pub mod mask;
 pub mod perf;

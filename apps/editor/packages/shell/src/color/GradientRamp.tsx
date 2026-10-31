@@ -38,6 +38,22 @@ export interface RampStop {
   locationPct: number;
   /** Blend midpoint toward the NEXT stop; null = 50 (linear). */
   midpointPct: number | null;
+  /** Engine ADR 1007 — the stop's opacity (0..100); null/absent = 100. */
+  opacityPct?: number | null;
+  /** Engine ADR 1007 — the stop's own colour (then `stopColorRef` is
+   *  ""); null/absent = the swatch. */
+  color?: { space: string; value: number[] } | null;
+}
+
+/** A stop's colour with its opacity, as CSS (`#rrggbbaa` when it is less
+ *  than opaque). */
+function stopCss(s: RampStop): string {
+  const o = s.opacityPct;
+  if (o === null || o === undefined || o >= 100) return s.resolvedRgbHex;
+  const a = Math.round((Math.max(0, o) / 100) * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return `${s.resolvedRgbHex.slice(0, 7)}${a}`;
 }
 
 export interface GradientRampProps {
@@ -75,11 +91,11 @@ export function rampCss(stops: RampStop[], kind?: string): string {
   if (stops.length === 0) return "var(--chrome-divider)";
   const ordered = [...stops].sort((a, b) => a.locationPct - b.locationPct);
   const parts = ordered
-    .map((s) => `${s.resolvedRgbHex} ${s.locationPct}%`)
+    .map((s) => `${stopCss(s)} ${s.locationPct}%`)
     .join(", ");
-  return kind === "radial"
-    ? `radial-gradient(circle, ${parts})`
-    : `linear-gradient(90deg, ${parts})`;
+  if (kind === "radial") return `radial-gradient(circle, ${parts})`;
+  if (kind === "conic") return `conic-gradient(from 90deg, ${parts})`;
+  return `linear-gradient(90deg, ${parts})`;
 }
 
 export function GradientRamp(props: GradientRampProps) {

@@ -922,6 +922,13 @@ STATIC: the protocol-78 handshake proves the engine has the op and the
 paths. paged.draw's effect UI (WP6.3) and the host Effects panel list the
 kinds from the schema's `EffectKind`.
 
+`"document.paint2@1"` (engine ADR 1007) is another property flag: the
+vendored wire carries a gradient stop's opacity (`opacityPct`) and inline
+colour (`color`), the `"Conic"` gradient kind, `frameGradientStrokeMode`
+("Within" / "Along" / "Across") and `frameGradientFillStart`. Additive at
+protocol 76 like the fill rule; the SVG importer asks it before
+lowering an SVG gradient with `stop-opacity` natively.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

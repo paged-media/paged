@@ -5305,6 +5305,285 @@ mod tests {
         );
     }
 
+    /// Engine ADR 1007 — a pixel of the 120 x 60 buffer.
+    fn px(buf: &[u8], x: usize, y: usize) -> [u8; 4] {
+        let i = (y * 120 + x) * 4;
+        [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
+    }
+
+    /// Engine ADR 1007 — a gradient's stops carry their own alpha, and
+    /// both lanes fade alike: red at full opacity on the left, red at none
+    /// on the right (white shows through), the middle half way.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn opacity_stops_fade_alike_on_both_lanes__feat__color_swatches_paint_v2() {
+        use paged_compose::{
+            DisplayCommand, GradientStop, LinearGradient, Paint, RadialGradient, Transform,
+        };
+        let red = |a: f32| ComposeColor::rgba(1.0, 0.0, 0.0, a);
+        for radial in [false, true] {
+            let mut list = DisplayList::new();
+            let rect = unit_rect_path(&mut list);
+            let stops = vec![
+                GradientStop {
+                    offset: 0.0,
+                    color: red(1.0),
+                },
+                GradientStop {
+                    offset: 1.0,
+                    color: red(0.0),
+                },
+            ];
+            let paint = if radial {
+                Paint::RadialGradient(list.push_radial_gradient(RadialGradient {
+                    center: (0.0, 0.5),
+                    radius: 1.0,
+                    stops,
+                }))
+            } else {
+                Paint::LinearGradient(list.push_linear_gradient(LinearGradient {
+                    start: (0.0, 0.0),
+                    end: (1.0, 0.0),
+                    stops,
+                }))
+            };
+            list.commands.push(DisplayCommand::FillPath {
+                path_id: rect,
+                paint,
+                transform: Transform([120.0, 0.0, 0.0, 60.0, 0.0, 0.0]),
+            });
+            let mut opts = RasterOptions::new(120.0, 60.0);
+            opts.dpi = 72.0;
+            opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+            let Some((worst, ndiff)) = cpu_gpu_delta(&list, &opts) else {
+                return;
+            };
+            assert!(
+                ndiff <= 40 && worst <= 8,
+                "radial {radial}: lanes differ on {ndiff} pixels (worst {worst})"
+            );
+            let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+            let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+            for buf in [&gpu, &cpu] {
+                let left = px(buf, 1, 30);
+                assert!(
+                    left[0] > 245 && left[1] < 20,
+                    "opaque red at the start: {left:?}"
+                );
+                let right = px(buf, 118, 30);
+                assert!(right[1] > 235, "transparent at the end: {right:?}");
+                let mid = px(buf, 60, 30);
+                assert!(
+                    mid[0] > 240 && (90..=200).contains(&mid[1]),
+                    "half way between: {mid:?}"
+                );
+            }
+        }
+    }
+
+    /// Engine ADR 1007 — a conic gradient sweeps alike on both lanes, and
+    /// turns with the path's transform: under a quarter turn the start
+    /// (red) moves from the +x axis to +y.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn conic_gradients_sweep_alike_on_both_lanes__feat__color_swatches_paint_v2() {
+        use paged_compose::{DisplayCommand, GradientStop, Paint, SweepGradient, Transform};
+        let c = |r: f32, g: f32, b: f32| ComposeColor::rgba(r, g, b, 1.0);
+        for turned in [false, true] {
+            let mut list = DisplayList::new();
+            let rect = unit_rect_path(&mut list);
+            let id = list.push_sweep_gradient(SweepGradient {
+                center: (0.5, 0.5),
+                start_angle: 0.0,
+                stops: vec![
+                    GradientStop {
+                        offset: 0.0,
+                        color: c(1.0, 0.0, 0.0),
+                    },
+                    GradientStop {
+                        offset: 0.5,
+                        color: c(0.0, 0.0, 1.0),
+                    },
+                    GradientStop {
+                        offset: 1.0,
+                        color: c(1.0, 0.0, 0.0),
+                    },
+                ],
+            });
+            // A 60 x 60 square centred at (60, 30); turned, the same
+            // square under a quarter turn about its centre.
+            let transform = if turned {
+                Transform([0.0, 60.0, -60.0, 0.0, 90.0, 0.0])
+            } else {
+                Transform([60.0, 0.0, 0.0, 60.0, 30.0, 0.0])
+            };
+            list.commands.push(DisplayCommand::FillPath {
+                path_id: rect,
+                paint: Paint::SweepGradient(id),
+                transform,
+            });
+            let mut opts = RasterOptions::new(120.0, 60.0);
+            opts.dpi = 72.0;
+            opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+            let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+            if !gpu_or_skip(&gpu) {
+                return;
+            }
+            let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+            // Vello's sweep reads its ramp from a lookup table, so the
+            // lanes differ by a few levels everywhere; past 8 levels only
+            // within 8 px of the centre, where a pixel spans many angles.
+            let mut far = 0usize;
+            for y in 0..60usize {
+                for x in 0..120usize {
+                    let (g, c) = (px(&gpu, x, y), px(&cpu, x, y));
+                    let d = (0..4).map(|i| g[i].abs_diff(c[i])).max().unwrap_or(0);
+                    let near_centre = (x as f32 - 60.0).hypot(y as f32 - 30.0) < 8.0;
+                    if d > 8 && !near_centre {
+                        far += 1;
+                    }
+                }
+            }
+            assert!(
+                far <= 24,
+                "turned {turned}: lanes differ by > 8 on {far} pixels"
+            );
+            let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+            let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+            for buf in [&gpu, &cpu] {
+                // Half a turn from the start is blue.
+                let (start, opposite) = if turned {
+                    // Start on +y (below the centre, just past the seam).
+                    (px(buf, 61, 55), px(buf, 59, 5))
+                } else {
+                    (px(buf, 85, 31), px(buf, 35, 29))
+                };
+                assert!(
+                    start[0] > 200 && start[2] < 60,
+                    "turned {turned}: red at the start: {start:?}"
+                );
+                assert!(
+                    opposite[2] > 200 && opposite[0] < 60,
+                    "turned {turned}: blue opposite: {opposite:?}"
+                );
+            }
+        }
+    }
+
+    /// Engine ADR 1007 — what a stroke mapped along or across its path
+    /// draws (`paged_renderer::module::stroke_gradient`): opaque bands
+    /// under the stroke's outline as a clip, inside a luminosity soft mask
+    /// of the same bands in grey when the ramp is translucent. The two
+    /// lanes agree on it, the bands' overlaps leave no seam, and the mask
+    /// grey (the alpha decoded from sRGB) fades the bands by their alpha.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn banded_stroke_under_a_clip_and_mask_matches__feat__color_swatches_paint_v2() {
+        use paged_compose::{
+            Color as DLColor, DisplayCommand, Paint, PathData, PathSegment, SoftMaskType, Transform,
+        };
+        let rect_path = |x0: f32, y0: f32, x1: f32, y1: f32| {
+            PathData::new(vec![
+                PathSegment::MoveTo { x: x0, y: y0 },
+                PathSegment::LineTo { x: x1, y: y0 },
+                PathSegment::LineTo { x: x1, y: y1 },
+                PathSegment::LineTo { x: x0, y: y1 },
+                PathSegment::Close,
+            ])
+        };
+        let decode = |v: f32| {
+            if v <= 0.040_45 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        for translucent in [false, true] {
+            let mut list = DisplayList::new();
+            let clip = list.paths.push_anon(rect_path(10.3, 20.0, 109.7, 40.0));
+            list.commands.push(DisplayCommand::PushClip {
+                path_id: clip,
+                transform: Transform::IDENTITY,
+            });
+            // 40 bands of 2.5 pt, each reaching 0.25 pt under the next.
+            let bands: Vec<(paged_compose::PathId, f32, f32)> = (0..40)
+                .map(|i| {
+                    let x0 = 10.0 + i as f32 * 2.5;
+                    let x1 = if i == 39 { 111.0 } else { x0 + 2.75 };
+                    let t = (i as f32 + 0.5) / 40.0;
+                    let id = list.paths.push_anon(rect_path(x0, 19.0, x1, 41.0));
+                    (id, t, 1.0 - t)
+                })
+                .collect();
+            if translucent {
+                list.commands.push(DisplayCommand::BeginSoftMask {
+                    mask_type: SoftMaskType::Luminosity,
+                    invert: false,
+                    transform: Transform::IDENTITY,
+                });
+                for (id, _, alpha) in &bands {
+                    let g = decode(*alpha);
+                    list.commands.push(DisplayCommand::FillPath {
+                        path_id: *id,
+                        paint: Paint::Solid(DLColor::rgba(g, g, g, 1.0)),
+                        transform: Transform::IDENTITY,
+                    });
+                }
+                list.commands
+                    .push(DisplayCommand::BeginMaskedContent(Transform::IDENTITY));
+            }
+            for (id, t, _) in &bands {
+                list.commands.push(DisplayCommand::FillPath {
+                    path_id: *id,
+                    paint: Paint::Solid(DLColor::rgba(1.0 - t, 0.0, *t, 1.0)),
+                    transform: Transform::IDENTITY,
+                });
+            }
+            if translucent {
+                list.commands
+                    .push(DisplayCommand::EndSoftMask(Transform::IDENTITY));
+            }
+            list.commands
+                .push(DisplayCommand::PopClip(Transform::IDENTITY));
+            let mut opts = RasterOptions::new(120.0, 60.0);
+            opts.dpi = 72.0;
+            opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+            let Some((worst, ndiff)) = cpu_gpu_delta(&list, &opts) else {
+                return;
+            };
+            assert!(
+                ndiff <= 60 && worst <= 16,
+                "translucent {translucent}: lanes differ on {ndiff} pixels (worst {worst})"
+            );
+            let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+            let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+            for buf in [&gpu, &cpu] {
+                assert_eq!(px(buf, 5, 30)[1], 255, "outside the clip stays white");
+                assert_eq!(px(buf, 60, 10)[1], 255, "above the stroke stays white");
+                // No seam: every column of the band row is painted (green
+                // stays 0 under opaque bands).
+                if !translucent {
+                    for x in 11..109 {
+                        assert!(
+                            px(buf, x, 30)[1] < 4,
+                            "a seam at x {x}: {:?}",
+                            px(buf, x, 30)
+                        );
+                    }
+                } else {
+                    // Left: nearly opaque red; right: nearly transparent.
+                    let l = px(buf, 12, 30);
+                    let r = px(buf, 107, 30);
+                    assert!(l[0] > 230 && l[1] < 40, "opaque at the start: {l:?}");
+                    assert!(r[1] > 215, "faded at the end: {r:?}");
+                }
+            }
+        }
+    }
+
     /// Engine ADR 1010 — a clip group nested in a paste-into is two
     /// `PushClip` brackets, one inside the other: both lanes intersect
     /// them alike (only the overlap of the two outlines paints).
