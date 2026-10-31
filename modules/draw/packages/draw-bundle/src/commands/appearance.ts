@@ -431,7 +431,8 @@ export async function applyAppearanceCommand(
       return addNativeLayer(layers, {
         kind: "stroke",
         color: (own ? t.color : seed.stroke) ?? "Color/Black",
-        weight: (own ? t.weight : seed.weight) ?? 1,
+        // A frame without a stroke of its own seeds a visible 1 pt line.
+        weight: (own ? t.weight : seed.stroke ? seed.weight : null) || 1,
       });
     });
     return;

@@ -461,6 +461,7 @@ fn the_effects_survive_a_paged_round_trip() {
 /// the others: written with its net, read back whole, expanded in one undo
 /// step, and kept live through an IDML this engine wrote.
 #[test]
+#[allow(non_snake_case)]
 fn an_envelope_mesh_is_a_vector_entry__feat__effects_transparency_live_vector_effects() {
     let mut m = load();
     let h0 = m.current_state_hash();

@@ -90,6 +90,17 @@ async function propOf(
   );
 }
 
+/** The kinds of the item's native appearance layers, bottom to top. */
+async function layerKinds(
+  page: import("@playwright/test").Page,
+  ref: { kind: string; id: string },
+): Promise<string[]> {
+  const v = await propOf(page, ref, "frameAppearance");
+  const layers = (v?.value as { layers?: { kind: string }[] } | undefined)
+    ?.layers;
+  return (layers ?? []).map((l) => l.kind);
+}
+
 async function strokeWeight(
   page: import("@playwright/test").Page,
   ref: { kind: string; id: string },
@@ -144,12 +155,16 @@ test.describe("journey · paged.draw appearance stack", () => {
       )
       .toBe("colorRef");
 
-    // ── 3. ADD STROKE — stacks a stroke layer and bakes it onto the
-    //    frame's real frameStrokeWeight; the stroke edge must PAINT. ──
+    // ── 3. ADD STROKE — stacks a stroke layer of the engine's native
+    //    appearance (draw ADR 367): the frame keeps its own (no) stroke,
+    //    and the layer's edge must PAINT. ──
     await invokeCommand(page, "media.paged.draw.command.appearanceAddStroke");
     await expect
-      .poll(() => strokeWeight(page, ref), { timeout: 6_000 })
-      .toBeGreaterThan(0);
+      .poll(() => layerKinds(page, ref), { timeout: 6_000 })
+      .toContain("stroke");
+    expect(await strokeWeight(page, ref), "the frame's own stroke stays").toBe(
+      0,
+    );
     await designer.expectRenderChangesFrom(beforeFill);
 
     // ── 4. CLEAR — drops the extra metadata layers. The bake is the
@@ -157,6 +172,9 @@ test.describe("journey · paged.draw appearance stack", () => {
     //    IDML stays valid); the stack metadata is what Clear empties.
     //    Assert it does not throw and the frame is still addressable. ──
     await invokeCommand(page, "media.paged.draw.command.appearanceClear");
+    await expect
+      .poll(() => layerKinds(page, ref), { timeout: 6_000 })
+      .toEqual([]);
     // The frame is intact after the clear (a property read still resolves
     // — Clear empties metadata, it does not delete the element).
     await expect
