@@ -8903,6 +8903,11 @@
           "description": "The frame's native mesh fill, a gradient mesh or a freeform\ngradient (`Value::FillMesh`), shown instead of its fill swatch;\n`Value::FillMesh(None)` clears it back to the swatch. Points are in\nthe frame's inner coordinates. On a TextFrame, Rectangle, Oval or\nPolygon. Whole-value, like `FrameGradientFeather`: the Mesh tool\nsends the edited mesh, and its inverse is the mesh it replaced.\nNo IDML attribute carries it: the IDML export keeps the swatch,\nstores the mesh in a label the import restores and reports the\nloss. Paint-only (`frame_style`).",
           "type": "string",
           "const": "frameFillMesh"
+        },
+        {
+          "description": "The frame's own placement of a pattern fill or stroke\n(`Value::Transform`, `[a b c d tx ty]` in the frame's box space,\napplied after the pattern's own placement; `None` is identity) —\nIllustrator's \"transform patterns\". On a TextFrame, Rectangle,\nOval, Polygon or GraphicLine. No IDML attribute carries it: the\nIDML export keeps it in the pattern label. Paint-only\n(`frame_style`).",
+          "type": "string",
+          "const": "framePatternTransform"
         }
       ]
     },
@@ -11635,12 +11640,212 @@
           ],
           "format": "float",
           "default": null
+        },
+        "pattern": {
+          "description": "Engine ADR 1041 — a PATTERN swatch: when set, the swatch is the\npattern (`space` and `value` are ignored, `\"\"` and `[]` will do)\nand lives under a `Pattern/…` id (`Pattern/u<n>` when `selfId` is\nabsent). A frame shows it by naming the id as its fill or stroke.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatternSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "space",
         "value"
       ]
+    },
+    "PatternSpec": {
+      "description": "Engine ADR 1041 — a pattern swatch on the wire, the mirror of\n`paged_model::PatternEntry`: the tile rectangle `0..width × 0..height`\nin pattern units, its items (paths in the same space), the lattice and\nthe placement. Carried by `SwatchSpec::pattern`.",
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number",
+          "format": "float"
+        },
+        "height": {
+          "type": "number",
+          "format": "float"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatternItemSpec"
+          }
+        },
+        "tileType": {
+          "description": "`\"Grid\"` (default) | `\"BrickByRow\"` | `\"BrickByColumn\"` |\n`\"HexByColumn\"` | `\"HexByRow\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "brickOffset": {
+          "description": "A brick row's (column's) shift as a fraction of the pitch, 0..1;\nabsent is 0.5.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "hSpacing": {
+          "description": "Extra space between columns / rows; negative overlaps.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "vSpacing": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "hOverlap": {
+          "description": "`\"LeftInFront\"` (default) | `\"RightInFront\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vOverlap": {
+          "description": "`\"TopInFront\"` (default) | `\"BottomInFront\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "offset": {
+          "description": "Placement on the frame's box: offset `[x, y]`, scale `[sx, sy]`,\nrotation in degrees (clockwise on the page).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "scale": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "rotationDeg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "items"
+      ]
+    },
+    "PatternItemSpec": {
+      "description": "One path of a pattern tile.",
+      "type": "object",
+      "properties": {
+        "anchors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PathAnchorSpec"
+          }
+        },
+        "subpathStarts": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "subpathOpen": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "fillRule": {
+          "description": "`\"NonZero\"` (default) | `\"EvenOdd\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatternColorSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stroke": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatternColorSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strokeWeight": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        }
+      },
+      "required": [
+        "anchors"
+      ]
+    },
+    "PatternColorSpec": {
+      "description": "A pattern item's colour: a palette swatch (`swatch`), or its own\ncolour (`space` + `value`, as a swatch's).",
+      "type": "object",
+      "properties": {
+        "swatch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "space": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          }
+        }
+      }
     },
     "GradientSpec": {
       "description": "Wire description of a gradient swatch, mirroring `GradientEntry`.",

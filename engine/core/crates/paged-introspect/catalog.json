@@ -1770,6 +1770,7 @@
     "frameShapePieStart",
     "frameShapePieEnd",
     "frameFillMesh",
+    "framePatternTransform",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -4284,6 +4285,17 @@
         "shape": "MeshFillSpec"
       },
       "wire": "fillMesh",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "framePatternTransform",
+      "type": {
+        "kind": "transform"
+      },
+      "wire": "transform",
       "nullable": true,
       "access": "readWrite",
       "bindable": true
@@ -18256,6 +18268,17 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "fillMesh"
+      },
+      {
+        "addressKind": "frame",
+        "path": "framePatternTransform",
+        "type": {
+          "kind": "transform"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "transform"
       },
       {
         "addressKind": "frame",

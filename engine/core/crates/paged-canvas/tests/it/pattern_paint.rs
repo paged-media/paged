@@ -336,3 +336,31 @@ fn the_idml_export_keeps_the_pattern_in_a_label_and_names_the_loss__feat__color_
         "the label entries are consumed"
     );
 }
+
+#[test]
+fn the_svg_export_writes_a_pattern_fill_as_an_svg_pattern__feat__color_swatches_pattern_paint() {
+    let mut m = load();
+    let id = create(&mut m);
+    set(
+        &mut m,
+        PropertyPath::FrameFillColor,
+        Value::ColorRef(Some(id.clone())),
+    );
+    let page = paged_canvas::PageId(m.pages()[0].self_id.clone());
+    let (out, _report) = m
+        .export_svg(&page, &[], &paged_svg::SvgExportOptions::default())
+        .expect("export");
+    // The tile is a `<pattern>` in the page's space, the frame's fill
+    // names it, and the tile's items are drawn inside it.
+    let at = out.find("<pattern id=\"").expect("a <pattern> def");
+    let def = &out[at..at + out[at..].find("</pattern>").expect("closed")];
+    assert!(def.contains("patternUnits=\"userSpaceOnUse\""), "{def}");
+    assert!(def.contains("patternTransform=\"matrix("), "{def}");
+    assert!(def.contains("<path d=\"M"), "the tile's items: {def}");
+    let pid = &def["<pattern id=\"".len()..];
+    let pid = &pid[..pid.find('"').unwrap()];
+    assert!(
+        out.contains(&format!("fill=\"url(#{pid})\"")),
+        "the frame fills with it: {out}"
+    );
+}
